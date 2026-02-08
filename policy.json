@@ -1,0 +1,6 @@
+{
+  "mode": "remediate",
+  "constraints": {
+    "maxActionsPerIncident": 3
+  }
+}

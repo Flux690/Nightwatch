@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "description": "Authoritative feasibility decision for infrastructure remediation planning.",
+  "properties": {
+    "feasible": {
+      "type": "boolean",
+      "description": "Whether a safe, deterministic remediation and verification plan can be produced."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Concise explanation of the feasibility decision."
+    },
+    "blocking_reason": {
+      "type": ["string", "null"],
+      "description": "Reason remediation is not feasible. Must be null when feasible is true."
+    }
+  },
+  "required": ["feasible", "summary", "blocking_reason"],
+  "additionalProperties": false
+}

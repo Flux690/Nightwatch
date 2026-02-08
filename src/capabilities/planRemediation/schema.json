@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "description": "A structured remediation plan for resolving a single infrastructure incident.",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "High-level explanation of the remediation decision, including why a remediation was chosen or why no safe remediation or verification is possible."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered remediation actions that mutate system state to resolve the incident. May be empty if no safe remediation can be proposed.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "A single, deterministic Docker CLI command that performs one remediation action."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this remediation action is necessary and how it contributes to fixing the root cause."
+          }
+        },
+        "required": ["action", "reason"],
+        "additionalProperties": false
+      }
+    },
+    "verification": {
+      "type": "array",
+      "description": "Ordered verification checks that prove the incident is resolved. May be empty if safe deterministic verification cannot be performed.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "A single Docker CLI command that verifies functional recovery of the original failure mode."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why this command conclusively verifies that the incident has been resolved."
+          }
+        },
+        "required": ["action", "reason"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["summary", "steps", "verification"],
+  "additionalProperties": false
+}

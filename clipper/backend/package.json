@@ -1,0 +1,19 @@
+{
+  "name": "clipper-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "transcoder": "node src/transcoder.js",
+    "notifier": "node src/notifier.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.8",
+    "pg": "^8.11.3"
+  }
+}

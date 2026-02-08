@@ -1,0 +1,61 @@
+{
+  "type": "object",
+  "description": "Incident graph representing infrastructure failures with causal relationships.",
+  "properties": {
+    "nodes": {
+      "description": "Array of incident nodes, each representing an affected component.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "container": {
+            "type": "string",
+            "description": "Name of the affected container"
+          },
+          "type": {
+            "type": "string",
+            "description": "Incident type using dot notation (e.g., 'storage.cache.oom_killed')"
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Log lines or signals supporting this incident"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO timestamp when incident was detected"
+          }
+        },
+        "required": ["container", "type", "evidence", "timestamp"]
+      }
+    },
+    "edges": {
+      "description": "Causal links between nodes. 'from' is the cause (array index), 'to' is the effect (array index).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "integer",
+            "description": "Array index of the upstream node (cause)"
+          },
+          "to": {
+            "type": "integer",
+            "description": "Array index of the downstream node (effect)"
+          }
+        },
+        "required": ["from", "to"]
+      }
+    },
+    "root": {
+      "type": ["integer", "null"],
+      "description": "Array index of the root cause node. Null if no incident detected."
+    },
+    "summary": {
+      "type": "string",
+      "description": "High-level summary of the incident graph or explanation if no incident exists."
+    }
+  },
+  "required": ["nodes", "edges", "root", "summary"],
+  "additionalProperties": false
+}

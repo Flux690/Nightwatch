@@ -1,0 +1,107 @@
+services:
+  db:
+    image: postgres:15
+    container_name: db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: clipperdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  cache:
+    image: redis:alpine
+    container_name: cache
+    ports:
+      - "6379:6379"
+
+  storage:
+    image: localstack/localstack
+    container_name: storage
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  api:
+    image: node:22
+    container_name: api
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgres://user:pass@db:5432/clipperdb
+      REDIS_URL: redis://cache:6379
+      S3_ENDPOINT: http://storage:4566
+      S3_BUCKET: clipper-videos
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    depends_on:
+      - db
+      - cache
+      - storage
+    command: sh -c "npm install --silent && node src/server.js"
+
+  transcoder:
+    image: node:22
+    container_name: transcoder
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      DATABASE_URL: postgres://user:pass@db:5432/clipperdb
+      REDIS_URL: redis://cache:6379
+      S3_ENDPOINT: http://storage:4566
+      S3_BUCKET: clipper-videos
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    depends_on:
+      - db
+      - cache
+      - storage
+    command: sh -c "npm install --silent && node src/transcoder.js"
+
+  notifier:
+    image: node:22
+    container_name: notifier
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      DATABASE_URL: postgres://user:pass@db:5432/clipperdb
+      REDIS_URL: redis://cache:6379
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+    depends_on:
+      - db
+      - cache
+      - mailhog
+    command: sh -c "npm install --silent && node src/notifier.js"
+
+  frontend:
+    image: node:22
+    container_name: frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    command: sh -c "npm install --silent && npm run dev"

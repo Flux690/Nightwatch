@@ -1,0 +1,65 @@
+:root {
+  /* Backgrounds: warm, neutral, no accent contamination */
+  --bg: #141313;
+  --surface: #1b1a1a;
+  --surface-elevated: #232121;
+  --surface-focus: #2b2929;
+
+  --border: #2f2c2c;
+
+  /* Accent: mature, desaturated purple */
+  --accent: #8b7fbf;
+  --accent-hover: #7a6fb0;
+  --accent-border: #6a6098;
+
+  /* Status colors tuned to warmth */
+  --status-green: #8fb8a1;
+  --status-red: #c98b8b;
+  --status-yellow: #d4b896;
+
+  /* Typography */
+  --text-primary: #eceae6;
+  --text-secondary: #bdb9b3;
+  --text-muted: #8f8b85;
+
+  --font-main: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography */
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}

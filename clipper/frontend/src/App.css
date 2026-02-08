@@ -1,0 +1,262 @@
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 72px 32px;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 48px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 20px;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Status */
+.status {
+  font-size: 0.75rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.status-ok {
+  background-color: rgba(143, 184, 161, 0.15);
+  color: var(--status-green);
+}
+
+.status-error {
+  background-color: rgba(201, 139, 139, 0.15);
+  color: var(--status-red);
+}
+
+/* Upload Section */
+.upload-section {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+  margin-bottom: 32px;
+}
+
+.upload-section h2 {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 18px;
+}
+
+.upload-form {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.upload-form input[type="file"] {
+  flex: 1;
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 14px 18px;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.upload-form input[type="file"]::-webkit-file-upload-button {
+  background-color: var(--surface-focus);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 12px;
+}
+
+.upload-form input[type="file"]::-webkit-file-upload-button:hover {
+  background-color: var(--border);
+}
+
+/* Button */
+.upload-form button {
+  height: 48px;
+  padding: 0 26px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-border);
+  background-color: var(--accent);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.upload-form button:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+
+.upload-form button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Error Display */
+.error {
+  margin-top: 18px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--status-red);
+  background-color: rgba(201, 139, 139, 0.08);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+/* Success Message */
+.success {
+  margin-top: 18px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--status-green);
+  background-color: rgba(143, 184, 161, 0.08);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+/* Videos Section */
+.videos-section {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+}
+
+.videos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.videos-section h2 {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.refresh-btn {
+  padding: 8px 16px;
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.refresh-btn:hover {
+  background-color: var(--surface-focus);
+  border-color: var(--accent-border);
+}
+
+/* Video List */
+.video-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.video-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.15s;
+}
+
+.video-item:last-child {
+  border-bottom: none;
+}
+
+.video-item:hover {
+  background-color: var(--surface-elevated);
+}
+
+.video-info {
+  flex: 1;
+}
+
+.video-filename {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.video-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Video Status */
+.video-status {
+  font-size: 0.7rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.video-status.pending {
+  background-color: rgba(212, 184, 150, 0.15);
+  color: var(--status-yellow);
+}
+
+.video-status.processing {
+  background-color: rgba(139, 127, 191, 0.15);
+  color: var(--accent);
+}
+
+.video-status.completed {
+  background-color: rgba(143, 184, 161, 0.15);
+  color: var(--status-green);
+}
+
+.video-status.failed {
+  background-color: rgba(201, 139, 139, 0.15);
+  color: var(--status-red);
+}
+
+/* States */
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 20px;
+  font-size: 0.9rem;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 20px;
+  font-size: 0.85rem;
+}

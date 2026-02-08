@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains API keys)
+.env
+
+# Runtime-generated files
+knowledge.md
+
+# Devpost submission text (lives on Devpost, not in repo)
+DEVPOST.md
+
+# Claude Code local config
+.claude/
+CLAUDE.md
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Test video (20MB binary)
+clipper/test-video.mp4

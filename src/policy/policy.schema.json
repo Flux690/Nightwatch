@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["remediate", "observe"],
+      "description": "remediate: allowed to plan and execute. observe: analysis and feasibility only"
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "maxActionsPerIncident": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Maximum number of plan attempts (initial plan + replans) before escalation"
+        }
+      },
+      "required": ["maxActionsPerIncident"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["mode", "constraints"],
+  "additionalProperties": false
+}
