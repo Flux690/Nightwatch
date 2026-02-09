@@ -3,7 +3,7 @@
  */
 
 import * as readline from "readline";
-import { logger } from "./logger";
+import { logger, trackLine } from "./logger";
 
 // Feasibility question — used by the feasibility capability within runAgent
 
@@ -20,13 +20,16 @@ export async function askFeasibilityQuestion(
   return new Promise((resolve) => {
     const promptIndent = " ".repeat(13); // aligns with logger text indent
     rl.question(`${promptIndent}\x1b[36m> \x1b[0m`, (answer) => {
+      trackLine(); // prompt + user answer
       rl.close();
       const trimmed = answer.trim().toLowerCase();
       if (trimmed === "skip" || trimmed === "") {
         console.log();
+        trackLine();
         resolve(null);
       } else {
         console.log();
+        trackLine();
         resolve(answer.trim());
       }
     });
@@ -50,19 +53,23 @@ export async function askPlanApproval(): Promise<ApprovalChoice> {
   return new Promise((resolve) => {
     const promptIndent = " ".repeat(13); // aligns with logger text indent
     rl.question(`${promptIndent}Approve plan? (y/n): `, (answer) => {
+      trackLine(); // prompt + user answer
       const trimmed = answer.trim().toLowerCase();
       if (trimmed === "y" || trimmed === "yes") {
         rl.close();
         console.log();
+        trackLine();
         resolve({ action: "approve" });
       } else {
         const askFeedback = () => {
           rl.question(
             `${promptIndent}Feedback for replanning: `, // promptIndent already set above
             (feedback) => {
+              trackLine(); // feedback prompt + user answer
               if (feedback.trim()) {
                 rl.close();
                 console.log();
+                trackLine();
                 resolve({ action: "reject", feedback: feedback.trim() });
               } else {
                 askFeedback();
@@ -97,9 +104,11 @@ export async function resolveEscalation(
   return new Promise((resolve) => {
     const promptIndent = " ".repeat(13); // aligns with logger text indent
     rl.question(`${promptIndent}\x1b[36m> \x1b[0m`, (answer) => {
+      trackLine(); // prompt + user answer
       rl.close();
       const trimmed = answer.trim().toLowerCase();
       console.log();
+      trackLine();
       if (trimmed === "stop" || trimmed === "dismiss" || trimmed === "") {
         resolve({ action: "dismiss" });
       } else {

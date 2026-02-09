@@ -357,7 +357,7 @@ export async function runOrchestrator(
           });
         } else {
           if (state.plan) {
-            logger.planGrayOut(state.plan, 4); // 4 lines: stage + approval header + y/n + feedback
+            logger.planGrayOut(state.plan);
           }
           logger.result(false, "Plan rejected by user", {
             Feedback: choice.feedback,

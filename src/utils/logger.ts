@@ -116,6 +116,28 @@ let ellipsisActive = false;
 
 // Track last plan line count for gray-out functionality
 let lastPlanLineCount = 0;
+let linesSincePlan = 0;
+
+/**
+ * Counted console.log — tracks visual lines for planGrayOut cursor math.
+ */
+function logLine(...args: Parameters<typeof console.log>): void {
+  let lines = 1;
+  for (const arg of args) {
+    if (typeof arg === "string") {
+      lines += (arg.match(/\n/g) || []).length;
+    }
+  }
+  linesSincePlan += lines;
+  console.log(...args);
+}
+
+/**
+ * Increment the line counter from outside the logger (e.g. prompts.ts).
+ */
+export function trackLine(count: number = 1): void {
+  linesSincePlan += count;
+}
 
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
@@ -171,7 +193,7 @@ function logIndentedDetails(
       continuationIndent,
     );
 
-    console.log(
+    logLine(
       `${baseIndent}${c("gray", prefix)} ${c("white", key)}: ${c("gray", wrappedValue)}`,
     );
   });
@@ -212,8 +234,8 @@ export const logger = {
 
   stage(name: string): void {
     stopEllipsis();
-    console.log();
-    console.log(cb("white", name));
+    logLine();
+    logLine(cb("white", name));
   },
 
   action(message: string): void {
@@ -232,7 +254,7 @@ export const logger = {
       }
     }
 
-    console.log(
+    logLine(
       `${ts()} ${c("magenta", "Tool:")} ${c("white", name)}${argsStr}`,
     );
   },
@@ -247,25 +269,24 @@ export const logger = {
     const color: ColorName = success ? "green" : "red";
     const line = `${ts()} ${c(color, icon)} ${c("white", message)}`;
 
-    console.log(line);
+    logLine(line);
     if (details) logIndentedDetails(details);
   },
 
   warn(message: string, details?: Record<string, string | number | boolean>) {
     stopEllipsis();
     const line = `${ts()} ${c("yellow", ICONS.warning)} ${c("white", message)}`;
-    console.log(line);
+    logLine(line);
     if (details) logIndentedDetails(details);
   },
 
   info(message: string): void {
     stopEllipsis();
-    console.log(`${ts()} ${c("gray", message)}`);
+    logLine(`${ts()} ${c("gray", message)}`);
   },
 
   plan(plan: RemediationPlan): void {
     stopEllipsis();
-    let lineCount = 0;
 
     if (!plan.steps.length) {
       logger.result(false, "No safe remediation possible", {
@@ -275,46 +296,42 @@ export const logger = {
       return;
     }
 
-    console.log(
+    const startCount = linesSincePlan;
+
+    logLine(
       `${ts()} ${c("green", ICONS.success)} ${c("white", "Plan generated")}`,
     );
-    lineCount++;
     logIndentedDetails({ Summary: plan.summary });
-    lineCount++; // Summary line
 
     const indent = " ".repeat(visibleLength(ts()) + 3);
 
-    console.log(`\n${indent}${c("gray", "Remediation Steps:")}`);
-    lineCount += 2; // blank line + header
+    logLine(`\n${indent}${c("gray", "Remediation Steps:")}`);
     plan.steps.forEach((s, i) => {
-      console.log(
+      logLine(
         `${indent}  ${c("white", `${i + 1}.`)} ${c("white", s.action)}`,
       );
-      lineCount++;
-      console.log(`${indent}     ${c("dim", s.reason)}`);
-      lineCount++;
+      logLine(`${indent}     ${c("dim", s.reason)}`);
     });
 
     if (plan.verification.length > 0) {
-      console.log(`\n${indent}${c("gray", "Verification Steps:")}`);
-      lineCount += 2; // blank line + header
+      logLine(`\n${indent}${c("gray", "Verification Steps:")}`);
       plan.verification.forEach((s, i) => {
-        console.log(
+        logLine(
           `${indent}  ${c("white", `${i + 1}.`)} ${c("white", s.action)}`,
         );
-        lineCount++;
-        console.log(`${indent}     ${c("dim", s.reason)}`);
-        lineCount++;
+        logLine(`${indent}     ${c("dim", s.reason)}`);
       });
     }
 
-    lastPlanLineCount = lineCount;
+    lastPlanLineCount = linesSincePlan - startCount;
+    linesSincePlan = 0;
   },
 
-  planGrayOut(plan: RemediationPlan, linesAfterPlan: number = 0): void {
+  planGrayOut(plan: RemediationPlan): void {
     if (lastPlanLineCount === 0) return;
 
-    const totalLines = lastPlanLineCount + linesAfterPlan;
+    const linesAfter = linesSincePlan;
+    const totalLines = lastPlanLineCount + linesAfter;
 
     // Move cursor up
     process.stdout.write(`\x1b[${totalLines}A`);
@@ -353,14 +370,15 @@ export const logger = {
 
     // Clear the lines that were after the plan
     const termWidth = process.stdout.columns || 120;
-    for (let i = 0; i < linesAfterPlan; i++) {
+    for (let i = 0; i < linesAfter; i++) {
       console.log(" ".repeat(termWidth));
     }
-    if (linesAfterPlan > 0) {
-      process.stdout.write(`\x1b[${linesAfterPlan}A`);
+    if (linesAfter > 0) {
+      process.stdout.write(`\x1b[${linesAfter}A`);
     }
 
     lastPlanLineCount = 0;
+    linesSincePlan = 0;
   },
 
   trace(items: StepResult[]): void {
@@ -371,7 +389,7 @@ export const logger = {
       const icon = item.status === "success" ? ICONS.success : ICONS.failure;
       const color: ColorName = item.status === "success" ? "green" : "red";
 
-      console.log(
+      logLine(
         `${ts()} ${c(color, icon)} ${c("white", `Step ${i + 1}:`)} ${c("gray", item.step)}`,
       );
 
@@ -379,7 +397,7 @@ export const logger = {
       if (output) {
         output
           .split("\n")
-          .forEach((l) => console.log(`${indent}${c("dim", l)}`));
+          .forEach((l) => logLine(`${indent}${c("dim", l)}`));
       }
     });
   },
@@ -393,14 +411,14 @@ export const logger = {
 
   approvalRequired(): void {
     stopEllipsis();
-    console.log(
+    logLine(
       `${ts()} ${c("cyan", "?")} ${cb("white", "Approval Required")}`,
     );
   },
 
   incidentGraph(graph: IncidentGraph): void {
     stopEllipsis();
-    console.log(
+    logLine(
       `${ts()} ${c("green", ICONS.success)} ${c("white", "Incident Graph Identified")}`,
     );
     logIndentedDetails({
@@ -410,21 +428,21 @@ export const logger = {
     const indent = " ".repeat(visibleLength(ts()) + 3);
 
     // Show affected components with evidence
-    console.log(`\n${indent}${c("gray", "Affected Components:")}`);
+    logLine(`\n${indent}${c("gray", "Affected Components:")}`);
     graph.nodes.forEach((node, i) => {
       const isRoot = i === graph.root;
       const marker = isRoot ? ` ${c("yellow", "[ROOT]")}` : "";
-      console.log(
+      logLine(
         `${indent}  ${c("white", `${i}.`)} ${c("white", node.container)}${marker}`,
       );
-      console.log(`${indent}     ${c("dim", node.type)}`);
+      logLine(`${indent}     ${c("dim", node.type)}`);
       // Show first evidence line
       if (node.evidence.length > 0) {
         const evidencePreview =
           node.evidence[0].length > 80
             ? node.evidence[0].substring(0, 77) + "..."
             : node.evidence[0];
-        console.log(
+        logLine(
           `${indent}     ${c("dim", `Evidence: ${evidencePreview}`)}`,
         );
       }
@@ -432,11 +450,11 @@ export const logger = {
 
     // Show causal chain if edges exist
     if (graph.edges.length > 0) {
-      console.log(`\n${indent}${c("gray", "Causal Chain:")}`);
+      logLine(`\n${indent}${c("gray", "Causal Chain:")}`);
       graph.edges.forEach((edge) => {
         const fromNode = graph.nodes[edge.from];
         const toNode = graph.nodes[edge.to];
-        console.log(
+        logLine(
           `${indent}  ${c("white", fromNode?.container || `Node ${edge.from}`)} ${c("dim", "→")} ${c("white", toNode?.container || `Node ${edge.to}`)}`,
         );
       });
@@ -449,8 +467,8 @@ export const logger = {
     const textIndent = " ".repeat(visibleLength(ts()) + 3);
     const labelPrefix = `${iconIndent}${c("cyan", "?")} `;
     const wrappedQuestion = wrapText(question, labelPrefix, textIndent);
-    console.log(`${iconIndent}${c("cyan", "?")} ${c("white", wrappedQuestion)}`);
-    console.log(`${textIndent}${c("dim", "(type 'skip' to continue without answering)")}`);
+    logLine(`${iconIndent}${c("cyan", "?")} ${c("white", wrappedQuestion)}`);
+    logLine(`${textIndent}${c("dim", "(type 'skip' to continue without answering)")}`);
   },
 
   feasibility(assessment: FeasibilityAssessment): void {
@@ -491,7 +509,7 @@ export const logger = {
 
   escalationPrompt(reason: string, neededContext: string): void {
     stopEllipsis();
-    console.log(
+    logLine(
       `${ts()} ${c("yellow", ICONS.warning)} ${cb("yellow", "Agent Requesting Help")}`,
     );
     logIndentedDetails({
@@ -499,7 +517,7 @@ export const logger = {
       "Needed Context": neededContext,
     });
     const indent = " ".repeat(visibleLength(ts()) + 3);
-    console.log(
+    logLine(
       `${indent}${c("dim", "(provide context to continue, or type 'stop' to dismiss)")}`,
     );
   },

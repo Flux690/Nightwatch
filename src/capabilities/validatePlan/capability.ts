@@ -30,7 +30,7 @@ export const config: CapabilityConfig = {
       logger.result(true, "All commands validated as safe");
     } else {
       if (state.plan) {
-        logger.planGrayOut(state.plan, 1); // 1 line: stage header
+        logger.planGrayOut(state.plan);
       }
       logger.result(false, "Plan validation failed", {
         "Rejection Reason": result.error ?? "Unknown",
