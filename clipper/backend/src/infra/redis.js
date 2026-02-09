@@ -12,9 +12,8 @@ function getClient() {
     client = new Redis(redisUrl, {
       maxRetriesPerRequest: 1,
       retryStrategy: (times) => {
-        // Reconnect after 1 second, up to 10 attempts
-        if (times > 10) return null;
-        return 1000;
+        // Linear backoff: wait 200ms, 400ms... capped at 2 seconds.
+        return Math.min(times * 200, 2000);
       },
       lazyConnect: true
     });
