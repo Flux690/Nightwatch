@@ -17,6 +17,9 @@ function getClient() {
       },
       lazyConnect: true
     });
+
+    // Suppress unhandled error logs during reconnection
+    client.on("error", () => {});
   }
   return client;
 }
