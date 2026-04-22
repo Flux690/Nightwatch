@@ -13,7 +13,7 @@ import {
   assertCommandsValid,
   CommandValidationError,
 } from "../../execution/validator";
-import { infrastructure } from "../../infrastructure/compose";
+import { getInfrastructure } from "../../globals";
 import { logger } from "../../utils/logger";
 
 export type ValidationData = {
@@ -29,9 +29,7 @@ export const config: CapabilityConfig = {
     if (result.success) {
       logger.result(true, "All commands validated as safe");
     } else {
-      if (state.plan) {
-        logger.planGrayOut(state.plan);
-      }
+      logger.planGrayOut();
       logger.result(false, "Plan validation failed", {
         "Rejection Reason": result.error ?? "Unknown",
       });
@@ -55,7 +53,7 @@ export function validatePlan(
     return failure(state, "Plan is already validated.");
   }
 
-  const knownContainers = infrastructure.containers;
+  const knownContainers = getInfrastructure().containers;
 
   try {
     assertCommandsValid(state.plan.steps, knownContainers);
@@ -72,7 +70,7 @@ export function validatePlan(
   } catch (err) {
     if (err instanceof CommandValidationError) {
       const isVerificationCommand = state.plan.verification.some(
-        (v) => v.action === err.command,
+        (v) => v.action.join(" ") === err.command,
       );
 
       const updatedState: IncidentResolutionState = {
@@ -84,6 +82,7 @@ export function validatePlan(
           step: err.command,
           reason: err.reason,
         },
+        approved: false,
       };
 
       return failure(

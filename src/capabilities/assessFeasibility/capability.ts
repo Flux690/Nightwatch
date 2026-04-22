@@ -10,18 +10,20 @@ import type {
 } from "../types";
 import type { FeasibilityAssessment } from "../../types";
 import { success, failure } from "../types";
-import { runAgent, AgentTool } from "../../llm/runtime";
-import { infrastructure } from "../../infrastructure/compose";
-import { loadKnowledge } from "../../infrastructure/knowledge";
-import {
-  inspectContainerTool,
-  inspectContainerDeclaration,
-} from "../../tools/docker";
-import { askUserTool, askUserDeclaration } from "../../tools/user";
+import { runAgent } from "../../llm/runtime";
+import { getInfrastructure } from "../../globals";
+import { loadKnowledge } from "../../llm/knowledge";
+import { createDiagnosticTools } from "../../tools/docker";
+import type { ToolCache } from "../../tools/cache";
 import { loadPrompt } from "../../utils/promptLoader";
 import { getErrorMessage } from "../../utils/helpers";
 import { logger } from "../../utils/logger";
-import schema from "./schema.json";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schema = JSON.parse(readFileSync(path.join(__dirname, "schema.json"), "utf-8"));
 
 const SYSTEM_PROMPT = loadPrompt(import.meta.url);
 
@@ -43,13 +45,14 @@ export const config: CapabilityConfig = {
   },
 };
 
-export const handler: CapabilityHandler = async (state) => {
-  const result = await assessFeasibility(state);
+export const handler: CapabilityHandler = async (state, toolCache) => {
+  const result = await assessFeasibility(state, toolCache);
   return result;
 };
 
 export async function assessFeasibility(
   state: IncidentResolutionState,
+  toolCache?: ToolCache,
 ): Promise<CapabilityResult<FeasibilityData>> {
   if (!state.incidentGraph || state.incidentGraph.nodes.length === 0) {
     return failure(state, "Cannot assess feasibility: no incident identified.");
@@ -70,70 +73,33 @@ export async function assessFeasibility(
     );
   }
 
-  const graphSummary = {
-    summary: state.incidentGraph.summary,
-    rootCause: {
-      index: state.incidentGraph.root,
-      container: rootNode.container,
-      type: rootNode.type,
-    },
-    affectedComponents: state.incidentGraph.nodes.map((n, i) => ({
-      index: i,
-      container: n.container,
-      type: n.type,
-    })),
-    causalChain: state.incidentGraph.edges.map((e) => `${e.from} -> ${e.to}`),
-  };
+  const infra = getInfrastructure();
+  const knowledge = loadKnowledge(infra.basePath);
 
-  const knowledge = loadKnowledge();
+  // Infrastructure and knowledge are new data not yet in conversation history.
+  // Incident graph details are already in history from the analyzer phase.
+  const userMessage = `## Infrastructure
+\`\`\`yaml
+${infra.raw}
+\`\`\`
+${knowledge ? `\n## Known Facts\n${knowledge}\n` : ""}
+Assess feasibility of remediating the incident identified above.`;
 
-  const userMessage = `
-          ## Infrastructure
-          \`\`\`yaml
-          ${infrastructure.raw}
-          \`\`\`
-          
-          ${
-            knowledge
-              ? `
-            ## Known Facts
-            ${knowledge}`
-              : ""
-          }
-
-          ## Incident Graph
-          ${JSON.stringify(graphSummary, null, 2)}
-
-          ## Root Cause
-          - Container: ${rootNode.container}
-          - Type: ${rootNode.type}
-          - Detected at: ${rootNode.timestamp}
-
-          Determine whether a safe, deterministic remediation plan can be produced.`;
-
-  const tools: AgentTool[] = [
-    {
-      declaration: inspectContainerDeclaration,
-      handler: async (args) =>
-        inspectContainerTool((args as { name: string }).name),
-    },
-    {
-      declaration: askUserDeclaration,
-      handler: async (args) => askUserTool(args as { question: string }),
-    },
-  ];
+  const tools = createDiagnosticTools(toolCache);
 
   try {
-    const { result } = await runAgent<FeasibilityAssessment>({
+    const { result, conversationHistory } = await runAgent<FeasibilityAssessment>({
       systemInstruction: SYSTEM_PROMPT,
       initialUserMessage: userMessage,
       tools,
+      conversationHistory: state.sharedHistory,
       responseSchema: schema,
     });
 
     const updatedState: IncidentResolutionState = {
       ...state,
       feasibility: result,
+      sharedHistory: conversationHistory,
     };
 
     return success(updatedState, { feasibility: result });

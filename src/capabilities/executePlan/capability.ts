@@ -48,6 +48,10 @@ export async function executePlan(
     return failure(state, "Cannot execute: plan has not been validated.");
   }
 
+  if (!state.approved) {
+    return failure(state, "Cannot execute: plan has not been approved by user.");
+  }
+
   if (state.plan.steps.length === 0) {
     return failure(state, "Cannot execute: plan has no remediation steps.");
   }
@@ -63,7 +67,7 @@ export async function executePlan(
   }
 
   const failedStepResult = result.results[result.failedAtStep];
-  const failedStepAction = state.plan.steps[result.failedAtStep].action;
+  const failedStepAction = state.plan.steps[result.failedAtStep].action.join(" ");
   const output = failedStepResult.stderr || failedStepResult.stdout;
 
   const updatedState: IncidentResolutionState = {
@@ -75,6 +79,7 @@ export async function executePlan(
       reason: `Command failed at step ${result.failedAtStep + 1}`,
       output,
     },
+    approved: false,
   };
 
   return failure(

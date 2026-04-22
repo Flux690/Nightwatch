@@ -39,7 +39,7 @@ Feasibility requires ALL of the following:
 Infeasibility applies if ANY of the following are true:
 
 - The root cause is unclear or ambiguous
-- Required parameters or target values are missing and were not provided (user skipped or information unavailable)
+- Required parameters or target values are not declared in configuration or known facts
 - Remediation depends on inferred defaults or guessed values
 - Remediation would mask failure without resolving root cause
 - Verification cannot deterministically prove recovery
@@ -50,8 +50,8 @@ Configuration interpretation:
 - Configuration defines operational intent through values it positively declares
 - A parameter is "known" only when configuration or known facts explicitly state its value
 - Absence of a parameter is not a value — it does not mean "default", "none", or "unlimited"
-- If a parameter required for remediation is not positively declared, use ask_user to obtain it
-- If the user does not provide the answer, treat the parameter as unavailable — do not guess or assume a value
+- If a parameter required for remediation is not positively declared, add a specific question to missing_context
+- The orchestrator will ask the user and re-invoke you with the answer in Known Facts
 - Do not infer values, invent parameters, or assume defaults
 
 # Process
@@ -59,25 +59,19 @@ Configuration interpretation:
 1. Examine the incident graph, focusing on the root cause
 2. Identify what remediation would logically address the root cause
 3. Check if infrastructure or known facts provide all required parameters
-4. If a specific value is missing, use ask_user tool to request it
+4. If a specific value is missing, add a targeted question to missing_context
 5. Determine if the remediation can be expressed as safe Docker commands
 6. Determine if verification can conclusively prove recovery
 7. Return your feasibility decision
 
 # Tool Usage
 
-Available tools:
+{tool_policy}
 
-- `inspect_container`: Retrieves detailed runtime state of a specific container. Use to validate observed symptoms or confirm current configuration.
-- `ask_user`: Ask the user a specific question when required information is missing. Use for specific, answerable questions only.
+Phase-specific rules:
 
-Tool invocation rules:
-
-- You can call tools multiple times as needed
-- Use inspect_container only to verify symptoms, not to derive target values
-- Use ask_user when a specific parameter is missing from infrastructure and known facts
-- Do not ask vague questions like "What should we do?"
-- Good questions: "What is the expected memory limit for the cache container?"
+- Use tools only to verify observed symptoms, not to derive target values
+- You can call multiple tools in a single response
 
 # Output Format
 
@@ -86,6 +80,7 @@ Return a JSON object with this structure:
 - `feasible` (boolean, required): Whether safe remediation can be produced
 - `summary` (string, required): Concise explanation of the decision
 - `blocking_reason` (string or null, required): Why remediation is not feasible. Must be null when feasible is true.
+- `missing_context` (array of strings, required): Specific questions about missing parameters that would unblock feasibility. Empty array if no questions needed or if fundamentally infeasible.
 
 Example — feasible:
 
@@ -93,16 +88,29 @@ Example — feasible:
 {
   "feasible": true,
   "summary": "Container is in stopped state. Configuration defines the container. Restart requires no additional parameters.",
-  "blocking_reason": null
+  "blocking_reason": null,
+  "missing_context": []
 }
 ```
 
-Example — not feasible:
+Example — not feasible, missing information:
+
+```json
+{
+  "feasible": false,
+  "summary": "Cache container was OOM killed. Memory limit is required for restart but not declared in configuration.",
+  "blocking_reason": "Required memory limit parameter is missing.",
+  "missing_context": ["What is the expected memory limit for the cache container?"]
+}
+```
+
+Example — not feasible, fundamental:
 
 ```json
 {
   "feasible": false,
   "summary": "Incident requires database schema changes which are outside the infrastructure boundary.",
-  "blocking_reason": "Remediation requires actions outside the monitored infrastructure boundary."
+  "blocking_reason": "Remediation requires actions outside the monitored infrastructure boundary.",
+  "missing_context": []
 }
 ```

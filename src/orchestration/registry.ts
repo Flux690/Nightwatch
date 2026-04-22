@@ -1,5 +1,5 @@
 import { FunctionDeclaration, Type } from "@google/genai";
-import { Policy } from "../policy/policy";
+import type { NightwatchConfig } from "../config";
 
 /**
  * Single source of truth for all capabilities.
@@ -13,16 +13,14 @@ const CAPABILITY_DEFINITIONS = {
     "Generate a remediation plan with Docker commands to resolve the incident. Use after feasibility is confirmed. Also use for replanning after a failed attempt.",
   validatePlan:
     "Validate that all commands in the remediation plan are safe to execute. Use after a plan exists but before execution.",
-  requestApproval:
-    "Request user approval for the validated remediation plan before execution. Use after validatePlan succeeds and planValidated is true.",
+  consultUser:
+    "Consult the user for input. Use for plan approval (type: plan_approval), missing context from feasibility (type: missing_context), or when stuck and needing human help (type: escalation).",
   executePlan:
     "Execute the remediation steps from the validated plan. Use only after the plan has been approved by the user.",
   verifyPlan:
     "Verify that the remediation resolved the incident by running verification commands. Use after execution succeeds.",
   reportFindings:
     "Report diagnostic findings and complete observation. Use in observe mode after analysis and feasibility assessment are complete.",
-  escalate:
-    "Request human help when stuck. Provide the reason you cannot proceed and what context from the user would help. The user can provide context to continue or dismiss the incident.",
 } as const;
 
 export type CapabilityName = keyof typeof CAPABILITY_DEFINITIONS;
@@ -40,17 +38,16 @@ const makeTool = (
 /**
  * Returns the list of tools available based on the current policy mode.
  */
-export function getCapabilities(mode: Policy["mode"]): FunctionDeclaration[] {
+export function getCapabilities(mode: NightwatchConfig["mode"]): FunctionDeclaration[] {
   const baseTools: CapabilityName[] = [
     "analyzeIncident",
     "assessFeasibility",
-    "escalate",
+    "consultUser",
   ];
 
   const remediationTools: CapabilityName[] = [
     "planRemediation",
     "validatePlan",
-    "requestApproval",
     "executePlan",
     "verifyPlan",
   ];
@@ -63,22 +60,24 @@ export function getCapabilities(mode: Policy["mode"]): FunctionDeclaration[] {
       : [...baseTools, ...observeTools];
 
   return allowedNames.map((name) => {
-    if (name === "escalate") {
+    if (name === "consultUser") {
       return makeTool(name, CAPABILITY_DEFINITIONS[name], {
         type: Type.OBJECT,
         properties: {
+          type: {
+            type: Type.STRING,
+            description: "Type of consultation: plan_approval, missing_context, or escalation",
+          },
           reason: {
             type: Type.STRING,
-            description:
-              "Why the agent cannot proceed. Be specific about what is blocking progress.",
+            description: "Why user input is needed. Displayed to the user.",
           },
-          needed_context: {
+          question: {
             type: Type.STRING,
-            description:
-              "What additional information or context from the user might help unblock progress.",
+            description: "Specific question to ask (for missing_context type).",
           },
         },
-        required: ["reason", "needed_context"],
+        required: ["type", "reason"],
       });
     }
     return makeTool(name, CAPABILITY_DEFINITIONS[name]);

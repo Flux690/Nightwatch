@@ -10,17 +10,19 @@ import type {
 } from "../types";
 import type { IncidentGraph } from "../../types";
 import { success, failure } from "../types";
-import { runAgent, AgentTool } from "../../llm/runtime";
-import {
-  listContainersTool,
-  inspectContainerTool,
-  listContainersDeclaration,
-  inspectContainerDeclaration,
-} from "../../tools/docker";
+import { runAgent } from "../../llm/runtime";
+import { createDiagnosticTools } from "../../tools/docker";
+import type { ToolCache } from "../../tools/cache";
+import { getResolvedIncidents } from "../../orchestration/resolvedStore";
 import { loadPrompt } from "../../utils/promptLoader";
 import { getErrorMessage } from "../../utils/helpers";
 import { logger } from "../../utils/logger";
-import schema from "./schema.json";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schema = JSON.parse(readFileSync(path.join(__dirname, "schema.json"), "utf-8"));
 
 const SYSTEM_PROMPT = loadPrompt(import.meta.url);
 
@@ -59,8 +61,8 @@ export const config: CapabilityConfig = {
   },
 };
 
-export const handler: CapabilityHandler = async (state) => {
-  const result = await analyzeIncident(state);
+export const handler: CapabilityHandler = async (state, toolCache) => {
+  const result = await analyzeIncident(state, toolCache);
   const idle =
     result.success &&
     (!result.state.incidentGraph ||
@@ -70,6 +72,7 @@ export const handler: CapabilityHandler = async (state) => {
 
 export async function analyzeIncident(
   state: IncidentResolutionState,
+  toolCache?: ToolCache,
 ): Promise<CapabilityResult<IncidentGraph | null>> {
   if (!state.logs || state.logs.length === 0) {
     return failure(state, "Cannot analyze: no logs present.");
@@ -79,31 +82,31 @@ export async function analyzeIncident(
     return failure(state, "Incident graph already identified.");
   }
 
-  const userMessage = `Analyze these logs:\n${state.logs.map((log, i) => `[${i}] ${log}`).join("\n")}`;
+  let userMessage = `Analyze these logs:\n${state.logs.map((log, i) => `[${i}] ${log}`).join("\n")}`;
 
-  const tools: AgentTool[] = [
-    {
-      declaration: listContainersDeclaration,
-      handler: async () => listContainersTool(),
-    },
-    {
-      declaration: inspectContainerDeclaration,
-      handler: async (args) =>
-        inspectContainerTool((args as { name: string }).name),
-    },
-  ];
+  // Append recently resolved incidents for deduplication
+  const resolved = getResolvedIncidents();
+  if (resolved.length > 0) {
+    const lines = resolved.map(
+      (r) => `- Container: ${r.rootContainer} | Summary: ${r.incidentSummary} | Resolution: ${r.resolution}`,
+    );
+    userMessage += `\n\n## Recently Resolved Incidents (last 5 minutes)\n${lines.join("\n")}\nIf current logs match a recently resolved incident, return empty graph.`;
+  }
+
+  const tools = createDiagnosticTools(toolCache);
 
   try {
-    const { result } = await runAgent<IncidentGraphAnalysis>({
+    const { result, conversationHistory } = await runAgent<IncidentGraphAnalysis>({
       systemInstruction: SYSTEM_PROMPT,
       initialUserMessage: userMessage,
       tools,
+      conversationHistory: state.sharedHistory,
       responseSchema: schema,
     });
 
     // No incident detected
     if (result.root === null || result.nodes.length === 0) {
-      return success(state, null);
+      return success({ ...state, sharedHistory: conversationHistory }, null);
     }
 
     const incidentGraph: IncidentGraph = {
@@ -113,7 +116,7 @@ export async function analyzeIncident(
       summary: result.summary,
     };
 
-    return success({ ...state, incidentGraph }, incidentGraph);
+    return success({ ...state, incidentGraph, sharedHistory: conversationHistory }, incidentGraph);
   } catch (err) {
     return failure(state, `Analysis failed: ${getErrorMessage(err)}`);
   }

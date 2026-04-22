@@ -83,17 +83,18 @@ Graph: 1 node, no edges, root: 0
 
 # Tool Usage
 
-Available tools:
+{tool_policy}
 
-- `list_containers`: Lists all Docker containers with name, image, state, and status. Use when logs are ambiguous about which containers exist or their availability.
-- `inspect_container`: Retrieves detailed runtime state of a specific container including health, resource limits, restart count, and mounts. Use when container state, configuration, or resource constraints are needed to determine root cause.
-
-Tool invocation rules:
+Phase-specific rules:
 
 - Only invoke tools when log evidence is insufficient
 - Do not invoke tools speculatively
 - Use inspection results as supporting evidence, not primary classification basis
 - You can call multiple tools in a single response; use this to inspect multiple containers in parallel
+
+# Deduplication
+
+If a "Recently Resolved Incidents" section is provided in the user message, compare the current logs against those entries. If the current logs describe the same failure on the same container as a recently resolved incident (same container name and same failure type), return an empty graph (empty nodes, null root). This prevents re-triggering remediation for incidents that were just fixed.
 
 # Output Format
 

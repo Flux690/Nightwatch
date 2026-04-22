@@ -10,17 +10,18 @@ import type {
 } from "../types";
 import type { RemediationPlan } from "../../types";
 import { success, failure } from "../types";
-import { runAgent, AgentTool } from "../../llm/runtime";
-import { infrastructure } from "../../infrastructure/compose";
-import { loadKnowledge } from "../../infrastructure/knowledge";
-import {
-  inspectContainerTool,
-  inspectContainerDeclaration,
-} from "../../tools/docker";
+import { runAgent } from "../../llm/runtime";
+import { createDiagnosticTools } from "../../tools/docker";
+import type { ToolCache } from "../../tools/cache";
 import { loadPrompt } from "../../utils/promptLoader";
 import { getErrorMessage } from "../../utils/helpers";
 import { logger } from "../../utils/logger";
-import schema from "./schema.json";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const schema = JSON.parse(readFileSync(path.join(__dirname, "schema.json"), "utf-8"));
 
 const SYSTEM_PROMPT = loadPrompt(import.meta.url);
 
@@ -46,13 +47,14 @@ export const config: CapabilityConfig = {
   },
 };
 
-export const handler: CapabilityHandler = async (state) => {
-  const result = await planRemediation(state);
+export const handler: CapabilityHandler = async (state, toolCache) => {
+  const result = await planRemediation(state, toolCache);
   return result;
 };
 
 export async function planRemediation(
   state: IncidentResolutionState,
+  toolCache?: ToolCache,
 ): Promise<CapabilityResult<PlanRemediationData>> {
   if (!state.incidentGraph || state.incidentGraph.nodes.length === 0) {
     return failure(state, "Cannot plan: no incident identified.");
@@ -75,86 +77,33 @@ export async function planRemediation(
     return failure(state, "Plan already exists without failure context.");
   }
 
-  // Get the root cause node by array index
-  if (state.incidentGraph.root === null) {
-    return failure(state, "Cannot plan: no root cause specified in graph.");
+  // Incident graph, infrastructure, and knowledge are already in shared history
+  // from analyzer and feasibility phases. Only inject NEW information.
+  let userMessage: string;
+
+  if (isReplanning && state.failureContext) {
+    userMessage = `## Failure Context\n${JSON.stringify(state.failureContext, null, 2)}\n\nGenerate a revised remediation plan addressing the failure above.`;
+  } else {
+    userMessage = `Generate a remediation plan for the incident assessed above.`;
   }
 
-  const rootNode = state.incidentGraph.nodes[state.incidentGraph.root];
-  if (!rootNode) {
-    return failure(state, "Cannot plan: root cause index out of bounds.");
-  }
-
-  // Build incident graph summary for the prompt
-  const graphSummary = {
-    summary: state.incidentGraph.summary,
-    rootCause: {
-      index: state.incidentGraph.root,
-      container: rootNode.container,
-      type: rootNode.type,
-    },
-    affectedComponents: state.incidentGraph.nodes.map((n, i) => ({
-      index: i,
-      container: n.container,
-      type: n.type,
-    })),
-    causalChain: state.incidentGraph.edges.map((e) => `${e.from} -> ${e.to}`),
-  };
-
-  const knowledge = loadKnowledge();
-
-  let userMessage = `
-          ## Infrastructure
-          \`\`\`yaml
-          ${infrastructure.raw}
-          \`\`\`
-          
-          ${
-            knowledge
-              ? `
-            ## Known Facts
-            ${knowledge}`
-              : ""
-          }
-
-          ## Incident Graph
-          ${JSON.stringify(graphSummary, null, 2)}
-
-          ## Root Cause
-          - Container: ${rootNode.container}
-          - Type: ${rootNode.type}
-          - Detected at: ${rootNode.timestamp}`;
-
-  if (isReplanning && state.plan) {
-    userMessage += `\n\n## Previous Plan\n${JSON.stringify(state.plan, null, 2)}`;
-  }
-
-  if (state.failureContext) {
-    userMessage += `\n\n## Failure Context\n${JSON.stringify(state.failureContext, null, 2)}`;
-  }
-
-  const tools: AgentTool[] = [
-    {
-      declaration: inspectContainerDeclaration,
-      handler: async (args) =>
-        inspectContainerTool((args as { name: string }).name),
-    },
-  ];
+  const tools = createDiagnosticTools(toolCache);
 
   try {
     const { result, conversationHistory } = await runAgent<RemediationPlan>({
       systemInstruction: SYSTEM_PROMPT,
       initialUserMessage: userMessage,
       tools,
-      conversationHistory: state.plannerHistory,
+      conversationHistory: state.sharedHistory,
       responseSchema: schema,
     });
 
     const updatedState: IncidentResolutionState = {
       ...state,
       plan: result,
-      plannerHistory: conversationHistory, // Update history in state
+      sharedHistory: conversationHistory,
       planValidated: false,
+      approved: false,
       executionResult: null,
       verificationResult: null,
       failureContext: null,

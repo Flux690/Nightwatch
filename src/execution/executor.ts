@@ -1,9 +1,9 @@
 /**
  * Command execution infrastructure.
- * Executes shell commands and tracks results.
+ * Executes commands via execFile (no shell) and tracks results.
  */
 
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { ExecutionResult, StepResult } from "../types";
 
 export type CommandResult = {
@@ -13,9 +13,9 @@ export type CommandResult = {
   stderr: string;
 };
 
-export function execCmd(command: string): Promise<CommandResult> {
+export function execCmd(args: string[]): Promise<CommandResult> {
   return new Promise((resolve) => {
-    exec(command, (error, stdout, stderr) => {
+    execFile(args[0], args.slice(1), (error, stdout, stderr) => {
       let exitCode = 0;
       let signal: string | null = null;
 
@@ -37,16 +37,16 @@ export function execCmd(command: string): Promise<CommandResult> {
 }
 
 export async function executeCommands(
-  steps: { action: string }[],
+  steps: { action: string[] }[],
 ): Promise<ExecutionResult> {
   const results: StepResult[] = [];
 
   for (let i = 0; i < steps.length; i++) {
-    const command = steps[i].action;
-    const cmdResult = await execCmd(command);
+    const args = steps[i].action;
+    const cmdResult = await execCmd(args);
 
     results.push({
-      step: command,
+      step: args.join(" "),
       status: cmdResult.success ? "success" : "failure",
       exitCode: cmdResult.exitCode,
       stdout: cmdResult.stdout,

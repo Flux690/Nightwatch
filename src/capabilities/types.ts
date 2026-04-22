@@ -3,6 +3,7 @@
  */
 
 import type { IncidentResolutionState } from "../orchestration/state";
+import type { ToolCache } from "../tools/cache";
 
 /**
  * Result returned by every capability.
@@ -30,6 +31,7 @@ export type CapabilityConfig = {
  */
 export type CapabilityHandler = (
   state: IncidentResolutionState,
+  toolCache?: ToolCache,
 ) => Promise<CapabilityResult>;
 
 /**

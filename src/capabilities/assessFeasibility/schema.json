@@ -13,8 +13,13 @@
     "blocking_reason": {
       "type": ["string", "null"],
       "description": "Reason remediation is not feasible. Must be null when feasible is true."
+    },
+    "missing_context": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Specific questions about missing parameters that would unblock feasibility. Empty if no questions or if fundamentally infeasible."
     }
   },
-  "required": ["feasible", "summary", "blocking_reason"],
+  "required": ["feasible", "summary", "blocking_reason", "missing_context"],
   "additionalProperties": false
 }
