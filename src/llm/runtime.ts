@@ -8,6 +8,7 @@ import {
 } from "@google/genai";
 import { logger } from "../utils/logger";
 import { withRetry } from "../utils/helpers";
+import { validateSchema } from "../utils/validateSchema";
 
 export type AgentTool<T = unknown> = {
   declaration: FunctionDeclaration;
@@ -33,8 +34,11 @@ export async function runAgent<T>(
     responseSchema,
   } = config;
 
+  const MAX_TOOL_ROUNDS = 20;
+
   const history: Content[] = [...conversationHistory];
   let userMessage: Part[] = [{ text: initialUserMessage }];
+  let toolRounds = 0;
 
   while (true) {
     history.push({ role: "user", parts: userMessage });
@@ -76,9 +80,7 @@ export async function runAgent<T>(
           if (!call.name) {
             throw new Error("Function call missing name");
           }
-          if (call.name !== "ask_user") {
-            logger.tool(call.name, call.args);
-          }
+          logger.tool(call.name, call.args);
 
           const tool = tools.find((t) => t.declaration.name === call.name);
           if (!tool) throw new Error(`Unknown tool: ${call.name}`);
@@ -94,6 +96,10 @@ export async function runAgent<T>(
       );
 
       userMessage = toolResults as Part[];
+      toolRounds++;
+      if (toolRounds >= MAX_TOOL_ROUNDS) {
+        throw new Error(`Agent exceeded maximum tool rounds (${MAX_TOOL_ROUNDS})`);
+      }
       continue;
     }
 
@@ -101,7 +107,8 @@ export async function runAgent<T>(
     if (modelText) {
       const parsed = tryParseJson<T>(modelText);
       if (parsed) {
-        return { result: parsed, conversationHistory: history };
+        const validated = validateSchema<T>(responseSchema, parsed, "agent response");
+        return { result: validated, conversationHistory: history };
       }
     }
 
@@ -146,4 +153,38 @@ function tryParseJson<T>(text: string): T | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Clean conversation history for handoff between capabilities.
+ * Keeps: user text, functionCall parts, functionResponse parts, final structured output.
+ * Drops: thinking traces (thought: true), cleanup prompts.
+ */
+export function cleanHistory(history: Content[]): Content[] {
+  const cleaned: Content[] = [];
+
+  for (const entry of history) {
+    // Drop user messages that are cleanup prompts
+    if (entry.role === "user") {
+      const isCleanupPrompt = entry.parts?.some(
+        (p) =>
+          p.text === "Provide your answer as valid JSON matching the schema.",
+      );
+      if (isCleanupPrompt) continue;
+    }
+
+    // Filter out thinking parts from model messages
+    if (entry.role === "model" && entry.parts) {
+      const filteredParts = entry.parts.filter(
+        (p) => !(p as any).thought,
+      );
+      if (filteredParts.length === 0) continue;
+      cleaned.push({ ...entry, parts: filteredParts });
+      continue;
+    }
+
+    cleaned.push(entry);
+  }
+
+  return cleaned;
 }

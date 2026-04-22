@@ -13,8 +13,9 @@
         "type": "object",
         "properties": {
           "action": {
-            "type": "string",
-            "description": "A single, deterministic Docker CLI command that performs one remediation action."
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Docker command as an argument array, e.g. [\"docker\", \"start\", \"myapp\"]. Each argument is a separate array element."
           },
           "reason": {
             "type": "string",
@@ -32,8 +33,9 @@
         "type": "object",
         "properties": {
           "action": {
-            "type": "string",
-            "description": "A single Docker CLI command that verifies functional recovery of the original failure mode."
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Docker verification command as an argument array, e.g. [\"docker\", \"inspect\", \"myapp\", \"--format\", \"{{.State.Running}}\"]. Each argument is a separate array element."
           },
           "reason": {
             "type": "string",

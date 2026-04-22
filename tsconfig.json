@@ -6,7 +6,10 @@
     "resolveJsonModule": true,
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
-  "exclude": ["src_old", "node_modules"]
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }

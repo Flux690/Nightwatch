@@ -20,21 +20,17 @@ Generate an ordered remediation plan using Docker CLI commands that resolves the
 
 ## Command Safety
 
+Every command is an argument array (not a string). Each argument is a separate array element. Do not combine multiple arguments into one string.
+
 Every command must satisfy ALL:
 
-- Starts with `docker`
+- First element is `"docker"`
 - Targets exactly one container
 - Performs exactly one operation
-- Is directly executable without preprocessing
 
 Forbidden patterns:
 
-- Shell wrappers: `sh -c`, `bash -c`, `/bin/sh`, `/bin/bash`
-- Pipes: `|`
-- Redirection: `>`, `<`, `>>`
-- Command chaining: `&&`, `||`, `;`
-- Variable substitution: `$VAR`, `${VAR}`, `$(command)`
-- Subshells or backticks
+- Shell wrappers inside `docker exec`: `sh`, `bash`, `/bin/sh`, `/bin/bash` as the executed command
 - Destructive operations: `rm -rf`, `dd`, `mkfs`, `format`
 
 ## Remediation Rules
@@ -76,9 +72,11 @@ Verify what was broken. If configuration was wrong, verify the configuration. If
 
 # Tool Usage
 
-Available tool:
+{tool_policy}
 
-- `inspect_container`: Retrieves runtime state of a container. Use to understand current state, not to derive target values.
+Phase-specific rules:
+
+- Use tools to understand current state, not to derive target values
 
 # Failure Modes
 
@@ -134,11 +132,13 @@ Return a JSON object:
 
 - `summary` (string, required): Explanation of the remediation decision, or why no safe remediation is possible
 - `steps` (array, required): Ordered remediation commands. May be empty if no safe remediation exists.
-  - `action` (string, required): The Docker command
+  - `action` (array of strings, required): Docker command as an argument array. Each argument is a separate element.
   - `reason` (string, required): Why this step is necessary
 - `verification` (array, required): Ordered verification commands. May be empty if verification cannot be safely expressed.
-  - `action` (string, required): The Docker command
+  - `action` (array of strings, required): Docker command as an argument array. Each argument is a separate element.
   - `reason` (string, required): Why this verifies recovery
+
+Each argument is a separate array element. Do not combine multiple arguments into one string.
 
 Example:
 
@@ -147,13 +147,13 @@ Example:
   "summary": "Service container is stopped. Starting it will restore availability.",
   "steps": [
     {
-      "action": "docker start myapp-worker",
+      "action": ["docker", "start", "myapp-worker"],
       "reason": "Start the stopped container to restore service"
     }
   ],
   "verification": [
     {
-      "action": "docker inspect myapp-worker --format '{{.State.Running}}'",
+      "action": ["docker", "inspect", "myapp-worker", "--format", "{{.State.Running}}"],
       "reason": "Verify container is in running state"
     }
   ]
@@ -173,15 +173,16 @@ Example — no safe remediation:
 Valid commands:
 
 ```
-docker start myapp-worker
-docker exec myapp-service myctl config get setting_name
-docker inspect myapp-api --format '{{.State.Health.Status}}'
+["docker", "start", "myapp-worker"]
+["docker", "exec", "myapp-service", "myctl", "config", "get", "setting_name"]
+["docker", "inspect", "myapp-api", "--format", "{{.State.Health.Status}}"]
+["docker", "update", "--restart=always", "myapp-worker"]
 ```
 
 Invalid commands:
 
 ```
-docker exec myapp-api sh -c "echo test"
-docker logs myapp-api | grep error
-docker restart worker scheduler
+["docker", "exec", "myapp-api", "sh", "-c", "echo test"]     # shell wrapper
+["docker logs myapp-api | grep error"]                         # single string, not array
+["docker", "restart", "worker", "scheduler"]                   # multiple containers
 ```

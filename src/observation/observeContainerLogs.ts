@@ -11,6 +11,7 @@ export type LogEvent = {
 export async function observeContainerLogs(
   containerName: string,
   onLog: (event: LogEvent) => void,
+  onError?: (error: Error) => void,
 ): Promise<void> {
   const container = docker.getContainer(containerName);
 
@@ -55,6 +56,44 @@ export async function observeContainerLogs(
   handleStream(stderr, "stderr");
 
   logStream.on("error", (error: Error) => {
-    console.error("[Observer] Docker log stream error:", error);
+    if (onError) {
+      onError(error);
+    } else {
+      console.error("[Observer] Docker log stream error:", error);
+    }
   });
+}
+
+const MAX_BACKOFF_MS = 30_000;
+
+/**
+ * Observe container logs with automatic reconnection on stream failure.
+ * Uses exponential backoff (1s, 2s, 4s... capped at 30s).
+ */
+export async function observeWithReconnect(
+  containerName: string,
+  onLog: (event: LogEvent) => void,
+): Promise<void> {
+  let delay = 1000;
+
+  const connect = async (): Promise<void> => {
+    try {
+      await observeContainerLogs(containerName, onLog, () => {
+        console.error(
+          `[Observer] Stream error for ${containerName}, reconnecting in ${delay}ms`,
+        );
+        setTimeout(() => void connect(), delay);
+        delay = Math.min(delay * 2, MAX_BACKOFF_MS);
+      });
+      delay = 1000; // Reset on successful connection
+    } catch {
+      console.error(
+        `[Observer] Failed to connect to ${containerName}, retrying in ${delay}ms`,
+      );
+      setTimeout(() => void connect(), delay);
+      delay = Math.min(delay * 2, MAX_BACKOFF_MS);
+    }
+  };
+
+  await connect();
 }

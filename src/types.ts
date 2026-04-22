@@ -30,11 +30,12 @@ export type FeasibilityAssessment = {
   feasible: boolean;
   summary: string;
   blocking_reason: string | null;
+  missing_context: string[];
 };
 
 /** Single step in a remediation or verification plan */
 export type PlanStep = {
-  action: string;
+  action: string[];
   reason: string;
 };
 
@@ -83,4 +84,12 @@ export type HistoryEntry = {
   capability: string;
   success: boolean;
   summary: string;
+};
+
+/** Record of a successfully resolved incident, used for deduplication */
+export type ResolvedIncident = {
+  rootContainer: string;
+  incidentSummary: string;
+  resolution: string;
+  resolvedAt: number;
 };

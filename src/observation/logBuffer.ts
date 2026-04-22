@@ -1,4 +1,4 @@
-import { LogEvent, observeContainerLogs } from "./observeContainerLogs";
+import { LogEvent, observeWithReconnect } from "./observeContainerLogs";
 
 export type LogBatch = {
   logs: string[];
@@ -129,16 +129,13 @@ function hasErrorIndicator(event: LogEvent): boolean {
 }
 
 function shouldInclude(event: LogEvent): boolean {
-  // Step 1: If it's a lifecycle event (shutdown, startup, health), IGNORE
-  if (isLifecycleEvent(event.message)) {
-    return false;
-  }
+  // Error indicators take priority — include even if lifecycle words are present
+  if (hasErrorIndicator(event)) return true;
 
-  // Step 2: stderr without lifecycle keywords is suspicious
-  if (event.stream === "stderr") return true;
+  // stderr without error indicators: include unless it's a lifecycle event
+  if (event.stream === "stderr" && !isLifecycleEvent(event.message)) return true;
 
-  // Step 3: Check for actual error indicators
-  return hasErrorIndicator(event);
+  return false;
 }
 
 export async function startMonitoring(
@@ -202,7 +199,7 @@ export async function startMonitoring(
   }
 
   for (const containerName of containerNames) {
-    await observeContainerLogs(containerName, handleLogEvent);
+    await observeWithReconnect(containerName, handleLogEvent);
   }
 
   return function stop() {

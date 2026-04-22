@@ -74,7 +74,7 @@ export async function verifyPlan(
   }
 
   const failedStepResult = result.results[result.failedAtStep];
-  const failedStepAction = state.plan.verification[result.failedAtStep].action;
+  const failedStepAction = state.plan.verification[result.failedAtStep].action.join(" ");
   const output = failedStepResult.stderr || failedStepResult.stdout;
 
   const updatedState: IncidentResolutionState = {
@@ -86,6 +86,7 @@ export async function verifyPlan(
       reason: `Verification failed at step ${result.failedAtStep + 1}`,
       output,
     },
+    approved: false,
   };
 
   return failure(

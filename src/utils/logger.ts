@@ -10,21 +10,9 @@ import {
   StepResult,
   ExecutionResult,
 } from "../types";
-
-// ANSI colors & icons
-const COLORS = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  dim: "\x1b[90m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  red: "\x1b[31m",
-  white: "\x1b[97m",
-  gray: "\x1b[37m",
-} as const;
+import type { Infrastructure } from "../orchestration/composeLoader";
+import type { NightwatchConfig } from "../config";
+import { pc, brightWhite, lightPurple } from "./colors";
 
 const ICONS = {
   success: "✓",
@@ -32,15 +20,7 @@ const ICONS = {
   warning: "⚠",
 };
 
-type ColorName = keyof typeof COLORS;
 const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
-
-// Color helpers
-const c = (color: ColorName, text: string): string =>
-  COLORS[color] + text + COLORS.reset;
-
-const cb = (color: ColorName, text: string): string =>
-  COLORS.bright + COLORS[color] + text + COLORS.reset;
 
 // Time & text helpers
 function getTimestamp(): string {
@@ -48,7 +28,7 @@ function getTimestamp(): string {
 }
 
 function ts(): string {
-  return c("dim", `[${getTimestamp()}]`);
+  return pc.gray(`[${getTimestamp()}]`);
 }
 
 function visibleLength(str: string): number {
@@ -114,29 +94,38 @@ function clearLine(): void {
 let ellipsisTimer: NodeJS.Timeout | null = null;
 let ellipsisActive = false;
 
-// Track last plan line count for gray-out functionality
-let lastPlanLineCount = 0;
-let linesSincePlan = 0;
+// Plan gray-out state — only tracks lines when a plan is active
+let activePlan: RemediationPlan | null = null;
+let planLineCount = 0;
+let linesAfterPlan = 0;
 
-/**
- * Counted console.log — tracks visual lines for planGrayOut cursor math.
- */
+// Invalidate tracking on terminal resize so grayout degrades gracefully
+process.stdout.on("resize", () => {
+  activePlan = null;
+  planLineCount = 0;
+  linesAfterPlan = 0;
+});
+
 function logLine(...args: Parameters<typeof console.log>): void {
-  let lines = 1;
-  for (const arg of args) {
-    if (typeof arg === "string") {
-      lines += (arg.match(/\n/g) || []).length;
+  if (activePlan) {
+    let lines = 1;
+    for (const arg of args) {
+      if (typeof arg === "string") {
+        lines += (arg.match(/\n/g) || []).length;
+      }
     }
+    linesAfterPlan += lines;
   }
-  linesSincePlan += lines;
   console.log(...args);
 }
 
 /**
- * Increment the line counter from outside the logger (e.g. prompts.ts).
+ * Increment the line counter from outside the logger (e.g. prompt.ts).
  */
 export function trackLine(count: number = 1): void {
-  linesSincePlan += count;
+  if (activePlan) {
+    linesAfterPlan += count;
+  }
 }
 
 const HIDE_CURSOR = "\x1b[?25l";
@@ -152,7 +141,7 @@ function startEllipsis(message: string): void {
   let frame = 0;
 
   ellipsisTimer = setInterval(() => {
-    const line = `${ts()} ${c("gray", message)}${frames[frame]}`;
+    const line = `${ts()} ${pc.white(message)}${frames[frame]}`;
     process.stdout.write(`\r${line}   `);
     frame = (frame + 1) % frames.length;
   }, 350);
@@ -194,14 +183,14 @@ function logIndentedDetails(
     );
 
     logLine(
-      `${baseIndent}${c("gray", prefix)} ${c("white", key)}: ${c("gray", wrappedValue)}`,
+      `${baseIndent}${pc.white(prefix)} ${brightWhite(key)}: ${pc.white(wrappedValue)}`,
     );
   });
 }
 
 // Logger API
 export const logger = {
-  startup(containers: string[], mode: string): void {
+  startup(infrastructure: Infrastructure, config: NightwatchConfig): void {
     stopEllipsis();
 
     const banner = `
@@ -215,14 +204,20 @@ export const logger = {
 
     const subheading = "Autonomous SRE Agent";
 
-    console.log(cb("white", banner.trim()));
-    console.log(c("white", subheading));
+    console.log(pc.bold(brightWhite(banner.trim())));
+    console.log(brightWhite(subheading));
     console.log();
     console.log(
-      `  ${c("white", "Monitoring")} : ${cb("white", `[ ${containers.map((c) => `'${c}'`).join(", ")} ]`)}`,
+      `  ${brightWhite("Compose")}     : ${pc.bold(brightWhite(infrastructure.composePaths.join(", ")))}`,
     );
     console.log(
-      `  ${c("white", "Mode")}       : ${cb("white", mode.charAt(0).toUpperCase() + mode.slice(1))}`,
+      `  ${brightWhite("Containers")}  : ${pc.bold(brightWhite(`[ ${infrastructure.containers.map((ct) => `'${ct}'`).join(", ")} ]`))}`,
+    );
+    console.log(
+      `  ${brightWhite("Mode")}        : ${pc.bold(brightWhite(config.mode.charAt(0).toUpperCase() + config.mode.slice(1)))}`,
+    );
+    console.log(
+      `  ${brightWhite("Max Retries")} : ${pc.bold(brightWhite(String(config.maxRetries)))}`,
     );
   },
 
@@ -235,7 +230,7 @@ export const logger = {
   stage(name: string): void {
     stopEllipsis();
     logLine();
-    logLine(cb("white", name));
+    logLine(pc.bold(brightWhite(name)));
   },
 
   action(message: string): void {
@@ -246,16 +241,16 @@ export const logger = {
   tool(name: string, args?: Record<string, unknown>): void {
     stopEllipsis();
     let argsStr = "";
-    if (args && name !== "ask_user") {
+    if (args) {
       try {
-        argsStr = ` ${c("dim", JSON.stringify(args))}`;
+        argsStr = ` ${pc.gray(JSON.stringify(args))}`;
       } catch {
-        argsStr = ` ${c("dim", "[unserializable args]")}`;
+        argsStr = ` ${pc.gray("[unserializable args]")}`;
       }
     }
 
     logLine(
-      `${ts()} ${c("magenta", "Tool:")} ${c("white", name)}${argsStr}`,
+      `${ts()} ${lightPurple("Tool:")} ${brightWhite(name)}${argsStr}`,
     );
   },
 
@@ -266,8 +261,8 @@ export const logger = {
   ): void {
     stopEllipsis();
     const icon = success ? ICONS.success : ICONS.failure;
-    const color: ColorName = success ? "green" : "red";
-    const line = `${ts()} ${c(color, icon)} ${c("white", message)}`;
+    const colorFn = success ? pc.green : pc.red;
+    const line = `${ts()} ${colorFn(icon)} ${brightWhite(message)}`;
 
     logLine(line);
     if (details) logIndentedDetails(details);
@@ -275,14 +270,14 @@ export const logger = {
 
   warn(message: string, details?: Record<string, string | number | boolean>) {
     stopEllipsis();
-    const line = `${ts()} ${c("yellow", ICONS.warning)} ${c("white", message)}`;
+    const line = `${ts()} ${pc.yellow(ICONS.warning)} ${brightWhite(message)}`;
     logLine(line);
     if (details) logIndentedDetails(details);
   },
 
   info(message: string): void {
     stopEllipsis();
-    logLine(`${ts()} ${c("gray", message)}`);
+    logLine(`${ts()} ${pc.white(message)}`);
   },
 
   plan(plan: RemediationPlan): void {
@@ -292,93 +287,103 @@ export const logger = {
       logger.result(false, "No safe remediation possible", {
         Summary: plan.summary,
       });
-      lastPlanLineCount = 0;
+      activePlan = null;
       return;
     }
 
-    const startCount = linesSincePlan;
+    // Count lines as we print (before activePlan is set, so logLine doesn't double-count)
+    let lines = 0;
 
-    logLine(
-      `${ts()} ${c("green", ICONS.success)} ${c("white", "Plan generated")}`,
-    );
-    logIndentedDetails({ Summary: plan.summary });
+    const countLog = (...args: Parameters<typeof console.log>): void => {
+      let l = 1;
+      for (const arg of args) {
+        if (typeof arg === "string") {
+          l += (arg.match(/\n/g) || []).length;
+        }
+      }
+      lines += l;
+      console.log(...args);
+    };
 
-    const indent = " ".repeat(visibleLength(ts()) + 3);
-
-    logLine(`\n${indent}${c("gray", "Remediation Steps:")}`);
-    plan.steps.forEach((s, i) => {
-      logLine(
-        `${indent}  ${c("white", `${i + 1}.`)} ${c("white", s.action)}`,
-      );
-      logLine(`${indent}     ${c("dim", s.reason)}`);
-    });
-
-    if (plan.verification.length > 0) {
-      logLine(`\n${indent}${c("gray", "Verification Steps:")}`);
-      plan.verification.forEach((s, i) => {
-        logLine(
-          `${indent}  ${c("white", `${i + 1}.`)} ${c("white", s.action)}`,
-        );
-        logLine(`${indent}     ${c("dim", s.reason)}`);
-      });
-    }
-
-    lastPlanLineCount = linesSincePlan - startCount;
-    linesSincePlan = 0;
-  },
-
-  planGrayOut(plan: RemediationPlan): void {
-    if (lastPlanLineCount === 0) return;
-
-    const linesAfter = linesSincePlan;
-    const totalLines = lastPlanLineCount + linesAfter;
-
-    // Move cursor up
-    process.stdout.write(`\x1b[${totalLines}A`);
-
-    // Rewrite plan in dim (same structure as plan(), but all dim)
-    console.log(
-      `${ts()} ${c("dim", ICONS.success)} ${c("dim", "Plan generated")}`,
+    countLog(
+      `${ts()} ${pc.green(ICONS.success)} ${brightWhite("Plan generated")}`,
     );
 
-    // Use same wrapping logic as logIndentedDetails for Summary
+    // Summary with wrapping (same as logIndentedDetails but counted)
     const baseIndent = " ".repeat(visibleLength(ts()) + 3);
     const labelPrefix = `${baseIndent}└─ Summary: `;
-    const continuationIndent = " ".repeat(visibleLength(labelPrefix));
-    const wrappedSummary = wrapText(plan.summary, labelPrefix, continuationIndent);
-    console.log(`${baseIndent}${c("dim", "└─")} ${c("dim", "Summary")}: ${c("dim", wrappedSummary)}`);
+    const contIndent = " ".repeat(visibleLength(labelPrefix));
+    const wrappedSummary = wrapText(plan.summary, labelPrefix, contIndent);
+    countLog(
+      `${baseIndent}${pc.white("└─")} ${brightWhite("Summary")}: ${pc.white(wrappedSummary)}`,
+    );
 
     const indent = " ".repeat(visibleLength(ts()) + 3);
 
-    console.log(`\n${indent}${c("dim", "Remediation Steps:")}`);
+    countLog(`\n${indent}${pc.white("Remediation Steps:")}`);
     plan.steps.forEach((s, i) => {
-      console.log(
-        `${indent}  ${c("dim", `${i + 1}.`)} ${c("dim", s.action)}`,
+      countLog(
+        `${indent}  ${brightWhite(`${i + 1}.`)} ${brightWhite(s.action.join(" "))}`,
       );
-      console.log(`${indent}     ${c("dim", s.reason)}`);
+      countLog(`${indent}     ${pc.gray(s.reason)}`);
     });
 
     if (plan.verification.length > 0) {
-      console.log(`\n${indent}${c("dim", "Verification Steps:")}`);
+      countLog(`\n${indent}${pc.white("Verification Steps:")}`);
       plan.verification.forEach((s, i) => {
-        console.log(
-          `${indent}  ${c("dim", `${i + 1}.`)} ${c("dim", s.action)}`,
+        countLog(
+          `${indent}  ${brightWhite(`${i + 1}.`)} ${brightWhite(s.action.join(" "))}`,
         );
-        console.log(`${indent}     ${c("dim", s.reason)}`);
+        countLog(`${indent}     ${pc.gray(s.reason)}`);
       });
     }
 
-    // Clear the lines that were after the plan
-    const termWidth = process.stdout.columns || 120;
-    for (let i = 0; i < linesAfter; i++) {
-      console.log(" ".repeat(termWidth));
+    // Activate tracking for lines printed after the plan
+    activePlan = plan;
+    planLineCount = lines;
+    linesAfterPlan = 0;
+  },
+
+  planGrayOut(): void {
+    if (!activePlan) return;
+
+    const plan = activePlan;
+    const totalLines = planLineCount + linesAfterPlan;
+
+    // Move cursor up and clear all lines first
+    process.stdout.write(`\x1b[${totalLines}A`);
+    for (let i = 0; i < totalLines; i++) {
+      process.stdout.write(`\x1b[2K\n`);
     }
-    if (linesAfter > 0) {
-      process.stdout.write(`\x1b[${linesAfter}A`);
+    process.stdout.write(`\x1b[${totalLines}A`);
+
+    // Rewrite plan — entire lines wrapped in pc.gray() for uniform color
+    const indent = " ".repeat(visibleLength(ts()) + 3);
+
+    console.log(pc.gray(`[${getTimestamp()}] ${ICONS.success} Plan generated`));
+
+    const labelPrefix = `${indent}└─ Summary: `;
+    const contIndent = " ".repeat(labelPrefix.length);
+    const wrappedSummary = wrapText(plan.summary, labelPrefix, contIndent);
+    console.log(pc.gray(`${indent}└─ Summary: ${wrappedSummary}`));
+
+    console.log(pc.gray(`\n${indent}Remediation Steps:`));
+    plan.steps.forEach((s, i) => {
+      console.log(pc.gray(`${indent}  ${i + 1}. ${s.action.join(" ")}`));
+      console.log(pc.gray(`${indent}     ${s.reason}`));
+    });
+
+    if (plan.verification.length > 0) {
+      console.log(pc.gray(`\n${indent}Verification Steps:`));
+      plan.verification.forEach((s, i) => {
+        console.log(pc.gray(`${indent}  ${i + 1}. ${s.action.join(" ")}`));
+        console.log(pc.gray(`${indent}     ${s.reason}`));
+      });
     }
 
-    lastPlanLineCount = 0;
-    linesSincePlan = 0;
+    activePlan = null;
+    planLineCount = 0;
+    linesAfterPlan = 0;
   },
 
   trace(items: StepResult[]): void {
@@ -387,17 +392,17 @@ export const logger = {
 
     items.forEach((item, i) => {
       const icon = item.status === "success" ? ICONS.success : ICONS.failure;
-      const color: ColorName = item.status === "success" ? "green" : "red";
+      const colorFn = item.status === "success" ? pc.green : pc.red;
 
       logLine(
-        `${ts()} ${c(color, icon)} ${c("white", `Step ${i + 1}:`)} ${c("gray", item.step)}`,
+        `${ts()} ${colorFn(icon)} ${brightWhite(`Step ${i + 1}:`)} ${pc.white(item.step)}`,
       );
 
       const output = (item.stdout || item.stderr || "").trim();
       if (output) {
         output
           .split("\n")
-          .forEach((l) => logLine(`${indent}${c("dim", l)}`));
+          .forEach((l) => logLine(`${indent}${pc.gray(l)}`));
       }
     });
   },
@@ -405,21 +410,25 @@ export const logger = {
   shutdown(): void {
     stopEllipsis();
     console.log();
-    console.log(`${ts()} ${c("gray", "Shutting down Nightwatch")}`);
+    console.log(`${ts()} ${pc.white("Shutting down Nightwatch")}`);
     process.stdout.write(SHOW_CURSOR);
   },
 
-  approvalRequired(): void {
+  consultPrompt(reason: string, question?: string): void {
     stopEllipsis();
-    logLine(
-      `${ts()} ${c("cyan", "?")} ${cb("white", "Approval Required")}`,
-    );
+    const prefix = `${ts()} ${pc.cyan("?")} `;
+    const contIndent = " ".repeat(visibleLength(prefix));
+    logLine(`${prefix}${brightWhite(wrapText(reason, prefix, contIndent))}`);
+    if (question) {
+      const indent = " ".repeat(visibleLength(ts()) + 3);
+      logLine(`${indent}${pc.gray(wrapText(question, indent, indent))}`);
+    }
   },
 
   incidentGraph(graph: IncidentGraph): void {
     stopEllipsis();
     logLine(
-      `${ts()} ${c("green", ICONS.success)} ${c("white", "Incident Graph Identified")}`,
+      `${ts()} ${pc.green(ICONS.success)} ${brightWhite("Incident Graph Identified")}`,
     );
     logIndentedDetails({
       Summary: graph.summary,
@@ -428,14 +437,14 @@ export const logger = {
     const indent = " ".repeat(visibleLength(ts()) + 3);
 
     // Show affected components with evidence
-    logLine(`\n${indent}${c("gray", "Affected Components:")}`);
+    logLine(`\n${indent}${pc.white("Affected Components:")}`);
     graph.nodes.forEach((node, i) => {
       const isRoot = i === graph.root;
-      const marker = isRoot ? ` ${c("yellow", "[ROOT]")}` : "";
+      const marker = isRoot ? ` ${pc.yellow("[ROOT]")}` : "";
       logLine(
-        `${indent}  ${c("white", `${i}.`)} ${c("white", node.container)}${marker}`,
+        `${indent}  ${brightWhite(`${i}.`)} ${brightWhite(node.container)}${marker}`,
       );
-      logLine(`${indent}     ${c("dim", node.type)}`);
+      logLine(`${indent}     ${pc.gray(node.type)}`);
       // Show first evidence line
       if (node.evidence.length > 0) {
         const evidencePreview =
@@ -443,32 +452,22 @@ export const logger = {
             ? node.evidence[0].substring(0, 77) + "..."
             : node.evidence[0];
         logLine(
-          `${indent}     ${c("dim", `Evidence: ${evidencePreview}`)}`,
+          `${indent}     ${pc.gray(`Evidence: ${evidencePreview}`)}`,
         );
       }
     });
 
     // Show causal chain if edges exist
     if (graph.edges.length > 0) {
-      logLine(`\n${indent}${c("gray", "Causal Chain:")}`);
+      logLine(`\n${indent}${pc.white("Causal Chain:")}`);
       graph.edges.forEach((edge) => {
         const fromNode = graph.nodes[edge.from];
         const toNode = graph.nodes[edge.to];
         logLine(
-          `${indent}  ${c("white", fromNode?.container || `Node ${edge.from}`)} ${c("dim", "→")} ${c("white", toNode?.container || `Node ${edge.to}`)}`,
+          `${indent}  ${brightWhite(fromNode?.container || `Node ${edge.from}`)} ${pc.gray("→")} ${brightWhite(toNode?.container || `Node ${edge.to}`)}`,
         );
       });
     }
-  },
-
-  feasibilityQuestion(question: string): void {
-    stopEllipsis();
-    const iconIndent = " ".repeat(visibleLength(ts()) + 1);
-    const textIndent = " ".repeat(visibleLength(ts()) + 3);
-    const labelPrefix = `${iconIndent}${c("cyan", "?")} `;
-    const wrappedQuestion = wrapText(question, labelPrefix, textIndent);
-    logLine(`${iconIndent}${c("cyan", "?")} ${c("white", wrappedQuestion)}`);
-    logLine(`${textIndent}${c("dim", "(type 'skip' to continue without answering)")}`);
   },
 
   feasibility(assessment: FeasibilityAssessment): void {
@@ -476,6 +475,8 @@ export const logger = {
       logger.result(true, "Remediation is feasible", {
         Summary: assessment.summary,
       });
+    } else if (assessment.missing_context.length > 0) {
+      logger.result(false, "Missing information for feasibility");
     } else {
       logger.warn("Remediation not feasible", {
         Reason: assessment.blocking_reason ?? assessment.summary,
@@ -507,26 +508,11 @@ export const logger = {
     }
   },
 
-  escalationPrompt(reason: string, neededContext: string): void {
-    stopEllipsis();
-    logLine(
-      `${ts()} ${c("yellow", ICONS.warning)} ${cb("yellow", "Agent Requesting Help")}`,
-    );
-    logIndentedDetails({
-      Reason: reason,
-      "Needed Context": neededContext,
-    });
-    const indent = " ".repeat(visibleLength(ts()) + 3);
-    logLine(
-      `${indent}${c("dim", "(provide context to continue, or type 'stop' to dismiss)")}`,
-    );
-  },
-
   resolved(type: string, summary: string): void {
     stopEllipsis();
     console.log();
     console.log(
-      `${ts()} ${c("green", ICONS.success)} ${cb("green", "Incident Resolved")}`,
+      `${ts()} ${pc.green(ICONS.success)} ${pc.bold(pc.green("Incident Resolved"))}`,
     );
     logIndentedDetails({ Incident: type, Resolution: summary });
   },
@@ -535,7 +521,7 @@ export const logger = {
     stopEllipsis();
     console.log();
     console.log(
-      `${ts()} ${c("yellow", ICONS.warning)} ${cb("yellow", "Incident Dismissed")}`,
+      `${ts()} ${pc.yellow(ICONS.warning)} ${pc.bold(pc.yellow("Incident Dismissed"))}`,
     );
     logIndentedDetails({ Incident: type });
   },
@@ -544,7 +530,7 @@ export const logger = {
     stopEllipsis();
     console.log();
     console.log(
-      `${ts()} ${c("cyan", ICONS.success)} ${cb("cyan", "Observation Complete")}`,
+      `${ts()} ${pc.cyan(ICONS.success)} ${pc.bold(pc.cyan("Observation Complete"))}`,
     );
     logIndentedDetails({ Incident: type, Summary: summary });
   },

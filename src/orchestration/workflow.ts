@@ -27,18 +27,20 @@ import {
   executePlan,
   verifyPlan,
   success,
-} from "../capabilities";
+} from "../capabilities/index";
 import type {
   CapabilityConfig,
   CapabilityHandler,
 } from "../capabilities/types";
-import { policy } from "../policy/policy";
+import { getConfig, getInfrastructure } from "../globals";
 import type { HistoryEntry } from "../types";
 import { logger } from "../utils/logger";
 import { loadPrompt } from "../utils/promptLoader";
 import { getErrorMessage } from "../utils/helpers";
-import { resolveEscalation, askPlanApproval } from "../utils/prompts";
-import { addFact } from "../infrastructure/knowledge";
+import { showPrompt, type ConsultType } from "../utils/formInput";
+import { addFact } from "../llm/knowledge";
+import { cleanHistory } from "../llm/runtime";
+import { addResolved } from "./resolvedStore";
 
 const SYSTEM_PROMPT = loadPrompt(import.meta.url, "prompt.md");
 
@@ -47,37 +49,20 @@ export type OrchestratorResult = {
   idle: boolean;
 };
 
-// Internal capabilities — escalate and requestApproval are handled as special
-// cases in the loop (they involve user interaction and need function call args).
-// Their handlers are never called directly.
+// Internal capabilities — consultUser is handled as a special case in the loop
+// (it involves user interaction and needs function call args).
 
-const escalateCapability: {
+const consultUserCapability: {
   config: CapabilityConfig;
   handler: CapabilityHandler;
 } = {
   config: {
-    stage: "Escalation",
-    action: "Requesting human assistance",
+    stage: "User Consultation",
+    action: "Requesting user input",
     logResult: () => {},
   },
   handler: async () => {
-    throw new Error("escalate is handled inline in the orchestration loop");
-  },
-};
-
-const requestApprovalCapability: {
-  config: CapabilityConfig;
-  handler: CapabilityHandler;
-} = {
-  config: {
-    stage: "Approval",
-    action: "Requesting user approval for plan",
-    logResult: () => {},
-  },
-  handler: async () => {
-    throw new Error(
-      "requestApproval is handled inline in the orchestration loop",
-    );
+    throw new Error("consultUser is handled inline in the orchestration loop");
   },
 };
 
@@ -126,10 +111,9 @@ const CAPABILITY_REGISTRY: Record<
   assessFeasibility,
   planRemediation,
   validatePlan,
-  requestApproval: requestApprovalCapability,
+  consultUser: consultUserCapability,
   executePlan,
   verifyPlan,
-  escalate: escalateCapability,
   reportFindings: reportFindingsCapability,
 };
 
@@ -138,12 +122,11 @@ export async function runOrchestrator(
   logs: string[],
 ): Promise<OrchestratorResult> {
   let state = createInitialState(logs);
-  const context = createInitialContext(
-    policy.constraints.maxActionsPerIncident,
-  );
+  const nightwatchConfig = getConfig();
+  const context = createInitialContext(nightwatchConfig.maxRetries);
 
   const modeInstruction =
-    policy.mode === "observe"
+    nightwatchConfig.mode === "observe"
       ? `\n\nRUNTIME MODE: OBSERVE\nGoal: Diagnose the incident and report findings.\nConstraint: Planning and execution tools are unavailable.`
       : `\n\nRUNTIME MODE: REMEDIATE\nGoal: Resolve the incident using planning and execution tools.`;
 
@@ -158,22 +141,22 @@ export async function runOrchestrator(
         "Attempt Limit": context.maxAttempts,
       });
 
-      const choice = await resolveEscalation(
+      logger.consultPrompt(
         `Maximum remediation attempts (${context.maxAttempts}) exhausted.`,
-        "Provide additional context about the infrastructure or incident to help the agent try a different approach.",
       );
+      const choice = await showPrompt("escalation");
 
       if (choice.action === "dismiss") {
         state = { ...state, resolution: "dismissed" };
         break;
-      } else {
-        addFact("User context after max attempts reached", choice.context);
+      } else if (choice.action === "text") {
+        addFact(getInfrastructure().basePath, "User context after max attempts reached", choice.value);
         context.attemptCount = 0;
         context.orchestratorConversationHistory.push({
           role: "user",
           parts: [
             {
-              text: `User provided additional context after max attempts: ${choice.context}. Attempt counter has been reset. Continue resolving the incident with this new information.`,
+              text: `User provided additional context after max attempts: ${choice.value}. Attempt counter has been reset. Continue resolving the incident with this new information.`,
             },
           ],
         });
@@ -181,15 +164,16 @@ export async function runOrchestrator(
       }
     }
 
-    // Build user message with current state
+    // Build user message with current state (exclude sharedHistory — only used by capability agents)
+    const { sharedHistory: _, ...stateForOrchestrator } = state;
     const stateMessage: Content = {
       role: "user",
-      parts: [{ text: `Current State:\n${JSON.stringify(state, null, 2)}` }],
+      parts: [{ text: `Current State:\n${JSON.stringify(stateForOrchestrator, null, 2)}` }],
     };
     context.orchestratorConversationHistory.push(stateMessage);
 
     try {
-      const allowedTools = getCapabilities(policy.mode);
+      const allowedTools = getCapabilities(nightwatchConfig.mode);
 
       const response = await withRetry(() =>
         gemini.models.generateContent({
@@ -249,149 +233,116 @@ export async function runOrchestrator(
       logger.stage(stageName);
       logger.action(actionName);
 
-      // === SPECIAL CASE: escalate ===
-      if (capabilityName === "escalate") {
+      // === SPECIAL CASE: consultUser ===
+      if (capabilityName === "consultUser") {
         const args = functionCall.args as {
+          type: ConsultType;
           reason: string;
-          needed_context: string;
+          question?: string;
         };
-        const reason = args.reason;
-        const neededContext = args.needed_context;
 
-        const choice = await resolveEscalation(reason, neededContext);
+        logger.consultPrompt(args.reason, args.question);
+        const choice = await showPrompt(args.type);
 
         if (choice.action === "dismiss") {
           state = { ...state, resolution: "dismissed" };
-
           context.history.push({
             timestamp: new Date().toISOString(),
-            capability: "escalate",
+            capability: "consultUser",
             success: true,
             summary: "User dismissed the incident",
           });
-
           context.orchestratorConversationHistory.push({
             role: "user",
             parts: [
               {
                 functionResponse: {
-                  name: "escalate",
-                  response: {
-                    success: true,
-                    action: "dismissed",
-                    summary: "User chose to dismiss the incident.",
-                  },
+                  name: "consultUser",
+                  response: { action: "dismissed" },
                 },
               },
             ],
           });
-        } else {
-          addFact(reason, choice.context);
-
-          // Reset feasibility if it was false (unblock planning path)
-          state = {
-            ...state,
-            ...(state.feasibility && !state.feasibility.feasible
-              ? { feasibility: null }
-              : {}),
-            failureContext: null,
-          };
-
-          context.history.push({
-            timestamp: new Date().toISOString(),
-            capability: "escalate",
-            success: true,
-            summary: `User provided context: ${choice.context}`,
-          });
-
-          context.orchestratorConversationHistory.push({
-            role: "user",
-            parts: [
-              {
-                functionResponse: {
-                  name: "escalate",
-                  response: {
-                    success: true,
-                    action: "continue",
-                    userContext: choice.context,
-                    summary:
-                      "User provided additional context. Feasibility has been reset if it was false. failureContext has been cleared. Re-evaluate the situation with this new information.",
-                  },
-                },
-              },
-            ],
-          });
-        }
-
-        continue;
-      }
-
-      // === SPECIAL CASE: requestApproval ===
-      if (capabilityName === "requestApproval") {
-        const choice = await askPlanApproval();
-
-        if (choice.action === "approve") {
+        } else if (choice.action === "approve") {
+          state = { ...state, approved: true };
           logger.result(true, "Plan approved by user");
-
           context.history.push({
             timestamp: new Date().toISOString(),
-            capability: "requestApproval",
+            capability: "consultUser",
             success: true,
             summary: "User approved the plan",
           });
-
           context.orchestratorConversationHistory.push({
             role: "user",
             parts: [
               {
                 functionResponse: {
-                  name: "requestApproval",
+                  name: "consultUser",
                   response: {
-                    success: true,
                     approved: true,
-                    summary: "User approved the plan. Proceed to executePlan.",
+                    summary: "User approved the plan.",
                   },
                 },
               },
             ],
           });
         } else {
-          if (state.plan) {
-            logger.planGrayOut(state.plan);
-          }
-          logger.result(false, "Plan rejected by user", {
-            Feedback: choice.feedback,
-          });
+          // choice.action === "text"
+          const userText = choice.value;
 
-          state = {
-            ...state,
-            failureContext: {
-              type: "user_rejected",
-              reason: choice.feedback,
-            },
-            planValidated: false,
-            executionResult: null,
-            verificationResult: null,
-          };
+          // Persist to knowledge if it was a question
+          if (args.type === "missing_context" && args.question) {
+            addFact(getInfrastructure().basePath, args.question, userText);
+          }
+
+          // If plan feedback, set failureContext and gray out plan
+          if (args.type === "plan_approval") {
+            logger.planGrayOut();
+            logger.result(false, "Plan rejected by user", {
+              Feedback: userText,
+            });
+            state = {
+              ...state,
+              failureContext: { type: "user_rejected", reason: userText },
+              planValidated: false,
+              approved: false,
+              executionResult: null,
+              verificationResult: null,
+            };
+          }
+
+          // If escalation context or missing_context answer, reset feasibility if it was false
+          if (args.type === "escalation" || args.type === "missing_context") {
+            addFact(getInfrastructure().basePath, args.reason, userText);
+            state = {
+              ...state,
+              ...(state.feasibility && !state.feasibility.feasible
+                ? { feasibility: null }
+                : {}),
+              failureContext: null,
+              approved: false,
+            };
+          }
 
           context.history.push({
             timestamp: new Date().toISOString(),
-            capability: "requestApproval",
-            success: false,
-            summary: `User rejected: ${choice.feedback}`,
+            capability: "consultUser",
+            success: true,
+            summary: `User provided: ${userText}`,
           });
-
           context.orchestratorConversationHistory.push({
             role: "user",
             parts: [
               {
                 functionResponse: {
-                  name: "requestApproval",
+                  name: "consultUser",
                   response: {
-                    success: false,
-                    approved: false,
-                    feedback: choice.feedback,
-                    summary: `User rejected the plan. Feedback: "${choice.feedback}". Use planRemediation to create a revised plan addressing this feedback.`,
+                    action: "user_provided_text",
+                    text: userText,
+                    summary:
+                      args.type === "plan_approval"
+                        ? `User rejected the plan. Feedback: "${userText}".`
+                        : `User response: "${userText}".`,
                   },
                 },
               },
@@ -405,7 +356,7 @@ export async function runOrchestrator(
       // === GENERIC PATH: all other capabilities ===
       const hadFailureContext = state.failureContext !== null;
 
-      const result = await capability.handler(state);
+      const result = await capability.handler(state, context.toolCache);
       const idle = result.idle;
 
       // Log result
@@ -449,6 +400,20 @@ export async function runOrchestrator(
       // Update state
       state = finalState;
 
+      // Clean shared history after LLM capabilities to strip thinking traces
+      if (
+        capabilityName === "analyzeIncident" ||
+        capabilityName === "assessFeasibility" ||
+        capabilityName === "planRemediation"
+      ) {
+        state = { ...state, sharedHistory: cleanHistory(state.sharedHistory) };
+      }
+
+      // Invalidate tool cache after execution mutations
+      if (capabilityName === "executePlan") {
+        context.toolCache.invalidate();
+      }
+
       // Track attempts - only count replans (planRemediation with prior failure)
       if (capabilityName === "planRemediation" && hadFailureContext) {
         context.attemptCount++;
@@ -466,6 +431,20 @@ export async function runOrchestrator(
         ],
       });
     }
+  }
+
+  // Record resolved incidents for deduplication
+  if (state.resolution === "resolved" && state.incidentGraph) {
+    const rootNode =
+      state.incidentGraph.root !== null
+        ? state.incidentGraph.nodes[state.incidentGraph.root]
+        : null;
+    addResolved({
+      rootContainer: rootNode?.container ?? "unknown",
+      incidentSummary: state.incidentGraph.summary,
+      resolution: state.plan?.summary ?? "Resolved",
+      resolvedAt: Date.now(),
+    });
   }
 
   return { state, idle: false };

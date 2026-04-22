@@ -15,6 +15,7 @@ import type {
   Resolution,
   HistoryEntry,
 } from "../types";
+import { ToolCache } from "../tools/cache";
 
 /**
  * Pure state representing the incident resolution process.
@@ -45,12 +46,15 @@ export type IncidentResolutionState = Readonly<{
   /** Why the last attempt failed (consumed by replanning) */
   failureContext: FailureContext | null;
 
-  /** Conversation memory for planner LLM across replanning attempts */
-  plannerHistory: Content[];
+  /** Shared conversation history across LLM capabilities */
+  sharedHistory: Content[];
 
   // Status flags
   /** Whether current plan has passed validation */
   planValidated: boolean;
+
+  /** Whether the user has approved the current plan for execution */
+  approved: boolean;
 
   /** Terminal status of the resolution process */
   resolution: Resolution;
@@ -72,6 +76,9 @@ export type OrchestrationContext = {
 
   /** Gemini conversation history for orchestrator (for LLM) */
   orchestratorConversationHistory: Content[];
+
+  /** Per-incident tool result cache shared across capabilities */
+  toolCache: ToolCache;
 };
 
 /**
@@ -86,8 +93,9 @@ export function createInitialState(logs: string[]): IncidentResolutionState {
     executionResult: null,
     verificationResult: null,
     failureContext: null,
-    plannerHistory: [],
+    sharedHistory: [],
     planValidated: false,
+    approved: false,
     resolution: "pending",
   };
 }
@@ -103,5 +111,6 @@ export function createInitialContext(
     maxAttempts,
     history: [],
     orchestratorConversationHistory: [],
+    toolCache: new ToolCache(),
   };
 }
