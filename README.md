@@ -30,14 +30,30 @@ docker compose up -d
 
 ## Running Nightwatch
 
+**Development (without building):**
+
 ```bash
-npm run dev
+npm run dev -- --compose path/to/docker-compose.yaml
 ```
 
-Or if installed globally as a package:
+Note the `--` before flags — npm requires this to forward arguments to the underlying script. If you're running against the included Clipper stack, there's a shortcut:
 
 ```bash
-nightwatch
+npm run dev:clipper
+```
+
+**Production (build first, then run):**
+
+```bash
+npm run build
+node dist/index.js --compose path/to/docker-compose.yaml
+```
+
+Or install globally and use the `nightwatch` binary directly:
+
+```bash
+npm install -g .
+nightwatch --compose path/to/docker-compose.yaml
 ```
 
 ### CLI Options
