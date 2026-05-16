@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-/**
- * Nightwatch CLI Entry Point
- */
+import "dotenv/config";
 
 import { Command } from "commander";
 import { readFileSync } from "fs";
