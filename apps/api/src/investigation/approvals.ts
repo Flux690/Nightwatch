@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "../db/client.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert, ApprovalDecision } from "@nightwatch/shared";
-import type { ToolUse } from "../llm/provider.js";
+import type { ToolUse } from "../llm/types.js";
 
 // Must be less than the investigation hard timeout so approvals can expire before the loop does.
 const APPROVAL_TIMEOUT_MS = 4 * 60_000;

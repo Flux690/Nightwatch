@@ -1,6 +1,6 @@
 import { AnthropicProvider } from "./anthropic.js";
 import { OpenAIProvider } from "./openai.js";
-import type { LLMProvider } from "./provider.js";
+import type { LLMProvider } from "./types.js";
 
 // Both adapters are always compiled in; LLM_PROVIDER picks one at runtime.
 export function createProvider(system: string): LLMProvider {

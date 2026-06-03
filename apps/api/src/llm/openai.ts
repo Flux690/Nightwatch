@@ -6,7 +6,7 @@ import type {
   ToolResult,
   ToolSchema,
   ToolUse,
-} from "./provider.js";
+} from "./types.js";
 
 // Bound each request so a slow/queued free model can't hang the whole job;
 // the SDK's default is 10 minutes, which reads as a freeze with no output.

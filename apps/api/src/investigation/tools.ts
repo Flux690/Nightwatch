@@ -1,4 +1,4 @@
-import type { ToolSchema } from "../llm/provider.js";
+import type { ToolSchema } from "../llm/types.js";
 
 // Runner tools that require human approval before execution.
 // This is a property of certain runner tools, not a separate routing destination.

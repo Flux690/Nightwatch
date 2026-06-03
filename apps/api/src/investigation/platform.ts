@@ -1,6 +1,6 @@
 import { logger } from "../logger.js";
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
-import type { ToolUse, ToolResult } from "../llm/provider.js";
+import type { ToolUse, ToolResult } from "../llm/types.js";
 
 export async function handlePlatformTool(
   tool: ToolUse,

@@ -12,7 +12,7 @@ import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate } from "./result.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
-import type { ToolResult } from "../llm/provider.js";
+import type { ToolResult } from "../llm/types.js";
 
 const MAX_TOOL_CALLS = 24;
 const HARD_TIMEOUT_MS = 5 * 60_000;

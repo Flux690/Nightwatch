@@ -6,7 +6,7 @@ import type {
   ToolResult,
   ToolSchema,
   ToolUse,
-} from "./provider.js";
+} from "./types.js";
 
 // Bound each request so a slow call can't hang the job past the loop budget;
 // the SDK default is 10 minutes.
