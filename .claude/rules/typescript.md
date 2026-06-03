@@ -7,3 +7,4 @@
 - Shared types belong in `packages/shared` only. Never duplicate across packages.
 - Import order: Node built-ins → external packages → internal packages → relative imports.
 - No barrel files (index.ts re-exporting everything). Import directly from the file.
+- Comments: `//` for single-line, `/* */` for multi-line. No decorative banners (`//────`, `// ===`, `// ***`). Only comment the WHY, never the WHAT.

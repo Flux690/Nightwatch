@@ -1,4 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+export interface ToolSchema {
+  name: string;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
 
 // Runner tools that require human approval before execution.
 // This is a property of certain runner tools, not a separate routing destination.
@@ -37,7 +45,7 @@ export const RUNNER_TOOLS = new Set([
   "exec_command",
 ]);
 
-export const TOOL_SCHEMAS: Anthropic.Tool[] = [
+export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: "get_container_list",
     description:
