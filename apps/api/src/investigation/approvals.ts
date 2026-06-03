@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
 import { db } from "../db/client.js";
 import type { NormalizedAlert, ApprovalDecision } from "@nightwatch/shared";
 import type { ToolUse } from "../llm/provider.js";
@@ -29,7 +30,9 @@ export async function requestApproval(
       incidentId,
       installationId: alert.installationId,
       toolName: tool.name,
-      toolInput: tool.input,
+      // tool.input is Record<string, unknown> from the LLM; Prisma's Json column
+      // wants InputJsonValue. The value is always a JSON object (LLM tool args).
+      toolInput: tool.input as Prisma.InputJsonValue,
       toolUseId: tool.id,
       status: "pending",
     },
