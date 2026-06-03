@@ -22,9 +22,9 @@ else
   exit 0
 fi
 
-npx prettier --write "$FILE" 2>/dev/null
+pnpm exec prettier --write "$FILE" 2>/dev/null
 
-ERRORS=$(cd "$PKG" && npx tsc --noEmit 2>&1 | grep "error TS" | head -15)
+ERRORS=$(cd "$PKG" && pnpm exec tsc --noEmit 2>&1 | grep "error TS" | head -15)
 
 if [[ -n "$ERRORS" ]]; then
   python3 -c "
