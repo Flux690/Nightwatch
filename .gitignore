@@ -17,7 +17,7 @@ dist/
 # Claude Code — personal/generated only; settings.json, hooks/, rules/ are committed
 .claude/settings.local.json
 .claude/worktrees/
-.claude/logs/hooks.log
+.claude/logs/hooks*.log
 
 # Reference docs — not part of the repo
 HARNESS.md

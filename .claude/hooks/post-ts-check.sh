@@ -1,10 +1,15 @@
 #!/bin/bash
 # Fires after every Write/Edit on a .ts file.
-# Runs prettier then tsc. Outputs results to log + systemMessage.
+# Runs prettier then tsc. Logs errors (not clean passes — those are noise).
 
-LOG=".claude/logs/hooks.log"
+LOG=".claude/logs/hooks-$(date +%F).log"
 TS=$(date '+%Y-%m-%d %H:%M:%S')
 INPUT=$(cat)
+
+SID=$(echo "$INPUT" | python3 -c "
+import json,sys
+print(json.load(sys.stdin).get('session_id','')[:8])
+" 2>/dev/null || echo "--------")
 
 FILE=$(echo "$INPUT" | python3 -c "
 import json,sys
@@ -30,15 +35,14 @@ fi
 
 SHORT="${FILE##*/}"
 
-# Prettier
 pnpm exec prettier --write "$FILE" 2>/dev/null
 
-# TypeScript check — run from pkg root
 ERRORS=$(cd "$PKG" && pnpm exec tsc --noEmit 2>&1 | grep "error TS" | head -10)
 
 if [[ -n "$ERRORS" ]]; then
-  echo "$TS [post-ts-check] $SHORT ($PKG) — TS ERRORS: $(echo "$ERRORS" | wc -l | tr -d ' ') error(s)" >> "$LOG"
-  echo "$TS   $(echo "$ERRORS" | head -3)" >> "$LOG"
+  COUNT=$(echo "$ERRORS" | wc -l | tr -d ' ')
+  echo "$TS [$SID] [post-ts-check] ERRORS in $SHORT ($PKG): $COUNT error(s)" >> "$LOG"
+  echo "$TS [$SID]   $(echo "$ERRORS" | head -3)" >> "$LOG"
 
   python3 -c "
 import json, sys
@@ -54,8 +58,6 @@ print(json.dumps({
     }
 }))
 " "$ERRORS" "$PKG" "$SHORT"
-else
-  echo "$TS [post-ts-check] $SHORT ($PKG) — OK" >> "$LOG"
 fi
 
 exit 0
