@@ -37,28 +37,41 @@
 - [x] investigation/loop.ts: agentic while loop, approval gate, Zod result validation
 - [x] jobs/worker.ts: BullMQ worker, concurrency 5
 
-### Phase 4 — End-to-End Investigation
-- [ ] Full path: curl webhook → BullMQ → loop → LLM calls tool → runner executes → result → SQLite
-- [ ] submit_investigation_result works end-to-end
-- [ ] Verify with real running Docker container
+### Phase 4 — End-to-End Investigation (read-only walking skeleton)
 
-### Phase 5 — Approval Flow
-- [ ] WRITE_TOOLS set interception in loop.ts
-- [ ] investigation/approvals.ts: requestApprovalAndExecute + Promise map
+**Part A — LLM provider layer (extract to `apps/api/src/llm/`)**
+- [ ] Move LLMProvider port + ToolSchema/ToolUse/ToolResult/ChatResponse → llm/provider.ts
+- [ ] llm/anthropic.ts: AnthropicProvider, env-driven (ANTHROPIC_API_KEY, ANTHROPIC_MODEL)
+- [ ] llm/openai.ts: OpenAIProvider via openai SDK (OpenAI-compatible → OpenRouter free models)
+- [ ] llm/factory.ts: createProvider() selects adapter by LLM_PROVIDER; both always compiled in
+- [ ] loop.ts uses createProvider() instead of `new AnthropicProvider()`
+
+**Part B — Close the path + smoke test**
+- [ ] write_incident runner command (dispatch → existing insertIncident) + matching shared ws.ts type
+- [ ] conclude() persists IncidentRecord via sendCommand("write_incident", ...)
+- [ ] Runner local harness: run via tsx against host Docker socket + local API
+- [ ] .http smoke: curl /alerts/ingest → BullMQ → loop → LLM → runner read tool → conclude → SQLite
+- [ ] prisma migrate dev (ApprovalRequest table already in schema)
+
+### Phase 5a — Approval Cycle (curl/.http-testable, no external deps)
+- [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
+- [ ] .http: write tool → approval pending → approve → runner executes → result → conclude
+- [ ] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
+
+### Phase 5b — Slack Approval (over the proven 5a backbone)
 - [ ] notifications/slack.ts: approval card with Approve/Reject/Add Context
-- [ ] Prisma schema: ApprovalRequest table
-- [ ] End-to-end: alert → investigate → Slack approval → execute
+- [ ] Slack interaction webhook → same resolveApproval()
+- [ ] Capstone: PRD section 5.3 synthetic first-run test
 
-### Phase 6 — Console
+### Phase 6 — Console (full)
 - [ ] Vite + React 19 scaffold
 - [ ] TanStack Router: file-based routes
 - [ ] TanStack Query: REST to API
 - [ ] WebSocket hook: real-time incident feed
-- [ ] Approval UI: Approve/Reject/Add Context
+- [ ] Promote the 5a approval page into the real Approvals route
 
 ### Phase 7 — Hardening
 - [ ] SQLite history loaded into initial investigation context
-- [ ] request_clarification tool (add to TOOL_SCHEMAS)
 - [ ] Reconnection resilience (exponential backoff both sides)
 - [ ] Error handling: all 6 failure modes from PRD section 19
 - [ ] Rate limiting dashboard indicator
@@ -69,3 +82,4 @@
 - Tech stack: PRD section 18.1
 - Approval flow: PRD sections 6.5, 9.3, 13.2
 - Session continuity: PRD section 10.6
+- LLM inference: hand-rolled ports-and-adapters in `apps/api/src/llm` (Anthropic + OpenAI-compatible), no framework. Both adapters compiled in, selected by LLM_PROVIDER. PRD section 14.

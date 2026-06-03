@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/client.js";
 import type { NormalizedAlert, ApprovalDecision } from "@nightwatch/shared";
-import type { ToolUse } from "./provider.js";
+import type { ToolUse } from "../llm/provider.js";
 
 // Must be less than the investigation hard timeout so approvals can expire before the loop does.
 const APPROVAL_TIMEOUT_MS = 4 * 60_000;

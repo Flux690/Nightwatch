@@ -6,12 +6,12 @@ import {
   RUNNER_TOOLS,
   REQUIRES_APPROVAL,
 } from "./tools.js";
-import { AnthropicProvider } from "./provider.js";
+import { createProvider } from "../llm/factory.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate } from "./result.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
-import type { ToolResult } from "./provider.js";
+import type { ToolResult } from "../llm/provider.js";
 
 const MAX_TOOL_CALLS = 24;
 const HARD_TIMEOUT_MS = 5 * 60_000;
@@ -22,7 +22,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   console.log(`[loop] starting investigation ${incidentId}`);
 
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
-  const provider = new AnthropicProvider(systemPrompt);
+  const provider = createProvider(systemPrompt);
   provider.start(firstUserMessage);
 
   let toolCallCount = 0;

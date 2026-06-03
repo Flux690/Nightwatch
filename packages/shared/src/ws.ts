@@ -1,6 +1,12 @@
 // WebSocket message envelope types — runner↔api and api↔console
 
-export type MessageDirection = "api_to_runner" | "runner_to_api" | "api_to_console" | "console_to_api";
+import type { IncidentRecord } from "./incidents.js";
+
+export type MessageDirection =
+  | "api_to_runner"
+  | "runner_to_api"
+  | "api_to_console"
+  | "console_to_api";
 
 // Runner ↔ API messages
 export interface WsEnvelope {
@@ -17,6 +23,14 @@ export interface RunnerCommandMessage extends WsEnvelope {
     commandInput: Record<string, unknown>;
     correlationId: string; // tool_use_id from Anthropic SDK
   };
+}
+
+// API → Runner: persist a concluded incident to the runner's local SQLite history.
+// Carried by a RunnerCommandMessage with commandName "write_incident".
+export interface WriteIncidentCommand {
+  commandName: "write_incident";
+  commandInput: IncidentRecord;
+  correlationId: string;
 }
 
 // Runner → API: capability manifest on connect

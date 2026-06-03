@@ -1,12 +1,4 @@
-export interface ToolSchema {
-  name: string;
-  description: string;
-  input_schema: {
-    type: "object";
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
-}
+import type { ToolSchema } from "../llm/provider.js";
 
 // Runner tools that require human approval before execution.
 // This is a property of certain runner tools, not a separate routing destination.

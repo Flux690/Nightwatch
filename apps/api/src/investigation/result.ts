@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
+import { sendCommand } from "../ws/router.js";
+
+// Best-effort persistence; the runner may be briefly offline at conclusion time.
+const PERSIST_TIMEOUT_MS = 10_000;
 
 export const InvestigationResultSchema = z.object({
   rootCause: z.object({
@@ -51,8 +55,32 @@ export async function conclude(
     return;
   }
 
+  const data = result.data;
+  const record: IncidentRecord = {
+    incidentId,
+    timestamp: alert.firedAt,
+    containerName: alert.targetIdentifier,
+    alertType: alert.alertType,
+    rootCause: data.rootCause.summary,
+    resolutionAction: data.recommendedAction?.toolName ?? null,
+    resolvedAt: null,
+    recurrenceCount: 0,
+  };
+
+  try {
+    await sendCommand(
+      alert.installationId,
+      "write_incident",
+      { ...record },
+      PERSIST_TIMEOUT_MS,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[loop] failed to persist incident ${incidentId}: ${msg}`);
+  }
+
   console.log(
-    `[loop] concluded incidentId=${incidentId} confidence=${result.data.rootCause.confidence} action=${result.data.recommendedAction?.toolName ?? "none"}`,
+    `[loop] concluded incidentId=${incidentId} confidence=${data.rootCause.confidence} action=${data.recommendedAction?.toolName ?? "none"}`,
   );
 }
 

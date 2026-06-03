@@ -1,5 +1,5 @@
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
-import type { ToolUse, ToolResult } from "./provider.js";
+import type { ToolUse, ToolResult } from "../llm/provider.js";
 
 export async function handlePlatformTool(
   tool: ToolUse,

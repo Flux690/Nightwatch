@@ -1,5 +1,10 @@
 import "dotenv/config";
-import { initDb, getRecentIncidents } from "./sqlite/history.js";
+import type { IncidentRecord } from "@nightwatch/shared";
+import {
+  initDb,
+  getRecentIncidents,
+  insertIncident,
+} from "./sqlite/history.js";
 import { startWebSocketClient } from "./websocket/client.js";
 import {
   getContainerList,
@@ -98,6 +103,14 @@ const dispatch = new Map<string, Handler>([
       return Promise.resolve(
         getRecentIncidents(inp?.containerName, inp?.limitDays),
       );
+    },
+  ],
+  [
+    "write_incident",
+    (i) => {
+      // Command input arrives over the wire as the IncidentRecord to persist.
+      insertIncident(i as IncidentRecord);
+      return Promise.resolve({ written: true });
     },
   ],
 ]);
