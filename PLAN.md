@@ -2,7 +2,7 @@
 
 > Static reference document. Not a task tracker — use TodoWrite for in-session tracking, git log for history.
 
-## Current Phase: 4 — End-to-End Investigation
+## Current Phase: 5a — Approval Cycle (Phase 4 ✅ complete; Phase 4.5 deployment packaging deferred/parallel)
 
 ### Phase 1 — Harness + Scaffold ✅ complete (commit 272f80c)
 - [x] Git: tag v1.0.0, create v2 branch
@@ -37,21 +37,34 @@
 - [x] investigation/loop.ts: agentic while loop, approval gate, Zod result validation
 - [x] jobs/worker.ts: BullMQ worker, concurrency 5
 
-### Phase 4 — End-to-End Investigation (read-only walking skeleton)
+### Phase 4 — End-to-End Investigation (read-only walking skeleton) ✅ complete
 
-**Part A — LLM provider layer (extract to `apps/api/src/llm/`)**
-- [ ] Move LLMProvider port + ToolSchema/ToolUse/ToolResult/ChatResponse → llm/provider.ts
-- [ ] llm/anthropic.ts: AnthropicProvider, env-driven (ANTHROPIC_API_KEY, ANTHROPIC_MODEL)
-- [ ] llm/openai.ts: OpenAIProvider via openai SDK (OpenAI-compatible → OpenRouter free models)
-- [ ] llm/factory.ts: createProvider() selects adapter by LLM_PROVIDER; both always compiled in
-- [ ] loop.ts uses createProvider() instead of `new AnthropicProvider()`
+**Part A — LLM provider layer (`apps/api/src/llm/`)** ✅ (commits c34eebb, b3d55f7)
+- [x] LLMProvider port + ToolSchema/ToolUse/ToolResult/ChatResponse → llm/provider.ts
+- [x] llm/anthropic.ts: AnthropicProvider, env-driven (ANTHROPIC_API_KEY, ANTHROPIC_MODEL)
+- [x] llm/openai.ts: OpenAIProvider via openai SDK (OpenAI-compatible → OpenRouter free models)
+- [x] llm/factory.ts: createProvider() selects adapter by LLM_PROVIDER; both always compiled in
+- [x] loop.ts uses createProvider() instead of `new AnthropicProvider()`
 
-**Part B — Close the path + smoke test**
-- [ ] write_incident runner command (dispatch → existing insertIncident) + matching shared ws.ts type
-- [ ] conclude() persists IncidentRecord via sendCommand("write_incident", ...)
-- [ ] Runner local harness: run via tsx against host Docker socket + local API
-- [ ] .http smoke: curl /alerts/ingest → BullMQ → loop → LLM → runner read tool → conclude → SQLite
-- [ ] prisma migrate dev (ApprovalRequest table already in schema)
+**Part B — Close the path + smoke test** ✅ (commits b3d55f7, 89b995f, 5289948, a46b357)
+- [x] write_incident runner command (dispatch → existing insertIncident) + matching shared ws.ts type
+- [x] conclude() persists IncidentRecord via sendCommand("write_incident", ...)
+- [x] Runner local harness: run via tsx against host Docker socket + local API (scripts/smoke.sh)
+- [x] End-to-end proven: alert → BullMQ → loop → OpenRouter → runner read tools → conclude → SQLite row. (Planned .http replaced by scripts/smoke.sh + clipper/chaos.sh fault injection.)
+- [x] prisma migrate dev — init migration committed
+- [x] Observability (added after first smoke run hung): pino structured logging across loop/providers; bounded LLM request timeout + maxRetries so a free-model 503/429 surfaces instead of hanging
+
+**Smoke-test findings — address in later phases:**
+- Test fidelity: the synthetic alert type must match the injected fault. Firing `ContainerHighMemory` while chaos does `docker stop` yielded a confabulated "memory leak" at 0.85 confidence with no memory evidence. → fix smoke defaults / chaos→alert mapping.
+- Confidence guardrail: when key evidence can't be gathered, the prompt should lower confidence and reconcile the alert against actual container state instead of trusting the label. → Phase 7 (prompt hardening).
+- Host tools (/proc, dmesg, cgroup reads) only work when the runner runs as a Linux container; they fail with the runner on a macOS host. → resolved by Phase 4.5.
+
+### Phase 4.5 — Deployment Packaging (runner container + install) [deferred, parallelizable]
+- [ ] Runner Dockerfile (Linux image) — the production form of the runner
+- [ ] Install script: inject the runner into a target compose with Docker-socket mount + NIGHTWATCH_TOKEN/WS_URL
+- [ ] Bundle Prometheus + Alertmanager so alerts fire via the real POST /alerts/ingest webhook (identical contract to `scripts/smoke.sh fire` — no API change needed)
+- [ ] Verify host introspection tools work once the runner is a Linux container
+- Note: does NOT block 5a/5b (those run against the tsx runner). Required before real deployments and before host-tool testing is meaningful.
 
 ### Phase 5a — Approval Cycle (curl/.http-testable, no external deps)
 - [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
