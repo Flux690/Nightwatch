@@ -1,3 +1,4 @@
+import { logger } from "../logger.js";
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolUse, ToolResult } from "../llm/provider.js";
 
@@ -18,9 +19,7 @@ export async function handlePlatformTool(
     const question =
       (tool.input["question"] as string | undefined) ?? "(no question)";
     const context = (tool.input["context"] as string | undefined) ?? "";
-    console.log(
-      `[loop] clarification requested incidentId=${incidentId}: ${question}`,
-    );
+    logger.info({ incidentId, question }, "clarification requested");
     /* Phase 5: send to Slack and await response on approvalBus with CLARIFICATION_TIMEOUT_MS. */
     return {
       tool_use_id: tool.id,

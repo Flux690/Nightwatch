@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
 import { sendCommand } from "../ws/router.js";
+import { logger } from "../logger.js";
 
 // Best-effort persistence; the runner may be briefly offline at conclusion time.
 const PERSIST_TIMEOUT_MS = 10_000;
@@ -75,12 +76,16 @@ export async function conclude(
       PERSIST_TIMEOUT_MS,
     );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[loop] failed to persist incident ${incidentId}: ${msg}`);
+    logger.error({ incidentId, err }, "failed to persist incident");
   }
 
-  console.log(
-    `[loop] concluded incidentId=${incidentId} confidence=${data.rootCause.confidence} action=${data.recommendedAction?.toolName ?? "none"}`,
+  logger.info(
+    {
+      incidentId,
+      confidence: data.rootCause.confidence,
+      action: data.recommendedAction?.toolName ?? "none",
+    },
+    "investigation concluded",
   );
 }
 
@@ -89,8 +94,9 @@ export async function escalate(
   incidentId: string,
   reason: string,
 ): Promise<void> {
-  console.error(
-    `[loop] ESCALATE incidentId=${incidentId} installation=${alert.installationId} reason=${reason}`,
+  logger.warn(
+    { incidentId, installationId: alert.installationId, reason },
+    "investigation escalated to human",
   );
   /* Phase 5: post escalation card to Slack */
 }

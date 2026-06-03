@@ -1,6 +1,7 @@
 import { Worker } from "bullmq";
 import { bullmqConnection } from "../redis/client.js";
 import { runInvestigation } from "../investigation/loop.js";
+import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 export function startWorker(): Worker {
@@ -17,11 +18,13 @@ export function startWorker(): Worker {
   );
 
   worker.on("completed", (job) => {
-    console.log(`[worker] job ${job.id} completed`);
+    logger.info({ jobId: job.id }, "investigation job completed");
   });
 
+  // err carries the full stack; for OpenAI/Anthropic SDK failures the provider
+  // has already logged status/code, so this is the job-level backstop.
   worker.on("failed", (job, err) => {
-    console.error(`[worker] job ${job?.id} failed:`, err.message);
+    logger.error({ jobId: job?.id, err }, "investigation job failed");
   });
 
   return worker;

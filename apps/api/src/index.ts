@@ -7,6 +7,8 @@ import { registerWsRoutes } from "./ws/server.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { startWorker } from "./jobs/worker.js";
 
+// Fastify keeps its own pino for HTTP logs; the investigation loop/providers
+// use the standalone logger in ./logger.js. Both emit pino JSON to stdout.
 const fastify = Fastify({ logger: true });
 
 await fastify.register(FastifyWebSocket);

@@ -10,6 +10,7 @@ import { createProvider } from "../llm/factory.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate } from "./result.js";
+import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 import type { ToolResult } from "../llm/provider.js";
 
@@ -19,7 +20,11 @@ const TOOL_TIMEOUT_MS = 15_000;
 
 export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   const incidentId = `${alert.installationId}-${alert.sourceAlertId}-${Date.now()}`;
-  console.log(`[loop] starting investigation ${incidentId}`);
+  const log = logger.child({ incidentId, alertType: alert.alertType });
+  log.info(
+    { target: alert.targetIdentifier, severity: alert.severity },
+    "investigation started",
+  );
 
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
   const provider = createProvider(systemPrompt);
@@ -27,10 +32,22 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
 
   let toolCallCount = 0;
   let clarificationsUsed = 0;
+  let turn = 0;
   const deadline = Date.now() + HARD_TIMEOUT_MS;
 
   while (toolCallCount < MAX_TOOL_CALLS && Date.now() < deadline) {
+    turn++;
+    const startedAt = Date.now();
     const response = await provider.chat(TOOL_SCHEMAS);
+    log.info(
+      {
+        turn,
+        ms: Date.now() - startedAt,
+        stopReason: response.stopReason,
+        toolUses: response.toolUses.map((t) => t.name),
+      },
+      "LLM responded",
+    );
 
     if (response.stopReason === "end_turn" || response.toolUses.length === 0) {
       await conclude(alert, incidentId, response.text);
@@ -43,6 +60,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       toolCallCount++;
 
       if (PLATFORM_TOOLS.has(tool.name)) {
+        log.debug({ tool: tool.name, kind: "platform" }, "dispatching tool");
         const result = await handlePlatformTool(
           tool,
           incidentId,
@@ -55,7 +73,12 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
 
       if (RUNNER_TOOLS.has(tool.name)) {
         if (REQUIRES_APPROVAL.has(tool.name)) {
+          log.info({ tool: tool.name }, "awaiting human approval");
           const decision = await requestApproval(alert, incidentId, tool);
+          log.info(
+            { tool: tool.name, decision: decision.action },
+            "approval resolved",
+          );
 
           if (decision.action === "reject") {
             toolResults.push({
@@ -64,6 +87,10 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
               is_error: true,
             });
             if (alert.severity === "critical") {
+              log.warn(
+                { tool: tool.name },
+                "critical write rejected, escalating",
+              );
               await escalate(
                 alert,
                 incidentId,
@@ -84,6 +111,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
           // action === "approve" — fall through to sendCommand
         }
 
+        log.debug({ tool: tool.name, kind: "runner" }, "dispatching tool");
         try {
           const result = await sendCommand(
             alert.installationId,
@@ -97,6 +125,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          log.warn({ tool: tool.name, err }, "runner tool failed");
           toolResults.push({
             tool_use_id: tool.id,
             content: `Error executing ${tool.name}: ${msg}`,
@@ -106,6 +135,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
         continue;
       }
 
+      log.warn({ tool: tool.name }, "LLM requested unknown tool");
       toolResults.push({
         tool_use_id: tool.id,
         content: `Unknown tool "${tool.name}". Platform configuration error - no routing entry. Do not retry.`,

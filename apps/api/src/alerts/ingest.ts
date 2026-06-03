@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit, tryDebounce, enqueueInvestigation } from "./queue.js";
+import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 export async function registerAlertRoutes(
@@ -82,7 +83,10 @@ function parseSource(
   ) {
     return parseAlertmanager(body, installationId);
   }
-  fastify_log_stub(body);
+  logger.warn(
+    { preview: JSON.stringify(body).slice(0, 200) },
+    "ingest: unknown alert source, ignoring",
+  );
   return [];
 }
 
@@ -92,12 +96,5 @@ function isAlertmanagerShape(body: unknown): boolean {
     body !== null &&
     "alerts" in body &&
     Array.isArray((body as Record<string, unknown>)["alerts"])
-  );
-}
-
-function fastify_log_stub(body: unknown): void {
-  console.log(
-    "[ingest] unknown source, ignoring:",
-    JSON.stringify(body).slice(0, 200),
   );
 }

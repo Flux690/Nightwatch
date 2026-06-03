@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { db } from "../db/client.js";
+import { logger } from "../logger.js";
 import type { NormalizedAlert, ApprovalDecision } from "@nightwatch/shared";
 import type { ToolUse } from "../llm/provider.js";
 
@@ -39,9 +40,9 @@ export async function requestApproval(
   });
 
   /* Phase 5: post approval card to Slack here */
-  console.log(
-    `[approval] PENDING incidentId=${incidentId} tool=${tool.name} id=${tool.id}`,
-    JSON.stringify(tool.input, null, 2),
+  logger.info(
+    { incidentId, approvalId, tool: tool.name, toolInput: tool.input },
+    "approval pending",
   );
 
   return new Promise<ApprovalDecision>((resolve, reject) => {
