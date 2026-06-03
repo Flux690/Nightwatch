@@ -2,9 +2,9 @@
 
 > Static reference document. Not a task tracker — use TodoWrite for in-session tracking, git log for history.
 
-## Current Phase: 1 — Harness + Scaffold (complete after this commit)
+## Current Phase: 4 — End-to-End Investigation
 
-### Phase 1 Tasks
+### Phase 1 — Harness + Scaffold ✅ complete (commit 272f80c)
 - [x] Git: tag v1.0.0, create v2 branch
 - [x] PRD.md committed to v2
 - [x] Fix .gitignore (.claude/ now committed)
@@ -15,27 +15,27 @@
 - [x] docker-compose.dev.yaml (Redis 7 alpine + Postgres 16 alpine)
 - [x] Stub package.json + tsconfig.json for apps/runner, apps/api, apps/console
 
-### Phase 2 — Runner (parallel with Phase 3)
-- [ ] WebSocket outbound connection to API (ws library)
-- [ ] Capability manifest: detect Docker, containers, Prometheus
-- [ ] Command dispatch table + unknown-command handler
-- [ ] commands/container.ts: logs, inspect, stats, events, processes, list
-- [ ] commands/host.ts: memory, cpu, disk, network, dmesg
-- [ ] commands/code.ts: commits, deploys, env_var_names, read_file
-- [ ] commands/remediation.ts: restart, rollback, exec (forwarded post-approval)
-- [ ] sqlite/history.ts: incident read/write (better-sqlite3)
+### Phase 2 — Runner ✅ complete (commit fe8ab28)
+- [x] WebSocket outbound connection to API (ws library)
+- [x] Capability manifest: detect Docker, containers, Prometheus
+- [x] Command dispatch table + unknown-command handler
+- [x] commands/container.ts: logs, inspect, stats, events, processes, list
+- [x] commands/host.ts: memory, cpu, disk, network, dmesg
+- [x] commands/code.ts: commits, deploys, env_var_names, read_file
+- [x] commands/remediation.ts: restart, rollback, exec (REMEDIATION_ENABLED gate)
+- [x] sqlite/history.ts: incident read/write (better-sqlite3)
 
-### Phase 3 — API (parallel with Phase 2)
-- [ ] Fastify server entry + @fastify/websocket plugin
-- [ ] ws/server.ts: runner connection registry, capability manifest store
-- [ ] ws/router.ts: resolve which runner handles a given tool call
-- [ ] alerts/ingest.ts: POST /alerts/ingest, normalization, parsers
-- [ ] alerts/dedup.ts: sourceAlertId deduplication
-- [ ] alerts/queue.ts: BullMQ queue, rate limiting (10/hr), debounce window
-- [ ] investigation/tools.ts: Anthropic TOOL_SCHEMAS for all read tools
-- [ ] investigation/context.ts: assemble initial LLM context
-- [ ] investigation/loop.ts: main agentic while loop (read tools only first)
-- [ ] Tool routing: Promise map keyed by tool_use_id
+### Phase 3 — API ✅ complete (commit 2c0bff7)
+- [x] Fastify server entry + @fastify/websocket plugin
+- [x] ws/server.ts: runner connection registry, capability manifest store
+- [x] ws/router.ts: sendCommand → Promise map keyed by correlationId
+- [x] alerts/ingest.ts: POST /alerts/ingest, normalization, parsers
+- [x] alerts/dedup.ts: sourceAlertId deduplication (Redis NX, 24h TTL)
+- [x] alerts/queue.ts: BullMQ queue, rate limiting (10/hr), 90s debounce
+- [x] investigation/tools.ts: 21 Anthropic TOOL_SCHEMAS
+- [x] investigation/context.ts: assemble initial LLM context
+- [x] investigation/loop.ts: agentic while loop, approval gate, Zod result validation
+- [x] jobs/worker.ts: BullMQ worker, concurrency 5
 
 ### Phase 4 — End-to-End Investigation
 - [ ] Full path: curl webhook → BullMQ → loop → LLM calls tool → runner executes → result → SQLite
