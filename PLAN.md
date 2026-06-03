@@ -12,7 +12,7 @@
 - [x] PLAN.md (this file)
 - [x] pnpm workspace init + tsconfig.base.json + root package.json
 - [x] packages/shared — all TypeScript types (alerts, tools, approvals, ws, runner)
-- [x] docker-compose.dev.yml (Redis 7 alpine + Postgres 16 alpine)
+- [x] docker-compose.dev.yaml (Redis 7 alpine + Postgres 16 alpine)
 - [x] Stub package.json + tsconfig.json for apps/runner, apps/api, apps/console
 
 ### Phase 2 — Runner (parallel with Phase 3)

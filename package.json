@@ -10,7 +10,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev:infra": "docker compose -f docker-compose.dev.yml up -d"
+    "dev:infra": "docker compose -f docker-compose.dev.yaml up -d"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

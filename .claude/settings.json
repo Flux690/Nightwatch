@@ -12,7 +12,6 @@
       "Bash(git log *)",
       "Bash(git diff *)",
       "Bash(git add *)",
-      "Bash(git commit *)",
       "Bash(git branch *)",
       "Bash(git checkout *)",
       "Bash(npx tsc *)",
@@ -20,6 +19,10 @@
       "Bash(docker compose *)",
       "Bash(node *)",
       "Bash(tsx *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
   },
   "hooks": {

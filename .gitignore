@@ -1,23 +1,27 @@
 # Dependencies
 node_modules/
 
-# Environment variables (contains API keys)
+# Environment variables
 .env
+.env.local
+.env.production
 
-# Runtime-generated files
-knowledge.md
+# Build output
+dist/
 
-# Devpost submission text (lives on Devpost, not in repo)
-DEVPOST.md
+# SQLite database files (runner local storage)
+*.db
+*.db-shm
+*.db-wal
 
-# Claude Code — commit settings.json, hooks/, rules/ — gitignore personal/generated only
+# Claude Code — personal/generated only; settings.json, hooks/, rules/ are committed
 .claude/settings.local.json
 .claude/worktrees/
 
+# Reference docs — not part of the repo
+HARNESS.md
+
 # OS files
+.DS_Store
 Thumbs.db
 Desktop.ini
-.DS_Store
-
-# Test video (20MB binary)
-clipper/test-video.mp4

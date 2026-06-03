@@ -5,7 +5,7 @@
 - Build all: `pnpm build`
 - Type-check all: `pnpm typecheck`
 - Test: `pnpm test`
-- Dev infra: `docker compose -f docker-compose.dev.yml up -d`
+- Dev infra: `docker compose -f docker-compose.dev.yaml up -d`
 
 ## Package Commands
 - Runner: `pnpm --filter @nightwatch/runner <cmd>`
