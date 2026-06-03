@@ -10,9 +10,9 @@ knowledge.md
 # Devpost submission text (lives on Devpost, not in repo)
 DEVPOST.md
 
-# Claude Code local config
-.claude/
-CLAUDE.md
+# Claude Code — commit settings.json, hooks/, rules/ — gitignore personal/generated only
+.claude/settings.local.json
+.claude/worktrees/
 
 # OS files
 Thumbs.db
