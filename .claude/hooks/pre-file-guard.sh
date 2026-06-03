@@ -1,9 +1,17 @@
 #!/bin/bash
+# Fires before every Write/Edit tool call.
+# Blocks writes to protected files. Logs all decisions.
+
+LOG=".claude/logs/hooks.log"
+TS=$(date '+%Y-%m-%d %H:%M:%S')
 INPUT=$(cat)
+
 FILE=$(echo "$INPUT" | python3 -c "
 import json,sys
 print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))
 " 2>/dev/null)
+
+SHORT="${FILE##*/}"
 
 PROTECTED=(
   ".env"
@@ -14,10 +22,22 @@ PROTECTED=(
 
 for protected in "${PROTECTED[@]}"; do
   if [[ "$FILE" == *"$protected"* ]]; then
+    echo "$TS [pre-file-guard] BLOCKED: $SHORT (matches $protected)" >> "$LOG"
+
+    python3 -c "
+import json, sys
+protected = sys.argv[1]
+short = sys.argv[2]
+print(json.dumps({
+    'systemMessage': f'🛡  Hook blocked write to {short} ({protected} is protected)'
+}))
+" "$protected" "$SHORT"
+
     echo "BLOCKED: $protected is a protected file." >&2
     echo "Edit it manually if needed." >&2
     exit 2
   fi
 done
 
+echo "$TS [pre-file-guard] ALLOWED: $SHORT" >> "$LOG"
 exit 0

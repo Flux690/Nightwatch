@@ -1,5 +1,11 @@
 #!/bin/bash
+# Fires after every Write/Edit on a .ts file.
+# Runs prettier then tsc. Outputs results to log + systemMessage.
+
+LOG=".claude/logs/hooks.log"
+TS=$(date '+%Y-%m-%d %H:%M:%S')
 INPUT=$(cat)
+
 FILE=$(echo "$INPUT" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
@@ -22,22 +28,34 @@ else
   exit 0
 fi
 
+SHORT="${FILE##*/}"
+
+# Prettier
 pnpm exec prettier --write "$FILE" 2>/dev/null
 
-ERRORS=$(cd "$PKG" && pnpm exec tsc --noEmit 2>&1 | grep "error TS" | head -15)
+# TypeScript check — run from pkg root
+ERRORS=$(cd "$PKG" && pnpm exec tsc --noEmit 2>&1 | grep "error TS" | head -10)
 
 if [[ -n "$ERRORS" ]]; then
+  echo "$TS [post-ts-check] $SHORT ($PKG) — TS ERRORS: $(echo "$ERRORS" | wc -l | tr -d ' ') error(s)" >> "$LOG"
+  echo "$TS   $(echo "$ERRORS" | head -3)" >> "$LOG"
+
   python3 -c "
 import json, sys
 errors = sys.argv[1]
 pkg = sys.argv[2]
-output = {
-  'hookSpecificOutput': {
-    'additionalContext': f'TypeScript errors in {pkg} — fix before proceeding:\n{errors}'
-  }
-}
-print(json.dumps(output))
-" "$ERRORS" "$PKG"
+short = sys.argv[3]
+count = len([l for l in errors.strip().split('\n') if l.strip()])
+print(json.dumps({
+    'systemMessage': f'⚠️  tsc: {count} error(s) in {pkg} after editing {short}',
+    'hookSpecificOutput': {
+        'hookEventName': 'PostToolUse',
+        'additionalContext': f'TypeScript errors in {pkg} — fix before proceeding:\n{errors}'
+    }
+}))
+" "$ERRORS" "$PKG" "$SHORT"
+else
+  echo "$TS [post-ts-check] $SHORT ($PKG) — OK" >> "$LOG"
 fi
 
 exit 0
