@@ -1,6 +1,37 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export const WRITE_TOOLS = new Set([
+// Runner tools that require human approval before execution.
+// This is a property of certain runner tools, not a separate routing destination.
+export const REQUIRES_APPROVAL = new Set([
+  "restart_container",
+  "rollback_deploy",
+  "exec_command",
+]);
+
+// Tools handled entirely on the platform (API) side — never reach the runner.
+export const PLATFORM_TOOLS = new Set([
+  "request_clarification",
+  "get_recent_commits",
+]);
+
+// Every tool that routes to the runner via sendCommand.
+// REQUIRES_APPROVAL is a subset: those tools go through the approval gate first.
+export const RUNNER_TOOLS = new Set([
+  "get_container_list",
+  "get_container_logs",
+  "get_container_inspect",
+  "get_container_stats",
+  "get_container_events",
+  "get_container_processes",
+  "get_host_memory",
+  "get_host_cpu",
+  "get_host_disk",
+  "get_host_network",
+  "get_host_dmesg",
+  "get_incident_history",
+  "get_recent_deploys",
+  "get_env_variable_names",
+  "read_file",
   "restart_container",
   "rollback_deploy",
   "exec_command",
@@ -138,7 +169,7 @@ export const TOOL_SCHEMAS: Anthropic.Tool[] = [
     },
   },
   {
-    name: "get_alert_history",
+    name: "get_incident_history",
     description:
       "Look up past incidents from the runner SQLite database to identify recurrence patterns.",
     input_schema: {

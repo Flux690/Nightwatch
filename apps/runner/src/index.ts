@@ -17,7 +17,6 @@ import {
   getHostDmesg,
 } from "./commands/host.js";
 import {
-  getRecentCommits,
   getRecentDeploys,
   getEnvVariableNames,
   readFileCommand,
@@ -70,10 +69,6 @@ const dispatch = new Map<string, Handler>([
   [
     "get_host_dmesg",
     (i) => getHostDmesg(i as Parameters<typeof getHostDmesg>[0]),
-  ],
-  [
-    "get_recent_commits",
-    (i) => getRecentCommits(i as Parameters<typeof getRecentCommits>[0]),
   ],
   [
     "get_recent_deploys",
