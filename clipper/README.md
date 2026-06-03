@@ -36,7 +36,7 @@ The frontend polls for status and shows each video's progress (pending → proce
 
 ## Chaos Testing with Nightwatch
 
-Clipper ships with a PowerShell chaos script (`chaos.ps1`) for injecting failures. Scenarios range from simple container stops (fixed by restart) to config corruption and network disconnects that require Nightwatch to reason through the fix.
+Clipper ships with a bash chaos script (`chaos.sh`) for injecting failures. Scenarios range from simple container stops (fixed by restart) to config corruption and network disconnects that require Nightwatch to reason through the fix.
 
 See [CHAOS.md](CHAOS.md) for all available scenarios and what each one breaks.
 
@@ -50,7 +50,7 @@ nightwatch --compose ./clipper/docker-compose.yaml --mode remediate
 
 # Terminal 2 — inject a failure
 cd clipper
-.\chaos.ps1 cache
+./chaos.sh cache
 ```
 
 Nightwatch will detect the degradation in logs, analyze the incident, propose a fix, and ask for your approval before executing.

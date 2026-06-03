@@ -19,6 +19,9 @@ dist/
 .claude/worktrees/
 .claude/logs/hooks*.log
 
+# Smoke test runtime — backgrounded process logs/pids
+.smoke/
+
 # Reference docs — not part of the repo
 HARNESS.md
 

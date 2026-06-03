@@ -1,9 +1,9 @@
 # Chaos Script
 
-PowerShell utility for triggering failure scenarios in Clipper to test Nightwatch.
+Bash utility for triggering failure scenarios in Clipper to test Nightwatch.
 
-```powershell
-.\chaos.ps1 <scenario>
+```bash
+./chaos.sh <scenario>
 ```
 
 ## Scenarios
