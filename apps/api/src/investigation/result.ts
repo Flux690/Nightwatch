@@ -17,7 +17,7 @@ export const InvestigationResultSchema = z.object({
     .object({
       toolName: z.string(),
       targetContainer: z.string(),
-      params: z.record(z.unknown()),
+      params: z.record(z.string(), z.unknown()),
       rationale: z.string(),
       risk: z.enum(["low", "medium", "high"]),
       estimatedDowntimeSeconds: z.number(),

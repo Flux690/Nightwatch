@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+injectWorkspacePackages: true
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
@@ -8,3 +9,6 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: true
   prisma: true
+minimumReleaseAgeExclude:
+  - ioredis@5.11.1
+  - openai@6.42.0
