@@ -24,6 +24,7 @@
 @.claude/rules/typescript.md
 @.claude/rules/monorepo.md
 @.claude/rules/git.md
+@.claude/rules/architecture.md
 
 ## References
 - Architecture and decisions: PRD.md

@@ -14,10 +14,11 @@ dist/
 *.db-shm
 *.db-wal
 
-# Claude Code — personal/generated only; settings.json, hooks/, rules/ are committed
+# Claude Code — personal/generated only; settings.json, hooks/, rules/, agents/ are committed
 .claude/settings.local.json
 .claude/worktrees/
 .claude/logs/hooks*.log
+.claude/current-brief.md
 
 # Smoke test runtime — backgrounded process logs/pids
 .smoke/
