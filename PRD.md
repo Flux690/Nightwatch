@@ -1,5 +1,5 @@
 # NIGHTWATCH
-## AI-Native Reliability Platform
+## AI-Native Reliability API
 ### Product Requirements and Technical Architecture Document
 **Version 2.0 · 2026 · Confidential**
 
@@ -19,9 +19,9 @@
    - 3.2 [Sarah - 12-Person Startup, Existing Stack](#32-sarah---12-person-startup-existing-stack)
 4. [System Architecture - Three Components](#4-system-architecture---three-components)
    - 4.1 [Architecture Evolution](#41-architecture-evolution)
-   - 4.2 [Component 1 - Nightwatch Client](#42-component-1---nightwatch-client)
-   - 4.3 [Component 2 - Nightwatch Platform](#43-component-2---nightwatch-platform)
-   - 4.4 [Component 3 - Nightwatch Dashboard](#44-component-3---nightwatch-dashboard)
+   - 4.2 [Component 1 - Nightwatch Runner](#42-component-1---nightwatch-runner)
+   - 4.3 [Component 2 - Nightwatch API](#43-component-2---nightwatch-api)
+   - 4.4 [Component 3 - Nightwatch Console](#44-component-3---nightwatch-console)
    - 4.5 [Proactive vs Reactive - Precise Distinction](#45-proactive-vs-reactive---precise-distinction)
 5. [Installation and Onboarding](#5-installation-and-onboarding)
    - 5.1 [Path A - Zero Stack (Ravi)](#51-path-a---zero-stack-ravi)
@@ -33,13 +33,13 @@
    - 6.3 [Multi-Server Correlation](#63-multi-server-correlation)
    - 6.4 [Managed Service Investigation](#64-managed-service-investigation)
    - 6.5 [Approval and Execution](#65-approval-and-execution)
-   - 6.6 [Dashboard Data Access via WebSocket Relay](#66-dashboard-data-access-via-websocket-relay)
-7. [The Nightwatch Client - Full Specification](#7-the-nightwatch-client---full-specification)
+   - 6.6 [Console Data Access via WebSocket Relay](#66-console-data-access-via-websocket-relay)
+7. [The Nightwatch Runner - Full Specification](#7-the-nightwatch-runner---full-specification)
    - 7.1 [Runtime and Packaging](#71-runtime-and-packaging)
    - 7.2 [Capability Manifest](#72-capability-manifest)
    - 7.3 [Metric Snapshot Collection](#73-metric-snapshot-collection)
    - 7.4 [On-Demand Investigation Commands](#74-on-demand-investigation-commands)
-   - 7.5 [Dashboard Query Commands](#75-dashboard-query-commands)
+   - 7.5 [Console Query Commands](#75-console-query-commands)
    - 7.6 [Remediation Execution](#76-remediation-execution)
    - 7.7 [WebSocket Communication Protocol](#77-websocket-communication-protocol)
 8. [Agent Tool Definitions](#8-agent-tool-definitions)
@@ -58,9 +58,9 @@
    - 9.5 [System Prompt - First Draft](#95-system-prompt---first-draft)
 10. [Memory Architecture](#10-memory-architecture)
     - 10.1 [Rolling Telemetry Context - Redis](#101-rolling-telemetry-context---redis)
-    - 10.2 [Local Incident History - Client SQLite](#102-local-incident-history---client-sqlite)
+    - 10.2 [Local Incident History - Runner SQLite](#102-local-incident-history---runner-sqlite)
     - 10.3 [Active Incident Checkpoint](#103-active-incident-checkpoint)
-    - 10.4 [Platform Postgres - What Actually Lives Here](#104-platform-postgres---what-actually-lives-here)
+    - 10.4 [API Postgres - What Actually Lives Here](#104-api-postgres---what-actually-lives-here)
     - 10.5 [Feedback Loop - Human Resolution Notes](#105-feedback-loop---human-resolution-notes)
     - 10.6 [Session Continuity - Persistent Conversation Thread](#106-session-continuity---persistent-conversation-thread)
 11. [Alert Ingestion and Deduplication](#11-alert-ingestion-and-deduplication)
@@ -87,12 +87,12 @@
     - 15.2 [Outbound Notification and Action](#152-outbound-notification-and-action)
     - 15.3 [Managed Service Integrations](#153-managed-service-integrations)
     - 15.4 [Investigation Context Integrations](#154-investigation-context-integrations)
-16. [Dashboard - Full Feature Specification](#16-dashboard---full-feature-specification)
+16. [Console - Full Feature Specification](#16-console---full-feature-specification)
 17. [Pricing and Plans](#17-pricing-and-plans)
-18. [Platform Backend - Architecture](#18-platform-backend---architecture)
+18. [API Backend - Architecture](#18-api-backend---architecture)
     - 18.1 [Tech Stack](#181-tech-stack)
     - 18.2 [API Surfaces](#182-api-surfaces)
-    - 18.3 [WebSocket Architecture and Dashboard Relay](#183-websocket-architecture-and-dashboard-relay)
+    - 18.3 [WebSocket Architecture and Console Relay](#183-websocket-architecture-and-console-relay)
 19. [Error Handling](#19-error-handling)
 20. [Feedback Loop and Evals](#20-feedback-loop-and-evals)
 21. [Security Model](#21-security-model)
@@ -173,36 +173,36 @@ The final architecture stops trying to replace battle-tested open source tools a
 
 > **Key insight:** Prometheus, cAdvisor, and Alertmanager are battle-tested open source tools that solve monitoring perfectly. We package and configure them -- we do not replace them. Nightwatch's value is the investigation and remediation layer on top.
 
-### 4.2 Component 1 - Nightwatch Client
+### 4.2 Component 1 - Nightwatch Runner
 
-Installed on each user-controlled machine as a Docker container. Has no intelligence, no LLM, no reasoning. Not an agent. A client in the precise software sense: connects to the Platform, receives commands, executes them, returns results.
+Installed on each user-controlled machine as a Docker container. Has no intelligence, no LLM, no reasoning. Not an agent. A client in the precise software sense: connects to the API, receives commands, executes them, returns results.
 
 **Three responsibilities only:**
 
-- **Periodic metric snapshot collection:** every 5 minutes, queries local Prometheus via PromQL and sends snapshots to Platform. This is how Platform builds rolling telemetry context.
-- **On-demand investigation execution:** when Platform needs specific data during an investigation -- log lines, container inspect, config file, Postgres query -- it sends a command to the Client. Client executes locally, returns structured result.
-- **Approved remediation execution:** when a human approves an action, the Platform orchestrator forwards the execution command to the Client over the authenticated WebSocket connection. Authorization is enforced at the orchestrator layer -- no token validation required on the Client.
+- **Periodic metric snapshot collection:** every 5 minutes, queries local Prometheus via PromQL and sends snapshots to API. This is how API builds rolling telemetry context.
+- **On-demand investigation execution:** when API needs specific data during an investigation -- log lines, container inspect, config file, Postgres query -- it sends a command to the Runner. Runner executes locally, returns structured result.
+- **Approved remediation execution:** when a human approves an action, the API orchestrator forwards the execution command to the Runner over the authenticated WebSocket connection. Authorization is enforced at the orchestrator layer -- no token validation required on the Runner.
 
-Persistent outbound WebSocket to Platform. Outbound only -- no inbound ports, works behind any firewall, any NAT, zero network configuration on user side.
+Persistent outbound WebSocket to API. Outbound only -- no inbound ports, works behind any firewall, any NAT, zero network configuration on user side.
 
-### 4.3 Component 2 - Nightwatch Platform
+### 4.3 Component 2 - Nightwatch API
 
-The brain. Runs on Nightwatch's cloud infrastructure. Everything intelligent happens here.
+The brain. Everything intelligent happens here. **Architectural invariant: the API is a stateless brain; the Runner is the stateful system of record.** The API holds a session's message array only in worker memory for the duration of an active run -- all durable user data (sessions, transcripts, incident history, infrastructure state) lives on the Runner.
 
-- Receives metric snapshots from all Clients every 5 minutes. Stores in Redis with 2-hour TTL as rolling telemetry context.
+- Receives metric snapshots from all Runners every 5 minutes. Stores in Redis with 2-hour TTL as rolling telemetry context.
 - Evaluates trends on stored telemetry proactively -- fires own alerts before Prometheus does for things like memory trending toward OOM.
 - Receives inbound alert webhooks from Alertmanager, Datadog, Better Stack, Grafana Cloud, UptimeRobot, CloudWatch.
-- Runs the LLM investigation loop via Anthropic SDK. Has full cross-service context because all Clients report to it.
-- For managed services (Neon, Upstash, RDS, Railway) -- connects directly using stored credentials. No Client needed.
-- Manages approval workflow. Issues signed approval tokens. Routes execution commands to correct Client.
-- Acts as relay between Dashboard and Client for data queries. Caches Client responses in Redis (short TTL) for performance.
-- Stores only what must live on the platform: user accounts, installations, credentials, billing, approval records.
+- Runs the LLM investigation loop via the provider abstraction (section 14). Has full cross-service context because all Runners report to it.
+- For managed services (Neon, Upstash, RDS, Railway) -- connects directly using stored credentials. No Runner needed.
+- Manages approval workflow (in-memory, keyed by tool_use_id). Routes execution commands to the correct Runner only after human approval.
+- Acts as relay between Console and Runner for data queries. Caches Runner responses in Redis (short TTL) for performance.
+- Stores only what must live on the API side: user accounts, installations, credentials, billing.
 
-### 4.4 Component 3 - Nightwatch Dashboard
+### 4.4 Component 3 - Nightwatch Console
 
-React 19 / TypeScript frontend. The user's interface for everything: viewing incidents, approving actions, chatting with the agent, configuring installations, managing integrations, billing. Connects to Platform via REST and WebSocket for real-time updates. All infrastructure data is fetched via the Platform's WebSocket relay to the Client -- the Dashboard does not store or independently hold incident history.
+React 19 / TypeScript frontend. The user's interface for everything: viewing incidents, approving actions, chatting with the agent, configuring installations, managing integrations, billing. Connects to API via REST and WebSocket for real-time updates. All infrastructure data is fetched via the API's WebSocket relay to the Runner -- the Console does not store or independently hold incident history.
 
-When Client is offline, Dashboard shows "Client offline" with last-seen timestamp. No stale data is shown as current.
+When Runner is offline, Console shows "Runner offline" with last-seen timestamp. No stale data is shown as current.
 
 ### 4.5 Proactive vs Reactive - Precise Distinction
 
@@ -210,10 +210,10 @@ Same underlying data pipeline. Different triggers.
 
 | Mode | Trigger | Context at Investigation Start | On-Demand Fetches Needed |
 |---|---|---|---|
-| Proactive | Platform detects trend in rolling telemetry | 2 hours of metrics -- trend already identified | Config files, specific log lines around trend period |
+| Proactive | API detects trend in rolling telemetry | 2 hours of metrics -- trend already identified | Config files, specific log lines around trend period |
 | Reactive | Alertmanager or external tool fires webhook | 2 hours of metrics -- incident correlated with history | Log lines around alert timestamp, docker inspect, diagnostic queries |
 
-> **Critical insight:** Because the Client pushes metric snapshots every 5 minutes and Platform stores them, when any incident fires the investigation already has 2 hours of context. The LLM does not start from zero. On-demand tool calls are reserved only for specific deep-dive data the pre-collected context cannot provide.
+> **Critical insight:** Because the Runner pushes metric snapshots every 5 minutes and API stores them, when any incident fires the investigation already has 2 hours of context. The LLM does not start from zero. On-demand tool calls are reserved only for specific deep-dive data the pre-collected context cannot provide.
 
 ---
 
@@ -221,7 +221,7 @@ Same underlying data pipeline. Different triggers.
 
 ### 5.1 Path A - Zero Stack (Ravi)
 
-One command. Single container with s6-overlay process supervision bundles Runner + Prometheus + Alertmanager + cAdvisor. Dashboard goes green in 60 seconds.
+One command. Single container with s6-overlay process supervision bundles Runner + Prometheus + Alertmanager + cAdvisor. Console goes green in 60 seconds.
 
 ```bash
 curl -sSL nightwatch.sh/install | NIGHTWATCH_TOKEN=inst_abc123 bash
@@ -231,13 +231,13 @@ The install script auto-detects existing Prometheus (port 9090) and Alertmanager
 
 | Process | Role | Bundled |
 |---|---|---|
-| Runner | Executes investigation commands, handles remediation, serves dashboard queries | Always |
+| Runner | Executes investigation commands, handles remediation, serves console queries | Always |
 | cAdvisor | Reads Docker container metrics, exposes HTTP endpoint for Prometheus | Always |
 | Prometheus | Scrapes cAdvisor every 15s, stores metrics, evaluates alert rules | Unless existing detected |
-| Alertmanager | Receives fired alerts from Prometheus, routes webhook to Platform | Unless existing detected |
+| Alertmanager | Receives fired alerts from Prometheus, routes webhook to API | Unless existing detected |
 | nightwatch-data volume | Persistent Docker volume for Runner SQLite and Prometheus/Alertmanager data | Always |
 
-For Ravi with two servers: same command on server 2 with same token. Second Runner registers under same installation. Dashboard shows both servers. Platform now has cross-server visibility.
+For Ravi with two servers: same command on server 2 with same token. Second Runner registers under same installation. Console shows both servers. API now has cross-server visibility.
 
 ### 5.2 Path B - Existing Stack (Sarah)
 
@@ -264,11 +264,11 @@ receivers:
       - url: 'https://api.nightwatch.sh/alerts/ingest?token=inst_abc123'
 ```
 
-Grafana Cloud users: paste API key in dashboard, Platform adds contact point automatically via Grafana API. No config file editing.
+Grafana Cloud users: paste API key in console, API adds contact point automatically via Grafana API. No config file editing.
 
 ### 5.3 Synthetic First-Run Test
 
-After installation, Platform fires one synthetic alert for a fake container called `nightwatch-test`. Client runs a mock investigation with simulated data. User sees a real approval request in Slack and dashboard. User clicks Approve. Nothing executes. Dashboard shows resolved. User knows exactly what a real incident looks like before one happens. Dramatically reduces early churn from "does this even work" anxiety.
+After installation, API fires one synthetic alert for a fake container called `nightwatch-test`. Runner runs a mock investigation with simulated data. User sees a real approval request in Slack and console. User clicks Approve. Nothing executes. Console shows resolved. User knows exactly what a real incident looks like before one happens. Dramatically reduces early churn from "does this even work" anxiety.
 
 ---
 
@@ -279,13 +279,13 @@ After installation, Platform fires one synthetic alert for a fake container call
 ```
 Every 5 minutes per installation:
 
-BullMQ job fires on Platform
-  -> Platform sends WebSocket command to Client:
+BullMQ job fires on API
+  -> API sends WebSocket command to Runner:
      { type: "metric_snapshot", queries: [...PromQL expressions] }
-  -> Client queries local Prometheus HTTP API
-  -> Client returns structured snapshots
-  -> Platform stores in Redis (key per metric, TTL 2 hours)
-  -> Platform evaluates trends against stored data
+  -> Runner queries local Prometheus HTTP API
+  -> Runner returns structured snapshots
+  -> API stores in Redis (key per metric, TTL 2 hours)
+  -> API evaluates trends against stored data
   -> If trend detected:
        Create proactive incident
        Notify user: "Redis memory at 78%, projected OOM in 90 minutes"
@@ -294,29 +294,29 @@ BullMQ job fires on Platform
 ### 6.2 Reactive Investigation
 
 ```
-Alert webhook arrives at Platform (Alertmanager / Datadog / Better Stack / etc.)
+Alert webhook arrives at API (Alertmanager / Datadog / Better Stack / etc.)
 
-Platform:
+API:
   -> Normalizes to NormalizedAlert schema
   -> Computes sourceAlertId fingerprint
   -> Checks deduplication: active incident with this fingerprint? -> drop
   -> Checks correlation window: other alerts in last 90 seconds? -> batch
   -> Loads rolling context from Redis (2 hours of metrics)
-  -> Loads incident history from Client SQLite via WebSocket relay
+  -> Loads incident history from Runner SQLite via WebSocket relay
   -> Assembles initial LLM context
   -> Starts investigation loop
 
 Investigation loop:
   -> LLM reasons about pre-collected context
-  -> LLM calls on-demand tools as needed; Client executes, returns results
+  -> LLM calls on-demand tools as needed; Runner executes, returns results
   -> LLM calls request_clarification if required context is missing
   -> LLM calls a write tool (restart_container, rollback_deploy, etc.)
   -> Orchestrator intercepts write call -- sends approval card to human
-  -> Human approves -> Orchestrator executes on Client, returns result to LLM
+  -> Human approves -> Orchestrator executes on Runner, returns result to LLM
   -> Human rejects -> Orchestrator returns error result, LLM adapts
   -> Human adds context -> Orchestrator injects message, LLM re-investigates
   -> LLM calls submit_investigation_result
-  -> Platform schedules 2-minute verification job
+  -> API schedules 2-minute verification job
 ```
 
 ### 6.3 Multi-Server Correlation
@@ -324,26 +324,26 @@ Investigation loop:
 ```
 Ravi has two servers. Alert fires: API timing out on Server 1.
 
-Platform:
+API:
   -> Loads rolling context for BOTH servers from Redis
   -> Already sees: Postgres on Server 2 had slow queries 3 minutes ago
   -> This correlation is in the initial LLM context -- no extra tool calls needed
 
 LLM:
-  -> Requests specific data from both Clients in parallel:
-     Platform -> Client 1: "get api container logs last 5 minutes"
-     Platform -> Client 2: "run pg_stat_activity query"
+  -> Requests specific data from both Runners in parallel:
+     API -> Runner 1: "get api container logs last 5 minutes"
+     API -> Runner 2: "run pg_stat_activity query"
   -> Both respond simultaneously
   -> LLM identifies: lock contention on Server 2 Postgres causing API timeouts
-  -> Single approval request -> action routed to Client 2
+  -> Single approval request -> action routed to Runner 2
 ```
 
 ### 6.4 Managed Service Investigation
 
 ```
-Alert fires: Postgres on Neon is slow. No Client on Neon servers.
+Alert fires: Postgres on Neon is slow. No Runner on Neon servers.
 
-Platform (server-side, no Client involved):
+API (server-side, no Runner involved):
   -> Retrieves Neon connection string from encrypted Postgres store
   -> Queries Neon: pg_stat_activity, pg_stat_statements, lock states
   -> Results fed to LLM as tool results -- identical interface
@@ -357,9 +357,10 @@ Platform (server-side, no Client involved):
 ```
 LLM calls a write tool: restart_container({ container: "redis" })
 
-Orchestrator intercepts (tool is in WRITE_TOOLS set):
-  -> Creates ApprovalRequest: { incidentId, toolName, toolInput, tool_use_id, status: "pending" }
-  -> Sends approval card to Slack/Dashboard:
+Orchestrator intercepts (tool is in the REQUIRES_APPROVAL set):
+  -> Registers a pending approval in-memory, keyed by Anthropic tool_use_id
+     (EventEmitter, not a DB row -- no ApprovalRequest table)
+  -> Sends approval card to Slack/Console:
      - What: restart redis
      - Why: LLM's reasoning from current turn
      - Risk: low / medium / high (LLM assesses in tool input)
@@ -369,9 +370,9 @@ Orchestrator intercepts (tool is in WRITE_TOOLS set):
   -> Promise unresolved -- Node.js process waiting, LLM is NOT running
 
 Human clicks Approve:
-  -> Orchestrator marks session: approved = true for tool_use_id
-  -> Forwards tool execution to Client via WebSocket (tool_use_id as correlationId)
-  -> Client executes: docker restart redis
+  -> resolveApproval() emits decision:{tool_use_id} on the approval bus
+  -> Forwards tool execution to Runner via WebSocket (tool_use_id as correlationId)
+  -> Runner executes: docker restart redis
   -> Returns: { success: true, startedAt, newStatus }
   -> Promise resolves with execution result
   -> LLM receives tool_result, resumes with full context intact
@@ -389,33 +390,33 @@ Human clicks Add Context:
   -> Does not count as a rejection
 ```
 
-### 6.6 Dashboard Data Access via WebSocket Relay
+### 6.6 Console Data Access via WebSocket Relay
 
-The Dashboard never stores incident history independently. All infrastructure data is fetched from the Client via the Platform acting as relay.
+The Console never stores incident history independently. All infrastructure data is fetched from the Runner via the API acting as relay.
 
 ```
-Dashboard requests incident history:
-  -> Platform checks Redis cache (30-second TTL for state, 5-minute TTL for history)
+Console requests incident history:
+  -> API checks Redis cache (30-second TTL for state, 5-minute TTL for history)
   -> Cache hit: return immediately (sub-millisecond)
   -> Cache miss:
-       Platform sends WebSocket command to Client:
+       API sends WebSocket command to Runner:
        { type: "get_incident_history", params: { limit, offset, containerName? } }
-       Client queries local SQLite
-       Client returns structured JSON
-       Platform caches result in Redis
-       Platform returns to Dashboard
+       Runner queries local SQLite
+       Runner returns structured JSON
+       API caches result in Redis
+       API returns to Console
 
-Client offline:
-  -> Dashboard shows "Client offline -- last seen [timestamp]"
+Runner offline:
+  -> Console shows "Runner offline -- last seen [timestamp]"
   -> No stale infrastructure data shown as current
-  -> Approval records and billing data (stored in Platform Postgres) remain visible
+  -> Approval records and billing data (stored in API Postgres) remain visible
 ```
 
-This architecture keeps all sensitive infrastructure data on the user's machine while giving the Dashboard fast, responsive access through Redis caching.
+This architecture keeps all sensitive infrastructure data on the user's machine while giving the Console fast, responsive access through Redis caching.
 
 ---
 
-## 7. The Nightwatch Client - Full Specification
+## 7. The Nightwatch Runner - Full Specification
 
 ### 7.1 Runtime and Packaging
 
@@ -428,14 +429,14 @@ This architecture keeps all sensitive infrastructure data on the user's machine 
 
 ### 7.2 Capability Manifest
 
-On WebSocket connection, Client sends manifest to Platform:
+On WebSocket connection, Runner sends manifest to API:
 
 ```json
 {
-  "clientId": "client_app_server_1",
+  "runnerId": "runner_app-server-1_4821",
   "token": "inst_abc123",
   "hostname": "app-server-1",
-  "clientVersion": "1.4.2",
+  "runnerVersion": "2.0.0",
   "capabilities": {
     "docker": true,
     "containers": ["api", "redis", "nginx"],
@@ -449,11 +450,11 @@ On WebSocket connection, Client sends manifest to Platform:
 }
 ```
 
-Platform stores manifest. When incident involves Redis, Platform knows which Client to ask. Routing is automatic -- no user configuration.
+API stores manifest. `runnerId` is stable per runner instance, derived from hostname plus a persisted suffix so it survives restarts. The API connection registry is keyed by `(token, runnerId)` (planned) so multiple runners can share one installation token without overwriting each other. When incident involves Redis, API knows which Runner to ask. Routing is automatic -- no user configuration.
 
 ### 7.3 Metric Snapshot Collection
 
-Every 5 minutes Platform sends snapshot command. Client runs these PromQL queries against local Prometheus:
+Every 5 minutes API sends snapshot command. Runner runs these PromQL queries against local Prometheus:
 
 - `container_memory_usage_bytes / container_spec_memory_limit_bytes` -- memory % per container
 - `rate(container_cpu_usage_seconds_total[5m])` -- CPU % per container
@@ -477,14 +478,16 @@ Every 5 minutes Platform sends snapshot command. Client runs these PromQL querie
 | `get_host_disk` | `df -h` + `iostat -x 1 1` | Filesystem usage per mount, disk I/O wait per device |
 | `get_host_network` | `ss -tunapl` | Open connections, listening ports, connection state counts |
 | `get_host_dmesg` | `dmesg -T --level=err,warn` | Kernel errors, OOM kills, filesystem errors |
-| `query_prometheus` | Prometheus HTTP API PromQL query | Time series data for metric and time range |
+| `get_recent_deploys` | `docker` image history | Current vs previous image digest, change timing |
+| `get_env_variable_names` | container config | Env var names only (values never read) |
 | `read_file` | `fs.readFile` with path allowlist | File contents, secret patterns redacted |
-| `run_postgres_query` | Query via stored connection string | Diagnostic query results (read-only) |
-| `run_redis_command` | Connect via stored URL | INFO, CONFIG GET, DBSIZE output |
+| `query_prometheus` (planned) | Prometheus HTTP API PromQL query | Time series data for metric and time range |
+| `run_postgres_query` (planned) | Query via stored connection string | Diagnostic query results (read-only) |
+| `run_redis_command` (planned) | Connect via stored URL | INFO, CONFIG GET, DBSIZE output |
 
-### 7.5 Dashboard Query Commands
+### 7.5 Console Query Commands
 
-Structured named commands the Client accepts for Dashboard data requests relayed through the Platform. Not arbitrary SQL -- typed parameters only.
+Structured named commands the Runner accepts for Console data requests relayed through the API. Not arbitrary SQL -- typed parameters only. Today only `get_incident_history` is implemented; the rest are planned for the Console phase.
 
 | Command | Parameters | Returns |
 |---|---|---|
@@ -496,24 +499,24 @@ Structured named commands the Client accepts for Dashboard data requests relayed
 
 ### 7.6 Remediation Execution
 
-Remediation commands are forwarded to the Client only after the Platform orchestrator has confirmed human approval in session state. The Client executes commands received over the authenticated WebSocket connection. Authorization is enforced at the orchestrator layer -- no token validation is required on the Client.
+Remediation commands are forwarded to the Runner only after the API orchestrator has confirmed human approval in session state. The Runner executes commands received over the authenticated WebSocket connection. Authorization is enforced at the orchestrator layer -- no token validation is required on the Runner.
 
 | Command | Executes | Notes |
 |---|---|---|
-| `restart_container` | `docker restart {name}` | Orchestrator-gated, human approval required |
-| `rollback_deploy` | `docker pull {digest}` + recreate container | Requires target image digest in tool input |
-| `scale_container` | `kubectl scale deployment/{name} --replicas={n}` | Kubernetes environment only (V2) |
-| `exec_command` | `docker exec {name} {cmd}` | Disabled by default, admin must enable per installation |
+| `restart_container` | `docker restart {name}` | Implemented. Orchestrator-gated, human approval required |
+| `rollback_deploy` | `docker pull {digest}` + recreate container | (planned -- stub) Requires target image digest + compose context |
+| `scale_container` | `kubectl scale deployment/{name} --replicas={n}` | (planned) Kubernetes runtime only |
+| `exec_command` | `docker exec {name} {cmd}` | Implemented. Disabled unless `REMEDIATION_ENABLED=true` per installation |
 
 ### 7.7 WebSocket Communication Protocol
 
-- Client opens: `wss://client.nightwatch.sh/connect` -- outbound, port 443
+- Runner opens: `wss://client.nightwatch.sh/connect` -- outbound, port 443
 - Auth: installation token in WebSocket handshake Authorization header
-- On connect: Client sends capability manifest
+- On connect: Runner sends capability manifest
 - Keepalive: ping/pong every 30 seconds
 - Reconnection: exponential backoff 2s -> 4s -> 8s -> max 60s, infinite retries
 - Message format: JSON `{ messageId, type, payload }` both directions
-- Multi-platform routing: Redis pub/sub -- message published to token channel, consumed by whichever Platform instance holds that Client's connection
+- Multi-instance routing: Redis pub/sub -- message published to token channel, consumed by whichever API instance holds that Runner's connection
 
 ---
 
@@ -615,19 +618,19 @@ All tools defined as JSON schemas passed in every LLM API call. Tool description
 
 ### 8.3 Metrics and History Tools
 
-#### `query_prometheus`
+#### `query_prometheus` (planned)
 
 | Field | Detail |
 |---|---|
-| Description | Historical metric data. Establishes precise incident timeline -- when exactly did metric start deviating and what was baseline before it. |
+| Description | Historical metric data. Establishes precise incident timeline -- when exactly did metric start deviating and what was baseline before it. Not yet implemented. |
 | Parameters | `query: string (PromQL)`, `startTime: ISO8601`, `endTime: ISO8601`, `step: string (e.g. "30s")` |
 | Returns | `{ metric: string, dataPoints: { timestamp, value }[], min, max, avg, firstAnomalyTimestamp?: string }` |
 
-#### `get_alert_history`
+#### `get_incident_history`
 
 | Field | Detail |
 |---|---|
-| Description | Previous incidents from Client local SQLite. Shows if recurring problem, what fixed it before, how many times occurred. Load early to avoid reinvestigating known patterns. |
+| Description | Previous incidents from Runner local SQLite (implemented as `get_incident_history`). Shows if recurring problem, what fixed it before, how many times occurred. Load early to avoid reinvestigating known patterns. |
 | Parameters | `containerName?: string`, `limitDays: number (default 30)` |
 | Returns | `Array of { incidentId, timestamp, containerName, alertType, rootCause, resolutionAction, resolvedAt, humanResolutionNote?, recurrenceCount }` |
 
@@ -637,7 +640,7 @@ All tools defined as JSON schemas passed in every LLM API call. Tool description
 
 | Field | Detail |
 |---|---|
-| Description | Recent GitHub commits. Correlate deploy timing with incident. Check if any commit landed within 10 minutes before incident started -- most common root cause is a bad deploy. |
+| Description | Recent GitHub commits. Correlate deploy timing with incident. Check if any commit landed within 10 minutes before incident started -- most common root cause is a bad deploy. Executed API-side (GitHub API), not relayed to the Runner. |
 | Parameters | `repoOwner: string`, `repoName: string`, `branch: string (default "main")`, `limit: number (default 10)` |
 | Returns | `Array of { sha, shortSha, message, author, timestamp, filesChanged: string[], additions, deletions }` |
 
@@ -673,12 +676,12 @@ All tools defined as JSON schemas passed in every LLM API call. Tool description
 |---|---|
 | Description | Ask the user for information the agent cannot retrieve from any investigation tool. Use when a required configuration value, threshold, or decision is unknown and cannot be inferred safely. Do not guess missing values -- ask. |
 | Parameters | `question: string`, `context: string (why this information is needed)` |
-| Returns | Orchestrator blocks, sends question to user via Slack/Dashboard, injects user's answer as a user message, LLM continues with full context |
+| Returns | Orchestrator blocks (90s timeout), sends question to user via Slack/Console, injects user's answer as a user message, LLM continues with full context. API-side tool, not relayed to the Runner. |
 | Example | "What should the Redis maxmemory be set to? Current value is 256mb and container is OOM-killing repeatedly." |
 
 ### 8.6 Remediation Tools (Approval-Gated)
 
-All write tools are intercepted by the Platform orchestrator before reaching the Client. When the LLM calls any of these tools, the orchestrator creates an ApprovalRequest, presents an approval card to the human (Slack/Dashboard), and blocks execution until the human responds. The LLM is not running during this wait. The Client receives the execution command only after the orchestrator confirms approval in session state.
+All write tools (`REQUIRES_APPROVAL`) are intercepted by the API orchestrator before reaching the Runner. When the LLM calls any of these tools, the orchestrator registers a pending approval in-memory, presents an approval card to the human (Slack/Console), and blocks on a Promise until the human responds. The LLM is not running during this wait. The Runner receives the execution command only after the human approves. Implemented set today: `restart_container`, `rollback_deploy`, `exec_command`.
 
 #### `restart_container`
 
@@ -687,17 +690,19 @@ All write tools are intercepted by the Platform orchestrator before reaching the
 | Parameters | `containerName: string`, `delaySeconds?: number`, `rationale: string`, `risk: "low" \| "medium" \| "high"`, `estimatedDowntimeSeconds: number` |
 | Returns | `{ success: boolean, startedAt: string, previousExitCode: number, newStatus: string }` |
 
-#### `rollback_deploy`
+#### `rollback_deploy` (planned -- stub)
 
 | Field | Detail |
 |---|---|
+| Note | In the approval set, but the Runner handler is a stub (throws "not yet implemented" -- needs docker-compose file path and compose context). |
 | Parameters | `containerName: string`, `targetImageDigest: string`, `rationale: string`, `risk: "low" \| "medium" \| "high"`, `estimatedDowntimeSeconds: number` |
 | Returns | `{ success: boolean, previousImage: string, newImage: string, restartedAt: string }` |
 
-#### `scale_container`
+#### `scale_container` (planned -- Kubernetes)
 
 | Field | Detail |
 |---|---|
+| Note | Not implemented. Requires the Kubernetes runtime (see roadmap). |
 | Parameters | `deploymentName: string`, `replicas: number`, `namespace: string`, `rationale: string`, `risk: "low" \| "medium" \| "high"` |
 | Returns | `{ success: boolean, previousReplicas: number, newReplicas: number }` |
 
@@ -711,13 +716,13 @@ All write tools are intercepted by the Platform orchestrator before reaching the
 
 ### 8.7 Terminal Tool: submit_investigation_result
 
-The only way to conclude an investigation. Exits the agentic loop. Platform validates against Zod schema before any action.
+The only way to conclude an investigation. Exits the agentic loop. API validates against Zod schema before any action.
 
 ```typescript
 interface InvestigationResult {
   rootCause: {
     summary: string;          // <= 200 chars -- shown in push notification
-    confidence: number;       // 0.0-1.0 -- if < 0.6, platform escalates
+    confidence: number;       // 0.0-1.0 -- if < 0.6, the API escalates
     evidence: string[];       // 2-5 items from tool results
     contributingFactors?: string[];
   };
@@ -739,78 +744,81 @@ interface InvestigationResult {
 
 ## 9. The Agentic Loop
 
+### 9.0 One Loop, Two Triggers (Unified Session Model)
+
+There is one agentic loop, one system prompt, and one session type. There is no separate "investigation engine" and "chat engine." A session is a message transcript driven by the same loop; only the entry point differs:
+
+- **Alert trigger:** the API authors the opening **user** message (alert payload + metric context + incident history) and runs the loop autonomously. The agent concludes by calling `submit_investigation_result`.
+- **Human trigger:** a user types the opening message in the Console. The same loop runs with the same tools and the same approval gate; it simply does not have to conclude with the terminal tool -- the human can keep the conversation going.
+
+A concluded investigation does not close its session. The user can open it, see exactly what the agent did, and continue talking to it in the same thread. The agent's identity, tools, and rules are constant across both triggers; what differs is the first message and whether anyone is watching. This is why the chat interface (section 16) is not a second subsystem -- it is the human-initiated entry point into the same loop.
+
 ### 9.1 Loop Implementation
 
 No framework. No LangChain, LangGraph, CrewAI, or AutoGen. Approximately 300 lines of TypeScript. Every line in the critical path must be readable and debuggable. Framework abstractions make 3am incident diagnosis harder.
 
-**Configurable per installation from dashboard:**
+Loop bounds are currently hardcoded constants in `loop.ts`. Per-installation configurability (served via `GET /clients/config`) is planned:
 
-- Maximum tool calls: 24 default, range 8-50
-- Hard timeout: 5 minutes default, range 2-15 minutes
-- Per-tool timeout: 15 seconds default, range 5-60 seconds -- uniform across all tools
-- Resource-constrained fallback: host memory >95% or CPU >95% -> limit to 8 tool calls
+- Maximum tool calls: `MAX_TOOL_CALLS = 24` (planned range 8-50)
+- Hard timeout: `HARD_TIMEOUT_MS = 5 * 60_000` (planned range 2-15 minutes)
+- Per-tool timeout: `TOOL_TIMEOUT_MS = 15_000` -- uniform across all tools (planned range 5-60s)
+- Resource-constrained fallback: host memory >95% or CPU >95% -> limit to 8 tool calls (planned)
+
+The loop never instantiates an SDK directly -- it calls `createProvider()` (section 14) and drives the provider via `start` / `chat` / `appendToolResults`. Write tools are gated by the `REQUIRES_APPROVAL` set (defined in `investigation/tools.ts`); read tools on the Runner go through `sendCommand`; `request_clarification` and `get_recent_commits` are API-side tools.
 
 ```typescript
+const MAX_TOOL_CALLS = 24;
+const HARD_TIMEOUT_MS = 5 * 60_000;
+const TOOL_TIMEOUT_MS = 15_000;
+
 async function runInvestigation(alert: NormalizedAlert): Promise<void> {
-  const config = await platform.getConfig(alert.token);
-  const context = await buildInitialContext(alert, config);
-  const messages: Message[] = [systemPrompt(config), context];
+  const provider = createProvider(systemPrompt);
+  provider.start(await buildInitialContext(alert));   // first message is a user turn
   let toolCallCount = 0;
-  const deadline = Date.now() + config.hardTimeoutMinutes * 60_000;
+  const deadline = Date.now() + HARD_TIMEOUT_MS;
 
-  while (Date.now() < deadline && toolCallCount < config.maxToolCalls) {
-    // Inject any correlated alerts that arrived while investigation is active
-    const pendingAlert = await alertQueue.dequeue(alert.token);
-    if (pendingAlert) {
-      messages.push({ role: "user", content:
-        `CORRELATED ALERT: ${pendingAlert.service} — ${pendingAlert.message} at ${pendingAlert.firedAt}. Assess whether related to current investigation.`
-      });
-    }
-
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      system: messages[0].content,
-      messages: messages.slice(1),
-      tools: TOOL_SCHEMAS,
-    });
-
-    if (response.stop_reason === "end_turn") {
-      await escalate(alert, "LLM ended without calling submit_investigation_result");
+  while (Date.now() < deadline && toolCallCount < MAX_TOOL_CALLS) {
+    const response = await provider.chat(TOOL_SCHEMAS);
+    if (response.toolUses.length === 0) {              // end_turn without concluding
+      await escalate(alert, "LLM ended without submit_investigation_result");
       return;
     }
 
-    for (const block of response.content) {
-      if (block.type === "tool_use") {
-        if (block.name === "submit_investigation_result") {
-          await conclude(alert, block.input);
-          return;
-        }
-
-        let result: unknown;
-        if (WRITE_TOOLS.has(block.name)) {
-          // Intercept write tools -- gate with human approval before executing
-          result = await requestApprovalAndExecute(alert, block, config);
-        } else {
-          result = await executeWithTimeout(block, config.toolTimeoutSeconds * 1000);
-        }
-
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({ role: "user", content: [{ type: "tool_result",
-          tool_use_id: block.id, content: JSON.stringify(result) }] });
-        toolCallCount++;
+    const results: ToolResult[] = [];
+    for (const tool of response.toolUses) {
+      if (tool.name === "submit_investigation_result") {
+        await conclude(alert, tool.input);
+        return;
       }
+
+      let result: unknown;
+      if (REQUIRES_APPROVAL.has(tool.name)) {
+        const decision = await requestApproval(alert, incidentId, tool);  // human gate
+        if (decision.action === "approve") {
+          result = await sendCommand(alert.token, tool.name, tool.input);
+        } else if (decision.action === "reject") {
+          result = { error: `Rejected by human: ${decision.comment ?? ""}` };
+        } else { /* add_context: inject message, continue */ }
+      } else if (PLATFORM_TOOLS.has(tool.name)) {
+        result = await handlePlatformTool(tool);
+      } else {
+        result = await sendCommand(alert.token, tool.name, tool.input, TOOL_TIMEOUT_MS);
+      }
+      results.push({ toolUseId: tool.id, content: JSON.stringify(result) });
+      toolCallCount++;
     }
+    provider.appendToolResults(results);
   }
   await escalate(alert, "Timeout or tool call limit reached");
 }
 
-const WRITE_TOOLS = new Set(["restart_container", "rollback_deploy", "scale_container", "exec_command"]);
+// apps/api/src/investigation/tools.ts
+export const REQUIRES_APPROVAL = new Set(["restart_container", "rollback_deploy", "exec_command"]);
 ```
 
 ### 9.2 Context Construction
 
-Initial user message is structured data assembled from: the alert payload, aggregated metric trend summary from Redis rolling context (not raw data points), and last 5 relevant incident records from Client SQLite history.
+Initial user message is structured data assembled from: the alert payload, aggregated metric trend summary from Redis rolling context (not raw data points), and last 5 relevant incident records from Runner SQLite history.
 
 ```
 ALERT RECEIVED
@@ -826,7 +834,7 @@ Redis restarts: 0 for 6 days -> 3 in last 5 minutes
 API error rate: stable until 14:28, then 23% errors (correlates with Redis)
 Host memory: 72% -- not constrained
 
-INCIDENT HISTORY (from Client SQLite)
+INCIDENT HISTORY (from Runner SQLite)
 --------------------------------------
 6 days ago: Redis OOM-killed -- human fixed by increasing maxmemory to 512mb
 14 days ago: Redis OOM-killed -- agent restarted, recurred in 2 hours
@@ -837,51 +845,37 @@ BEGIN INVESTIGATION
 
 ### 9.3 Orchestrator-Level Write Gating
 
-The LLM has no visibility into the approval mechanism. It calls a write tool (`restart_container`, `rollback_deploy`, etc.) the same way it calls any read tool. The orchestrator intercepts the call before it reaches the Client.
+The LLM has no visibility into the approval mechanism. It calls a write tool (`restart_container`, `rollback_deploy`, etc.) the same way it calls any read tool. The orchestrator intercepts the call before it reaches the Runner.
 
-`requestApprovalAndExecute` implementation:
+Approval coordination is purely in-memory -- a Node.js `EventEmitter` (`approvalBus`), not a database table. The orchestrator parks on a Promise keyed by Anthropic's `tool_use_id`; the human's Console/Slack response emits the matching event and resolves it. `requestApproval` (in `apps/api/src/investigation/approvals.ts`) returns the decision; the loop then executes, rejects, or injects context.
 
 ```typescript
-async function requestApprovalAndExecute(
+// apps/api/src/investigation/approvals.ts
+const approvalBus = new EventEmitter();
+const APPROVAL_TIMEOUT_MS = 4 * 60_000;       // 4 minutes
+const CLARIFICATION_TIMEOUT_MS = 90_000;       // 90 seconds
+
+export function resolveApproval(decision: ApprovalDecision): void {
+  approvalBus.emit(`decision:${decision.toolUseId}`, decision);
+}
+
+export async function requestApproval(
   alert: NormalizedAlert,
-  block: ToolUseBlock,
-  config: InstallationConfig,
-): Promise<unknown> {
-  // Create approval record keyed by Anthropic's tool_use_id
-  await db.approvalRequest.create({
-    data: { incidentId: alert.incidentId, toolName: block.name,
-            toolInput: block.input, toolUseId: block.id, status: "pending" }
-  });
-
-  // Send approval card to human -- blocks here
-  return new Promise((resolve) => {
-    notifier.sendApprovalCard({
-      incidentId: alert.incidentId,
-      toolUseId: block.id,
-      toolName: block.name,
-      toolInput: block.input,
-      // risk and rationale come from the LLM's tool input parameters
-    });
-
-    // Resolved externally when human responds via Slack/Dashboard webhook
-    approvalBus.once(block.id, async (decision) => {
-      if (decision.action === "approve") {
-        const result = await client.execute(block.name, block.input);
-        await db.approvalRequest.update({ where: { toolUseId: block.id },
-          data: { status: "approved" } });
-        resolve(result);
-      } else if (decision.action === "reject") {
-        await db.approvalRequest.update({ where: { toolUseId: block.id },
-          data: { status: "rejected", comment: decision.comment } });
-        resolve({ error: `Rejected by human: ${decision.comment ?? "no reason given"}` });
-      }
-      // "add_context" is handled at the loop level -- message injected before next LLM turn
+  incidentId: string,
+  tool: ToolUse,
+): Promise<ApprovalDecision> {
+  notifier.sendApprovalCard({ incidentId, toolUseId: tool.id, toolName: tool.name, toolInput: tool.input });
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("approval timeout")), APPROVAL_TIMEOUT_MS);
+    approvalBus.once(`decision:${tool.id}`, (decision: ApprovalDecision) => {
+      clearTimeout(timer);
+      resolve(decision);   // { action: "approve" | "reject" | "add_context", comment? }
     });
   });
 }
 ```
 
-The LLM receives a tool_result either way -- success from execution or an error from rejection. The approval gate is invisible to the LLM. One continuous investigation flow with no context loss.
+The loop (not this function) decides what to do with the decision: on `approve` it forwards execution to the Runner via `sendCommand`; on `reject` it feeds an error tool_result back to the LLM (max 3 rejections before escalation); on `add_context` it injects a user message before the next turn. The LLM receives a tool_result either way -- the approval gate is invisible to it. The hard investigation deadline pauses while an approval is pending (planned) so human wait time does not time out the run. One continuous investigation flow with no context loss.
 
 ### 9.4 Rejection and Context Re-entry
 
@@ -897,8 +891,8 @@ incidents and propose precise, safe remediation actions.
 
 CONTEXT
 -------
-You run on the Nightwatch platform. You have access to tools that query user
-infrastructure through the Nightwatch Client on each machine. You have
+You run on the Nightwatch API. You have access to tools that query user
+infrastructure through the Nightwatch Runner on each machine. You have
 pre-collected metric context for the last 2 hours across all services.
 Use this context before calling tools -- it is already assembled.
 
@@ -906,11 +900,11 @@ INVESTIGATION SEQUENCE
 -----------------------
 1. Read the metric context and incident history in the initial message.
    Do not call tools to re-fetch data already present.
-2. Call get_alert_history -- check if this pattern has been seen before.
+2. Call get_incident_history -- check if this pattern has been seen before.
 3. Call get_container_events on the alerting container.
 4. Call get_container_logs on the alerting container.
 5. Call get_host_memory and get_host_dmesg if resource pressure suspected.
-6. Call query_prometheus if you need to refine the timeline.
+6. Call query_prometheus if you need to refine the timeline (when available).
 7. Call get_recent_commits if timing suggests a bad deploy.
 8. If a required value is unknown and cannot be inferred safely, call
    request_clarification with a specific question. Do not guess config values.
@@ -946,7 +940,7 @@ Session timeout: {{timeoutMinutes}} minutes
 
 Four stores. Zero overlap in purpose.
 
-### 10.1 Rolling Telemetry Context - Redis (Platform Side)
+### 10.1 Rolling Telemetry Context - Redis (API Side)
 
 - **What:** metric snapshots per container per installation, collected every 5 minutes
 - **Why:** every investigation starts with 2 hours of pre-assembled context. LLM does not start from zero.
@@ -955,57 +949,58 @@ Four stores. Zero overlap in purpose.
 - **Scale:** approximately 60KB per installation per 2-hour window. Trivial at thousands of users.
 - **What is NOT stored:** raw logs, config contents, env var values, anything sensitive
 
-### 10.2 Local Incident History - Client SQLite
+### 10.2 Local Incident History - Runner SQLite
 
 - **What:** last 30 resolved incidents per installation. Container, alert type, root cause, action taken, outcome, human resolution note if provided.
 - **Why:** loaded into LLM context at investigation start. Agent knows Redis has OOM-killed 4 times and restart alone never permanently fixes it.
 - **Storage:** SQLite at `/var/nightwatch/history.db` on Docker volume. Survives container restarts.
-- **Served via:** Dashboard query commands relayed through Platform WebSocket -- not stored on Platform.
-- **Retention:** 90 days default, configurable. Nightly pruning job on Client.
+- **Served via:** Console query commands relayed through API WebSocket -- not stored on API.
+- **Retention:** 90 days default, configurable. Nightly pruning job on Runner.
 - **What is NOT stored:** raw log lines, metric data, anything growing unboundedly
 
-### 10.3 Active Incident Checkpoint
+### 10.3 Crash Recovery via the Durable Transcript (planned)
 
-- **What:** one small JSON file per active investigation on Platform side
-- **Why:** crash recovery only. Detects investigation was in progress when Platform restarted.
-- **Contents:** `{ incidentId, token, container, alertType, status, startedAt }`
-- **Lifecycle:** created when investigation starts, deleted on resolution or escalation
-- **On restart:** restart investigation from scratch -- 2-3 minutes, acceptable. Do NOT replay message arrays.
+The durable session transcript on the Runner (section 10.6) supersedes the separate JSON-checkpoint idea. Because the API appends each turn to the Runner as it happens, the transcript on disk *is* the checkpoint: if the API restarts mid-run, the partial transcript survives and the run can be resumed (or, at minimum, the human still sees everything the agent did). No separate checkpoint file is maintained.
 
-### 10.4 Platform Postgres - What Actually Lives Here
+- **Today:** the message array lives only in API worker memory; an API restart loses an in-flight run and the user is notified.
+- **Planned:** per-turn append to the Runner makes the transcript durable and the run resumable.
 
-Only what must exist on the Platform and cannot live on the Client:
+### 10.4 API Postgres - What Actually Lives Here
 
-- User accounts, sessions, and authentication state
+Only what must exist on the API and cannot live on the Runner:
+
+- User accounts, sessions, and authentication state (planned)
 - Installation records and tokens
-- Encrypted integration credentials (Slack, GitHub, managed service connection strings)
-- Billing usage counters and Stripe references
-- Approval records (generated on Platform, needed for audit trail)
-- Active incident status (minimal -- just enough for approval workflow)
+- Encrypted integration credentials (Slack, GitHub, managed service connection strings) (planned)
+- Billing usage counters and Stripe references (planned)
 
-**What does NOT live here:** incident history, tool results, log excerpts, metric data, or any infrastructure state. All of that lives on the Client's SQLite and is served on demand via WebSocket relay.
+Approvals are NOT stored here. Approval coordination is in-memory only (an `EventEmitter` keyed by `tool_use_id`); there is no `ApprovalRequest` table. The current schema holds only `User` and `Installation`.
+
+**What does NOT live here:** sessions and transcripts, incident history, tool results, log excerpts, metric data, or any infrastructure state. All of that lives on the Runner's SQLite (the system of record) and is served on demand via WebSocket relay. The API is a stateless brain -- it holds the live message array only in worker memory during an active run.
 
 ### 10.5 Feedback Loop - Human Resolution Notes
 
 ```
 Incident escalates -- agent could not determine root cause
   -> Human fixes manually
-  -> Human marks resolved in dashboard with note:
+  -> Human marks resolved in console with note:
      "Increased Redis maxmemory from 256mb to 512mb in docker-compose.yml"
-  -> Platform updates approval record
-  -> Platform pushes note to Client via WebSocket
-  -> Client appends to local SQLite history
+  -> API pushes note to Runner via WebSocket
+  -> Runner appends to local SQLite history
   -> Next Redis OOM: agent reads history, sees the note,
      knows the real fix is maxmemory not a restart
 ```
 
-### 10.6 Session Continuity - Persistent Conversation Thread
+### 10.6 Sessions and Transcripts (Runner SQLite)
 
-- **What:** One persistent investigation thread per installation. When a new investigation starts after a previous one concludes, it loads the last N incident records from Client SQLite and continues in the same logical thread -- the agent has history of what it already investigated, what actions were taken, and what the outcomes were.
-- **Why:** An agent investigating a second Redis OOM 30 minutes after fixing the first one benefits from knowing the first investigation's conclusion. It avoids re-running the same tool calls and can immediately recognize a recurrence pattern.
-- **How:** Incident history records in Client SQLite (section 10.2) serve as the persistent memory layer. The structured record (root cause, action taken, outcome, human notes) is loaded into the initial context of each new investigation. No raw message arrays are persisted -- they live in Platform memory only for the duration of an active investigation.
-- **Mid-investigation injection:** When a second alert arrives for an installation that already has an active investigation, it is not queued as a new session. It is held in a per-installation alert queue and injected as a user message at the next tool call boundary, before the next LLM turn. The LLM receives it with full prior context and determines whether it is a downstream effect or an independent incident.
-- **What is NOT stored:** The raw message array (which contains log excerpts and tool results) is not persisted anywhere. The structured incident record is the persistence layer, not the conversation transcript.
+A session is a durable message transcript -- the conversation between the agent and the world for one trigger (alert or chat), per the unified model in section 9.0. Two complementary memory layers:
+
+- **Episodic memory (implemented):** structured `IncidentRecord`s in Runner SQLite (section 10.2). Loaded into the initial context of each new run so the agent recognizes recurrence patterns ("Redis has OOM-killed 4 times; restart alone never fixes it"). Injection is filtered to the same container + same alert type, repeated root causes collapsed with a recurrence count, capped at ~5 records, formatted as compact labeled text.
+- **Transcript memory (planned):** the full message array persisted on the Runner in `sessions` + `session_messages` tables (one row per message, appended per turn via a new `append_session_message` WS command). No status state machine, no TTL, no auto-pruning -- a session persists until the user deletes it, like any coding-agent session. The API holds the array in memory only during an active run; the Runner is the system of record.
+
+**Why two layers, not a session framework:** this is a task agent, not a chatbot. The episodic record is what makes the *next* run smarter; the transcript is what lets a human review or continue *this* one. Neither needs a vector store, cross-installation learning, or a hardcoded pattern library at this scale -- the LLM reading a plaintext root cause surfaces the pattern directly.
+
+**Mid-investigation injection:** When a second alert arrives for an installation with an active run, it is not a new session. It is held in a per-installation queue and injected as a user message at the next tool-call boundary. The LLM determines whether it is a downstream effect or an independent incident.
 
 ---
 
@@ -1015,13 +1010,13 @@ Incident escalates -- agent could not determine root cause
 
 | Source | Auth | Native Dedup Field | Notes |
 |---|---|---|---|
-| Alertmanager (self-hosted) | Webhook URL from dashboard | `fingerprint` (native) | Default -- pre-configured by install script for zero-stack users |
-| Grafana Cloud | API Key -> auto-add contact point | `fingerprint` (identical format) | Platform adds contact point via Grafana API |
-| Datadog | Webhook + payload template | `$ALERT_ID` (stable across repeat firings) | User configures webhook in Datadog, pastes template from dashboard |
+| Alertmanager (self-hosted) | Webhook URL from console | `fingerprint` (native) | Default -- pre-configured by install script for zero-stack users |
+| Grafana Cloud | API Key -> auto-add contact point | `fingerprint` (identical format) | API adds contact point via Grafana API |
+| Datadog | Webhook + payload template | `$ALERT_ID` (stable across repeat firings) | User configures webhook in Datadog, pastes template from console |
 | Better Stack | Webhook URL | `alert.id` | User adds URL in Better Stack settings |
 | UptimeRobot | Webhook URL | `monitor.id` | User adds URL in UptimeRobot settings |
-| AWS CloudWatch | SNS -> HTTP endpoint | `AlarmArn` | SNS subscription to Platform HTTP endpoint |
-| Platform (proactive) | Internal | Generated UUID per trend alert | Platform generates own fingerprint for self-detected trends |
+| AWS CloudWatch | SNS -> HTTP endpoint | `AlarmArn` | SNS subscription to API HTTP endpoint |
+| API (proactive) | Internal | Generated UUID per trend alert | API generates own fingerprint for self-detected trends |
 
 ### 11.2 Normalized Alert Schema
 
@@ -1047,7 +1042,7 @@ Handles: Alertmanager repeat firings every 4 hours, Datadog repeat notifications
 
 ### 11.4 Debounce Window - Correlation
 
-Separate from deduplication. When new alert arrives, Platform checks: other alerts for this installation in last 90 seconds without active investigation? If yes, batch together. LLM investigates all affected services as one incident and determines whether they share a root cause or are independent. Manual chat-triggered investigations bypass both deduplication and debounce.
+Separate from deduplication. When new alert arrives, API checks: other alerts for this installation in last 90 seconds without active investigation? If yes, batch together. LLM investigates all affected services as one incident and determines whether they share a root cause or are independent. Manual chat-triggered investigations bypass both deduplication and debounce.
 
 **Mid-investigation arrival:** When a new alert arrives for an installation that already has an active investigation running (outside the debounce window), it is not queued as a new investigation. It is placed in a per-installation alert queue and injected into the active conversation as a user message at the next tool call boundary. The LLM determines whether it is a downstream effect of the same root cause or an independent incident.
 
@@ -1065,7 +1060,7 @@ async function checkRateLimit(token: string, severity: string): Promise<boolean>
 }
 ```
 
-When suppressed: alert is logged with suppression reason, suppression counter incremented per installation, dashboard shows "N alerts suppressed in the last hour." Alerts are never silently dropped.
+When suppressed: alert is logged with suppression reason, suppression counter incremented per installation, console shows "N alerts suppressed in the last hour." Alerts are never silently dropped.
 
 ---
 
@@ -1090,7 +1085,7 @@ When suppressed: alert is logged with suppression reason, suppression counter in
 
 ### 12.3 Proactive Alert Generation
 
-Proactive incidents show a "Predicted" badge in dashboard -- visually distinct from firing incidents. Same agentic loop runs but LLM is told this is a predicted failure and should focus on prevention options. Lower urgency notifications by default: Slack message, no push notification, no PagerDuty escalation. Configurable per alert type in installation settings.
+Proactive incidents show a "Predicted" badge in console -- visually distinct from firing incidents. Same agentic loop runs but LLM is told this is a predicted failure and should focus on prevention options. Lower urgency notifications by default: Slack message, no push notification, no PagerDuty escalation. Configurable per alert type in installation settings.
 
 ---
 
@@ -1100,7 +1095,7 @@ Proactive incidents show a "Predicted" badge in dashboard -- visually distinct f
 
 **Layer 1 -- Orchestrator Write Gating (Primary)**
 
-All write tool calls are intercepted by the Platform orchestrator before reaching the Client. When the LLM calls a write tool, the orchestrator creates an ApprovalRequest, presents an approval card to the human (Slack/Dashboard), and blocks execution until the human responds. The Client only receives the execution command after the orchestrator confirms approval in session state. The LLM cannot bypass this gate -- it calls a tool and receives a result, with no visibility into whether that result came from immediate execution or a human approval wait. This is the hard safety guarantee -- architectural enforcement at the orchestrator layer, not a prompt rule.
+All write tool calls (the `REQUIRES_APPROVAL` set) are intercepted by the API orchestrator before reaching the Runner. When the LLM calls a write tool, the orchestrator registers a pending approval in-memory, presents an approval card to the human (Slack/Console), and blocks on a Promise until the human responds. The Runner only receives the execution command after the orchestrator confirms approval in session state. The LLM cannot bypass this gate -- it calls a tool and receives a result, with no visibility into whether that result came from immediate execution or a human approval wait. This is the hard safety guarantee -- architectural enforcement at the orchestrator layer, not a prompt rule.
 
 **Layer 2 -- System Prompt Rules**
 
@@ -1108,20 +1103,21 @@ Shapes reasoning in the vast majority of cases: never read env values, never int
 
 **Layer 3 -- Output Schema Validation**
 
-Before any action on `submit_investigation_result`, Platform validates Zod schema: `targetContainer` must be registered in this installation, `toolName` must be valid enum, `confidence` must be 0.0-1.0, `evidence` must be 2-5 strings, `risk` must be `"low"`/`"medium"`/`"high"`. Invalid payloads rejected, agent must retry.
+Before any action on `submit_investigation_result`, API validates Zod schema: `targetContainer` must be registered in this installation, `toolName` must be valid enum, `confidence` must be 0.0-1.0, `evidence` must be 2-5 strings, `risk` must be `"low"`/`"medium"`/`"high"`. Invalid payloads rejected, agent must retry.
 
 ### 13.2 Orchestrator Approval State
 
 When a write tool call is intercepted:
 
 - `tool_use_id` from Anthropic SDK serves as the correlation key -- no separate UUID needed
-- ApprovalRequest record created in Platform Postgres: `{ incidentId, toolName, toolInput, toolUseId, status: "pending", createdAt }`
-- Status updated to `approved`, `rejected`, or `context_added` when human responds
-- If approved: orchestrator forwards execution to Client via WebSocket, result returned to LLM as tool_result
-- If rejected: orchestrator returns `{ error: "Rejected by human: [comment]" }` as tool_result to LLM
-- If "Add Context": user message injected into conversation, ApprovalRequest marked `context_added`, approval loop repeats if LLM calls another write tool
-- Approval records retained in Platform Postgres for audit trail regardless of outcome
-- No expiry window -- approval remains valid until the investigation concludes or is escalated
+- A pending approval is registered in-memory on the `approvalBus` EventEmitter -- there is no Postgres `ApprovalRequest` record
+- The orchestrator parks on a Promise; `resolveApproval()` emits `decision:{tool_use_id}` when the human responds
+- If approved: orchestrator forwards execution to Runner via WebSocket, result returned to LLM as tool_result
+- If rejected: orchestrator returns `{ error: "Rejected by human: [comment]" }` as tool_result to LLM (max 3 rejections before escalation)
+- If "Add Context": user message injected into conversation before the next turn, approval loop repeats if LLM calls another write tool
+- Approval wait times out after 4 minutes (`APPROVAL_TIMEOUT_MS`); clarification waits time out after 90 seconds (`CLARIFICATION_TIMEOUT_MS`)
+- The hard investigation deadline pauses while an approval is pending (planned), so human wait time does not abort the run
+- No audit-trail persistence today -- if an immutable approval log is needed later it is added as an explicit feature, not a side effect of the gate
 
 ### 13.3 Prompt Injection Defense
 
@@ -1134,50 +1130,44 @@ When a write tool call is intercepted:
 
 ## 14. Inference Architecture
 
-### 14.1 Anthropic SDK - Primary
+### 14.1 Provider Abstraction - Ports and Adapters
 
-Anthropic SDK used directly. No OpenRouter. No extra network hop. Claude Sonnet is the default model.
-
-```typescript
-import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic({
-  apiKey: config.anthropicKey, // Nightwatch key (proxy) or user key (BYOK)
-});
-
-const response = await anthropic.messages.create({
-  model: "claude-sonnet-4-6",
-  max_tokens: 4096,
-  system: systemPrompt,
-  messages,
-  tools: TOOL_SCHEMAS,
-});
-```
-
-### 14.2 Multi-Provider Strategy
-
-Additional providers added incrementally when users request them. Each provider gets its own SDK implementation behind a shared internal interface.
+A hand-rolled ports-and-adapters layer lives in `apps/api/src/llm/`. No framework (no LangChain/LangGraph). The port is a small `LLMProvider` interface in `types.ts`; adapters implement it per SDK. Both adapters are compiled in; `createProvider()` selects one by the `LLM_PROVIDER` env var (default `anthropic`).
 
 ```typescript
-interface LLMClient {
-  complete(params: CompletionParams): Promise<CompletionResult>;
+// apps/api/src/llm/types.ts
+export interface LLMProvider {
+  start(firstMessage: string): void;
+  chat(tools: ToolSchema[]): Promise<ChatResponse>;
+  appendToolResults(results: ToolResult[]): void;
 }
 
-// Implementations added as needed:
-class AnthropicClient implements LLMClient { ... }  // launch
-class OpenAIClient implements LLMClient { ... }      // when users ask
-class GeminiClient implements LLMClient { ... }      // when users ask
+// apps/api/src/llm/factory.ts
+export function createProvider(system: string): LLMProvider {
+  switch (process.env["LLM_PROVIDER"] ?? "anthropic") {
+    case "anthropic": return new AnthropicProvider(system);
+    case "openai":    return new OpenAIProvider(system);
+    default: throw new Error("unknown LLM_PROVIDER");
+  }
+}
 ```
 
-No OpenRouter dependency. Provider selected from user's BYOK config or from Platform's proxy config.
+The provider owns the message array in memory for the duration of a run. Each adapter sets a bounded request timeout (60s) and `maxRetries` (2) so a provider 429/503 surfaces as an error instead of hanging the loop.
 
-### 14.3 Proxy Mode (Default)
+### 14.2 Adapters
 
-Nightwatch's Anthropic API key used. User needs no API key. Inference cost included in subscription up to monthly investigation limit. Overages billed at $0.25 per investigation. Consistent model version for all users.
+- **`anthropic.ts` (default).** `@anthropic-ai/sdk` used directly, no extra network hop. Model from `ANTHROPIC_MODEL`, default `claude-sonnet-4-6`. Key from `ANTHROPIC_API_KEY`.
+- **`openai.ts`.** `openai` SDK against any OpenAI-compatible endpoint. `OPENAI_BASE_URL` lets it target OpenAI, OpenRouter, Groq, or a local server; model from `OPENAI_MODEL`. This is what made free-model smoke testing via OpenRouter possible. Both adapters satisfy the same `LLMProvider` port, so the loop is provider-agnostic.
+
+Additional providers (e.g. a dedicated Gemini adapter) are added by implementing the same port -- no loop changes.
+
+### 14.3 Proxy Mode (planned)
+
+Nightwatch's Anthropic API key used. User needs no API key. Inference cost included in subscription up to monthly investigation limit. Overages billed at $0.25 per investigation. Consistent model version for all users. (SaaS-era feature; BYOK is the only mode today.)
 
 ### 14.4 BYOK Mode
 
-User provides own API key in dashboard settings. Stored AES-256 encrypted in Postgres. Decrypted at investigation time. User selects provider (Anthropic, OpenAI, Gemini) and pays provider directly. No Nightwatch overage charges. Available on all tiers including trial after 20-investigation proxy limit.
+User provides own API key in console settings. Stored AES-256 encrypted in Postgres. Decrypted at investigation time. User selects provider (Anthropic, OpenAI, Gemini) and pays provider directly. No Nightwatch overage charges. Available on all tiers including trial after 20-investigation proxy limit.
 
 ---
 
@@ -1186,7 +1176,7 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 ### 15.1 Inbound Alert Sources
 
 - Alertmanager (self-hosted) -- pre-configured by install script
-- Grafana Cloud -- API key, Platform auto-adds contact point
+- Grafana Cloud -- API key, API auto-adds contact point
 - Datadog -- custom webhook payload template, user configures in Datadog UI
 - Better Stack -- webhook URL
 - UptimeRobot -- webhook URL
@@ -1201,7 +1191,7 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 
 ### 15.3 Managed Service Integrations
 
-| Service | Credential | What Platform Queries | Remediation |
+| Service | Credential | What API Queries | Remediation |
 |---|---|---|---|
 | Neon / RDS / any Postgres | Connection string (encrypted) | `pg_stat_activity`, `pg_stat_statements`, locks, sizes | Terminate connections, diagnostic queries |
 | Upstash / ElastiCache / Redis | Redis URL (encrypted) | INFO, DBSIZE, CONFIG GET, keyspace stats | FLUSHDB on specific DBs (with approval) |
@@ -1218,17 +1208,17 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 
 ---
 
-## 16. Dashboard - Full Feature Specification
+## 16. Console - Full Feature Specification
 
 **Technology:** React 19 + TypeScript. WebSocket for real-time incident updates and approval state sync across sessions. Fully responsive -- all core actions work on mobile browser.
 
 **Navigation:**
 
 - **Incidents** -- main feed across all installations. Reactive and proactive (Predicted badge) incidents.
-- **Infrastructure** -- visual map of containers per machine with health status and live metrics. Shows "Client offline" when machine is unreachable.
+- **Infrastructure** -- visual map of containers per machine with health status and live metrics. Shows "Runner offline" when machine is unreachable.
 - **Approvals** -- pending actions waiting for human decision
 - **Chat** -- conversational interface with real-time tool access. Installation selector for multi-installation users.
-- **Installations** -- Client config, alert rules, thresholds, remediation permissions, agent settings
+- **Installations** -- Runner config, alert rules, thresholds, remediation permissions, agent settings
 - **Integrations** -- connect Slack, GitHub, PagerDuty, Discord, Linear, Jira, managed services
 - **On-Call** -- rotation schedule, escalation rules (Team plan only)
 - **Billing** -- plan, usage, overage, invoices, upgrade/downgrade
@@ -1236,18 +1226,19 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 
 **Incident Feed:** All incidents across all installations in reverse chronological order. Each card: installation name, machine hostname, container, alert type, severity, status, time since alert, one-line root cause, Approve/Reject buttons if awaiting approval, Predicted badge for proactive alerts. Clicking opens full investigation detail: timeline, tool calls, metric trend, evidence, reasoning chain, action taken, verification result.
 
-**Data Access:** All incident history and infrastructure state fetched from Client via Platform WebSocket relay and cached in Redis. When Client is offline, Dashboard shows "Client offline -- last seen [timestamp]". No stale infrastructure data shown as current.
+**Data Access:** All incident history and infrastructure state fetched from Runner via API WebSocket relay and cached in Redis. When Runner is offline, Console shows "Runner offline -- last seen [timestamp]". No stale infrastructure data shown as current.
 
 **Real-Time Multi-User Sync:** Multiple users on same account (Team plan) see same incident feed via WebSocket. When one user clicks Approve, all other sessions immediately see: buttons disabled, approving user name and timestamp shown. Database unique constraint on `(incidentId, status=approved)` prevents double-approval at data layer regardless of WebSocket timing.
 
-**Agent Chat Interface:** Conversational interface with access to same tools as incident investigations -- not read-only.
+**Agent Chat Interface:** Not a separate subsystem -- the human-initiated entry point into the same agentic loop and session model as alert-driven investigations (section 9.0). Same tools, same approval gate, not read-only. A chat message simply authors the opening user turn instead of an alert; write tools still route through human approval. This is what gives a Runner-only-monitored user (no Grafana, no Datadog) a way to *pull* status on demand rather than only reacting to alerts.
 
 - "What is my Redis memory usage right now?" -> agent calls `get_container_stats`
 - "Show me API logs from the last 10 minutes" -> agent calls `get_container_logs`
 - "Why has Redis been crashing this week?" -> agent queries SQLite history AND current stats
 - "Restart my Redis container" -> agent proposes action, approval request appears in chat, user approves, action executes
+- Opening a concluded investigation and asking "why did you restart instead of rolling back?" continues that same session
 
-**On-Call Rotation (Team Plan):** Admins configure rotation schedule: engineer name, Slack user ID, email, start/end time per slot. When incident fires, Platform routes Slack message to current on-call DM. If no response within configurable timeout (default 10 minutes), escalates to next engineer in schedule. Engineers can set temporary out-of-office overrides.
+**On-Call Rotation (Team Plan):** Admins configure rotation schedule: engineer name, Slack user ID, email, start/end time per slot. When incident fires, API routes Slack message to current on-call DM. If no response within configurable timeout (default 10 minutes), escalates to next engineer in schedule. Engineers can set temporary out-of-office overrides.
 
 ---
 
@@ -1272,79 +1263,79 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 | Managed service integrations | Yes | Yes |
 | PagerDuty | No | Yes |
 | On-call rotation scheduling | No | Yes |
-| Multi-user dashboard | No | Yes |
+| Multi-user console | No | Yes |
 | Real-time multi-user sync | No | Yes |
-| Incident history retention | 90 days (Client SQLite) | 1 year (Client SQLite) |
+| Incident history retention | 90 days (Runner SQLite) | 1 year (Runner SQLite) |
 | Audit log | 30 days | 1 year |
 | Synthetic first-run test | Yes | Yes |
 
 **Upgrade Forcing Functions:**
 
 - Free -> $49: trial ends. User needs more than 1 installation or wants proxy inference without managing API keys.
-- $49 -> $99: second engineer needs dashboard access (single seat wall). Team hits 3-installation limit. Team needs on-call routing or PagerDuty.
+- $49 -> $99: second engineer needs console access (single seat wall). Team hits 3-installation limit. Team needs on-call routing or PagerDuty.
 
 **Overage Pricing:** Proxy inference above plan limit: $0.25 per investigation. Users can set a monthly overage cap in billing settings. BYOK users pay their LLM provider directly -- no Nightwatch overage charges.
 
 ---
 
-## 18. Platform Backend - Architecture
+## 18. API Backend - Architecture
 
 ### 18.1 Tech Stack
 
 | Component | Technology | Rationale |
 |---|---|---|
 | Runtime | Node.js 24 LTS | Current LTS -- stable and supported |
-| Language | TypeScript (strict) | One language across entire monorepo -- shared types between Platform, Client, Dashboard |
+| Language | TypeScript (strict) | One language across entire monorepo -- shared types between API, Runner, Console |
 | Framework | Fastify | Native TypeScript, built-in JSON schema validation on routes, high-throughput traditional Node.js server, mature plugin ecosystem. Right choice for a long-running stateful backend with WebSocket support. |
-| Database | PostgreSQL (self-hosted on Railway) | Stores only: user accounts, installations, credentials, billing, approval records. No infrastructure data. |
+| Database | PostgreSQL | Current schema holds only `User` and `Installation`. No infrastructure data, no approval records (approvals are in-memory). Any Postgres provider works via connection string. |
 | ORM | Prisma | Type-safe queries, migration tooling, shared Prisma types across monorepo packages |
-| Cache / telemetry | Redis (Railway managed) | Rolling telemetry context (2h TTL), WebSocket routing via pub/sub, BullMQ job backing, Dashboard query cache (30s-5min TTL). Same provider as Postgres — no per-request billing, no cold-start latency, critical for frequent rolling telemetry reads/writes. |
-| Job queue | BullMQ (Redis-backed) | Recurring 5-min metric polling per installation, 2-min post-remediation verification scheduling |
-| LLM | Anthropic SDK (primary) | Direct connection, no extra network hop. OpenAI and Gemini SDKs added incrementally. |
-| Auth | Better Auth | TypeScript-native, self-hosted, no vendor lock-in, no per-user pricing. Handles sessions, OAuth providers, API key management, multi-tenancy. Integrates cleanly with Prisma and Fastify. |
-| Deployment | Railway | Monorepo-aware, Node + Dashboard, env management, minimal ops overhead |
-| Payments | Stripe | Subscriptions, usage metering, Customer Portal |
+| Cache / telemetry | Redis | Rolling telemetry context (2h TTL, planned), WebSocket routing via pub/sub, BullMQ job backing, heartbeat keys, Console query cache (30s-5min TTL, planned). Any Redis provider works via connection string. |
+| Job queue | BullMQ (Redis-backed) | Investigation queue with rate limiting and debounce; 5-min metric polling and 2-min verification scheduling (planned) |
+| LLM | Provider abstraction (`apps/api/src/llm/`) | Ports-and-adapters: `LLMProvider` port, Anthropic adapter (default) and OpenAI-compatible adapter (supports OpenRouter via `OPENAI_BASE_URL`), selected by `LLM_PROVIDER`. Both compiled in. |
+| Auth | Better Auth (planned) | TypeScript-native, self-hosted, no per-user pricing. Sessions, OAuth, API keys, multi-tenancy. SaaS-era; not yet wired. |
+| Deployment | Railway / self-hosted (planned) | API + Console + Postgres + Redis. Provider-agnostic via connection strings. |
+| Payments | Stripe (planned) | Subscriptions, usage metering, Customer Portal. SaaS-era. |
 | Monorepo tooling | pnpm workspaces | pnpm for package management and cross-package linking. Turborepo not used — overkill for 3 apps. Add if build times become a problem. |
 
 ### 18.2 API Surfaces
 
-**Client-Facing:**
+**Runner-Facing:**
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `WSS /clients/connect` | WebSocket | Client establishes persistent connection, sends capability manifest |
+| `WSS /clients/connect` | WebSocket | Runner establishes persistent connection, sends capability manifest |
 | `POST /alerts/ingest` | POST | Receives alert webhooks from all inbound sources |
-| `POST /incidents/:id/result` | POST | Client delivers final investigation result |
-| `POST /incidents/:id/verify` | POST | Client delivers 2-min post-remediation verification result |
-| `GET /clients/config` | GET | Client fetches config: maxToolCalls, timeoutMinutes, toolTimeoutSeconds, inferenceMode, byokKeyRef, alertRuleOverrides |
-| `POST /clients/heartbeat` | POST | Client posts every 30s. Platform marks Client online. 5-min silence triggers offline notification. |
+| `POST /incidents/:id/result` | POST | Runner delivers final investigation result |
+| `POST /incidents/:id/verify` | POST | Runner delivers 2-min post-remediation verification result |
+| `GET /clients/config` | GET | (planned) Runner fetches config: maxToolCalls, timeoutMinutes, toolTimeoutSeconds, inferenceMode, byokKeyRef, alertRuleOverrides |
+| heartbeat (WebSocket message) | WS | Runner sends a `heartbeat` message every 30s over the existing socket (not a POST). API refreshes a Redis key; ~60s of silence (2 missed beats) marks the Runner offline. |
 
-**Dashboard-Facing:**
+**Console-Facing:**
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `GET /incidents` | GET | Active incident feed (status only -- detail fetched via Client relay) |
+| `GET /incidents` | GET | Active incident feed (status only -- detail fetched via Runner relay) |
 | `GET /incidents/:id/status` | GET | Incident status and approval state |
-| `POST /incidents/:id/approve` | POST | Human approves -- Platform generates signed token, sends to Client |
+| `POST /incidents/:id/approve` | POST | Human approves -- API generates signed token, sends to Runner |
 | `POST /incidents/:id/reject` | POST | Human rejects with optional comment -- relayed to investigation loop |
-| `POST /incidents/:id/resolve` | POST | Human marks escalated incident resolved with note -- triggers feedback loop to Client |
-| `GET /installations` | GET | List all installations with Client status |
+| `POST /incidents/:id/resolve` | POST | Human marks escalated incident resolved with note -- triggers feedback loop to Runner |
+| `GET /installations` | GET | List all installations with Runner status |
 | `POST /installations` | POST | Register new installation, returns installation token |
-| `POST /client-query/:token` | POST | Relay dashboard query command to Client, return cached or fresh result |
+| `POST /client-query/:token` | POST | Relay console query command to Runner, return cached or fresh result |
 | `POST /chat/:token` | POST | Send chat message to agent for specific installation |
 | `GET /billing/usage` | GET | Current month investigation count, overage, next billing date |
 
-### 18.3 WebSocket Architecture and Dashboard Relay
+### 18.3 WebSocket Architecture and Console Relay
 
-Multiple Platform instances behind load balancer. Client connects to any available instance. When Platform needs to send command to specific Client, publishes to Redis pub/sub channel keyed by `token`. Whichever Platform instance holds that Client's WebSocket consumes and delivers.
+Multiple API instances behind load balancer. Runner connects to any available instance. When API needs to send command to specific Runner, publishes to Redis pub/sub channel keyed by `token`. Whichever API instance holds that Runner's WebSocket consumes and delivers.
 
-Dashboard data relay uses the same WebSocket infrastructure. When Dashboard requests incident history:
+Console data relay uses the same WebSocket infrastructure. When Console requests incident history:
 
-1. Platform checks Redis cache (30s TTL for infrastructure state, 5min TTL for incident history)
+1. API checks Redis cache (30s TTL for infrastructure state, 5min TTL for incident history)
 2. Cache hit: return immediately
-3. Cache miss: relay query command to Client via WebSocket, receive result, cache in Redis, return to Dashboard
+3. Cache miss: relay query command to Runner via WebSocket, receive result, cache in Redis, return to Console
 
-Cache contains only sanitized structured data returned by Client's SQLite queries. No raw logs, no sensitive infrastructure state.
+Cache contains only sanitized structured data returned by Runner's SQLite queries. No raw logs, no sensitive infrastructure state.
 
 ---
 
@@ -1354,9 +1345,9 @@ Cache contains only sanitized structured data returned by Client's SQLite querie
 |---|---|---|
 | Tool call fails or times out | Tool catches error, returns `{ error: true, message, toolName }`. LLM sees error as tool result and continues. Loop does not crash. | Graceful degradation -- investigation continues with partial data |
 | LLM API fails mid-loop | Retry: exponential backoff 2s -> 4s -> 8s, max 3 attempts | All fail -> escalated. User notified: "LLM API unreachable. Manual investigation required." |
-| Client loses connectivity mid-investigation | Investigation tool calls time out (15s each). Platform marks tasks failed. | Notify user Client is offline. Approval request re-sent when Client reconnects. |
-| Platform restarts mid-investigation | Checkpoint file detected on restart | Restart investigation from scratch. 2-3 minutes. User notified of restart. |
-| Human does not respond to approval card | Platform holds Promise open indefinitely until response arrives | No expiry enforced -- investigation waits. User can re-review from dashboard. Future: configurable auto-escalation after N minutes with no response. |
+| Runner loses connectivity mid-investigation | Investigation tool calls time out (15s each). API marks tasks failed. | Notify user Runner is offline. Approval request re-sent when Runner reconnects. |
+| API restarts mid-investigation | Checkpoint file detected on restart | Restart investigation from scratch. 2-3 minutes. User notified of restart. |
+| Human does not respond to approval card | API holds Promise open indefinitely until response arrives | No expiry enforced -- investigation waits. User can re-review from console. Future: configurable auto-escalation after N minutes with no response. |
 | Two users approve simultaneously | DB unique constraint on `(incidentId, status=approved)` rejects second | First wins. Second sees "Already approved by [name] at [time]." WebSocket push disabled buttons already. |
 
 ---
@@ -1367,7 +1358,7 @@ Cache contains only sanitized structured data returned by Client's SQLite querie
 
 **Eval Suite:** Synthetic incident scenarios with known ground truth. Each defines simulated infrastructure state, triggering alert, correct root cause and action. Eval runner executes full investigation loop against mock tools and scores: root cause accuracy, tool selection efficiency, recommendation correctness, token efficiency, hallucination rate. Runs in CI on every agent version. Accuracy regression blocks deployment.
 
-**Rejection Signal:** Human rejection is the highest-value signal. High rejection rate for a specific alert type indicates wrong reasoning for that pattern. Rejection data reviewed weekly. Rejection comments stored in Client SQLite history -- future investigations see comments as context.
+**Rejection Signal:** Human rejection is the highest-value signal. High rejection rate for a specific alert type indicates wrong reasoning for that pattern. Rejection data reviewed weekly. Rejection comments stored in Runner SQLite history -- future investigations see comments as context.
 
 ---
 
@@ -1377,12 +1368,12 @@ Cache contains only sanitized structured data returned by Client's SQLite querie
 |---|---|
 | Data in transit | HTTPS/TLS 1.3 for all API. WSS for WebSocket. No plaintext fallback. |
 | API keys at rest | AES-256 encrypted in Postgres. Never logged. Decrypted only at runtime. |
-| Installation tokens | 256-bit random UUIDs. Never logged. Rotatable from dashboard. Scoped to one installation. |
-| Approval enforcement | Orchestrator-level write gating. Client only receives execution command after orchestrator confirms human approval in session state via `tool_use_id` correlation key. No token-based validation on Client — authorization is architectural, not cryptographic. |
+| Installation tokens | 256-bit random UUIDs. Never logged. Rotatable from console. Scoped to one installation. |
+| Approval enforcement | Orchestrator-level write gating. Runner only receives execution command after orchestrator confirms human approval in session state via `tool_use_id` correlation key. No token-based validation on Runner — authorization is architectural, not cryptographic. |
 | Docker socket access | Read-only mount for inspection. `exec_command` disabled by default. All interactions logged. |
-| Raw log handling | Never transmitted to Platform. Filtered locally by Client. Log content marked untrusted in system prompt. |
-| Env var values | Never read by agent. Client strips values before return. Only names transmitted. |
-| Infrastructure data | Lives on Client SQLite only. Platform never stores raw infrastructure state. Dashboard reads via relay. |
+| Raw log handling | Never transmitted to API. Filtered locally by Runner. Log content marked untrusted in system prompt. |
+| Env var values | Never read by agent. Runner strips values before return. Only names transmitted. |
+| Infrastructure data | Lives on Runner SQLite only. API never stores raw infrastructure state. Console reads via relay. |
 | Prompt injection | Tool results as tool messages (structural separation). System prompt marks all tool data as untrusted. Path allowlist on file reads. Orchestrator write gating as architectural backstop — injection cannot trigger execution without a human in the loop. |
 
 ---
@@ -1398,43 +1389,38 @@ nightwatch/
 ├── apps/
 │   ├── runner/                  # Runs on user machines -- remote executor only
 │   │   ├── src/
+│   │   │   ├── index.ts         # Entry + command dispatch table
 │   │   │   ├── websocket/       # API connection + reconnection logic (ws library)
 │   │   │   ├── manifest/        # Capability detection + manifest generation
-│   │   │   ├── metrics/         # Prometheus queries + 5-min snapshot collection
+│   │   │   ├── metrics/         # Prometheus snapshot collection
 │   │   │   ├── sqlite/          # Local incident history read/write (better-sqlite3)
-│   │   │   ├── dashboard/       # Dashboard query command handlers
-│   │   │   └── commands/        # On-demand execution (NOT LLM tools -- those are in shared)
-│   │   │       ├── container/   # docker logs, inspect, stats, events, processes
-│   │   │       ├── host/        # /proc reads, dmesg, network, disk
-│   │   │       ├── metrics/     # Prometheus HTTP API queries
-│   │   │       ├── code/        # GitHub API, docker image history
-│   │   │       └── remediation/ # restart, rollback, scale, exec (forwarded post-approval)
-│   │   ├── safety/              # Path allowlist, PII stripper
+│   │   │   ├── safety/          # Path allowlist
+│   │   │   └── commands/        # On-demand execution (flat files, NOT LLM tools)
+│   │   │       ├── container.ts # docker logs, inspect, stats, events, processes, list
+│   │   │       ├── host.ts      # /proc reads, dmesg, network, disk
+│   │   │       ├── code.ts      # docker image history, env var names, read_file
+│   │   │       └── remediation.ts # restart, exec (rollback stub) -- forwarded post-approval
 │   │   └── Dockerfile
-│   ├── api/                     # Nightwatch Platform -- Fastify backend
+│   ├── api/                     # Nightwatch API -- Fastify backend
 │   │   ├── src/
-│   │   │   ├── api/             # REST endpoints
-│   │   │   ├── ws/              # WebSocket server + Redis pub/sub routing (@fastify/websocket)
-│   │   │   ├── relay/           # Dashboard query relay + Redis caching
-│   │   │   ├── investigation/   # Agentic loop, tool schemas, context builder
-│   │   │   ├── telemetry/       # Rolling context store, trend evaluation
-│   │   │   ├── approvals/       # ApprovalRequest lifecycle, orchestrator write gating
-│   │   │   ├── notifications/   # Slack, email, push, PagerDuty
-│   │   │   ├── integrations/
-│   │   │   │   ├── parsers/     # Alert source parsers -> NormalizedAlert
-│   │   │   │   └── managed/     # Postgres, Redis, Railway, Render, AWS clients
-│   │   │   ├── jobs/            # BullMQ: polling, verification, pattern extraction
-│   │   │   ├── auth/            # Better Auth configuration
-│   │   │   ├── billing/         # Stripe integration
-│   │   │   └── db/              # Prisma client instance
+│   │   │   ├── ws/              # WebSocket server + sendCommand router
+│   │   │   ├── investigation/   # loop, tools, context, approvals, result, platform tools
+│   │   │   ├── llm/             # provider port + anthropic/openai adapters + factory
+│   │   │   ├── alerts/          # ingest, dedup, queue, parsers/
+│   │   │   ├── jobs/            # BullMQ worker
+│   │   │   ├── redis/           # Redis client
+│   │   │   ├── db/              # Prisma client instance
+│   │   │   ├── relay/           # (planned) Console query relay + Redis caching
+│   │   │   ├── telemetry/       # (planned) rolling context store, trend evaluation
+│   │   │   ├── notifications/   # (planned) Slack, email, push, PagerDuty
+│   │   │   ├── integrations/managed/ # (planned) Postgres, Redis, Railway, Render, AWS
+│   │   │   ├── auth/            # (planned) Better Auth configuration
+│   │   │   └── billing/         # (planned) Stripe integration
 │   │   └── prisma/
-│   │       ├── schema.prisma
+│   │       ├── schema.prisma    # User, Installation (no ApprovalRequest table)
 │   │       └── migrations/
-│   └── console/                 # React 19 / TypeScript frontend
-│       └── src/
-│           ├── routes/          # TanStack Router file-based routes
-│           ├── components/
-│           └── hooks/           # TanStack Query, WebSocket, real-time state, approval sync
+│   └── console/                 # React 19 / TypeScript frontend (stub today)
+│       └── src/                 # (planned) routes/, components/, hooks/
 ├── packages/
 │   └── shared/                  # Shared TypeScript types -- imported by all apps
 │       └── src/
@@ -1468,15 +1454,15 @@ nightwatch/
 | Item | Status | Notes |
 |---|---|---|
 | Product name | Open | Nightwatch is placeholder. Confirmed collisions: Nightwatch.js (E2E testing), Laravel Nightwatch (monitoring), existing open-source DevOps agent on GitHub. Must rename before public launch. |
-| Kubernetes support | Deferred to V2 | K8s adds RBAC, PVCs, namespaces, ServiceAccount complexity. Launch covers Docker Compose only. Architecture supports K8s without redesign -- Client tool implementations call kubectl instead of docker. |
-| Rate limiting on alert ingestion | Specified (section 11.5) | 10 investigations/hour per installation. Critical severity bypasses cap. Suppressed alerts logged and shown in dashboard. |
-| Agent health monitoring | Specified | 5-minute missed heartbeat triggers offline notification to user. Recovery notification when Client reconnects. |
-| Agent upgrade mechanism | Decide before build | Notify in dashboard when new Client version available. User-controlled upgrade -- `docker pull` + recreate. No auto-update -- reliability product must not self-deploy uncontrolled. |
-| Data retention | Decide before build | 90 days local SQLite, configurable per installation. Nightly pruning job on Client side. |
+| Kubernetes support | Deferred to V2 | K8s adds RBAC, PVCs, namespaces, ServiceAccount complexity. Launch covers Docker Compose only. Architecture supports K8s without redesign -- Runner tool implementations call kubectl instead of docker. |
+| Rate limiting on alert ingestion | Specified (section 11.5) | 10 investigations/hour per installation. Critical severity bypasses cap. Suppressed alerts logged and shown in console. |
+| Agent health monitoring | Specified | Heartbeat every 30s over the WebSocket; ~60s of silence (2 missed beats) marks the Runner offline and notifies the user. Recovery notification when Runner reconnects. |
+| Agent upgrade mechanism | Decide before build | Notify in console when new Runner version available. User-controlled upgrade -- `docker pull` + recreate. No auto-update -- reliability product must not self-deploy uncontrolled. |
+| Data retention | Decide before build | 90 days local SQLite, configurable per installation. Nightly pruning job on Runner side. |
 | Multi-container incident correlation | Specified | 90-second debounce window batches related alerts. Mid-investigation alerts injected into active session (section 10.6, 11.4). |
-| Chat interface session routing | Specified | Dropdown selects which installation agent is talking to. Different Clients on different machines routed by Platform. |
-| Self-hosted Platform | Post-launch | Standard Fastify + Postgres + Redis. Swap any Postgres provider and any Redis provider with connection string changes only. No proprietary lock-in. |
-| Windows / non-Linux Client | Not planned | Client requires Docker socket and /proc. Windows is not a target market. |
+| Chat interface session routing | Specified | Dropdown selects which installation agent is talking to. Different Runners on different machines routed by API. |
+| Self-hosted API | Post-launch | Standard Fastify + Postgres + Redis. Swap any Postgres provider and any Redis provider with connection string changes only. No proprietary lock-in. |
+| Windows / non-Linux Runner | Not planned | Runner requires Docker socket and /proc. Windows is not a target market. |
 
 ---
 
