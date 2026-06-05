@@ -1,0 +1,4 @@
+#!/bin/sh
+exec 2>&1
+cd /app
+exec node dist/index.js

@@ -1,0 +1,7 @@
+#!/bin/sh
+exec 2>&1
+exec /opt/cadvisor/cadvisor \
+  --port=8080 \
+  --docker_only=true \
+  --housekeeping_interval=15s \
+  --store_container_labels=false

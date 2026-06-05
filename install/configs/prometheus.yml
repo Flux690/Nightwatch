@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/nightwatch/rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "${ALERTMANAGER_TARGET}"
+
+scrape_configs:
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - "localhost:8080"
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "container_(cpu_usage_seconds_total|memory_usage_bytes|spec_memory_limit_bytes|last_seen|restart_count|fs_usage_bytes|fs_limit_bytes|network_.*|start_time_seconds)"
+        action: keep

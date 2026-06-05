@@ -1,0 +1,13 @@
+.git
+.smoke
+clipper
+apps/api
+apps/console
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+*.db
+*.db-shm
+*.db-wal
+.DS_Store

@@ -1,0 +1,10 @@
+#!/bin/sh
+exec 2>&1
+if [ -n "$PROMETHEUS_URL" ]; then
+  exec s6-pause
+fi
+exec /opt/prometheus/prometheus \
+  --config.file=/etc/nightwatch/prometheus.yml \
+  --storage.tsdb.path=/var/nightwatch/prometheus \
+  --web.listen-address=0.0.0.0:9090 \
+  --web.enable-lifecycle
