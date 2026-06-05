@@ -221,39 +221,47 @@ Same underlying data pipeline. Different triggers.
 
 ### 5.1 Path A - Zero Stack (Ravi)
 
-One command. Five containers installed and pre-configured. Dashboard goes green in 60 seconds.
+One command. Single container with s6-overlay process supervision bundles Runner + Prometheus + Alertmanager + cAdvisor. Dashboard goes green in 60 seconds.
 
 ```bash
-curl -sSL nightwatch.sh/install | bash -s -- --token inst_abc123
+curl -sSL nightwatch.sh/install | NIGHTWATCH_TOKEN=inst_abc123 bash
 ```
 
-| Container | Role | Configured By Script |
-|---|---|---|
-| cAdvisor | Reads Docker container metrics, exposes HTTP endpoint for Prometheus | Yes -- auto-detects all running containers |
-| Prometheus | Scrapes cAdvisor every 15s, stores metrics, evaluates alert rules | Yes -- pre-built rules for memory/CPU/restarts/disk/uptime |
-| Alertmanager | Receives fired alerts from Prometheus, routes webhook to Platform | Yes -- pre-wired to Nightwatch Platform webhook URL |
-| Nightwatch Client | Executes investigation commands, handles remediation, serves dashboard queries | Yes -- installation token embedded automatically |
-| nightwatch-data volume | Persistent Docker volume for Client SQLite | Yes -- created automatically |
+The install script auto-detects existing Prometheus (port 9090) and Alertmanager (port 9093) via Docker port scanning and health probes. If found, the bundled instances are skipped (env var presence = BYO, absence = start bundled). cAdvisor always runs.
 
-For Ravi with two servers: same command on server 2 with same token. Second Client registers under same installation. Dashboard shows both servers. Platform now has cross-server visibility.
+| Process | Role | Bundled |
+|---|---|---|
+| Runner | Executes investigation commands, handles remediation, serves dashboard queries | Always |
+| cAdvisor | Reads Docker container metrics, exposes HTTP endpoint for Prometheus | Always |
+| Prometheus | Scrapes cAdvisor every 15s, stores metrics, evaluates alert rules | Unless existing detected |
+| Alertmanager | Receives fired alerts from Prometheus, routes webhook to Platform | Unless existing detected |
+| nightwatch-data volume | Persistent Docker volume for Runner SQLite and Prometheus/Alertmanager data | Always |
+
+For Ravi with two servers: same command on server 2 with same token. Second Runner registers under same installation. Dashboard shows both servers. Platform now has cross-server visibility.
 
 ### 5.2 Path B - Existing Stack (Sarah)
 
-Two steps. Nothing in Sarah's existing stack is touched.
+Same install script. Auto-detects Sarah's existing Prometheus and Alertmanager, skips bundled instances, runs Runner + cAdvisor only.
 
-**Step 1 -- Add Nightwatch Client:**
+**Step 1 -- Run the same install script:**
 
 ```bash
-curl -sSL nightwatch.sh/install/client | bash -s -- --token inst_abc123
+curl -sSL nightwatch.sh/install | NIGHTWATCH_TOKEN=inst_abc123 bash
 ```
 
-**Step 2 -- Add one webhook receiver to existing Alertmanager (dashboard shows the URL):**
+Script detects existing monitoring, prints:
+```
+  Prometheus:   found at http://localhost:9090
+  Alertmanager: found at http://localhost:9093
+```
+
+**Step 2 -- Add one webhook receiver to existing Alertmanager (script prints the YAML):**
 
 ```yaml
 receivers:
   - name: nightwatch
     webhook_configs:
-      - url: 'https://platform.nightwatch.sh/alerts/inst_abc123'
+      - url: 'https://api.nightwatch.sh/alerts/ingest?token=inst_abc123'
 ```
 
 Grafana Cloud users: paste API key in dashboard, Platform adds contact point automatically via Grafana API. No config file editing.
@@ -412,7 +420,7 @@ This architecture keeps all sensitive infrastructure data on the user's machine 
 ### 7.1 Runtime and Packaging
 
 - **Language:** TypeScript (Node.js 24 LTS)
-- **Packaging:** Docker image -- `nightwatch/client:latest`, base: `node:24-alpine`
+- **Packaging:** Docker image -- `nightwatch/runner:latest`, base: `node:24-slim` (glibc required for better-sqlite3 and monitoring binaries)
 - **Idle memory:** approximately 60-80MB RSS
 - **Required mounts:** `/var/run/docker.sock` (read-only), `/proc` (read-only), `nightwatch-data` volume at `/var/nightwatch`
 - **Required env:** `NIGHTWATCH_TOKEN`. Optional: `POSTGRES_URL`, `REDIS_URL`
@@ -1435,15 +1443,22 @@ nightwatch/
 │           ├── ws.ts            # WebSocket message types (runner↔api, api↔console)
 │           ├── approvals.ts     # ApprovalRequest, ApprovalResponse
 │           └── runner.ts        # CapabilityManifest, MetricSnapshot, DashboardQuery
-└── install/
-    ├── install.sh               # Zero-stack: Prometheus+cAdvisor+Alertmanager+Runner
-    ├── runner-only.sh           # Existing-stack: Runner only
-    ├── k8s.yaml                 # Kubernetes Runner manifest (V2)
-    └── templates/
-        ├── prometheus.yml
-        ├── alertmanager.yml
-        ├── rules.yml            # Default alert rules
-        └── nightwatch-compose.yml
+├── install/
+│   ├── install.sh               # Self-detecting install script (auto-detects existing monitoring)
+│   ├── configure.sh             # Init script: renders config templates via envsubst
+│   ├── configs/
+│   │   ├── prometheus.yml       # Production template (envsubst variables)
+│   │   ├── prometheus.dev.yml   # Dev config (Docker Compose service names)
+│   │   ├── alertmanager.yml     # Production template (envsubst variables)
+│   │   ├── alertmanager.dev.yml # Dev config (webhook to host API)
+│   │   └── rules.yml            # Default Prometheus alert rules
+│   └── s6/                      # s6-overlay service definitions
+│       ├── init-configure/      # Oneshot: renders configs before longruns start
+│       ├── runner/              # Longrun: node /app/dist/index.js
+│       ├── prometheus/          # Longrun: skips if PROMETHEUS_URL set (BYO)
+│       ├── alertmanager/        # Longrun: skips if ALERTMANAGER_URL set (BYO)
+│       └── cadvisor/            # Longrun: always runs
+└── Dockerfile                   # Multi-stage build for single-container image
 ```
 
 ---

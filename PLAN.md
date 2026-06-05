@@ -2,7 +2,7 @@
 
 > Static reference document. Not a task tracker — use TodoWrite for in-session tracking, git log for history.
 
-## Current Phase: 5a — Approval Cycle (Phase 4 ✅ complete; Phase 4.5 deployment packaging deferred/parallel)
+## Current Phase: 5a — Approval Cycle. Phase 4.5 ✅ complete; 5a queued next.
 
 ### Phase 1 — Harness + Scaffold ✅ complete (commit 272f80c)
 - [x] Git: tag v1.0.0, create v2 branch
@@ -59,12 +59,56 @@
 - Confidence guardrail: when key evidence can't be gathered, the prompt should lower confidence and reconcile the alert against actual container state instead of trusting the label. → Phase 7 (prompt hardening).
 - Host tools (/proc, dmesg, cgroup reads) only work when the runner runs as a Linux container; they fail with the runner on a macOS host. → resolved by Phase 4.5.
 
-### Phase 4.5 — Deployment Packaging (runner container + install) [deferred, parallelizable]
-- [ ] Runner Dockerfile (Linux image) — the production form of the runner
-- [ ] Install script: inject the runner into a target compose with Docker-socket mount + NIGHTWATCH_TOKEN/WS_URL
-- [ ] Bundle Prometheus + Alertmanager so alerts fire via the real POST /alerts/ingest webhook (identical contract to `scripts/smoke.sh fire` — no API change needed)
-- [ ] Verify host introspection tools work once the runner is a Linux container
-- Note: does NOT block 5a/5b (those run against the tsx runner). Required before real deployments and before host-tool testing is meaningful.
+### Phase 4.5 — Deployment Packaging (single container + self-detecting install) ✅ complete
+
+**Architecture decision:** One container bundles runner + Prometheus + Alertmanager + cAdvisor. s6-overlay supervises all four processes. The install script auto-detects what the user already has and skips bundled services accordingly. Env var convention follows industry standard: `PROMETHEUS_URL` / `ALERTMANAGER_URL` — presence means "use mine", absence means "start bundled". No flags, no modes.
+
+**Prerequisites** ✅
+- [x] Pino structured logger added to runner (replaced all console.log/console.error)
+- [x] HOST_PROC parameterization in host.ts for containerized /proc access
+
+**4.5a — Single container image** ✅
+- [x] Dockerfile: multi-stage build on node:24-slim (glibc needed for better-sqlite3 + monitoring binaries)
+- [x] s6-overlay v3 service scripts: conditionally start Prometheus/Alertmanager based on env vars
+- [x] cAdvisor always runs (feeds container metrics regardless of who consumes them)
+- [x] Bundled Prometheus config: scrape cAdvisor at localhost:8080, evaluate alert rules
+- [x] Bundled Alertmanager config: webhook to Platform `POST /alerts/ingest?token=${NIGHTWATCH_TOKEN}`
+- [x] Default `rules.yml`: memory >85% 5m, CPU >90% 5m, restart count >3 in 15m, disk >90%, container down >1m
+- [x] Runner mounts: `/var/run/docker.sock` (ro), `/proc` (ro), `nightwatch-data` volume at `/var/nightwatch`
+- [x] Docker build verified: `pnpm deploy` works without `--legacy` via `injectWorkspacePackages: true` in pnpm-workspace.yaml
+
+**4.5b — install.sh (self-detecting, one script)** ✅
+- [x] Single script at `install/install.sh`
+- [x] Auto-detect: check `docker ps` + probe ports for existing Prometheus (9090) and Alertmanager (9093)
+- [x] If detected: set env vars on the container, print webhook snippet for user's existing Alertmanager
+- [x] If not detected: leave env vars unset, bundled services start automatically
+- [x] Always: pull image, `docker run` with socket mount + token + WS URL
+- [x] Output: clear summary of what was detected/started
+
+**4.5c — Dev environment** ✅
+- [x] Add cAdvisor + Prometheus + Alertmanager to `docker-compose.dev.yaml`
+- [x] Same `rules.yml` and configs shared between dev compose and production container
+- [x] smoke.sh updated (X-Nightwatch-Token header, token query param)
+
+**Dependency upgrades (done alongside 4.5):**
+- [x] All packages pinned to exact latest stable versions (no carets)
+- [x] pnpm v11.5.1 via corepack `packageManager` field
+- [x] `injectWorkspacePackages: true` in pnpm-workspace.yaml (proper pnpm v11 config, replaces .npmrc)
+- [x] Zod 3.23 → 4.4.3 (fixed `z.record()` to require key + value schemas)
+- [x] TypeScript 5.5 → 6.0.3, React 19.0 → 19.2.7, Vite 5.3 → 8.0.16, Fastify 5.8.5, etc.
+- [x] Prisma 5.16 → 6.19.3 (latest compatible with current schema)
+- [x] PRD.md updated for drift (base image, container architecture, install structure)
+- [x] Comment cleanup enforced across all file types (Dockerfile, .sh, .ts, .yaml)
+
+**Alert identity cleanup (done alongside 4.5):**
+- [x] API ingest accepts `X-Nightwatch-Token` header (with `X-Installation-Id` legacy fallback) and `?token=` query param
+- [x] Alertmanager configs use `?token=` query param (Alertmanager does not support custom HTTP headers)
+
+**Deferred from 4.5:**
+- Prisma 7 migration: v7 removes `datasource.url` from schema, requires a new `prisma.config.ts`, and changes client imports. Staying on 6.19.3 until a dedicated migration task.
+- Full `installationId` → `NIGHTWATCH_TOKEN` rename throughout the codebase: touches alert normalization, dedup, rate limiting, investigation loop, WebSocket router, incident storage, and Prisma schema. Scope fits Phase 5 better.
+- Host introspection verification (/proc, dmesg, cgroup reads inside running container): Docker image builds, but live container test against clipper pending.
+- Real Prometheus alert flow in dev: monitoring stack is in docker-compose.dev.yaml, but end-to-end flow (chaos fault → Prometheus rule fires → Alertmanager webhook → API ingest) not yet tested live.
 
 ### Phase 5a — Approval Cycle (curl/.http-testable, no external deps)
 - [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
@@ -82,12 +126,21 @@
 - [ ] TanStack Query: REST to API
 - [ ] WebSocket hook: real-time incident feed
 - [ ] Promote the 5a approval page into the real Approvals route
+- [ ] Settings page: alert rule configuration (thresholds per installation)
+- [ ] Mechanism: API stores updated rules, sends `update_alert_rules` command to runner via WebSocket, runner rewrites Prometheus `rules.yml` and hits `/-/reload`
 
 ### Phase 7 — Hardening
-- [ ] SQLite history loaded into initial investigation context
-- [ ] Reconnection resilience (exponential backoff both sides)
+- [ ] SQLite history loaded into initial investigation context (makes reactive investigations smarter)
+- [ ] Reconnection resilience (exponential backoff, both runner→API and console→API)
 - [ ] Error handling: all 6 failure modes from PRD section 19
 - [ ] Rate limiting dashboard indicator
+- [ ] Prompt hardening: confidence guardrail when evidence is missing (Phase 4 smoke finding)
+
+### Phase 8 — Proactive Detection
+- [ ] Metric snapshot collection: runner queries local Prometheus every 5min via PromQL, sends snapshots to Platform
+- [ ] Rolling telemetry context: Platform stores snapshots in Redis with 2-hour TTL
+- [ ] Trend evaluation: Platform detects patterns (memory trending to OOM, disk filling, restart loops) and fires self-generated alerts
+- [ ] Proactive alerts flow through the same investigation pipeline as reactive alerts (same loop, same tools, richer starting context)
 
 ## Architecture Decisions
 - Full spec: PRD.md
@@ -96,3 +149,6 @@
 - Approval flow: PRD sections 6.5, 9.3, 13.2
 - Session continuity: PRD section 10.6
 - LLM inference: hand-rolled ports-and-adapters in `apps/api/src/llm` (Anthropic + OpenAI-compatible), no framework. Both adapters compiled in, selected by LLM_PROVIDER. PRD section 14.
+- **Single container:** runner + Prometheus + Alertmanager + cAdvisor in one Docker image, s6-overlay process supervisor. User sees one container in `docker ps`. PRD's 5-container install table collapsed into one image for simplicity.
+- **Self-detecting install:** one `install.sh` script, no flags. Auto-detects existing Prometheus/Alertmanager via `docker ps` + port probes. Sets `PROMETHEUS_URL` / `ALERTMANAGER_URL` env vars if found (industry-standard convention: presence = BYO, absence = bundled). Prints webhook snippet if user has existing Alertmanager.
+- **Reactive-first:** proactive detection (metric snapshots, rolling telemetry, trend evaluation) deferred to Phase 8. Phases 4.5-7 focus on the reactive path: alert fires → investigate → recommend/remediate.
