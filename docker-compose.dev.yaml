@@ -29,6 +29,48 @@ services:
       timeout: 3s
       retries: 5
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    container_name: nightwatch-cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    command:
+      - "--docker_only=true"
+      - "--housekeeping_interval=15s"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: nightwatch-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./install/configs/prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro
+      - ./install/configs/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - cadvisor
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+
+  alertmanager:
+    image: prom/alertmanager:v0.32.1
+    container_name: nightwatch-alertmanager
+    ports:
+      - "9093:9093"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./install/configs/alertmanager.dev.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:

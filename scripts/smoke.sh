@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Nightwatch local smoke test — drives the full Phase 4 path against Clipper.
-#
-#   scripts/smoke.sh setup            env files, infra (Postgres/Redis), Clipper, db schema
-#   scripts/smoke.sh up               start API + runner in the background
-#   scripts/smoke.sh fire [ctr] [a]   POST a synthetic alert (default container "api")
-#   scripts/smoke.sh logs             follow API + runner logs
-#   scripts/smoke.sh status           containers + process state
-#   scripts/smoke.sh down             stop API + runner
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,7 +11,7 @@ setup() {
   [ -f apps/api/.env ]    || { cp apps/api/.env.example apps/api/.env;       echo "created apps/api/.env — add your OpenRouter key to OPENAI_API_KEY"; }
   [ -f apps/runner/.env ] || { cp apps/runner/.env.example apps/runner/.env; echo "created apps/runner/.env"; }
   mkdir -p apps/runner/data
-  echo "Bringing up Nightwatch infra (Postgres 5433 / Redis 6380)..."
+  echo "Bringing up Nightwatch infra (Postgres/Redis + Prometheus/Alertmanager/cAdvisor)..."
   pnpm dev:infra
   echo "Bringing up Clipper (the test subject)..."
   ( cd clipper && docker compose up -d )
@@ -39,7 +31,11 @@ up() {
   pnpm --filter @nightwatch/runner dev > "$RUN_DIR/runner.log" 2>&1 &
   echo $! > "$RUN_DIR/runner.pid"
   echo ""
-  echo "Up. Break something (clipper/chaos.sh transcoder), then: scripts/smoke.sh fire transcoder"
+  echo "Up. Two ways to trigger an investigation:"
+  echo "  1. Manual:  scripts/smoke.sh fire transcoder ContainerRestarting"
+  echo "  2. Real:    clipper/chaos.sh oom  (wait ~5min for Prometheus alert to fire)"
+  echo ""
+  echo "Check monitoring: scripts/smoke.sh stack"
 }
 
 fire() {
@@ -66,10 +62,54 @@ JSON
   echo "Firing: container=$container alert=$alertname fingerprint=$fp"
   curl -sS -X POST "http://localhost:${PORT:-3000}/alerts/ingest" \
     -H "Content-Type: application/json" \
-    -H "X-Installation-Id: ${INSTALLATION:-inst_local}" \
+    -H "X-Nightwatch-Token: ${INSTALLATION:-inst_local}" \
     -d "$payload"
   echo ""
   echo "Watch: scripts/smoke.sh logs"
+}
+
+stack() {
+  local ok=0 fail=0
+  echo "Monitoring stack health:"
+  echo ""
+
+  if curl -sf --max-time 2 "http://localhost:8080/healthz" >/dev/null 2>&1; then
+    echo "  cAdvisor:     http://localhost:8080  OK"
+    ((ok++))
+  else
+    echo "  cAdvisor:     http://localhost:8080  UNREACHABLE"
+    ((fail++))
+  fi
+
+  if curl -sf --max-time 2 "http://localhost:9090/-/healthy" >/dev/null 2>&1; then
+    echo "  Prometheus:   http://localhost:9090  OK"
+    ((ok++))
+    local targets
+    targets=$(curl -sf "http://localhost:9090/api/v1/targets" 2>/dev/null)
+    if [ -n "$targets" ]; then
+      local up_count
+      up_count=$(echo "$targets" | grep -o '"health":"up"' | wc -l | tr -d ' ')
+      echo "                scrape targets up: $up_count"
+    fi
+  else
+    echo "  Prometheus:   http://localhost:9090  UNREACHABLE"
+    ((fail++))
+  fi
+
+  if curl -sf --max-time 2 "http://localhost:9093/-/healthy" >/dev/null 2>&1; then
+    echo "  Alertmanager: http://localhost:9093  OK"
+    ((ok++))
+  else
+    echo "  Alertmanager: http://localhost:9093  UNREACHABLE"
+    ((fail++))
+  fi
+
+  echo ""
+  if [ "$fail" -eq 0 ]; then
+    echo "All $ok services healthy. Real alerts will flow to POST /alerts/ingest."
+  else
+    echo "$fail service(s) down. Run: pnpm dev:infra"
+  fi
 }
 
 logs() { tail -n 40 -f "$RUN_DIR/api.log" "$RUN_DIR/runner.log"; }
@@ -100,8 +140,9 @@ case "${1:-help}" in
   setup)  setup ;;
   up)     up ;;
   fire)   shift; fire "$@" ;;
+  stack)  stack ;;
   logs)   logs ;;
   status) status ;;
   down)   down ;;
-  *) echo "usage: scripts/smoke.sh {setup|up|fire [container] [alertname]|logs|status|down}" ;;
+  *) echo "usage: scripts/smoke.sh {setup|up|fire [container] [alertname]|stack|logs|status|down}" ;;
 esac

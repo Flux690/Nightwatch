@@ -8,67 +8,76 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.post<{ Body: unknown }>("/alerts/ingest", async (request, reply) => {
-    const userAgent = request.headers["user-agent"] ?? "";
-    const installationId = extractInstallationId(request.headers);
+  fastify.post<{ Body: unknown; Querystring: { token?: string } }>(
+    "/alerts/ingest",
+    async (request, reply) => {
+      const userAgent = request.headers["user-agent"] ?? "";
+      const installationId =
+        extractToken(request.headers) ??
+        (typeof request.query.token === "string" ? request.query.token : null);
 
-    if (!installationId) {
+      if (!installationId) {
+        return reply.code(401).send({
+          error: "token query param or X-Nightwatch-Token header required",
+        });
+      }
+
+      let alerts: NormalizedAlert[];
+      try {
+        alerts = parseSource(userAgent, request.body, installationId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(400).send({ error: msg });
+      }
+
+      let enqueued = 0;
+      let skipped = 0;
+
+      for (const alert of alerts) {
+        if (await isDuplicate(alert)) {
+          skipped++;
+          continue;
+        }
+
+        const allowed = await checkRateLimit(
+          alert.installationId,
+          alert.severity,
+        );
+        if (!allowed) {
+          skipped++;
+          fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
+          continue;
+        }
+
+        const debounced = await tryDebounce(alert.installationId);
+        if (!debounced) {
+          skipped++;
+          fastify.log.info({ alertId: alert.sourceAlertId }, "debounced");
+          continue;
+        }
+
+        await enqueueInvestigation(alert);
+        enqueued++;
+        fastify.log.info(
+          { alertId: alert.sourceAlertId, type: alert.alertType },
+          "queued",
+        );
+      }
+
       return reply
-        .code(401)
-        .send({ error: "X-Installation-Id header required" });
-    }
-
-    let alerts: NormalizedAlert[];
-    try {
-      alerts = parseSource(userAgent, request.body, installationId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.code(400).send({ error: msg });
-    }
-
-    let enqueued = 0;
-    let skipped = 0;
-
-    for (const alert of alerts) {
-      if (await isDuplicate(alert)) {
-        skipped++;
-        continue;
-      }
-
-      const allowed = await checkRateLimit(
-        alert.installationId,
-        alert.severity,
-      );
-      if (!allowed) {
-        skipped++;
-        fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
-        continue;
-      }
-
-      const debounced = await tryDebounce(alert.installationId);
-      if (!debounced) {
-        skipped++;
-        fastify.log.info({ alertId: alert.sourceAlertId }, "debounced");
-        continue;
-      }
-
-      await enqueueInvestigation(alert);
-      enqueued++;
-      fastify.log.info(
-        { alertId: alert.sourceAlertId, type: alert.alertType },
-        "queued",
-      );
-    }
-
-    return reply.code(200).send({ received: alerts.length, enqueued, skipped });
-  });
+        .code(200)
+        .send({ received: alerts.length, enqueued, skipped });
+    },
+  );
 }
 
-function extractInstallationId(
+function extractToken(
   headers: Record<string, string | string[] | undefined>,
 ): string | null {
-  const raw = headers["x-installation-id"];
-  if (typeof raw === "string" && raw.length > 0) return raw;
+  const token = headers["x-nightwatch-token"];
+  if (typeof token === "string" && token.length > 0) return token;
+  const legacy = headers["x-installation-id"];
+  if (typeof legacy === "string" && legacy.length > 0) return legacy;
   return null;
 }
 
