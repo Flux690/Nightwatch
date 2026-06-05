@@ -14,21 +14,21 @@ const pending = new Map<string, PendingCommand>();
 const registry = new Map<string, (msg: string) => void>();
 
 export class RunnerOfflineError extends Error {
-  constructor(installationId: string) {
-    super(`Runner for installation ${installationId} is offline`);
+  constructor(token: string) {
+    super(`Runner for token ${token} is offline`);
     this.name = "RunnerOfflineError";
   }
 }
 
 export function registerRunner(
-  installationId: string,
+  token: string,
   send: (msg: string) => void,
 ): void {
-  registry.set(installationId, send);
+  registry.set(token, send);
 }
 
-export function unregisterRunner(installationId: string): void {
-  registry.delete(installationId);
+export function unregisterRunner(token: string): void {
+  registry.delete(token);
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
@@ -44,13 +44,13 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
 }
 
 export function sendCommand(
-  installationId: string,
+  token: string,
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  const send = registry.get(installationId);
-  if (!send) throw new RunnerOfflineError(installationId);
+  const send = registry.get(token);
+  if (!send) throw new RunnerOfflineError(token);
 
   const correlationId = randomUUID();
   const msg: RunnerCommandMessage = {

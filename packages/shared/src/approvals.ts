@@ -1,9 +1,13 @@
-export type ApprovalStatus = "pending" | "approved" | "rejected" | "context_added";
+export type ApprovalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "context_added";
 
 export interface ApprovalRequest {
   id: string;
   incidentId: string;
-  installationId: string;
+  token: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   toolUseId: string; // Anthropic tool_use_id — correlation key

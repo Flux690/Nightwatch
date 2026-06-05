@@ -19,7 +19,7 @@ const HARD_TIMEOUT_MS = 5 * 60_000;
 const TOOL_TIMEOUT_MS = 15_000;
 
 export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
-  const incidentId = `${alert.installationId}-${alert.sourceAlertId}-${Date.now()}`;
+  const incidentId = `${alert.token}-${alert.sourceAlertId}-${Date.now()}`;
   const log = logger.child({ incidentId, alertType: alert.alertType });
   log.info(
     { target: alert.targetIdentifier, severity: alert.severity },
@@ -114,7 +114,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
         log.debug({ tool: tool.name, kind: "runner" }, "dispatching tool");
         try {
           const result = await sendCommand(
-            alert.installationId,
+            alert.token,
             tool.name,
             tool.input,
             TOOL_TIMEOUT_MS,

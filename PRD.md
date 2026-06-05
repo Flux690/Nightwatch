@@ -433,7 +433,7 @@ On WebSocket connection, Client sends manifest to Platform:
 ```json
 {
   "clientId": "client_app_server_1",
-  "installationId": "inst_abc123",
+  "token": "inst_abc123",
   "hostname": "app-server-1",
   "clientVersion": "1.4.2",
   "capabilities": {
@@ -513,7 +513,7 @@ Remediation commands are forwarded to the Client only after the Platform orchest
 - Keepalive: ping/pong every 30 seconds
 - Reconnection: exponential backoff 2s -> 4s -> 8s -> max 60s, infinite retries
 - Message format: JSON `{ messageId, type, payload }` both directions
-- Multi-platform routing: Redis pub/sub -- message published to installationId channel, consumed by whichever Platform instance holds that Client's connection
+- Multi-platform routing: Redis pub/sub -- message published to token channel, consumed by whichever Platform instance holds that Client's connection
 
 ---
 
@@ -752,7 +752,7 @@ No framework. No LangChain, LangGraph, CrewAI, or AutoGen. Approximately 300 lin
 
 ```typescript
 async function runInvestigation(alert: NormalizedAlert): Promise<void> {
-  const config = await platform.getConfig(alert.installationId);
+  const config = await platform.getConfig(alert.token);
   const context = await buildInitialContext(alert, config);
   const messages: Message[] = [systemPrompt(config), context];
   let toolCallCount = 0;
@@ -760,7 +760,7 @@ async function runInvestigation(alert: NormalizedAlert): Promise<void> {
 
   while (Date.now() < deadline && toolCallCount < config.maxToolCalls) {
     // Inject any correlated alerts that arrived while investigation is active
-    const pendingAlert = await alertQueue.dequeue(alert.installationId);
+    const pendingAlert = await alertQueue.dequeue(alert.token);
     if (pendingAlert) {
       messages.push({ role: "user", content:
         `CORRELATED ALERT: ${pendingAlert.service} — ${pendingAlert.message} at ${pendingAlert.firedAt}. Assess whether related to current investigation.`
@@ -968,7 +968,7 @@ Four stores. Zero overlap in purpose.
 
 - **What:** one small JSON file per active investigation on Platform side
 - **Why:** crash recovery only. Detects investigation was in progress when Platform restarted.
-- **Contents:** `{ incidentId, installationId, container, alertType, status, startedAt }`
+- **Contents:** `{ incidentId, token, container, alertType, status, startedAt }`
 - **Lifecycle:** created when investigation starts, deleted on resolution or escalation
 - **On restart:** restart investigation from scratch -- 2-3 minutes, acceptable. Do NOT replay message arrays.
 
@@ -1028,7 +1028,7 @@ Incident escalates -- agent could not determine root cause
 ```typescript
 interface NormalizedAlert {
   sourceAlertId: string;    // native dedup key from source
-  installationId: string;
+  token: string;
   targetIdentifier: string; // container name or service name
   alertType: string;        // "container_restarting" | "high_memory" | etc
   severity: "critical" | "warning" | "info";
@@ -1056,9 +1056,9 @@ Separate from deduplication. When new alert arrives, Platform checks: other aler
 Cap: 10 investigations per hour per installation. Enforced via Redis sliding window counter. `critical` severity alerts bypass the cap and always proceed.
 
 ```typescript
-async function checkRateLimit(installationId: string, severity: string): Promise<boolean> {
+async function checkRateLimit(token: string, severity: string): Promise<boolean> {
   if (severity === "critical") return true;
-  const key = `rate:investigations:${installationId}`;
+  const key = `rate:investigations:${token}`;
   const count = await redis.incr(key);
   if (count === 1) await redis.expire(key, 3600);
   return count <= 10;
@@ -1330,13 +1330,13 @@ User provides own API key in dashboard settings. Stored AES-256 encrypted in Pos
 | `POST /incidents/:id/resolve` | POST | Human marks escalated incident resolved with note -- triggers feedback loop to Client |
 | `GET /installations` | GET | List all installations with Client status |
 | `POST /installations` | POST | Register new installation, returns installation token |
-| `POST /client-query/:installationId` | POST | Relay dashboard query command to Client, return cached or fresh result |
-| `POST /chat/:installationId` | POST | Send chat message to agent for specific installation |
+| `POST /client-query/:token` | POST | Relay dashboard query command to Client, return cached or fresh result |
+| `POST /chat/:token` | POST | Send chat message to agent for specific installation |
 | `GET /billing/usage` | GET | Current month investigation count, overage, next billing date |
 
 ### 18.3 WebSocket Architecture and Dashboard Relay
 
-Multiple Platform instances behind load balancer. Client connects to any available instance. When Platform needs to send command to specific Client, publishes to Redis pub/sub channel keyed by `installationId`. Whichever Platform instance holds that Client's WebSocket consumes and delivers.
+Multiple Platform instances behind load balancer. Client connects to any available instance. When Platform needs to send command to specific Client, publishes to Redis pub/sub channel keyed by `token`. Whichever Platform instance holds that Client's WebSocket consumes and delivers.
 
 Dashboard data relay uses the same WebSocket infrastructure. When Dashboard requests incident history:
 

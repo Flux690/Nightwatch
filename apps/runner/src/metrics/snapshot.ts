@@ -14,7 +14,7 @@ interface PrometheusRangeResponse {
 const PROMETHEUS_URL = process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
 export async function captureMetricSnapshot(
-  installationId: string,
+  token: string,
   runnerId: string,
   containerNames: string[],
 ): Promise<MetricSnapshot> {
@@ -48,7 +48,7 @@ export async function captureMetricSnapshot(
   }));
 
   return {
-    installationId,
+    token,
     runnerId,
     capturedAt,
     metrics,

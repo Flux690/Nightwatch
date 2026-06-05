@@ -12,7 +12,7 @@ interface AlertmanagerWebhook {
 
 export function parseAlertmanager(
   body: unknown,
-  installationId: string,
+  token: string,
 ): NormalizedAlert[] {
   const payload = body as AlertmanagerWebhook;
   if (!Array.isArray(payload?.alerts)) {
@@ -21,7 +21,7 @@ export function parseAlertmanager(
 
   return payload.alerts.map((alert) => ({
     sourceAlertId: alert.fingerprint,
-    installationId,
+    token,
     targetIdentifier:
       alert.labels["container"] ??
       alert.labels["service"] ??

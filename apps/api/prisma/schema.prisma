@@ -16,25 +16,10 @@ model User {
 }
 
 model Installation {
-  id               String            @id @default(cuid())
-  token            String            @unique @default(cuid())
-  userId           String
-  user             User              @relation(fields: [userId], references: [id])
-  hostname         String?
-  createdAt        DateTime          @default(now())
-  approvalRequests ApprovalRequest[]
-}
-
-model ApprovalRequest {
-  id             String       @id @default(cuid())
-  incidentId     String
-  installationId String
-  installation   Installation @relation(fields: [installationId], references: [id])
-  toolName       String
-  toolInput      Json
-  toolUseId      String       @unique
-  status         String       @default("pending") // pending | approved | rejected | context_added
-  comment        String?
-  createdAt      DateTime     @default(now())
-  resolvedAt     DateTime?
+  id        String   @id @default(cuid())
+  token     String   @unique @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  hostname  String?
+  createdAt DateTime @default(now())
 }

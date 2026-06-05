@@ -1,9 +1,13 @@
 export type AlertSeverity = "critical" | "warning" | "info";
-export type IncidentStatus = "investigating" | "resolved" | "escalated" | "dismissed";
+export type IncidentStatus =
+  | "investigating"
+  | "resolved"
+  | "escalated"
+  | "dismissed";
 
 export interface NormalizedAlert {
   sourceAlertId: string;
-  installationId: string;
+  token: string;
   targetIdentifier: string;
   alertType: string;
   severity: AlertSeverity;

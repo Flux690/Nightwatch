@@ -5,7 +5,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 const DEDUP_TTL_SECONDS = 86_400;
 
 export async function isDuplicate(alert: NormalizedAlert): Promise<boolean> {
-  const key = `dedup:${alert.installationId}:${alert.sourceAlertId}`;
+  const key = `dedup:${alert.token}:${alert.sourceAlertId}`;
   // NX = only set if not exists; null return means key already existed
   const result = await redis.set(key, "1", "EX", DEDUP_TTL_SECONDS, "NX");
   return result === null;

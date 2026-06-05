@@ -17,7 +17,7 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
 
   return {
     runnerId: `runner_${hostname()}_${process.pid}`,
-    installationId: process.env["NIGHTWATCH_TOKEN"] ?? "unknown",
+    token: process.env["NIGHTWATCH_TOKEN"] ?? "unknown",
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,
     capabilities: {

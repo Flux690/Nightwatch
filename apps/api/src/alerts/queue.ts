@@ -11,20 +11,20 @@ const RATE_LIMIT_MAX = 10;
 const DEBOUNCE_SECONDS = 90;
 
 export async function checkRateLimit(
-  installationId: string,
+  token: string,
   severity: NormalizedAlert["severity"],
 ): Promise<boolean> {
   if (severity === "critical") return true;
 
-  const key = `rate:${installationId}`;
+  const key = `rate:${token}`;
   const count = await redis.incr(key);
   if (count === 1) await redis.expire(key, RATE_LIMIT_WINDOW_SECONDS);
 
   return count <= RATE_LIMIT_MAX;
 }
 
-export async function tryDebounce(installationId: string): Promise<boolean> {
-  const key = `debounce:${installationId}`;
+export async function tryDebounce(token: string): Promise<boolean> {
+  const key = `debounce:${token}`;
   const result = await redis.set(key, "1", "EX", DEBOUNCE_SECONDS, "NX");
   return result !== null;
 }

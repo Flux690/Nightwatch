@@ -11,8 +11,8 @@ export async function buildInitialContext(
   alert: NormalizedAlert,
 ): Promise<InitialContext> {
   const [telemetrySummary, incidentHistory] = await Promise.allSettled([
-    loadTelemetrySummary(alert.installationId),
-    loadIncidentHistory(alert.installationId, alert.targetIdentifier),
+    loadTelemetrySummary(alert.token),
+    loadIncidentHistory(alert.token, alert.targetIdentifier),
   ]);
 
   const telemetryBlock =
@@ -40,7 +40,7 @@ Rules:
   const firstUserMessage = `INCIDENT ALERT
 --------------
 Alert ID:     ${alert.sourceAlertId}
-Installation: ${alert.installationId}
+Token:        ${alert.token}
 Target:       ${alert.targetIdentifier}
 Alert type:   ${alert.alertType}
 Severity:     ${alert.severity}
@@ -80,8 +80,8 @@ When complete, output ONLY a JSON object with this exact shape (no markdown, no 
   return { systemPrompt, firstUserMessage };
 }
 
-async function loadTelemetrySummary(installationId: string): Promise<string> {
-  const keys = await redis.keys(`telemetry:${installationId}:*`);
+async function loadTelemetrySummary(token: string): Promise<string> {
+  const keys = await redis.keys(`telemetry:${token}:*`);
   if (keys.length === 0) return "(no recent telemetry snapshots found)";
 
   const latest = keys.sort().slice(-3);
@@ -118,11 +118,11 @@ async function loadTelemetrySummary(installationId: string): Promise<string> {
 }
 
 async function loadIncidentHistory(
-  installationId: string,
+  token: string,
   containerName: string,
 ): Promise<IncidentRecord[]> {
   const result = await sendCommand(
-    installationId,
+    token,
     "get_incident_history",
     { containerName, limitDays: 30 },
     10_000,

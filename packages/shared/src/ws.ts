@@ -61,7 +61,7 @@ export interface ConsoleIncidentUpdate extends WsEnvelope {
   type: "incident_update";
   payload: {
     incidentId: string;
-    installationId: string;
+    token: string;
     status: string;
     rootCauseSummary?: string;
     awaitingApproval?: boolean;

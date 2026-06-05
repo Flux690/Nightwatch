@@ -12,11 +12,11 @@ export async function registerAlertRoutes(
     "/alerts/ingest",
     async (request, reply) => {
       const userAgent = request.headers["user-agent"] ?? "";
-      const installationId =
+      const token =
         extractToken(request.headers) ??
         (typeof request.query.token === "string" ? request.query.token : null);
 
-      if (!installationId) {
+      if (!token) {
         return reply.code(401).send({
           error: "token query param or X-Nightwatch-Token header required",
         });
@@ -24,7 +24,7 @@ export async function registerAlertRoutes(
 
       let alerts: NormalizedAlert[];
       try {
-        alerts = parseSource(userAgent, request.body, installationId);
+        alerts = parseSource(userAgent, request.body, token);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return reply.code(400).send({ error: msg });
@@ -39,17 +39,14 @@ export async function registerAlertRoutes(
           continue;
         }
 
-        const allowed = await checkRateLimit(
-          alert.installationId,
-          alert.severity,
-        );
+        const allowed = await checkRateLimit(alert.token, alert.severity);
         if (!allowed) {
           skipped++;
           fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
           continue;
         }
 
-        const debounced = await tryDebounce(alert.installationId);
+        const debounced = await tryDebounce(alert.token);
         if (!debounced) {
           skipped++;
           fastify.log.info({ alertId: alert.sourceAlertId }, "debounced");
@@ -76,21 +73,19 @@ function extractToken(
 ): string | null {
   const token = headers["x-nightwatch-token"];
   if (typeof token === "string" && token.length > 0) return token;
-  const legacy = headers["x-installation-id"];
-  if (typeof legacy === "string" && legacy.length > 0) return legacy;
   return null;
 }
 
 function parseSource(
   userAgent: string,
   body: unknown,
-  installationId: string,
+  token: string,
 ): NormalizedAlert[] {
   if (
     userAgent.toLowerCase().includes("alertmanager") ||
     isAlertmanagerShape(body)
   ) {
-    return parseAlertmanager(body, installationId);
+    return parseAlertmanager(body, token);
   }
   logger.warn(
     { preview: JSON.stringify(body).slice(0, 200) },

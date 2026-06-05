@@ -70,7 +70,7 @@ export async function conclude(
 
   try {
     await sendCommand(
-      alert.installationId,
+      alert.token,
       "write_incident",
       { ...record },
       PERSIST_TIMEOUT_MS,
@@ -95,8 +95,7 @@ export async function escalate(
   reason: string,
 ): Promise<void> {
   logger.warn(
-    { incidentId, installationId: alert.installationId, reason },
+    { incidentId, token: alert.token, reason },
     "investigation escalated to human",
   );
-  /* Phase 5: post escalation card to Slack */
 }

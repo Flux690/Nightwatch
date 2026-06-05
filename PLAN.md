@@ -2,7 +2,7 @@
 
 > Static reference document. Not a task tracker — use TodoWrite for in-session tracking, git log for history.
 
-## Current Phase: 5a — Approval Cycle. Phase 4.5 ✅ complete; 5a queued next.
+## Current Phase: 5 — Approval Cycle. Phase 4.5 ✅ complete; 5 queued next.
 
 ### Phase 1 — Harness + Scaffold ✅ complete (commit 272f80c)
 - [x] Git: tag v1.0.0, create v2 branch
@@ -101,24 +101,19 @@
 - [x] Comment cleanup enforced across all file types (Dockerfile, .sh, .ts, .yaml)
 
 **Alert identity cleanup (done alongside 4.5):**
-- [x] API ingest accepts `X-Nightwatch-Token` header (with `X-Installation-Id` legacy fallback) and `?token=` query param
+- [x] API ingest accepts `X-Nightwatch-Token` header and `?token=` query param
 - [x] Alertmanager configs use `?token=` query param (Alertmanager does not support custom HTTP headers)
 
 **Deferred from 4.5:**
 - Prisma 7 migration: v7 removes `datasource.url` from schema, requires a new `prisma.config.ts`, and changes client imports. Staying on 6.19.3 until a dedicated migration task.
-- Full `installationId` → `NIGHTWATCH_TOKEN` rename throughout the codebase: touches alert normalization, dedup, rate limiting, investigation loop, WebSocket router, incident storage, and Prisma schema. Scope fits Phase 5 better.
+- ~~Full `installationId` → `token` rename throughout the codebase~~ ✅ Done: 5 shared types, 10 API files, 2 runner files, Prisma schema, PRD.md updated. ApprovalRequest table removed (approval flow is in-memory EventEmitter). WS connect verifies token against Installation table.
 - Host introspection verification (/proc, dmesg, cgroup reads inside running container): Docker image builds, but live container test against clipper pending.
 - Real Prometheus alert flow in dev: monitoring stack is in docker-compose.dev.yaml, but end-to-end flow (chaos fault → Prometheus rule fires → Alertmanager webhook → API ingest) not yet tested live.
 
-### Phase 5a — Approval Cycle (curl/.http-testable, no external deps)
+### Phase 5 — Approval Cycle (curl/.http-testable, no external deps)
 - [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
 - [ ] .http: write tool → approval pending → approve → runner executes → result → conclude
 - [ ] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
-
-### Phase 5b — Slack Approval (over the proven 5a backbone)
-- [ ] notifications/slack.ts: approval card with Approve/Reject/Add Context
-- [ ] Slack interaction webhook → same resolveApproval()
-- [ ] Capstone: PRD section 5.3 synthetic first-run test
 
 ### Phase 6 — Console (full)
 - [ ] Vite + React 19 scaffold
@@ -146,7 +141,7 @@
 - Full spec: PRD.md
 - Tool definitions: PRD section 8
 - Tech stack: PRD section 18.1
-- Approval flow: PRD sections 6.5, 9.3, 13.2
+- Approval flow: in-memory EventEmitter (no DB table). PRD sections 6.5, 9.3, 13.2
 - Session continuity: PRD section 10.6
 - LLM inference: hand-rolled ports-and-adapters in `apps/api/src/llm` (Anthropic + OpenAI-compatible), no framework. Both adapters compiled in, selected by LLM_PROVIDER. PRD section 14.
 - **Single container:** runner + Prometheus + Alertmanager + cAdvisor in one Docker image, s6-overlay process supervisor. User sees one container in `docker ps`. PRD's 5-container install table collapsed into one image for simplicity.
