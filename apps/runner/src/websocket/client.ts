@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
+import { logger } from "../logger.js";
 import type {
   RunnerCommandMessage,
   RunnerHeartbeatMessage,
@@ -34,7 +35,7 @@ export function startWebSocketClient(
     const delaySec =
       BACKOFF_STEPS[Math.min(retryCount, BACKOFF_STEPS.length - 1)] ?? 60;
     retryCount++;
-    console.error(`[ws] reconnecting in ${delaySec}s (attempt ${retryCount})`);
+    logger.warn({ delaySec, attempt: retryCount }, "reconnecting");
     setTimeout(connect, delaySec * 1000);
   }
 
@@ -112,9 +113,9 @@ export function startWebSocketClient(
 
     ws.on("open", () => {
       retryCount = 0;
-      console.log("[ws] connected");
-      sendManifest(ws!).catch((err) =>
-        console.error("[ws] manifest error:", err),
+      logger.info("ws connected");
+      sendManifest(ws!).catch((err: unknown) =>
+        logger.error({ err }, "manifest send failed"),
       );
       startHeartbeat(ws!);
     });
@@ -129,19 +130,19 @@ export function startWebSocketClient(
 
       if (parsed["type"] === "command") {
         handleCommand(ws!, parsed as unknown as RunnerCommandMessage).catch(
-          (err) => console.error("[ws] command handler error:", err),
+          (err: unknown) => logger.error({ err }, "command handler error"),
         );
       }
     });
 
     ws.on("close", (code) => {
       clearHeartbeat();
-      console.error(`[ws] closed (code ${code})`);
+      logger.warn({ code }, "ws closed");
       scheduleReconnect();
     });
 
     ws.on("error", (err) => {
-      console.error("[ws] error:", err.message);
+      logger.error({ err }, "ws error");
       // 'close' fires after 'error', which triggers reconnect
     });
   }

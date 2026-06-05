@@ -51,7 +51,6 @@ export async function restartContainer(
 export async function rollbackDeploy(
   _input: RollbackDeployInput,
 ): Promise<RollbackDeployResult> {
-  // Full implementation requires docker-compose file path — deferred to Phase 7.
   throw new Error(
     "rollback_deploy is not yet implemented. Requires docker-compose file path and compose context.",
   );

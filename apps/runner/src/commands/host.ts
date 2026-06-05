@@ -11,10 +11,11 @@ import type {
 } from "@nightwatch/shared";
 
 const exec = promisify(execFile);
+const PROC_PATH = process.env["HOST_PROC"] ?? "/proc";
 
 export async function getHostMemory(): Promise<GetHostMemoryResult> {
   const [meminfo, dmesgOut] = await Promise.all([
-    readFile("/proc/meminfo", "utf8"),
+    readFile(`${PROC_PATH}/meminfo`, "utf8"),
     exec("dmesg", ["-T"])
       .then((r) => r.stdout)
       .catch(() => ""),
@@ -56,13 +57,13 @@ export async function getHostMemory(): Promise<GetHostMemoryResult> {
 
 export async function getHostCpu(): Promise<GetHostCpuResult> {
   const [stat1, loadavgStr] = await Promise.all([
-    readFile("/proc/stat", "utf8"),
-    readFile("/proc/loadavg", "utf8"),
+    readFile(`${PROC_PATH}/stat`, "utf8"),
+    readFile(`${PROC_PATH}/loadavg`, "utf8"),
   ]);
 
   // Two reads 100ms apart to compute delta
   await new Promise((r) => setTimeout(r, 100));
-  const stat2 = await readFile("/proc/stat", "utf8");
+  const stat2 = await readFile(`${PROC_PATH}/stat`, "utf8");
 
   interface CpuRow {
     name: string;

@@ -225,8 +225,6 @@ export async function getContainerProcesses(
   return { processes };
 }
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-
 function parseUptime(status: string): number {
   const m = status.match(/Up\s+(\d+)\s+(second|minute|hour|day|week|month)/i);
   if (!m) return 0;

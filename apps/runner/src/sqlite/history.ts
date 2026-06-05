@@ -27,7 +27,7 @@ function db(): Database.Database {
 }
 
 export function initDb(): void {
-  db(); // triggers lazy CREATE TABLE IF NOT EXISTS
+  db();
 }
 
 export function insertIncident(record: IncidentRecord): void {

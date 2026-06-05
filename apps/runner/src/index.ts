@@ -31,9 +31,10 @@ import {
   rollbackDeploy,
   execCommand,
 } from "./commands/remediation.js";
+import { logger } from "./logger.js";
 
 if (!process.env["NIGHTWATCH_TOKEN"]) {
-  console.error("[runner] NIGHTWATCH_TOKEN is required");
+  logger.fatal("NIGHTWATCH_TOKEN is required");
   process.exit(1);
 }
 
@@ -108,7 +109,6 @@ const dispatch = new Map<string, Handler>([
   [
     "write_incident",
     (i) => {
-      // Command input arrives over the wire as the IncidentRecord to persist.
       insertIncident(i as IncidentRecord);
       return Promise.resolve({ written: true });
     },
@@ -116,4 +116,4 @@ const dispatch = new Map<string, Handler>([
 ]);
 
 startWebSocketClient(dispatch);
-console.log("[runner] started");
+logger.info("runner started");
