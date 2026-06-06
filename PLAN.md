@@ -2,7 +2,7 @@
 
 > Static reference document. Not a task tracker — use TodoWrite for in-session tracking, git log for history.
 
-## Current Phase: 5 — Approval Cycle. Phase 4.5 ✅ complete; 5 queued next.
+## Current Phase: 6 — Console (full). Phases 1 through 5.5 ✅ complete; 6 queued next.
 
 ### Phase 1 — Harness + Scaffold ✅ complete (commit 272f80c)
 - [x] Git: tag v1.0.0, create v2 branch
@@ -108,30 +108,30 @@
 **Deferred from 4.5:**
 - Prisma 7 migration: v7 removes `datasource.url` from schema, requires a new `prisma.config.ts`, and changes client imports. Staying on 6.19.3 until a dedicated migration task.
 - Host introspection verification (/proc, dmesg, cgroup reads inside running container): Docker image builds, but live container test against clipper pending.
-- Real Prometheus alert flow in dev: monitoring stack is in docker-compose.dev.yaml, but end-to-end flow (chaos fault → Prometheus rule fires → Alertmanager webhook → API ingest) not yet tested live.
+- Real Prometheus alert flow in dev: monitoring stack is in docker-compose.dev.yaml, but the metrics-driven end-to-end flow (chaos fault → cAdvisor → Prometheus rule fires → Alertmanager webhook → API ingest) cannot be tested live on Docker Desktop for Mac. cAdvisor there only emits the root cgroup (`container_last_seen{id="/"}`) and zero `name`-labeled per-container series, because containers run inside the LinuxKit VM and cAdvisor can't read per-container cgroup accounting (cgroup v2 + VM layout). Since every rule in `rules.yml` filters on `{name!=""}`, no rule can fire locally. Confirmed not fixable via cAdvisor config (tried `privileged`, `/:/rootfs:ro`, `/var/run` mounts). The path from `/alerts/ingest` onward is fully proven via `scripts/smoke.sh fire` (manual webhook, exercised end-to-end incl. the approval cycle in Phase 5.5). The real metrics path must be validated on a Linux host / CI where cAdvisor reads host cgroups natively.
 
-### Phase 5 — Approval Cycle + Investigation Completeness
-- [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
-- [ ] Unified session scaffolding: one loop/one system prompt, alert authors the opening user message (groundwork for chat in Phase 6)
-- [ ] Runner identity: stable `runnerId` persisted in the SQLite volume; API connection registry keyed by `(token, runnerId)` so multiple runners per token don't overwrite each other
-- [ ] SQLite incident history injected into initial investigation context (same container + same alertType, collapse repeats, cap ~5, labeled plain text)
-- [ ] Approval-deadline pause: hard timer stops while an approval is pending (human wait time doesn't abort the run)
-- [ ] smoke.sh approval helpers (pending/approve/reject) driving the full cycle: write tool → approval pending → approve → runner executes → result → conclude
-- [ ] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
+### Phase 5 — Approval Cycle + Investigation Completeness ✅ complete
+- [x] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
+- [x] Unified session scaffolding: one loop/one system prompt, alert authors the opening user message (groundwork for chat in Phase 6)
+- [x] Runner identity: stable `runnerId` persisted in the SQLite volume; API connection registry keyed by `(token, runnerId)` so multiple runners per token don't overwrite each other
+- [x] SQLite incident history injected into initial investigation context (same container + same alertType, collapse repeats, cap ~5, labeled plain text)
+- [x] Approval-deadline pause: hard timer stops while an approval is pending (human wait time doesn't abort the run)
+- [x] smoke.sh approval helpers (pending/approve/reject) driving the full cycle: write tool → approval pending → approve → runner executes → result → conclude
+- [x] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
 - [x] Faster default detection: cAdvisor housekeeping 15s->5s, Prometheus scrape/eval 15s->5s, `ContainerDown` `last_seen>15`/`for:10s`, Alertmanager `group_wait` 30s->5s (~3min -> ~30s for the down signal; resource rules keep their `for:5m`)
 - [ ] (future) User-overridable alert rules: `configure.sh` currently `cp`s our `rules.yml` over the user's on every boot. Should prefer a mounted `rules.yml` / `rules.d/` if present and fall back to our defaults - the standard Prometheus rule-file convention, so users tune thresholds without forking. Not done; deferred.
 
-### Phase 5.5 — Agentic LLM Hardening
-The live Phase 5 test ran the loop on under-powered defaults: the model recommended a write tool in free-text JSON and concluded instead of invoking it, so the approval cycle never fired. This subphase makes both providers proper agentic clients and replaces text-scraping with a schema-guaranteed conclusion.
-- [ ] Shared `llm/config.ts`: `MAX_OUTPUT_TOKENS = 32000` (was 4096) plus the consolidated `REQUEST_TIMEOUT_MS` / `MAX_RETRIES` (deduped from both providers)
-- [ ] Streaming on both providers (`messages.stream().finalMessage()` / `chat.completions.stream().finalChatCompletion()`) so 32K output can't trip the single-read timeout
-- [ ] AnthropicProvider: prompt caching (cache_control on system block + rolling message breakpoint), adaptive thinking, proper stop_reason mapping (add `refusal`)
-- [ ] OpenAIProvider parity: strict function calling, `content_filter` → refusal
-- [ ] `conclude` strict tool (terminal, schema = InvestigationResult); `strict?` added to ToolSchema
-- [ ] Loop handles conclude tool_use (zod-validate → conclude), refusal/no-conclude → escalate
-- [ ] Remove the regex/JSON.parse hack in result.ts; conclude() takes the validated object
-- [ ] Rip out `confidence` everywhere (result.ts schema+log, context.ts prompt+template, shared incidents.ts)
-- [ ] System prompt rewrite: call the gated tool, do not describe it; finish by calling conclude
+### Phase 5.5 — Agentic LLM Hardening ✅ complete
+The live Phase 5 test ran the loop on under-powered defaults: the model recommended a write tool in free-text JSON and concluded instead of invoking it, so the approval cycle never fired. This subphase makes both providers proper agentic clients and replaces text-scraping with a schema-guaranteed conclusion. Proven end-to-end after this change: the model invoked `restart_container` → approval pending → approved → runner executed → `conclude`.
+- [x] Shared `llm/config.ts`: `MAX_OUTPUT_TOKENS = 32000` (was 4096) plus the consolidated `REQUEST_TIMEOUT_MS` / `MAX_RETRIES` (deduped from both providers)
+- [x] Streaming on both providers (`messages.stream().finalMessage()` / `chat.completions.stream().finalChatCompletion()`) so 32K output can't trip the single-read timeout
+- [x] AnthropicProvider: prompt caching (cache_control on system block + rolling message breakpoint), adaptive thinking, proper stop_reason mapping (add `refusal`)
+- [x] OpenAIProvider parity: strict function calling, `content_filter` → refusal
+- [x] `conclude` strict tool (terminal, schema = InvestigationResult); `strict?` added to ToolSchema
+- [x] Loop handles conclude tool_use (zod-validate → conclude), refusal/no-conclude → escalate
+- [x] Remove the regex/JSON.parse hack in result.ts; conclude() takes the validated object
+- [x] Rip out `confidence` everywhere (result.ts schema+log, context.ts prompt+template, shared incidents.ts)
+- [x] System prompt rewrite: call the gated tool, do not describe it; finish by calling conclude
 
 ### Phase 6 — Console (full)
 - [ ] Vite + React 19 scaffold
@@ -149,7 +149,7 @@ The live Phase 5 test ran the loop on under-powered defaults: the model recommen
 ### Phase 7 — Resilience & Reliability
 - [ ] Reconnection resilience (exponential backoff, both runner→API and console→API)
 - [ ] Error handling: all 6 failure modes from PRD section 19
-- [ ] Prompt hardening: confidence guardrail when evidence is missing (Phase 4 smoke finding)
+- [ ] Prompt hardening: evidence-grounding guardrail (escalate rather than act on thin evidence). Note: the original Phase 4 "confidence guardrail" framing is obsolete - `confidence` was removed in Phase 5.5; the guardrail is now behavioral (the system prompt's escalation policy), not a self-reported number.
 - [ ] First-run synthetic test (validates the end-to-end flow before a real incident)
 - [ ] Rate limiting indicator in the console
 - [ ] Full self-hosted `docker compose` stack (API + console + Postgres + Redis alongside the runner)
@@ -178,7 +178,7 @@ The live Phase 5 test ran the loop on under-powered defaults: the model recommen
 - **Unified session model:** one agentic loop, one system prompt, two triggers. An alert authors the opening user message; a chat message is the human-triggered entry into the same loop. A concluded investigation stays open as a session the user can continue. PRD section 9.0, 16
 - **Sessions & memory:** episodic `IncidentRecord`s (implemented) injected at run start; full transcript persisted on the runner (`sessions` + `session_messages`, planned), appended per turn. No status machine, no TTL, no auto-prune — user-deletable. No vector DB, no cross-installation learning, no hardcoded pattern library. PRD section 10.6
 - **API-stateless / runner-is-system-of-record:** the API holds the message array only in worker memory during a run; all durable user data lives on the runner. PRD sections 4.3, 10.4
-- **Runner identity:** stable `runnerId` per runner instance; API registry keyed by `(token, runnerId)`. PRD section 7.2 (planned)
+- **Runner identity:** stable `runnerId` per runner instance (persisted UUID in the SQLite volume); API registry keyed by `(token, runnerId)`. PRD section 7.2
 - LLM inference: hand-rolled ports-and-adapters in `apps/api/src/llm` (Anthropic + OpenAI-compatible), no framework. Both adapters compiled in, selected by LLM_PROVIDER. PRD section 14.
 - **Single container:** runner + Prometheus + Alertmanager + cAdvisor in one Docker image, s6-overlay process supervisor. User sees one container in `docker ps`. PRD's 5-container install table collapsed into one image for simplicity.
 - **Self-detecting install:** one `install.sh` script, no flags. Auto-detects existing Prometheus/Alertmanager via `docker ps` + port probes. Sets `PROMETHEUS_URL` / `ALERTMANAGER_URL` env vars if found (industry-standard convention: presence = BYO, absence = bundled). Prints webhook snippet if user has existing Alertmanager.
