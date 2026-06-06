@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
+import { getRunnerId } from "../manifest/identity.js";
 import { logger } from "../logger.js";
 import type {
   RunnerCommandMessage,
@@ -108,7 +109,10 @@ export function startWebSocketClient(
 
   function connect(): void {
     ws = new WebSocket(wsUrl, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Nightwatch-Runner-Id": getRunnerId(),
+      },
     });
 
     ws.on("open", () => {

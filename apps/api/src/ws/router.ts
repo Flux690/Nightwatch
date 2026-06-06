@@ -11,7 +11,12 @@ interface PendingCommand {
 }
 
 const pending = new Map<string, PendingCommand>();
-const registry = new Map<string, (msg: string) => void>();
+
+// token -> runnerId -> send. Keying by runnerId (not token alone) stops a second
+// runner on the same installation token from overwriting the first runner's
+// socket. sendCommand still routes by token and picks any live runner for it;
+// targeting a specific runner is future work.
+const registry = new Map<string, Map<string, (msg: string) => void>>();
 
 export class RunnerOfflineError extends Error {
   constructor(token: string) {
@@ -22,13 +27,22 @@ export class RunnerOfflineError extends Error {
 
 export function registerRunner(
   token: string,
+  runnerId: string,
   send: (msg: string) => void,
 ): void {
-  registry.set(token, send);
+  let runners = registry.get(token);
+  if (!runners) {
+    runners = new Map();
+    registry.set(token, runners);
+  }
+  runners.set(runnerId, send);
 }
 
-export function unregisterRunner(token: string): void {
-  registry.delete(token);
+export function unregisterRunner(token: string, runnerId: string): void {
+  const runners = registry.get(token);
+  if (!runners) return;
+  runners.delete(runnerId);
+  if (runners.size === 0) registry.delete(token);
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
@@ -49,7 +63,8 @@ export function sendCommand(
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  const send = registry.get(token);
+  const runners = registry.get(token);
+  const send = runners?.values().next().value;
   if (!send) throw new RunnerOfflineError(token);
 
   const correlationId = randomUUID();

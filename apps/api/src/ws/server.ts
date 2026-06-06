@@ -28,6 +28,14 @@ export async function registerWsRoutes(
         return;
       }
 
+      const runnerIdHeader = request.headers["x-nightwatch-runner-id"];
+      const runnerId =
+        typeof runnerIdHeader === "string" ? runnerIdHeader.trim() : "";
+      if (!runnerId) {
+        socket.close(4002, "X-Nightwatch-Runner-Id header required");
+        return;
+      }
+
       const installation = await db.installation.findUnique({
         where: { token },
       });
@@ -36,7 +44,7 @@ export async function registerWsRoutes(
         return;
       }
 
-      registerRunner(token, (msg) => {
+      registerRunner(token, runnerId, (msg) => {
         if (socket.readyState === socket.OPEN) socket.send(msg);
       });
 
@@ -80,7 +88,7 @@ export async function registerWsRoutes(
       });
 
       socket.on("close", () => {
-        unregisterRunner(token);
+        unregisterRunner(token, runnerId);
         fastify.log.warn({ token: token.slice(0, 8) }, "runner disconnected");
       });
 
