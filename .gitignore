@@ -23,9 +23,6 @@ dist/
 # Smoke test runtime — backgrounded process logs/pids
 .smoke/
 
-# Reference docs — not part of the repo
-HARNESS.md
-
 # OS files
 .DS_Store
 Thumbs.db

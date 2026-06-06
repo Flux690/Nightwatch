@@ -72,7 +72,7 @@
 - [x] s6-overlay v3 service scripts: conditionally start Prometheus/Alertmanager based on env vars
 - [x] cAdvisor always runs (feeds container metrics regardless of who consumes them)
 - [x] Bundled Prometheus config: scrape cAdvisor at localhost:8080, evaluate alert rules
-- [x] Bundled Alertmanager config: webhook to Platform `POST /alerts/ingest?token=${NIGHTWATCH_TOKEN}`
+- [x] Bundled Alertmanager config: webhook to the API `POST /alerts/ingest?token=${NIGHTWATCH_TOKEN}`
 - [x] Default `rules.yml`: memory >85% 5m, CPU >90% 5m, restart count >3 in 15m, disk >90%, container down >1m
 - [x] Runner mounts: `/var/run/docker.sock` (ro), `/proc` (ro), `nightwatch-data` volume at `/var/nightwatch`
 - [x] Docker build verified: `pnpm deploy` works without `--legacy` via `injectWorkspacePackages: true` in pnpm-workspace.yaml
@@ -103,15 +103,19 @@
 **Alert identity cleanup (done alongside 4.5):**
 - [x] API ingest accepts `X-Nightwatch-Token` header and `?token=` query param
 - [x] Alertmanager configs use `?token=` query param (Alertmanager does not support custom HTTP headers)
+- [x] `installationId` → `token` rename throughout the codebase (5 shared types, 10 API files, 2 runner files, Prisma schema, PRD.md). Decision: identify installations by `token` directly, no separate `installationId`. The `ApprovalRequest` table was dropped (approval flow is an in-memory EventEmitter, not a DB row). WS connect verifies `token` against the `Installation` table.
 
 **Deferred from 4.5:**
 - Prisma 7 migration: v7 removes `datasource.url` from schema, requires a new `prisma.config.ts`, and changes client imports. Staying on 6.19.3 until a dedicated migration task.
-- ~~Full `installationId` → `token` rename throughout the codebase~~ ✅ Done: 5 shared types, 10 API files, 2 runner files, Prisma schema, PRD.md updated. ApprovalRequest table removed (approval flow is in-memory EventEmitter). WS connect verifies token against Installation table.
 - Host introspection verification (/proc, dmesg, cgroup reads inside running container): Docker image builds, but live container test against clipper pending.
 - Real Prometheus alert flow in dev: monitoring stack is in docker-compose.dev.yaml, but end-to-end flow (chaos fault → Prometheus rule fires → Alertmanager webhook → API ingest) not yet tested live.
 
-### Phase 5 — Approval Cycle (curl/.http-testable, no external deps)
+### Phase 5 — Approval Cycle + Investigation Completeness
 - [ ] REST POST /incidents/:id/approve|reject → resolveApproval() (the missing return path)
+- [ ] Unified session scaffolding: one loop/one system prompt, alert authors the opening user message (groundwork for chat in Phase 6)
+- [ ] Runner identity: stable `runnerId` persisted in the SQLite volume; API connection registry keyed by `(token, runnerId)` so multiple runners per token don't overwrite each other
+- [ ] SQLite incident history injected into initial investigation context (same container + same alertType, collapse repeats, cap ~5, labeled plain text)
+- [ ] Approval-deadline pause: hard timer stops while an approval is pending (human wait time doesn't abort the run)
 - [ ] .http: write tool → approval pending → approve → runner executes → result → conclude
 - [ ] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
 
@@ -119,31 +123,49 @@
 - [ ] Vite + React 19 scaffold
 - [ ] TanStack Router: file-based routes
 - [ ] TanStack Query: REST to API
-- [ ] WebSocket hook: real-time incident feed
-- [ ] Promote the 5a approval page into the real Approvals route
+- [ ] WebSocket hook: real-time session feed
+- [ ] Single unified session feed: investigations and chat in one surface (promote the Phase 5 approval page into the real Approvals route)
+- [ ] Chat: human-triggered entry into the same loop (write tools still gated by approval)
+- [ ] Runner online/offline indicator (heartbeat every 30s, ~60s silence = offline)
+- [ ] `GET /clients/config` endpoint feeding the loop (replaces hardcoded MAX_TOOL_CALLS / timeouts)
+- [ ] Session transcript persistence: `sessions` + `session_messages` tables on the runner, API appends per turn via `append_session_message` WS command
 - [ ] Settings page: alert rule configuration (thresholds per installation)
 - [ ] Mechanism: API stores updated rules, sends `update_alert_rules` command to runner via WebSocket, runner rewrites Prometheus `rules.yml` and hits `/-/reload`
 
-### Phase 7 — Hardening
-- [ ] SQLite history loaded into initial investigation context (makes reactive investigations smarter)
+### Phase 7 — Resilience & Reliability
 - [ ] Reconnection resilience (exponential backoff, both runner→API and console→API)
 - [ ] Error handling: all 6 failure modes from PRD section 19
-- [ ] Rate limiting dashboard indicator
 - [ ] Prompt hardening: confidence guardrail when evidence is missing (Phase 4 smoke finding)
+- [ ] First-run synthetic test (validates the end-to-end flow before a real incident)
+- [ ] Rate limiting indicator in the console
+- [ ] Full self-hosted `docker compose` stack (API + console + Postgres + Redis alongside the runner)
 
-### Phase 8 — Proactive Detection
-- [ ] Metric snapshot collection: runner queries local Prometheus every 5min via PromQL, sends snapshots to Platform
-- [ ] Rolling telemetry context: Platform stores snapshots in Redis with 2-hour TTL
-- [ ] Trend evaluation: Platform detects patterns (memory trending to OOM, disk filling, restart loops) and fires self-generated alerts
+### Phase 8 — Integrations
+- [ ] Slack: investigation results + Approve/Reject buttons (makes the approval flow usable off the console)
+- [ ] GitHub: `get_recent_commits` / deploy correlation against real repos
+- [ ] OAuth credential storage (encrypted), per-installation integration config
+
+### Phase 9 — Multi-runtime / Kubernetes
+- [ ] Runner command implementations for Kubernetes (kubectl instead of docker): pods, deployments, namespaces
+- [ ] Capability manifest extends to detect Kubernetes
+- [ ] `scale_container` remediation tool (K8s-only) wired through the approval gate
+
+### Phase 10 — Proactive Detection
+- [ ] Metric snapshot collection: runner queries local Prometheus every 5min via PromQL, sends snapshots to the API
+- [ ] Rolling telemetry context: API stores snapshots in Redis with 2-hour TTL
+- [ ] Trend evaluation: API detects patterns (memory trending to OOM, disk filling, restart loops) and fires self-generated alerts
 - [ ] Proactive alerts flow through the same investigation pipeline as reactive alerts (same loop, same tools, richer starting context)
 
 ## Architecture Decisions
 - Full spec: PRD.md
 - Tool definitions: PRD section 8
 - Tech stack: PRD section 18.1
-- Approval flow: in-memory EventEmitter (no DB table). PRD sections 6.5, 9.3, 13.2
-- Session continuity: PRD section 10.6
+- Approval flow: in-memory EventEmitter (no DB table), keyed by `tool_use_id`; 4-min approval timeout, 90s clarification timeout. The gate set is `REQUIRES_APPROVAL` in `apps/api/src/investigation/tools.ts`. PRD sections 6.5, 9.3, 13.2
+- **Unified session model:** one agentic loop, one system prompt, two triggers. An alert authors the opening user message; a chat message is the human-triggered entry into the same loop. A concluded investigation stays open as a session the user can continue. PRD section 9.0, 16
+- **Sessions & memory:** episodic `IncidentRecord`s (implemented) injected at run start; full transcript persisted on the runner (`sessions` + `session_messages`, planned), appended per turn. No status machine, no TTL, no auto-prune — user-deletable. No vector DB, no cross-installation learning, no hardcoded pattern library. PRD section 10.6
+- **API-stateless / runner-is-system-of-record:** the API holds the message array only in worker memory during a run; all durable user data lives on the runner. PRD sections 4.3, 10.4
+- **Runner identity:** stable `runnerId` per runner instance; API registry keyed by `(token, runnerId)`. PRD section 7.2 (planned)
 - LLM inference: hand-rolled ports-and-adapters in `apps/api/src/llm` (Anthropic + OpenAI-compatible), no framework. Both adapters compiled in, selected by LLM_PROVIDER. PRD section 14.
 - **Single container:** runner + Prometheus + Alertmanager + cAdvisor in one Docker image, s6-overlay process supervisor. User sees one container in `docker ps`. PRD's 5-container install table collapsed into one image for simplicity.
 - **Self-detecting install:** one `install.sh` script, no flags. Auto-detects existing Prometheus/Alertmanager via `docker ps` + port probes. Sets `PROMETHEUS_URL` / `ALERTMANAGER_URL` env vars if found (industry-standard convention: presence = BYO, absence = bundled). Prints webhook snippet if user has existing Alertmanager.
-- **Reactive-first:** proactive detection (metric snapshots, rolling telemetry, trend evaluation) deferred to Phase 8. Phases 4.5-7 focus on the reactive path: alert fires → investigate → recommend/remediate.
+- **Reactive-first:** proactive detection (metric snapshots, rolling telemetry, trend evaluation) deferred to Phase 10. Phases 5-7 focus on the reactive path: alert fires → investigate → recommend/remediate. Integrations (Phase 8) and Kubernetes (Phase 9) come before proactive detection.
