@@ -4,10 +4,15 @@
 export interface ToolSchema {
   name: string;
   description: string;
+  // When true, the provider constrains tool input to the schema (Anthropic
+  // strict tools / OpenAI strict function calling). Used by the terminal
+  // `conclude` tool so its output is schema-guaranteed, not free text.
+  strict?: boolean;
   input_schema: {
     type: "object";
     properties: Record<string, unknown>;
     required?: string[];
+    additionalProperties?: boolean;
   };
 }
 
@@ -24,7 +29,7 @@ export interface ToolResult {
 }
 
 export interface ChatResponse {
-  stopReason: "end_turn" | "tool_use" | "max_tokens";
+  stopReason: "end_turn" | "tool_use" | "max_tokens" | "refusal";
   toolUses: ToolUse[];
   text: string;
 }

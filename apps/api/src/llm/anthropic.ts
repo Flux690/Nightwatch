@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
+import {
+  MAX_OUTPUT_TOKENS,
+  MAX_RETRIES,
+  REQUEST_TIMEOUT_MS,
+} from "./config.js";
 import type {
   ChatResponse,
   LLMProvider,
@@ -7,11 +12,6 @@ import type {
   ToolSchema,
   ToolUse,
 } from "./types.js";
-
-// Bound each request so a slow call can't hang the job past the loop budget;
-// the SDK default is 10 minutes.
-const REQUEST_TIMEOUT_MS = 60_000;
-const MAX_RETRIES = 2;
 
 export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;
@@ -36,14 +36,32 @@ export class AnthropicProvider implements LLMProvider {
   async chat(tools: ToolSchema[]): Promise<ChatResponse> {
     let response: Anthropic.Messages.Message;
     try {
-      response = await this.client.messages.create({
-        model: this.model,
-        max_tokens: 4096,
-        system: this.system,
-        // ToolSchema is structurally compatible with Anthropic.Tool.
-        tools: tools as Anthropic.Tool[],
-        messages: this.messages,
-      });
+      // Stream and accumulate via finalMessage(): a large response (up to
+      // MAX_OUTPUT_TOKENS) can no longer trip the single-read request timeout.
+      // The returned Message is identical to a non-streamed one, so everything
+      // downstream (content blocks, usage, stop_reason) is unchanged.
+      response = await this.client.messages
+        .stream({
+          model: this.model,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          // A single cache breakpoint on the system block caches the stable
+          // system + tools prefix, which is identical on every loop turn.
+          system: [
+            {
+              type: "text",
+              text: this.system,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+          // Let the model decide when and how deeply to reason. Full
+          // response.content (including thinking blocks) is preserved below for
+          // multi-turn continuity.
+          thinking: { type: "adaptive" },
+          // ToolSchema is structurally compatible with Anthropic.Tool.
+          tools: tools as Anthropic.Tool[],
+          messages: this.messagesWithCacheBreakpoint(),
+        })
+        .finalMessage();
     } catch (err) {
       if (err instanceof Anthropic.APIError) {
         logger.error(
@@ -55,6 +73,16 @@ export class AnthropicProvider implements LLMProvider {
       }
       throw err;
     }
+
+    logger.debug(
+      {
+        model: this.model,
+        cacheRead: response.usage.cache_read_input_tokens,
+        cacheWrite: response.usage.cache_creation_input_tokens,
+        input: response.usage.input_tokens,
+      },
+      "Anthropic usage",
+    );
 
     this.messages.push({ role: "assistant", content: response.content });
 
@@ -75,10 +103,36 @@ export class AnthropicProvider implements LLMProvider {
       )?.text ?? "";
 
     return {
-      stopReason: response.stop_reason as ChatResponse["stopReason"],
+      stopReason: mapStopReason(response.stop_reason),
       toolUses,
       text,
     };
+  }
+
+  // Place a rolling cache breakpoint on the tail of the conversation so the
+  // growing message history is cached incrementally across turns. History is
+  // append-only, so each turn's prefix matches the breakpoint written last
+  // turn. chat() is only ever called when the last message is the user turn
+  // (initial string, or tool_result blocks); we mark the final tool_result.
+  // The persisted history stays free of breakpoints to avoid accumulation.
+  private messagesWithCacheBreakpoint(): Anthropic.Messages.MessageParam[] {
+    const lastIdx = this.messages.length - 1;
+    const last = this.messages[lastIdx];
+    if (!last || typeof last.content === "string") return this.messages;
+
+    const blocks = last.content;
+    const tailIdx = blocks.length - 1;
+    const tail = blocks[tailIdx];
+    if (tail?.type !== "tool_result") return this.messages;
+
+    const marked: Anthropic.Messages.ToolResultBlockParam = {
+      ...tail,
+      cache_control: { type: "ephemeral" },
+    };
+    return [
+      ...this.messages.slice(0, lastIdx),
+      { ...last, content: [...blocks.slice(0, tailIdx), marked] },
+    ];
   }
 
   appendToolResults(results: ToolResult[]): void {
@@ -91,5 +145,22 @@ export class AnthropicProvider implements LLMProvider {
         ...(r.is_error && { is_error: true }),
       })),
     });
+  }
+}
+
+function mapStopReason(
+  reason: Anthropic.Messages.StopReason | null,
+): ChatResponse["stopReason"] {
+  switch (reason) {
+    case "tool_use":
+      return "tool_use";
+    case "max_tokens":
+      return "max_tokens";
+    case "refusal":
+      return "refusal";
+    // end_turn, stop_sequence, pause_turn, null all mean "the model is done
+    // for now with no tool call" - the loop treats that as a normal stop.
+    default:
+      return "end_turn";
   }
 }
