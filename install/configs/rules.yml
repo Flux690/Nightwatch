@@ -39,9 +39,9 @@ groups:
 
       - alert: ContainerDown
         expr: |
-          time() - container_last_seen{name!=""} > 60
-        for: 1m
+          time() - container_last_seen{name!=""} > 15
+        for: 10s
         labels:
           severity: critical
         annotations:
-          summary: "Container {{ $labels.name }} has been down for more than 1 minute"
+          summary: "Container {{ $labels.name }} has been down for more than 15 seconds"

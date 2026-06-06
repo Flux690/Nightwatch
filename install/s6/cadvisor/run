@@ -3,5 +3,5 @@ exec 2>&1
 exec /opt/cadvisor/cadvisor \
   --port=8080 \
   --docker_only=true \
-  --housekeeping_interval=15s \
+  --housekeeping_interval=5s \
   --store_container_labels=false

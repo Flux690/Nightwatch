@@ -116,8 +116,22 @@
 - [ ] Runner identity: stable `runnerId` persisted in the SQLite volume; API connection registry keyed by `(token, runnerId)` so multiple runners per token don't overwrite each other
 - [ ] SQLite incident history injected into initial investigation context (same container + same alertType, collapse repeats, cap ~5, labeled plain text)
 - [ ] Approval-deadline pause: hard timer stops while an approval is pending (human wait time doesn't abort the run)
-- [ ] .http: write tool → approval pending → approve → runner executes → result → conclude
+- [ ] smoke.sh approval helpers (pending/approve/reject) driving the full cycle: write tool → approval pending → approve → runner executes → result → conclude
 - [ ] Minimal approval page in console (plain fetch, no TanStack yet — embryo of Phase 6)
+- [x] Faster default detection: cAdvisor housekeeping 15s->5s, Prometheus scrape/eval 15s->5s, `ContainerDown` `last_seen>15`/`for:10s`, Alertmanager `group_wait` 30s->5s (~3min -> ~30s for the down signal; resource rules keep their `for:5m`)
+- [ ] (future) User-overridable alert rules: `configure.sh` currently `cp`s our `rules.yml` over the user's on every boot. Should prefer a mounted `rules.yml` / `rules.d/` if present and fall back to our defaults - the standard Prometheus rule-file convention, so users tune thresholds without forking. Not done; deferred.
+
+### Phase 5.5 — Agentic LLM Hardening
+The live Phase 5 test ran the loop on under-powered defaults: the model recommended a write tool in free-text JSON and concluded instead of invoking it, so the approval cycle never fired. This subphase makes both providers proper agentic clients and replaces text-scraping with a schema-guaranteed conclusion.
+- [ ] Shared `llm/config.ts`: `MAX_OUTPUT_TOKENS = 32000` (was 4096) plus the consolidated `REQUEST_TIMEOUT_MS` / `MAX_RETRIES` (deduped from both providers)
+- [ ] Streaming on both providers (`messages.stream().finalMessage()` / `chat.completions.stream().finalChatCompletion()`) so 32K output can't trip the single-read timeout
+- [ ] AnthropicProvider: prompt caching (cache_control on system block + rolling message breakpoint), adaptive thinking, proper stop_reason mapping (add `refusal`)
+- [ ] OpenAIProvider parity: strict function calling, `content_filter` → refusal
+- [ ] `conclude` strict tool (terminal, schema = InvestigationResult); `strict?` added to ToolSchema
+- [ ] Loop handles conclude tool_use (zod-validate → conclude), refusal/no-conclude → escalate
+- [ ] Remove the regex/JSON.parse hack in result.ts; conclude() takes the validated object
+- [ ] Rip out `confidence` everywhere (result.ts schema+log, context.ts prompt+template, shared incidents.ts)
+- [ ] System prompt rewrite: call the gated tool, do not describe it; finish by calling conclude
 
 ### Phase 6 — Console (full)
 - [ ] Vite + React 19 scaffold

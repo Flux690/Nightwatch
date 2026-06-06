@@ -40,7 +40,7 @@ services:
       - /var/lib/docker:/var/lib/docker:ro
     command:
       - "--docker_only=true"
-      - "--housekeeping_interval=15s"
+      - "--housekeeping_interval=5s"
 
   prometheus:
     image: prom/prometheus:v2.53.0

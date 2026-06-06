@@ -22,7 +22,10 @@ export function parseAlertmanager(
   return payload.alerts.map((alert) => ({
     sourceAlertId: alert.fingerprint,
     token,
+    // `name` is what cAdvisor sets and what our shipped rules.yml alerts carry
+    // ({{ $labels.name }}); the rest are fallbacks for other alert sources.
     targetIdentifier:
+      alert.labels["name"] ??
       alert.labels["container"] ??
       alert.labels["service"] ??
       alert.labels["job"] ??
