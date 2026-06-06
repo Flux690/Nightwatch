@@ -100,9 +100,13 @@ const dispatch = new Map<string, Handler>([
   [
     "get_incident_history",
     (i) => {
-      const inp = i as { containerName?: string; limitDays?: number } | null;
+      const inp = i as {
+        containerName?: string;
+        alertType?: string;
+        limitDays?: number;
+      } | null;
       return Promise.resolve(
-        getRecentIncidents(inp?.containerName, inp?.limitDays),
+        getRecentIncidents(inp?.containerName, inp?.alertType, inp?.limitDays),
       );
     },
   ],

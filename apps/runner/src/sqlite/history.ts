@@ -54,24 +54,27 @@ export function insertIncident(record: IncidentRecord): void {
 
 export function getRecentIncidents(
   containerName?: string,
+  alertType?: string,
   limitDays = 30,
 ): IncidentRecord[] {
   const since = new Date(Date.now() - limitDays * 86_400_000).toISOString();
-  const rows = containerName
-    ? db()
-        .prepare(
-          `SELECT * FROM incidents
-           WHERE containerName = ? AND timestamp >= ?
-           ORDER BY timestamp DESC LIMIT 50`,
-        )
-        .all(containerName, since)
-    : db()
-        .prepare(
-          `SELECT * FROM incidents
-           WHERE timestamp >= ?
-           ORDER BY timestamp DESC LIMIT 50`,
-        )
-        .all(since);
+  const conditions = ["timestamp >= ?"];
+  const params: string[] = [since];
+  if (containerName) {
+    conditions.push("containerName = ?");
+    params.push(containerName);
+  }
+  if (alertType) {
+    conditions.push("alertType = ?");
+    params.push(alertType);
+  }
+  const rows = db()
+    .prepare(
+      `SELECT * FROM incidents
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY timestamp DESC LIMIT 50`,
+    )
+    .all(...params);
   return rows as IncidentRecord[];
 }
 
