@@ -30,10 +30,19 @@ up() {
   echo "Starting runner (logs: $RUN_DIR/runner.log)..."
   pnpm --filter @nightwatch/runner dev > "$RUN_DIR/runner.log" 2>&1 &
   echo $! > "$RUN_DIR/runner.pid"
+  echo "Starting console (logs: $RUN_DIR/console.log)..."
+  pnpm --filter @nightwatch/console dev > "$RUN_DIR/console.log" 2>&1 &
+  echo $! > "$RUN_DIR/console.pid"
   echo ""
-  echo "Up. Two ways to trigger an investigation:"
-  echo "  1. Manual:  scripts/smoke.sh fire transcoder ContainerRestarting"
-  echo "  2. Real:    clipper/chaos.sh oom  (wait ~5min for Prometheus alert to fire)"
+  echo "Up. Approval console: http://localhost:5173"
+  echo ""
+  echo "Drive the full approval cycle:"
+  echo "  1. Trigger:  scripts/smoke.sh fire clipper-redis ContainerRestarting"
+  echo "               (or real: clipper/chaos.sh oom, wait ~5min for the alert)"
+  echo "  2. Watch:    scripts/smoke.sh logs   (until you see 'approval pending')"
+  echo "  3. Resolve:  approve/reject in the console UI, or from the terminal:"
+  echo "               scripts/smoke.sh pending"
+  echo "               scripts/smoke.sh approve <incidentId>"
   echo ""
   echo "Check monitoring: scripts/smoke.sh stack"
 }
@@ -66,6 +75,30 @@ JSON
     -d "$payload"
   echo ""
   echo "Watch: scripts/smoke.sh logs"
+}
+
+pending() {
+  curl -sS "http://localhost:${PORT:-3000}/incidents/pending" \
+    -H "X-Nightwatch-Token: ${INSTALLATION:-inst_local}"
+  echo ""
+}
+
+approve() {
+  local id="${1:?usage: scripts/smoke.sh approve <incidentId>}"
+  curl -sS -X POST "http://localhost:${PORT:-3000}/incidents/${id}/approve" \
+    -H "Content-Type: application/json" \
+    -H "X-Nightwatch-Token: ${INSTALLATION:-inst_local}" \
+    -d '{"resolvedBy":"smoke.sh"}'
+  echo ""
+}
+
+reject() {
+  local id="${1:?usage: scripts/smoke.sh reject <incidentId>}"
+  curl -sS -X POST "http://localhost:${PORT:-3000}/incidents/${id}/reject" \
+    -H "Content-Type: application/json" \
+    -H "X-Nightwatch-Token: ${INSTALLATION:-inst_local}" \
+    -d '{"resolvedBy":"smoke.sh","comment":"rejected via smoke"}'
+  echo ""
 }
 
 stack() {
@@ -117,7 +150,7 @@ logs() { tail -n 40 -f "$RUN_DIR/api.log" "$RUN_DIR/runner.log"; }
 status() {
   docker ps --format "table {{.Names}}\t{{.Status}}"
   echo ""
-  for svc in api runner; do
+  for svc in api runner console; do
     if [ -f "$RUN_DIR/$svc.pid" ] && kill -0 "$(cat "$RUN_DIR/$svc.pid")" 2>/dev/null; then
       echo "$svc: running (pid $(cat "$RUN_DIR/$svc.pid"))"
     else
@@ -127,22 +160,25 @@ status() {
 }
 
 down() {
-  for svc in runner api; do
+  for svc in console runner api; do
     if [ -f "$RUN_DIR/$svc.pid" ]; then
       kill "$(cat "$RUN_DIR/$svc.pid")" 2>/dev/null && echo "stopped $svc" || true
       rm -f "$RUN_DIR/$svc.pid"
     fi
   done
-  echo "API + runner stopped. Infra + Clipper still up (docker compose down to stop them)."
+  echo "API + runner + console stopped. Infra + Clipper still up (docker compose down to stop them)."
 }
 
 case "${1:-help}" in
-  setup)  setup ;;
-  up)     up ;;
-  fire)   shift; fire "$@" ;;
-  stack)  stack ;;
-  logs)   logs ;;
-  status) status ;;
-  down)   down ;;
-  *) echo "usage: scripts/smoke.sh {setup|up|fire [container] [alertname]|stack|logs|status|down}" ;;
+  setup)   setup ;;
+  up)      up ;;
+  fire)    shift; fire "$@" ;;
+  pending) pending ;;
+  approve) shift; approve "$@" ;;
+  reject)  shift; reject "$@" ;;
+  stack)   stack ;;
+  logs)    logs ;;
+  status)  status ;;
+  down)    down ;;
+  *) echo "usage: scripts/smoke.sh {setup|up|fire [container] [alertname]|pending|approve <id>|reject <id>|stack|logs|status|down}" ;;
 esac
