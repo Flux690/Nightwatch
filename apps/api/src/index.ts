@@ -5,6 +5,7 @@ import { db } from "./db/client.js";
 import { redis } from "./redis/client.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
+import { registerIncidentRoutes } from "./incidents/routes.js";
 import { startWorker } from "./jobs/worker.js";
 
 // Fastify keeps its own pino for HTTP logs; the investigation loop/providers
@@ -15,6 +16,7 @@ await fastify.register(FastifyWebSocket);
 
 await registerWsRoutes(fastify);
 await registerAlertRoutes(fastify);
+await registerIncidentRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 
