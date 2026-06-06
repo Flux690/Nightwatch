@@ -23,7 +23,7 @@ export async function handlePlatformTool(
     /* Phase 5: send to Slack and await response on approvalBus with CLARIFICATION_TIMEOUT_MS. */
     return {
       tool_use_id: tool.id,
-      content: `Automated mode — no human available to answer "${question}". Context noted: ${context}. Continue with available evidence and conclude at best-effort confidence.`,
+      content: `Automated mode — no human available to answer "${question}". Context noted: ${context}. Continue with the evidence you have and conclude as best you can.`,
     };
   }
 

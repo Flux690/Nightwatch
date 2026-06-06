@@ -1,62 +1,44 @@
 import { z } from "zod";
-import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
+import type {
+  IncidentRecord,
+  InvestigationResult,
+  NormalizedAlert,
+} from "@nightwatch/shared";
 import { sendCommand } from "../ws/router.js";
 import { logger } from "../logger.js";
 
 // Best-effort persistence; the runner may be briefly offline at conclusion time.
 const PERSIST_TIMEOUT_MS = 10_000;
 
+// Mirrors the `conclude` tool's input_schema in tools.ts. Optional fields are
+// nullable (not optional) to match the strict tool contract.
 export const InvestigationResultSchema = z.object({
   rootCause: z.object({
     summary: z.string(),
-    confidence: z.number().min(0).max(1),
     evidence: z.array(z.string()),
-    contributingFactors: z.array(z.string()).optional(),
+    contributingFactors: z.array(z.string()).nullable(),
   }),
   recommendedAction: z
     .object({
       toolName: z.string(),
       targetContainer: z.string(),
-      params: z.record(z.string(), z.unknown()),
       rationale: z.string(),
       risk: z.enum(["low", "medium", "high"]),
       estimatedDowntimeSeconds: z.number(),
-      followUp: z.string().optional(),
+      followUp: z.string().nullable(),
     })
     .nullable(),
   escalateIfRejected: z.boolean(),
   investigationSteps: z.array(z.string()),
 });
 
+// The model delivers this as a validated `conclude` tool call, so `data` is
+// already schema-checked by the loop - no text scraping, no JSON.parse here.
 export async function conclude(
   alert: NormalizedAlert,
   incidentId: string,
-  rawText: string,
+  data: InvestigationResult,
 ): Promise<void> {
-  let parsed: unknown;
-  try {
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    parsed = JSON.parse(jsonMatch?.[0] ?? rawText);
-  } catch {
-    await escalate(
-      alert,
-      incidentId,
-      `Could not parse result JSON: ${rawText.slice(0, 200)}`,
-    );
-    return;
-  }
-
-  const result = InvestigationResultSchema.safeParse(parsed);
-  if (!result.success) {
-    await escalate(
-      alert,
-      incidentId,
-      `Result failed schema validation: ${result.error.message}`,
-    );
-    return;
-  }
-
-  const data = result.data;
   const record: IncidentRecord = {
     incidentId,
     timestamp: alert.firedAt,
@@ -82,8 +64,8 @@ export async function conclude(
   logger.info(
     {
       incidentId,
-      confidence: data.rootCause.confidence,
       action: data.recommendedAction?.toolName ?? "none",
+      escalateIfRejected: data.escalateIfRejected,
     },
     "investigation concluded",
   );

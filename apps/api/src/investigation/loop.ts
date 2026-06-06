@@ -5,11 +5,12 @@ import {
   PLATFORM_TOOLS,
   RUNNER_TOOLS,
   REQUIRES_APPROVAL,
+  CONCLUDE_TOOL_NAME,
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
-import { conclude, escalate } from "./result.js";
+import { conclude, escalate, InvestigationResultSchema } from "./result.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 import type { ToolResult } from "../llm/types.js";
@@ -33,7 +34,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   let toolCallCount = 0;
   let clarificationsUsed = 0;
   let turn = 0;
-  const deadline = Date.now() + HARD_TIMEOUT_MS;
+  let deadline = Date.now() + HARD_TIMEOUT_MS;
 
   while (toolCallCount < MAX_TOOL_CALLS && Date.now() < deadline) {
     turn++;
@@ -49,14 +50,39 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       "LLM responded",
     );
 
-    if (response.stopReason === "end_turn" || response.toolUses.length === 0) {
-      await conclude(alert, incidentId, response.text);
+    if (response.stopReason === "refusal") {
+      await escalate(alert, incidentId, "Model refused to continue");
+      return;
+    }
+
+    // The model ends the investigation by calling `conclude`. Stopping with no
+    // tool call means it failed to do so - escalate rather than silently drop.
+    if (response.toolUses.length === 0) {
+      await escalate(
+        alert,
+        incidentId,
+        `Model stopped without calling ${CONCLUDE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
+      );
       return;
     }
 
     const toolResults: ToolResult[] = [];
 
     for (const tool of response.toolUses) {
+      if (tool.name === CONCLUDE_TOOL_NAME) {
+        const parsed = InvestigationResultSchema.safeParse(tool.input);
+        if (parsed.success) {
+          await conclude(alert, incidentId, parsed.data);
+        } else {
+          await escalate(
+            alert,
+            incidentId,
+            `${CONCLUDE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
+          );
+        }
+        return;
+      }
+
       toolCallCount++;
 
       if (PLATFORM_TOOLS.has(tool.name)) {
@@ -74,7 +100,10 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       if (RUNNER_TOOLS.has(tool.name)) {
         if (REQUIRES_APPROVAL.has(tool.name)) {
           log.info({ tool: tool.name }, "awaiting human approval");
+          // Human think-time must not be charged against the hard deadline.
+          const waitedFrom = Date.now();
           const decision = await requestApproval(alert, incidentId, tool);
+          deadline += Date.now() - waitedFrom;
           log.info(
             { tool: tool.name, decision: decision.action },
             "approval resolved",

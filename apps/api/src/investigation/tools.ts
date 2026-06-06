@@ -1,5 +1,10 @@
 import type { ToolSchema } from "../llm/types.js";
 
+// The terminal tool. Calling it ends the investigation with a schema-validated
+// result instead of free-text JSON. It is platform-side and never routed to the
+// runner, so it appears in no routing set below.
+export const CONCLUDE_TOOL_NAME = "conclude";
+
 // Runner tools that require human approval before execution.
 // This is a property of certain runner tools, not a separate routing destination.
 export const REQUIRES_APPROVAL = new Set([
@@ -328,6 +333,92 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
         risk: { type: "string", enum: ["low", "medium", "high"] },
       },
       required: ["containerName", "command", "reason", "risk"],
+    },
+  },
+  {
+    name: CONCLUDE_TOOL_NAME,
+    description:
+      "Finish the investigation. Call this exactly once, as the final step, with the root cause and (if any) the remediation you took or recommend. Do not describe your conclusion in prose - call this tool.",
+    // Strict so the model's input is schema-constrained, not free text.
+    // Strict mode requires every field listed in `required` and every object
+    // sealed with additionalProperties:false; optional fields are expressed as
+    // nullable (`type: [..., "null"]`) rather than omitted.
+    strict: true,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        rootCause: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            summary: {
+              type: "string",
+              description: "One or two sentences: what actually went wrong.",
+            },
+            evidence: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Concrete observations from tools that support the root cause.",
+            },
+            contributingFactors: {
+              type: ["array", "null"],
+              items: { type: "string" },
+              description: "Secondary factors, or null if none.",
+            },
+          },
+          required: ["summary", "evidence", "contributingFactors"],
+        },
+        recommendedAction: {
+          type: ["object", "null"],
+          additionalProperties: false,
+          description:
+            "The remediation taken or recommended, or null if none is warranted.",
+          properties: {
+            toolName: {
+              type: "string",
+              description:
+                "The write tool that remediates this (e.g. restart_container).",
+            },
+            targetContainer: { type: "string" },
+            rationale: {
+              type: "string",
+              description: "Why this action is the correct, minimal fix.",
+            },
+            risk: { type: "string", enum: ["low", "medium", "high"] },
+            estimatedDowntimeSeconds: { type: "number" },
+            followUp: {
+              type: ["string", "null"],
+              description: "Follow-up the human should do later, or null.",
+            },
+          },
+          required: [
+            "toolName",
+            "targetContainer",
+            "rationale",
+            "risk",
+            "estimatedDowntimeSeconds",
+            "followUp",
+          ],
+        },
+        escalateIfRejected: {
+          type: "boolean",
+          description:
+            "True if a human should be paged when the recommended action is rejected.",
+        },
+        investigationSteps: {
+          type: "array",
+          items: { type: "string" },
+          description: "Ordered summary of the steps you took.",
+        },
+      },
+      required: [
+        "rootCause",
+        "recommendedAction",
+        "escalateIfRejected",
+        "investigationSteps",
+      ],
     },
   },
 ];

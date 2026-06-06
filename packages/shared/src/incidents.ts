@@ -15,21 +15,21 @@ export interface NormalizedAlert {
   rawPayload: unknown;
 }
 
+// Shape of a concluded investigation. Optional fields are nullable (not
+// optional) to match the strict `conclude` tool contract the model fills in.
 export interface InvestigationResult {
   rootCause: {
     summary: string;
-    confidence: number;
     evidence: string[];
-    contributingFactors?: string[];
+    contributingFactors: string[] | null;
   };
   recommendedAction: {
     toolName: string;
     targetContainer: string;
-    params: Record<string, unknown>;
     rationale: string;
     risk: "low" | "medium" | "high";
     estimatedDowntimeSeconds: number;
-    followUp?: string;
+    followUp: string | null;
   } | null;
   escalateIfRejected: boolean;
   investigationSteps: string[];
