@@ -1,10 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
-import {
-  MAX_OUTPUT_TOKENS,
-  MAX_RETRIES,
-  REQUEST_TIMEOUT_MS,
-} from "./config.js";
+import type { AgentConfig } from "@nightwatch/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -17,16 +13,19 @@ export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly system: string;
+  private readonly config: AgentConfig;
   private messages: Anthropic.Messages.MessageParam[] = [];
 
-  constructor(system: string) {
+  constructor(system: string, config: AgentConfig) {
     this.system = system;
+    this.config = config;
+    // API key stays in env and is never part of AgentConfig.
     this.client = new Anthropic({
       apiKey: process.env["ANTHROPIC_API_KEY"],
-      timeout: REQUEST_TIMEOUT_MS,
-      maxRetries: MAX_RETRIES,
+      timeout: config.requestTimeoutMs,
+      maxRetries: config.maxRetries,
     });
-    this.model = process.env["ANTHROPIC_MODEL"] ?? "claude-sonnet-4-6";
+    this.model = config.model;
   }
 
   start(firstMessage: string): void {
@@ -43,7 +42,7 @@ export class AnthropicProvider implements LLMProvider {
       response = await this.client.messages
         .stream({
           model: this.model,
-          max_tokens: MAX_OUTPUT_TOKENS,
+          max_tokens: this.config.maxOutputTokens,
           // A single cache breakpoint on the system block caches the stable
           // system + tools prefix, which is identical on every loop turn.
           system: [
@@ -53,10 +52,12 @@ export class AnthropicProvider implements LLMProvider {
               cache_control: { type: "ephemeral" },
             },
           ],
-          // Let the model decide when and how deeply to reason. Full
-          // response.content (including thinking blocks) is preserved below for
-          // multi-turn continuity.
-          thinking: { type: "adaptive" },
+          // Adaptive thinking lets the model decide when and how deeply to
+          // reason; full response.content (incl. thinking blocks) is preserved
+          // below for multi-turn continuity. Omitted entirely when disabled.
+          ...(this.config.thinking === "adaptive" && {
+            thinking: { type: "adaptive" as const },
+          }),
           // ToolSchema is structurally compatible with Anthropic.Tool.
           tools: tools as Anthropic.Tool[],
           messages: this.messagesWithCacheBreakpoint(),

@@ -1,10 +1,6 @@
 import OpenAI from "openai";
 import { logger } from "../logger.js";
-import {
-  MAX_OUTPUT_TOKENS,
-  MAX_RETRIES,
-  REQUEST_TIMEOUT_MS,
-} from "./config.js";
+import type { AgentConfig } from "@nightwatch/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -14,22 +10,25 @@ import type {
 } from "./types.js";
 
 // Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
-// OPENAI_BASE_URL selects the host; OPENAI_MODEL selects the model.
+// OPENAI_BASE_URL selects the host; the model comes from the global config.
 export class OpenAIProvider implements LLMProvider {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly system: string;
+  private readonly config: AgentConfig;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
-  constructor(system: string) {
+  constructor(system: string, config: AgentConfig) {
     this.system = system;
+    this.config = config;
+    // API key stays in env and is never part of AgentConfig.
     this.client = new OpenAI({
       apiKey: process.env["OPENAI_API_KEY"],
       baseURL: process.env["OPENAI_BASE_URL"],
-      timeout: REQUEST_TIMEOUT_MS,
-      maxRetries: MAX_RETRIES,
+      timeout: config.requestTimeoutMs,
+      maxRetries: config.maxRetries,
     });
-    this.model = process.env["OPENAI_MODEL"] ?? "openai/gpt-oss-120b:free";
+    this.model = config.model;
   }
 
   start(firstMessage: string): void {
@@ -50,7 +49,7 @@ export class OpenAIProvider implements LLMProvider {
       response = await this.client.chat.completions
         .stream({
           model: this.model,
-          max_tokens: MAX_OUTPUT_TOKENS,
+          max_tokens: this.config.maxOutputTokens,
           messages: this.messages,
           tools: tools.map((t) => ({
             type: "function" as const,

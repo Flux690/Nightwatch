@@ -23,3 +23,20 @@ model Installation {
   hostname  String?
   createdAt DateTime @default(now())
 }
+
+// Global agent config: one row (id "global"). Seeded from env on first write;
+// the API stores user edits here. Secrets (API keys) are never stored - they
+// stay in env - so every column is safe to return to the console.
+model Config {
+  id               String   @id @default("global")
+  provider         String   @default("anthropic")
+  model            String   @default("claude-sonnet-4-6")
+  thinking         String   @default("adaptive")
+  maxOutputTokens  Int      @default(32000)
+  maxRetries       Int      @default(2)
+  requestTimeoutMs Int      @default(120000)
+  maxToolCalls     Int      @default(24)
+  hardTimeoutMs    Int      @default(300000)
+  toolTimeoutMs    Int      @default(15000)
+  updatedAt        DateTime @updatedAt
+}

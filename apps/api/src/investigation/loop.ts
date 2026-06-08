@@ -8,16 +8,13 @@ import {
   CONCLUDE_TOOL_NAME,
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
+import { loadConfig } from "../config/store.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate, InvestigationResultSchema } from "./result.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 import type { ToolResult } from "../llm/types.js";
-
-const MAX_TOOL_CALLS = 24;
-const HARD_TIMEOUT_MS = 5 * 60_000;
-const TOOL_TIMEOUT_MS = 15_000;
 
 export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   const incidentId = `${alert.token}-${alert.sourceAlertId}-${Date.now()}`;
@@ -27,16 +24,17 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
     "investigation started",
   );
 
+  const config = await loadConfig();
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
-  const provider = createProvider(systemPrompt);
+  const provider = createProvider(systemPrompt, config);
   provider.start(firstUserMessage);
 
   let toolCallCount = 0;
   let clarificationsUsed = 0;
   let turn = 0;
-  let deadline = Date.now() + HARD_TIMEOUT_MS;
+  let deadline = Date.now() + config.hardTimeoutMs;
 
-  while (toolCallCount < MAX_TOOL_CALLS && Date.now() < deadline) {
+  while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
     turn++;
     const startedAt = Date.now();
     const response = await provider.chat(TOOL_SCHEMAS);
@@ -146,7 +144,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
             alert.token,
             tool.name,
             tool.input,
-            TOOL_TIMEOUT_MS,
+            config.toolTimeoutMs,
           );
           toolResults.push({
             tool_use_id: tool.id,
@@ -178,6 +176,6 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   await escalate(
     alert,
     incidentId,
-    `Exceeded ${MAX_TOOL_CALLS} tool calls or ${HARD_TIMEOUT_MS / 60_000}m timeout`,
+    `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
   );
 }
