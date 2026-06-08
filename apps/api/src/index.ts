@@ -4,6 +4,7 @@ import FastifyWebSocket from "@fastify/websocket";
 import { db } from "./db/client.js";
 import { redis } from "./redis/client.js";
 import { registerWsRoutes } from "./ws/server.js";
+import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { registerIncidentRoutes } from "./incidents/routes.js";
 import { registerConfigRoutes } from "./config/routes.js";
@@ -18,6 +19,7 @@ const fastify = Fastify({ logger: true });
 await fastify.register(FastifyWebSocket);
 
 await registerWsRoutes(fastify);
+await registerConsoleWsRoutes(fastify);
 await registerAlertRoutes(fastify);
 await registerIncidentRoutes(fastify);
 await registerConfigRoutes(fastify);

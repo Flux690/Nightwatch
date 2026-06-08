@@ -4,6 +4,7 @@ import {
   getPendingApproval,
   resolveApproval,
 } from "../investigation/approvals.js";
+import { publishApprovalUpdate } from "../session/stream.js";
 import { logger } from "../logger.js";
 import type { ApprovalResponse } from "@nightwatch/shared";
 
@@ -25,11 +26,9 @@ export async function registerIncidentRoutes(
     async (request, reply) => {
       const pending = getPendingApproval(request.params.id);
       if (!pending) {
-        return reply
-          .code(404)
-          .send({
-            error: `No pending approval for incident ${request.params.id}`,
-          });
+        return reply.code(404).send({
+          error: `No pending approval for incident ${request.params.id}`,
+        });
       }
 
       const resolvedBy = request.body?.resolvedBy ?? "console";
@@ -50,6 +49,13 @@ export async function registerIncidentRoutes(
         resolvedBy,
         resolvedAt: new Date().toISOString(),
       };
+      publishApprovalUpdate({
+        incidentId: response.incidentId,
+        toolUseId: response.toolUseId,
+        status: "approved",
+        resolvedBy: response.resolvedBy,
+        resolvedAt: response.resolvedAt,
+      });
       return reply.code(200).send(response);
     },
   );
@@ -59,11 +65,9 @@ export async function registerIncidentRoutes(
     async (request, reply) => {
       const pending = getPendingApproval(request.params.id);
       if (!pending) {
-        return reply
-          .code(404)
-          .send({
-            error: `No pending approval for incident ${request.params.id}`,
-          });
+        return reply.code(404).send({
+          error: `No pending approval for incident ${request.params.id}`,
+        });
       }
 
       const resolvedBy = request.body?.resolvedBy ?? "console";
@@ -84,6 +88,13 @@ export async function registerIncidentRoutes(
         resolvedBy,
         resolvedAt: new Date().toISOString(),
       };
+      publishApprovalUpdate({
+        incidentId: response.incidentId,
+        toolUseId: response.toolUseId,
+        status: "rejected",
+        resolvedBy: response.resolvedBy,
+        resolvedAt: response.resolvedAt,
+      });
       return reply.code(200).send(response);
     },
   );
