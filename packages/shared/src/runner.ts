@@ -39,7 +39,9 @@ export interface DashboardQuery {
     | "get_incident_detail"
     | "get_current_infrastructure_state"
     | "get_metric_snapshot"
-    | "get_active_incidents";
+    | "get_active_incidents"
+    | "get_sessions"
+    | "get_session_messages";
   params?: Record<string, unknown>;
 }
 

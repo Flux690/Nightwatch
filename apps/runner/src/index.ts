@@ -1,9 +1,17 @@
 import "dotenv/config";
-import type { IncidentRecord } from "@nightwatch/shared";
+import type {
+  IncidentRecord,
+  SessionMessage,
+  SessionMeta,
+} from "@nightwatch/shared";
 import {
   initDb,
   getRecentIncidents,
   insertIncident,
+  upsertSession,
+  appendSessionMessage,
+  getSessions,
+  getSessionMessages,
 } from "./sqlite/history.js";
 import { startWebSocketClient } from "./websocket/client.js";
 import {
@@ -30,6 +38,7 @@ import {
   restartContainer,
   rollbackDeploy,
   execCommand,
+  updateAlertRules,
 } from "./commands/remediation.js";
 import { logger } from "./logger.js";
 
@@ -116,6 +125,27 @@ const dispatch = new Map<string, Handler>([
       insertIncident(i as IncidentRecord);
       return Promise.resolve({ written: true });
     },
+  ],
+  [
+    "append_session_message",
+    (i) => {
+      const inp = i as { session: SessionMeta; message: SessionMessage };
+      upsertSession(inp.session);
+      appendSessionMessage(inp.message);
+      return Promise.resolve({ appended: true });
+    },
+  ],
+  ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
+  [
+    "get_sessions",
+    (i) => Promise.resolve(getSessions((i as { token: string }).token)),
+  ],
+  [
+    "get_session_messages",
+    (i) =>
+      Promise.resolve(
+        getSessionMessages((i as { sessionId: string }).sessionId),
+      ),
   ],
 ]);
 

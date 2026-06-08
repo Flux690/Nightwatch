@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 import type {
   ExecCommandInput,
@@ -10,6 +12,39 @@ import type {
 } from "@nightwatch/shared";
 
 const exec = promisify(execFile);
+
+// Live file Prometheus reads; the persisted copy on the mounted volume survives
+// container restarts (configure.sh prefers it on boot).
+const RULES_PATH =
+  process.env["NIGHTWATCH_RULES_PATH"] ?? "/etc/nightwatch/rules.yml";
+const RULES_OVERRIDE_PATH =
+  process.env["NIGHTWATCH_RULES_OVERRIDE_PATH"] ?? "/var/nightwatch/rules.yml";
+const PROMETHEUS_URL = process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
+
+export interface UpdateAlertRulesResult {
+  reloaded: boolean;
+  rulesPath: string;
+}
+
+export async function updateAlertRules(input: {
+  rulesYaml: string;
+}): Promise<UpdateAlertRulesResult> {
+  await mkdir(dirname(RULES_OVERRIDE_PATH), { recursive: true });
+  await writeFile(RULES_OVERRIDE_PATH, input.rulesYaml, "utf8");
+  await writeFile(RULES_PATH, input.rulesYaml, "utf8");
+
+  // /-/reload exists only with --web.enable-lifecycle; a failed reload is
+  // non-fatal since the file is written and loads on the next restart.
+  let reloaded = false;
+  try {
+    const res = await fetch(`${PROMETHEUS_URL}/-/reload`, { method: "POST" });
+    reloaded = res.ok;
+  } catch {
+    reloaded = false;
+  }
+
+  return { reloaded, rulesPath: RULES_PATH };
+}
 
 export async function restartContainer(
   input: RestartContainerInput,

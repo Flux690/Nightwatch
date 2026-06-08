@@ -22,7 +22,13 @@ if [ -z "$ALERTMANAGER_URL" ]; then
   envsubst < /etc/nightwatch/templates/alertmanager.yml > /etc/nightwatch/alertmanager.yml
 fi
 
-cp /etc/nightwatch/templates/rules.yml /etc/nightwatch/rules.yml
+# Prefer a persisted rules override (written by update_alert_rules and kept on
+# the mounted volume) so user threshold changes survive restarts; else defaults.
+if [ -f /var/nightwatch/rules.yml ]; then
+  cp /var/nightwatch/rules.yml /etc/nightwatch/rules.yml
+else
+  cp /etc/nightwatch/templates/rules.yml /etc/nightwatch/rules.yml
+fi
 
 echo "nightwatch configured:"
 echo "  prometheus: ${PROMETHEUS_URL:-http://localhost:9090 (bundled)}"
