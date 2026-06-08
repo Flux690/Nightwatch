@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
 import { redis, bullmqConnection } from "../redis/client.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
+import type { RunInvestigationInput } from "../investigation/loop.js";
 
 export const investigationQueue = new Queue("investigations", {
   connection: bullmqConnection,
@@ -32,7 +34,14 @@ export async function tryDebounce(token: string): Promise<boolean> {
 export async function enqueueInvestigation(
   alert: NormalizedAlert,
 ): Promise<void> {
-  await investigationQueue.add("investigate", alert, {
+  // The session id is minted here so the whole investigation - persistence and
+  // the live pub/sub channel - is keyed by it from the first turn.
+  const job: RunInvestigationInput = {
+    alert,
+    sessionId: randomUUID(),
+    trigger: "alert",
+  };
+  await investigationQueue.add("investigate", job, {
     attempts: 1,
     removeOnComplete: 100,
     removeOnFail: 100,

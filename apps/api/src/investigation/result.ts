@@ -37,10 +37,12 @@ export const InvestigationResultSchema = z.object({
 export async function conclude(
   alert: NormalizedAlert,
   incidentId: string,
+  sessionId: string,
   data: InvestigationResult,
 ): Promise<void> {
   const record: IncidentRecord = {
     incidentId,
+    sessionId,
     timestamp: alert.firedAt,
     containerName: alert.targetIdentifier,
     alertType: alert.alertType,

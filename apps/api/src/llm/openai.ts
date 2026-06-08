@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderMessage,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -114,6 +115,34 @@ export class OpenAIProvider implements LLMProvider {
         content: r.is_error ? `ERROR: ${r.content}` : r.content,
       });
     }
+  }
+
+  appendUserMessage(message: string): void {
+    this.messages.push({ role: "user", content: message });
+  }
+
+  seed(history: ProviderMessage[]): void {
+    // The system prompt lives in the message array for OpenAI, so it is
+    // re-prepended here rather than restored from the transcript.
+    this.messages = [
+      { role: "system", content: this.system },
+      ...history.map(
+        (m) =>
+          m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+      ),
+    ];
+  }
+
+  snapshot(): ProviderMessage[] {
+    // The system message is not part of the transcript; skip it. Tool-role
+    // messages are persisted on the user side for display, native role kept.
+    return this.messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: typeof m.content === "string" ? m.content : "",
+        providerContent: m,
+      }));
   }
 }
 

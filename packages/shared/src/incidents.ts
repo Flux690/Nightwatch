@@ -37,6 +37,9 @@ export interface InvestigationResult {
 
 export interface IncidentRecord {
   incidentId: string;
+  // The session this incident concluded from. Optional for records written
+  // before sessions existed; populated by conclude() going forward.
+  sessionId?: string;
   timestamp: string;
   containerName: string;
   alertType: string;

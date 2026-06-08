@@ -1,15 +1,15 @@
 import { Worker } from "bullmq";
 import { bullmqConnection } from "../redis/client.js";
 import { runInvestigation } from "../investigation/loop.js";
+import type { RunInvestigationInput } from "../investigation/loop.js";
 import { logger } from "../logger.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
 
 export function startWorker(): Worker {
   const worker = new Worker(
     "investigations",
     async (job) => {
-      const alert = job.data as NormalizedAlert;
-      await runInvestigation(alert);
+      const input = job.data as RunInvestigationInput;
+      await runInvestigation(input);
     },
     {
       connection: bullmqConnection,

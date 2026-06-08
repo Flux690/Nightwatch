@@ -16,6 +16,7 @@ function db(): Database.Database {
     _db.exec(`
       CREATE TABLE IF NOT EXISTS incidents (
         incidentId          TEXT PRIMARY KEY,
+        sessionId           TEXT,
         timestamp           TEXT NOT NULL,
         containerName       TEXT NOT NULL,
         alertType           TEXT NOT NULL,
@@ -47,6 +48,15 @@ function db(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_session_messages_session
         ON session_messages(session_id, seq);
     `);
+
+    // Databases created before sessions existed won't get sessionId from the
+    // CREATE above; add it idempotently.
+    const cols = _db.prepare(`PRAGMA table_info(incidents)`).all() as Array<{
+      name: string;
+    }>;
+    if (!cols.some((c) => c.name === "sessionId")) {
+      _db.exec(`ALTER TABLE incidents ADD COLUMN sessionId TEXT`);
+    }
   }
   return _db;
 }
@@ -59,13 +69,14 @@ export function insertIncident(record: IncidentRecord): void {
   db()
     .prepare(
       `INSERT OR REPLACE INTO incidents
-       (incidentId, timestamp, containerName, alertType, rootCause,
+       (incidentId, sessionId, timestamp, containerName, alertType, rootCause,
         resolutionAction, resolvedAt, humanResolutionNote, recurrenceCount)
-       VALUES (@incidentId, @timestamp, @containerName, @alertType, @rootCause,
+       VALUES (@incidentId, @sessionId, @timestamp, @containerName, @alertType, @rootCause,
                @resolutionAction, @resolvedAt, @humanResolutionNote, @recurrenceCount)`,
     )
     .run({
       incidentId: record.incidentId,
+      sessionId: record.sessionId ?? null,
       timestamp: record.timestamp,
       containerName: record.containerName,
       alertType: record.alertType,

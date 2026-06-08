@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderMessage,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -153,6 +154,42 @@ export class AnthropicProvider implements LLMProvider {
       })),
     });
   }
+
+  appendUserMessage(message: string): void {
+    this.messages.push({ role: "user", content: message });
+  }
+
+  seed(history: ProviderMessage[]): void {
+    // providerContent is the MessageParam stored verbatim on persist; the
+    // role/content fallback only applies to messages that predate it.
+    this.messages = history.map((m) =>
+      m.providerContent != null
+        ? (m.providerContent as Anthropic.Messages.MessageParam)
+        : { role: m.role, content: m.content },
+    );
+  }
+
+  snapshot(): ProviderMessage[] {
+    return this.messages.map((m) => ({
+      // Anthropic messages are only user/assistant; coerce for the neutral type.
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: messageText(m),
+      providerContent: m,
+    }));
+  }
+}
+
+function messageText(m: Anthropic.Messages.MessageParam): string {
+  if (typeof m.content === "string") return m.content;
+  const parts: string[] = [];
+  for (const b of m.content) {
+    if (b.type === "text") parts.push(b.text);
+    else if (b.type === "thinking") parts.push(b.thinking);
+    else if (b.type === "tool_use") parts.push(`[tool_use: ${b.name}]`);
+    else if (b.type === "tool_result")
+      parts.push(typeof b.content === "string" ? b.content : "[tool_result]");
+  }
+  return parts.join("\n");
 }
 
 function mapStopReason(

@@ -12,13 +12,38 @@ import { loadConfig } from "../config/store.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate, InvestigationResultSchema } from "./result.js";
+import {
+  publishSessionDelta,
+  publishSessionMessage,
+  publishToolCall,
+} from "../session/stream.js";
 import { logger } from "../logger.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type {
+  NormalizedAlert,
+  SessionMessage,
+  SessionMeta,
+  SessionTrigger,
+} from "@nightwatch/shared";
 import type { ToolResult } from "../llm/types.js";
 
-export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
+const APPEND_TIMEOUT_MS = 10_000;
+
+export interface RunInvestigationInput {
+  alert: NormalizedAlert;
+  sessionId: string;
+  trigger: SessionTrigger;
+}
+
+export async function runInvestigation(
+  input: RunInvestigationInput,
+): Promise<void> {
+  const { alert, sessionId, trigger } = input;
   const incidentId = `${alert.token}-${alert.sourceAlertId}-${Date.now()}`;
-  const log = logger.child({ incidentId, alertType: alert.alertType });
+  const log = logger.child({
+    incidentId,
+    sessionId,
+    alertType: alert.alertType,
+  });
   log.info(
     { target: alert.targetIdentifier, severity: alert.severity },
     "investigation started",
@@ -29,6 +54,46 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   const provider = createProvider(systemPrompt, config);
   provider.start(firstUserMessage);
 
+  const sessionMeta: SessionMeta = {
+    sessionId,
+    token: alert.token,
+    trigger,
+    title: `${alert.alertType} - ${alert.targetIdentifier}`,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Persist (durable, on the runner) and broadcast (live, to the console) every
+  // new provider message exactly once, in order. The first append upserts the
+  // session row; later appends only add messages.
+  let persistedCount = 0;
+  const persist = async (): Promise<void> => {
+    const snap = provider.snapshot();
+    for (let seq = persistedCount; seq < snap.length; seq++) {
+      const m = snap[seq];
+      if (!m) continue;
+      const message: SessionMessage = {
+        sessionId,
+        seq,
+        role: m.role,
+        content: m.content,
+        providerContent: m.providerContent,
+        createdAt: new Date().toISOString(),
+      };
+      try {
+        await sendCommand(
+          alert.token,
+          "append_session_message",
+          { session: sessionMeta, message },
+          APPEND_TIMEOUT_MS,
+        );
+      } catch (err) {
+        log.warn({ err, seq }, "failed to persist session message");
+      }
+      publishSessionMessage(sessionId, message);
+    }
+    persistedCount = snap.length;
+  };
+
   let toolCallCount = 0;
   let clarificationsUsed = 0;
   let turn = 0;
@@ -37,7 +102,9 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
   while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
     turn++;
     const startedAt = Date.now();
-    const response = await provider.chat(TOOL_SCHEMAS);
+    const response = await provider.chat(TOOL_SCHEMAS, (d) =>
+      publishSessionDelta(sessionId, d),
+    );
     log.info(
       {
         turn,
@@ -47,6 +114,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       },
       "LLM responded",
     );
+    await persist();
 
     if (response.stopReason === "refusal") {
       await escalate(alert, incidentId, "Model refused to continue");
@@ -70,7 +138,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       if (tool.name === CONCLUDE_TOOL_NAME) {
         const parsed = InvestigationResultSchema.safeParse(tool.input);
         if (parsed.success) {
-          await conclude(alert, incidentId, parsed.data);
+          await conclude(alert, incidentId, sessionId, parsed.data);
         } else {
           await escalate(
             alert,
@@ -82,6 +150,16 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
       }
 
       toolCallCount++;
+      const gated =
+        RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name);
+      publishToolCall({
+        sessionId,
+        toolUseId: tool.id,
+        toolName: tool.name,
+        phase: "start",
+        input: tool.input,
+        awaitingApproval: gated,
+      });
 
       if (PLATFORM_TOOLS.has(tool.name)) {
         log.debug({ tool: tool.name, kind: "platform" }, "dispatching tool");
@@ -92,6 +170,14 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
         );
         if (tool.name === "request_clarification") clarificationsUsed++;
         toolResults.push(result);
+        publishToolCall({
+          sessionId,
+          toolUseId: tool.id,
+          toolName: tool.name,
+          phase: "result",
+          result: result.content,
+          isError: result.is_error,
+        });
         continue;
       }
 
@@ -108,10 +194,19 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
           );
 
           if (decision.action === "reject") {
-            toolResults.push({
+            const rejected: ToolResult = {
               tool_use_id: tool.id,
               content: "Rejected by human reviewer. Do not retry this action.",
               is_error: true,
+            };
+            toolResults.push(rejected);
+            publishToolCall({
+              sessionId,
+              toolUseId: tool.id,
+              toolName: tool.name,
+              phase: "result",
+              result: rejected.content,
+              isError: true,
             });
             if (alert.severity === "critical") {
               log.warn(
@@ -129,6 +224,8 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
           }
 
           if (decision.action === "add_context") {
+            // Stays a tool_result (not a user message): the provider contract
+            // requires every tool_use to be answered with a tool_result (D10).
             toolResults.push({
               tool_use_id: tool.id,
               content: `Human added context: ${decision.contextMessage ?? "(no message)"}`,
@@ -150,6 +247,13 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
             tool_use_id: tool.id,
             content: JSON.stringify(result),
           });
+          publishToolCall({
+            sessionId,
+            toolUseId: tool.id,
+            toolName: tool.name,
+            phase: "result",
+            result,
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           log.warn({ tool: tool.name, err }, "runner tool failed");
@@ -157,6 +261,14 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
             tool_use_id: tool.id,
             content: `Error executing ${tool.name}: ${msg}`,
             is_error: true,
+          });
+          publishToolCall({
+            sessionId,
+            toolUseId: tool.id,
+            toolName: tool.name,
+            phase: "result",
+            result: msg,
+            isError: true,
           });
         }
         continue;
@@ -171,6 +283,7 @@ export async function runInvestigation(alert: NormalizedAlert): Promise<void> {
     }
 
     provider.appendToolResults(toolResults);
+    await persist();
   }
 
   await escalate(

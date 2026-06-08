@@ -43,11 +43,29 @@ export interface StreamDelta {
 
 export type OnDelta = (delta: StreamDelta) => void;
 
+// A single conversation turn in provider-neutral form. `content` is the human-
+// readable text for the transcript; `providerContent` is the native message
+// kept verbatim so a resumed run rebuilds a valid turn (the provider contract
+// requires thinking/tool_use/tool_result pairing that text alone can't restore).
+export interface ProviderMessage {
+  role: "user" | "assistant";
+  content: string;
+  providerContent: unknown;
+}
+
 // Implement this interface to add a new provider, then wire it into createProvider.
 export interface LLMProvider {
   start(firstMessage: string): void;
+  // Restore a prior transcript so the loop can continue a session. start() is
+  // the empty-history special case; seed() is the general entry (D10).
+  seed(history: ProviderMessage[]): void;
+  // Current conversation in neutral form, for incremental persistence.
+  snapshot(): ProviderMessage[];
   // onDelta, when provided, receives live fragments as the turn streams; the
   // returned ChatResponse is unchanged whether or not it is passed.
   chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse>;
   appendToolResults(results: ToolResult[]): void;
+  // Inject a human-authored user turn (chat / resume). Distinct from a
+  // tool_result: add_context mid-approval must stay a tool_result (D10).
+  appendUserMessage(message: string): void;
 }
