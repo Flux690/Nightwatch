@@ -4,6 +4,7 @@ import type { AgentConfig } from "@nightwatch/shared";
 import type {
   ChatResponse,
   LLMProvider,
+  OnDelta,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -32,37 +33,42 @@ export class AnthropicProvider implements LLMProvider {
     this.messages = [{ role: "user", content: firstMessage }];
   }
 
-  async chat(tools: ToolSchema[]): Promise<ChatResponse> {
+  async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
     let response: Anthropic.Messages.Message;
     try {
       // Stream and accumulate via finalMessage(): a large response (up to
-      // MAX_OUTPUT_TOKENS) can no longer trip the single-read request timeout.
+      // maxOutputTokens) can no longer trip the single-read request timeout.
       // The returned Message is identical to a non-streamed one, so everything
       // downstream (content blocks, usage, stop_reason) is unchanged.
-      response = await this.client.messages
-        .stream({
-          model: this.model,
-          max_tokens: this.config.maxOutputTokens,
-          // A single cache breakpoint on the system block caches the stable
-          // system + tools prefix, which is identical on every loop turn.
-          system: [
-            {
-              type: "text",
-              text: this.system,
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-          // Adaptive thinking lets the model decide when and how deeply to
-          // reason; full response.content (incl. thinking blocks) is preserved
-          // below for multi-turn continuity. Omitted entirely when disabled.
-          ...(this.config.thinking === "adaptive" && {
-            thinking: { type: "adaptive" as const },
-          }),
-          // ToolSchema is structurally compatible with Anthropic.Tool.
-          tools: tools as Anthropic.Tool[],
-          messages: this.messagesWithCacheBreakpoint(),
-        })
-        .finalMessage();
+      const stream = this.client.messages.stream({
+        model: this.model,
+        max_tokens: this.config.maxOutputTokens,
+        // A single cache breakpoint on the system block caches the stable
+        // system + tools prefix, which is identical on every loop turn.
+        system: [
+          {
+            type: "text",
+            text: this.system,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        // Adaptive thinking lets the model decide when and how deeply to
+        // reason; full response.content (incl. thinking blocks) is preserved
+        // below for multi-turn continuity. Omitted entirely when disabled.
+        ...(this.config.thinking === "adaptive" && {
+          thinking: { type: "adaptive" as const },
+        }),
+        // ToolSchema is structurally compatible with Anthropic.Tool.
+        tools: tools as Anthropic.Tool[],
+        messages: this.messagesWithCacheBreakpoint(),
+      });
+      if (onDelta) {
+        stream.on("text", (delta) => onDelta({ kind: "text", text: delta }));
+        stream.on("thinking", (delta) =>
+          onDelta({ kind: "thinking", text: delta }),
+        );
+      }
+      response = await stream.finalMessage();
     } catch (err) {
       if (err instanceof Anthropic.APIError) {
         logger.error(

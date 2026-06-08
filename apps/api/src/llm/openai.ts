@@ -4,6 +4,7 @@ import type { AgentConfig } from "@nightwatch/shared";
 import type {
   ChatResponse,
   LLMProvider,
+  OnDelta,
   ToolResult,
   ToolSchema,
   ToolUse,
@@ -39,32 +40,34 @@ export class OpenAIProvider implements LLMProvider {
     ];
   }
 
-  async chat(tools: ToolSchema[]): Promise<ChatResponse> {
+  async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
       // Stream and accumulate via finalChatCompletion(): a large response (up
-      // to MAX_OUTPUT_TOKENS) can't trip the single-read request timeout. The
+      // to maxOutputTokens) can't trip the single-read request timeout. The
       // accumulated completion has the same shape as a non-streamed one, so
       // everything downstream is unchanged.
-      response = await this.client.chat.completions
-        .stream({
-          model: this.model,
-          max_tokens: this.config.maxOutputTokens,
-          messages: this.messages,
-          tools: tools.map((t) => ({
-            type: "function" as const,
-            function: {
-              name: t.name,
-              description: t.description,
-              parameters: t.input_schema,
-              // Strict function calling constrains the model's arguments to the
-              // schema - the terminal `conclude` tool relies on this so its
-              // output is validated, not free text.
-              ...(t.strict && { strict: true }),
-            },
-          })),
-        })
-        .finalChatCompletion();
+      const stream = this.client.chat.completions.stream({
+        model: this.model,
+        max_tokens: this.config.maxOutputTokens,
+        messages: this.messages,
+        tools: tools.map((t) => ({
+          type: "function" as const,
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema,
+            // Strict function calling constrains the model's arguments to the
+            // schema - the terminal `conclude` tool relies on this so its
+            // output is validated, not free text.
+            ...(t.strict && { strict: true }),
+          },
+        })),
+      });
+      if (onDelta) {
+        stream.on("content", (delta) => onDelta({ kind: "text", text: delta }));
+      }
+      response = await stream.finalChatCompletion();
     } catch (err) {
       // Surface OpenRouter/OpenAI status (429 rate limit, 503 provider down,
       // timeout) instead of a bare stack, then rethrow to fail the job.

@@ -34,9 +34,20 @@ export interface ChatResponse {
   text: string;
 }
 
+// A live token fragment emitted while a turn streams. `thinking` is the model's
+// reasoning (Anthropic adaptive thinking); `text` is the visible answer.
+export interface StreamDelta {
+  kind: "text" | "thinking";
+  text: string;
+}
+
+export type OnDelta = (delta: StreamDelta) => void;
+
 // Implement this interface to add a new provider, then wire it into createProvider.
 export interface LLMProvider {
   start(firstMessage: string): void;
-  chat(tools: ToolSchema[]): Promise<ChatResponse>;
+  // onDelta, when provided, receives live fragments as the turn streams; the
+  // returned ChatResponse is unchanged whether or not it is passed.
+  chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse>;
   appendToolResults(results: ToolResult[]): void;
 }
