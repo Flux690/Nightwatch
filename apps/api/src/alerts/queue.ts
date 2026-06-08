@@ -31,19 +31,20 @@ export async function tryDebounce(token: string): Promise<boolean> {
   return result !== null;
 }
 
-export async function enqueueInvestigation(
-  alert: NormalizedAlert,
-): Promise<void> {
-  // The session id is minted here so the whole investigation - persistence and
-  // the live pub/sub channel - is keyed by it from the first turn.
-  const job: RunInvestigationInput = {
-    alert,
-    sessionId: randomUUID(),
-    trigger: "alert",
-  };
+// Investigation always starts via the queue (architecture invariant). Alert,
+// chat, and resume triggers all funnel through here.
+export async function enqueueJob(job: RunInvestigationInput): Promise<void> {
   await investigationQueue.add("investigate", job, {
     attempts: 1,
     removeOnComplete: 100,
     removeOnFail: 100,
   });
+}
+
+export async function enqueueInvestigation(
+  alert: NormalizedAlert,
+): Promise<void> {
+  // The session id is minted here so the whole investigation - persistence and
+  // the live pub/sub channel - is keyed by it from the first turn.
+  await enqueueJob({ alert, sessionId: randomUUID(), trigger: "alert" });
 }

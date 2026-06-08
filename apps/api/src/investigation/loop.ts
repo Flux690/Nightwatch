@@ -24,7 +24,7 @@ import type {
   SessionMeta,
   SessionTrigger,
 } from "@nightwatch/shared";
-import type { ToolResult } from "../llm/types.js";
+import type { ProviderMessage, ToolResult } from "../llm/types.js";
 
 const APPEND_TIMEOUT_MS = 10_000;
 
@@ -32,6 +32,10 @@ export interface RunInvestigationInput {
   alert: NormalizedAlert;
   sessionId: string;
   trigger: SessionTrigger;
+  // Resume: a prior transcript to seed before continuing.
+  seed?: ProviderMessage[];
+  // Human-authored opening (chat) or continuation (resume) message.
+  userMessage?: string;
 }
 
 export async function runInvestigation(
@@ -45,27 +49,37 @@ export async function runInvestigation(
     alertType: alert.alertType,
   });
   log.info(
-    { target: alert.targetIdentifier, severity: alert.severity },
+    { target: alert.targetIdentifier, severity: alert.severity, trigger },
     "investigation started",
   );
 
   const config = await loadConfig();
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
   const provider = createProvider(systemPrompt, config);
-  provider.start(firstUserMessage);
-
-  const sessionMeta: SessionMeta = {
-    sessionId,
-    token: alert.token,
-    trigger,
-    title: `${alert.alertType} - ${alert.targetIdentifier}`,
-    createdAt: new Date().toISOString(),
-  };
 
   // Persist (durable, on the runner) and broadcast (live, to the console) every
   // new provider message exactly once, in order. The first append upserts the
   // session row; later appends only add messages.
   let persistedCount = 0;
+  if (input.seed && input.seed.length > 0) {
+    provider.seed(input.seed);
+    if (input.userMessage) provider.appendUserMessage(input.userMessage);
+    // Seeded turns are already on the runner; only new ones get persisted.
+    persistedCount = input.seed.length;
+  } else {
+    provider.start(input.userMessage ?? firstUserMessage);
+  }
+
+  const sessionMeta: SessionMeta = {
+    sessionId,
+    token: alert.token,
+    trigger,
+    title:
+      trigger === "chat" && input.userMessage
+        ? input.userMessage.slice(0, 80)
+        : `${alert.alertType} - ${alert.targetIdentifier}`,
+    createdAt: new Date().toISOString(),
+  };
   const persist = async (): Promise<void> => {
     const snap = provider.snapshot();
     for (let seq = persistedCount; seq < snap.length; seq++) {

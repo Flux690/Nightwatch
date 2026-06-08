@@ -7,6 +7,8 @@ import { registerWsRoutes } from "./ws/server.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { registerIncidentRoutes } from "./incidents/routes.js";
 import { registerConfigRoutes } from "./config/routes.js";
+import { registerChatRoutes } from "./chat/routes.js";
+import { registerSessionRoutes } from "./sessions/routes.js";
 import { startWorker } from "./jobs/worker.js";
 
 // Fastify keeps its own pino for HTTP logs; the investigation loop/providers
@@ -19,6 +21,8 @@ await registerWsRoutes(fastify);
 await registerAlertRoutes(fastify);
 await registerIncidentRoutes(fastify);
 await registerConfigRoutes(fastify);
+await registerChatRoutes(fastify);
+await registerSessionRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 
