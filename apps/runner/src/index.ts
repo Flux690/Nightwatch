@@ -8,6 +8,7 @@ import {
   initDb,
   getRecentIncidents,
   insertIncident,
+  updateResolutionNote,
   upsertSession,
   appendSessionMessage,
   getSessions,
@@ -136,6 +137,14 @@ const dispatch = new Map<string, Handler>([
     },
   ],
   ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
+  [
+    "resolve_incident",
+    (i) => {
+      const inp = i as { incidentId: string; note: string };
+      updateResolutionNote(inp.incidentId, inp.note);
+      return Promise.resolve({ resolved: true });
+    },
+  ],
   [
     "get_sessions",
     (i) => Promise.resolve(getSessions((i as { token: string }).token)),

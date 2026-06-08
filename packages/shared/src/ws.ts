@@ -55,6 +55,14 @@ export interface UpdateAlertRulesCommand {
   correlationId: string;
 }
 
+// API → Runner: record a human's resolution note on a concluded incident (the
+// feedback loop for an escalated incident a person resolved).
+export interface ResolveIncidentCommand {
+  commandName: "resolve_incident";
+  commandInput: { incidentId: string; note: string };
+  correlationId: string;
+}
+
 // Runner → API: capability manifest on connect
 export interface RunnerManifestMessage extends WsEnvelope {
   type: "manifest";
