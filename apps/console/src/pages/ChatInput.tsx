@@ -1,0 +1,77 @@
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Button, Textarea } from "@mantine/core";
+
+export interface ChatInputProps {
+  token: string;
+  sessionId: string | null;
+  isRunning: boolean;
+}
+
+export function ChatInput({
+  token,
+  sessionId,
+  isRunning,
+}: ChatInputProps): React.JSX.Element {
+  const [text, setText] = useState("");
+  const navigate = useNavigate();
+
+  async function handleSubmit(): Promise<void> {
+    const trimmed = text.trim();
+    if (!trimmed || isRunning) return;
+
+    if (sessionId === null) {
+      const res = await fetch(`/api/chat/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed }),
+      });
+      const data = (await res.json()) as { sessionId: string };
+      await navigate({ to: "/sessions/$id", params: { id: data.sessionId } });
+    } else {
+      await fetch(`/api/sessions/${sessionId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, message: trimmed }),
+      });
+    }
+
+    setText("");
+  }
+
+  return (
+    <div
+      style={{
+        borderTop: "1px solid var(--mantine-color-dark-4)",
+        padding: "var(--mantine-spacing-sm)",
+        display: "flex",
+        gap: "var(--mantine-spacing-xs)",
+        alignItems: "flex-end",
+      }}
+    >
+      <Textarea
+        style={{ flex: 1 }}
+        placeholder={isRunning ? "Agent is running…" : "Type a message…"}
+        value={text}
+        onChange={(e) => setText(e.currentTarget.value)}
+        disabled={isRunning}
+        autosize
+        minRows={1}
+        maxRows={6}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            void handleSubmit();
+          }
+        }}
+      />
+      <Button
+        disabled={isRunning}
+        onClick={() => void handleSubmit()}
+        size="sm"
+      >
+        Send
+      </Button>
+    </div>
+  );
+}

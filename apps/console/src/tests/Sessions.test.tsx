@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionsSidebar } from "../pages/Sessions.js";
+import { SessionsSidebar, NewSessionPage } from "../pages/Sessions.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
@@ -365,6 +365,91 @@ describe("SessionsSidebar", () => {
       await waitFor(() => {
         expect(screen.getAllByRole("listitem")).toHaveLength(2);
       });
+    });
+  });
+
+  describe("NewSessionPage", () => {
+    function setupNewSession() {
+      vi.stubGlobal("WebSocket", MockWs);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url: string) => {
+          if (url.includes("/installations")) {
+            return Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve([INSTALLATION]),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ sessionId: "created-id" }),
+          });
+        }),
+      );
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+
+      const root = createRootRoute({ component: Outlet });
+      const newRoute = createRoute({
+        getParentRoute: () => root,
+        path: "/sessions/new",
+        component: NewSessionPage,
+      });
+      const sessionIdRoute = createRoute({
+        getParentRoute: () => root,
+        path: "/sessions/$id",
+        component: () => <div>session transcript</div>,
+      });
+      const router = createRouter({
+        routeTree: root.addChildren([newRoute, sessionIdRoute]),
+        history: createMemoryHistory({ initialEntries: ["/sessions/new"] }),
+      });
+
+      render(
+        <MantineProvider
+          theme={theme}
+          cssVariablesResolver={cssVariablesResolver}
+          defaultColorScheme="dark"
+        >
+          <QueryClientProvider client={qc}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </MantineProvider>,
+      );
+
+      return { fetchMock: vi.mocked(fetch) };
+    }
+
+    it("renders an enabled composer with no transcript content", async () => {
+      setupNewSession();
+
+      const textarea = await screen.findByRole("textbox");
+      const button = screen.getByRole("button", { name: /send/i });
+
+      expect(textarea).not.toBeDisabled();
+      expect(button).not.toBeDisabled();
+      expect(screen.queryByText(/select a session/i)).not.toBeInTheDocument();
+    });
+
+    it("submits to POST /api/chat/:token and navigates to the new session", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setupNewSession();
+
+      const textarea = await screen.findByRole("textbox");
+      await user.type(textarea, "Check disk usage on prod");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/chat/tok-1",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ message: "Check disk usage on prod" }),
+        }),
+      );
+
+      await screen.findByText("session transcript");
     });
   });
 

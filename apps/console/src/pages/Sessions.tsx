@@ -8,6 +8,7 @@ import type {
   WsEnvelope,
 } from "@nightwatch/shared";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
+import { ChatInput } from "./ChatInput.js";
 
 type SessionStatus =
   | "streaming"
@@ -235,20 +236,28 @@ export function SessionsEmpty(): React.JSX.Element {
   );
 }
 
-// Placeholder — composer and chat UI covered in issue 005
 export function NewSessionPage(): React.JSX.Element {
+  const { data: installations } = useQuery<InstallationRecord[]>({
+    queryKey: ["installations"],
+    queryFn: () =>
+      fetch("/api/installations").then((r) => {
+        if (!r.ok) throw new Error(`installations ${r.status}`);
+        return r.json() as Promise<InstallationRecord[]>;
+      }),
+  });
+
+  const token = installations?.[0]?.token ?? "";
+
   return (
     <div
       style={{
         height: "100%",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
+        flexDirection: "column",
+        justifyContent: "flex-end",
       }}
     >
-      <Text c="dimmed" size="sm">
-        New session — coming soon
-      </Text>
+      <ChatInput token={token} sessionId={null} isRunning={false} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import type {
   WsEnvelope,
 } from "@nightwatch/shared";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
+import { ChatInput } from "./ChatInput.js";
 
 interface LiveTextItem {
   kind: "text";
@@ -94,6 +95,7 @@ export function SessionTranscript(): React.JSX.Element {
   const { id } = useParams({ strict: false }) as { id: string };
   const queryClient = useQueryClient();
   const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
 
   const { data: installations } = useQuery<InstallationRecord[]>({
     queryKey: ["installations"],
@@ -125,6 +127,7 @@ export function SessionTranscript(): React.JSX.Element {
           kind: string;
         };
         if (sessionId !== id) return;
+        setIsRunning(true);
         setLiveItems((prev) => {
           const last = prev[prev.length - 1];
           if (last?.kind === "text") {
@@ -141,6 +144,7 @@ export function SessionTranscript(): React.JSX.Element {
           message: SessionMessage;
         };
         if (sessionId !== id) return;
+        setIsRunning(false);
         setLiveItems([]);
         queryClient.setQueryData<SessionMessage[]>(
           ["session", id],
@@ -179,37 +183,47 @@ export function SessionTranscript(): React.JSX.Element {
   return (
     <div
       style={{
-        padding: "var(--mantine-spacing-md)",
-        overflowY: "auto",
+        display: "flex",
+        flexDirection: "column",
         height: "100%",
       }}
     >
-      {messages.map((msg) => (
-        <div
-          key={msg.seq}
-          style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-        >
-          <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-            {msg.content}
-          </Text>
-        </div>
-      ))}
+      <div
+        style={{
+          flex: 1,
+          padding: "var(--mantine-spacing-md)",
+          overflowY: "auto",
+        }}
+      >
+        {messages.map((msg) => (
+          <div
+            key={msg.seq}
+            style={{ marginBottom: "var(--mantine-spacing-sm)" }}
+          >
+            <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+              {msg.content}
+            </Text>
+          </div>
+        ))}
 
-      {liveItems.map((item) => {
-        if (item.kind === "text") {
-          return (
-            <div
-              key={item.id}
-              style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-            >
-              <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                {item.text}
-              </Text>
-            </div>
-          );
-        }
-        return <ToolCard key={item.toolUseId} card={item} />;
-      })}
+        {liveItems.map((item) => {
+          if (item.kind === "text") {
+            return (
+              <div
+                key={item.id}
+                style={{ marginBottom: "var(--mantine-spacing-sm)" }}
+              >
+                <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+                  {item.text}
+                </Text>
+              </div>
+            );
+          }
+          return <ToolCard key={item.toolUseId} card={item} />;
+        })}
+      </div>
+
+      <ChatInput token={token ?? ""} sessionId={id} isRunning={isRunning} />
     </div>
   );
 }

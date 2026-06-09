@@ -462,4 +462,75 @@ describe("SessionTranscript", () => {
       expect(screen.queryByText("should_not_appear")).not.toBeInTheDocument();
     });
   });
+
+  describe("composer integration", () => {
+    it("disables the composer while session_delta events are arriving", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m1",
+          type: "session_delta",
+          payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeDisabled();
+        expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+      });
+    });
+
+    it("re-enables the composer once session_message arrives", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m1",
+          type: "session_delta",
+          payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeDisabled();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m2",
+          type: "session_message",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "assistant",
+              content: "Investigation complete.",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).not.toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: /send/i }),
+        ).not.toBeDisabled();
+      });
+    });
+  });
 });
