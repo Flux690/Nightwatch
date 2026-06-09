@@ -1,11 +1,9 @@
-import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
-// API routes are unprefixed (e.g. /incidents/pending); the console calls them
-// under /api and the proxy strips the prefix, so the browser stays same-origin
-// and no CORS handling is needed on the API.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
   server: {
     port: 5173,
     proxy: {

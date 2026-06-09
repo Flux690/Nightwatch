@@ -7,7 +7,7 @@ Every issue cuts through all layers and is demoable/verifiable on its own.
 
 - **Tracker:** local markdown in `issues/` (see `issues/README.md`). Do NOT use
   GitHub issues or Linear. Publishing an issue = writing `issues/NNN-title.md`.
-- **Per-feature PRD:** `issues/<feature>/prd.md`.
+- **Per-feature PRD:** `.claude/<feature>-prd.md` (flat, in .claude/).
 - **Labels:** frontmatter fields - `mode` (afk|hitl), `type`
   (bugfix|infra|feature|refactor|polish), `priority` (p1|p2|p3), `status`
   (ready-for-agent|in-progress|blocked), `blocked_by`. The `ready-for-agent`
