@@ -39,7 +39,7 @@ class MockWs {
   }
 }
 
-const INSTALLATION = {
+const RUNNER = {
   id: "inst-1",
   token: "tok-1",
   hostname: "host-1",
@@ -62,10 +62,10 @@ function setupWithSessionsError() {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/installations")) {
+      if (url.includes("/runners")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([INSTALLATION]),
+          json: () => Promise.resolve([RUNNER]),
         });
       }
       if (url.includes("/sessions")) {
@@ -113,10 +113,10 @@ function setup(sessions: object[] = [SESSION_1]) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/installations")) {
+      if (url.includes("/runners")) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve([INSTALLATION]),
+          json: () => Promise.resolve([RUNNER]),
         });
       }
       if (url.includes("/sessions")) {
@@ -374,10 +374,10 @@ describe("SessionsSidebar", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((url: string) => {
-          if (url.includes("/installations")) {
+          if (url.includes("/runners")) {
             return Promise.resolve({
               ok: true,
-              json: () => Promise.resolve([INSTALLATION]),
+              json: () => Promise.resolve([RUNNER]),
             });
           }
           return Promise.resolve({

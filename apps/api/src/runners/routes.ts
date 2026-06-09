@@ -9,23 +9,23 @@ import type { CapabilityManifest } from "@nightwatch/shared";
 
 const RULES_TIMEOUT_MS = 10_000;
 
-export async function registerInstallationRoutes(
+export async function registerRunnerRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // List installations with live runner status from the heartbeat key.
-  fastify.get("/installations", async () => {
-    const installations = await db.installation.findMany({
+  // List runners with live status from the heartbeat key.
+  fastify.get("/runners", async () => {
+    const tokens = await db.token.findMany({
       orderBy: { createdAt: "desc" },
     });
     return Promise.all(
-      installations.map(async (i) => {
-        const lastSeen = await redis.get(`heartbeat:${i.token}`);
-        const manifestRaw = await redis.get(`manifest:${i.token}`);
+      tokens.map(async (t) => {
+        const lastSeen = await redis.get(`heartbeat:${t.token}`);
+        const manifestRaw = await redis.get(`manifest:${t.token}`);
         return {
-          id: i.id,
-          token: i.token,
-          hostname: i.hostname,
-          createdAt: i.createdAt,
+          id: t.id,
+          token: t.token,
+          hostname: t.hostname,
+          createdAt: t.createdAt,
           // Heartbeat carries a 120s TTL; absence means the runner is offline.
           online: lastSeen !== null,
           lastSeen,
@@ -37,25 +37,25 @@ export async function registerInstallationRoutes(
     );
   });
 
-  // Generate a new installation token for a runner.
+  // Generate a new token for a runner deployment.
   fastify.post<{ Body: { hostname?: string } }>(
-    "/installations",
+    "/runners",
     { preHandler: requireAuth },
     async (request, reply) => {
       const user = await ensureAdminUser();
-      const installation = await db.installation.create({
+      const tokenRecord = await db.token.create({
         data: { userId: user.id, hostname: request.body?.hostname ?? null },
       });
-      logger.info({ id: installation.id }, "installation created");
+      logger.info({ id: tokenRecord.id }, "runner token created");
       return reply
         .code(201)
-        .send({ id: installation.id, token: installation.token });
+        .send({ id: tokenRecord.id, token: tokenRecord.token });
     },
   );
 
   // Push updated Prometheus alert rules to the runner (settings, not gated).
   fastify.patch<{ Params: { token: string }; Body: { rulesYaml?: string } }>(
-    "/installations/:token/rules",
+    "/runners/:token/rules",
     { preHandler: requireAuth },
     async (request, reply) => {
       const rulesYaml = request.body?.rulesYaml;

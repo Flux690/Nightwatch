@@ -3,7 +3,7 @@ import { Button, Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import type {
-  InstallationRecord,
+  RunnerRecord,
   SessionMeta,
   WsEnvelope,
 } from "@nightwatch/shared";
@@ -78,16 +78,16 @@ export function SessionsSidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<SidebarSession[]>([]);
 
-  const { data: installations } = useQuery<InstallationRecord[]>({
-    queryKey: ["installations"],
+  const { data: runners } = useQuery<RunnerRecord[]>({
+    queryKey: ["runners"],
     queryFn: () =>
-      fetch("/api/installations").then((r) => {
-        if (!r.ok) throw new Error(`installations ${r.status}`);
-        return r.json() as Promise<InstallationRecord[]>;
+      fetch("/api/runners").then((r) => {
+        if (!r.ok) throw new Error(`runners ${r.status}`);
+        return r.json() as Promise<RunnerRecord[]>;
       }),
   });
 
-  const token = installations?.[0]?.token;
+  const token = runners?.[0]?.token;
 
   const { data: fetchedSessions } = useQuery<SessionMeta[]>({
     queryKey: ["sessions", token],
@@ -237,16 +237,16 @@ export function SessionsEmpty(): React.JSX.Element {
 }
 
 export function NewSessionPage(): React.JSX.Element {
-  const { data: installations } = useQuery<InstallationRecord[]>({
-    queryKey: ["installations"],
+  const { data: runners } = useQuery<RunnerRecord[]>({
+    queryKey: ["runners"],
     queryFn: () =>
-      fetch("/api/installations").then((r) => {
-        if (!r.ok) throw new Error(`installations ${r.status}`);
-        return r.json() as Promise<InstallationRecord[]>;
+      fetch("/api/runners").then((r) => {
+        if (!r.ok) throw new Error(`runners ${r.status}`);
+        return r.json() as Promise<RunnerRecord[]>;
       }),
   });
 
-  const token = installations?.[0]?.token ?? "";
+  const token = runners?.[0]?.token ?? "";
 
   return (
     <div

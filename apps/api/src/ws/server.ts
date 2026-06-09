@@ -36,10 +36,10 @@ export async function registerWsRoutes(
         return;
       }
 
-      const installation = await db.installation.findUnique({
+      const tokenRecord = await db.token.findUnique({
         where: { token },
       });
-      if (!installation) {
+      if (!tokenRecord) {
         socket.close(4003, "Invalid token");
         return;
       }
@@ -63,7 +63,7 @@ export async function registerWsRoutes(
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
           void redis.set(`manifest:${token}`, JSON.stringify(msg.payload));
-          void db.installation.update({
+          void db.token.update({
             where: { token },
             data: { hostname: msg.payload.hostname },
           });

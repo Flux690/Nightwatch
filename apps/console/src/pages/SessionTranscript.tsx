@@ -4,7 +4,7 @@ import { Text } from "@mantine/core";
 import { useCallback, useState } from "react";
 import type {
   ConsoleToolCall,
-  InstallationRecord,
+  RunnerRecord,
   SessionMessage,
   WsEnvelope,
 } from "@nightwatch/shared";
@@ -97,16 +97,16 @@ export function SessionTranscript(): React.JSX.Element {
   const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
-  const { data: installations } = useQuery<InstallationRecord[]>({
-    queryKey: ["installations"],
+  const { data: runners } = useQuery<RunnerRecord[]>({
+    queryKey: ["runners"],
     queryFn: () =>
-      fetch("/api/installations").then((r) => {
-        if (!r.ok) throw new Error(`installations ${r.status}`);
-        return r.json() as Promise<InstallationRecord[]>;
+      fetch("/api/runners").then((r) => {
+        if (!r.ok) throw new Error(`runners ${r.status}`);
+        return r.json() as Promise<RunnerRecord[]>;
       }),
   });
 
-  const token = installations?.[0]?.token;
+  const token = runners?.[0]?.token;
 
   const { data: messages = [] } = useQuery<SessionMessage[]>({
     queryKey: ["session", id],

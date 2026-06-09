@@ -8,14 +8,14 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String?
-  createdAt     DateTime       @default(now())
-  installations Installation[]
+  id        String  @id @default(cuid())
+  email     String  @unique
+  name      String?
+  createdAt DateTime @default(now())
+  tokens    Token[]
 }
 
-model Installation {
+model Token {
   id        String   @id @default(cuid())
   token     String   @unique @default(cuid())
   userId    String

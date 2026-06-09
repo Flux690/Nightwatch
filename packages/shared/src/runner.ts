@@ -51,7 +51,7 @@ export interface DashboardQueryResult {
   cachedAt?: string;
 }
 
-export interface InstallationRecord {
+export interface RunnerRecord {
   id: string;
   token: string;
   hostname: string | null;

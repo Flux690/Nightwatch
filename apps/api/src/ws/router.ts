@@ -13,9 +13,9 @@ interface PendingCommand {
 const pending = new Map<string, PendingCommand>();
 
 // token -> runnerId -> send. Keying by runnerId (not token alone) stops a second
-// runner on the same installation token from overwriting the first runner's
-// socket. sendCommand still routes by token and picks any live runner for it;
-// targeting a specific runner is future work.
+// runner sharing the same token from overwriting the first runner's socket.
+// sendCommand routes by token and picks any live runner; targeting a specific
+// runner is future work.
 const registry = new Map<string, Map<string, (msg: string) => void>>();
 
 export class RunnerOfflineError extends Error {

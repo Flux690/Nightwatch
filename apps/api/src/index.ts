@@ -10,7 +10,7 @@ import { registerIncidentRoutes } from "./incidents/routes.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { registerChatRoutes } from "./chat/routes.js";
 import { registerSessionRoutes } from "./sessions/routes.js";
-import { registerInstallationRoutes } from "./installations/routes.js";
+import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerRelayRoutes } from "./relay/routes.js";
 import { startWorker } from "./jobs/worker.js";
 
@@ -27,7 +27,7 @@ await registerIncidentRoutes(fastify);
 await registerConfigRoutes(fastify);
 await registerChatRoutes(fastify);
 await registerSessionRoutes(fastify);
-await registerInstallationRoutes(fastify);
+await registerRunnerRoutes(fastify);
 await registerRelayRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));

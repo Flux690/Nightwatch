@@ -43,11 +43,11 @@ export async function registerChatRoutes(
         return reply.code(400).send({ error: "message is required" });
       }
 
-      const installation = await db.installation.findUnique({
+      const tokenRecord = await db.token.findUnique({
         where: { token },
       });
-      if (!installation) {
-        return reply.code(404).send({ error: "unknown installation token" });
+      if (!tokenRecord) {
+        return reply.code(404).send({ error: "unknown token" });
       }
 
       const sessionId = randomUUID();
