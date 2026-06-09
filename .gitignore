@@ -26,6 +26,9 @@ runner-id
 # Smoke test runtime — backgrounded process logs/pids
 .smoke/
 
+# Fetched skill content — regenerable from skills-lock.json (committed)
+.claude/skills/
+
 # OS files
 .DS_Store
 Thumbs.db
