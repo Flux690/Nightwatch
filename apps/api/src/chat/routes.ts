@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { enqueueJob } from "../alerts/queue.js";
 import { sendCommand } from "../ws/router.js";
 import { db } from "../db/client.js";
+import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert, SessionMessage } from "@nightwatch/shared";
 import type { ProviderMessage } from "../llm/types.js";
@@ -34,6 +35,7 @@ export async function registerChatRoutes(
   // Start a new chat session: a human authors the opening message.
   fastify.post<{ Params: { token: string }; Body: { message?: string } }>(
     "/chat/:token",
+    { preHandler: requireAuth },
     async (request, reply) => {
       const { token } = request.params;
       const message = request.body?.message?.trim();
@@ -65,42 +67,50 @@ export async function registerChatRoutes(
   fastify.post<{
     Params: { id: string };
     Body: { token?: string; message?: string };
-  }>("/sessions/:id/messages", async (request, reply) => {
-    const sessionId = request.params.id;
-    const token = request.body?.token;
-    const message = request.body?.message?.trim();
-    if (!token || !message) {
-      return reply.code(400).send({ error: "token and message are required" });
-    }
+  }>(
+    "/sessions/:id/messages",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const sessionId = request.params.id;
+      const token = request.body?.token;
+      const message = request.body?.message?.trim();
+      if (!token || !message) {
+        return reply
+          .code(400)
+          .send({ error: "token and message are required" });
+      }
 
-    let history: SessionMessage[];
-    try {
-      // get_session_messages returns SessionMessage[]; the WS contract is untyped.
-      history = (await sendCommand(
-        token,
-        "get_session_messages",
-        { sessionId },
-        RELOAD_TIMEOUT_MS,
-      )) as SessionMessage[];
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.code(502).send({ error: `failed to load session: ${msg}` });
-    }
+      let history: SessionMessage[];
+      try {
+        // get_session_messages returns SessionMessage[]; the WS contract is untyped.
+        history = (await sendCommand(
+          token,
+          "get_session_messages",
+          { sessionId },
+          RELOAD_TIMEOUT_MS,
+        )) as SessionMessage[];
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply
+          .code(502)
+          .send({ error: `failed to load session: ${msg}` });
+      }
 
-    const seed: ProviderMessage[] = history.map((m) => ({
-      role: m.role,
-      content: m.content,
-      providerContent: m.providerContent,
-    }));
+      const seed: ProviderMessage[] = history.map((m) => ({
+        role: m.role,
+        content: m.content,
+        providerContent: m.providerContent,
+      }));
 
-    await enqueueJob({
-      alert: chatAlert(token, sessionId, message),
-      sessionId,
-      trigger: "chat",
-      seed,
-      userMessage: message,
-    });
-    logger.info({ token, sessionId, seeded: seed.length }, "session resumed");
-    return reply.code(202).send({ sessionId });
-  });
+      await enqueueJob({
+        alert: chatAlert(token, sessionId, message),
+        sessionId,
+        trigger: "chat",
+        seed,
+        userMessage: message,
+      });
+      logger.info({ token, sessionId, seeded: seed.length }, "session resumed");
+      return reply.code(202).send({ sessionId });
+    },
+  );
 }

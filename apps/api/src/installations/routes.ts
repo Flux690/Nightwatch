@@ -3,6 +3,7 @@ import { db } from "../db/client.js";
 import { redis } from "../redis/client.js";
 import { sendCommand } from "../ws/router.js";
 import { ensureAdminUser } from "../auth/admin.js";
+import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { CapabilityManifest } from "@nightwatch/shared";
 
@@ -39,6 +40,7 @@ export async function registerInstallationRoutes(
   // Generate a new installation token for a runner.
   fastify.post<{ Body: { hostname?: string } }>(
     "/installations",
+    { preHandler: requireAuth },
     async (request, reply) => {
       const user = await ensureAdminUser();
       const installation = await db.installation.create({
@@ -54,6 +56,7 @@ export async function registerInstallationRoutes(
   // Push updated Prometheus alert rules to the runner (settings, not gated).
   fastify.patch<{ Params: { token: string }; Body: { rulesYaml?: string } }>(
     "/installations/:token/rules",
+    { preHandler: requireAuth },
     async (request, reply) => {
       const rulesYaml = request.body?.rulesYaml;
       if (!rulesYaml) {

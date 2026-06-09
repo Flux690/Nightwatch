@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { loadConfig, updateConfig } from "./store.js";
+import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 
 // Only these fields are user-editable; secrets are never part of the surface.
@@ -21,13 +22,17 @@ export async function registerConfigRoutes(
 ): Promise<void> {
   fastify.get("/config", async () => loadConfig());
 
-  fastify.patch("/config", async (request, reply) => {
-    const parsed = ConfigPatchSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: parsed.error.message });
-    }
-    const updated = await updateConfig(parsed.data);
-    logger.info({ keys: Object.keys(parsed.data) }, "agent config updated");
-    return updated;
-  });
+  fastify.patch(
+    "/config",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const parsed = ConfigPatchSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: parsed.error.message });
+      }
+      const updated = await updateConfig(parsed.data);
+      logger.info({ keys: Object.keys(parsed.data) }, "agent config updated");
+      return updated;
+    },
+  );
 }

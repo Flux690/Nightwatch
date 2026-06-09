@@ -6,6 +6,7 @@ import {
 } from "../investigation/approvals.js";
 import { publishApprovalUpdate } from "../session/stream.js";
 import { sendCommand } from "../ws/router.js";
+import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { ApprovalResponse } from "@nightwatch/shared";
 
@@ -26,6 +27,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/approve",
+    { preHandler: requireAuth },
     async (request, reply) => {
       const pending = getPendingApproval(request.params.id);
       if (!pending) {
@@ -65,6 +67,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/reject",
+    { preHandler: requireAuth },
     async (request, reply) => {
       const pending = getPendingApproval(request.params.id);
       if (!pending) {
@@ -120,23 +123,27 @@ export async function registerIncidentRoutes(
   fastify.post<{
     Params: { id: string };
     Body: { token?: string; note?: string };
-  }>("/incidents/:id/resolve", async (request, reply) => {
-    const { token, note } = request.body ?? {};
-    if (!token || !note) {
-      return reply.code(400).send({ error: "token and note are required" });
-    }
-    try {
-      const result = await sendCommand(
-        token,
-        "resolve_incident",
-        { incidentId: request.params.id, note },
-        RESOLVE_TIMEOUT_MS,
-      );
-      logger.info({ incidentId: request.params.id }, "incident resolved");
-      return result;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return reply.code(502).send({ error: msg });
-    }
-  });
+  }>(
+    "/incidents/:id/resolve",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { token, note } = request.body ?? {};
+      if (!token || !note) {
+        return reply.code(400).send({ error: "token and note are required" });
+      }
+      try {
+        const result = await sendCommand(
+          token,
+          "resolve_incident",
+          { incidentId: request.params.id, note },
+          RESOLVE_TIMEOUT_MS,
+        );
+        logger.info({ incidentId: request.params.id }, "incident resolved");
+        return result;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(502).send({ error: msg });
+      }
+    },
+  );
 }
