@@ -10,31 +10,10 @@ import type { Worker } from "bullmq";
 import type {
   ConsoleSessionDelta,
   ConsoleSessionMessage,
+  RunnerCommandMessage,
 } from "@nightwatch/shared";
 
-// --- Hoisted mocks (must be at top, before any imports that load these modules) ---
-
-const { mockSendCommand, mockCreateProvider } = vi.hoisted(() => {
-  const storedMessages: Record<string, unknown[]> = {};
-
-  const sendCmd = vi.fn(
-    (_token: string, command: string, params: Record<string, unknown>) => {
-      if (command === "append_session_message") {
-        const sid = (params as { message: { sessionId: string } }).message
-          .sessionId;
-        storedMessages[sid] ??= [];
-        storedMessages[sid].push(params["message"]);
-        return Promise.resolve({ ok: true });
-      }
-      if (command === "get_session_messages") {
-        const sid = (params as { sessionId: string }).sessionId;
-        return Promise.resolve(storedMessages[sid] ?? []);
-      }
-      // write_incident, telemetry, history — all succeed silently
-      return Promise.resolve([]);
-    },
-  );
-
+const { mockCreateProvider } = vi.hoisted(() => {
   const provider = {
     start: vi.fn(),
     seed: vi.fn(),
@@ -80,37 +59,24 @@ const { mockSendCommand, mockCreateProvider } = vi.hoisted(() => {
   };
 
   return {
-    mockSendCommand: sendCmd,
     mockCreateProvider: vi.fn(() => provider),
   };
 });
 
-vi.mock("../ws/router.js", () => ({
-  sendCommand: mockSendCommand,
-  registerRunner: vi.fn(),
-  unregisterRunner: vi.fn(),
-  resolveCommand: vi.fn(),
-  RunnerOfflineError: class RunnerOfflineError extends Error {
-    constructor(token: string) {
-      super(`Runner for token ${token} is offline`);
-      this.name = "RunnerOfflineError";
-    }
-  },
-}));
-
 vi.mock("../llm/factory.js", () => ({
   createProvider: mockCreateProvider,
 }));
-
-// --- Imports that depend on mocked modules (after vi.mock calls) ---
 
 import { db } from "../db/client.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { startWorker } from "../jobs/worker.js";
-
-// ---
+import {
+  registerRunner,
+  unregisterRunner,
+  resolveCommand,
+} from "../ws/router.js";
 
 describe("console WS pipeline", () => {
   let server: FastifyInstance;
@@ -118,18 +84,39 @@ describe("console WS pipeline", () => {
   let port: number;
   let userId: string;
   const TEST_TOKEN = `test-${randomUUID()}`;
+  const TEST_RUNNER_ID = "test-runner-1";
+  const storedMessages: Record<string, unknown[]> = {};
 
   beforeAll(async () => {
-    // Seed minimal DB fixture: user + installation
     const user = await db.user.create({
       data: { email: `test-${randomUUID()}@nightwatch-test.local` },
     });
     userId = user.id;
-    await db.installation.create({
+    await db.token.create({
       data: { token: TEST_TOKEN, userId, hostname: "test-runner" },
     });
 
-    // Minimal server: console WS + chat + sessions routes
+    registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
+      const msg = JSON.parse(raw) as RunnerCommandMessage;
+      const { commandName, commandInput, correlationId } = msg.payload;
+
+      if (commandName === "append_session_message") {
+        const message = commandInput["message"] as { sessionId: string };
+        storedMessages[message.sessionId] ??= [];
+        storedMessages[message.sessionId].push(commandInput["message"]);
+        resolveCommand({ correlationId, success: true, result: { ok: true } });
+      } else if (commandName === "get_session_messages") {
+        const sessionId = commandInput["sessionId"] as string;
+        resolveCommand({
+          correlationId,
+          success: true,
+          result: storedMessages[sessionId] ?? [],
+        });
+      } else {
+        resolveCommand({ correlationId, success: true, result: [] });
+      }
+    });
+
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
@@ -138,29 +125,30 @@ describe("console WS pipeline", () => {
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
 
+    // The test owns the only worker on its isolated Redis db, so it always wins
+    // the job and runs the mocked provider in-process.
     worker = startWorker();
-    await (
-      worker as unknown as { waitUntilReady: () => Promise<void> }
-    ).waitUntilReady();
+    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
     await worker.close();
+    unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
-    await db.installation.deleteMany({ where: { userId } });
+    await db.token.deleteMany({ where: { userId } });
     await db.user.delete({ where: { id: userId } });
     await db.$disconnect();
   });
 
   it("delivers session_delta events then session_message, transcript loadable after", async () => {
-    // Connect WS client
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
 
-    let resolveMessage: () => void = () => {};
+    let targetSessionId: string | undefined;
+    let resolveFirstMessage: () => void = () => {};
     const firstMessageArrived = new Promise<void>((res) => {
-      resolveMessage = res;
+      resolveFirstMessage = res;
     });
 
     ws.on("message", (raw) => {
@@ -170,12 +158,18 @@ describe("console WS pipeline", () => {
       };
       if (msg.type === "connected") return;
       events.push(msg);
-      if (msg.type === "session_message") resolveMessage();
+      // Redis pub/sub is instance-global, so a concurrent dev investigation
+      // could publish here; only react to this test's own session.
+      if (
+        msg.type === "session_message" &&
+        msg.payload["sessionId"] === targetSessionId
+      ) {
+        resolveFirstMessage();
+      }
     });
 
     await new Promise<void>((res) => ws.on("open", res));
 
-    // Start a chat session
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -184,35 +178,37 @@ describe("console WS pipeline", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
+    targetSessionId = sessionId;
 
-    // Wait for first session_message (signals at least one turn persisted)
+    // The POST enqueued the job; the test's worker (sole consumer of its
+    // isolated Redis db) runs the mocked investigation, which publishes
+    // session_delta then session_message over Redis pub/sub to the console WS.
     await Promise.race([
       firstMessageArrived,
       new Promise<void>((_, rej) =>
         setTimeout(
-          () => rej(new Error("timeout: no session_message after 15s")),
-          15_000,
+          () => rej(new Error("timeout: no session_message after 10s")),
+          10_000,
         ),
       ),
     ]);
 
     ws.close();
 
-    // Delta events arrived before session_message
     const deltas = events.filter(
-      (e): e is ConsoleSessionDelta => e.type === "session_delta",
+      (e): e is ConsoleSessionDelta =>
+        e.type === "session_delta" && e.payload["sessionId"] === sessionId,
     );
     expect(deltas.length).toBeGreaterThan(0);
     expect(deltas[0].payload.sessionId).toBe(sessionId);
 
-    // session_message events arrived
     const messages = events.filter(
-      (e): e is ConsoleSessionMessage => e.type === "session_message",
+      (e): e is ConsoleSessionMessage =>
+        e.type === "session_message" && e.payload["sessionId"] === sessionId,
     );
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].payload.sessionId).toBe(sessionId);
 
-    // Transcript loadable via REST
     const transcriptRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}?token=${TEST_TOKEN}`,
     );
