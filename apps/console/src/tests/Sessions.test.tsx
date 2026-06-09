@@ -1,0 +1,404 @@
+import { render, screen, waitFor, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MantineProvider } from "@mantine/core";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+} from "@tanstack/react-router";
+import { RouterProvider } from "@tanstack/react-router";
+
+import { SessionsSidebar } from "../pages/Sessions.js";
+import { theme, cssVariablesResolver } from "../theme.js";
+
+let latestWs: MockWs | null = null;
+
+class MockWs {
+  static OPEN = 1;
+  static CONNECTING = 0;
+  static CLOSING = 2;
+  static CLOSED = 3;
+
+  readyState = MockWs.OPEN;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: ((e: unknown) => void) | null = null;
+  close = vi.fn();
+
+  constructor(_url: string) {
+    latestWs = this;
+  }
+
+  push(envelope: object): void {
+    this.onmessage?.({ data: JSON.stringify(envelope) });
+  }
+}
+
+const INSTALLATION = {
+  id: "inst-1",
+  token: "tok-1",
+  hostname: "host-1",
+  online: true,
+  createdAt: "2024-01-01T00:00:00Z",
+};
+
+const SESSION_1 = {
+  sessionId: "s1",
+  token: "tok-1",
+  trigger: "alert",
+  title: "CPU spike on web-01",
+  createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
+};
+
+function setupWithSessionsError() {
+  latestWs = null;
+
+  vi.stubGlobal("WebSocket", MockWs);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/installations")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([INSTALLATION]),
+        });
+      }
+      if (url.includes("/sessions")) {
+        return Promise.resolve({
+          ok: false,
+          status: 502,
+          json: () => Promise.resolve({ error: "no runner connected" }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }),
+  );
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const root = createRootRoute({ component: Outlet });
+  const sessionsRoute = createRoute({
+    getParentRoute: () => root,
+    path: "/sessions",
+    component: SessionsSidebar,
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([sessionsRoute]),
+    history: createMemoryHistory({ initialEntries: ["/sessions"] }),
+  });
+
+  render(
+    <MantineProvider
+      theme={theme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="dark"
+    >
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+}
+
+function setup(sessions: object[] = [SESSION_1]) {
+  latestWs = null;
+
+  vi.stubGlobal("WebSocket", MockWs);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/installations")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([INSTALLATION]),
+        });
+      }
+      if (url.includes("/sessions")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(sessions),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }),
+  );
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+
+  const root = createRootRoute({ component: Outlet });
+  const sessionsRoute = createRoute({
+    getParentRoute: () => root,
+    path: "/sessions",
+    component: SessionsSidebar,
+  });
+  const sessionIdRoute = createRoute({
+    getParentRoute: () => root,
+    path: "/sessions/$id",
+    component: () => <div data-testid="transcript" />,
+  });
+  const newSessionRoute = createRoute({
+    getParentRoute: () => root,
+    path: "/sessions/new",
+    component: () => <div data-testid="new-session-page" />,
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([
+      sessionsRoute,
+      sessionIdRoute,
+      newSessionRoute,
+    ]),
+    history: createMemoryHistory({ initialEntries: ["/sessions"] }),
+  });
+
+  render(
+    <MantineProvider
+      theme={theme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="dark"
+    >
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+
+  return { router };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("SessionsSidebar", () => {
+  describe("initial render", () => {
+    it("renders an empty list when the sessions endpoint returns an error", async () => {
+      setupWithSessionsError();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /new session/i }),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    });
+
+    it("fetches sessions and renders a row for each", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+    });
+
+    it("shows a relative timestamp on each row", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText(/ago/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows a 'concluded' badge for a session with no live activity", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("concluded")).toBeInTheDocument();
+      });
+    });
+
+    it("renders a New Session button", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /new session/i }),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("live WS updates", () => {
+    it("updates the status badge to 'streaming' on session_delta for existing session", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("concluded")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m1",
+          type: "session_delta",
+          payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("streaming")).toBeInTheDocument();
+      });
+    });
+
+    it("updates the badge to 'awaiting-approval' on tool_call with awaitingApproval", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("concluded")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m2",
+          type: "tool_call",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu1",
+            toolName: "restart_service",
+            phase: "start",
+            awaitingApproval: true,
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("awaiting-approval")).toBeInTheDocument();
+      });
+    });
+
+    it("resets badge to 'concluded' on session_message for existing session", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("concluded")).toBeInTheDocument();
+      });
+
+      // First make it streaming
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "session_delta",
+          payload: { sessionId: "s1", kind: "text", delta: "Thinking..." },
+        });
+      });
+      await waitFor(() =>
+        expect(screen.getByText("streaming")).toBeInTheDocument(),
+      );
+
+      // Then finish turn
+      act(() => {
+        latestWs?.push({
+          messageId: "m4",
+          type: "session_message",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 1,
+              role: "assistant",
+              content: "Done",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("concluded")).toBeInTheDocument();
+      });
+    });
+
+    it("appends a new row when session_message arrives for an unseen sessionId", async () => {
+      setup([SESSION_1]);
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      // Initially one session row
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m5",
+          type: "session_message",
+          payload: {
+            sessionId: "s-new",
+            message: {
+              sessionId: "s-new",
+              seq: 1,
+              role: "assistant",
+              content: "Investigation started",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByRole("listitem")).toHaveLength(2);
+      });
+    });
+
+    it("appends a new row when session_delta arrives for an unseen sessionId", async () => {
+      setup([SESSION_1]);
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m6",
+          type: "session_delta",
+          payload: { sessionId: "s-brand-new", kind: "text", delta: "..." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByRole("listitem")).toHaveLength(2);
+      });
+    });
+  });
+
+  describe("navigation", () => {
+    it("navigates to /sessions/:id when a session row is clicked", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText("CPU spike on web-01"));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/sessions/s1");
+      });
+    });
+
+    it("navigates to /sessions/new when New Session is clicked", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /new session/i }),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /new session/i }));
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/sessions/new");
+      });
+    });
+  });
+});

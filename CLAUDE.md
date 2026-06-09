@@ -22,6 +22,7 @@
 - Every new WebSocket command needs a matching type in `shared/ws.ts`.
 
 @.claude/rules/typescript.md
+@.claude/rules/testing.md
 @.claude/rules/monorepo.md
 @.claude/rules/git.md
 @.claude/rules/architecture.md

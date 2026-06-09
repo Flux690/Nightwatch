@@ -50,3 +50,13 @@ export interface DashboardQueryResult {
   data: unknown;
   cachedAt?: string;
 }
+
+export interface InstallationRecord {
+  id: string;
+  token: string;
+  hostname: string | null;
+  createdAt: string;
+  online: boolean;
+  lastSeen: string | null;
+  manifest: CapabilityManifest | null;
+}

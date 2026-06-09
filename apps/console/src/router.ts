@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { RunnersPage } from "./pages/Runners.js";
 import { SessionsEmpty, SessionsLayout } from "./pages/Sessions.js";
+import { NewSessionPage } from "./pages/Sessions.js";
 import { SessionTranscript } from "./pages/SessionTranscript.js";
 import { SettingsPage } from "./pages/Settings.js";
 
@@ -32,6 +33,12 @@ const sessionsIndexRoute = createRoute({
   component: SessionsEmpty,
 });
 
+const newSessionRoute = createRoute({
+  getParentRoute: () => sessionsRoute,
+  path: "new",
+  component: NewSessionPage,
+});
+
 const sessionIdRoute = createRoute({
   getParentRoute: () => sessionsRoute,
   path: "$id",
@@ -52,7 +59,11 @@ const settingsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  sessionsRoute.addChildren([sessionsIndexRoute, sessionIdRoute]),
+  sessionsRoute.addChildren([
+    sessionsIndexRoute,
+    newSessionRoute,
+    sessionIdRoute,
+  ]),
   runnersRoute,
   settingsRoute,
 ]);
