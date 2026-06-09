@@ -20,7 +20,11 @@ export function useConsoleWs(onMessage: (envelope: WsEnvelope) => void): void {
     };
 
     return () => {
-      ws.close();
+      if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => ws.close();
+      } else {
+        ws.close();
+      }
     };
   }, []);
 }
