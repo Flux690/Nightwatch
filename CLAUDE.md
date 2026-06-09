@@ -25,10 +25,12 @@
 @.claude/rules/monorepo.md
 @.claude/rules/git.md
 @.claude/rules/architecture.md
+@.claude/rules/workflow.md
 
 ## References
-- Architecture and decisions: PRD.md
-- Phase reference: PLAN.md
+- Architecture and decisions (enduring north-star): PRD.md
+- Domain glossary: CONTEXT.md
+- Work backlog (vertical-slice issues): issues/
 
 ## Session protocol
 1. Read what SessionStart hook outputs (branch, git state, current phase)
