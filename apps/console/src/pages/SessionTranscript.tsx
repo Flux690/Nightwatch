@@ -1,8 +1,9 @@
 import { useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Text } from "@mantine/core";
+import { Button, Text } from "@mantine/core";
 import { useCallback, useState } from "react";
 import type {
+  ConsoleApprovalUpdate,
   ConsoleToolCall,
   RunnerRecord,
   SessionMessage,
@@ -23,6 +24,13 @@ interface LiveToolCard {
   toolName: string;
   input: Record<string, unknown>;
   result: unknown | null;
+  // Set on gated tools: the call waits behind a human approve/reject before it
+  // executes. incidentId addresses the approve endpoint; toolUseId correlates.
+  awaitingApproval?: boolean;
+  incidentId?: string;
+  risk?: string;
+  approval?: "pending" | "approved" | "rejected";
+  resolvedBy?: string;
 }
 
 type LiveItem = LiveTextItem | LiveToolCard;
@@ -91,6 +99,61 @@ function ToolCard({ card }: { card: LiveToolCard }): React.JSX.Element {
   );
 }
 
+function ApprovalCard({
+  card,
+  onResolve,
+}: {
+  card: LiveToolCard;
+  onResolve: (action: "approve" | "reject") => void;
+}): React.JSX.Element {
+  const resolved = card.approval === "approved" || card.approval === "rejected";
+
+  return (
+    <div
+      data-testid="approval-card"
+      style={{
+        marginBottom: "var(--mantine-spacing-sm)",
+        border: "1px solid var(--mantine-color-yellow-7)",
+        borderRadius: "var(--mantine-radius-sm)",
+        padding: "var(--mantine-spacing-xs)",
+      }}
+    >
+      <Text size="xs" ff="monospace" fw={600}>
+        {card.toolName}
+      </Text>
+      <Text size="xs" c="dimmed" mb="xs">
+        Risk: {card.risk ?? "unknown"}
+      </Text>
+      {resolved ? (
+        <Text size="xs" data-testid="approval-resolution">
+          {card.approval === "approved" ? "Approved" : "Rejected"}
+          {card.resolvedBy ? ` by ${card.resolvedBy}` : ""}
+        </Text>
+      ) : (
+        <div style={{ display: "flex", gap: "var(--mantine-spacing-xs)" }}>
+          <Button
+            size="xs"
+            color="green"
+            disabled={card.approval === "pending"}
+            onClick={() => onResolve("approve")}
+          >
+            Approve
+          </Button>
+          <Button
+            size="xs"
+            color="red"
+            variant="outline"
+            disabled={card.approval === "pending"}
+            onClick={() => onResolve("reject")}
+          >
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SessionTranscript(): React.JSX.Element {
   const { id } = useParams({ strict: false }) as { id: string };
   const queryClient = useQueryClient();
@@ -154,6 +217,7 @@ export function SessionTranscript(): React.JSX.Element {
         const payload = env.payload as ConsoleToolCall["payload"];
         if (payload.sessionId !== id) return;
         if (payload.phase === "start") {
+          const riskValue = payload.input?.["risk"];
           setLiveItems((prev) => [
             ...prev,
             {
@@ -162,6 +226,9 @@ export function SessionTranscript(): React.JSX.Element {
               toolName: payload.toolName,
               input: payload.input ?? {},
               result: null,
+              awaitingApproval: payload.awaitingApproval ?? false,
+              incidentId: payload.incidentId,
+              risk: typeof riskValue === "string" ? riskValue : undefined,
             },
           ]);
         } else if (payload.phase === "result") {
@@ -173,9 +240,43 @@ export function SessionTranscript(): React.JSX.Element {
             ),
           );
         }
+      } else if (env.type === "approval_update") {
+        // No sessionId on this channel - correlate by toolUseId, which is global.
+        const payload = env.payload as ConsoleApprovalUpdate["payload"];
+        if (payload.status === "context_added") return;
+        const resolution = payload.status;
+        const resolvedBy = payload.resolvedBy;
+        setLiveItems((prev) =>
+          prev.map((item) =>
+            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
+              ? { ...item, approval: resolution, resolvedBy }
+              : item,
+          ),
+        );
       }
     },
     [id, queryClient],
+  );
+
+  const handleResolve = useCallback(
+    (card: LiveToolCard, action: "approve" | "reject") => {
+      if (!card.incidentId) return;
+      // Optimistically mark pending so both buttons disable; the durable state
+      // arrives via the approval_update event.
+      setLiveItems((prev) =>
+        prev.map((item) =>
+          item.kind === "tool_card" && item.toolUseId === card.toolUseId
+            ? { ...item, approval: "pending" }
+            : item,
+        ),
+      );
+      void fetch(`/api/incidents/${card.incidentId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolvedBy: "console" }),
+      });
+    },
+    [],
   );
 
   useConsoleWs(handleEnvelope);
@@ -219,7 +320,22 @@ export function SessionTranscript(): React.JSX.Element {
               </div>
             );
           }
-          return <ToolCard key={item.toolUseId} card={item} />;
+          if (!item.awaitingApproval) {
+            return <ToolCard key={item.toolUseId} card={item} />;
+          }
+          // Gated: the approval card stands alone until resolved; only then does
+          // the execution record (tool card) appear below it.
+          const resolved =
+            item.approval === "approved" || item.approval === "rejected";
+          return (
+            <div key={item.toolUseId}>
+              <ApprovalCard
+                card={item}
+                onResolve={(action) => handleResolve(item, action)}
+              />
+              {resolved ? <ToolCard card={item} /> : null}
+            </div>
+          );
         })}
       </div>
 

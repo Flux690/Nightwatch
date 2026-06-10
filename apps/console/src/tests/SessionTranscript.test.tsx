@@ -1,4 +1,5 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
@@ -460,6 +461,165 @@ describe("SessionTranscript", () => {
       });
 
       expect(screen.queryByText("should_not_appear")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("approval card (gated tool_call)", () => {
+    function pushGatedStart(): void {
+      act(() => {
+        latestWs?.push({
+          messageId: "a1",
+          type: "tool_call",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-gated",
+            toolName: "restart_container",
+            phase: "start",
+            input: { containerName: "web-01", risk: "high" },
+            awaitingApproval: true,
+            incidentId: "inc-1",
+          },
+        });
+      });
+    }
+
+    it("renders an approval card with tool name, risk, and Approve/Reject buttons before the tool card", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushGatedStart();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+      });
+
+      const card = screen.getByTestId("approval-card");
+      expect(within(card).getByText("restart_container")).toBeInTheDocument();
+      expect(within(card).getByText(/high/i)).toBeInTheDocument();
+      expect(
+        within(card).getByRole("button", { name: /approve/i }),
+      ).toBeInTheDocument();
+      expect(
+        within(card).getByRole("button", { name: /reject/i }),
+      ).toBeInTheDocument();
+
+      // While pending, only the approval card shows - the execution record (tool
+      // card) appears below it only after the decision resolves.
+      expect(
+        screen.queryByTestId("tool-card-out-loading"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("posts to the approve endpoint and disables both buttons on Approve", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushGatedStart();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("approval-card");
+      await user.click(within(card).getByRole("button", { name: /approve/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/incidents/inc-1/approve",
+          expect.objectContaining({ method: "POST" }),
+        );
+        expect(
+          within(card).getByRole("button", { name: /approve/i }),
+        ).toBeDisabled();
+        expect(
+          within(card).getByRole("button", { name: /reject/i }),
+        ).toBeDisabled();
+      });
+    });
+
+    it("replaces the buttons with a resolution label on approval_update and keeps the tool card below", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushGatedStart();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "a2",
+          type: "approval_update",
+          payload: {
+            incidentId: "inc-1",
+            toolUseId: "tu-gated",
+            status: "approved",
+            resolvedBy: "operator",
+            resolvedAt: "2024-01-01T00:03:00Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        const card = screen.getByTestId("approval-card");
+        expect(
+          within(card).getByText(/approved by operator/i),
+        ).toBeInTheDocument();
+        expect(
+          within(card).queryByRole("button", { name: /approve/i }),
+        ).not.toBeInTheDocument();
+        expect(
+          within(card).queryByRole("button", { name: /reject/i }),
+        ).not.toBeInTheDocument();
+      });
+
+      // The paired tool card now appears below the resolved approval card, OUT
+      // still loading until the result (both cards label the tool name).
+      expect(screen.getAllByText("restart_container")).toHaveLength(2);
+      const resolvedCard = screen.getByTestId("approval-card");
+      const toolCardOut = screen.getByTestId("tool-card-out-loading");
+      expect(
+        resolvedCard.compareDocumentPosition(toolCardOut) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      act(() => {
+        latestWs?.push({
+          messageId: "a3",
+          type: "tool_call",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-gated",
+            toolName: "restart_container",
+            phase: "result",
+            result: { restarted: true },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("tool-card-out-loading"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByText(/restarted/)).toBeInTheDocument();
+      });
     });
   });
 
