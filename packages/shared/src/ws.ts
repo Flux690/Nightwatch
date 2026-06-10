@@ -145,5 +145,9 @@ export interface ConsoleToolCall extends WsEnvelope {
     result?: unknown;
     isError?: boolean;
     awaitingApproval?: boolean;
+    // The investigation this call belongs to. Present on the `start` event so the
+    // console can address `POST /incidents/:id/approve` for a gated tool without a
+    // second lookup. The toolUseId remains the loop's correlation key.
+    incidentId?: string;
   };
 }

@@ -173,6 +173,7 @@ export async function runInvestigation(
         phase: "start",
         input: tool.input,
         awaitingApproval: gated,
+        incidentId,
       });
 
       if (PLATFORM_TOOLS.has(tool.name)) {
