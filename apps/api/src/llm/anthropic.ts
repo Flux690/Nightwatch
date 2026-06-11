@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwatch/shared";
@@ -10,6 +11,11 @@ import type {
   ToolSchema,
   ToolUse,
 } from "./types.js";
+
+// The terminal tool name. When native structured output is enabled, the
+// Anthropic provider promotes this tool to output_config.format so the model
+// produces a constrained JSON object rather than a tool invocation.
+const FINAL_RESPONSE_TOOL_NAME = "final_response";
 
 export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;
@@ -35,6 +41,19 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
+    // When structured output is enabled (the default), promote final_response
+    // to output_config.format so the model produces a constrained JSON object
+    // on its final turn rather than a tool invocation. Investigation tools are
+    // passed unchanged. When disabled, pass final_response as a normal strict
+    // tool (fallback for endpoints without native structured output support).
+    const useStructuredOutput = this.config.structuredOutput !== false;
+    const terminalTool = useStructuredOutput
+      ? tools.find((t) => t.name === FINAL_RESPONSE_TOOL_NAME)
+      : undefined;
+    const functionTools = terminalTool
+      ? tools.filter((t) => t.name !== FINAL_RESPONSE_TOOL_NAME)
+      : tools;
+
     let response: Anthropic.Messages.Message;
     try {
       // Stream and accumulate via finalMessage(): a large response (up to
@@ -60,7 +79,20 @@ export class AnthropicProvider implements LLMProvider {
           thinking: { type: "adaptive" as const },
         }),
         // ToolSchema is structurally compatible with Anthropic.Tool.
-        tools: tools as Anthropic.Tool[],
+        tools: functionTools as Anthropic.Tool[],
+        // When the terminal tool is present, native structured output replaces
+        // it. output_config.format coexists with tool use: investigation tools
+        // are still available; when the model is done it produces JSON matching
+        // the schema in a text block (stop_reason: end_turn) rather than a
+        // tool_use block.
+        ...(terminalTool && {
+          output_config: {
+            format: {
+              type: "json_schema" as const,
+              schema: terminalTool.input_schema as { [key: string]: unknown },
+            },
+          },
+        }),
         messages: this.messagesWithCacheBreakpoint(),
       });
       if (onDelta) {
@@ -105,10 +137,37 @@ export class AnthropicProvider implements LLMProvider {
         input: b.input as Record<string, unknown>,
       }));
 
-    const text =
-      response.content.find(
-        (b): b is Anthropic.Messages.TextBlock => b.type === "text",
-      )?.text ?? "";
+    const textBlock = response.content.find(
+      (b): b is Anthropic.Messages.TextBlock => b.type === "text",
+    );
+    const text = textBlock?.text ?? "";
+
+    // When native structured output is used (terminalTool present) and the
+    // model finished with stop_reason end_turn (no tool_use blocks), the text
+    // block contains the structured JSON. Synthesize it as a final_response
+    // ToolUse so the loop validates via InvestigationResultSchema — same path
+    // as the tool-fallback. If JSON parsing fails, leave toolUses empty so the
+    // loop's empty-tools guard escalates.
+    if (
+      terminalTool &&
+      response.stop_reason === "end_turn" &&
+      toolUses.length === 0 &&
+      textBlock
+    ) {
+      try {
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        toolUses.push({
+          id: randomUUID(),
+          name: FINAL_RESPONSE_TOOL_NAME,
+          input: parsed,
+        });
+      } catch {
+        logger.warn(
+          { model: this.model },
+          "structured output text block was not valid JSON; escalating via empty toolUses",
+        );
+      }
+    }
 
     return {
       stopReason: mapStopReason(response.stop_reason),

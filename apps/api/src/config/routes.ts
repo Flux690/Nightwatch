@@ -9,6 +9,7 @@ const ConfigPatchSchema = z.object({
   provider: z.enum(["anthropic", "openai"]).optional(),
   model: z.string().min(1).optional(),
   thinking: z.enum(["adaptive", "off"]).optional(),
+  structuredOutput: z.boolean().optional(),
   maxOutputTokens: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).optional(),
   requestTimeoutMs: z.number().int().positive().optional(),

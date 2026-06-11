@@ -10,6 +10,11 @@ export interface AgentConfig {
   provider: LLMProviderName;
   model: string;
   thinking: ThinkingMode;
+  // When true (default), providers use native structured output (response_format
+  // / output_config.format) for the final_response instead of a terminal tool
+  // call. Set false to fall back to the final_response tool on endpoints that
+  // do not support native structured output.
+  structuredOutput?: boolean;
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
