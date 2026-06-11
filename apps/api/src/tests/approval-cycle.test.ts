@@ -9,7 +9,7 @@ import type { FastifyInstance } from "fastify";
 import type { Worker } from "bullmq";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
-// A gated runner tool (restart_container) on the first turn, then conclude.
+// A gated runner tool (restart_container) on the first turn, then final_response.
 // The loop must pause at the gate and only execute the restart after approval.
 const { mockCreateProvider } = vi.hoisted(() => {
   let chatCalls = 0;
@@ -49,8 +49,8 @@ const { mockCreateProvider } = vi.hoisted(() => {
           stopReason: "tool_use" as const,
           toolUses: [
             {
-              id: "conclude-1",
-              name: "conclude",
+              id: "final-response-1",
+              name: "final_response",
               input: {
                 rootCause: {
                   summary: "Wedged process table; restart cleared it.",

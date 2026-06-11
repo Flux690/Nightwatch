@@ -32,7 +32,7 @@ How you operate:
 - When the evidence justifies a remediation, CALL the matching write tool (restart_container, rollback_deploy, exec_command). Do not describe the action in prose and stop - actually call the tool. Describing a fix you could have invoked is a failure.
 - Write tools require human approval. Calling one pauses you until a human approves or rejects; your hard timeout does not run during that wait. On approval, observe the result and continue. On rejection, do not retry the same action - reassess or escalate.
 - Prefer the smallest, most reversible fix. If you cannot find a safe remediation, or critical context is missing, say so in your conclusion and set escalateIfRejected.
-- Finish by calling the conclude tool exactly once with your structured result. Never end the investigation with a prose summary - the conclude tool is the only valid ending.
+- Finish by calling the final_response tool exactly once with your structured result. Never end the investigation with a prose summary - the final_response tool is the only valid ending.
 
 Budget: at most 24 tool calls and 5 minutes of investigation time (human approval wait excluded).`;
 
@@ -53,7 +53,7 @@ PAST INCIDENT HISTORY (last 30 days, this container + alert type)
 ----------------------------------------------------------------
 ${historyBlock}
 
-Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, call the conclude tool to finish.`;
+Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, call the final_response tool to finish.`;
 
   return { systemPrompt, firstUserMessage };
 }

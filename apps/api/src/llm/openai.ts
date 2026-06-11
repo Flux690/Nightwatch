@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwatch/shared";
@@ -10,6 +11,11 @@ import type {
   ToolSchema,
   ToolUse,
 } from "./types.js";
+
+// The terminal tool name. The OpenAI provider promotes this tool to a native
+// response_format instead of passing it as a function call, so the model
+// produces a JSON object rather than a tool invocation.
+const FINAL_RESPONSE_TOOL_NAME = "final_response";
 
 // Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
 // OPENAI_BASE_URL selects the host; the model comes from the global config.
@@ -42,6 +48,15 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
+    // Separate the terminal tool from the investigation tools. For endpoints
+    // that support native structured output (all OpenAI-compatible ones), we
+    // promote final_response to response_format instead of a function call so
+    // the model produces a JSON object at end-of-turn rather than a tool use.
+    const terminalTool = tools.find((t) => t.name === FINAL_RESPONSE_TOOL_NAME);
+    const functionTools = tools.filter(
+      (t) => t.name !== FINAL_RESPONSE_TOOL_NAME,
+    );
+
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
       // Stream and accumulate via finalChatCompletion(): a large response (up
@@ -52,18 +67,31 @@ export class OpenAIProvider implements LLMProvider {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
         messages: this.messages,
-        tools: tools.map((t) => ({
+        tools: functionTools.map((t) => ({
           type: "function" as const,
           function: {
             name: t.name,
             description: t.description,
             parameters: t.input_schema,
             // Strict function calling constrains the model's arguments to the
-            // schema - the terminal `conclude` tool relies on this so its
-            // output is validated, not free text.
+            // schema - the terminal `final_response` tool relies on this so
+            // its output is validated, not free text.
             ...(t.strict && { strict: true }),
           },
         })),
+        // When the terminal tool is present, native structured output replaces
+        // it. The model outputs a JSON object that the loop validates against
+        // InvestigationResultSchema - same path as the tool-fallback.
+        ...(terminalTool && {
+          response_format: {
+            type: "json_schema" as const,
+            json_schema: {
+              name: terminalTool.name,
+              strict: true,
+              schema: terminalTool.input_schema,
+            },
+          },
+        }),
       });
       if (onDelta) {
         stream.on("content", (delta) => onDelta({ kind: "text", text: delta }));
@@ -97,6 +125,33 @@ export class OpenAIProvider implements LLMProvider {
         // OpenAI returns arguments as a JSON string; parse to the neutral input shape.
         input: JSON.parse(call.function.arguments) as Record<string, unknown>,
       });
+    }
+
+    // When native structured output was used (terminalTool present) and the
+    // model finished with no tool calls, the response content is the structured
+    // JSON. Synthesize it as a final_response ToolUse so the loop validates and
+    // dispatches it through the same path as the tool-fallback. If JSON parsing
+    // fails (unexpected from json_schema mode, but possible on provider error),
+    // return empty toolUses and let the loop escalate via its empty-tools guard.
+    if (
+      terminalTool &&
+      choice.finish_reason === "stop" &&
+      toolUses.length === 0
+    ) {
+      const content = choice.message.content ?? "";
+      try {
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        toolUses.push({
+          id: randomUUID(),
+          name: FINAL_RESPONSE_TOOL_NAME,
+          input: parsed,
+        });
+      } catch {
+        logger.warn(
+          { model: this.model },
+          "structured output content was not valid JSON; escalating via empty toolUses",
+        );
+      }
     }
 
     return {

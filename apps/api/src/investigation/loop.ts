@@ -5,7 +5,7 @@ import {
   PLATFORM_TOOLS,
   RUNNER_TOOLS,
   REQUIRES_APPROVAL,
-  CONCLUDE_TOOL_NAME,
+  FINAL_RESPONSE_TOOL_NAME,
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig } from "../config/store.js";
@@ -137,13 +137,15 @@ export async function runInvestigation(
       return;
     }
 
-    // The model ends the investigation by calling `conclude`. Stopping with no
-    // tool call means it failed to do so - escalate rather than silently drop.
+    // The model ends the investigation by calling final_response (or producing
+    // native structured output, which the provider synthesizes as the same tool
+    // use). Stopping with no tool call means it failed - escalate rather than
+    // silently drop.
     if (response.toolUses.length === 0) {
       await escalate(
         alert,
         incidentId,
-        `Model stopped without calling ${CONCLUDE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
+        `Model stopped without calling ${FINAL_RESPONSE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
       );
       return;
     }
@@ -151,7 +153,7 @@ export async function runInvestigation(
     const toolResults: ToolResult[] = [];
 
     for (const tool of response.toolUses) {
-      if (tool.name === CONCLUDE_TOOL_NAME) {
+      if (tool.name === FINAL_RESPONSE_TOOL_NAME) {
         const parsed = InvestigationResultSchema.safeParse(tool.input);
         if (parsed.success) {
           await conclude(alert, incidentId, sessionId, parsed.data);
@@ -159,7 +161,7 @@ export async function runInvestigation(
           await escalate(
             alert,
             incidentId,
-            `${CONCLUDE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
+            `${FINAL_RESPONSE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
           );
         }
         return;

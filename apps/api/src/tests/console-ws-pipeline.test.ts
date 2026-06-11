@@ -51,8 +51,8 @@ const { mockCreateProvider } = vi.hoisted(() => {
             stopReason: "tool_use" as const,
             toolUses: [
               {
-                id: `conclude-${messages.length}`,
-                name: "conclude",
+                id: `final-response-${messages.length}`,
+                name: "final_response",
                 input: {
                   rootCause: {
                     summary: "No issues detected.",

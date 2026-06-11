@@ -10,8 +10,8 @@ import { logger } from "../logger.js";
 // Best-effort persistence; the runner may be briefly offline at conclusion time.
 const PERSIST_TIMEOUT_MS = 10_000;
 
-// Mirrors the `conclude` tool's input_schema in tools.ts. Optional fields are
-// nullable (not optional) to match the strict tool contract.
+// Mirrors the `final_response` tool's input_schema in tools.ts. Optional fields
+// are nullable (not optional) to match the strict tool contract.
 export const InvestigationResultSchema = z.object({
   rootCause: z.object({
     summary: z.string(),
@@ -32,8 +32,9 @@ export const InvestigationResultSchema = z.object({
   investigationSteps: z.array(z.string()),
 });
 
-// The model delivers this as a validated `conclude` tool call, so `data` is
-// already schema-checked by the loop - no text scraping, no JSON.parse here.
+// The model delivers this as a validated `final_response` tool call (or via
+// native structured output synthesized into one), so `data` is already
+// schema-checked by the loop - no text scraping, no JSON.parse here.
 export async function conclude(
   alert: NormalizedAlert,
   incidentId: string,

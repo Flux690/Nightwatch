@@ -1,9 +1,9 @@
 import type { ToolSchema } from "../llm/types.js";
 
-// The terminal tool. Calling it ends the investigation with a schema-validated
-// result instead of free-text JSON. It is platform-side and never routed to the
-// runner, so it appears in no routing set below.
-export const CONCLUDE_TOOL_NAME = "conclude";
+// The terminal tool. Calling it (or producing native structured output) ends
+// the investigation with a schema-validated result. Platform-side only - never
+// routed to the runner, so it appears in no routing set below.
+export const FINAL_RESPONSE_TOOL_NAME = "final_response";
 
 // Runner tools that require human approval before execution.
 // This is a property of certain runner tools, not a separate routing destination.
@@ -336,7 +336,7 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
     },
   },
   {
-    name: CONCLUDE_TOOL_NAME,
+    name: FINAL_RESPONSE_TOOL_NAME,
     description:
       "Finish the investigation. Call this exactly once, as the final step, with the root cause and (if any) the remediation you took or recommend. Do not describe your conclusion in prose - call this tool.",
     // Strict so the model's input is schema-constrained, not free text.
