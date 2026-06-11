@@ -2,47 +2,23 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  Outlet,
-  redirect,
 } from "@tanstack/react-router";
+import { Shell } from "./pages/Shell.js";
 import { RunnersPage } from "./pages/Runners.js";
-import { SessionsEmpty, SessionsLayout } from "./pages/Sessions.js";
-import { NewSessionPage } from "./pages/Sessions.js";
-import { SessionTranscript } from "./pages/SessionTranscript.js";
 import { SettingsPage } from "./pages/Settings.js";
 
-const rootRoute = createRootRoute({ component: Outlet });
+const rootRoute = createRootRoute({ component: Shell });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/sessions" });
-  },
-});
-
-const sessionsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/sessions",
-  component: SessionsLayout,
-});
-
-const sessionsIndexRoute = createRoute({
-  getParentRoute: () => sessionsRoute,
-  path: "/",
-  component: SessionsEmpty,
-});
-
-const newSessionRoute = createRoute({
-  getParentRoute: () => sessionsRoute,
-  path: "new",
-  component: NewSessionPage,
+  component: () => null,
 });
 
 const sessionIdRoute = createRoute({
-  getParentRoute: () => sessionsRoute,
-  path: "$id",
-  component: SessionTranscript,
+  getParentRoute: () => rootRoute,
+  path: "/sessions/$id",
+  component: () => null,
 });
 
 const runnersRoute = createRoute({
@@ -59,11 +35,7 @@ const settingsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  sessionsRoute.addChildren([
-    sessionsIndexRoute,
-    newSessionRoute,
-    sessionIdRoute,
-  ]),
+  sessionIdRoute,
   runnersRoute,
   settingsRoute,
 ]);

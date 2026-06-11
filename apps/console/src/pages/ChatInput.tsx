@@ -6,12 +6,14 @@ export interface ChatInputProps {
   token: string;
   sessionId: string | null;
   isRunning: boolean;
+  onSessionCreated?: (sessionId: string, firstMessage: string) => void;
 }
 
 export function ChatInput({
   token,
   sessionId,
   isRunning,
+  onSessionCreated,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
   const navigate = useNavigate();
@@ -27,7 +29,13 @@ export function ChatInput({
         body: JSON.stringify({ message: trimmed }),
       });
       const data = (await res.json()) as { sessionId: string };
-      await navigate({ to: "/sessions/$id", params: { id: data.sessionId } });
+      // Signal before navigation so callers can set up WS filtering immediately.
+      onSessionCreated?.(data.sessionId, trimmed);
+      await navigate({
+        to: "/sessions/$id",
+        params: { id: data.sessionId },
+        replace: true,
+      });
     } else {
       await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
