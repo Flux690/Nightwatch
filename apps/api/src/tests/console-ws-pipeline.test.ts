@@ -14,52 +14,70 @@ import type {
 } from "@nightwatch/shared";
 
 const { mockCreateProvider } = vi.hoisted(() => {
-  const provider = {
-    start: vi.fn(),
-    seed: vi.fn(),
-    snapshot: vi.fn(() => [
-      { role: "user", content: "Is the system healthy?", providerContent: {} },
-      {
-        role: "assistant",
-        content: "All looks well.",
-        providerContent: {},
-      },
-    ]),
-    chat: vi.fn(
-      (
-        _tools: unknown,
-        onDelta?: (d: { kind: string; text: string }) => void,
-      ) => {
-        onDelta?.({ kind: "text", text: "All " });
-        onDelta?.({ kind: "text", text: "looks well." });
-        return Promise.resolve({
-          stopReason: "tool_use" as const,
-          toolUses: [
-            {
-              id: "conclude-1",
-              name: "conclude",
-              input: {
-                rootCause: {
-                  summary: "No issues detected.",
-                  evidence: ["Metrics within normal range"],
-                  contributingFactors: null,
+  // Each createProvider() call returns a fresh, stateful provider instance so
+  // that snapshot() reflects the messages accumulated via seed/start/chat/append.
+  // The fixed-array mock would return seed.length items on resume, causing
+  // persist() to skip all new messages (persistedCount == snap.length).
+  const makeProvider = () => {
+    type ProvMsg = {
+      role: "user" | "assistant";
+      content: string;
+      providerContent: unknown;
+    };
+    const messages: ProvMsg[] = [];
+
+    return {
+      start: vi.fn((msg: string) => {
+        messages.push({ role: "user", content: msg, providerContent: {} });
+      }),
+      seed: vi.fn((history: ProvMsg[]) => {
+        messages.length = 0;
+        messages.push(...history);
+      }),
+      snapshot: vi.fn((): ProvMsg[] => [...messages]),
+      chat: vi.fn(
+        (
+          _tools: unknown,
+          onDelta?: (d: { kind: string; text: string }) => void,
+        ) => {
+          onDelta?.({ kind: "text", text: "All " });
+          onDelta?.({ kind: "text", text: "looks well." });
+          messages.push({
+            role: "assistant",
+            content: "All looks well.",
+            providerContent: {},
+          });
+          return Promise.resolve({
+            stopReason: "tool_use" as const,
+            toolUses: [
+              {
+                id: `conclude-${messages.length}`,
+                name: "conclude",
+                input: {
+                  rootCause: {
+                    summary: "No issues detected.",
+                    evidence: ["Metrics within normal range"],
+                    contributingFactors: null,
+                  },
+                  recommendedAction: null,
+                  escalateIfRejected: false,
+                  investigationSteps: ["Checked system metrics"],
                 },
-                recommendedAction: null,
-                escalateIfRejected: false,
-                investigationSteps: ["Checked system metrics"],
               },
-            },
-          ],
-          text: "All looks well.",
-        });
-      },
-    ),
-    appendToolResults: vi.fn(),
-    appendUserMessage: vi.fn(),
+            ],
+            text: "All looks well.",
+          });
+        },
+      ),
+      appendToolResults: vi.fn(),
+      appendUserMessage: vi.fn((msg: string) => {
+        messages.push({ role: "user", content: msg, providerContent: {} });
+      }),
+    };
   };
 
   return {
-    mockCreateProvider: vi.fn(() => provider),
+    mockCreateProvider: vi.fn(makeProvider),
   };
 });
 
@@ -216,5 +234,117 @@ describe("console WS pipeline", () => {
     expect(transcriptRes.status).toBe(200);
     const transcript = (await transcriptRes.json()) as unknown[];
     expect(transcript.length).toBeGreaterThan(0);
+  });
+
+  it("resume of ended session seeds provider from persisted transcript", async () => {
+    mockCreateProvider.mockClear();
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    await new Promise<void>((res) => ws.on("open", res));
+
+    let targetSessionId: string | undefined;
+    let firstRunDone = false;
+    let resolveFirstRun!: () => void;
+    let resolveResumedRun!: () => void;
+    const firstRunComplete = new Promise<void>((r) => {
+      resolveFirstRun = r;
+    });
+    const resumedRunComplete = new Promise<void>((r) => {
+      resolveResumedRun = r;
+    });
+
+    ws.on("message", (raw) => {
+      const msg = JSON.parse(raw.toString()) as {
+        type: string;
+        payload: { sessionId: string; message: { role: string } };
+      };
+      if (msg.type !== "session_message") return;
+      if (msg.payload.sessionId !== targetSessionId) return;
+      // The first run ends when the assistant turn is persisted. Waiting only
+      // for the assistant turn (not the user turn) prevents the user message
+      // from the same run from prematurely resolving resumedRunComplete.
+      if (!firstRunDone && msg.payload.message.role === "assistant") {
+        firstRunDone = true;
+        resolveFirstRun();
+      } else if (firstRunDone) {
+        resolveResumedRun();
+      }
+    });
+
+    // Start a new chat session (first run).
+    const startRes = await fetch(
+      `http://127.0.0.1:${port}/chat/${TEST_TOKEN}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Is the system healthy?" }),
+      },
+    );
+    expect(startRes.status).toBe(202);
+    const { sessionId } = (await startRes.json()) as { sessionId: string };
+    targetSessionId = sessionId;
+
+    await Promise.race([
+      firstRunComplete,
+      new Promise<void>((_, rej) =>
+        setTimeout(
+          () => rej(new Error("timeout: first run did not complete")),
+          10_000,
+        ),
+      ),
+    ]);
+
+    // Resume the ended session with a follow-up message. The same sessionId
+    // must come back - no new session is minted.
+    const resumeRes = await fetch(
+      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: TEST_TOKEN,
+          message: "Follow-up question.",
+        }),
+      },
+    );
+    expect(resumeRes.status).toBe(202);
+    const resumeBody = (await resumeRes.json()) as { sessionId: string };
+    expect(resumeBody.sessionId).toBe(sessionId);
+
+    // The resumed run must emit session_message (i.e. the new turns are
+    // persisted - if snapshot() were not stateful this would time out).
+    await Promise.race([
+      resumedRunComplete,
+      new Promise<void>((_, rej) =>
+        setTimeout(
+          () =>
+            rej(new Error("timeout: resumed run did not emit session_message")),
+          10_000,
+        ),
+      ),
+    ]);
+
+    ws.close();
+
+    // createProvider was called once per run.
+    expect(mockCreateProvider.mock.calls.length).toBe(2);
+
+    // The second provider (resume run) must have been seeded with the two
+    // messages persisted by the first run (user + assistant), then had the
+    // follow-up appended as a user turn.
+    const resumeProvider = mockCreateProvider.mock.results[1]?.value as {
+      seed: ReturnType<typeof vi.fn>;
+      appendUserMessage: ReturnType<typeof vi.fn>;
+    };
+    expect(resumeProvider.seed).toHaveBeenCalledOnce();
+    const [seededHistory] = resumeProvider.seed.mock.calls[0] as [
+      Array<{ role: string; content: string }>,
+    ];
+    expect(seededHistory).toHaveLength(2);
+    expect(seededHistory[0]).toMatchObject({ role: "user" });
+    expect(seededHistory[1]).toMatchObject({ role: "assistant" });
+    expect(resumeProvider.appendUserMessage).toHaveBeenCalledWith(
+      "Follow-up question.",
+    );
   });
 });
