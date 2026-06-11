@@ -84,17 +84,14 @@ function makeUsage() {
   };
 }
 
-describe("AnthropicProvider structured output (structuredOutput=true)", () => {
+describe("AnthropicProvider structured output", () => {
   let provider: AnthropicProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockAnthropicOn.mockReturnThis();
     mockMessagesStream.mockReturnValue(mockAnthropicStream);
-    provider = new AnthropicProvider("You are Nightwatch.", {
-      ...BASE_CONFIG,
-      structuredOutput: true,
-    });
+    provider = new AnthropicProvider("You are Nightwatch.", BASE_CONFIG);
     provider.start("CPU spike detected.");
   });
 
@@ -184,7 +181,11 @@ describe("AnthropicProvider structured output (structuredOutput=true)", () => {
     mockFinalMessage.mockResolvedValueOnce({
       stop_reason: "end_turn",
       content: [
-        { type: "thinking", thinking: "Let me reason about this...", signature: "" },
+        {
+          type: "thinking",
+          thinking: "Let me reason about this...",
+          signature: "",
+        },
         {
           type: "text",
           text: JSON.stringify(VALID_STRUCTURED_OUTPUT),
@@ -199,69 +200,5 @@ describe("AnthropicProvider structured output (structuredOutput=true)", () => {
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("final_response");
     expect(response.toolUses[0].input).toMatchObject(VALID_STRUCTURED_OUTPUT);
-  });
-});
-
-describe("AnthropicProvider tool fallback (structuredOutput=false)", () => {
-  let provider: AnthropicProvider;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockAnthropicOn.mockReturnThis();
-    mockMessagesStream.mockReturnValue(mockAnthropicStream);
-    provider = new AnthropicProvider("You are Nightwatch.", {
-      ...BASE_CONFIG,
-      structuredOutput: false,
-    });
-    provider.start("CPU spike detected.");
-  });
-
-  it("passes final_response as a normal tool and does not set output_config.format", async () => {
-    mockFinalMessage.mockResolvedValueOnce({
-      stop_reason: "tool_use",
-      content: [
-        {
-          type: "tool_use",
-          id: "tu-fr-1",
-          name: "final_response",
-          input: VALID_STRUCTURED_OUTPUT,
-        },
-      ],
-      usage: makeUsage(),
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
-
-    const callArgs = mockMessagesStream.mock.calls[0]?.[0] as {
-      tools: Array<{ name: string }>;
-      output_config?: unknown;
-    };
-
-    // final_response must be present in the tools list
-    const toolNames = (callArgs.tools ?? []).map((t) => t.name);
-    expect(toolNames).toContain("final_response");
-    // output_config must not be set
-    expect(callArgs.output_config).toBeUndefined();
-
-    // The real tool_use block is returned verbatim (no synthesis)
-    expect(response.stopReason).toBe("tool_use");
-    expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("final_response");
-    expect(response.toolUses[0].id).toBe("tu-fr-1");
-    expect(response.toolUses[0].input).toMatchObject(VALID_STRUCTURED_OUTPUT);
-  });
-
-  it("does not synthesize ToolUse when model returns end_turn (no structured output)", async () => {
-    // With fallback, end_turn with text = model didn't call the tool = escalation path.
-    mockFinalMessage.mockResolvedValueOnce({
-      stop_reason: "end_turn",
-      content: [{ type: "text", text: "I am done.", citations: null }],
-      usage: makeUsage(),
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
-
-    // No synthesis: the loop will escalate via empty toolUses
-    expect(response.toolUses).toHaveLength(0);
   });
 });

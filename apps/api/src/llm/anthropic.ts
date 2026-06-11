@@ -41,15 +41,7 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
-    // When structured output is enabled (the default), promote final_response
-    // to output_config.format so the model produces a constrained JSON object
-    // on its final turn rather than a tool invocation. Investigation tools are
-    // passed unchanged. When disabled, pass final_response as a normal strict
-    // tool (fallback for endpoints without native structured output support).
-    const useStructuredOutput = this.config.structuredOutput !== false;
-    const terminalTool = useStructuredOutput
-      ? tools.find((t) => t.name === FINAL_RESPONSE_TOOL_NAME)
-      : undefined;
+    const terminalTool = tools.find((t) => t.name === FINAL_RESPONSE_TOOL_NAME);
     const functionTools = terminalTool
       ? tools.filter((t) => t.name !== FINAL_RESPONSE_TOOL_NAME)
       : tools;

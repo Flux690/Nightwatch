@@ -78,17 +78,14 @@ const OTHER_TOOL = {
   },
 };
 
-describe("OpenAIProvider structured output (structuredOutput=true)", () => {
+describe("OpenAIProvider structured output", () => {
   let provider: OpenAIProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockStream.on.mockReturnThis();
     mockCompletionsStream.mockReturnValue(mockStream);
-    provider = new OpenAIProvider("You are Nightwatch.", {
-      ...BASE_CONFIG,
-      structuredOutput: true,
-    });
+    provider = new OpenAIProvider("You are Nightwatch.", BASE_CONFIG);
     provider.start("CPU spike detected.");
   });
 
@@ -193,85 +190,5 @@ describe("OpenAIProvider structured output (structuredOutput=true)", () => {
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("get_container_list");
     expect(response.toolUses[0].id).toBe("call-123");
-  });
-});
-
-describe("OpenAIProvider tool fallback (structuredOutput=false)", () => {
-  let provider: OpenAIProvider;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockStream.on.mockReturnThis();
-    mockCompletionsStream.mockReturnValue(mockStream);
-    provider = new OpenAIProvider("You are Nightwatch.", {
-      ...BASE_CONFIG,
-      structuredOutput: false,
-    });
-    provider.start("CPU spike detected.");
-  });
-
-  it("passes final_response as a normal function tool and does not set response_format", async () => {
-    mockFinalChatCompletion.mockResolvedValueOnce({
-      choices: [
-        {
-          finish_reason: "tool_calls",
-          message: {
-            role: "assistant",
-            content: null,
-            tool_calls: [
-              {
-                type: "function",
-                id: "fr-fallback-1",
-                function: {
-                  name: "final_response",
-                  arguments: JSON.stringify(VALID_STRUCTURED_OUTPUT),
-                },
-              },
-            ],
-          },
-        },
-      ],
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
-
-    const callArgs = mockCompletionsStream.mock.calls[0]?.[0] as {
-      tools: Array<{ function: { name: string } }>;
-      response_format?: unknown;
-    };
-
-    // final_response must be present in the tools list
-    const toolNames = (callArgs.tools ?? []).map((t) => t.function.name);
-    expect(toolNames).toContain("final_response");
-    // response_format must not be set
-    expect(callArgs.response_format).toBeUndefined();
-
-    // Real tool_use returned verbatim
-    expect(response.stopReason).toBe("tool_use");
-    expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("final_response");
-    expect(response.toolUses[0].id).toBe("fr-fallback-1");
-    expect(response.toolUses[0].input).toMatchObject(VALID_STRUCTURED_OUTPUT);
-  });
-
-  it("does not synthesize ToolUse when model returns finish_reason: stop (no structured output)", async () => {
-    // With fallback, stop + no tool_calls = model didn't invoke the tool = escalation.
-    mockFinalChatCompletion.mockResolvedValueOnce({
-      choices: [
-        {
-          finish_reason: "stop",
-          message: {
-            role: "assistant",
-            content: "I am done.",
-            tool_calls: undefined,
-          },
-        },
-      ],
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
-
-    // No synthesis: the loop will escalate via empty toolUses check
-    expect(response.toolUses).toHaveLength(0);
   });
 });

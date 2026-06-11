@@ -32,7 +32,6 @@ model Config {
   provider         String   @default("anthropic")
   model            String   @default("claude-sonnet-4-6")
   thinking         String   @default("adaptive")
-  structuredOutput Boolean  @default(true)
   maxOutputTokens  Int      @default(32000)
   maxRetries       Int      @default(2)
   requestTimeoutMs Int      @default(120000)
