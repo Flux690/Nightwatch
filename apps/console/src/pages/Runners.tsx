@@ -34,13 +34,22 @@ export function RunnersPage(): React.JSX.Element {
   });
 
   return (
-    <div style={{ padding: "var(--mantine-spacing-md)" }}>
+    <div
+      className="nw-page"
+      style={{ padding: "var(--mantine-spacing-md)" }}
+    >
       <Title order={2} size="h4" mb="md">
         Runners
       </Title>
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {(runners ?? []).map((runner) => (
-          <li key={runner.id}>
+          <li
+            key={runner.id}
+            style={{
+              borderTop: "1px solid var(--nw-border)",
+              padding: "var(--mantine-spacing-sm) 0",
+            }}
+          >
             <Text size="sm" ff="monospace">
               {runner.hostname}
             </Text>

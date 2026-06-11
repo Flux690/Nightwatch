@@ -19,7 +19,7 @@ createRoot(root).render(
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />

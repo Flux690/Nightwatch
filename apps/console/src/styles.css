@@ -2,7 +2,81 @@
 @import "tailwindcss";
 @import "@mantine/core/styles.layer.css";
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
-  background-color: var(--mantine-color-dark-9);
-  color: var(--mantine-color-dark-0);
+  margin: 0;
+  background-color: var(--nw-bg);
+  color: var(--nw-text);
+  font-family: var(--mantine-font-family);
+  color-scheme: light;
+}
+
+::selection {
+  background: var(--nw-accent);
+  color: var(--nw-bg);
+}
+
+.mantine-Button-root,
+.mantine-ActionIcon-root {
+  box-shadow: none;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.mantine-Button-root:focus-visible,
+.mantine-ActionIcon-root:focus-visible,
+.mantine-Input-input:focus-visible,
+.nw-session-row:focus-visible {
+  outline: 2px solid var(--nw-accent);
+  outline-offset: 2px;
+}
+
+.mantine-Input-input {
+  background: var(--nw-bg);
+  border-color: var(--nw-border-strong);
+  color: var(--nw-text);
+}
+
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--nw-accent);
+}
+
+.mantine-InputWrapper-label {
+  color: var(--nw-text);
+  font-weight: 600;
+}
+
+.mantine-Combobox-dropdown,
+.mantine-Popover-dropdown {
+  background: var(--nw-bg);
+  border-color: var(--nw-border-strong);
+}
+
+.mantine-Combobox-option[data-combobox-selected],
+.mantine-Combobox-option:hover {
+  background: var(--nw-surface-raised);
+}
+
+.mantine-Code-root {
+  background: var(--nw-surface);
+  color: var(--nw-text);
+}
+
+.nw-session-row {
+  background: transparent;
+}
+
+.nw-session-row:hover {
+  background: var(--nw-surface-raised);
+}
+
+.nw-page {
+  min-height: 100%;
+  background: var(--nw-bg);
 }
