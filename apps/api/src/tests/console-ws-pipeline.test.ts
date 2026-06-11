@@ -258,7 +258,7 @@ describe("console WS pipeline", () => {
         type: string;
         payload: { sessionId: string; message: { role: string } };
       };
-      if (msg.type !== "session_message") return;
+      if (msg.type !== "RUN_FINISHED") return;
       if (msg.payload.sessionId !== targetSessionId) return;
       // The first run ends when the assistant turn is persisted. Waiting only
       // for the assistant turn (not the user turn) prevents the user message
@@ -311,14 +311,14 @@ describe("console WS pipeline", () => {
     const resumeBody = (await resumeRes.json()) as { sessionId: string };
     expect(resumeBody.sessionId).toBe(sessionId);
 
-    // The resumed run must emit session_message (i.e. the new turns are
+    // The resumed run must emit RUN_FINISHED (i.e. the new turns are
     // persisted - if snapshot() were not stateful this would time out).
     await Promise.race([
       resumedRunComplete,
       new Promise<void>((_, rej) =>
         setTimeout(
           () =>
-            rej(new Error("timeout: resumed run did not emit session_message")),
+            rej(new Error("timeout: resumed run did not emit RUN_FINISHED")),
           10_000,
         ),
       ),
