@@ -1,34 +1,57 @@
-import { createTheme, type CSSVariablesResolver } from "@mantine/core";
+import {
+  colorsTuple,
+  createTheme,
+  type CSSVariablesResolver,
+} from "@mantine/core";
 
 export const theme = createTheme({
-  // "red" is the closest built-in Mantine scale to Folio crimson (#8B1A1A).
-  // Actual accent hex is in other.accentInteractive and --nw-accent.
-  primaryColor: "red",
+  colors: {
+    ink: colorsTuple([
+      "#F5F2EE",
+      "#E9E5E0",
+      "#D9D3CD",
+      "#BEB6AF",
+      "#918983",
+      "#6F6862",
+      "#504A45",
+      "#3C3834",
+      "#24211F",
+      "#0D0C0B",
+    ]),
+    streaming: colorsTuple("#00552A"),
+    awaiting: colorsTuple("#684000"),
+    escalated: colorsTuple("#7A0E0E"),
+  },
+  primaryColor: "ink",
   primaryShade: { light: 9, dark: 9 },
-  fontFamily: "IBM Plex Sans, system-ui, -apple-system, sans-serif",
-  fontFamilyMonospace: "IBM Plex Mono, Menlo, Consolas, monospace",
+  black: "#0D0C0B",
+  white: "#FDFCFB",
+  fontFamily:
+    '"IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontFamilyMonospace:
+    '"IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace',
   defaultRadius: "xs",
   radius: {
     xs: "1px",
-    sm: "2px",
+    sm: "1px",
     md: "2px",
-    lg: "4px",
-    xl: "4px",
+    lg: "2px",
+    xl: "2px",
   },
   other: {
-    bg: "#F2EFE9",
-    surface: "#EAE6DE",
-    // crimson #8B1A1A — 8.2:1 on bg (AAA)
-    accentInteractive: "#8B1A1A",
-    // prussian navy #1C3A5E — 9.7:1 on bg (AAA)
-    accentLive: "#1C3A5E",
-    textPrimary: "#1A1816",
-    textMuted: "#5C5750",
-    border: "#C8C3BA",
-    // all status colours AAA on #F2EFE9
-    statusStreaming: "#1C3A5E", // 9.7:1
-    statusAwaiting: "#7A4A00", // 8.9:1
-    statusEscalated: "#8B1A1A", // 8.2:1
+    bg: "#F5F2EE",
+    surface: "#EFECE8",
+    surfaceRaised: "#E6E1DB",
+    accent: "#0D0C0B",
+    accentHover: "#24211F",
+    textPrimary: "#0D0C0B",
+    textMuted: "#504A45",
+    border: "#C9C1BA",
+    borderStrong: "#918983",
+    statusStreaming: "#00552A", // 8.07:1 on bg
+    statusAwaiting: "#684000", // 8.10:1 on bg
+    statusConcluded: "#504A45", // 7.82:1 on bg
+    statusEscalated: "#7A0E0E", // 9.92:1 on bg
   },
 });
 
@@ -38,17 +61,29 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => {
     variables: {
       "--nw-bg": o.bg,
       "--nw-surface": o.surface,
-      "--nw-accent": o.accentInteractive,
-      "--nw-accent-live": o.accentLive,
+      "--nw-surface-raised": o.surfaceRaised,
+      "--nw-accent": o.accent,
+      "--nw-accent-hover": o.accentHover,
       "--nw-text": o.textPrimary,
       "--nw-text-muted": o.textMuted,
       "--nw-border": o.border,
+      "--nw-border-strong": o.borderStrong,
       "--nw-mono": t.fontFamilyMonospace ?? "monospace",
       "--nw-status-streaming": o.statusStreaming,
       "--nw-status-awaiting": o.statusAwaiting,
+      "--nw-status-concluded": o.statusConcluded,
       "--nw-status-escalated": o.statusEscalated,
     },
     dark: {},
-    light: {},
+    light: {
+      "--mantine-color-body": o.bg,
+      "--mantine-color-text": o.textPrimary,
+      "--mantine-color-dimmed": o.textMuted,
+      "--mantine-color-default": o.surface,
+      "--mantine-color-default-hover": o.surfaceRaised,
+      "--mantine-color-default-color": o.textPrimary,
+      "--mantine-color-default-border": o.border,
+      "--mantine-color-placeholder": o.textMuted,
+    },
   };
 };

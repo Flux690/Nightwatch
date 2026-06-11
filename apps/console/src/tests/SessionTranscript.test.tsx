@@ -105,7 +105,7 @@ function setup(messages: object[] = [SESSION_MESSAGE_1]) {
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />

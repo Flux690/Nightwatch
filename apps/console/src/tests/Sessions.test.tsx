@@ -97,7 +97,7 @@ function setupWithSessionsError() {
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
@@ -162,7 +162,7 @@ function setup(sessions: object[] = [SESSION_1]) {
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
@@ -411,7 +411,7 @@ describe("SessionsSidebar", () => {
         <MantineProvider
           theme={theme}
           cssVariablesResolver={cssVariablesResolver}
-          defaultColorScheme="dark"
+          defaultColorScheme="light"
         >
           <QueryClientProvider client={qc}>
             <RouterProvider router={router} />

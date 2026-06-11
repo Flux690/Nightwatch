@@ -48,7 +48,7 @@ function setup(runners: object[] = [ONLINE_RUNNER, OFFLINE_RUNNER]) {
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
         <RunnersPage />
@@ -128,7 +128,7 @@ describe("RunnersPage", () => {
       <MantineProvider
         theme={theme}
         cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="dark"
+        defaultColorScheme="light"
       >
         <QueryClientProvider client={qc}>
           <RunnersPage />

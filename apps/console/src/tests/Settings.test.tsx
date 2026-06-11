@@ -62,7 +62,7 @@ function setup() {
     <MantineProvider
       theme={theme}
       cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="dark"
+      defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
         <SettingsPage />

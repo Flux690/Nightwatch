@@ -119,7 +119,8 @@ export function SessionsSidebar(): React.JSX.Element {
       style={{
         width: 260,
         height: "100vh",
-        borderRight: "1px solid var(--mantine-color-dark-4)",
+        borderRight: "1px solid var(--nw-border)",
+        background: "var(--nw-surface)",
         display: "flex",
         flexDirection: "column",
         padding: "var(--mantine-spacing-sm)",
@@ -149,6 +150,7 @@ export function SessionsSidebar(): React.JSX.Element {
         {sessions.map((session) => (
           <li key={session.sessionId}>
             <button
+              className="nw-session-row"
               onClick={() =>
                 void navigate({
                   to: "/sessions/$id",
@@ -157,13 +159,12 @@ export function SessionsSidebar(): React.JSX.Element {
               }
               style={{
                 width: "100%",
-                background: "none",
                 border: "none",
                 cursor: "pointer",
                 padding: "var(--mantine-spacing-xs)",
                 borderRadius: "var(--mantine-radius-sm)",
                 textAlign: "left",
-                color: "inherit",
+                color: "var(--nw-text)",
               }}
             >
               <Text size="sm" truncate>
@@ -192,7 +193,10 @@ export function SessionsSidebar(): React.JSX.Element {
 
 export function SessionsLayout(): React.JSX.Element {
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div
+      className="nw-page"
+      style={{ display: "flex", height: "100vh" }}
+    >
       <SessionsSidebar />
       <main style={{ flex: 1, overflow: "hidden" }}>
         <Outlet />

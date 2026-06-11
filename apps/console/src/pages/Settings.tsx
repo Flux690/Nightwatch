@@ -103,7 +103,10 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   return (
-    <div style={{ padding: "var(--mantine-spacing-md)", maxWidth: 520 }}>
+    <div
+      className="nw-page"
+      style={{ padding: "var(--mantine-spacing-md)", maxWidth: 520 }}
+    >
       <Title order={2} size="h4" mb="md">
         Settings
       </Title>

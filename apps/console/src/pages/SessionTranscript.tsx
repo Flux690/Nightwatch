@@ -47,8 +47,9 @@ function ToolCard({ card }: { card: LiveToolCard }): React.JSX.Element {
       </Text>
       <div
         style={{
-          border: "1px solid var(--mantine-color-dark-4)",
+          border: "1px solid var(--nw-border)",
           borderRadius: "var(--mantine-radius-sm)",
+          background: "var(--nw-surface)",
           overflow: "hidden",
         }}
       >
@@ -68,7 +69,7 @@ function ToolCard({ card }: { card: LiveToolCard }): React.JSX.Element {
             {inputText}
           </pre>
         </div>
-        <div style={{ borderTop: "1px solid var(--mantine-color-dark-4)" }} />
+        <div style={{ borderTop: "1px solid var(--nw-border)" }} />
         <div style={{ padding: "var(--mantine-spacing-xs)" }}>
           <Text size="xs" c="dimmed" ff="monospace" mb={4}>
             OUT
@@ -115,8 +116,9 @@ function ApprovalCard({
       data-testid="approval-card"
       style={{
         marginBottom: "var(--mantine-spacing-sm)",
-        border: "1px solid var(--mantine-color-yellow-7)",
+        border: "1px solid var(--nw-status-awaiting)",
         borderRadius: "var(--mantine-radius-sm)",
+        background: "var(--nw-surface)",
         padding: "var(--mantine-spacing-xs)",
       }}
     >
@@ -135,7 +137,7 @@ function ApprovalCard({
         <div style={{ display: "flex", gap: "var(--mantine-spacing-xs)" }}>
           <Button
             size="xs"
-            color="green"
+            color="streaming"
             disabled={card.approval === "pending"}
             onClick={() => onResolve("approve")}
           >
@@ -143,7 +145,7 @@ function ApprovalCard({
           </Button>
           <Button
             size="xs"
-            color="red"
+            color="escalated"
             variant="outline"
             disabled={card.approval === "pending"}
             onClick={() => onResolve("reject")}
@@ -299,6 +301,7 @@ export function SessionTranscript(): React.JSX.Element {
 
   return (
     <div
+      className="nw-page"
       style={{
         display: "flex",
         flexDirection: "column",
