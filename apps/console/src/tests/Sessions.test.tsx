@@ -227,7 +227,7 @@ describe("SessionsSidebar", () => {
   });
 
   describe("live WS updates", () => {
-    it("updates the status badge to 'streaming' on session_delta for existing session", async () => {
+    it("updates the status badge to 'streaming' on TEXT_MESSAGE_CONTENT for existing session", async () => {
       setup();
 
       await waitFor(() => {
@@ -237,7 +237,7 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
         });
       });
@@ -247,7 +247,7 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("updates the badge to 'awaiting-approval' on tool_call with awaitingApproval", async () => {
+    it("updates the badge to 'awaiting-approval' on INTERRUPT", async () => {
       setup();
 
       await waitFor(() => {
@@ -257,13 +257,13 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m2",
-          type: "tool_call",
+          type: "INTERRUPT",
           payload: {
             sessionId: "s1",
             toolUseId: "tu1",
             toolName: "restart_service",
-            phase: "start",
-            awaitingApproval: true,
+            input: {},
+            incidentId: "inc-1",
           },
         });
       });
@@ -273,7 +273,7 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("resets badge to 'concluded' on session_message for existing session", async () => {
+    it("resets badge to 'concluded' on RUN_FINISHED for existing session", async () => {
       setup();
 
       await waitFor(() => {
@@ -284,7 +284,7 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Thinking..." },
         });
       });
@@ -296,7 +296,7 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m4",
-          type: "session_message",
+          type: "RUN_FINISHED",
           payload: {
             sessionId: "s1",
             message: {
@@ -315,7 +315,7 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("appends a new row when session_message arrives for an unseen sessionId", async () => {
+    it("appends a new row when RUN_FINISHED arrives for an unseen sessionId", async () => {
       setup([SESSION_1]);
 
       await waitFor(() => {
@@ -328,7 +328,7 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m5",
-          type: "session_message",
+          type: "RUN_FINISHED",
           payload: {
             sessionId: "s-new",
             message: {
@@ -347,7 +347,7 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("appends a new row when session_delta arrives for an unseen sessionId", async () => {
+    it("appends a new row when TEXT_MESSAGE_CONTENT arrives for an unseen sessionId", async () => {
       setup([SESSION_1]);
 
       await waitFor(() => {
@@ -357,7 +357,7 @@ describe("SessionsSidebar", () => {
       act(() => {
         latestWs?.push({
           messageId: "m6",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s-brand-new", kind: "text", delta: "..." },
         });
       });

@@ -98,22 +98,17 @@ export function SessionsSidebar(): React.JSX.Element {
   }, [fetchedSessions]);
 
   const handleEnvelope = useCallback((env: WsEnvelope) => {
-    if (env.type === "session_delta") {
+    if (env.type === "TEXT_MESSAGE_CONTENT") {
       const { sessionId } = env.payload as { sessionId: string };
       setSessions((prev) => updateOrAppend(prev, sessionId, "streaming"));
-    } else if (env.type === "session_message") {
+    } else if (env.type === "RUN_FINISHED") {
       const { sessionId } = env.payload as { sessionId: string };
       setSessions((prev) => updateOrAppend(prev, sessionId, "concluded"));
-    } else if (env.type === "tool_call") {
-      const { sessionId, awaitingApproval } = env.payload as {
-        sessionId: string;
-        awaitingApproval?: boolean;
-      };
-      if (awaitingApproval) {
-        setSessions((prev) =>
-          updateOrAppend(prev, sessionId, "awaiting-approval"),
-        );
-      }
+    } else if (env.type === "INTERRUPT") {
+      const { sessionId } = env.payload as { sessionId: string };
+      setSessions((prev) =>
+        updateOrAppend(prev, sessionId, "awaiting-approval"),
+      );
     }
   }, []);
 

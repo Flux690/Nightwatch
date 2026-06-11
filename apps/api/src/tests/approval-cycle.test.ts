@@ -182,19 +182,13 @@ describe("approval cycle", () => {
       const msg = JSON.parse(raw.toString()) as WsEvent;
       if (msg.type === "connected") return;
       events.push(msg);
-      if (
-        msg.type === "tool_call" &&
-        msg.payload["sessionId"] === sessionId &&
-        msg.payload["phase"] === "start" &&
-        msg.payload["awaitingApproval"] === true
-      ) {
+      if (msg.type === "INTERRUPT" && msg.payload["sessionId"] === sessionId) {
         resolveAwaiting(msg);
       }
       if (
-        msg.type === "tool_call" &&
+        msg.type === "TOOL_CALL_END" &&
         msg.payload["sessionId"] === sessionId &&
-        msg.payload["toolUseId"] === "restart-1" &&
-        msg.payload["phase"] === "result"
+        msg.payload["toolUseId"] === "restart-1"
       ) {
         resolveResult();
       }
@@ -251,14 +245,15 @@ describe("approval cycle", () => {
 
     ws.close();
 
-    // The gate resolved, the write ran exactly once, and an approval_update was
+    // The gate resolved, the write ran exactly once, and an INTERRUPT_RESOLVED was
     // broadcast to the console.
     expect(restartCommands).toHaveLength(1);
     expect(restartCommands[0]["containerName"]).toBe("web-01");
 
     const approvalUpdates = events.filter(
       (e) =>
-        e.type === "approval_update" && e.payload["toolUseId"] === "restart-1",
+        e.type === "INTERRUPT_RESOLVED" &&
+        e.payload["toolUseId"] === "restart-1",
     );
     expect(approvalUpdates.length).toBeGreaterThan(0);
     expect(approvalUpdates[0].payload["status"]).toBe("approved");

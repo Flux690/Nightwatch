@@ -87,8 +87,9 @@ export interface RunnerHeartbeatMessage extends WsEnvelope {
 }
 
 // API → Console: real-time incident update
+// AG-UI: INCIDENT_UPDATE
 export interface ConsoleIncidentUpdate extends WsEnvelope {
-  type: "incident_update";
+  type: "INCIDENT_UPDATE";
   payload: {
     incidentId: string;
     token: string;
@@ -98,9 +99,10 @@ export interface ConsoleIncidentUpdate extends WsEnvelope {
   };
 }
 
-// API → Console: approval state change (e.g. another user approved)
-export interface ConsoleApprovalUpdate extends WsEnvelope {
-  type: "approval_update";
+// API → Console: approval resolved (another user approved or rejected).
+// AG-UI: INTERRUPT_RESOLVED — paired with the INTERRUPT that preceded it.
+export interface ConsoleInterruptResolved extends WsEnvelope {
+  type: "INTERRUPT_RESOLVED";
   payload: {
     incidentId: string;
     toolUseId: string;
@@ -112,9 +114,10 @@ export interface ConsoleApprovalUpdate extends WsEnvelope {
 
 // API → Console: a live token delta from an in-progress turn. Ephemeral (Redis
 // pub/sub only, keyed by session); never persisted - the durable record is the
-// ConsoleSessionMessage written when the turn completes.
-export interface ConsoleSessionDelta extends WsEnvelope {
-  type: "session_delta";
+// ConsoleRunFinished message written when the turn completes.
+// AG-UI: TEXT_MESSAGE_CONTENT
+export interface ConsoleTextMessageContent extends WsEnvelope {
+  type: "TEXT_MESSAGE_CONTENT";
   payload: {
     sessionId: string;
     kind: "text" | "thinking";
@@ -123,31 +126,52 @@ export interface ConsoleSessionDelta extends WsEnvelope {
 }
 
 // API → Console: a completed turn, mirroring what was persisted to the runner.
-export interface ConsoleSessionMessage extends WsEnvelope {
-  type: "session_message";
+// AG-UI: RUN_FINISHED
+export interface ConsoleRunFinished extends WsEnvelope {
+  type: "RUN_FINISHED";
   payload: {
     sessionId: string;
     message: SessionMessage;
   };
 }
 
-// API → Console: a tool call's lifecycle within a session. `start` fires when the
-// model invokes it (carrying input and, for gated tools, awaitingApproval);
-// `result` fires once the runner/platform responds.
-export interface ConsoleToolCall extends WsEnvelope {
-  type: "tool_call";
+// API → Console: a non-gated tool call started. The tool will execute
+// immediately; TOOL_CALL_END arrives once the runner/platform responds.
+// AG-UI: TOOL_CALL_START
+export interface ConsoleToolCallStart extends WsEnvelope {
+  type: "TOOL_CALL_START";
   payload: {
     sessionId: string;
     toolUseId: string;
     toolName: string;
-    phase: "start" | "result";
-    input?: Record<string, unknown>;
-    result?: unknown;
+    input: Record<string, unknown>;
+  };
+}
+
+// API → Console: a gated tool call is paused awaiting human approval.
+// The operator must approve before execution proceeds. incidentId addresses
+// POST /incidents/:id/approve; toolUseId is the loop's correlation key.
+// AG-UI: INTERRUPT
+export interface ConsoleInterrupt extends WsEnvelope {
+  type: "INTERRUPT";
+  payload: {
+    sessionId: string;
+    toolUseId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    incidentId: string;
+  };
+}
+
+// API → Console: a tool call completed. Fires for both gated and non-gated
+// tools once the runner/platform responds.
+// AG-UI: TOOL_CALL_END
+export interface ConsoleToolCallEnd extends WsEnvelope {
+  type: "TOOL_CALL_END";
+  payload: {
+    sessionId: string;
+    toolUseId: string;
+    result: unknown;
     isError?: boolean;
-    awaitingApproval?: boolean;
-    // The investigation this call belongs to. Present on the `start` event so the
-    // console can address `POST /incidents/:id/approve` for a gated tool without a
-    // second lookup. The toolUseId remains the loop's correlation key.
-    incidentId?: string;
   };
 }

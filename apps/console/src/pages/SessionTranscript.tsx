@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Text } from "@mantine/core";
 import { useCallback, useState } from "react";
 import type {
-  ConsoleApprovalUpdate,
-  ConsoleToolCall,
+  ConsoleInterrupt,
+  ConsoleInterruptResolved,
+  ConsoleToolCallEnd,
+  ConsoleToolCallStart,
   RunnerRecord,
   SessionMessage,
   WsEnvelope,
@@ -183,7 +185,7 @@ export function SessionTranscript(): React.JSX.Element {
 
   const handleEnvelope = useCallback(
     (env: WsEnvelope) => {
-      if (env.type === "session_delta") {
+      if (env.type === "TEXT_MESSAGE_CONTENT") {
         const { sessionId, delta } = env.payload as {
           sessionId: string;
           delta: string;
@@ -201,7 +203,7 @@ export function SessionTranscript(): React.JSX.Element {
             { kind: "text", id: `text-${Date.now()}`, text: delta },
           ];
         });
-      } else if (env.type === "session_message") {
+      } else if (env.type === "RUN_FINISHED") {
         const { sessionId, message } = env.payload as {
           sessionId: string;
           message: SessionMessage;
@@ -213,36 +215,50 @@ export function SessionTranscript(): React.JSX.Element {
           ["session", id],
           (prev = []) => [...prev, message],
         );
-      } else if (env.type === "tool_call") {
-        const payload = env.payload as ConsoleToolCall["payload"];
+      } else if (env.type === "TOOL_CALL_START") {
+        const payload = env.payload as ConsoleToolCallStart["payload"];
         if (payload.sessionId !== id) return;
-        if (payload.phase === "start") {
-          const riskValue = payload.input?.["risk"];
-          setLiveItems((prev) => [
-            ...prev,
-            {
-              kind: "tool_card",
-              toolUseId: payload.toolUseId,
-              toolName: payload.toolName,
-              input: payload.input ?? {},
-              result: null,
-              awaitingApproval: payload.awaitingApproval ?? false,
-              incidentId: payload.incidentId,
-              risk: typeof riskValue === "string" ? riskValue : undefined,
-            },
-          ]);
-        } else if (payload.phase === "result") {
-          setLiveItems((prev) =>
-            prev.map((item) =>
-              item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-                ? { ...item, result: payload.result ?? null }
-                : item,
-            ),
-          );
-        }
-      } else if (env.type === "approval_update") {
+        setLiveItems((prev) => [
+          ...prev,
+          {
+            kind: "tool_card",
+            toolUseId: payload.toolUseId,
+            toolName: payload.toolName,
+            input: payload.input,
+            result: null,
+            awaitingApproval: false,
+          },
+        ]);
+      } else if (env.type === "INTERRUPT") {
+        const payload = env.payload as ConsoleInterrupt["payload"];
+        if (payload.sessionId !== id) return;
+        const riskValue = payload.input["risk"];
+        setLiveItems((prev) => [
+          ...prev,
+          {
+            kind: "tool_card",
+            toolUseId: payload.toolUseId,
+            toolName: payload.toolName,
+            input: payload.input,
+            result: null,
+            awaitingApproval: true,
+            incidentId: payload.incidentId,
+            risk: typeof riskValue === "string" ? riskValue : undefined,
+          },
+        ]);
+      } else if (env.type === "TOOL_CALL_END") {
+        const payload = env.payload as ConsoleToolCallEnd["payload"];
+        if (payload.sessionId !== id) return;
+        setLiveItems((prev) =>
+          prev.map((item) =>
+            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
+              ? { ...item, result: payload.result ?? null }
+              : item,
+          ),
+        );
+      } else if (env.type === "INTERRUPT_RESOLVED") {
         // No sessionId on this channel - correlate by toolUseId, which is global.
-        const payload = env.payload as ConsoleApprovalUpdate["payload"];
+        const payload = env.payload as ConsoleInterruptResolved["payload"];
         if (payload.status === "context_added") return;
         const resolution = payload.status;
         const resolvedBy = payload.resolvedBy;

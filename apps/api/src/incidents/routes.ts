@@ -4,7 +4,7 @@ import {
   getPendingApproval,
   resolveApproval,
 } from "../investigation/approvals.js";
-import { publishApprovalUpdate } from "../session/stream.js";
+import { publishInterruptResolved } from "../session/stream.js";
 import { sendCommand } from "../ws/router.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
@@ -54,7 +54,7 @@ export async function registerIncidentRoutes(
         resolvedBy,
         resolvedAt: new Date().toISOString(),
       };
-      publishApprovalUpdate({
+      publishInterruptResolved({
         incidentId: response.incidentId,
         toolUseId: response.toolUseId,
         status: "approved",
@@ -94,7 +94,7 @@ export async function registerIncidentRoutes(
         resolvedBy,
         resolvedAt: new Date().toISOString(),
       };
-      publishApprovalUpdate({
+      publishInterruptResolved({
         incidentId: response.incidentId,
         toolUseId: response.toolUseId,
         status: "rejected",

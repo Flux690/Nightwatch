@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import { redis } from "../redis/client.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
-  ConsoleApprovalUpdate,
-  ConsoleSessionDelta,
-  ConsoleSessionMessage,
-  ConsoleToolCall,
+  ConsoleInterrupt,
+  ConsoleInterruptResolved,
+  ConsoleRunFinished,
+  ConsoleTextMessageContent,
+  ConsoleToolCallEnd,
+  ConsoleToolCallStart,
   SessionMessage,
 } from "@nightwatch/shared";
 
@@ -29,45 +31,67 @@ async function publishRaw(channel: string, env: unknown): Promise<void> {
   }
 }
 
-export function publishSessionDelta(
+export function publishTextMessageContent(
   sessionId: string,
   delta: StreamDelta,
 ): void {
-  const env: ConsoleSessionDelta = {
+  const env: ConsoleTextMessageContent = {
     messageId: randomUUID(),
-    type: "session_delta",
+    type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId, kind: delta.kind, delta: delta.text },
   };
   void publishRaw(sessionChannel(sessionId), env);
 }
 
-export function publishSessionMessage(
+export function publishRunFinished(
   sessionId: string,
   message: SessionMessage,
 ): void {
-  const env: ConsoleSessionMessage = {
+  const env: ConsoleRunFinished = {
     messageId: randomUUID(),
-    type: "session_message",
+    type: "RUN_FINISHED",
     payload: { sessionId, message },
   };
   void publishRaw(sessionChannel(sessionId), env);
 }
 
-export function publishToolCall(payload: ConsoleToolCall["payload"]): void {
-  const env: ConsoleToolCall = {
+export function publishToolCallStart(
+  payload: ConsoleToolCallStart["payload"],
+): void {
+  const env: ConsoleToolCallStart = {
     messageId: randomUUID(),
-    type: "tool_call",
+    type: "TOOL_CALL_START",
     payload,
   };
   void publishRaw(sessionChannel(payload.sessionId), env);
 }
 
-export function publishApprovalUpdate(
-  payload: ConsoleApprovalUpdate["payload"],
-): void {
-  const env: ConsoleApprovalUpdate = {
+export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
+  const env: ConsoleInterrupt = {
     messageId: randomUUID(),
-    type: "approval_update",
+    type: "INTERRUPT",
+    payload,
+  };
+  void publishRaw(sessionChannel(payload.sessionId), env);
+}
+
+export function publishToolCallEnd(
+  payload: ConsoleToolCallEnd["payload"],
+): void {
+  const env: ConsoleToolCallEnd = {
+    messageId: randomUUID(),
+    type: "TOOL_CALL_END",
+    payload,
+  };
+  void publishRaw(sessionChannel(payload.sessionId), env);
+}
+
+export function publishInterruptResolved(
+  payload: ConsoleInterruptResolved["payload"],
+): void {
+  const env: ConsoleInterruptResolved = {
+    messageId: randomUUID(),
+    type: "INTERRUPT_RESOLVED",
     payload,
   };
   void publishRaw(CONSOLE_EVENTS_CHANNEL, env);

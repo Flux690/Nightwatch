@@ -13,9 +13,11 @@ import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate, InvestigationResultSchema } from "./result.js";
 import {
-  publishSessionDelta,
-  publishSessionMessage,
-  publishToolCall,
+  publishTextMessageContent,
+  publishRunFinished,
+  publishToolCallStart,
+  publishInterrupt,
+  publishToolCallEnd,
 } from "../session/stream.js";
 import { logger } from "../logger.js";
 import type {
@@ -103,7 +105,7 @@ export async function runInvestigation(
       } catch (err) {
         log.warn({ err, seq }, "failed to persist session message");
       }
-      publishSessionMessage(sessionId, message);
+      publishRunFinished(sessionId, message);
     }
     persistedCount = snap.length;
   };
@@ -117,7 +119,7 @@ export async function runInvestigation(
     turn++;
     const startedAt = Date.now();
     const response = await provider.chat(TOOL_SCHEMAS, (d) =>
-      publishSessionDelta(sessionId, d),
+      publishTextMessageContent(sessionId, d),
     );
     log.info(
       {
@@ -166,15 +168,22 @@ export async function runInvestigation(
       toolCallCount++;
       const gated =
         RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name);
-      publishToolCall({
-        sessionId,
-        toolUseId: tool.id,
-        toolName: tool.name,
-        phase: "start",
-        input: tool.input,
-        awaitingApproval: gated,
-        incidentId,
-      });
+      if (gated) {
+        publishInterrupt({
+          sessionId,
+          toolUseId: tool.id,
+          toolName: tool.name,
+          input: tool.input,
+          incidentId,
+        });
+      } else {
+        publishToolCallStart({
+          sessionId,
+          toolUseId: tool.id,
+          toolName: tool.name,
+          input: tool.input,
+        });
+      }
 
       if (PLATFORM_TOOLS.has(tool.name)) {
         log.debug({ tool: tool.name, kind: "platform" }, "dispatching tool");
@@ -185,11 +194,9 @@ export async function runInvestigation(
         );
         if (tool.name === "request_clarification") clarificationsUsed++;
         toolResults.push(result);
-        publishToolCall({
+        publishToolCallEnd({
           sessionId,
           toolUseId: tool.id,
-          toolName: tool.name,
-          phase: "result",
           result: result.content,
           isError: result.is_error,
         });
@@ -215,11 +222,9 @@ export async function runInvestigation(
               is_error: true,
             };
             toolResults.push(rejected);
-            publishToolCall({
+            publishToolCallEnd({
               sessionId,
               toolUseId: tool.id,
-              toolName: tool.name,
-              phase: "result",
               result: rejected.content,
               isError: true,
             });
@@ -262,11 +267,9 @@ export async function runInvestigation(
             tool_use_id: tool.id,
             content: JSON.stringify(result),
           });
-          publishToolCall({
+          publishToolCallEnd({
             sessionId,
             toolUseId: tool.id,
-            toolName: tool.name,
-            phase: "result",
             result,
           });
         } catch (err) {
@@ -277,11 +280,9 @@ export async function runInvestigation(
             content: `Error executing ${tool.name}: ${msg}`,
             is_error: true,
           });
-          publishToolCall({
+          publishToolCallEnd({
             sessionId,
             toolUseId: tool.id,
-            toolName: tool.name,
-            phase: "result",
             result: msg,
             isError: true,
           });

@@ -147,7 +147,7 @@ describe("SessionTranscript", () => {
     });
   });
 
-  describe("live streaming (session_delta)", () => {
+  describe("live streaming (TEXT_MESSAGE_CONTENT)", () => {
     it("accumulates delta text into a visible live buffer", async () => {
       setup();
 
@@ -160,7 +160,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
         });
       });
@@ -182,12 +182,12 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing" },
         });
         latestWs?.push({
           messageId: "m2",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: " the logs..." },
         });
       });
@@ -209,7 +209,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: {
             sessionId: "other-session",
             kind: "text",
@@ -222,7 +222,7 @@ describe("SessionTranscript", () => {
     });
   });
 
-  describe("session_message flush", () => {
+  describe("RUN_FINISHED flush", () => {
     it("clears the live buffer when session_message arrives", async () => {
       setup();
 
@@ -235,7 +235,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
         });
       });
@@ -247,7 +247,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m2",
-          type: "session_message",
+          type: "RUN_FINISHED",
           payload: {
             sessionId: "s1",
             message: {
@@ -268,8 +268,8 @@ describe("SessionTranscript", () => {
     });
   });
 
-  describe("tool card (tool_call events)", () => {
-    it("renders a tool card with IN block when tool_call phase=start arrives", async () => {
+  describe("tool card (TOOL_CALL_START / TOOL_CALL_END events)", () => {
+    it("renders a tool card with IN block when TOOL_CALL_START arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -281,12 +281,11 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            phase: "start",
             input: { service: "nginx" },
           },
         });
@@ -310,12 +309,11 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            phase: "start",
             input: { service: "nginx" },
           },
         });
@@ -328,7 +326,7 @@ describe("SessionTranscript", () => {
       expect(screen.getByTestId("tool-card-out-loading")).toBeInTheDocument();
     });
 
-    it("fills the OUT block when tool_call phase=result arrives", async () => {
+    it("fills the OUT block when TOOL_CALL_END arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -340,12 +338,11 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            phase: "start",
             input: { service: "nginx" },
           },
         });
@@ -358,12 +355,10 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m4",
-          type: "tool_call",
+          type: "TOOL_CALL_END",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-1",
-            toolName: "check_service_status",
-            phase: "result",
             result: { status: "stopped", exitCode: 1 },
           },
         });
@@ -377,7 +372,7 @@ describe("SessionTranscript", () => {
       });
     });
 
-    it("matches phase=result to the correct card by toolUseId", async () => {
+    it("matches TOOL_CALL_END to the correct card by toolUseId", async () => {
       setup();
 
       await waitFor(() => {
@@ -389,23 +384,21 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            phase: "start",
             input: { service: "nginx" },
           },
         });
         latestWs?.push({
           messageId: "m5",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-2",
             toolName: "list_processes",
-            phase: "start",
             input: { filter: "http" },
           },
         });
@@ -419,12 +412,10 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m6",
-          type: "tool_call",
+          type: "TOOL_CALL_END",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-2",
-            toolName: "list_processes",
-            phase: "result",
             result: { processes: ["nginx", "node"] },
           },
         });
@@ -437,7 +428,7 @@ describe("SessionTranscript", () => {
       });
     });
 
-    it("ignores tool_call events for a different session", async () => {
+    it("ignores TOOL_CALL_START events for a different session", async () => {
       setup();
 
       await waitFor(() => {
@@ -449,12 +440,11 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m3",
-          type: "tool_call",
+          type: "TOOL_CALL_START",
           payload: {
             sessionId: "other-session",
             toolUseId: "tu-99",
             toolName: "should_not_appear",
-            phase: "start",
             input: {},
           },
         });
@@ -464,19 +454,17 @@ describe("SessionTranscript", () => {
     });
   });
 
-  describe("approval card (gated tool_call)", () => {
+  describe("approval card (INTERRUPT)", () => {
     function pushGatedStart(): void {
       act(() => {
         latestWs?.push({
           messageId: "a1",
-          type: "tool_call",
+          type: "INTERRUPT",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
             toolName: "restart_container",
-            phase: "start",
             input: { containerName: "web-01", risk: "high" },
-            awaitingApproval: true,
             incidentId: "inc-1",
           },
         });
@@ -548,7 +536,7 @@ describe("SessionTranscript", () => {
       });
     });
 
-    it("replaces the buttons with a resolution label on approval_update and keeps the tool card below", async () => {
+    it("replaces the buttons with a resolution label on INTERRUPT_RESOLVED and keeps the tool card below", async () => {
       setup();
 
       await waitFor(() => {
@@ -566,7 +554,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "a2",
-          type: "approval_update",
+          type: "INTERRUPT_RESOLVED",
           payload: {
             incidentId: "inc-1",
             toolUseId: "tu-gated",
@@ -603,12 +591,10 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "a3",
-          type: "tool_call",
+          type: "TOOL_CALL_END",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
-            toolName: "restart_container",
-            phase: "result",
             result: { restarted: true },
           },
         });
@@ -624,7 +610,7 @@ describe("SessionTranscript", () => {
   });
 
   describe("composer integration", () => {
-    it("disables the composer while session_delta events are arriving", async () => {
+    it("disables the composer while TEXT_MESSAGE_CONTENT events are arriving", async () => {
       setup();
 
       await waitFor(() => {
@@ -636,7 +622,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
         });
       });
@@ -647,7 +633,7 @@ describe("SessionTranscript", () => {
       });
     });
 
-    it("re-enables the composer once session_message arrives", async () => {
+    it("re-enables the composer once RUN_FINISHED arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -659,7 +645,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m1",
-          type: "session_delta",
+          type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
         });
       });
@@ -671,7 +657,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "m2",
-          type: "session_message",
+          type: "RUN_FINISHED",
           payload: {
             sessionId: "s1",
             message: {

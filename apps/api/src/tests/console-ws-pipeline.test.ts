@@ -8,8 +8,8 @@ import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { Worker } from "bullmq";
 import type {
-  ConsoleSessionDelta,
-  ConsoleSessionMessage,
+  ConsoleTextMessageContent,
+  ConsoleRunFinished,
   RunnerCommandMessage,
 } from "@nightwatch/shared";
 
@@ -161,7 +161,7 @@ describe("console WS pipeline", () => {
       // Redis pub/sub is instance-global, so a concurrent dev investigation
       // could publish here; only react to this test's own session.
       if (
-        msg.type === "session_message" &&
+        msg.type === "RUN_FINISHED" &&
         msg.payload["sessionId"] === targetSessionId
       ) {
         resolveFirstMessage();
@@ -196,15 +196,16 @@ describe("console WS pipeline", () => {
     ws.close();
 
     const deltas = events.filter(
-      (e): e is ConsoleSessionDelta =>
-        e.type === "session_delta" && e.payload["sessionId"] === sessionId,
+      (e): e is ConsoleTextMessageContent =>
+        e.type === "TEXT_MESSAGE_CONTENT" &&
+        e.payload["sessionId"] === sessionId,
     );
     expect(deltas.length).toBeGreaterThan(0);
     expect(deltas[0].payload.sessionId).toBe(sessionId);
 
     const messages = events.filter(
-      (e): e is ConsoleSessionMessage =>
-        e.type === "session_message" && e.payload["sessionId"] === sessionId,
+      (e): e is ConsoleRunFinished =>
+        e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
     );
     expect(messages.length).toBeGreaterThan(0);
     expect(messages[0].payload.sessionId).toBe(sessionId);
