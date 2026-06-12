@@ -158,7 +158,9 @@ export function Shell(): React.JSX.Element {
           display: "flex",
           flexDirection: "column",
           height: "100vh",
-          overflow: "hidden",
+          // Session area manages its own internal scroll; other pages (Settings,
+          // Runners) need the main container to scroll normally.
+          overflow: isSessionArea ? "hidden" : "auto",
         }}
       >
         {isSessionArea ? (
