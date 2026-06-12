@@ -104,29 +104,29 @@ export async function execCommand(
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");
 
-  const { stdout, stderr } = await exec("docker", [
-    "exec",
-    input.containerName,
-    cmd,
-    ...args,
-  ]).catch(
-    (
-      err: NodeJS.ErrnoException & {
-        code?: number;
-        stdout?: string;
-        stderr?: string;
-      },
-    ) => ({
-      stdout: err.stdout ?? "",
-      stderr: err.stderr ?? String(err.message),
-      code: err.code,
-    }),
-  );
+  let exitCode = 0;
+  let stdout = "";
+  let stderr = "";
 
-  return {
-    exitCode: 0,
-    stdout: String(stdout),
-    stderr: String(stderr),
-    executedAt,
-  };
+  try {
+    const out = await exec("docker", [
+      "exec",
+      input.containerName,
+      cmd,
+      ...args,
+    ]);
+    stdout = out.stdout;
+    stderr = out.stderr;
+  } catch (err: unknown) {
+    const e = err as NodeJS.ErrnoException & {
+      code?: number;
+      stdout?: string;
+      stderr?: string;
+    };
+    stdout = e.stdout ?? "";
+    stderr = e.stderr ?? String(e.message);
+    exitCode = typeof e.code === "number" ? e.code : 1;
+  }
+
+  return { exitCode, stdout, stderr, executedAt };
 }

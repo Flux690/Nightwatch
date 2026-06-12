@@ -17,6 +17,7 @@ function db(): Database.Database {
       CREATE TABLE IF NOT EXISTS incidents (
         incidentId          TEXT PRIMARY KEY,
         sessionId           TEXT,
+        outcome             TEXT NOT NULL DEFAULT 'finding',
         timestamp           TEXT NOT NULL,
         containerName       TEXT NOT NULL,
         alertType           TEXT NOT NULL,
@@ -57,6 +58,11 @@ function db(): Database.Database {
     if (!cols.some((c) => c.name === "sessionId")) {
       _db.exec(`ALTER TABLE incidents ADD COLUMN sessionId TEXT`);
     }
+    if (!cols.some((c) => c.name === "outcome")) {
+      _db.exec(
+        `ALTER TABLE incidents ADD COLUMN outcome TEXT NOT NULL DEFAULT 'finding'`,
+      );
+    }
   }
   return _db;
 }
@@ -69,14 +75,15 @@ export function insertIncident(record: IncidentRecord): void {
   db()
     .prepare(
       `INSERT OR REPLACE INTO incidents
-       (incidentId, sessionId, timestamp, containerName, alertType, rootCause,
+       (incidentId, sessionId, outcome, timestamp, containerName, alertType, rootCause,
         resolutionAction, resolvedAt, humanResolutionNote, recurrenceCount)
-       VALUES (@incidentId, @sessionId, @timestamp, @containerName, @alertType, @rootCause,
+       VALUES (@incidentId, @sessionId, @outcome, @timestamp, @containerName, @alertType, @rootCause,
                @resolutionAction, @resolvedAt, @humanResolutionNote, @recurrenceCount)`,
     )
     .run({
       incidentId: record.incidentId,
       sessionId: record.sessionId ?? null,
+      outcome: record.outcome,
       timestamp: record.timestamp,
       containerName: record.containerName,
       alertType: record.alertType,

@@ -175,3 +175,15 @@ export interface ConsoleToolCallEnd extends WsEnvelope {
     isError?: boolean;
   };
 }
+
+// API → Console: an investigation was escalated (the agent gave up and handed
+// off to the human). Paired with a persisted incident record.
+// AG-UI: ESCALATED
+export interface ConsoleEscalated extends WsEnvelope {
+  type: "ESCALATED";
+  payload: {
+    sessionId: string;
+    incidentId: string;
+    reason: string;
+  };
+}

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit, tryDebounce, enqueueInvestigation } from "./queue.js";
+import { db } from "../db/client.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -20,6 +21,11 @@ export async function registerAlertRoutes(
         return reply.code(401).send({
           error: "token query param or X-Nightwatch-Token header required",
         });
+      }
+
+      const tokenRecord = await db.token.findUnique({ where: { token } });
+      if (!tokenRecord) {
+        return reply.code(401).send({ error: "unknown or revoked token" });
       }
 
       let alerts: NormalizedAlert[];

@@ -5,6 +5,7 @@ import type {
   NormalizedAlert,
 } from "@nightwatch/shared";
 import { sendCommand } from "../ws/router.js";
+import { publishEscalated } from "../session/stream.js";
 import { logger } from "../logger.js";
 
 // Best-effort persistence; the runner may be briefly offline at conclusion time.
@@ -44,6 +45,7 @@ export async function conclude(
   const record: IncidentRecord = {
     incidentId,
     sessionId,
+    outcome: "finding",
     timestamp: alert.firedAt,
     containerName: alert.targetIdentifier,
     alertType: alert.alertType,
@@ -77,10 +79,37 @@ export async function conclude(
 export async function escalate(
   alert: NormalizedAlert,
   incidentId: string,
+  sessionId: string,
   reason: string,
 ): Promise<void> {
   logger.warn(
-    { incidentId, token: alert.token, reason },
+    { incidentId, sessionId, reason },
     "investigation escalated to human",
   );
+
+  const record: IncidentRecord = {
+    incidentId,
+    sessionId,
+    outcome: "escalated",
+    timestamp: new Date().toISOString(),
+    containerName: alert.targetIdentifier,
+    alertType: alert.alertType,
+    rootCause: reason,
+    resolutionAction: null,
+    resolvedAt: null,
+    recurrenceCount: 0,
+  };
+
+  try {
+    await sendCommand(
+      alert.token,
+      "write_incident",
+      { ...record },
+      PERSIST_TIMEOUT_MS,
+    );
+  } catch (err) {
+    logger.error({ incidentId, err }, "failed to persist escalation incident");
+  }
+
+  publishEscalated({ sessionId, incidentId, reason });
 }

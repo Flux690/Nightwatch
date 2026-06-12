@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { redis } from "../redis/client.js";
+import { requireAuth } from "../auth/gate.js";
 import { CONSOLE_EVENTS_CHANNEL } from "../session/stream.js";
 
 const SESSION_PATTERN = "session:*";
@@ -15,7 +16,7 @@ export async function registerConsoleWsRoutes(
 ): Promise<void> {
   fastify.get(
     "/console/connect",
-    { websocket: true },
+    { websocket: true, preHandler: requireAuth },
     async (socket: WebSocket) => {
       const sub = redis.duplicate();
 

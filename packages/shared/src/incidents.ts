@@ -40,6 +40,10 @@ export interface IncidentRecord {
   // The session this incident concluded from. Optional for records written
   // before sessions existed; populated by conclude() going forward.
   sessionId?: string;
+  // finding = the agent diagnosed and concluded; escalated = the agent handed
+  // off to the human. Episodic memory must not present an escalation reason as
+  // a diagnosed root cause.
+  outcome: "finding" | "escalated";
   timestamp: string;
   containerName: string;
   alertType: string;

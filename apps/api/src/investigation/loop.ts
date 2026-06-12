@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sendCommand } from "../ws/router.js";
 import { buildInitialContext } from "./context.js";
 import {
@@ -44,7 +45,7 @@ export async function runInvestigation(
   input: RunInvestigationInput,
 ): Promise<void> {
   const { alert, sessionId, trigger } = input;
-  const incidentId = `${alert.token}-${alert.sourceAlertId}-${Date.now()}`;
+  const incidentId = randomUUID();
   const log = logger.child({
     incidentId,
     sessionId,
@@ -133,7 +134,7 @@ export async function runInvestigation(
     await persist();
 
     if (response.stopReason === "refusal") {
-      await escalate(alert, incidentId, "Model refused to continue");
+      await escalate(alert, incidentId, sessionId, "Model refused to continue");
       return;
     }
 
@@ -145,6 +146,7 @@ export async function runInvestigation(
       await escalate(
         alert,
         incidentId,
+        sessionId,
         `Model stopped without calling ${FINAL_RESPONSE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
       );
       return;
@@ -161,6 +163,7 @@ export async function runInvestigation(
           await escalate(
             alert,
             incidentId,
+            sessionId,
             `${FINAL_RESPONSE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
           );
         }
@@ -238,6 +241,7 @@ export async function runInvestigation(
               await escalate(
                 alert,
                 incidentId,
+                sessionId,
                 `Write action rejected: ${tool.name}`,
               );
               return;
@@ -307,6 +311,7 @@ export async function runInvestigation(
   await escalate(
     alert,
     incidentId,
+    sessionId,
     `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
   );
 }

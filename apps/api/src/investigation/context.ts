@@ -137,9 +137,10 @@ function collapseHistory(records: IncidentRecord[]): IncidentRecord[] {
 function formatIncidentHistory(records: IncidentRecord[]): string {
   if (records.length === 0) return "(no past incidents)";
   return records
-    .map(
-      (r) =>
-        `[${r.timestamp}] ${r.alertType} — ${r.rootCause} — action: ${r.resolutionAction ?? "none"} (recurrences: ${r.recurrenceCount})`,
+    .map((r) =>
+      r.outcome === "escalated"
+        ? `[${r.timestamp}] ${r.alertType} — ESCALATED TO HUMAN (no root cause diagnosed): ${r.rootCause} (recurrences: ${r.recurrenceCount})`
+        : `[${r.timestamp}] ${r.alertType} — ${r.rootCause} — action: ${r.resolutionAction ?? "none"} (recurrences: ${r.recurrenceCount})`,
     )
     .join("\n");
 }

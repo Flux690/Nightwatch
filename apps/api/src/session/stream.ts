@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { redis } from "../redis/client.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
+  ConsoleEscalated,
   ConsoleInterrupt,
   ConsoleInterruptResolved,
   ConsoleRunFinished,
@@ -92,6 +93,15 @@ export function publishInterruptResolved(
   const env: ConsoleInterruptResolved = {
     messageId: randomUUID(),
     type: "INTERRUPT_RESOLVED",
+    payload,
+  };
+  void publishRaw(CONSOLE_EVENTS_CHANNEL, env);
+}
+
+export function publishEscalated(payload: ConsoleEscalated["payload"]): void {
+  const env: ConsoleEscalated = {
+    messageId: randomUUID(),
+    type: "ESCALATED",
     payload,
   };
   void publishRaw(CONSOLE_EVENTS_CHANNEL, env);

@@ -182,6 +182,7 @@ describe("final_response terminal mechanism", () => {
     expect(writeIncidentCalls).toHaveLength(1);
     expect(writeIncidentCalls[0]).toMatchObject({
       alertType: expect.any(String),
+      outcome: "finding",
     });
   });
 
@@ -230,10 +231,14 @@ describe("final_response terminal mechanism", () => {
     ]);
 
     // Short wait: after RUN_FINISHED the loop has already decided escalate vs conclude.
-    // If conclude ran, write_incident would arrive almost immediately (it's awaited).
+    // escalate() now writes an incident (escalated outcome) — exactly one call.
     await new Promise((r) => setTimeout(r, 200));
 
     ws.close();
-    expect(writeIncidentCalls).toHaveLength(0);
+    expect(writeIncidentCalls).toHaveLength(1);
+    expect(writeIncidentCalls[0]).toMatchObject({
+      alertType: expect.any(String),
+      outcome: "escalated",
+    });
   });
 });
