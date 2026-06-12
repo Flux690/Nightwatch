@@ -29,8 +29,7 @@
 @.claude/rules/workflow.md
 
 ## References
-- Architecture and decisions (enduring north-star): PRD.md
-- Domain glossary: CONTEXT.md
+- Project, architecture, glossary, decisions (single source of truth): CONTEXT.md
 - Work backlog (vertical-slice issues): issues/
 
 ## Session protocol

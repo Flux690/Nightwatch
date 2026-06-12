@@ -12,9 +12,9 @@ Every issue cuts through all layers and is demoable/verifiable on its own.
   (bugfix|infra|feature|refactor|polish), `priority` (p1|p2|p3), `status`
   (ready-for-agent|in-progress|blocked), `blocked_by`. The `ready-for-agent`
   marker is `status: ready-for-agent`.
-- **Domain glossary:** `CONTEXT.md`. Architecture decisions: `docs/adr/`.
-  Enduring architecture/north-star: `PRD.md` (not a per-feature PRD - the
-  stable reference; per-feature PRDs link to it).
+- **Single enduring reference:** `CONTEXT.md` (project, architecture, glossary,
+  decisions). Not a per-feature PRD - per-feature PRDs link to it. There is no
+  separate PRD.md or docs/adr/.
 
 ## The cycle
 
@@ -26,8 +26,8 @@ pick feature (HITL) -> /grill-with-docs (HITL) -> /to-prd -> /to-issues (HITL)
 - Alignment is front-loaded into the grill. If implementation needs many
   questions, the grill was too shallow.
 - One issue per session. Clear context between issues - never compact. All
-  durable knowledge lives in PRD.md, CONTEXT.md, docs/adr/, the issue file, and
-  rich commit messages.
+  durable knowledge lives in CONTEXT.md, the issue file, and rich commit
+  messages.
 - Infra before features (tests/types first); they are the feedback-loop ceiling.
 
 ## Feedback loops (must pass before every commit)
