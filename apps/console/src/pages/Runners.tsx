@@ -11,7 +11,7 @@ function OnlineBadge({ online }: { online: boolean }): React.JSX.Element {
         fontFamily: "var(--nw-mono)",
         color: online
           ? "var(--nw-status-streaming)"
-          : "var(--nw-status-concluded)",
+          : "var(--nw-status-offline)",
         textTransform: "uppercase",
         letterSpacing: "0.05em",
       }}
@@ -34,10 +34,7 @@ export function RunnersPage(): React.JSX.Element {
   });
 
   return (
-    <div
-      className="nw-page"
-      style={{ padding: "var(--mantine-spacing-md)" }}
-    >
+    <div className="nw-page" style={{ padding: "var(--mantine-spacing-md)" }}>
       <Title order={2} size="h4" mb="md">
         Runners
       </Title>

@@ -26,7 +26,7 @@ export interface RunnerCommandMessage extends WsEnvelope {
   };
 }
 
-// API → Runner: persist a concluded incident to the runner's local SQLite history.
+// API → Runner: persist an incident record to the runner's local SQLite history.
 // Carried by a RunnerCommandMessage with commandName "write_incident".
 export interface WriteIncidentCommand {
   commandName: "write_incident";
@@ -55,7 +55,7 @@ export interface UpdateAlertRulesCommand {
   correlationId: string;
 }
 
-// API → Runner: record a human's resolution note on a concluded incident (the
+// API → Runner: record a human's resolution note on a recorded incident (the
 // feedback loop for an escalated incident a person resolved).
 export interface ResolveIncidentCommand {
   commandName: "resolve_incident";

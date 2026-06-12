@@ -8,7 +8,7 @@ import { sendCommand } from "../ws/router.js";
 import { publishEscalated } from "../session/stream.js";
 import { logger } from "../logger.js";
 
-// Best-effort persistence; the runner may be briefly offline at conclusion time.
+// Best-effort persistence; the runner may be briefly offline when the incident is written.
 const PERSIST_TIMEOUT_MS = 10_000;
 
 // Mirrors the `final_response` tool's input_schema in tools.ts. Optional fields
@@ -36,7 +36,7 @@ export const InvestigationResultSchema = z.object({
 // The model delivers this as a validated `final_response` tool call (or via
 // native structured output synthesized into one), so `data` is already
 // schema-checked by the loop - no text scraping, no JSON.parse here.
-export async function conclude(
+export async function recordFinding(
   alert: NormalizedAlert,
   incidentId: string,
   sessionId: string,
@@ -72,7 +72,7 @@ export async function conclude(
       action: data.recommendedAction?.toolName ?? "none",
       escalateIfRejected: data.escalateIfRejected,
     },
-    "investigation concluded",
+    "finding recorded",
   );
 }
 

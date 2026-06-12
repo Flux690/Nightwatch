@@ -15,8 +15,9 @@ export interface NormalizedAlert {
   rawPayload: unknown;
 }
 
-// Shape of a concluded investigation. Optional fields are nullable (not
-// optional) to match the strict `conclude` tool contract the model fills in.
+// Shape of a completed investigation. Optional fields are nullable (not
+// optional) to match the strict `final_response` tool contract the model
+// fills in.
 export interface InvestigationResult {
   rootCause: {
     summary: string;
@@ -37,12 +38,12 @@ export interface InvestigationResult {
 
 export interface IncidentRecord {
   incidentId: string;
-  // The session this incident concluded from. Optional for records written
-  // before sessions existed; populated by conclude() going forward.
+  // The session this incident came from. Optional for records written before
+  // sessions existed; populated by recordFinding()/escalate() going forward.
   sessionId?: string;
-  // finding = the agent diagnosed and concluded; escalated = the agent handed
-  // off to the human. Episodic memory must not present an escalation reason as
-  // a diagnosed root cause.
+  // finding = the agent diagnosed and delivered a final_response; escalated =
+  // the agent handed off to the human. Episodic memory must not present an
+  // escalation reason as a diagnosed root cause.
   outcome: "finding" | "escalated";
   timestamp: string;
   containerName: string;

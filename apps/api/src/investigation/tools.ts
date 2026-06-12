@@ -248,7 +248,7 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: "request_clarification",
     description:
-      "Ask the on-call engineer a clarifying question when critical context is missing before concluding.",
+      "Ask the on-call engineer a clarifying question when critical context is missing before delivering your final_response.",
     input_schema: {
       type: "object",
       properties: {
@@ -338,7 +338,7 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: FINAL_RESPONSE_TOOL_NAME,
     description:
-      "Finish the investigation. Call this exactly once, as the final step, with the root cause and (if any) the remediation you took or recommend. Do not describe your conclusion in prose - call this tool.",
+      "Finish the investigation. Call this exactly once, as the final step, with the root cause and (if any) the remediation you took or recommend. Do not describe your finding in prose - call this tool.",
     // Strict so the model's input is schema-constrained, not free text.
     // Strict mode requires every field listed in `required` and every object
     // sealed with additionalProperties:false; optional fields are expressed as

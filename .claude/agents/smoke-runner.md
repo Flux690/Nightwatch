@@ -12,10 +12,10 @@ Steps:
 1. Check the dev stack is running: `docker compose -f docker-compose.dev.yaml ps`. If services are not Up, run `docker compose -f docker-compose.dev.yaml up -d` then wait 5 seconds.
 2. Run `bash scripts/smoke.sh` and capture full output.
 3. Read the structured Pino JSON logs from the output to understand what happened at each pipeline stage.
-4. Parse the result: did the alert reach BullMQ? Did the investigation loop start? Did LLM tool calls fire? Did conclude() write an incident? Did the runner execute the command?
+4. Parse the result: did the alert reach BullMQ? Did the investigation loop start? Did LLM tool calls fire? Did recordFinding() write an incident? Did the runner execute the command?
 
 Output format:
-- `PASS:` followed by each verified stage (alert ingested, queue entry created, loop started, tools called: [list], conclude fired, SQLite row written).
+- `PASS:` followed by each verified stage (alert ingested, queue entry created, loop started, tools called: [list], finding recorded, SQLite row written).
 - `FAIL:` name the specific stage that broke, quote the relevant log lines verbatim, and state what was expected vs what actually happened.
 
 Be specific. Do not summarize logs generically. Identify exactly where the pipeline broke and what the log evidence shows.

@@ -50,7 +50,7 @@ export const theme = createTheme({
     borderStrong: "#918983",
     statusStreaming: "#00552A", // 8.07:1 on bg
     statusAwaiting: "#684000", // 8.10:1 on bg
-    statusConcluded: "#504A45", // 7.82:1 on bg
+    statusOffline: "#504A45", // 7.82:1 on bg
     statusEscalated: "#7A0E0E", // 9.92:1 on bg
   },
 });
@@ -71,7 +71,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => {
       "--nw-mono": t.fontFamilyMonospace ?? "monospace",
       "--nw-status-streaming": o.statusStreaming,
       "--nw-status-awaiting": o.statusAwaiting,
-      "--nw-status-concluded": o.statusConcluded,
+      "--nw-status-offline": o.statusOffline,
       "--nw-status-escalated": o.statusEscalated,
     },
     dark: {},

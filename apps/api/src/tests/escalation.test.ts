@@ -98,7 +98,7 @@ function makeCriticalWriteProvider() {
   };
 }
 
-// Calls a read tool every turn and never concludes, so the loop exhausts
+// Calls a read tool every turn and never delivers a final_response, so the loop exhausts
 // maxToolCalls and escalates on the budget exit.
 function makeToolLoopProvider() {
   return {

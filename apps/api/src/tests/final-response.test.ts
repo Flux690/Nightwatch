@@ -144,7 +144,7 @@ describe("final_response terminal mechanism", () => {
     await db.$disconnect();
   });
 
-  it("valid final_response concludes the investigation and persists the incident", async () => {
+  it("valid final_response records a finding and persists the incident", async () => {
     mockCreateProvider.mockImplementationOnce(() => makeProvider(VALID_INPUT));
     writeIncidentCalls.length = 0;
 
@@ -230,7 +230,7 @@ describe("final_response terminal mechanism", () => {
       ),
     ]);
 
-    // Short wait: after RUN_FINISHED the loop has already decided escalate vs conclude.
+    // Short wait: after RUN_FINISHED the loop has already decided escalate vs finding.
     // escalate() now writes an incident (escalated outcome) — exactly one call.
     await new Promise((r) => setTimeout(r, 200));
 

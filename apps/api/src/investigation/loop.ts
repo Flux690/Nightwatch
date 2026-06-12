@@ -12,7 +12,11 @@ import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
-import { conclude, escalate, InvestigationResultSchema } from "./result.js";
+import {
+  recordFinding,
+  escalate,
+  InvestigationResultSchema,
+} from "./result.js";
 import {
   publishTextMessageContent,
   publishRunFinished,
@@ -158,7 +162,7 @@ export async function runInvestigation(
       if (tool.name === FINAL_RESPONSE_TOOL_NAME) {
         const parsed = InvestigationResultSchema.safeParse(tool.input);
         if (parsed.success) {
-          await conclude(alert, incidentId, sessionId, parsed.data);
+          await recordFinding(alert, incidentId, sessionId, parsed.data);
         } else {
           await escalate(
             alert,

@@ -12,7 +12,7 @@ export async function handlePlatformTool(
       return {
         tool_use_id: tool.id,
         content:
-          "request_clarification already used once this investigation. Conclude with the evidence already gathered.",
+          "request_clarification already used once this investigation. Deliver your final_response with the evidence already gathered.",
         is_error: true,
       };
     }
@@ -23,7 +23,7 @@ export async function handlePlatformTool(
     /* Phase 5: send to Slack and await response on approvalBus with CLARIFICATION_TIMEOUT_MS. */
     return {
       tool_use_id: tool.id,
-      content: `Automated mode — no human available to answer "${question}". Context noted: ${context}. Continue with the evidence you have and conclude as best you can.`,
+      content: `Automated mode — no human available to answer "${question}". Context noted: ${context}. Continue with the evidence you have and deliver your final_response as best you can.`,
     };
   }
 

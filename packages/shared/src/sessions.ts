@@ -1,5 +1,5 @@
 // A session is the agent's conversation thread (the durable parent); an incident
-// is an optional concluded artifact that references it. Sessions live on the
+// is an optional resulting artifact that references it. Sessions live on the
 // runner's SQLite; the API mints the id at trigger time and appends per turn.
 
 export type SessionRole = "user" | "assistant";
