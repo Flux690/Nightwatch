@@ -15,6 +15,7 @@ import { Shell } from "../pages/Shell.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
+const allWsInstances: MockWs[] = [];
 
 class MockWs {
   static OPEN = 1;
@@ -31,11 +32,16 @@ class MockWs {
 
   constructor(_url: string) {
     latestWs = this;
+    allWsInstances.push(this);
   }
 
   push(envelope: object): void {
     this.onmessage?.({ data: JSON.stringify(envelope) });
   }
+}
+
+function broadcast(envelope: object): void {
+  allWsInstances.forEach((ws) => ws.push(envelope));
 }
 
 const RUNNER = {
@@ -54,10 +60,23 @@ const SESSION_1 = {
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
 };
 
-function setup() {
+function setup(pendingCount = 0) {
   latestWs = null;
+  allWsInstances.length = 0;
 
   vi.stubGlobal("WebSocket", MockWs);
+
+  const pendingApprovals = Array.from({ length: pendingCount }, (_, i) => ({
+    id: `appr-${i}`,
+    incidentId: `inc-${i}`,
+    token: "tok-1",
+    toolName: "restart_container",
+    toolInput: {},
+    toolUseId: `tool-${i}`,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  }));
+
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
@@ -65,6 +84,12 @@ function setup() {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([RUNNER]),
+        });
+      }
+      if (url.includes("/approvals/pending")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(pendingApprovals),
         });
       }
       if (url.includes("/chat/")) {
@@ -245,7 +270,7 @@ describe("Shell", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        broadcast({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: {
@@ -314,6 +339,81 @@ describe("Shell", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/settings");
       });
+    });
+  });
+
+  describe("attention queue", () => {
+    it("shows awaiting-approval count on first load from API", async () => {
+      setup(2);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
+      });
+    });
+
+    it("increments count when INTERRUPT arrives", async () => {
+      setup(1);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("1");
+      });
+
+      act(() => {
+        broadcast({
+          messageId: "m-int",
+          type: "INTERRUPT",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tool-99",
+            toolName: "restart_container",
+            input: {},
+            incidentId: "inc-99",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
+      });
+    });
+
+    it("decrements count when INTERRUPT_RESOLVED arrives", async () => {
+      setup(1);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("1");
+      });
+
+      act(() => {
+        broadcast({
+          messageId: "m-res",
+          type: "INTERRUPT_RESOLVED",
+          payload: {
+            incidentId: "inc-0",
+            toolUseId: "tool-0",
+            status: "approved",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("status", { name: /awaiting approval/i }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("shows no indicator when count is zero", async () => {
+      setup(0);
+      await screen.findByRole("link", { name: /sessions/i });
+      expect(
+        screen.queryByRole("status", { name: /awaiting approval/i }),
+      ).not.toBeInTheDocument();
     });
   });
 });
