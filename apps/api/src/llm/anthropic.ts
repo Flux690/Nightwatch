@@ -24,12 +24,14 @@ export class AnthropicProvider implements LLMProvider {
   private readonly config: AgentConfig;
   private messages: Anthropic.Messages.MessageParam[] = [];
 
-  constructor(system: string, config: AgentConfig) {
+  constructor(system: string, config: AgentConfig, apiKey?: string) {
     this.system = system;
     this.config = config;
-    // API key stays in env and is never part of AgentConfig.
+    // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
+    // when set, falling back to the env var for deployments that still use env.
     this.client = new Anthropic({
-      apiKey: process.env["ANTHROPIC_API_KEY"],
+      apiKey: apiKey ?? process.env["ANTHROPIC_API_KEY"],
+      ...(config.baseUrl && { baseURL: config.baseUrl }),
       timeout: config.requestTimeoutMs,
       maxRetries: config.maxRetries,
     });

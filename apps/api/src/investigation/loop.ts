@@ -8,7 +8,7 @@ import {
   FINAL_RESPONSE_TOOL_NAME,
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
-import { loadConfig } from "../config/store.js";
+import { loadConfig, loadApiKey } from "../config/store.js";
 import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import { conclude, escalate, InvestigationResultSchema } from "./result.js";
@@ -55,9 +55,9 @@ export async function runInvestigation(
     "investigation started",
   );
 
-  const config = await loadConfig();
+  const [config, apiKey] = await Promise.all([loadConfig(), loadApiKey()]);
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
-  const provider = createProvider(systemPrompt, config);
+  const provider = createProvider(systemPrompt, config, apiKey);
 
   // Persist (durable, on the runner) and broadcast (live, to the console) every
   // new provider message exactly once, in order. The first append upserts the

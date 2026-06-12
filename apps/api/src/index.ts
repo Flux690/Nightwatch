@@ -1,5 +1,12 @@
 import "dotenv/config";
 import Fastify from "fastify";
+
+if (!process.env["SECRET_KEY"]) {
+  console.error(
+    "FATAL: SECRET_KEY environment variable is required for API key encryption. Set it before starting the API.",
+  );
+  process.exit(1);
+}
 import FastifyWebSocket from "@fastify/websocket";
 import { db } from "./db/client.js";
 import { redis } from "./redis/client.js";

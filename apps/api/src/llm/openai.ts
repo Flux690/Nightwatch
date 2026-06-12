@@ -26,13 +26,15 @@ export class OpenAIProvider implements LLMProvider {
   private readonly config: AgentConfig;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
-  constructor(system: string, config: AgentConfig) {
+  constructor(system: string, config: AgentConfig, apiKey?: string) {
     this.system = system;
     this.config = config;
-    // API key stays in env and is never part of AgentConfig.
+    // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
+    // when set, falling back to the env var. baseUrl from config overrides the
+    // env var so operators can change endpoints without a server restart.
     this.client = new OpenAI({
-      apiKey: process.env["OPENAI_API_KEY"],
-      baseURL: process.env["OPENAI_BASE_URL"],
+      apiKey: apiKey ?? process.env["OPENAI_API_KEY"],
+      baseURL: config.baseUrl ?? process.env["OPENAI_BASE_URL"],
       timeout: config.requestTimeoutMs,
       maxRetries: config.maxRetries,
     });

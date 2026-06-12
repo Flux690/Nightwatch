@@ -25,8 +25,8 @@ model Token {
 }
 
 // Global agent config: one row (id "global"). Seeded from env on first write;
-// the API stores user edits here. Secrets (API keys) are never stored - they
-// stay in env - so every column is safe to return to the console.
+// the API stores user edits here. apiKeyEncrypted is AES-256-GCM encrypted with
+// SECRET_KEY and never returned to the console; the plaintext is never stored.
 model Config {
   id               String   @id @default("global")
   provider         String   @default("anthropic")
@@ -38,5 +38,10 @@ model Config {
   maxToolCalls     Int      @default(24)
   hardTimeoutMs    Int      @default(300000)
   toolTimeoutMs    Int      @default(15000)
+  // Provider endpoint config (issue 015)
+  baseUrl          String?
+  apiKeyEncrypted  String?
+  promptCaching    Boolean  @default(true)
+  reasoningEffort  String?
   updatedAt        DateTime @updatedAt
 }
