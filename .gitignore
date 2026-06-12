@@ -37,3 +37,6 @@ Desktop.ini
 mantinedocs.txt
 # Local work tracking — issues stay untracked
 issues
+
+# Per-feature PRDs — local working docs, not published
+.claude/*-prd.md
