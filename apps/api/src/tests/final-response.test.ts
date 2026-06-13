@@ -1,11 +1,9 @@
 import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { Worker } from "bullmq";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
 const VALID_INPUT = {
@@ -75,7 +73,6 @@ import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
-import { startWorker } from "../jobs/worker.js";
 import { getRecentIncidents } from "../db/incidents.js";
 import type { IncidentRecord } from "@nightwatch/shared";
 import {
@@ -86,7 +83,6 @@ import {
 
 describe("final_response terminal mechanism", () => {
   let server: FastifyInstance;
-  let worker: Worker;
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
@@ -131,12 +127,9 @@ describe("final_response terminal mechanism", () => {
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-    worker = startWorker();
-    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
-    await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
     cleanupDb();
@@ -164,48 +157,17 @@ describe("final_response terminal mechanism", () => {
       makeProvider(INVALID_INPUT),
     );
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    let targetSessionId: string | undefined;
-    let resolveRunFinished!: () => void;
-    const runFinished = new Promise<void>((res) => {
-      resolveRunFinished = res;
-    });
-
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString()) as {
-        type: string;
-        payload: { sessionId: string };
-      };
-      if (
-        msg.type === "RUN_FINISHED" &&
-        msg.payload.sessionId === targetSessionId
-      ) {
-        resolveRunFinished();
-      }
-    });
-    await new Promise<void>((res) => ws.on("open", res));
-
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Something exploded." }),
     });
     expect(res.status).toBe(202);
-    ({ sessionId: targetSessionId } = (await res.json()) as {
-      sessionId: string;
-    });
+    const { sessionId } = (await res.json()) as { sessionId: string };
 
-    await Promise.race([
-      runFinished,
-      new Promise<void>((_, rej) =>
-        setTimeout(() => rej(new Error("timeout: no RUN_FINISHED")), 10_000),
-      ),
-    ]);
-
-    // After RUN_FINISHED the loop has already decided escalate vs finding;
-    // escalate() writes one incident with an escalated outcome.
-    const incident = await waitFor(() => incidentFor(String(targetSessionId)));
-    ws.close();
+    // The loop decides escalate vs finding before it ends; an invalid
+    // final_response escalates, writing one incident with an escalated outcome.
+    const incident = await waitFor(() => incidentFor(sessionId));
     expect(incident.outcome).toBe("escalated");
   });
 });

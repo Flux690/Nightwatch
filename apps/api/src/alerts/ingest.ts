@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
-import { checkRateLimit, tryDebounce, enqueueInvestigation } from "./queue.js";
+import { checkRateLimit } from "./rate-limit.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue } from "../db/tokens.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
@@ -40,26 +42,34 @@ export async function registerAlertRoutes(
       let skipped = 0;
 
       for (const alert of alerts) {
-        if (await isDuplicate(alert)) {
+        if (isDuplicate(alert)) {
           skipped++;
           continue;
         }
 
-        const allowed = await checkRateLimit(alert.token, alert.severity);
-        if (!allowed) {
+        if (!checkRateLimit(alert.token, alert.severity)) {
           skipped++;
           fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
           continue;
         }
 
-        const debounced = await tryDebounce(alert.token);
-        if (!debounced) {
+        // The session id is minted here so the whole investigation - local
+        // persistence and the live event stream - is keyed by it from turn one.
+        const accepted = dispatcher.dispatch({
+          alert,
+          sessionId: randomUUID(),
+          token: alert.token,
+          trigger: "alert",
+        });
+        if (!accepted) {
           skipped++;
-          fastify.log.info({ alertId: alert.sourceAlertId }, "debounced");
+          fastify.log.warn(
+            { alertId: alert.sourceAlertId },
+            "dispatch queue full, dropped (alert will re-fire)",
+          );
           continue;
         }
 
-        await enqueueInvestigation(alert);
         enqueued++;
         fastify.log.info(
           { alertId: alert.sourceAlertId, type: alert.alertType },

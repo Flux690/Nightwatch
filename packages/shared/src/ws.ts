@@ -83,8 +83,8 @@ export interface ConsoleInterruptResolved extends WsEnvelope {
   };
 }
 
-// API → Console: a live token delta from an in-progress turn. Ephemeral (Redis
-// pub/sub only, keyed by session); never persisted - the durable record is the
+// API → Console: a live token delta from an in-progress turn. Ephemeral (rides
+// the in-process event bus only); never persisted - the durable record is the
 // ConsoleRunFinished message written when the turn completes.
 // AG-UI: TEXT_MESSAGE_CONTENT
 export interface ConsoleTextMessageContent extends WsEnvelope {

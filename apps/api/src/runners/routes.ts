@@ -1,37 +1,57 @@
 import type { FastifyInstance } from "fastify";
 import { createToken, listTokens } from "../db/tokens.js";
-import { redis } from "../redis/client.js";
-import { sendCommand } from "../ws/router.js";
+import { sendCommand, listRunners } from "../ws/router.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
-import type { CapabilityManifest } from "@nightwatch/shared";
+import type { RunnerRecord } from "@nightwatch/shared";
 
 const RULES_TIMEOUT_MS = 10_000;
 
 export async function registerRunnerRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // List runners with live status from the heartbeat key.
-  fastify.get("/runners", async () => {
-    const tokens = listTokens();
-    return Promise.all(
-      tokens.map(async (t) => {
-        const lastSeen = await redis.get(`heartbeat:${t.token}`);
-        const manifestRaw = await redis.get(`manifest:${t.token}`);
-        return {
+  // The fleet view, per runner not per token (CONTEXT.md multi-runner): liveness
+  // and manifests come from the in-memory connection registry. A token with one
+  // or more live runners contributes one row each (so two runners on a shared
+  // token are visible independently); a token with no live runner still shows as
+  // a single offline row so its install command remains discoverable.
+  fastify.get("/runners", () => {
+    const live = listRunners();
+    const byToken = new Map<string, typeof live>();
+    for (const r of live) {
+      const list = byToken.get(r.token);
+      if (list) list.push(r);
+      else byToken.set(r.token, [r]);
+    }
+
+    const records: RunnerRecord[] = [];
+    for (const t of listTokens()) {
+      const runners = byToken.get(t.token);
+      if (!runners || runners.length === 0) {
+        records.push({
           id: t.id,
           token: t.token,
           hostname: t.hostname,
           createdAt: t.createdAt,
-          // Heartbeat carries a 120s TTL; absence means the runner is offline.
-          online: lastSeen !== null,
-          lastSeen,
-          manifest: manifestRaw
-            ? (JSON.parse(manifestRaw) as CapabilityManifest)
-            : null,
-        };
-      }),
-    );
+          online: false,
+          lastSeen: null,
+          manifest: null,
+        });
+        continue;
+      }
+      for (const r of runners) {
+        records.push({
+          id: r.runnerId,
+          token: t.token,
+          hostname: r.hostname ?? t.hostname,
+          createdAt: t.createdAt,
+          online: r.online,
+          lastSeen: new Date(r.lastSeen).toISOString(),
+          manifest: r.manifest,
+        });
+      }
+    }
+    return records;
   });
 
   // Generate a new token for a runner deployment.

@@ -10,7 +10,6 @@ allowBuilds:
   msgpackr-extract: true
   prisma: true
 minimumReleaseAgeExclude:
-  - ioredis@5.11.1
   - openai@6.42.0
   - '@mantine/core@9.3.1'
   - '@mantine/hooks@9.3.1'

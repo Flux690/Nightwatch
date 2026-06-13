@@ -6,7 +6,6 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { Worker } from "bullmq";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
@@ -79,10 +78,10 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { createToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
-import { startWorker } from "../jobs/worker.js";
 import { insertIncident } from "../db/incidents.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../investigation/context.js";
@@ -114,7 +113,6 @@ interface WsEvent {
 
 describe("state inversion: persistence and reads are API-local", () => {
   let server: FastifyInstance;
-  let worker: Worker;
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
@@ -130,21 +128,17 @@ describe("state inversion: persistence and reads are API-local", () => {
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-
-    worker = startWorker();
-    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
-    await worker.close();
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
   });
 
-  // Resolve once the console handler has acked its subscription; a fast
-  // in-process publish (e.g. a platform tool's TOOL_CALL_END) otherwise races
-  // ahead of the Redis subscribe and is missed.
+  // Resolve once the console handler has acked its subscription; a fast publish
+  // (e.g. a platform tool's TOOL_CALL_END) otherwise races ahead of the
+  // event-bus subscribe and is missed.
   function waitForConnected(ws: WebSocket): Promise<void> {
     return new Promise<void>((resolve) => {
       const onMessage = (raw: WebSocket.RawData): void => {
@@ -158,30 +152,28 @@ describe("state inversion: persistence and reads are API-local", () => {
     });
   }
 
-  function transcriptArrived(
-    ws: WebSocket,
-    sessionId: () => string | undefined,
-  ) {
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("timeout: no assistant RUN_FINISHED")),
-        10_000,
-      );
-      ws.on("message", (raw) => {
-        const msg = JSON.parse(raw.toString()) as {
-          type: string;
-          payload: { sessionId: string; message?: { role: string } };
-        };
-        if (
-          msg.type === "RUN_FINISHED" &&
-          msg.payload.sessionId === sessionId() &&
-          msg.payload.message?.role === "assistant"
-        ) {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
+  // Buffer every event from the socket. The run resolves in microtasks now, so
+  // an assistant RUN_FINISHED can be published before the test has captured the
+  // session id it is keyed by; buffering lets the assertion poll for it after.
+  function collectEvents(ws: WebSocket): WsEvent[] {
+    const events: WsEvent[] = [];
+    ws.on("message", (raw) => {
+      events.push(JSON.parse(raw.toString()) as WsEvent);
     });
+    return events;
+  }
+
+  function hasAssistantRunFinished(
+    events: WsEvent[],
+    sessionId: string,
+  ): boolean {
+    return events.some(
+      (e) =>
+        e.type === "RUN_FINISHED" &&
+        e.payload["sessionId"] === sessionId &&
+        (e.payload["message"] as { role?: string } | undefined)?.role ===
+          "assistant",
+    );
   }
 
   it("lists sessions and reads the full transcript with no runner connected", async () => {
@@ -189,9 +181,8 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     // Deliberately register no runner: the console must work during an outage.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const events = collectEvents(ws);
     await waitForConnected(ws);
-    let sessionId: string | undefined;
-    const done = transcriptArrived(ws, () => sessionId);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
@@ -199,9 +190,9 @@ describe("state inversion: persistence and reads are API-local", () => {
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
     expect(res.status).toBe(202);
-    ({ sessionId } = (await res.json()) as { sessionId: string });
+    const { sessionId } = (await res.json()) as { sessionId: string };
 
-    await done;
+    await waitFor(() => hasAssistantRunFinished(events, sessionId));
     ws.close();
 
     const listRes = await fetch(
@@ -228,17 +219,16 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Acknowledged.", toolUses: [FINAL_RESPONSE] }]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const events = collectEvents(ws);
     await waitForConnected(ws);
-    let sessionId: string | undefined;
-    const done = transcriptArrived(ws, () => sessionId);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
-    ({ sessionId } = (await res.json()) as { sessionId: string });
-    await done;
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    await waitFor(() => hasAssistantRunFinished(events, sessionId));
     ws.close();
 
     const stored = getSession(String(sessionId));
@@ -394,9 +384,27 @@ describe("state inversion: episodic memory loads from the central store", () => 
       rawPayload: {},
     };
 
-    const { firstUserMessage } = await buildInitialContext(alert);
+    const { firstUserMessage } = buildInitialContext(alert);
     expect(firstUserMessage).toContain("memory leak in image v12");
     expect(firstUserMessage).toContain("swap exhaustion under load");
+  });
+
+  it("never puts the deployment token in the opening context (it is a secret)", () => {
+    const secret = `nwr_${randomUUID()}-supersecret`;
+    const alert: NormalizedAlert = {
+      sourceAlertId: "src-token",
+      token: secret,
+      targetIdentifier: "web-01",
+      alertType: "HighCPU",
+      severity: "warning",
+      firedAt: new Date().toISOString(),
+      rawPayload: {},
+    };
+
+    // The token authenticates the alert and keys incident history, but the LLM
+    // never needs it - and the opening message is sent to an external provider.
+    const { firstUserMessage } = buildInitialContext(alert);
+    expect(firstUserMessage).not.toContain(secret);
   });
 
   it("does not leak another deployment's incidents into the opening context", async () => {
@@ -423,7 +431,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
       rawPayload: {},
     };
 
-    const { firstUserMessage } = await buildInitialContext(alert);
+    const { firstUserMessage } = buildInitialContext(alert);
     expect(firstUserMessage).not.toContain("stranger's secret incident");
     expect(firstUserMessage).toContain("(no past incidents)");
   });

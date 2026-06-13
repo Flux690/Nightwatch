@@ -6,7 +6,6 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { Worker } from "bullmq";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
 const { mockCreateProvider } = vi.hoisted(() => ({
@@ -20,8 +19,7 @@ import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
-import { enqueueJob } from "../alerts/queue.js";
-import { startWorker } from "../jobs/worker.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
 import { getRecentIncidents } from "../db/incidents.js";
 import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
 import {
@@ -35,11 +33,11 @@ interface WsEvent {
   payload: Record<string, unknown>;
 }
 
-// Resolve once the console handler has acked its subscription. The server sends
-// `connected` only after `await sub.subscribe(...)` (ws/console.ts), so this
-// guarantees a later best-effort publish (e.g. ESCALATED) is actually delivered.
-// Waiting on the WebSocket `open` event only proves the handshake, not the
-// subscription, which races the fastest escalation paths.
+// Resolve once the console handler has acked its subscription. The server
+// registers the event-bus listener synchronously and only then sends
+// `connected` (ws/console.ts), so this guarantees a later publish (e.g.
+// ESCALATED) is actually delivered. Waiting on the WebSocket `open` event only
+// proves the handshake, not the subscription, which races the fastest paths.
 function waitForConnected(ws: WebSocket): Promise<void> {
   return new Promise<void>((resolve) => {
     const onMessage = (raw: WebSocket.RawData): void => {
@@ -147,7 +145,6 @@ function makeToolLoopProvider() {
 
 describe("escalation paths write an incident and emit ESCALATED", () => {
   let server: FastifyInstance;
-  let worker: Worker;
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
@@ -181,13 +178,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     await registerIncidentRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-
-    worker = startWorker();
-    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
-    await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
     cleanupDb();
@@ -330,7 +323,12 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       }
     });
 
-    await enqueueJob({ alert, sessionId, token: TEST_TOKEN, trigger: "alert" });
+    dispatcher.dispatch({
+      alert,
+      sessionId,
+      token: TEST_TOKEN,
+      trigger: "alert",
+    });
 
     // The loop parks on the approval gate; reject it via REST.
     const incidentId = await waitForPendingApproval("restart_container");

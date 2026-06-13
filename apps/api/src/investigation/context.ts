@@ -1,4 +1,3 @@
-import { redis } from "../redis/client.js";
 import { getRecentIncidents } from "../db/incidents.js";
 import type { NormalizedAlert, IncidentRecord } from "@nightwatch/shared";
 
@@ -26,15 +25,11 @@ export function buildChatContext(): InitialContext {
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
 }
 
-export async function buildInitialContext(
-  alert: NormalizedAlert,
-): Promise<InitialContext> {
-  // Telemetry is a remote read (Redis) that can fail while a runner is down -
-  // degrade gracefully. Incident history is a local read now; a failure there
-  // is a real defect, so it surfaces rather than being masked.
-  const telemetryBlock = await loadTelemetrySummary(alert.token).catch(
-    () => "(telemetry unavailable)",
-  );
+export function buildInitialContext(alert: NormalizedAlert): InitialContext {
+  // Incident history is a local read; a failure there is a real defect, so it
+  // surfaces rather than being masked. Live telemetry is not assembled here:
+  // post state-inversion the runner is stateless and pushes no snapshots, so the
+  // agent gathers current state through its read tools at the start of the run.
   const historyBlock = formatIncidentHistory(
     loadIncidentHistory(alert.token, alert.targetIdentifier, alert.alertType),
   );
@@ -42,15 +37,10 @@ export async function buildInitialContext(
   const firstUserMessage = `INCIDENT ALERT
 --------------
 Alert ID:     ${alert.sourceAlertId}
-Token:        ${alert.token}
 Target:       ${alert.targetIdentifier}
 Alert type:   ${alert.alertType}
 Severity:     ${alert.severity}
 Fired at:     ${alert.firedAt}
-
-RECENT TELEMETRY (last 2h)
---------------------------
-${telemetryBlock}
 
 PAST INCIDENT HISTORY (last 30 days, this container + alert type)
 ----------------------------------------------------------------
@@ -59,43 +49,6 @@ ${historyBlock}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, call the final_response tool to finish.`;
 
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage };
-}
-
-async function loadTelemetrySummary(token: string): Promise<string> {
-  const keys = await redis.keys(`telemetry:${token}:*`);
-  if (keys.length === 0) return "(no recent telemetry snapshots found)";
-
-  const latest = keys.sort().slice(-3);
-  const snapshots = await Promise.all(latest.map((k) => redis.get(k)));
-
-  const lines: string[] = [];
-  for (const raw of snapshots) {
-    if (!raw) continue;
-    try {
-      const snap = JSON.parse(raw) as {
-        capturedAt: string;
-        host: { memoryPercent: number; loadAvg1m: number };
-        metrics: Array<{
-          containerName: string;
-          cpuPercent: number;
-          memoryPercent: number;
-          status: string;
-        }>;
-      };
-      lines.push(
-        `[${snap.capturedAt}] host mem=${snap.host.memoryPercent.toFixed(1)}% load=${snap.host.loadAvg1m.toFixed(2)}`,
-      );
-      for (const m of snap.metrics) {
-        lines.push(
-          `  ${m.containerName}: cpu=${m.cpuPercent.toFixed(1)}% mem=${m.memoryPercent.toFixed(1)}% status=${m.status}`,
-        );
-      }
-    } catch {
-      // skip malformed snapshots
-    }
-  }
-
-  return lines.length > 0 ? lines.join("\n") : "(no parseable snapshots)";
 }
 
 const MAX_HISTORY_RECORDS = 5;

@@ -83,7 +83,7 @@ export async function runInvestigation(
   const config = loadConfig();
   const apiKey = loadApiKey();
   const { systemPrompt, firstUserMessage } = alert
-    ? await buildInitialContext(alert)
+    ? buildInitialContext(alert)
     : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 

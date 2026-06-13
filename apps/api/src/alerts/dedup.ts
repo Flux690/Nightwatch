@@ -1,12 +1,14 @@
-import { redis } from "../redis/client.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// 24h TTL — covers Alertmanager's default 4h repeat interval
-const DEDUP_TTL_SECONDS = 86_400;
-
-export async function isDuplicate(alert: NormalizedAlert): Promise<boolean> {
-  const key = `dedup:${alert.token}:${alert.sourceAlertId}`;
-  // NX = only set if not exists; null return means key already existed
-  const result = await redis.set(key, "1", "EX", DEDUP_TTL_SECONDS, "NX");
-  return result === null;
+// Dedup is derived, never stored (CONTEXT.md D2/D4): an alert is a duplicate iff
+// a run for the same token + sourceAlertId is already active or queued. There is
+// no dedup key and no TTL - a crashed run leaves no marker, so a re-fired alert
+// correctly re-investigates instead of being suppressed for hours.
+//
+// A run parked on a human approval still counts: pre-022 the loop awaits the
+// approval in memory, so its dispatch is still active. Issue 022 makes the wait
+// durable and swaps this source to the pending_interrupts table.
+export function isDuplicate(alert: NormalizedAlert): boolean {
+  return dispatcher.isInvestigating(alert.token, alert.sourceAlertId);
 }

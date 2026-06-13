@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { enqueueJob } from "../alerts/queue.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue } from "../db/tokens.js";
 import { getSession, getSessionMessages } from "../db/sessions.js";
 import { requireAuth } from "../auth/gate.js";
@@ -29,13 +29,21 @@ export async function registerChatRoutes(
       }
 
       const sessionId = randomUUID();
-      await enqueueJob({
+      const accepted = dispatcher.dispatch({
         sessionId,
         token,
         trigger: "chat",
         userMessage: message,
       });
-      logger.info({ token, sessionId }, "chat session started");
+      if (!accepted) {
+        return reply
+          .code(503)
+          .send({ error: "investigation queue full, retry shortly" });
+      }
+      logger.info(
+        { token: token.slice(0, 8), sessionId },
+        "chat session started",
+      );
       return reply.code(202).send({ sessionId });
     },
   );
@@ -71,14 +79,22 @@ export async function registerChatRoutes(
         providerContent: m.providerContent,
       }));
 
-      await enqueueJob({
+      const accepted = dispatcher.dispatch({
         sessionId,
         token,
         trigger: session.trigger,
         seed,
         userMessage: message,
       });
-      logger.info({ token, sessionId, seeded: seed.length }, "session resumed");
+      if (!accepted) {
+        return reply
+          .code(503)
+          .send({ error: "investigation queue full, retry shortly" });
+      }
+      logger.info(
+        { token: token.slice(0, 8), sessionId, seeded: seed.length },
+        "session resumed",
+      );
       return reply.code(202).send({ sessionId });
     },
   );

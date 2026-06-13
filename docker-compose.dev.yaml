@@ -1,17 +1,4 @@
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      # 6380 on the host to avoid clashing with Clipper's own Redis (6379).
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
     container_name: nightwatch-cadvisor
@@ -54,5 +41,4 @@ services:
       - "--config.file=/etc/alertmanager/alertmanager.yml"
 
 volumes:
-  redis_data:
   prometheus_data:

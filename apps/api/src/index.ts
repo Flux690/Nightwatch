@@ -9,7 +9,6 @@ if (!process.env["SECRET_KEY"]) {
 }
 import FastifyWebSocket from "@fastify/websocket";
 import { initDb } from "./db/client.js";
-import { redis } from "./redis/client.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
@@ -20,7 +19,6 @@ import { registerSessionRoutes } from "./sessions/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
 import { registerApprovalRoutes } from "./approvals/routes.js";
-import { startWorker } from "./jobs/worker.js";
 
 // Fastify keeps its own pino for HTTP logs; the investigation loop/providers
 // use the standalone logger in ./logger.js. Both emit pino JSON to stdout.
@@ -43,15 +41,11 @@ fastify.get("/health", async () => ({ status: "ok" }));
 
 const start = async (): Promise<void> => {
   try {
-    await redis.ping();
-    fastify.log.info("Redis connected");
-
     initDb();
     fastify.log.info("SQLite ready");
 
-    startWorker();
-    fastify.log.info("BullMQ worker started");
-
+    // Investigations run on the in-process dispatcher (CONTEXT.md D2); it is a
+    // module singleton with no separate worker to boot. No Redis, no BullMQ.
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
     await fastify.listen({ port, host: "0.0.0.0" });
   } catch (err) {

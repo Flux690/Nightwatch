@@ -1,17 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { redis } from "../redis/client.js";
 import { findTokenByValue, setTokenHostname } from "../db/tokens.js";
-import { registerRunner, resolveCommand, unregisterRunner } from "./router.js";
+import {
+  registerRunner,
+  resolveCommand,
+  unregisterRunner,
+  setRunnerManifest,
+  recordHeartbeat,
+} from "./router.js";
 import type {
-  RunnerHeartbeatMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
 } from "@nightwatch/shared";
-
-const DEBOUNCE_MS = 30_000;
-const lastSeenWrites = new Map<string, number>();
 
 export async function registerWsRoutes(
   fastify: FastifyInstance,
@@ -60,25 +61,14 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
-          void redis.set(`manifest:${token}`, JSON.stringify(msg.payload));
+          setRunnerManifest(token, runnerId, msg.payload);
           setTokenHostname(token, msg.payload.hostname);
           fastify.log.info({ token: token.slice(0, 8) }, "manifest stored");
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);
         } else if (type === "heartbeat") {
-          const _msg = parsed as unknown as RunnerHeartbeatMessage;
-          const now = Date.now();
-          const last = lastSeenWrites.get(token) ?? 0;
-          if (now - last >= DEBOUNCE_MS) {
-            lastSeenWrites.set(token, now);
-            void redis.set(
-              `heartbeat:${token}`,
-              new Date().toISOString(),
-              "EX",
-              120,
-            );
-          }
+          recordHeartbeat(token, runnerId);
         }
       });
 

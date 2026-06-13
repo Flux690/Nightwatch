@@ -5,7 +5,6 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { Worker } from "bullmq";
 import type {
   ConsoleTextMessageContent,
   ConsoleRunFinished,
@@ -86,19 +85,35 @@ vi.mock("../llm/factory.js", () => ({
 
 import { createToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
-import { startWorker } from "../jobs/worker.js";
 import {
   registerRunner,
   unregisterRunner,
   resolveCommand,
 } from "../ws/router.js";
 
+// Wait for the console handler's `connected` ack, sent only after it subscribes
+// to the event bus. Dispatch is now in-process and synchronous, so a run can
+// publish before a subscriber that only waited for the socket `open` handshake;
+// pre-subscribe events are correctly dropped (the transcript is durable).
+function waitForConnected(ws: WebSocket): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onMessage = (raw: WebSocket.RawData): void => {
+      const msg = JSON.parse(raw.toString()) as { type: string };
+      if (msg.type === "connected") {
+        ws.off("message", onMessage);
+        resolve();
+      }
+    };
+    ws.on("message", onMessage);
+  });
+}
+
 describe("console WS pipeline", () => {
   let server: FastifyInstance;
-  let worker: Worker;
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
@@ -126,15 +141,9 @@ describe("console WS pipeline", () => {
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-
-    // The test owns the only worker on its isolated Redis db, so it always wins
-    // the job and runs the mocked provider in-process.
-    worker = startWorker();
-    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
-    await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
     cleanupDb();
@@ -146,12 +155,6 @@ describe("console WS pipeline", () => {
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
 
-    let targetSessionId: string | undefined;
-    let resolveFirstMessage: () => void = () => {};
-    const firstMessageArrived = new Promise<void>((res) => {
-      resolveFirstMessage = res;
-    });
-
     ws.on("message", (raw) => {
       const msg = JSON.parse(raw.toString()) as {
         type: string;
@@ -159,17 +162,9 @@ describe("console WS pipeline", () => {
       };
       if (msg.type === "connected") return;
       events.push(msg);
-      // Redis pub/sub is instance-global, so a concurrent dev investigation
-      // could publish here; only react to this test's own session.
-      if (
-        msg.type === "RUN_FINISHED" &&
-        msg.payload["sessionId"] === targetSessionId
-      ) {
-        resolveFirstMessage();
-      }
     });
 
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
@@ -179,20 +174,17 @@ describe("console WS pipeline", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
-    targetSessionId = sessionId;
 
-    // The POST enqueued the job; the test's worker (sole consumer of its
-    // isolated Redis db) runs the mocked investigation, which publishes
-    // session_delta then session_message over Redis pub/sub to the console WS.
-    await Promise.race([
-      firstMessageArrived,
-      new Promise<void>((_, rej) =>
-        setTimeout(
-          () => rej(new Error("timeout: no session_message after 10s")),
-          10_000,
-        ),
+    // The POST dispatched the run in-process; the mocked investigation publishes
+    // session_delta then session_message over the event bus to the console WS.
+    // The run resolves in microtasks - possibly before this captured sessionId -
+    // so buffer every event and poll for the match rather than racing arrival.
+    await waitFor(() =>
+      events.some(
+        (e) =>
+          e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
       ),
-    ]);
+    );
 
     ws.close();
 
@@ -223,36 +215,27 @@ describe("console WS pipeline", () => {
     mockCreateProvider.mockClear();
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    await new Promise<void>((res) => ws.on("open", res));
-
-    let targetSessionId: string | undefined;
-    let firstRunDone = false;
-    let resolveFirstRun!: () => void;
-    let resolveResumedRun!: () => void;
-    const firstRunComplete = new Promise<void>((r) => {
-      resolveFirstRun = r;
-    });
-    const resumedRunComplete = new Promise<void>((r) => {
-      resolveResumedRun = r;
-    });
-
+    const events: Array<{
+      type: string;
+      payload: { sessionId: string; message?: { role: string } };
+    }> = [];
     ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString()) as {
-        type: string;
-        payload: { sessionId: string; message: { role: string } };
-      };
-      if (msg.type !== "RUN_FINISHED") return;
-      if (msg.payload.sessionId !== targetSessionId) return;
-      // The first run ends when the assistant turn is persisted. Waiting only
-      // for the assistant turn (not the user turn) prevents the user message
-      // from the same run from prematurely resolving resumedRunComplete.
-      if (!firstRunDone && msg.payload.message.role === "assistant") {
-        firstRunDone = true;
-        resolveFirstRun();
-      } else if (firstRunDone) {
-        resolveResumedRun();
-      }
+      const msg = JSON.parse(raw.toString()) as (typeof events)[number];
+      if (msg.type === "connected") return;
+      events.push(msg);
     });
+    await waitForConnected(ws);
+
+    // Each run persists exactly one assistant turn, so counting assistant
+    // RUN_FINISHED events for the session distinguishes the first run (>=1) from
+    // the resumed run (>=2) without racing the captured sessionId.
+    const assistantFinishes = (sessionId: string): number =>
+      events.filter(
+        (e) =>
+          e.type === "RUN_FINISHED" &&
+          e.payload.sessionId === sessionId &&
+          e.payload.message?.role === "assistant",
+      ).length;
 
     // Start a new chat session (first run).
     const startRes = await fetch(
@@ -265,17 +248,8 @@ describe("console WS pipeline", () => {
     );
     expect(startRes.status).toBe(202);
     const { sessionId } = (await startRes.json()) as { sessionId: string };
-    targetSessionId = sessionId;
 
-    await Promise.race([
-      firstRunComplete,
-      new Promise<void>((_, rej) =>
-        setTimeout(
-          () => rej(new Error("timeout: first run did not complete")),
-          10_000,
-        ),
-      ),
-    ]);
+    await waitFor(() => assistantFinishes(sessionId) >= 1);
 
     // Resume the ended session with a follow-up message. The same sessionId
     // must come back - no new session is minted.
@@ -294,18 +268,9 @@ describe("console WS pipeline", () => {
     const resumeBody = (await resumeRes.json()) as { sessionId: string };
     expect(resumeBody.sessionId).toBe(sessionId);
 
-    // The resumed run must emit RUN_FINISHED (i.e. the new turns are
-    // persisted - if snapshot() were not stateful this would time out).
-    await Promise.race([
-      resumedRunComplete,
-      new Promise<void>((_, rej) =>
-        setTimeout(
-          () =>
-            rej(new Error("timeout: resumed run did not emit RUN_FINISHED")),
-          10_000,
-        ),
-      ),
-    ]);
+    // The resumed run must emit a second assistant RUN_FINISHED (i.e. the new
+    // turns are persisted - if snapshot() were not stateful this would time out).
+    await waitFor(() => assistantFinishes(sessionId) >= 2);
 
     ws.close();
 

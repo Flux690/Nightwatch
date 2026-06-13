@@ -1,0 +1,194 @@
+import "dotenv/config";
+import type { AddressInfo } from "node:net";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+
+// The provider is scripted: by default chat() parks the run on a gate the test
+// releases, so a run stays "active" long enough to assert derived dedup against
+// it. Switching to immediate mode lets runs complete at once for rate-limit math.
+const { mockCreateProvider, releaseAll, setImmediate } = vi.hoisted(() => {
+  const FINAL = {
+    id: "fr-1",
+    name: "final_response",
+    input: {
+      rootCause: {
+        summary: "done",
+        evidence: ["e"],
+        contributingFactors: null,
+      },
+      recommendedAction: null,
+      escalateIfRejected: false,
+      investigationSteps: ["s"],
+    },
+  };
+  let immediate = false;
+  const gates: Array<() => void> = [];
+  const finalTurn = {
+    stopReason: "tool_use" as const,
+    toolUses: [FINAL],
+    text: "",
+  };
+  const make = () => ({
+    start: vi.fn(),
+    seed: vi.fn(),
+    snapshot: vi.fn((): unknown[] => []),
+    appendToolResults: vi.fn(),
+    appendUserMessage: vi.fn(),
+    chat: vi.fn(() => {
+      if (immediate) return Promise.resolve(finalTurn);
+      return new Promise((resolve) => {
+        gates.push(() => resolve(finalTurn));
+      });
+    }),
+  });
+  return {
+    mockCreateProvider: vi.fn(make),
+    releaseAll: (): void => {
+      for (const g of gates) g();
+      gates.length = 0;
+    },
+    setImmediate: (v: boolean): void => {
+      immediate = v;
+    },
+  };
+});
+
+vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+
+import { createToken } from "../db/tokens.js";
+import { useTempDb } from "./temp-db.js";
+import { waitFor } from "./wait.js";
+import { registerAlertRoutes } from "../alerts/ingest.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
+
+// One firing Alertmanager alert with a caller-chosen fingerprint (-> sourceAlertId)
+// and severity, so dedup and rate-limit can be driven precisely.
+function alertBody(fingerprint: string, severity = "warning") {
+  return {
+    alerts: [
+      {
+        status: "firing",
+        labels: { alertname: "HighCPU", severity, container: "web-01" },
+        annotations: { summary: "CPU high" },
+        startsAt: new Date().toISOString(),
+        endsAt: "0001-01-01T00:00:00Z",
+        fingerprint,
+      },
+    ],
+    version: "4",
+    groupKey: "test",
+    receiver: "nightwatch",
+    status: "firing",
+    groupLabels: {},
+    commonLabels: {},
+    commonAnnotations: {},
+    externalURL: "http://localhost:9093",
+  };
+}
+
+describe("POST /alerts/ingest dispatch behavior", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = Fastify({ logger: false });
+    await registerAlertRoutes(server);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    // Drain any parked runs so a later test never inherits a held dedup key.
+    setImmediate(false);
+    releaseAll();
+    vi.useRealTimers();
+  });
+
+  function ingest(
+    token: string,
+    body: ReturnType<typeof alertBody>,
+  ): Promise<{ enqueued: number; skipped: number }> {
+    return server
+      .inject({
+        method: "POST",
+        url: "/alerts/ingest",
+        headers: { "x-nightwatch-token": token },
+        payload: body,
+      })
+      .then((res) => {
+        expect(res.statusCode).toBe(200);
+        return JSON.parse(res.body) as { enqueued: number; skipped: number };
+      });
+  }
+
+  it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
+    // A fresh token isolates this test's rate-limit counter from the others.
+    const token = createToken("dedup").token;
+    setImmediate(false); // runs park on the gate -> stay active
+
+    const first = await ingest(token, alertBody("dup-1"));
+    expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
+
+    // Same token + sourceAlertId while the first run is still active -> dropped.
+    const dupe = await ingest(token, alertBody("dup-1"));
+    expect(dupe).toMatchObject({ enqueued: 0, skipped: 1 });
+
+    // End the active run; its dedup marker clears (no key, no TTL).
+    releaseAll();
+    await waitFor(() => !dispatcher.isInvestigating(token, "dup-1"));
+
+    // The same alert now starts a fresh investigation - no 24h suppression.
+    const refire = await ingest(token, alertBody("dup-1"));
+    expect(refire).toMatchObject({ enqueued: 1, skipped: 0 });
+  });
+
+  it("rate-limits past 10 non-critical alerts per token per hour; critical bypasses; resets after the window", async () => {
+    const token = createToken("ratelimit").token;
+    setImmediate(true); // runs complete at once; rate-limit is independent of them
+    // Fake only Date - the rate-limit window is Date.now()-based. Faking
+    // setImmediate/setTimeout too would hang Fastify's async internals.
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    // 10 distinct alerts all admitted.
+    for (let i = 0; i < 10; i++) {
+      const r = await ingest(token, alertBody(`rl-${i}`));
+      expect(r).toMatchObject({ enqueued: 1, skipped: 0 });
+    }
+
+    // The 11th non-critical alert is rate-limited.
+    expect(await ingest(token, alertBody("rl-over"))).toMatchObject({
+      enqueued: 0,
+      skipped: 1,
+    });
+
+    // A critical alert bypasses the limit even while it is exhausted.
+    expect(await ingest(token, alertBody("rl-crit", "critical"))).toMatchObject(
+      {
+        enqueued: 1,
+        skipped: 0,
+      },
+    );
+
+    // After the hourly window the counter resets and non-critical flows again.
+    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
+    expect(await ingest(token, alertBody("rl-after"))).toMatchObject({
+      enqueued: 1,
+      skipped: 0,
+    });
+  });
+});

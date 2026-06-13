@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  CapabilityManifest,
   RunnerCommandMessage,
   RunnerResultMessage,
 } from "@nightwatch/shared";
@@ -12,17 +13,50 @@ interface PendingCommand {
 
 const pending = new Map<string, PendingCommand>();
 
-// token -> runnerId -> send. Keying by runnerId (not token alone) stops a second
-// runner sharing the same token from overwriting the first runner's socket.
-// sendCommand routes by token and picks any live runner; targeting a specific
-// runner is future work.
-const registry = new Map<string, Map<string, (msg: string) => void>>();
+// A runner liveness window: a runner whose last heartbeat is older than this is
+// treated as offline even if its socket has not yet emitted `close` (a half-open
+// connection). Matches the TTL the Redis heartbeat key used to carry.
+const HEARTBEAT_TTL_MS = 120_000;
+
+// The connection registry is the only home for per-runner liveness and
+// capability now - manifests and heartbeats live here in memory, never in Redis
+// (CONTEXT.md D2). It is keyed (token, runnerId) so a second runner sharing a
+// token can never overwrite the first's manifest or keep a dead one looking
+// alive.
+interface RunnerConnection {
+  send: (msg: string) => void;
+  manifest: CapabilityManifest | null;
+  hostname: string | null;
+  lastSeen: number;
+}
+
+// A single registry row surfaced to the /runners endpoint.
+export interface RunnerView {
+  token: string;
+  runnerId: string;
+  hostname: string | null;
+  manifest: CapabilityManifest | null;
+  lastSeen: number;
+  online: boolean;
+}
+
+const registry = new Map<string, Map<string, RunnerConnection>>();
 
 export class RunnerOfflineError extends Error {
-  constructor(token: string) {
-    super(`Runner for token ${token} is offline`);
+  // The message becomes a tool_result fed back to the LLM and is logged, so it
+  // must never carry the deployment token (a secret). It identifies no token:
+  // the loop already knows which deployment it is running for.
+  constructor() {
+    super("No runner is connected for this deployment");
     this.name = "RunnerOfflineError";
   }
+}
+
+function getConnection(
+  token: string,
+  runnerId: string,
+): RunnerConnection | undefined {
+  return registry.get(token)?.get(runnerId);
 }
 
 export function registerRunner(
@@ -35,7 +69,13 @@ export function registerRunner(
     runners = new Map();
     registry.set(token, runners);
   }
-  runners.set(runnerId, send);
+  // Seed lastSeen at connect so a runner is online before its first heartbeat.
+  runners.set(runnerId, {
+    send,
+    manifest: null,
+    hostname: null,
+    lastSeen: Date.now(),
+  });
 }
 
 export function unregisterRunner(token: string, runnerId: string): void {
@@ -43,6 +83,45 @@ export function unregisterRunner(token: string, runnerId: string): void {
   if (!runners) return;
   runners.delete(runnerId);
   if (runners.size === 0) registry.delete(token);
+}
+
+export function setRunnerManifest(
+  token: string,
+  runnerId: string,
+  manifest: CapabilityManifest,
+): void {
+  const conn = getConnection(token, runnerId);
+  if (!conn) return;
+  conn.manifest = manifest;
+  conn.hostname = manifest.hostname;
+  conn.lastSeen = Date.now();
+}
+
+export function recordHeartbeat(token: string, runnerId: string): void {
+  const conn = getConnection(token, runnerId);
+  if (!conn) return;
+  conn.lastSeen = Date.now();
+}
+
+// Every connected runner, one row per (token, runnerId), with liveness derived
+// from heartbeat freshness. The /runners endpoint reads this - the fleet view is
+// per runner, not per token, so one live runner never masks a dead sibling.
+export function listRunners(): RunnerView[] {
+  const now = Date.now();
+  const views: RunnerView[] = [];
+  for (const [token, runners] of registry) {
+    for (const [runnerId, conn] of runners) {
+      views.push({
+        token,
+        runnerId,
+        hostname: conn.hostname,
+        manifest: conn.manifest,
+        lastSeen: conn.lastSeen,
+        online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+      });
+    }
+  }
+  return views;
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
@@ -63,9 +142,11 @@ export function sendCommand(
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  const runners = registry.get(token);
-  const send = runners?.values().next().value;
-  if (!send) throw new RunnerOfflineError(token);
+  // Any live runner on the token (single-runner deployments and pre-routing).
+  // Container-targeted routing by manifest is issue 026.
+  const conn = registry.get(token)?.values().next().value;
+  if (!conn) throw new RunnerOfflineError();
+  const { send } = conn;
 
   const correlationId = randomUUID();
   const msg: RunnerCommandMessage = {

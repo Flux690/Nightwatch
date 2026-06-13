@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { redis } from "../redis/client.js";
+import { publishConsoleEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
   ConsoleEscalated,
@@ -12,24 +12,12 @@ import type {
   SessionMessage,
 } from "@nightwatch/shared";
 
-// One channel per session; the console WS pattern-subscribes to all of them.
-export function sessionChannel(sessionId: string): string {
-  return `session:${sessionId}`;
-}
-
-// Events not scoped to a single session (e.g. approval resolutions, which the
-// console correlates by toolUseId) ride this fixed channel.
-export const CONSOLE_EVENTS_CHANNEL = "console:events";
-
-// Live events are best-effort and ephemeral - a failed publish must never break
-// the investigation, so every publish swallows its error. The durable record is
-// the SessionMessage persisted to the runner when the turn completes.
-async function publishRaw(channel: string, env: unknown): Promise<void> {
-  try {
-    await redis.publish(channel, JSON.stringify(env));
-  } catch {
-    // streaming is best-effort
-  }
+// Every envelope goes to the one console bus; the console WS forwards all of
+// them and the client routes by type and sessionId. Publishing is synchronous
+// and in-process now, so there is nothing to fail - but the serialized form
+// stays the wire-identical envelope the console already parses.
+function publishRaw(env: unknown): void {
+  publishConsoleEvent(JSON.stringify(env));
 }
 
 export function publishTextMessageContent(
@@ -41,7 +29,7 @@ export function publishTextMessageContent(
     type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId, kind: delta.kind, delta: delta.text },
   };
-  void publishRaw(sessionChannel(sessionId), env);
+  publishRaw(env);
 }
 
 export function publishRunFinished(
@@ -53,7 +41,7 @@ export function publishRunFinished(
     type: "RUN_FINISHED",
     payload: { sessionId, message },
   };
-  void publishRaw(sessionChannel(sessionId), env);
+  publishRaw(env);
 }
 
 export function publishToolCallStart(
@@ -64,7 +52,7 @@ export function publishToolCallStart(
     type: "TOOL_CALL_START",
     payload,
   };
-  void publishRaw(sessionChannel(payload.sessionId), env);
+  publishRaw(env);
 }
 
 export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
@@ -73,7 +61,7 @@ export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
     type: "INTERRUPT",
     payload,
   };
-  void publishRaw(sessionChannel(payload.sessionId), env);
+  publishRaw(env);
 }
 
 export function publishToolCallEnd(
@@ -84,7 +72,7 @@ export function publishToolCallEnd(
     type: "TOOL_CALL_END",
     payload,
   };
-  void publishRaw(sessionChannel(payload.sessionId), env);
+  publishRaw(env);
 }
 
 export function publishInterruptResolved(
@@ -95,7 +83,7 @@ export function publishInterruptResolved(
     type: "INTERRUPT_RESOLVED",
     payload,
   };
-  void publishRaw(CONSOLE_EVENTS_CHANNEL, env);
+  publishRaw(env);
 }
 
 export function publishEscalated(payload: ConsoleEscalated["payload"]): void {
@@ -104,5 +92,5 @@ export function publishEscalated(payload: ConsoleEscalated["payload"]): void {
     type: "ESCALATED",
     payload,
   };
-  void publishRaw(CONSOLE_EVENTS_CHANNEL, env);
+  publishRaw(env);
 }

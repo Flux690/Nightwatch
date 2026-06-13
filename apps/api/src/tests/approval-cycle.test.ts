@@ -5,7 +5,6 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { Worker } from "bullmq";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
 // A gated runner tool (restart_container) on the first turn, then final_response.
@@ -79,11 +78,11 @@ vi.mock("../llm/factory.js", () => ({
 
 import { createToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
-import { startWorker } from "../jobs/worker.js";
 import {
   registerRunner,
   unregisterRunner,
@@ -95,9 +94,24 @@ interface WsEvent {
   payload: Record<string, unknown>;
 }
 
+// Wait for the console handler's `connected` ack, sent only after it subscribes
+// to the event bus, so a run dispatched next cannot publish before the socket is
+// subscribed (pre-subscribe events are correctly dropped).
+function waitForConnected(ws: WebSocket): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onMessage = (raw: WebSocket.RawData): void => {
+      const msg = JSON.parse(raw.toString()) as { type: string };
+      if (msg.type === "connected") {
+        ws.off("message", onMessage);
+        resolve();
+      }
+    };
+    ws.on("message", onMessage);
+  });
+}
+
 describe("approval cycle", () => {
   let server: FastifyInstance;
-  let worker: Worker;
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
@@ -134,13 +148,9 @@ describe("approval cycle", () => {
     await registerIncidentRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-
-    worker = startWorker();
-    await worker.waitUntilReady();
   });
 
   afterAll(async () => {
-    await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
     cleanupDb();
@@ -150,34 +160,12 @@ describe("approval cycle", () => {
   it("pauses at a gated tool, resumes on approve, executes the write", async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
     const events: WsEvent[] = [];
-
-    let sessionId: string | undefined;
-    let resolveAwaiting: (e: WsEvent) => void = () => {};
-    const awaitingArrived = new Promise<WsEvent>((res) => {
-      resolveAwaiting = res;
-    });
-    let resolveResult: () => void = () => {};
-    const restartResultArrived = new Promise<void>((res) => {
-      resolveResult = res;
-    });
-
     ws.on("message", (raw) => {
       const msg = JSON.parse(raw.toString()) as WsEvent;
       if (msg.type === "connected") return;
       events.push(msg);
-      if (msg.type === "INTERRUPT" && msg.payload["sessionId"] === sessionId) {
-        resolveAwaiting(msg);
-      }
-      if (
-        msg.type === "TOOL_CALL_END" &&
-        msg.payload["sessionId"] === sessionId &&
-        msg.payload["toolUseId"] === "restart-1"
-      ) {
-        resolveResult();
-      }
     });
-
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
@@ -185,17 +173,15 @@ describe("approval cycle", () => {
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     expect(res.status).toBe(202);
-    ({ sessionId } = (await res.json()) as { sessionId: string });
+    const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const awaiting = await Promise.race([
-      awaitingArrived,
-      new Promise<WsEvent>((_, rej) =>
-        setTimeout(
-          () => rej(new Error("timeout: no awaitingApproval")),
-          10_000,
-        ),
+    // The run resolves into the gate in microtasks - possibly before this
+    // captured sessionId - so buffer every event and poll for the INTERRUPT.
+    const awaiting = await waitFor(() =>
+      events.find(
+        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
       ),
-    ]);
+    );
 
     // The console needs the incidentId to address the approve endpoint, and it
     // must travel on the gated start event (the join key the loop is blocked on).
@@ -216,15 +202,14 @@ describe("approval cycle", () => {
     );
     expect(approveRes.status).toBe(200);
 
-    await Promise.race([
-      restartResultArrived,
-      new Promise<void>((_, rej) =>
-        setTimeout(
-          () => rej(new Error("timeout: loop did not resume")),
-          10_000,
-        ),
+    await waitFor(() =>
+      events.some(
+        (e) =>
+          e.type === "TOOL_CALL_END" &&
+          e.payload["sessionId"] === sessionId &&
+          e.payload["toolUseId"] === "restart-1",
       ),
-    ]);
+    );
 
     ws.close();
 
