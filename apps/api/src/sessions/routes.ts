@@ -1,10 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { sendCommand } from "../ws/router.js";
+import { listSessions, getSessionMessages } from "../db/sessions.js";
 
-const QUERY_TIMEOUT_MS = 10_000;
-
-// Read-only session views for the console. Both relay to the runner, which is
-// the system of record for transcripts (PRD 4.3 / 10.4).
+// Read-only session views for the console, served from the API's SQLite (state
+// inversion): sessions and transcripts are readable even when every runner is
+// offline - exactly when the operator needs them.
 export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
@@ -15,40 +14,11 @@ export async function registerSessionRoutes(
       if (!token) {
         return reply.code(400).send({ error: "token is required" });
       }
-      try {
-        const sessions = await sendCommand(
-          token,
-          "get_sessions",
-          { token },
-          QUERY_TIMEOUT_MS,
-        );
-        return sessions;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(502).send({ error: msg });
-      }
+      return listSessions(token);
     },
   );
 
-  fastify.get<{ Params: { id: string }; Querystring: { token?: string } }>(
-    "/sessions/:id",
-    async (request, reply) => {
-      const token = request.query.token;
-      if (!token) {
-        return reply.code(400).send({ error: "token is required" });
-      }
-      try {
-        const messages = await sendCommand(
-          token,
-          "get_session_messages",
-          { sessionId: request.params.id },
-          QUERY_TIMEOUT_MS,
-        );
-        return messages;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(502).send({ error: msg });
-      }
-    },
+  fastify.get<{ Params: { id: string } }>("/sessions/:id", async (request) =>
+    getSessionMessages(request.params.id),
   );
 }

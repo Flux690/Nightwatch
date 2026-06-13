@@ -12,9 +12,9 @@ function dbPath(): string {
 }
 
 // Tables land here as the refactor proceeds; issue 019 introduces the first two
-// (tokens, config). Sessions, transcripts, incidents, and pending interrupts
-// follow in later issues. Each statement is CREATE TABLE IF NOT EXISTS so the
-// bootstrap is safe to run on every boot.
+// (tokens, config); issue 020 adds sessions, session_messages, and incidents as
+// part of the state inversion (the runner is now stateless). Each statement is
+// CREATE TABLE IF NOT EXISTS so the bootstrap is safe to run on every boot.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS tokens (
     id         TEXT PRIMARY KEY,
@@ -40,6 +40,47 @@ const SCHEMA = `
     reasoning_effort   TEXT,
     updated_at         TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    session_id        TEXT PRIMARY KEY,
+    token             TEXT NOT NULL,
+    trigger           TEXT NOT NULL,
+    title             TEXT NOT NULL DEFAULT '',
+    originating_alert TEXT,
+    created_at        TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_token
+    ON sessions(token, created_at);
+
+  CREATE TABLE IF NOT EXISTS session_messages (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id       TEXT NOT NULL REFERENCES sessions(session_id),
+    seq              INTEGER NOT NULL,
+    role             TEXT NOT NULL,
+    content          TEXT NOT NULL,
+    provider_content TEXT,
+    created_at       TEXT NOT NULL,
+    UNIQUE(session_id, seq)
+  );
+
+  CREATE TABLE IF NOT EXISTS incidents (
+    id                    TEXT PRIMARY KEY,
+    token                 TEXT NOT NULL,
+    session_id            TEXT,
+    outcome               TEXT NOT NULL DEFAULT 'finding',
+    timestamp             TEXT NOT NULL,
+    container_name        TEXT NOT NULL,
+    alert_type            TEXT NOT NULL,
+    root_cause            TEXT NOT NULL DEFAULT '',
+    resolution_action     TEXT,
+    resolved_at           TEXT,
+    human_resolution_note TEXT,
+    recurrence_count      INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_incidents_lookup
+    ON incidents(token, container_name, alert_type, timestamp);
 `;
 
 let _db: Database.Database | undefined;

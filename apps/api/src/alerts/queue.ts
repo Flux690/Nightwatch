@@ -46,5 +46,10 @@ export async function enqueueInvestigation(
 ): Promise<void> {
   // The session id is minted here so the whole investigation - persistence and
   // the live pub/sub channel - is keyed by it from the first turn.
-  await enqueueJob({ alert, sessionId: randomUUID(), trigger: "alert" });
+  await enqueueJob({
+    alert,
+    sessionId: randomUUID(),
+    token: alert.token,
+    trigger: "alert",
+  });
 }

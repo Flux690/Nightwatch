@@ -33,23 +33,11 @@ describe("GET /approvals/pending", () => {
     const toolUseId = `tool-${randomUUID()}`;
 
     // Seed a pending approval without awaiting — the approval gate is in-flight
-    void requestApproval(
-      {
-        sourceAlertId: "alert-1",
-        token: TOKEN_A,
-        targetIdentifier: "web-01",
-        alertType: "cpu_high",
-        severity: "warning",
-        firedAt: new Date().toISOString(),
-        rawPayload: {},
-      },
-      incidentId,
-      {
-        id: toolUseId,
-        name: "restart_container",
-        input: { containerName: "web-01" },
-      },
-    );
+    void requestApproval(TOKEN_A, incidentId, {
+      id: toolUseId,
+      name: "restart_container",
+      input: { containerName: "web-01" },
+    });
 
     const res = await fetch(
       `http://127.0.0.1:${port}/approvals/pending?token=${TOKEN_A}`,
@@ -70,23 +58,11 @@ describe("GET /approvals/pending", () => {
     const incidentId = `inc-${randomUUID()}`;
     const toolUseId = `tool-${randomUUID()}`;
 
-    void requestApproval(
-      {
-        sourceAlertId: "alert-2",
-        token: TOKEN_B,
-        targetIdentifier: "db-01",
-        alertType: "mem_high",
-        severity: "critical",
-        firedAt: new Date().toISOString(),
-        rawPayload: {},
-      },
-      incidentId,
-      {
-        id: toolUseId,
-        name: "restart_container",
-        input: { containerName: "db-01" },
-      },
-    );
+    void requestApproval(TOKEN_B, incidentId, {
+      id: toolUseId,
+      name: "restart_container",
+      input: { containerName: "db-01" },
+    });
 
     const res = await fetch(
       `http://127.0.0.1:${port}/approvals/pending?token=${TOKEN_A}`,

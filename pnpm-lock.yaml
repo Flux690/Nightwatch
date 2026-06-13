@@ -152,9 +152,6 @@ importers:
       '@nightwatch/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      better-sqlite3:
-        specifier: 12.10.0
-        version: 12.10.0
       dotenv:
         specifier: 17.4.2
         version: 17.4.2
@@ -168,9 +165,6 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
-      '@types/better-sqlite3':
-        specifier: 7.6.13
-        version: 7.6.13
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1

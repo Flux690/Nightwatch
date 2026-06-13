@@ -1,5 +1,5 @@
 import { redis } from "../redis/client.js";
-import { sendCommand } from "../ws/router.js";
+import { getRecentIncidents } from "../db/incidents.js";
 import type { NormalizedAlert, IncidentRecord } from "@nightwatch/shared";
 
 export interface InitialContext {
@@ -7,25 +7,9 @@ export interface InitialContext {
   firstUserMessage: string;
 }
 
-export async function buildInitialContext(
-  alert: NormalizedAlert,
-): Promise<InitialContext> {
-  const [telemetrySummary, incidentHistory] = await Promise.allSettled([
-    loadTelemetrySummary(alert.token),
-    loadIncidentHistory(alert.token, alert.targetIdentifier, alert.alertType),
-  ]);
-
-  const telemetryBlock =
-    telemetrySummary.status === "fulfilled"
-      ? telemetrySummary.value
-      : "(telemetry unavailable)";
-
-  const historyBlock =
-    incidentHistory.status === "fulfilled"
-      ? formatIncidentHistory(incidentHistory.value)
-      : "(incident history unavailable)";
-
-  const systemPrompt = `You are Nightwatch, an autonomous reliability engineer embedded in a production infrastructure platform. You investigate one incident at a time: find the root cause from evidence, then remediate or recommend the minimum-viable fix.
+// The system prompt is identical for both triggers (one loop, one prompt). A
+// chat session authors its own opening message, so it needs no incident header.
+const SYSTEM_PROMPT = `You are Nightwatch, an autonomous reliability engineer embedded in a production infrastructure platform. You investigate one incident at a time: find the root cause from evidence, then remediate or recommend the minimum-viable fix.
 
 How you operate:
 - Investigate with the read tools first. Build a hypothesis from concrete evidence (logs, stats, events, history) before acting. Ground every claim in something a tool returned.
@@ -35,6 +19,25 @@ How you operate:
 - Finish by calling the final_response tool exactly once with your structured result. Never end the investigation with a prose summary - the final_response tool is the only valid ending.
 
 Budget: at most 24 tool calls and 5 minutes of investigation time (human approval wait excluded).`;
+
+// A chat session is opened by the human's own message; there is no alert to
+// summarize, so the opening context is just the system prompt.
+export function buildChatContext(): InitialContext {
+  return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
+}
+
+export async function buildInitialContext(
+  alert: NormalizedAlert,
+): Promise<InitialContext> {
+  // Telemetry is a remote read (Redis) that can fail while a runner is down -
+  // degrade gracefully. Incident history is a local read now; a failure there
+  // is a real defect, so it surfaces rather than being masked.
+  const telemetryBlock = await loadTelemetrySummary(alert.token).catch(
+    () => "(telemetry unavailable)",
+  );
+  const historyBlock = formatIncidentHistory(
+    loadIncidentHistory(alert.token, alert.targetIdentifier, alert.alertType),
+  );
 
   const firstUserMessage = `INCIDENT ALERT
 --------------
@@ -55,7 +58,7 @@ ${historyBlock}
 
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, call the final_response tool to finish.`;
 
-  return { systemPrompt, firstUserMessage };
+  return { systemPrompt: SYSTEM_PROMPT, firstUserMessage };
 }
 
 async function loadTelemetrySummary(token: string): Promise<string> {
@@ -97,20 +100,17 @@ async function loadTelemetrySummary(token: string): Promise<string> {
 
 const MAX_HISTORY_RECORDS = 5;
 
-async function loadIncidentHistory(
+// Episodic memory comes from the API's central store, not the runner: incident
+// history is one place per deployment regardless of which runner the alert
+// concerned, and it is readable even when every runner is offline.
+function loadIncidentHistory(
   token: string,
   containerName: string,
   alertType: string,
-): Promise<IncidentRecord[]> {
-  const result = await sendCommand(
-    token,
-    "get_incident_history",
-    { containerName, alertType, limitDays: 30 },
-    10_000,
+): IncidentRecord[] {
+  return collapseHistory(
+    getRecentIncidents(token, containerName, alertType, 30),
   );
-  // The runner's get_incident_history handler returns IncidentRecord[]; the WS
-  // command contract has no per-command typing, so this shape is asserted.
-  return collapseHistory(result as IncidentRecord[]);
 }
 
 // Same root cause recurring is one signal, not five. Collapse duplicates into a

@@ -103,31 +103,20 @@ describe("console WS pipeline", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-1";
-  const storedMessages: Record<string, unknown[]> = {};
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     TEST_TOKEN = createToken("test-runner").token;
 
+    // Persistence is local now; the provider calls no runner tool here, so the
+    // runner receives nothing. Resolve defensively for any stray command.
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-
-      if (commandName === "append_session_message") {
-        const message = commandInput["message"] as { sessionId: string };
-        storedMessages[message.sessionId] ??= [];
-        storedMessages[message.sessionId].push(commandInput["message"]);
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else if (commandName === "get_session_messages") {
-        const sessionId = commandInput["sessionId"] as string;
-        resolveCommand({
-          correlationId,
-          success: true,
-          result: storedMessages[sessionId] ?? [],
-        });
-      } else {
-        resolveCommand({ correlationId, success: true, result: [] });
-      }
+      resolveCommand({
+        correlationId: msg.payload.correlationId,
+        success: true,
+        result: [],
+      });
     });
 
     server = Fastify({ logger: false });

@@ -14,9 +14,12 @@ export const REQUIRES_APPROVAL = new Set([
 ]);
 
 // Tools handled entirely on the platform (API) side — never reach the runner.
+// get_incident_history reads the API's central incident store (state inversion):
+// episodic memory is no longer the runner's to answer.
 export const PLATFORM_TOOLS = new Set([
   "request_clarification",
   "get_recent_commits",
+  "get_incident_history",
 ]);
 
 // Every tool that routes to the runner via sendCommand.
@@ -33,7 +36,6 @@ export const RUNNER_TOOLS = new Set([
   "get_host_disk",
   "get_host_network",
   "get_host_dmesg",
-  "get_incident_history",
   "get_recent_deploys",
   "get_env_variable_names",
   "read_file",
@@ -176,13 +178,17 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: "get_incident_history",
     description:
-      "Look up past incidents from the runner SQLite database to identify recurrence patterns.",
+      "Look up past incidents for this deployment to identify recurrence patterns.",
     input_schema: {
       type: "object",
       properties: {
         containerName: {
           type: "string",
           description: "Filter by container name (omit for all containers).",
+        },
+        alertType: {
+          type: "string",
+          description: "Filter by alert type (omit for all types).",
         },
         limitDays: {
           type: "number",

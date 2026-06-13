@@ -103,12 +103,13 @@ describe("approval cycle", () => {
   let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-approval";
   const restartCommands: Array<Record<string, unknown>> = [];
-  const storedMessages: Record<string, unknown[]> = {};
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     TEST_TOKEN = createToken("test-runner").token;
 
+    // restart_container is the only runner command this test drives; transcript
+    // persistence is local now, so no persistence command reaches the runner.
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
       const { commandName, commandInput, correlationId } = msg.payload;
@@ -119,18 +120,6 @@ describe("approval cycle", () => {
           correlationId,
           success: true,
           result: { restarted: true, container: commandInput["containerName"] },
-        });
-      } else if (commandName === "append_session_message") {
-        const message = commandInput["message"] as { sessionId: string };
-        storedMessages[message.sessionId] ??= [];
-        storedMessages[message.sessionId].push(commandInput["message"]);
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else if (commandName === "get_session_messages") {
-        const sessionId = commandInput["sessionId"] as string;
-        resolveCommand({
-          correlationId,
-          success: true,
-          result: storedMessages[sessionId] ?? [],
         });
       } else {
         resolveCommand({ correlationId, success: true, result: [] });

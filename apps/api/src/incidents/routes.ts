@@ -5,12 +5,10 @@ import {
   resolveApproval,
 } from "../investigation/approvals.js";
 import { publishInterruptResolved } from "../session/stream.js";
-import { sendCommand } from "../ws/router.js";
+import { getIncidentById, updateResolutionNote } from "../db/incidents.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { ApprovalResponse } from "@nightwatch/shared";
-
-const RESOLVE_TIMEOUT_MS = 10_000;
 
 interface ApprovalBody {
   resolvedBy?: string;
@@ -118,32 +116,26 @@ export async function registerIncidentRoutes(
     },
   );
 
-  // Human marks an escalated incident resolved; the note is written to the
-  // runner's SQLite history (the feedback loop, relayed via resolve_incident).
+  // Human marks an escalated incident resolved; the note is written to the API's
+  // SQLite history (the feedback loop, now local - state inversion).
   fastify.post<{
     Params: { id: string };
-    Body: { token?: string; note?: string };
+    Body: { note?: string };
   }>(
     "/incidents/:id/resolve",
     { preHandler: requireAuth },
     async (request, reply) => {
-      const { token, note } = request.body ?? {};
-      if (!token || !note) {
-        return reply.code(400).send({ error: "token and note are required" });
+      const incidentId = request.params.id;
+      const note = request.body?.note?.trim();
+      if (!note) {
+        return reply.code(400).send({ error: "note is required" });
       }
-      try {
-        const result = await sendCommand(
-          token,
-          "resolve_incident",
-          { incidentId: request.params.id, note },
-          RESOLVE_TIMEOUT_MS,
-        );
-        logger.info({ incidentId: request.params.id }, "incident resolved");
-        return result;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(502).send({ error: msg });
+      if (!getIncidentById(incidentId)) {
+        return reply.code(404).send({ error: "unknown incident" });
       }
+      updateResolutionNote(incidentId, note);
+      logger.info({ incidentId }, "incident resolved");
+      return reply.code(200).send({ incidentId, resolved: true });
     },
   );
 }

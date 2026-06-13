@@ -33,24 +33,6 @@ export interface MetricSnapshot {
   };
 }
 
-export interface DashboardQuery {
-  type:
-    | "get_incident_history"
-    | "get_incident_detail"
-    | "get_current_infrastructure_state"
-    | "get_metric_snapshot"
-    | "get_active_incidents"
-    | "get_sessions"
-    | "get_session_messages";
-  params?: Record<string, unknown>;
-}
-
-export interface DashboardQueryResult {
-  queryType: string;
-  data: unknown;
-  cachedAt?: string;
-}
-
 export interface RunnerRecord {
   id: string;
   token: string;

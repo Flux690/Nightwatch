@@ -1,19 +1,4 @@
 import "dotenv/config";
-import type {
-  IncidentRecord,
-  SessionMessage,
-  SessionMeta,
-} from "@nightwatch/shared";
-import {
-  initDb,
-  getRecentIncidents,
-  insertIncident,
-  updateResolutionNote,
-  upsertSession,
-  appendSessionMessage,
-  getSessions,
-  getSessionMessages,
-} from "./sqlite/history.js";
 import { startWebSocketClient } from "./websocket/client.js";
 import {
   getContainerList,
@@ -48,8 +33,8 @@ if (!process.env["NIGHTWATCH_TOKEN"]) {
   process.exit(1);
 }
 
-initDb();
-
+// The runner is stateless (state inversion, D1): its only durable state is the
+// runner-id file. Reads are side-effect-free; writes go through remediation.
 type Handler = (input: unknown) => Promise<unknown>;
 
 const dispatch = new Map<string, Handler>([
@@ -107,55 +92,7 @@ const dispatch = new Map<string, Handler>([
     (i) => rollbackDeploy(i as Parameters<typeof rollbackDeploy>[0]),
   ],
   ["exec_command", (i) => execCommand(i as Parameters<typeof execCommand>[0])],
-  [
-    "get_incident_history",
-    (i) => {
-      const inp = i as {
-        containerName?: string;
-        alertType?: string;
-        limitDays?: number;
-      } | null;
-      return Promise.resolve(
-        getRecentIncidents(inp?.containerName, inp?.alertType, inp?.limitDays),
-      );
-    },
-  ],
-  [
-    "write_incident",
-    (i) => {
-      insertIncident(i as IncidentRecord);
-      return Promise.resolve({ written: true });
-    },
-  ],
-  [
-    "append_session_message",
-    (i) => {
-      const inp = i as { session: SessionMeta; message: SessionMessage };
-      upsertSession(inp.session);
-      appendSessionMessage(inp.message);
-      return Promise.resolve({ appended: true });
-    },
-  ],
   ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
-  [
-    "resolve_incident",
-    (i) => {
-      const inp = i as { incidentId: string; note: string };
-      updateResolutionNote(inp.incidentId, inp.note);
-      return Promise.resolve({ resolved: true });
-    },
-  ],
-  [
-    "get_sessions",
-    (i) => Promise.resolve(getSessions((i as { token: string }).token)),
-  ],
-  [
-    "get_session_messages",
-    (i) =>
-      Promise.resolve(
-        getSessionMessages((i as { sessionId: string }).sessionId),
-      ),
-  ],
 ]);
 
 startWebSocketClient(dispatch);

@@ -10,14 +10,12 @@
   },
   "dependencies": {
     "@nightwatch/shared": "workspace:*",
-    "better-sqlite3": "12.10.0",
     "dotenv": "17.4.2",
     "pino": "10.3.1",
     "ws": "8.21.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "7.6.13",
     "@types/ws": "8.18.1",
     "tsx": "4.22.4",
     "typescript": "6.0.3",

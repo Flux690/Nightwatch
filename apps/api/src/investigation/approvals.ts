@@ -1,11 +1,7 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import { logger } from "../logger.js";
-import type {
-  NormalizedAlert,
-  ApprovalDecision,
-  ApprovalRequest,
-} from "@nightwatch/shared";
+import type { ApprovalDecision, ApprovalRequest } from "@nightwatch/shared";
 import type { ToolUse } from "../llm/types.js";
 
 const APPROVAL_TIMEOUT_MS = 4 * 60_000;
@@ -37,7 +33,7 @@ export function resolveApproval(decision: ApprovalDecision): void {
 }
 
 export async function requestApproval(
-  alert: NormalizedAlert,
+  token: string,
   incidentId: string,
   tool: ToolUse,
 ): Promise<ApprovalDecision> {
@@ -49,7 +45,7 @@ export async function requestApproval(
   pendingApprovals.set(incidentId, {
     id: randomUUID(),
     incidentId,
-    token: alert.token,
+    token,
     toolName: tool.name,
     toolInput: tool.input,
     toolUseId: tool.id,

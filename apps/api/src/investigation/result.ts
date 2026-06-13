@@ -1,15 +1,18 @@
 import { z } from "zod";
-import type {
-  IncidentRecord,
-  InvestigationResult,
-  NormalizedAlert,
-} from "@nightwatch/shared";
-import { sendCommand } from "../ws/router.js";
+import type { IncidentRecord, InvestigationResult } from "@nightwatch/shared";
+import { insertIncident } from "../db/incidents.js";
 import { publishEscalated } from "../session/stream.js";
 import { logger } from "../logger.js";
 
-// Best-effort persistence; the runner may be briefly offline when the incident is written.
-const PERSIST_TIMEOUT_MS = 10_000;
+// The incident store is token-scoped and one alert may concern any container, so
+// the finding/escalation writers carry just the fields an incident needs - not a
+// whole NormalizedAlert (a chat session has none).
+export interface IncidentContext {
+  token: string;
+  containerName: string;
+  alertType: string;
+  firedAt: string;
+}
 
 // Mirrors the `final_response` tool's input_schema in tools.ts. Optional fields
 // are nullable (not optional) to match the strict tool contract.
@@ -36,35 +39,27 @@ export const InvestigationResultSchema = z.object({
 // The model delivers this as a validated `final_response` tool call (or via
 // native structured output synthesized into one), so `data` is already
 // schema-checked by the loop - no text scraping, no JSON.parse here.
-export async function recordFinding(
-  alert: NormalizedAlert,
+export function recordFinding(
+  ctx: IncidentContext,
   incidentId: string,
   sessionId: string,
   data: InvestigationResult,
-): Promise<void> {
+): void {
   const record: IncidentRecord = {
     incidentId,
     sessionId,
     outcome: "finding",
-    timestamp: alert.firedAt,
-    containerName: alert.targetIdentifier,
-    alertType: alert.alertType,
+    timestamp: ctx.firedAt,
+    containerName: ctx.containerName,
+    alertType: ctx.alertType,
     rootCause: data.rootCause.summary,
     resolutionAction: data.recommendedAction?.toolName ?? null,
     resolvedAt: null,
     recurrenceCount: 0,
   };
 
-  try {
-    await sendCommand(
-      alert.token,
-      "write_incident",
-      { ...record },
-      PERSIST_TIMEOUT_MS,
-    );
-  } catch (err) {
-    logger.error({ incidentId, err }, "failed to persist incident");
-  }
+  // Local, synchronous, transactional - never best-effort over a socket.
+  insertIncident(ctx.token, record);
 
   logger.info(
     {
@@ -76,12 +71,12 @@ export async function recordFinding(
   );
 }
 
-export async function escalate(
-  alert: NormalizedAlert,
+export function escalate(
+  ctx: IncidentContext,
   incidentId: string,
   sessionId: string,
   reason: string,
-): Promise<void> {
+): void {
   logger.warn(
     { incidentId, sessionId, reason },
     "investigation escalated to human",
@@ -92,24 +87,15 @@ export async function escalate(
     sessionId,
     outcome: "escalated",
     timestamp: new Date().toISOString(),
-    containerName: alert.targetIdentifier,
-    alertType: alert.alertType,
+    containerName: ctx.containerName,
+    alertType: ctx.alertType,
     rootCause: reason,
     resolutionAction: null,
     resolvedAt: null,
     recurrenceCount: 0,
   };
 
-  try {
-    await sendCommand(
-      alert.token,
-      "write_incident",
-      { ...record },
-      PERSIST_TIMEOUT_MS,
-    );
-  } catch (err) {
-    logger.error({ incidentId, err }, "failed to persist escalation incident");
-  }
+  insertIncident(ctx.token, record);
 
   publishEscalated({ sessionId, incidentId, reason });
 }

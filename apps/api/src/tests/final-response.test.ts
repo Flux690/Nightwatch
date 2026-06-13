@@ -76,6 +76,8 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { startWorker } from "../jobs/worker.js";
+import { getRecentIncidents } from "../db/incidents.js";
+import type { IncidentRecord } from "@nightwatch/shared";
 import {
   registerRunner,
   unregisterRunner,
@@ -89,34 +91,37 @@ describe("final_response terminal mechanism", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-fr";
-  const storedMessages: Record<string, unknown[]> = {};
-  const writeIncidentCalls: Array<Record<string, unknown>> = [];
+
+  // Incidents land in the API's local store now; read them back from there.
+  function incidentFor(sessionId: string): IncidentRecord | undefined {
+    return getRecentIncidents(TEST_TOKEN).find(
+      (i) => i.sessionId === sessionId,
+    );
+  }
+
+  async function waitFor<T>(probe: () => T | undefined): Promise<T> {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const value = probe();
+      if (value !== undefined) return value;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error("timeout: condition never became true");
+  }
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     TEST_TOKEN = createToken("test-fr-runner").token;
 
+    // The provider only calls final_response (platform-terminal) and persistence
+    // is local, so no command reaches the runner; resolve defensively.
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-      if (commandName === "write_incident") {
-        writeIncidentCalls.push(commandInput as Record<string, unknown>);
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else if (commandName === "append_session_message") {
-        const message = commandInput["message"] as { sessionId: string };
-        storedMessages[message.sessionId] ??= [];
-        storedMessages[message.sessionId].push(commandInput["message"]);
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else if (commandName === "get_session_messages") {
-        const sessionId = commandInput["sessionId"] as string;
-        resolveCommand({
-          correlationId,
-          success: true,
-          result: storedMessages[sessionId] ?? [],
-        });
-      } else {
-        resolveCommand({ correlationId, success: true, result: [] });
-      }
+      resolveCommand({
+        correlationId: msg.payload.correlationId,
+        success: true,
+        result: [],
+      });
     });
 
     server = Fastify({ logger: false });
@@ -140,21 +145,6 @@ describe("final_response terminal mechanism", () => {
 
   it("valid final_response records a finding and persists the incident", async () => {
     mockCreateProvider.mockImplementationOnce(() => makeProvider(VALID_INPUT));
-    writeIncidentCalls.length = 0;
-
-    let resolveWriteIncident!: () => void;
-    const writeIncidentArrived = new Promise<void>((res) => {
-      resolveWriteIncident = res;
-    });
-
-    // Patch the runner callback to resolve the promise on write_incident.
-    // The runner was registered above; we detect arrival via the shared array.
-    const poll = setInterval(() => {
-      if (writeIncidentCalls.length > 0) {
-        clearInterval(poll);
-        resolveWriteIncident();
-      }
-    }, 10);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
@@ -162,29 +152,17 @@ describe("final_response terminal mechanism", () => {
       body: JSON.stringify({ message: "Something went wrong." }),
     });
     expect(res.status).toBe(202);
+    const { sessionId } = (await res.json()) as { sessionId: string };
 
-    await Promise.race([
-      writeIncidentArrived,
-      new Promise<void>((_, rej) =>
-        setTimeout(() => {
-          clearInterval(poll);
-          rej(new Error("timeout: write_incident not received"));
-        }, 10_000),
-      ),
-    ]);
-
-    expect(writeIncidentCalls).toHaveLength(1);
-    expect(writeIncidentCalls[0]).toMatchObject({
-      alertType: expect.any(String),
-      outcome: "finding",
-    });
+    const incident = await waitFor(() => incidentFor(sessionId));
+    expect(incident.outcome).toBe("finding");
+    expect(incident.containerName).toBe("chat");
   });
 
   it("invalid final_response schema escalates without persisting an incident", async () => {
     mockCreateProvider.mockImplementationOnce(() =>
       makeProvider(INVALID_INPUT),
     );
-    writeIncidentCalls.length = 0;
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
     let targetSessionId: string | undefined;
@@ -224,15 +202,10 @@ describe("final_response terminal mechanism", () => {
       ),
     ]);
 
-    // Short wait: after RUN_FINISHED the loop has already decided escalate vs finding.
-    // escalate() now writes an incident (escalated outcome) — exactly one call.
-    await new Promise((r) => setTimeout(r, 200));
-
+    // After RUN_FINISHED the loop has already decided escalate vs finding;
+    // escalate() writes one incident with an escalated outcome.
+    const incident = await waitFor(() => incidentFor(String(targetSessionId)));
     ws.close();
-    expect(writeIncidentCalls).toHaveLength(1);
-    expect(writeIncidentCalls[0]).toMatchObject({
-      alertType: expect.any(String),
-      outcome: "escalated",
-    });
+    expect(incident.outcome).toBe("escalated");
   });
 });

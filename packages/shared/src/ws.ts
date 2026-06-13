@@ -1,7 +1,6 @@
 // WebSocket message envelope types — runner↔api and api↔console
 
-import type { IncidentRecord } from "./incidents.js";
-import type { SessionMessage, SessionMeta } from "./sessions.js";
+import type { SessionMessage } from "./sessions.js";
 
 export type MessageDirection =
   | "api_to_runner"
@@ -26,40 +25,12 @@ export interface RunnerCommandMessage extends WsEnvelope {
   };
 }
 
-// API → Runner: persist an incident record to the runner's local SQLite history.
-// Carried by a RunnerCommandMessage with commandName "write_incident".
-export interface WriteIncidentCommand {
-  commandName: "write_incident";
-  commandInput: IncidentRecord;
-  correlationId: string;
-}
-
-// API → Runner: append one transcript turn to the runner's session history. The
-// session meta rides along on every call so the runner upserts it idempotently -
-// the first append for a session creates the row, later ones just add messages.
-export interface AppendSessionMessageCommand {
-  commandName: "append_session_message";
-  commandInput: {
-    session: SessionMeta;
-    message: SessionMessage;
-  };
-  correlationId: string;
-}
-
 // API → Runner: replace the runner's Prometheus alert rules and reload. Settings,
 // not remediation - it does not pass through the approval gate. The API renders
 // the threshold form into the final rules file; the runner writes it verbatim.
 export interface UpdateAlertRulesCommand {
   commandName: "update_alert_rules";
   commandInput: { rulesYaml: string };
-  correlationId: string;
-}
-
-// API → Runner: record a human's resolution note on a recorded incident (the
-// feedback loop for an escalated incident a person resolved).
-export interface ResolveIncidentCommand {
-  commandName: "resolve_incident";
-  commandInput: { incidentId: string; note: string };
   correlationId: string;
 }
 

@@ -1,12 +1,34 @@
 import { logger } from "../logger.js";
+import { getRecentIncidents } from "../db/incidents.js";
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolUse, ToolResult } from "../llm/types.js";
 
 export async function handlePlatformTool(
   tool: ToolUse,
+  token: string,
   incidentId: string,
   clarificationsUsed: number,
 ): Promise<ToolResult> {
+  if (tool.name === "get_incident_history") {
+    // Episodic memory now lives in the API's central store (state inversion);
+    // the runner no longer answers this. Token-scoped so one deployment never
+    // sees another's incidents.
+    // tool.input is the model-supplied Record<string, unknown>; reading these
+    // optional fields off it is the documented schema (see tools.ts).
+    const input = tool.input as {
+      containerName?: string;
+      alertType?: string;
+      limitDays?: number;
+    };
+    const records = getRecentIncidents(
+      token,
+      input.containerName,
+      input.alertType,
+      input.limitDays,
+    );
+    return { tool_use_id: tool.id, content: JSON.stringify(records) };
+  }
+
   if (tool.name === "request_clarification") {
     if (clarificationsUsed >= 1) {
       return {

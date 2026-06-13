@@ -22,7 +22,8 @@ import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
 import { enqueueJob } from "../alerts/queue.js";
 import { startWorker } from "../jobs/worker.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import { getRecentIncidents } from "../db/incidents.js";
+import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
 import {
   registerRunner,
   unregisterRunner,
@@ -151,23 +152,26 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-esc";
-  const writeIncidentCalls: Array<Record<string, unknown>> = [];
+
+  // Incidents are now written to the API's local store; read them back from there
+  // (the public seam) instead of intercepting a WS persistence command.
+  function escalationFor(sessionId: string): IncidentRecord | undefined {
+    return getRecentIncidents(TEST_TOKEN).find(
+      (i) => i.sessionId === sessionId,
+    );
+  }
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     TEST_TOKEN = createToken("test-esc-runner").token;
 
+    // The runner only fields read tools now (e.g. get_container_list in the
+    // budget-exhaustion case); persistence is local, so no persistence command
+    // ever reaches it.
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-      if (commandName === "write_incident") {
-        writeIncidentCalls.push(commandInput as Record<string, unknown>);
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else if (commandName === "append_session_message") {
-        resolveCommand({ correlationId, success: true, result: { ok: true } });
-      } else {
-        resolveCommand({ correlationId, success: true, result: [] });
-      }
+      const { correlationId } = msg.payload;
+      resolveCommand({ correlationId, success: true, result: [] });
     });
 
     server = Fastify({ logger: false });
@@ -191,7 +195,6 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   });
 
   it("model refusal escalates: writes incident and emits ESCALATED", async () => {
-    writeIncidentCalls.length = 0;
     mockCreateProvider.mockImplementationOnce(makeRefusalProvider);
 
     // Open the console WS before dispatching so we don't miss the ESCALATED
@@ -239,15 +242,14 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     expect(event.payload["incidentId"]).toBeTruthy();
     expect(String(event.payload["reason"])).toMatch(/refus/i);
 
-    expect(writeIncidentCalls.length).toBeGreaterThanOrEqual(1);
-    const record = writeIncidentCalls[writeIncidentCalls.length - 1];
-    expect(record["rootCause"]).toBeTruthy();
-    expect(record["alertType"]).toBe("chat");
-    expect(record["outcome"]).toBe("escalated");
+    const record = escalationFor(sessionId);
+    expect(record).toBeDefined();
+    expect(record?.rootCause).toBeTruthy();
+    expect(record?.alertType).toBe("chat");
+    expect(record?.outcome).toBe("escalated");
   });
 
   it("stop without final_response escalates: writes incident and emits ESCALATED", async () => {
-    writeIncidentCalls.length = 0;
     mockCreateProvider.mockImplementationOnce(makeStopProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -290,14 +292,10 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(event.payload["sessionId"]).toBe(sessionId);
-    expect(writeIncidentCalls.length).toBeGreaterThanOrEqual(1);
-    expect(writeIncidentCalls[writeIncidentCalls.length - 1]?.["outcome"]).toBe(
-      "escalated",
-    );
+    expect(escalationFor(sessionId)?.outcome).toBe("escalated");
   });
 
   it("rejected critical write escalates: writes incident and emits ESCALATED", async () => {
-    writeIncidentCalls.length = 0;
     mockCreateProvider.mockImplementationOnce(makeCriticalWriteProvider);
 
     const sessionId = randomUUID();
@@ -332,7 +330,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       }
     });
 
-    await enqueueJob({ alert, sessionId, trigger: "alert" });
+    await enqueueJob({ alert, sessionId, token: TEST_TOKEN, trigger: "alert" });
 
     // The loop parks on the approval gate; reject it via REST.
     const incidentId = await waitForPendingApproval("restart_container");
@@ -350,14 +348,12 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(String(event.payload["reason"])).toMatch(/rejected/i);
-    expect(writeIncidentCalls.length).toBeGreaterThanOrEqual(1);
-    const record = writeIncidentCalls[writeIncidentCalls.length - 1];
-    expect(record?.["outcome"]).toBe("escalated");
-    expect(String(record?.["rootCause"])).toMatch(/rejected/i);
+    const record = escalationFor(sessionId);
+    expect(record?.outcome).toBe("escalated");
+    expect(String(record?.rootCause)).toMatch(/rejected/i);
   });
 
   it("tool budget exhaustion escalates: writes incident and emits ESCALATED", async () => {
-    writeIncidentCalls.length = 0;
     mockCreateProvider.mockImplementationOnce(makeToolLoopProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -399,10 +395,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(String(event.payload["reason"])).toMatch(/exceeded/i);
-    expect(writeIncidentCalls.length).toBeGreaterThanOrEqual(1);
-    expect(writeIncidentCalls[writeIncidentCalls.length - 1]?.["outcome"]).toBe(
-      "escalated",
-    );
+    expect(escalationFor(String(targetSessionId))?.outcome).toBe("escalated");
   });
 
   async function waitForPendingApproval(toolName: string): Promise<string> {

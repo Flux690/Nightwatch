@@ -1,0 +1,125 @@
+import type {
+  NormalizedAlert,
+  SessionMessage,
+  SessionMeta,
+} from "@nightwatch/shared";
+import { getDb } from "./client.js";
+
+// A session row plus its originating alert (null for chat sessions). The alert is
+// the durable source of severity-dependent behavior on resume, so a run that no
+// longer carries the alert in its job can recover it from here.
+export type StoredSession = SessionMeta & {
+  originatingAlert: NormalizedAlert | null;
+};
+
+// Create the session row once. Idempotent: a resume re-enters the loop with the
+// same id, and the first title/alert win - later runs never clobber them.
+export function createSession(
+  meta: SessionMeta,
+  originatingAlert: NormalizedAlert | null,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO sessions (session_id, token, trigger, title, originating_alert, created_at)
+       VALUES (@sessionId, @token, @trigger, @title, @originatingAlert, @createdAt)
+       ON CONFLICT(session_id) DO NOTHING`,
+    )
+    .run({
+      sessionId: meta.sessionId,
+      token: meta.token,
+      trigger: meta.trigger,
+      title: meta.title,
+      originatingAlert:
+        originatingAlert != null ? JSON.stringify(originatingAlert) : null,
+      createdAt: meta.createdAt,
+    });
+}
+
+// Append one turn's worth of messages atomically. The UNIQUE(session_id, seq)
+// constraint makes a duplicate seq impossible; wrapping the batch in a
+// transaction makes the whole turn all-or-nothing so a partial turn can never be
+// persisted (the transcript is the checkpoint - it must never hold a hole).
+export function appendSessionMessages(messages: SessionMessage[]): void {
+  if (messages.length === 0) return;
+  const insert = getDb().prepare(
+    `INSERT INTO session_messages
+       (session_id, seq, role, content, provider_content, created_at)
+     VALUES (@sessionId, @seq, @role, @content, @providerContent, @createdAt)`,
+  );
+  const insertAll = getDb().transaction((rows: SessionMessage[]) => {
+    for (const m of rows) {
+      insert.run({
+        sessionId: m.sessionId,
+        seq: m.seq,
+        role: m.role,
+        content: m.content,
+        providerContent:
+          m.providerContent != null ? JSON.stringify(m.providerContent) : null,
+        createdAt: m.createdAt,
+      });
+    }
+  });
+  insertAll(messages);
+}
+
+export function listSessions(token: string): SessionMeta[] {
+  // Cast is sound: the aliased columns match SessionMeta exactly.
+  return getDb()
+    .prepare(
+      `SELECT session_id AS sessionId, token, trigger, title, created_at AS createdAt
+       FROM sessions WHERE token = ? ORDER BY created_at DESC LIMIT 100`,
+    )
+    .all(token) as SessionMeta[];
+}
+
+export function getSession(sessionId: string): StoredSession | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT session_id AS sessionId, token, trigger, title,
+              originating_alert AS originatingAlert, created_at AS createdAt
+       FROM sessions WHERE session_id = ?`,
+    )
+    .get(sessionId) as
+    | (SessionMeta & { originatingAlert: string | null })
+    | undefined;
+  if (!row) return undefined;
+  return {
+    sessionId: row.sessionId,
+    token: row.token,
+    trigger: row.trigger,
+    title: row.title,
+    createdAt: row.createdAt,
+    // Stored as JSON text; only this layer deserializes it.
+    originatingAlert:
+      row.originatingAlert != null
+        ? (JSON.parse(row.originatingAlert) as NormalizedAlert)
+        : null,
+  };
+}
+
+export function getSessionMessages(sessionId: string): SessionMessage[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT session_id AS sessionId, seq, role, content,
+              provider_content AS providerContent, created_at AS createdAt
+       FROM session_messages WHERE session_id = ? ORDER BY seq ASC`,
+    )
+    .all(sessionId) as Array<{
+    sessionId: string;
+    seq: number;
+    role: string;
+    content: string;
+    providerContent: string | null;
+    createdAt: string;
+  }>;
+  return rows.map((r) => ({
+    sessionId: r.sessionId,
+    // role is constrained to SessionRole on write; the column is plain TEXT.
+    role: r.role as SessionMessage["role"],
+    seq: r.seq,
+    content: r.content,
+    providerContent:
+      r.providerContent != null ? JSON.parse(r.providerContent) : undefined,
+    createdAt: r.createdAt,
+  }));
+}

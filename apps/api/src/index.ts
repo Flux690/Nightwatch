@@ -19,7 +19,6 @@ import { registerChatRoutes } from "./chat/routes.js";
 import { registerSessionRoutes } from "./sessions/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
-import { registerRelayRoutes } from "./relay/routes.js";
 import { registerApprovalRoutes } from "./approvals/routes.js";
 import { startWorker } from "./jobs/worker.js";
 
@@ -38,7 +37,6 @@ await registerChatRoutes(fastify);
 await registerSessionRoutes(fastify);
 await registerRunnerRoutes(fastify);
 await registerTokenRoutes(fastify);
-await registerRelayRoutes(fastify);
 await registerApprovalRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));

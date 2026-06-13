@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sendCommand } from "../ws/router.js";
-import { buildInitialContext } from "./context.js";
+import { buildInitialContext, buildChatContext } from "./context.js";
 import {
   TOOL_SCHEMAS,
   PLATFORM_TOOLS,
@@ -16,7 +16,13 @@ import {
   recordFinding,
   escalate,
   InvestigationResultSchema,
+  type IncidentContext,
 } from "./result.js";
+import {
+  createSession,
+  appendSessionMessages,
+  getSession,
+} from "../db/sessions.js";
 import {
   publishTextMessageContent,
   publishRunFinished,
@@ -33,46 +39,61 @@ import type {
 } from "@nightwatch/shared";
 import type { ProviderMessage, ToolResult } from "../llm/types.js";
 
-const APPEND_TIMEOUT_MS = 10_000;
-
+// The loop input is session-shaped (D8): an alert authors the opening message,
+// or a human does. `alert` is present only for a fresh alert run; on resume the
+// run recovers it from the session row. `userMessage`/`seed` carry the chat
+// opening and the prior transcript respectively.
 export interface RunInvestigationInput {
-  alert: NormalizedAlert;
   sessionId: string;
+  token: string;
   trigger: SessionTrigger;
-  // Resume: a prior transcript to seed before continuing.
+  alert?: NormalizedAlert;
   seed?: ProviderMessage[];
-  // Human-authored opening (chat) or continuation (resume) message.
   userMessage?: string;
 }
 
 export async function runInvestigation(
   input: RunInvestigationInput,
 ): Promise<void> {
-  const { alert, sessionId, trigger } = input;
+  const { sessionId, token, trigger } = input;
+
+  // Severity-dependent behavior reads the alert: from the job on a fresh run,
+  // from the session row on resume. A chat session has none.
+  const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
+
+  const ctx: IncidentContext & { severity: NormalizedAlert["severity"] } = {
+    token,
+    containerName: alert?.targetIdentifier ?? "chat",
+    alertType: alert?.alertType ?? "chat",
+    firedAt: alert?.firedAt ?? new Date().toISOString(),
+    severity: alert?.severity ?? "info",
+  };
+
   const incidentId = randomUUID();
   const log = logger.child({
     incidentId,
     sessionId,
-    alertType: alert.alertType,
+    alertType: ctx.alertType,
   });
   log.info(
-    { target: alert.targetIdentifier, severity: alert.severity, trigger },
+    { target: ctx.containerName, severity: ctx.severity, trigger },
     "investigation started",
   );
 
   const config = loadConfig();
   const apiKey = loadApiKey();
-  const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
+  const { systemPrompt, firstUserMessage } = alert
+    ? await buildInitialContext(alert)
+    : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 
-  // Persist (durable, on the runner) and broadcast (live, to the console) every
-  // new provider message exactly once, in order. The first append upserts the
-  // session row; later appends only add messages.
+  // Persist (durable, local, transactional) and broadcast (live, to the console)
+  // every new provider message exactly once, in order. Seeded turns are already
+  // persisted; only new ones get written.
   let persistedCount = 0;
   if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     if (input.userMessage) provider.appendUserMessage(input.userMessage);
-    // Seeded turns are already on the runner; only new ones get persisted.
     persistedCount = input.seed.length;
   } else {
     provider.start(input.userMessage ?? firstUserMessage);
@@ -80,39 +101,38 @@ export async function runInvestigation(
 
   const sessionMeta: SessionMeta = {
     sessionId,
-    token: alert.token,
+    token,
     trigger,
     title:
       trigger === "chat" && input.userMessage
         ? input.userMessage.slice(0, 80)
-        : `${alert.alertType} - ${alert.targetIdentifier}`,
+        : `${ctx.alertType} - ${ctx.containerName}`,
     createdAt: new Date().toISOString(),
   };
-  const persist = async (): Promise<void> => {
+  // Create the session row once (idempotent); a resume re-enters with the same
+  // id and the original title/alert are preserved.
+  createSession(sessionMeta, alert);
+
+  // The transcript is the checkpoint: each turn is written in one transaction,
+  // locally, with no swallowed failure. A write error fails the run loudly
+  // rather than leaving a silent hole.
+  const persist = (): void => {
     const snap = provider.snapshot();
+    const newMessages: SessionMessage[] = [];
     for (let seq = persistedCount; seq < snap.length; seq++) {
       const m = snap[seq];
       if (!m) continue;
-      const message: SessionMessage = {
+      newMessages.push({
         sessionId,
         seq,
         role: m.role,
         content: m.content,
         providerContent: m.providerContent,
         createdAt: new Date().toISOString(),
-      };
-      try {
-        await sendCommand(
-          alert.token,
-          "append_session_message",
-          { session: sessionMeta, message },
-          APPEND_TIMEOUT_MS,
-        );
-      } catch (err) {
-        log.warn({ err, seq }, "failed to persist session message");
-      }
-      publishRunFinished(sessionId, message);
+      });
     }
+    appendSessionMessages(newMessages);
+    for (const message of newMessages) publishRunFinished(sessionId, message);
     persistedCount = snap.length;
   };
 
@@ -136,10 +156,10 @@ export async function runInvestigation(
       },
       "LLM responded",
     );
-    await persist();
+    persist();
 
     if (response.stopReason === "refusal") {
-      await escalate(alert, incidentId, sessionId, "Model refused to continue");
+      escalate(ctx, incidentId, sessionId, "Model refused to continue");
       return;
     }
 
@@ -148,8 +168,8 @@ export async function runInvestigation(
     // use). Stopping with no tool call means it failed - escalate rather than
     // silently drop.
     if (response.toolUses.length === 0) {
-      await escalate(
-        alert,
+      escalate(
+        ctx,
         incidentId,
         sessionId,
         `Model stopped without calling ${FINAL_RESPONSE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
@@ -163,10 +183,10 @@ export async function runInvestigation(
       if (tool.name === FINAL_RESPONSE_TOOL_NAME) {
         const parsed = InvestigationResultSchema.safeParse(tool.input);
         if (parsed.success) {
-          await recordFinding(alert, incidentId, sessionId, parsed.data);
+          recordFinding(ctx, incidentId, sessionId, parsed.data);
         } else {
-          await escalate(
-            alert,
+          escalate(
+            ctx,
             incidentId,
             sessionId,
             `${FINAL_RESPONSE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
@@ -199,6 +219,7 @@ export async function runInvestigation(
         log.debug({ tool: tool.name, kind: "platform" }, "dispatching tool");
         const result = await handlePlatformTool(
           tool,
+          token,
           incidentId,
           clarificationsUsed,
         );
@@ -218,7 +239,7 @@ export async function runInvestigation(
           log.info({ tool: tool.name }, "awaiting human approval");
           // Human think-time must not be charged against the hard deadline.
           const waitedFrom = Date.now();
-          const decision = await requestApproval(alert, incidentId, tool);
+          const decision = await requestApproval(token, incidentId, tool);
           deadline += Date.now() - waitedFrom;
           log.info(
             { tool: tool.name, decision: decision.action },
@@ -238,13 +259,13 @@ export async function runInvestigation(
               result: rejected.content,
               isError: true,
             });
-            if (alert.severity === "critical") {
+            if (ctx.severity === "critical") {
               log.warn(
                 { tool: tool.name },
                 "critical write rejected, escalating",
               );
-              await escalate(
-                alert,
+              escalate(
+                ctx,
                 incidentId,
                 sessionId,
                 `Write action rejected: ${tool.name}`,
@@ -269,7 +290,7 @@ export async function runInvestigation(
         log.debug({ tool: tool.name, kind: "runner" }, "dispatching tool");
         try {
           const result = await sendCommand(
-            alert.token,
+            token,
             tool.name,
             tool.input,
             config.toolTimeoutMs,
@@ -310,11 +331,11 @@ export async function runInvestigation(
     }
 
     provider.appendToolResults(toolResults);
-    await persist();
+    persist();
   }
 
-  await escalate(
-    alert,
+  escalate(
+    ctx,
     incidentId,
     sessionId,
     `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
