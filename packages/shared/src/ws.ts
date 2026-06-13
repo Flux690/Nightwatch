@@ -70,14 +70,14 @@ export interface ConsoleIncidentUpdate extends WsEnvelope {
   };
 }
 
-// API → Console: approval resolved (another user approved or rejected).
+// API → Console: interrupt resolved (approved, rejected, context added, or clarification answered).
 // AG-UI: INTERRUPT_RESOLVED — paired with the INTERRUPT that preceded it.
 export interface ConsoleInterruptResolved extends WsEnvelope {
   type: "INTERRUPT_RESOLVED";
   payload: {
     incidentId: string;
     toolUseId: string;
-    status: "approved" | "rejected" | "context_added";
+    status: "approved" | "rejected" | "context_added" | "answered";
     resolvedBy?: string;
     resolvedAt?: string;
   };
@@ -119,9 +119,9 @@ export interface ConsoleToolCallStart extends WsEnvelope {
   };
 }
 
-// API → Console: a gated tool call is paused awaiting human approval.
-// The operator must approve before execution proceeds. incidentId addresses
-// POST /incidents/:id/approve; toolUseId is the loop's correlation key.
+// API → Console: a gated tool call is paused awaiting human approval or a
+// clarifying question is waiting for an answer. incidentId addresses
+// POST /incidents/:id/approve (approval) or /incidents/:id/answer (clarification).
 // AG-UI: INTERRUPT
 export interface ConsoleInterrupt extends WsEnvelope {
   type: "INTERRUPT";
@@ -131,6 +131,11 @@ export interface ConsoleInterrupt extends WsEnvelope {
     toolName: string;
     input: Record<string, unknown>;
     incidentId: string;
+    kind: "approval" | "clarification";
+    // Present when kind=clarification:
+    question?: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
   };
 }
 

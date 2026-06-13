@@ -26,6 +26,11 @@ interface ApprovalBody {
   contextMessage?: string;
 }
 
+interface AnswerBody {
+  answer: string | string[];
+  resolvedBy?: string;
+}
+
 function toApprovalRequest(i: PendingInterruptWithSession): ApprovalRequest {
   return {
     id: i.id,
@@ -245,6 +250,12 @@ export async function registerIncidentRoutes(
           .send({ error: `Interrupt already resolved or not found: ${id}` });
       }
 
+      if (interrupt.kind === "clarification") {
+        return reply
+          .code(400)
+          .send({ error: "Use POST /incidents/:id/answer for clarifications" });
+      }
+
       const { sessionId, token, toolName, toolUseId, completedResults } =
         interrupt;
       const contextMessage =
@@ -298,6 +309,87 @@ export async function registerIncidentRoutes(
         incidentId: id,
         toolUseId,
         status: "context_added",
+        resolvedBy,
+        resolvedAt,
+      };
+      return reply.code(200).send(response);
+    },
+  );
+
+  fastify.post<{ Params: { id: string }; Body: AnswerBody }>(
+    "/incidents/:id/answer",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const id = request.params.id;
+
+      const interrupt = getInterruptWithSession(id);
+      if (!interrupt) {
+        return reply
+          .code(409)
+          .send({ error: `Interrupt already resolved or not found: ${id}` });
+      }
+
+      if (interrupt.kind !== "clarification") {
+        return reply
+          .code(400)
+          .send({ error: "This interrupt is not a clarification" });
+      }
+
+      const { sessionId, token, toolName, toolUseId, completedResults } =
+        interrupt;
+      const rawAnswer = request.body?.answer;
+      if (!rawAnswer || (typeof rawAnswer === "string" && !rawAnswer.trim())) {
+        return reply.code(400).send({ error: "answer is required" });
+      }
+      const answerText = Array.isArray(rawAnswer)
+        ? rawAnswer.join(", ")
+        : rawAnswer;
+
+      const gatedResult: ToolResult = {
+        tool_use_id: toolUseId,
+        content: answerText,
+      };
+
+      if (!deleteInterrupt(id)) {
+        return reply
+          .code(409)
+          .send({ error: "Interrupt already resolved by another request" });
+      }
+
+      const resolvedBy = request.body?.resolvedBy ?? "console";
+      const resolvedAt = new Date().toISOString();
+
+      publishInterruptResolved({
+        incidentId: id,
+        toolUseId,
+        status: "answered",
+        resolvedBy,
+        resolvedAt,
+      });
+
+      logger.info(
+        { incidentId: id, tool: toolName, resolvedBy },
+        "clarification answered",
+      );
+
+      const resumeToolResults: ToolResult[] = [
+        ...completedResults,
+        gatedResult,
+      ];
+      const seed = buildSeed(sessionId);
+
+      dispatcher.dispatch({
+        sessionId,
+        token,
+        trigger: interrupt.sessionTrigger as "alert" | "chat",
+        seed,
+        resumeToolResults,
+      });
+
+      const response: ApprovalResponse = {
+        incidentId: id,
+        toolUseId,
+        status: "answered",
         resolvedBy,
         resolvedAt,
       };

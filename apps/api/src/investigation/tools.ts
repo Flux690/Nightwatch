@@ -16,8 +16,9 @@ export const REQUIRES_APPROVAL = new Set([
 // Tools handled entirely on the platform (API) side — never reach the runner.
 // get_incident_history reads the API's central incident store (state inversion):
 // episodic memory is no longer the runner's to answer.
+// request_clarification is NOT here — it suspends the run via a durable interrupt
+// (kind: clarification) rather than executing inline.
 export const PLATFORM_TOOLS = new Set([
-  "request_clarification",
   "get_recent_commits",
   "get_incident_history",
 ]);
@@ -254,20 +255,35 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: "request_clarification",
     description:
-      "Ask the on-call engineer a clarifying question when critical context is missing before delivering your final_response.",
+      "Suspend the investigation and ask the on-call engineer a clarifying question. Present selectable options; the engineer may also answer in free text.",
     input_schema: {
       type: "object",
       properties: {
         question: {
           type: "string",
-          description: "Specific question to ask.",
+          description: "The specific question to ask.",
         },
-        context: {
-          type: "string",
-          description: "What you already know that prompted this question.",
+        options: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "Short option label." },
+              description: {
+                type: "string",
+                description: "What this option means.",
+              },
+            },
+            required: ["label", "description"],
+          },
+          description: "Selectable answers for the question.",
+        },
+        multiSelect: {
+          type: "boolean",
+          description: "True if multiple options may be selected.",
         },
       },
-      required: ["question", "context"],
+      required: ["question", "options"],
     },
   },
   {

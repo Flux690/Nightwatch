@@ -2,7 +2,8 @@ export type ApprovalStatus =
   | "pending"
   | "approved"
   | "rejected"
-  | "context_added";
+  | "context_added"
+  | "answered";
 
 export interface ApprovalRequest {
   id: string;

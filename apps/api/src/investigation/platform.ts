@@ -7,7 +7,6 @@ export async function handlePlatformTool(
   tool: ToolUse,
   token: string,
   incidentId: string,
-  clarificationsUsed: number,
 ): Promise<ToolResult> {
   if (tool.name === "get_incident_history") {
     // Episodic memory now lives in the API's central store (state inversion);
@@ -27,26 +26,6 @@ export async function handlePlatformTool(
       input.limitDays,
     );
     return { tool_use_id: tool.id, content: JSON.stringify(records) };
-  }
-
-  if (tool.name === "request_clarification") {
-    if (clarificationsUsed >= 1) {
-      return {
-        tool_use_id: tool.id,
-        content:
-          "request_clarification already used once this investigation. Deliver your final_response with the evidence already gathered.",
-        is_error: true,
-      };
-    }
-    const question =
-      (tool.input["question"] as string | undefined) ?? "(no question)";
-    const context = (tool.input["context"] as string | undefined) ?? "";
-    logger.info({ incidentId, question }, "clarification requested");
-    /* Phase 5: send to Slack and await response on approvalBus with CLARIFICATION_TIMEOUT_MS. */
-    return {
-      tool_use_id: tool.id,
-      content: `Automated mode — no human available to answer "${question}". Context noted: ${context}. Continue with the evidence you have and deliver your final_response as best you can.`,
-    };
   }
 
   if (tool.name === "get_recent_commits") {

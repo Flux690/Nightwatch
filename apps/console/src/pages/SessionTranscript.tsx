@@ -32,7 +32,7 @@ interface LiveToolCard {
   awaitingApproval?: boolean;
   incidentId?: string;
   risk?: string;
-  approval?: "pending" | "approved" | "rejected";
+  approval?: "pending" | "approved" | "rejected" | "answered";
   resolvedBy?: string;
 }
 

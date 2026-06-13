@@ -154,7 +154,6 @@ export async function runInvestigation(
   };
 
   let toolCallCount = 0;
-  let clarificationsUsed = 0;
   let turn = 0;
   const deadline = Date.now() + config.hardTimeoutMs;
 
@@ -215,7 +214,11 @@ export async function runInvestigation(
 
       toolCallCount++;
 
-      if (RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name)) {
+      const isClarification = tool.name === "request_clarification";
+      const isApproval =
+        RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name);
+
+      if (isClarification || isApproval) {
         if (gatedTool === null) {
           // Capture the first gated tool; execution deferred to the resume run.
           gatedTool = tool;
@@ -225,7 +228,7 @@ export async function runInvestigation(
           toolResults.push({
             tool_use_id: tool.id,
             content:
-              "Another gated tool is pending approval. Retry after the current approval resolves.",
+              "Another gated action is pending. Retry after it resolves.",
             is_error: true,
           });
         }
@@ -239,13 +242,7 @@ export async function runInvestigation(
           toolName: tool.name,
           input: tool.input,
         });
-        const result = await handlePlatformTool(
-          tool,
-          token,
-          incidentId,
-          clarificationsUsed,
-        );
-        if (tool.name === "request_clarification") clarificationsUsed++;
+        const result = await handlePlatformTool(tool, token, incidentId);
         toolResults.push(result);
         publishToolCallEnd({
           sessionId,
@@ -304,11 +301,12 @@ export async function runInvestigation(
     if (gatedTool !== null) {
       // Durably suspend: persist the assistant turn + interrupt row in ONE
       // transaction (D3). The run then exits and frees its dispatcher slot.
+      const isClarificationGate = gatedTool.name === "request_clarification";
       const interrupt: PendingInterrupt = {
         id: incidentId,
         sessionId,
         toolUseId: gatedTool.id,
-        kind: "approval",
+        kind: isClarificationGate ? "clarification" : "approval",
         toolName: gatedTool.name,
         toolInput: gatedTool.input,
         completedResults: toolResults,
@@ -332,15 +330,28 @@ export async function runInvestigation(
       for (const message of newMessages) publishRunFinished(sessionId, message);
       persistedCount = snap.length;
       // Publish INTERRUPT after the row is durably in the DB.
+      const clarInput = isClarificationGate
+        ? (gatedTool.input as {
+            question: string;
+            options: Array<{ label: string; description: string }>;
+            multiSelect?: boolean;
+          })
+        : null;
       publishInterrupt({
         sessionId,
         toolUseId: gatedTool.id,
         toolName: gatedTool.name,
         input: gatedTool.input,
         incidentId,
+        kind: isClarificationGate ? "clarification" : "approval",
+        ...(clarInput !== null && {
+          question: clarInput.question,
+          options: clarInput.options,
+          multiSelect: clarInput.multiSelect,
+        }),
       });
       log.info(
-        { tool: gatedTool.name, incidentId },
+        { tool: gatedTool.name, kind: interrupt.kind, incidentId },
         "run suspended: pending interrupt",
       );
       return;
