@@ -10,7 +10,6 @@ import {
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
-import { requestApproval } from "./approvals.js";
 import { handlePlatformTool } from "./platform.js";
 import {
   recordFinding,
@@ -21,6 +20,7 @@ import {
 import {
   createSession,
   appendSessionMessages,
+  appendMessagesAndInterrupt,
   getSession,
 } from "../db/sessions.js";
 import {
@@ -37,12 +37,9 @@ import type {
   SessionMeta,
   SessionTrigger,
 } from "@nightwatch/shared";
-import type { ProviderMessage, ToolResult } from "../llm/types.js";
+import type { ProviderMessage, ToolResult, ToolUse } from "../llm/types.js";
+import type { PendingInterrupt } from "../db/interrupts.js";
 
-// The loop input is session-shaped (D8): an alert authors the opening message,
-// or a human does. `alert` is present only for a fresh alert run; on resume the
-// run recovers it from the session row. `userMessage`/`seed` carry the chat
-// opening and the prior transcript respectively.
 export interface RunInvestigationInput {
   sessionId: string;
   token: string;
@@ -50,6 +47,9 @@ export interface RunInvestigationInput {
   alert?: NormalizedAlert;
   seed?: ProviderMessage[];
   userMessage?: string;
+  // Present on resume: the full tool_results for the suspended turn
+  // (completedResults from interrupt row + the newly resolved gated result).
+  resumeToolResults?: ToolResult[];
 }
 
 export async function runInvestigation(
@@ -57,8 +57,6 @@ export async function runInvestigation(
 ): Promise<void> {
   const { sessionId, token, trigger } = input;
 
-  // Severity-dependent behavior reads the alert: from the job on a fresh run,
-  // from the session row on resume. A chat session has none.
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
   const ctx: IncidentContext & { severity: NormalizedAlert["severity"] } = {
@@ -87,11 +85,35 @@ export async function runInvestigation(
     : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 
-  // Persist (durable, local, transactional) and broadcast (live, to the console)
-  // every new provider message exactly once, in order. Seeded turns are already
-  // persisted; only new ones get written.
   let persistedCount = 0;
-  if (input.seed && input.seed.length > 0) {
+
+  if (input.resumeToolResults && input.resumeToolResults.length > 0) {
+    // Resume from a durable interrupt: seed the prior transcript, then append
+    // the resolved tool_results turn so the next chat() sees a complete context.
+    if (input.seed) {
+      provider.seed(input.seed);
+      persistedCount = input.seed.length;
+    }
+    provider.appendToolResults(input.resumeToolResults);
+    // Persist the tool_results turn (with correct providerContent from the provider).
+    const snap = provider.snapshot();
+    const newMessages: SessionMessage[] = [];
+    for (let seq = persistedCount; seq < snap.length; seq++) {
+      const m = snap[seq];
+      if (!m) continue;
+      newMessages.push({
+        sessionId,
+        seq,
+        role: m.role,
+        content: m.content,
+        providerContent: m.providerContent,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    appendSessionMessages(newMessages);
+    for (const message of newMessages) publishRunFinished(sessionId, message);
+    persistedCount = snap.length;
+  } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     if (input.userMessage) provider.appendUserMessage(input.userMessage);
     persistedCount = input.seed.length;
@@ -109,13 +131,8 @@ export async function runInvestigation(
         : `${ctx.alertType} - ${ctx.containerName}`,
     createdAt: new Date().toISOString(),
   };
-  // Create the session row once (idempotent); a resume re-enters with the same
-  // id and the original title/alert are preserved.
   createSession(sessionMeta, alert);
 
-  // The transcript is the checkpoint: each turn is written in one transaction,
-  // locally, with no swallowed failure. A write error fails the run loudly
-  // rather than leaving a silent hole.
   const persist = (): void => {
     const snap = provider.snapshot();
     const newMessages: SessionMessage[] = [];
@@ -139,7 +156,7 @@ export async function runInvestigation(
   let toolCallCount = 0;
   let clarificationsUsed = 0;
   let turn = 0;
-  let deadline = Date.now() + config.hardTimeoutMs;
+  const deadline = Date.now() + config.hardTimeoutMs;
 
   while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
     turn++;
@@ -163,10 +180,6 @@ export async function runInvestigation(
       return;
     }
 
-    // The model ends the investigation by calling final_response (or producing
-    // native structured output, which the provider synthesizes as the same tool
-    // use). Stopping with no tool call means it failed - escalate rather than
-    // silently drop.
     if (response.toolUses.length === 0) {
       escalate(
         ctx,
@@ -177,7 +190,12 @@ export async function runInvestigation(
       return;
     }
 
+    // Two-pass: execute non-gated tools first, accumulate their results, then
+    // suspend on the first gated tool. Non-gated results become completedResults
+    // on the interrupt row so the resume can assemble the single tool_results
+    // message the provider contract requires (D9, D10).
     const toolResults: ToolResult[] = [];
+    let gatedTool: ToolUse | null = null;
 
     for (const tool of response.toolUses) {
       if (tool.name === FINAL_RESPONSE_TOOL_NAME) {
@@ -196,27 +214,31 @@ export async function runInvestigation(
       }
 
       toolCallCount++;
-      const gated =
-        RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name);
-      if (gated) {
-        publishInterrupt({
-          sessionId,
-          toolUseId: tool.id,
-          toolName: tool.name,
-          input: tool.input,
-          incidentId,
-        });
-      } else {
+
+      if (RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name)) {
+        if (gatedTool === null) {
+          // Capture the first gated tool; execution deferred to the resume run.
+          gatedTool = tool;
+        } else {
+          // Only one gate per turn; reject subsequent gated tools so every
+          // tool_use in this assistant message still gets a tool_result (D10).
+          toolResults.push({
+            tool_use_id: tool.id,
+            content:
+              "Another gated tool is pending approval. Retry after the current approval resolves.",
+            is_error: true,
+          });
+        }
+        continue;
+      }
+
+      if (PLATFORM_TOOLS.has(tool.name)) {
         publishToolCallStart({
           sessionId,
           toolUseId: tool.id,
           toolName: tool.name,
           input: tool.input,
         });
-      }
-
-      if (PLATFORM_TOOLS.has(tool.name)) {
-        log.debug({ tool: tool.name, kind: "platform" }, "dispatching tool");
         const result = await handlePlatformTool(
           tool,
           token,
@@ -235,59 +257,12 @@ export async function runInvestigation(
       }
 
       if (RUNNER_TOOLS.has(tool.name)) {
-        if (REQUIRES_APPROVAL.has(tool.name)) {
-          log.info({ tool: tool.name }, "awaiting human approval");
-          // Human think-time must not be charged against the hard deadline.
-          const waitedFrom = Date.now();
-          const decision = await requestApproval(token, incidentId, tool);
-          deadline += Date.now() - waitedFrom;
-          log.info(
-            { tool: tool.name, decision: decision.action },
-            "approval resolved",
-          );
-
-          if (decision.action === "reject") {
-            const rejected: ToolResult = {
-              tool_use_id: tool.id,
-              content: "Rejected by human reviewer. Do not retry this action.",
-              is_error: true,
-            };
-            toolResults.push(rejected);
-            publishToolCallEnd({
-              sessionId,
-              toolUseId: tool.id,
-              result: rejected.content,
-              isError: true,
-            });
-            if (ctx.severity === "critical") {
-              log.warn(
-                { tool: tool.name },
-                "critical write rejected, escalating",
-              );
-              escalate(
-                ctx,
-                incidentId,
-                sessionId,
-                `Write action rejected: ${tool.name}`,
-              );
-              return;
-            }
-            continue;
-          }
-
-          if (decision.action === "add_context") {
-            // Stays a tool_result (not a user message): the provider contract
-            // requires every tool_use to be answered with a tool_result (D10).
-            toolResults.push({
-              tool_use_id: tool.id,
-              content: `Human added context: ${decision.contextMessage ?? "(no message)"}`,
-            });
-            continue;
-          }
-          // action === "approve" — fall through to sendCommand
-        }
-
-        log.debug({ tool: tool.name, kind: "runner" }, "dispatching tool");
+        publishToolCallStart({
+          sessionId,
+          toolUseId: tool.id,
+          toolName: tool.name,
+          input: tool.input,
+        });
         try {
           const result = await sendCommand(
             token,
@@ -299,11 +274,7 @@ export async function runInvestigation(
             tool_use_id: tool.id,
             content: JSON.stringify(result),
           });
-          publishToolCallEnd({
-            sessionId,
-            toolUseId: tool.id,
-            result,
-          });
+          publishToolCallEnd({ sessionId, toolUseId: tool.id, result });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           log.warn({ tool: tool.name, err }, "runner tool failed");
@@ -325,9 +296,54 @@ export async function runInvestigation(
       log.warn({ tool: tool.name }, "LLM requested unknown tool");
       toolResults.push({
         tool_use_id: tool.id,
-        content: `Unknown tool "${tool.name}". Platform configuration error - no routing entry. Do not retry.`,
+        content: `Unknown tool "${tool.name}". Platform configuration error. Do not retry.`,
         is_error: true,
       });
+    }
+
+    if (gatedTool !== null) {
+      // Durably suspend: persist the assistant turn + interrupt row in ONE
+      // transaction (D3). The run then exits and frees its dispatcher slot.
+      const interrupt: PendingInterrupt = {
+        id: incidentId,
+        sessionId,
+        toolUseId: gatedTool.id,
+        kind: "approval",
+        toolName: gatedTool.name,
+        toolInput: gatedTool.input,
+        completedResults: toolResults,
+        createdAt: new Date().toISOString(),
+      };
+      const snap = provider.snapshot();
+      const newMessages: SessionMessage[] = [];
+      for (let seq = persistedCount; seq < snap.length; seq++) {
+        const m = snap[seq];
+        if (!m) continue;
+        newMessages.push({
+          sessionId,
+          seq,
+          role: m.role,
+          content: m.content,
+          providerContent: m.providerContent,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      appendMessagesAndInterrupt(newMessages, interrupt);
+      for (const message of newMessages) publishRunFinished(sessionId, message);
+      persistedCount = snap.length;
+      // Publish INTERRUPT after the row is durably in the DB.
+      publishInterrupt({
+        sessionId,
+        toolUseId: gatedTool.id,
+        toolName: gatedTool.name,
+        input: gatedTool.input,
+        incidentId,
+      });
+      log.info(
+        { tool: gatedTool.name, incidentId },
+        "run suspended: pending interrupt",
+      );
+      return;
     }
 
     provider.appendToolResults(toolResults);

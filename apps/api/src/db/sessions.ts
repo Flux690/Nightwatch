@@ -4,6 +4,7 @@ import type {
   SessionMeta,
 } from "@nightwatch/shared";
 import { getDb } from "./client.js";
+import type { PendingInterrupt } from "./interrupts.js";
 
 // A session row plus its originating alert (null for chat sessions). The alert is
 // the durable source of severity-dependent behavior on resume, so a run that no
@@ -60,6 +61,49 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
     }
   });
   insertAll(messages);
+}
+
+// Atomically persist the assistant turn messages AND the interrupt row in one
+// transaction. The loop calls this when suspending on a gated tool so the DB
+// is always in a consistent state: both exist or neither does (D3).
+export function appendMessagesAndInterrupt(
+  messages: SessionMessage[],
+  interrupt: PendingInterrupt,
+): void {
+  const insertMsg = getDb().prepare(
+    `INSERT INTO session_messages
+       (session_id, seq, role, content, provider_content, created_at)
+     VALUES (@sessionId, @seq, @role, @content, @providerContent, @createdAt)`,
+  );
+  const insertInterrupt = getDb().prepare(
+    `INSERT INTO pending_interrupts
+       (id, session_id, tool_use_id, kind, tool_name, tool_input, completed_results, created_at)
+     VALUES (@id, @sessionId, @toolUseId, @kind, @toolName, @toolInput, @completedResults, @createdAt)`,
+  );
+  const txn = getDb().transaction(() => {
+    for (const m of messages) {
+      insertMsg.run({
+        sessionId: m.sessionId,
+        seq: m.seq,
+        role: m.role,
+        content: m.content,
+        providerContent:
+          m.providerContent != null ? JSON.stringify(m.providerContent) : null,
+        createdAt: m.createdAt,
+      });
+    }
+    insertInterrupt.run({
+      id: interrupt.id,
+      sessionId: interrupt.sessionId,
+      toolUseId: interrupt.toolUseId,
+      kind: interrupt.kind,
+      toolName: interrupt.toolName,
+      toolInput: JSON.stringify(interrupt.toolInput),
+      completedResults: JSON.stringify(interrupt.completedResults),
+      createdAt: interrupt.createdAt,
+    });
+  });
+  txn();
 }
 
 export function listSessions(token: string): SessionMeta[] {

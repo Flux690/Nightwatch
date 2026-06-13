@@ -81,6 +81,20 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_incidents_lookup
     ON incidents(token, container_name, alert_type, timestamp);
+
+  CREATE TABLE IF NOT EXISTS pending_interrupts (
+    id                TEXT PRIMARY KEY,
+    session_id        TEXT NOT NULL REFERENCES sessions(session_id),
+    tool_use_id       TEXT NOT NULL UNIQUE,
+    kind              TEXT NOT NULL DEFAULT 'approval',
+    tool_name         TEXT NOT NULL,
+    tool_input        TEXT NOT NULL,
+    completed_results TEXT NOT NULL DEFAULT '[]',
+    created_at        TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_pending_interrupts_session
+    ON pending_interrupts(session_id);
 `;
 
 let _db: Database.Database | undefined;

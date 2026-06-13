@@ -15,6 +15,9 @@ export interface Dispatcher {
   // active or waiting in the queue. No keys, no TTLs - a crashed run leaves no
   // marker, so a re-fired alert re-investigates (CONTEXT.md D2/D4).
   isInvestigating(token: string, sourceAlertId: string): boolean;
+  // True while a run for this sessionId is active or queued (covers both alert
+  // and chat runs). Used for the 409 guard on POST /sessions/:id/messages.
+  isSessionRunning(sessionId: string): boolean;
 }
 
 export interface DispatcherOptions {
@@ -42,6 +45,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const queue: Queued[] = [];
   // Multiset: an alert key is present while any active-or-queued run carries it.
   const active = new Map<string, number>();
+  const activeSessionIds = new Set<string>();
   let running = 0;
 
   function retain(key: string | null): void {
@@ -58,6 +62,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
   function start(input: RunInvestigationInput, key: string | null): void {
     running++;
+    activeSessionIds.add(input.sessionId);
     void run(input)
       .catch((err: unknown) => {
         logger.error(
@@ -67,6 +72,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       })
       .finally(() => {
         running--;
+        activeSessionIds.delete(input.sessionId);
         release(key);
         drain();
       });
@@ -102,6 +108,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
     isInvestigating(token: string, sourceAlertId: string): boolean {
       return active.has(dedupKey(token, sourceAlertId));
+    },
+
+    isSessionRunning(sessionId: string): boolean {
+      return activeSessionIds.has(sessionId);
     },
   };
 }

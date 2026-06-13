@@ -1,5 +1,20 @@
 import type { FastifyInstance } from "fastify";
-import { listPendingApprovals } from "../investigation/approvals.js";
+import { listInterruptsByToken } from "../db/interrupts.js";
+import type { PendingInterruptWithSession } from "../db/interrupts.js";
+import type { ApprovalRequest } from "@nightwatch/shared";
+
+function toApprovalRequest(i: PendingInterruptWithSession): ApprovalRequest {
+  return {
+    id: i.id,
+    incidentId: i.id,
+    token: i.token,
+    toolName: i.toolName,
+    toolInput: i.toolInput,
+    toolUseId: i.toolUseId,
+    status: "pending",
+    createdAt: i.createdAt,
+  };
+}
 
 export async function registerApprovalRoutes(
   fastify: FastifyInstance,
@@ -11,7 +26,7 @@ export async function registerApprovalRoutes(
       if (!token) {
         return reply.code(400).send({ error: "token is required" });
       }
-      return listPendingApprovals().filter((a) => a.token === token);
+      return listInterruptsByToken(token).map(toApprovalRequest);
     },
   );
 }

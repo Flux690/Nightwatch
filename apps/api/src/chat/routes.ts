@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue } from "../db/tokens.js";
 import { getSession, getSessionMessages } from "../db/sessions.js";
+import { hasPendingInterrupt } from "../db/interrupts.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { ProviderMessage } from "../llm/types.js";
@@ -70,6 +71,15 @@ export async function registerChatRoutes(
       const session = getSession(sessionId);
       if (!session || session.token !== token) {
         return reply.code(404).send({ error: "unknown session" });
+      }
+
+      if (
+        dispatcher.isSessionRunning(sessionId) ||
+        hasPendingInterrupt(sessionId)
+      ) {
+        return reply
+          .code(409)
+          .send({ error: "session is busy: running or awaiting approval" });
       }
 
       const history = getSessionMessages(sessionId);

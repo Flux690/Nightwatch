@@ -1,14 +1,24 @@
 import type { FastifyInstance } from "fastify";
 import {
-  listPendingApprovals,
-  getPendingApproval,
-  resolveApproval,
-} from "../investigation/approvals.js";
-import { publishInterruptResolved } from "../session/stream.js";
-import { getIncidentById, updateResolutionNote } from "../db/incidents.js";
+  getInterruptWithSession,
+  deleteInterrupt,
+  listAllInterrupts,
+} from "../db/interrupts.js";
+import type { PendingInterruptWithSession } from "../db/interrupts.js";
+import { getSessionMessages } from "../db/sessions.js";
+import {
+  publishInterruptResolved,
+  publishToolCallEnd,
+} from "../session/stream.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
+import { escalate } from "../investigation/result.js";
+import { sendCommand } from "../ws/router.js";
+import { loadConfig } from "../config/store.js";
 import { requireAuth } from "../auth/gate.js";
+import { getIncidentById, updateResolutionNote } from "../db/incidents.js";
 import { logger } from "../logger.js";
-import type { ApprovalResponse } from "@nightwatch/shared";
+import type { ApprovalRequest, ApprovalResponse } from "@nightwatch/shared";
+import type { ProviderMessage, ToolResult } from "../llm/types.js";
 
 interface ApprovalBody {
   resolvedBy?: string;
@@ -16,49 +26,119 @@ interface ApprovalBody {
   contextMessage?: string;
 }
 
+function toApprovalRequest(i: PendingInterruptWithSession): ApprovalRequest {
+  return {
+    id: i.id,
+    incidentId: i.id,
+    token: i.token,
+    toolName: i.toolName,
+    toolInput: i.toolInput,
+    toolUseId: i.toolUseId,
+    status: "pending",
+    createdAt: i.createdAt,
+  };
+}
+
+function buildSeed(sessionId: string): ProviderMessage[] {
+  return getSessionMessages(sessionId).map((m) => ({
+    role: m.role,
+    content: m.content,
+    providerContent: m.providerContent,
+  }));
+}
+
 export async function registerIncidentRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   fastify.get("/incidents/pending", async () => ({
-    pending: listPendingApprovals(),
+    pending: listAllInterrupts().map(toApprovalRequest),
   }));
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/approve",
     { preHandler: requireAuth },
     async (request, reply) => {
-      const pending = getPendingApproval(request.params.id);
-      if (!pending) {
-        return reply.code(404).send({
-          error: `No pending approval for incident ${request.params.id}`,
-        });
+      const id = request.params.id;
+
+      const interrupt = getInterruptWithSession(id);
+      if (!interrupt) {
+        return reply
+          .code(409)
+          .send({ error: `Interrupt already resolved or not found: ${id}` });
+      }
+
+      const { sessionId, token, toolName, toolUseId, completedResults } =
+        interrupt;
+      const config = loadConfig();
+
+      let gatedResult: ToolResult;
+      try {
+        const result = await sendCommand(
+          token,
+          toolName,
+          interrupt.toolInput,
+          config.toolTimeoutMs,
+        );
+        gatedResult = {
+          tool_use_id: toolUseId,
+          content: JSON.stringify(result),
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        gatedResult = {
+          tool_use_id: toolUseId,
+          content: `Error executing ${toolName}: ${msg}`,
+          is_error: true,
+        };
+      }
+
+      // Atomic delete — if row is already gone a concurrent approve beat us.
+      if (!deleteInterrupt(id)) {
+        return reply
+          .code(409)
+          .send({ error: "Interrupt already resolved by another request" });
       }
 
       const resolvedBy = request.body?.resolvedBy ?? "console";
-      resolveApproval({
-        toolUseId: pending.toolUseId,
-        action: "approve",
-        comment: request.body?.comment,
-      });
-      logger.info(
-        { incidentId: pending.incidentId, tool: pending.toolName, resolvedBy },
-        "approval approved via REST",
-      );
+      const resolvedAt = new Date().toISOString();
 
-      const response: ApprovalResponse = {
-        incidentId: pending.incidentId,
-        toolUseId: pending.toolUseId,
+      publishToolCallEnd({
+        sessionId,
+        toolUseId,
+        result: gatedResult.content,
+        isError: gatedResult.is_error,
+      });
+      publishInterruptResolved({
+        incidentId: id,
+        toolUseId,
         status: "approved",
         resolvedBy,
-        resolvedAt: new Date().toISOString(),
-      };
-      publishInterruptResolved({
-        incidentId: response.incidentId,
-        toolUseId: response.toolUseId,
-        status: "approved",
-        resolvedBy: response.resolvedBy,
-        resolvedAt: response.resolvedAt,
+        resolvedAt,
       });
+
+      logger.info({ incidentId: id, tool: toolName, resolvedBy }, "approved");
+
+      const resumeToolResults: ToolResult[] = [
+        ...completedResults,
+        gatedResult,
+      ];
+      const seed = buildSeed(sessionId);
+
+      dispatcher.dispatch({
+        sessionId,
+        token,
+        trigger: interrupt.sessionTrigger as "alert" | "chat",
+        seed,
+        resumeToolResults,
+      });
+
+      const response: ApprovalResponse = {
+        incidentId: id,
+        toolUseId,
+        status: "approved",
+        resolvedBy,
+        resolvedAt,
+      };
       return reply.code(200).send(response);
     },
   );
@@ -67,57 +147,176 @@ export async function registerIncidentRoutes(
     "/incidents/:id/reject",
     { preHandler: requireAuth },
     async (request, reply) => {
-      const pending = getPendingApproval(request.params.id);
-      if (!pending) {
-        return reply.code(404).send({
-          error: `No pending approval for incident ${request.params.id}`,
-        });
+      const id = request.params.id;
+
+      const interrupt = getInterruptWithSession(id);
+      if (!interrupt) {
+        return reply
+          .code(409)
+          .send({ error: `Interrupt already resolved or not found: ${id}` });
+      }
+
+      const { sessionId, token, toolName, toolUseId, completedResults } =
+        interrupt;
+
+      const gatedResult: ToolResult = {
+        tool_use_id: toolUseId,
+        content: `Rejected by operator: ${request.body?.comment ?? "no comment"}`,
+        is_error: true,
+      };
+
+      if (!deleteInterrupt(id)) {
+        return reply
+          .code(409)
+          .send({ error: "Interrupt already resolved by another request" });
       }
 
       const resolvedBy = request.body?.resolvedBy ?? "console";
-      resolveApproval({
-        toolUseId: pending.toolUseId,
-        action: "reject",
-        comment: request.body?.comment,
-      });
-      logger.info(
-        { incidentId: pending.incidentId, tool: pending.toolName, resolvedBy },
-        "approval rejected via REST",
-      );
+      const resolvedAt = new Date().toISOString();
 
-      const response: ApprovalResponse = {
-        incidentId: pending.incidentId,
-        toolUseId: pending.toolUseId,
+      publishInterruptResolved({
+        incidentId: id,
+        toolUseId,
         status: "rejected",
         resolvedBy,
-        resolvedAt: new Date().toISOString(),
-      };
-      publishInterruptResolved({
-        incidentId: response.incidentId,
-        toolUseId: response.toolUseId,
-        status: "rejected",
-        resolvedBy: response.resolvedBy,
-        resolvedAt: response.resolvedAt,
+        resolvedAt,
       });
+
+      logger.info({ incidentId: id, tool: toolName, resolvedBy }, "rejected");
+
+      const severity = interrupt.originatingAlert?.severity ?? "info";
+
+      if (severity === "critical") {
+        const ctx = {
+          token,
+          containerName:
+            interrupt.originatingAlert?.targetIdentifier ?? "unknown",
+          alertType: interrupt.originatingAlert?.alertType ?? "unknown",
+          firedAt:
+            interrupt.originatingAlert?.firedAt ?? new Date().toISOString(),
+        };
+        escalate(ctx, id, sessionId, `Write action rejected: ${toolName}`);
+
+        const response: ApprovalResponse = {
+          incidentId: id,
+          toolUseId,
+          status: "rejected",
+          resolvedBy,
+          resolvedAt,
+        };
+        return reply.code(200).send(response);
+      }
+
+      const resumeToolResults: ToolResult[] = [
+        ...completedResults,
+        gatedResult,
+      ];
+      const seed = buildSeed(sessionId);
+
+      dispatcher.dispatch({
+        sessionId,
+        token,
+        trigger: interrupt.sessionTrigger as "alert" | "chat",
+        seed,
+        resumeToolResults,
+      });
+
+      const response: ApprovalResponse = {
+        incidentId: id,
+        toolUseId,
+        status: "rejected",
+        resolvedBy,
+        resolvedAt,
+      };
       return reply.code(200).send(response);
     },
   );
 
-  // Approval state for an incident: in-memory, so present only while pending.
+  fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
+    "/incidents/:id/add-context",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const id = request.params.id;
+
+      const interrupt = getInterruptWithSession(id);
+      if (!interrupt) {
+        return reply
+          .code(409)
+          .send({ error: `Interrupt already resolved or not found: ${id}` });
+      }
+
+      const { sessionId, token, toolName, toolUseId, completedResults } =
+        interrupt;
+      const contextMessage =
+        request.body?.contextMessage?.trim() ?? request.body?.comment?.trim();
+      if (!contextMessage) {
+        return reply.code(400).send({ error: "contextMessage is required" });
+      }
+
+      const gatedResult: ToolResult = {
+        tool_use_id: toolUseId,
+        content: `Human added context: ${contextMessage}`,
+      };
+
+      if (!deleteInterrupt(id)) {
+        return reply
+          .code(409)
+          .send({ error: "Interrupt already resolved by another request" });
+      }
+
+      const resolvedBy = request.body?.resolvedBy ?? "console";
+      const resolvedAt = new Date().toISOString();
+
+      publishInterruptResolved({
+        incidentId: id,
+        toolUseId,
+        status: "context_added",
+        resolvedBy,
+        resolvedAt,
+      });
+
+      logger.info(
+        { incidentId: id, tool: toolName, resolvedBy },
+        "context added",
+      );
+
+      const resumeToolResults: ToolResult[] = [
+        ...completedResults,
+        gatedResult,
+      ];
+      const seed = buildSeed(sessionId);
+
+      dispatcher.dispatch({
+        sessionId,
+        token,
+        trigger: interrupt.sessionTrigger as "alert" | "chat",
+        seed,
+        resumeToolResults,
+      });
+
+      const response: ApprovalResponse = {
+        incidentId: id,
+        toolUseId,
+        status: "context_added",
+        resolvedBy,
+        resolvedAt,
+      };
+      return reply.code(200).send(response);
+    },
+  );
+
   fastify.get<{ Params: { id: string } }>(
     "/incidents/:id/status",
     async (request) => {
-      const pending = getPendingApproval(request.params.id);
+      const interrupt = getInterruptWithSession(request.params.id);
       return {
         incidentId: request.params.id,
-        awaitingApproval: pending != null,
-        approval: pending ?? null,
+        awaitingApproval: interrupt != null,
+        approval: interrupt ? toApprovalRequest(interrupt) : null,
       };
     },
   );
 
-  // Human marks an escalated incident resolved; the note is written to the API's
-  // SQLite history (the feedback loop, now local - state inversion).
   fastify.post<{
     Params: { id: string };
     Body: { note?: string };
