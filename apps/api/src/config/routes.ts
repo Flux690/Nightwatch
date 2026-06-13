@@ -119,7 +119,7 @@ export async function registerConfigRoutes(
 ): Promise<void> {
   // GET /config — returns AgentConfig without any encrypted/plaintext key.
   fastify.get("/config", async () => {
-    const config = await loadConfig();
+    const config = loadConfig();
     // apiKeyMasked is safe to return; apiKeyEncrypted never reaches here.
     return config;
   });
@@ -139,7 +139,7 @@ export async function registerConfigRoutes(
         ...rest,
         ...(rawBaseUrl !== undefined && { baseUrl: rawBaseUrl ?? undefined }),
       };
-      const updated = await updateConfig(patch);
+      const updated = updateConfig(patch);
       logger.info({ keys: Object.keys(parsed.data) }, "agent config updated");
       return updated;
     },
@@ -148,9 +148,9 @@ export async function registerConfigRoutes(
   // GET /config/models — proxies the configured endpoint's model list so the
   // browser never calls the LLM endpoint directly.
   fastify.get("/config/models", async () => {
-    const config = await loadConfig();
+    const config = loadConfig();
     const apiKey =
-      (await loadApiKey()) ??
+      loadApiKey() ??
       (config.provider === "anthropic"
         ? process.env["ANTHROPIC_API_KEY"]
         : process.env["OPENAI_API_KEY"]) ??
@@ -180,9 +180,9 @@ export async function registerConfigRoutes(
       const { apiKey, model } = parsed.data;
 
       const encrypted = encrypt(apiKey);
-      await saveApiKey(encrypted);
+      saveApiKey(encrypted);
 
-      const config = await loadConfig();
+      const config = loadConfig();
       const result = await probeEndpoint(config, apiKey, model);
       logger.info({ ok: result.ok }, "config/test probe completed");
       return result;
@@ -201,7 +201,7 @@ export async function registerConfigRoutes(
       }
       const { apiKey } = parsed.data;
       const encrypted = encrypt(apiKey);
-      await saveApiKey(encrypted);
+      saveApiKey(encrypted);
       return { apiKeyMasked: maskKey(apiKey) };
     },
   );

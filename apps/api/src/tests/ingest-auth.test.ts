@@ -1,10 +1,11 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db/client.js";
+import { createToken } from "../db/tokens.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
+import { useTempDb } from "./temp-db.js";
 
 const ALERTMANAGER_BODY = {
   alerts: [
@@ -33,17 +34,12 @@ const ALERTMANAGER_BODY = {
 
 describe("POST /alerts/ingest auth", () => {
   let server: FastifyInstance;
-  let userId: string;
-  const VALID_TOKEN = `test-ingest-${randomUUID()}`;
+  let cleanupDb: () => void;
+  let VALID_TOKEN: string;
 
   beforeAll(async () => {
-    const user = await db.user.create({
-      data: { email: `test-ingest-${randomUUID()}@nightwatch-test.local` },
-    });
-    userId = user.id;
-    await db.token.create({
-      data: { token: VALID_TOKEN, userId, hostname: "test-ingest-runner" },
-    });
+    cleanupDb = useTempDb();
+    VALID_TOKEN = createToken("test-ingest-runner").token;
 
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
@@ -52,9 +48,8 @@ describe("POST /alerts/ingest auth", () => {
 
   afterAll(async () => {
     await server.close();
-    await db.token.deleteMany({ where: { userId } });
-    await db.user.delete({ where: { id: userId } });
-    await db.$disconnect();
+    cleanupDb();
+    vi.unstubAllEnvs();
   });
 
   it("rejects unknown token with 401 before any processing", async () => {

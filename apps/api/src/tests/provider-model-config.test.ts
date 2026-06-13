@@ -11,6 +11,7 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { registerConfigRoutes } from "../config/routes.js";
+import { useTempDb } from "./temp-db.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
 function mockResponse(
@@ -34,8 +35,10 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
 
 describe("provider/model config seam", () => {
   let server: FastifyInstance;
+  let cleanupDb: () => void;
 
   beforeAll(async () => {
+    cleanupDb = useTempDb();
     vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
     server = Fastify({ logger: false });
     await registerConfigRoutes(server);
@@ -44,6 +47,7 @@ describe("provider/model config seam", () => {
 
   afterAll(async () => {
     await server.close();
+    cleanupDb();
     vi.unstubAllEnvs();
   });
 
@@ -180,5 +184,24 @@ describe("provider/model config seam", () => {
     // Masked value must show something like "sk-...5678" (never the full key)
     expect(body.apiKeyMasked).toMatch(/\.\.\./);
     expect(body.apiKeyMasked).not.toContain("sk-ant-test-key-12345678");
+  });
+
+  it("PATCH /config/key then GET /config: persists the encrypted key and round-trips it to a mask, never the plaintext", async () => {
+    const apiKey = "sk-ant-roundtrip-abcd9999";
+    const saved = await server.inject({
+      method: "PATCH",
+      url: "/config/key",
+      payload: { apiKey },
+    });
+    expect(saved.statusCode).toBe(200);
+
+    // GET /config reads the row, decrypts, and masks - proving the encrypt →
+    // store → decrypt → mask round-trip without ever returning the plaintext.
+    const res = await server.inject({ method: "GET", url: "/config" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as Record<string, unknown>;
+    expect(body["apiKeyMasked"]).toBe("sk-...9999");
+    expect(body).not.toHaveProperty("apiKeyEncrypted");
+    expect(JSON.stringify(body)).not.toContain(apiKey);
   });
 });

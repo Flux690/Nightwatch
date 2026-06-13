@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -78,7 +77,8 @@ vi.mock("../llm/factory.js", () => ({
   createProvider: mockCreateProvider,
 }));
 
-import { db } from "../db/client.js";
+import { createToken } from "../db/tokens.js";
+import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
@@ -99,20 +99,15 @@ describe("approval cycle", () => {
   let server: FastifyInstance;
   let worker: Worker;
   let port: number;
-  let userId: string;
-  const TEST_TOKEN = `test-${randomUUID()}`;
+  let cleanupDb: () => void;
+  let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-approval";
   const restartCommands: Array<Record<string, unknown>> = [];
   const storedMessages: Record<string, unknown[]> = {};
 
   beforeAll(async () => {
-    const user = await db.user.create({
-      data: { email: `test-${randomUUID()}@nightwatch-test.local` },
-    });
-    userId = user.id;
-    await db.token.create({
-      data: { token: TEST_TOKEN, userId, hostname: "test-runner" },
-    });
+    cleanupDb = useTempDb();
+    TEST_TOKEN = createToken("test-runner").token;
 
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -159,9 +154,8 @@ describe("approval cycle", () => {
     await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
-    await db.token.deleteMany({ where: { userId } });
-    await db.user.delete({ where: { id: userId } });
-    await db.$disconnect();
+    cleanupDb();
+    vi.unstubAllEnvs();
   });
 
   it("pauses at a gated tool, resumes on approve, executes the write", async () => {

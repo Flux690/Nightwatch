@@ -8,7 +8,7 @@ if (!process.env["SECRET_KEY"]) {
   process.exit(1);
 }
 import FastifyWebSocket from "@fastify/websocket";
-import { db } from "./db/client.js";
+import { initDb } from "./db/client.js";
 import { redis } from "./redis/client.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
@@ -48,8 +48,8 @@ const start = async (): Promise<void> => {
     await redis.ping();
     fastify.log.info("Redis connected");
 
-    await db.$connect();
-    fastify.log.info("Postgres connected");
+    initDb();
+    fastify.log.info("SQLite ready");
 
     startWorker();
     fastify.log.info("BullMQ worker started");

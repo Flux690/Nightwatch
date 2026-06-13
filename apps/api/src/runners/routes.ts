@@ -1,8 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { db } from "../db/client.js";
+import { createToken, listTokens } from "../db/tokens.js";
 import { redis } from "../redis/client.js";
 import { sendCommand } from "../ws/router.js";
-import { ensureAdminUser } from "../auth/admin.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { CapabilityManifest } from "@nightwatch/shared";
@@ -14,9 +13,7 @@ export async function registerRunnerRoutes(
 ): Promise<void> {
   // List runners with live status from the heartbeat key.
   fastify.get("/runners", async () => {
-    const tokens = await db.token.findMany({
-      orderBy: { createdAt: "desc" },
-    });
+    const tokens = listTokens();
     return Promise.all(
       tokens.map(async (t) => {
         const lastSeen = await redis.get(`heartbeat:${t.token}`);
@@ -42,10 +39,7 @@ export async function registerRunnerRoutes(
     "/runners",
     { preHandler: requireAuth },
     async (request, reply) => {
-      const user = await ensureAdminUser();
-      const tokenRecord = await db.token.create({
-        data: { userId: user.id, hostname: request.body?.hostname ?? null },
-      });
+      const tokenRecord = createToken(request.body?.hostname ?? null);
       logger.info({ id: tokenRecord.id }, "runner token created");
       return reply
         .code(201)

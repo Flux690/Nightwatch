@@ -1,4 +1,4 @@
-import { db } from "../db/client.js";
+import { getDb } from "../db/client.js";
 import {
   DEFAULT_HARD_TIMEOUT_MS,
   DEFAULT_MAX_TOOL_CALLS,
@@ -16,6 +16,45 @@ import type {
 } from "@nightwatch/shared";
 
 const CONFIG_ID = "global";
+
+// Shape of the config row as selected (columns aliased to camelCase). The
+// provider/thinking/reasoningEffort columns are plain TEXT, constrained to their
+// enums on write via the route schema. promptCaching is stored as 0/1.
+type ConfigRow = {
+  provider: string;
+  model: string;
+  thinking: string;
+  maxOutputTokens: number;
+  maxRetries: number;
+  requestTimeoutMs: number;
+  maxToolCalls: number;
+  hardTimeoutMs: number;
+  toolTimeoutMs: number;
+  baseUrl: string | null;
+  apiKeyEncrypted: string | null;
+  promptCaching: number;
+  reasoningEffort: string | null;
+};
+
+const SELECT_ROW = `
+  SELECT provider, model, thinking,
+         max_output_tokens  AS maxOutputTokens,
+         max_retries        AS maxRetries,
+         request_timeout_ms AS requestTimeoutMs,
+         max_tool_calls     AS maxToolCalls,
+         hard_timeout_ms    AS hardTimeoutMs,
+         tool_timeout_ms    AS toolTimeoutMs,
+         base_url           AS baseUrl,
+         api_key_encrypted  AS apiKeyEncrypted,
+         prompt_caching     AS promptCaching,
+         reasoning_effort   AS reasoningEffort
+  FROM config WHERE id = ?
+`;
+
+function readRow(): ConfigRow | undefined {
+  // better-sqlite3 returns untyped rows; the column aliases match ConfigRow.
+  return getDb().prepare(SELECT_ROW).get(CONFIG_ID) as ConfigRow | undefined;
+}
 
 function defaultConfigFromEnv(): AgentConfig {
   const provider: LLMProviderName =
@@ -45,22 +84,22 @@ function defaultConfigFromEnv(): AgentConfig {
   };
 }
 
-export async function loadConfig(): Promise<AgentConfig> {
-  const row = await db.config.findUnique({ where: { id: CONFIG_ID } });
+export function loadConfig(): AgentConfig {
+  const row = readRow();
   if (!row) return defaultConfigFromEnv();
 
   let apiKeyMasked: string | null = null;
   if (row.apiKeyEncrypted) {
     try {
-      const plain = decrypt(row.apiKeyEncrypted);
-      apiKeyMasked = maskKey(plain);
+      apiKeyMasked = maskKey(decrypt(row.apiKeyEncrypted));
     } catch {
-      // Decryption failure (e.g. rotated SECRET_KEY) — treat as unset.
+      // Decryption failure (e.g. rotated SECRET_KEY) - treat as unset.
       apiKeyMasked = null;
     }
   }
 
   return {
+    // Columns are plain TEXT; the route schema constrains writes to these enums.
     provider: row.provider as LLMProviderName,
     model: row.model,
     thinking: row.thinking as ThinkingMode,
@@ -72,14 +111,14 @@ export async function loadConfig(): Promise<AgentConfig> {
     toolTimeoutMs: row.toolTimeoutMs,
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
-    promptCaching: row.promptCaching,
+    promptCaching: row.promptCaching === 1,
     reasoningEffort: (row.reasoningEffort as ReasoningEffort | null) ?? null,
   };
 }
 
-// Returns the decrypted API key from DB, or undefined if none is stored.
-export async function loadApiKey(): Promise<string | undefined> {
-  const row = await db.config.findUnique({ where: { id: CONFIG_ID } });
+// Returns the decrypted API key from the DB, or undefined if none is stored.
+export function loadApiKey(): string | undefined {
+  const row = readRow();
   if (!row?.apiKeyEncrypted) return undefined;
   try {
     return decrypt(row.apiKeyEncrypted);
@@ -88,15 +127,39 @@ export async function loadApiKey(): Promise<string | undefined> {
   }
 }
 
-export async function updateConfig(
-  patch: Partial<AgentConfig>,
-): Promise<AgentConfig> {
-  // Strip computed/internal fields before writing — they are never stored.
-  const { apiKeyMasked: _masked, ...storable } = patch;
-  const next: AgentConfig = { ...(await loadConfig()), ...patch };
-  await db.config.upsert({
-    where: { id: CONFIG_ID },
-    create: {
+const UPSERT_CONFIG = `
+  INSERT INTO config (
+    id, provider, model, thinking, max_output_tokens, max_retries,
+    request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+    base_url, prompt_caching, reasoning_effort, updated_at
+  ) VALUES (
+    @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
+    @requestTimeoutMs, @maxToolCalls, @hardTimeoutMs, @toolTimeoutMs,
+    @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
+  )
+  ON CONFLICT(id) DO UPDATE SET
+    provider = excluded.provider,
+    model = excluded.model,
+    thinking = excluded.thinking,
+    max_output_tokens = excluded.max_output_tokens,
+    max_retries = excluded.max_retries,
+    request_timeout_ms = excluded.request_timeout_ms,
+    max_tool_calls = excluded.max_tool_calls,
+    hard_timeout_ms = excluded.hard_timeout_ms,
+    tool_timeout_ms = excluded.tool_timeout_ms,
+    base_url = excluded.base_url,
+    prompt_caching = excluded.prompt_caching,
+    reasoning_effort = excluded.reasoning_effort,
+    updated_at = excluded.updated_at
+`;
+
+export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
+  // apiKeyMasked is computed on read and never stored; the encrypted key is
+  // written only through saveApiKey, so the upsert above leaves it untouched.
+  const next: AgentConfig = { ...loadConfig(), ...patch };
+  getDb()
+    .prepare(UPSERT_CONFIG)
+    .run({
       id: CONFIG_ID,
       provider: next.provider,
       model: next.model,
@@ -108,45 +171,27 @@ export async function updateConfig(
       hardTimeoutMs: next.hardTimeoutMs,
       toolTimeoutMs: next.toolTimeoutMs,
       baseUrl: next.baseUrl ?? null,
-      promptCaching: next.promptCaching ?? true,
+      promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,
-      ...("baseUrl" in storable && { baseUrl: storable.baseUrl ?? null }),
-    },
-    update: {
-      provider: next.provider,
-      model: next.model,
-      thinking: next.thinking,
-      maxOutputTokens: next.maxOutputTokens,
-      maxRetries: next.maxRetries,
-      requestTimeoutMs: next.requestTimeoutMs,
-      maxToolCalls: next.maxToolCalls,
-      hardTimeoutMs: next.hardTimeoutMs,
-      toolTimeoutMs: next.toolTimeoutMs,
-      baseUrl: next.baseUrl ?? null,
-      promptCaching: next.promptCaching ?? true,
-      reasoningEffort: next.reasoningEffort ?? null,
-    },
-  });
+      updatedAt: new Date().toISOString(),
+    });
   return next;
 }
 
-// Persists the encrypted key without touching other config fields.
-export async function saveApiKey(apiKeyEncrypted: string): Promise<void> {
-  await db.config.upsert({
-    where: { id: CONFIG_ID },
-    create: {
+// Persists the encrypted key without touching other config fields. On first
+// write the row is created with column defaults for everything else.
+export function saveApiKey(apiKeyEncrypted: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO config (id, api_key_encrypted, updated_at)
+       VALUES (@id, @apiKeyEncrypted, @updatedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         api_key_encrypted = excluded.api_key_encrypted,
+         updated_at = excluded.updated_at`,
+    )
+    .run({
       id: CONFIG_ID,
-      provider: "anthropic",
-      model: "claude-sonnet-4-6",
-      thinking: "adaptive",
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      maxRetries: MAX_RETRIES,
-      requestTimeoutMs: REQUEST_TIMEOUT_MS,
-      maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
-      hardTimeoutMs: DEFAULT_HARD_TIMEOUT_MS,
-      toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
       apiKeyEncrypted,
-    },
-    update: { apiKeyEncrypted },
-  });
+      updatedAt: new Date().toISOString(),
+    });
 }

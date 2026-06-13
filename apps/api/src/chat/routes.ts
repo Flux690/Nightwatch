@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { enqueueJob } from "../alerts/queue.js";
 import { sendCommand } from "../ws/router.js";
-import { db } from "../db/client.js";
+import { findTokenByValue } from "../db/tokens.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert, SessionMessage } from "@nightwatch/shared";
@@ -43,9 +43,7 @@ export async function registerChatRoutes(
         return reply.code(400).send({ error: "message is required" });
       }
 
-      const tokenRecord = await db.token.findUnique({
-        where: { token },
-      });
+      const tokenRecord = findTokenByValue(token);
       if (!tokenRecord) {
         return reply.code(404).send({ error: "unknown token" });
       }

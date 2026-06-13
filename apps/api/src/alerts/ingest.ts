@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit, tryDebounce, enqueueInvestigation } from "./queue.js";
-import { db } from "../db/client.js";
+import { findTokenByValue } from "../db/tokens.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -23,7 +23,7 @@ export async function registerAlertRoutes(
         });
       }
 
-      const tokenRecord = await db.token.findUnique({ where: { token } });
+      const tokenRecord = findTokenByValue(token);
       if (!tokenRecord) {
         return reply.code(401).send({ error: "unknown or revoked token" });
       }

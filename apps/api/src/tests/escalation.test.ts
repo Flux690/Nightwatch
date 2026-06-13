@@ -15,7 +15,8 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { db } from "../db/client.js";
+import { createToken } from "../db/tokens.js";
+import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
@@ -31,6 +32,24 @@ import {
 interface WsEvent {
   type: string;
   payload: Record<string, unknown>;
+}
+
+// Resolve once the console handler has acked its subscription. The server sends
+// `connected` only after `await sub.subscribe(...)` (ws/console.ts), so this
+// guarantees a later best-effort publish (e.g. ESCALATED) is actually delivered.
+// Waiting on the WebSocket `open` event only proves the handshake, not the
+// subscription, which races the fastest escalation paths.
+function waitForConnected(ws: WebSocket): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onMessage = (raw: WebSocket.RawData): void => {
+      const msg = JSON.parse(raw.toString()) as WsEvent;
+      if (msg.type === "connected") {
+        ws.off("message", onMessage);
+        resolve();
+      }
+    };
+    ws.on("message", onMessage);
+  });
 }
 
 function makeRefusalProvider() {
@@ -129,19 +148,14 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   let server: FastifyInstance;
   let worker: Worker;
   let port: number;
-  let userId: string;
-  const TEST_TOKEN = `test-esc-${randomUUID()}`;
+  let cleanupDb: () => void;
+  let TEST_TOKEN: string;
   const TEST_RUNNER_ID = "test-runner-esc";
   const writeIncidentCalls: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
-    const user = await db.user.create({
-      data: { email: `test-esc-${randomUUID()}@nightwatch-test.local` },
-    });
-    userId = user.id;
-    await db.token.create({
-      data: { token: TEST_TOKEN, userId, hostname: "test-esc-runner" },
-    });
+    cleanupDb = useTempDb();
+    TEST_TOKEN = createToken("test-esc-runner").token;
 
     registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
       const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -172,9 +186,8 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     await worker.close();
     unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
     await server.close();
-    await db.token.deleteMany({ where: { userId } });
-    await db.user.delete({ where: { id: userId } });
-    await db.$disconnect();
+    cleanupDb();
+    vi.unstubAllEnvs();
   });
 
   it("model refusal escalates: writes incident and emits ESCALATED", async () => {
@@ -184,7 +197,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     // Open the console WS before dispatching so we don't miss the ESCALATED
     // event that fires synchronously after the investigation ends.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
     let resolveEscalated!: (e: WsEvent) => void;
@@ -238,7 +251,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     mockCreateProvider.mockImplementationOnce(makeStopProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
     let resolveEscalated!: (e: WsEvent) => void;
@@ -299,7 +312,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     };
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     let resolveEscalated!: (e: WsEvent) => void;
     let rejectEscalated!: (err: Error) => void;
@@ -348,7 +361,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     mockCreateProvider.mockImplementationOnce(makeToolLoopProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
-    await new Promise<void>((res) => ws.on("open", res));
+    await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
     let resolveEscalated!: (e: WsEvent) => void;

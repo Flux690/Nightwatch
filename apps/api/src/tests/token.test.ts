@@ -1,16 +1,19 @@
 import "dotenv/config";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerTokenRoutes } from "../token/routes.js";
+import { useTempDb } from "./temp-db.js";
 
 describe("GET /token", () => {
   let server: FastifyInstance;
   let port: number;
+  let cleanupDb: () => void;
 
   beforeAll(async () => {
+    cleanupDb = useTempDb();
     server = Fastify({ logger: false });
     await registerTokenRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
@@ -19,6 +22,8 @@ describe("GET /token", () => {
 
   afterAll(async () => {
     await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
   });
 
   it("returns a non-empty deployment token", async () => {

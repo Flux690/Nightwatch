@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { redis } from "../redis/client.js";
-import { db } from "../db/client.js";
+import { findTokenByValue, setTokenHostname } from "../db/tokens.js";
 import { registerRunner, resolveCommand, unregisterRunner } from "./router.js";
 import type {
   RunnerHeartbeatMessage,
@@ -36,9 +36,7 @@ export async function registerWsRoutes(
         return;
       }
 
-      const tokenRecord = await db.token.findUnique({
-        where: { token },
-      });
+      const tokenRecord = findTokenByValue(token);
       if (!tokenRecord) {
         socket.close(4003, "Invalid token");
         return;
@@ -63,10 +61,7 @@ export async function registerWsRoutes(
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
           void redis.set(`manifest:${token}`, JSON.stringify(msg.payload));
-          void db.token.update({
-            where: { token },
-            data: { hostname: msg.payload.hostname },
-          });
+          setTokenHostname(token, msg.payload.hostname);
           fastify.log.info({ token: token.slice(0, 8) }, "manifest stored");
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;

@@ -60,7 +60,8 @@ export async function runInvestigation(
     "investigation started",
   );
 
-  const [config, apiKey] = await Promise.all([loadConfig(), loadApiKey()]);
+  const config = loadConfig();
+  const apiKey = loadApiKey();
   const { systemPrompt, firstUserMessage } = await buildInitialContext(alert);
   const provider = createProvider(systemPrompt, config, apiKey);
 
