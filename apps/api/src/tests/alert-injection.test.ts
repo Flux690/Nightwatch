@@ -125,24 +125,10 @@ import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { hasPendingInterrupt } from "../db/interrupts.js";
 
-const FINAL_RESPONSE_TURN = {
-  text: "",
-  toolUses: [
-    {
-      id: "fr-inject",
-      name: "final_response",
-      input: {
-        rootCause: {
-          summary: "done",
-          evidence: ["e"],
-          contributingFactors: null,
-        },
-        recommendedAction: null,
-        escalateIfRejected: false,
-        investigationSteps: ["s"],
-      },
-    },
-  ],
+// A free-form text finish: no tool call ends the run successfully.
+const FINISH_TURN = {
+  text: "Investigation complete.",
+  toolUses: [],
 };
 
 // Platform tool — handled in-process, no runner needed.
@@ -188,8 +174,8 @@ describe("mid-run alert injection (loop seam)", () => {
   it("alert injected mid-run appears in the next tool_results user message", async () => {
     const tokenId = mintToken("inject-midrun").id;
 
-    // Turn 1: platform read tool (no runner). Turn 2: final_response.
-    setTurns([READ_TURN, FINAL_RESPONSE_TURN]);
+    // Turn 1: platform read tool (no runner). Turn 2: free-form finish.
+    setTurns([READ_TURN, FINISH_TURN]);
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -229,7 +215,7 @@ describe("mid-run alert injection (loop seam)", () => {
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const tokenId = mintToken("inject-sus").id;
 
-    // Turn 1: gated tool → run suspends. Turn 2: final_response for the resume.
+    // Turn 1: gated tool → run suspends. Turn 2: free-form finish for the resume.
     setTurns([
       {
         text: "",
@@ -246,7 +232,7 @@ describe("mid-run alert injection (loop seam)", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const sessionId = randomUUID();
@@ -285,16 +271,16 @@ describe("mid-run alert injection (loop seam)", () => {
     // The suspended session's inbox was not touched
     expect(dispatcher.drainInbox(sessionId)).toHaveLength(0);
 
-    releaseNext(); // final_response for the new session
+    releaseNext(); // free-form finish for the new session
     await waitFor(() => !dispatcher.isSessionRunning(newSessionId));
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
     const tokenId = mintToken("inject-leftover").id;
 
-    // Single turn: final_response immediately. The loop exits before any
+    // Single turn: free-form finish immediately. The loop exits before any
     // appendToolResults call, so the inbox is never drained by the loop itself.
-    setTurns([FINAL_RESPONSE_TURN]);
+    setTurns([FINISH_TURN]);
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -309,7 +295,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const callsBefore = mockCreateProvider.mock.calls.length;
 
-    // Release: chat() resolves with final_response → run exits without draining inbox
+    // Release: chat() resolves with free-form finish → run exits without draining inbox
     releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
@@ -328,7 +314,7 @@ describe("mid-run alert injection (loop seam)", () => {
     expect(openingMsg).toBeDefined();
 
     // The leftover session's opening message is for the leftover alert
-    releaseNext(); // final_response for the leftover session
+    releaseNext(); // free-form finish for the leftover session
     await waitFor(() => dispatcher.getActiveSessionForToken(tokenId) === null);
   });
 });

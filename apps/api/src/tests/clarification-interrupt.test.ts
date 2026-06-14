@@ -113,24 +113,10 @@ interface WsEvent {
   payload: Record<string, unknown>;
 }
 
-const FINAL_RESPONSE_TURN = {
-  text: "Done.",
-  toolUses: [
-    {
-      id: `fr-${randomUUID()}`,
-      name: "final_response",
-      input: {
-        rootCause: {
-          summary: "Answered.",
-          evidence: ["clarification resolved"],
-          contributingFactors: null,
-        },
-        recommendedAction: null,
-        escalateIfRejected: false,
-        investigationSteps: ["asked clarification", "received answer"],
-      },
-    },
-  ],
+// A free-form text finish: no tool call ends the run successfully.
+const FINISH_TURN = {
+  text: "Answered. Investigation complete.",
+  toolUses: [],
 };
 
 const TEST_OPTIONS = [
@@ -219,7 +205,7 @@ describe("clarification interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -269,7 +255,7 @@ describe("clarification interrupts", () => {
     await waitFor(() => !hasPendingInterrupt(sessionId));
   });
 
-  it("answer resolves: resumes run, tool result contains answer, reaches final_response", async () => {
+  it("answer resolves: resumes run, tool result contains answer, reaches free-form finish", async () => {
     setScript([
       {
         text: "Need clarification.",
@@ -284,7 +270,7 @@ describe("clarification interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -323,7 +309,7 @@ describe("clarification interrupts", () => {
     const body = (await answerRes.json()) as { status: string };
     expect(body.status).toBe("answered");
 
-    // INTERRUPT_RESOLVED arrives, run resumes, reaches final_response
+    // INTERRUPT_RESOLVED arrives, run resumes, reaches free-form finish
     await waitFor(() =>
       events.some(
         (e) =>
@@ -354,7 +340,7 @@ describe("clarification interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -416,7 +402,7 @@ describe("clarification interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -509,7 +495,7 @@ describe("clarification interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);

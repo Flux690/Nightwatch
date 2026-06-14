@@ -45,24 +45,10 @@ const { mockCreateProvider } = vi.hoisted(() => {
             content: "All looks well.",
             providerContent: {},
           });
+          // A free-form text finish: no tool call ends the run successfully.
           return Promise.resolve({
-            stopReason: "tool_use" as const,
-            toolUses: [
-              {
-                id: `final-response-${messages.length}`,
-                name: "final_response",
-                input: {
-                  rootCause: {
-                    summary: "No issues detected.",
-                    evidence: ["Metrics within normal range"],
-                    contributingFactors: null,
-                  },
-                  recommendedAction: null,
-                  escalateIfRejected: false,
-                  investigationSteps: ["Checked system metrics"],
-                },
-              },
-            ],
+            stopReason: "end_turn" as const,
+            toolUses: [],
             text: "All looks well.",
           });
         },

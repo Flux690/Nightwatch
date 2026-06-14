@@ -15,26 +15,13 @@ import type { FastifyInstance } from "fastify";
 // Same provider mock pattern as ingest-dispatch.test.ts: chat() parks by default
 // (so we can observe mid-window state), immediate mode makes runs finish quickly.
 const { mockCreateProvider, releaseAll, setRunImmediate } = vi.hoisted(() => {
-  const FINAL = {
-    id: "fr-1",
-    name: "final_response",
-    input: {
-      rootCause: {
-        summary: "done",
-        evidence: ["e"],
-        contributingFactors: null,
-      },
-      recommendedAction: null,
-      escalateIfRejected: false,
-      investigationSteps: ["s"],
-    },
-  };
   let immediate = true;
   const gates: Array<() => void> = [];
+  // A free-form text finish: no tool call ends the run successfully.
   const finalTurn = {
-    stopReason: "tool_use" as const,
-    toolUses: [FINAL],
-    text: "",
+    stopReason: "end_turn" as const,
+    toolUses: [] as never[],
+    text: "Investigation complete.",
   };
   const make = () => ({
     start: vi.fn(),

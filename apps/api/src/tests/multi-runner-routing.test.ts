@@ -120,24 +120,10 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
 
-const FINAL_RESPONSE_TURN = {
-  text: "Done.",
-  toolUses: [
-    {
-      id: "fr-1",
-      name: "final_response",
-      input: {
-        rootCause: {
-          summary: "Found root cause.",
-          evidence: ["log line"],
-          contributingFactors: null,
-        },
-        recommendedAction: null,
-        escalateIfRejected: false,
-        investigationSteps: ["checked logs"],
-      },
-    },
-  ],
+// A free-form text finish: no tool call ends the run successfully.
+const FINISH_TURN = {
+  text: "Found root cause. Investigation complete.",
+  toolUses: [],
 };
 
 function makeManifest(
@@ -272,7 +258,7 @@ describe("multi-runner routing", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     await runSession();
@@ -294,7 +280,7 @@ describe("multi-runner routing", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     await runSession();
@@ -316,7 +302,7 @@ describe("multi-runner routing", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const sessionId = await runSession();
@@ -347,7 +333,7 @@ describe("multi-runner routing", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     await runSession();
@@ -363,7 +349,7 @@ describe("multi-runner routing", () => {
         text: "Checking host memory.",
         toolUses: [{ id: "tu-5", name: "get_host_memory", input: {} }],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const sessionId = await runSession();
@@ -398,7 +384,7 @@ describe("multi-runner routing", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);

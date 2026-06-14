@@ -116,24 +116,10 @@ interface WsEvent {
   payload: Record<string, unknown>;
 }
 
-const FINAL_RESPONSE_TURN = {
-  text: "Done.",
-  toolUses: [
-    {
-      id: "fr-1",
-      name: "final_response",
-      input: {
-        rootCause: {
-          summary: "Fixed.",
-          evidence: ["container restarted"],
-          contributingFactors: null,
-        },
-        recommendedAction: null,
-        escalateIfRejected: false,
-        investigationSteps: ["restarted web-01"],
-      },
-    },
-  ],
+// A free-form text finish: no tool call ends the run successfully.
+const FINISH_TURN = {
+  text: "Fixed. Investigation complete.",
+  toolUses: [],
 };
 
 function waitForConnected(ws: WebSocket): Promise<void> {
@@ -217,7 +203,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -266,7 +252,7 @@ describe("durable approval interrupts", () => {
   });
 
   // RED: approve executes runner tool exactly once, run resumes and reaches finding
-  it("approve: executes tool on runner exactly once, run resumes, reaches final_response", async () => {
+  it("approve: executes tool on runner exactly once, run resumes, reaches free-form finish", async () => {
     restartCommands.length = 0;
     setScript([
       {
@@ -284,7 +270,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -321,7 +307,7 @@ describe("durable approval interrupts", () => {
     const body = (await approveRes.json()) as { status: string };
     expect(body.status).toBe("approved");
 
-    // Run resumes and reaches final_response: INTERRUPT_RESOLVED arrives
+    // Run resumes and reaches free-form finish: INTERRUPT_RESOLVED arrives
     await waitFor(() =>
       events.some(
         (e) =>
@@ -358,7 +344,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -423,7 +409,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -489,7 +475,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -554,7 +540,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -626,7 +612,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -698,7 +684,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -780,7 +766,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -861,7 +847,7 @@ describe("durable approval interrupts", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);

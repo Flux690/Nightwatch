@@ -1,17 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AgentConfig } from "@nightwatch/shared";
 
-const VALID_STRUCTURED_OUTPUT = {
-  rootCause: {
-    summary: "High memory usage caused OOM kill.",
-    evidence: ["dmesg: oom-kill process webapp"],
-    contributingFactors: null,
-  },
-  recommendedAction: null,
-  escalateIfRejected: false,
-  investigationSteps: ["checked dmesg", "confirmed OOM"],
-};
-
 const mockFinalMessage = vi.fn();
 const mockAnthropicOn = vi.fn().mockReturnThis();
 const mockAnthropicStream = {
@@ -43,29 +32,7 @@ const BASE_CONFIG: AgentConfig = {
   toolTimeoutMs: 15_000,
 };
 
-const FINAL_RESPONSE_TOOL = {
-  name: "final_response",
-  description: "Finish the investigation.",
-  strict: true as const,
-  input_schema: {
-    type: "object" as const,
-    additionalProperties: false,
-    properties: {
-      rootCause: { type: "object", properties: {} },
-      recommendedAction: {},
-      escalateIfRejected: { type: "boolean" },
-      investigationSteps: { type: "array", items: { type: "string" } },
-    },
-    required: [
-      "rootCause",
-      "recommendedAction",
-      "escalateIfRejected",
-      "investigationSteps",
-    ],
-  },
-};
-
-const OTHER_TOOL = {
+const READ_TOOL = {
   name: "get_container_list",
   description: "List containers.",
   input_schema: {
@@ -84,7 +51,7 @@ function makeUsage() {
   };
 }
 
-describe("AnthropicProvider structured output", () => {
+describe("AnthropicProvider", () => {
   let provider: AnthropicProvider;
 
   beforeEach(() => {
@@ -95,67 +62,46 @@ describe("AnthropicProvider structured output", () => {
     provider.start("CPU spike detected.");
   });
 
-  it("synthesizes a final_response ToolUse when model returns structured JSON (stop_reason: end_turn, text block)", async () => {
+  it("returns free-form text with no toolUses when the model ends its turn", async () => {
     mockFinalMessage.mockResolvedValueOnce({
       stop_reason: "end_turn",
       content: [
         {
           type: "text",
-          text: JSON.stringify(VALID_STRUCTURED_OUTPUT),
+          text: "Root cause: the webapp container was OOM-killed.",
           citations: null,
         },
       ],
       usage: makeUsage(),
     });
 
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
+    const response = await provider.chat([READ_TOOL]);
 
     expect(response.stopReason).toBe("end_turn");
-    expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("final_response");
-    expect(response.toolUses[0].input).toMatchObject(VALID_STRUCTURED_OUTPUT);
-    expect(typeof response.toolUses[0].id).toBe("string");
-    expect(response.toolUses[0].id.length).toBeGreaterThan(0);
+    expect(response.toolUses).toHaveLength(0);
+    expect(response.text).toContain("OOM-killed");
   });
 
-  it("strips final_response from the tools list and sets output_config.format", async () => {
+  it("passes every tool through unchanged and sends no structured-output config", async () => {
     mockFinalMessage.mockResolvedValueOnce({
       stop_reason: "end_turn",
-      content: [{ type: "text", text: "{}", citations: null }],
+      content: [{ type: "text", text: "done", citations: null }],
       usage: makeUsage(),
     });
 
-    await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
+    await provider.chat([READ_TOOL]);
 
     const callArgs = mockMessagesStream.mock.calls[0]?.[0] as {
       tools: Array<{ name: string }>;
-      output_config: {
-        format: { type: string; schema: Record<string, unknown> };
-      };
+      output_config?: unknown;
     };
-
-    const toolNames = (callArgs.tools ?? []).map((t) => t.name);
-    expect(toolNames).not.toContain("final_response");
-    expect(toolNames).toContain("get_container_list");
-    expect(callArgs.output_config).toMatchObject({
-      format: { type: "json_schema" },
-    });
-    expect(callArgs.output_config.format.schema).toBeDefined();
+    expect((callArgs.tools ?? []).map((t) => t.name)).toEqual([
+      "get_container_list",
+    ]);
+    expect(callArgs.output_config).toBeUndefined();
   });
 
-  it("returns empty toolUses when structured output content is not valid JSON", async () => {
-    mockFinalMessage.mockResolvedValueOnce({
-      stop_reason: "end_turn",
-      content: [{ type: "text", text: "not json at all", citations: null }],
-      usage: makeUsage(),
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL]);
-
-    expect(response.toolUses).toHaveLength(0);
-  });
-
-  it("passes through real tool_use blocks unchanged when model uses tools mid-investigation", async () => {
+  it("passes through real tool_use blocks unchanged when the model uses tools", async () => {
     mockFinalMessage.mockResolvedValueOnce({
       stop_reason: "tool_use",
       content: [
@@ -169,36 +115,11 @@ describe("AnthropicProvider structured output", () => {
       usage: makeUsage(),
     });
 
-    const response = await provider.chat([FINAL_RESPONSE_TOOL, OTHER_TOOL]);
+    const response = await provider.chat([READ_TOOL]);
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("get_container_list");
     expect(response.toolUses[0].id).toBe("tu-1");
-  });
-
-  it("synthesizes correctly when thinking blocks precede the JSON text block", async () => {
-    mockFinalMessage.mockResolvedValueOnce({
-      stop_reason: "end_turn",
-      content: [
-        {
-          type: "thinking",
-          thinking: "Let me reason about this...",
-          signature: "",
-        },
-        {
-          type: "text",
-          text: JSON.stringify(VALID_STRUCTURED_OUTPUT),
-          citations: null,
-        },
-      ],
-      usage: makeUsage(),
-    });
-
-    const response = await provider.chat([FINAL_RESPONSE_TOOL]);
-
-    expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("final_response");
-    expect(response.toolUses[0].input).toMatchObject(VALID_STRUCTURED_OUTPUT);
   });
 });

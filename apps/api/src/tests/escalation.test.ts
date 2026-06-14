@@ -70,18 +70,25 @@ function makeRefusalProvider() {
   };
 }
 
-function makeStopProvider() {
+// Ends its turn with free-form text and no tool call. This is a successful
+// finish, not an escalation: the model's text is the answer.
+function makeFinishProvider() {
   return {
     start: vi.fn(),
     seed: vi.fn(),
     snapshot: vi.fn(() => [
-      { role: "user", content: "test", providerContent: {} },
+      { role: "user", content: "Wrap up.", providerContent: {} },
+      {
+        role: "assistant",
+        content: "Root cause found. I am done.",
+        providerContent: {},
+      },
     ]),
     chat: vi.fn(() =>
       Promise.resolve({
-        stopReason: "stop" as const,
+        stopReason: "end_turn" as const,
         toolUses: [],
-        text: "I am done.",
+        text: "Root cause found. I am done.",
       }),
     ),
     appendToolResults: vi.fn(),
@@ -116,7 +123,7 @@ function makeCriticalWriteProvider() {
   };
 }
 
-// Calls a read tool every turn and never delivers a final_response, so the loop exhausts
+// Calls a read tool every turn and never finishes, so the loop exhausts
 // maxToolCalls and escalates on the budget exit.
 function makeToolLoopProvider() {
   return {
@@ -247,33 +254,47 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     expect(record?.outcome).toBe("escalated");
   });
 
-  it("stop without final_response escalates: writes incident and emits ESCALATED", async () => {
-    mockCreateProvider.mockImplementationOnce(makeStopProvider);
+  it("free-form text finish does NOT escalate: no incident written", async () => {
+    mockCreateProvider.mockImplementationOnce(makeFinishProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
     await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
-    let resolveEscalated!: (e: WsEvent) => void;
-    let rejectEscalated!: (err: Error) => void;
-    const escalatedArrived = new Promise<WsEvent>((res, rej) => {
-      resolveEscalated = res;
-      rejectEscalated = rej;
+    let resolveFinished!: (e: WsEvent) => void;
+    let rejectFinished!: (err: Error) => void;
+    const finishArrived = new Promise<WsEvent>((res, rej) => {
+      resolveFinished = res;
+      rejectFinished = rej;
     });
 
     const timer = setTimeout(
-      () => rejectEscalated(new Error("timeout: no ESCALATED event")),
+      () => rejectFinished(new Error("timeout: no assistant RUN_FINISHED")),
       10_000,
     );
 
+    // Fail loudly if an ESCALATED ever shows up - a prose finish must not escalate.
+    let escalated = false;
     ws.on("message", (raw) => {
       const msg = JSON.parse(raw.toString()) as WsEvent;
       if (
-        msg.type === "ESCALATED" &&
-        (!targetSessionId || msg.payload["sessionId"] === targetSessionId)
+        targetSessionId &&
+        msg.payload["sessionId"] === targetSessionId &&
+        msg.type === "ESCALATED"
+      ) {
+        escalated = true;
+      }
+      const message = msg.payload["message"] as
+        | { role?: string; content?: string }
+        | undefined;
+      if (
+        msg.type === "RUN_FINISHED" &&
+        targetSessionId &&
+        msg.payload["sessionId"] === targetSessionId &&
+        message?.role === "assistant"
       ) {
         clearTimeout(timer);
-        resolveEscalated(msg);
+        resolveFinished(msg);
       }
     });
 
@@ -286,11 +307,13 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
     targetSessionId = sessionId;
 
-    const event = await escalatedArrived;
+    const event = await finishArrived;
     ws.close();
 
-    expect(event.payload["sessionId"]).toBe(sessionId);
-    expect(escalationFor(sessionId)?.outcome).toBe("escalated");
+    const message = event.payload["message"] as { content: string };
+    expect(message.content).toContain("I am done.");
+    expect(escalated).toBe(false);
+    expect(escalationFor(sessionId)).toBeUndefined();
   });
 
   it("rejected critical write escalates: writes incident and emits ESCALATED", async () => {

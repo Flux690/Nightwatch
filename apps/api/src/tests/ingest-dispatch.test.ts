@@ -16,26 +16,13 @@ import type { FastifyInstance } from "fastify";
 // releases, so a run stays "active" long enough to assert derived dedup against
 // it. Switching to immediate mode lets runs complete at once for rate-limit math.
 const { mockCreateProvider, releaseAll, setImmediate } = vi.hoisted(() => {
-  const FINAL = {
-    id: "fr-1",
-    name: "final_response",
-    input: {
-      rootCause: {
-        summary: "done",
-        evidence: ["e"],
-        contributingFactors: null,
-      },
-      recommendedAction: null,
-      escalateIfRejected: false,
-      investigationSteps: ["s"],
-    },
-  };
   let immediate = false;
   const gates: Array<() => void> = [];
+  // A free-form text finish: no tool call ends the run successfully.
   const finalTurn = {
-    stopReason: "tool_use" as const,
-    toolUses: [FINAL],
-    text: "",
+    stopReason: "end_turn" as const,
+    toolUses: [] as never[],
+    text: "Investigation complete.",
   };
   const make = () => ({
     start: vi.fn(),

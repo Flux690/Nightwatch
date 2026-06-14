@@ -6,17 +6,11 @@ import {
   PLATFORM_TOOLS,
   RUNNER_TOOLS,
   REQUIRES_APPROVAL,
-  FINAL_RESPONSE_TOOL_NAME,
 } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import { handlePlatformTool } from "./platform.js";
-import {
-  recordFinding,
-  escalate,
-  InvestigationResultSchema,
-  type IncidentContext,
-} from "./result.js";
+import { escalate, type IncidentContext } from "./result.js";
 import {
   createSession,
   appendSessionMessages,
@@ -188,13 +182,11 @@ export async function runInvestigation(
       return;
     }
 
+    // No tool calls means the model is done: its free-form text is the answer.
+    // persist() above already published it via RUN_FINISHED, so the run simply
+    // ends here - a prose finish is success, not an escalation.
     if (response.toolUses.length === 0) {
-      escalate(
-        ctx,
-        incidentId,
-        sessionId,
-        `Model stopped without calling ${FINAL_RESPONSE_TOOL_NAME}: ${response.text.slice(0, 200)}`,
-      );
+      log.info({ turn }, "investigation finished with free-form response");
       return;
     }
 
@@ -206,21 +198,6 @@ export async function runInvestigation(
     let gatedTool: ToolUse | null = null;
 
     for (const tool of response.toolUses) {
-      if (tool.name === FINAL_RESPONSE_TOOL_NAME) {
-        const parsed = InvestigationResultSchema.safeParse(tool.input);
-        if (parsed.success) {
-          recordFinding(ctx, incidentId, sessionId, parsed.data);
-        } else {
-          escalate(
-            ctx,
-            incidentId,
-            sessionId,
-            `${FINAL_RESPONSE_TOOL_NAME} failed schema validation: ${parsed.error.message}`,
-          );
-        }
-        return;
-      }
-
       toolCallCount++;
 
       const isClarification = tool.name === "request_clarification";

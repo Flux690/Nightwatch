@@ -3,7 +3,7 @@
 
 // Output ceiling for every provider. Requests stream (see the providers), so
 // this is no longer bounded by the single-read HTTP timeout - it is purely a
-// cost/runaway cap and headroom for a large `final_response` result. The API still
+// cost/runaway cap and headroom for a large final summary. The API still
 // requires max_tokens on every request; the model stops earlier on its own.
 export const MAX_OUTPUT_TOKENS = 32_000;
 

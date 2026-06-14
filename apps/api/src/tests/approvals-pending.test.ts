@@ -100,24 +100,10 @@ import {
 } from "../ws/router.js";
 import type { ApprovalRequest } from "@nightwatch/shared";
 
-const FINAL_RESPONSE_TURN = {
-  text: "Done.",
-  toolUses: [
-    {
-      id: "fr-pend",
-      name: "final_response",
-      input: {
-        rootCause: {
-          summary: "ok",
-          evidence: ["ok"],
-          contributingFactors: null,
-        },
-        recommendedAction: null,
-        escalateIfRejected: false,
-        investigationSteps: ["done"],
-      },
-    },
-  ],
+// A free-form text finish: no tool call ends the run successfully.
+const FINISH_TURN = {
+  text: "Investigation complete.",
+  toolUses: [],
 };
 
 describe("GET /approvals/pending reads from DB (not in-memory)", () => {
@@ -176,7 +162,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokA}`, {
@@ -239,7 +225,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     registerRunner(
@@ -316,7 +302,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
           },
         ],
       },
-      FINAL_RESPONSE_TURN,
+      FINISH_TURN,
     ]);
 
     registerRunner(

@@ -91,21 +91,6 @@ import {
   resolveCommand,
 } from "../ws/router.js";
 
-const FINAL_RESPONSE = {
-  id: "fr-1",
-  name: "final_response",
-  input: {
-    rootCause: {
-      summary: "All clear.",
-      evidence: ["nothing on fire"],
-      contributingFactors: null,
-    },
-    recommendedAction: null,
-    escalateIfRejected: false,
-    investigationSteps: ["looked around"],
-  },
-};
-
 interface WsEvent {
   type: string;
   payload: Record<string, unknown>;
@@ -177,7 +162,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   }
 
   it("lists sessions and reads the full transcript with no runner connected", async () => {
-    setScript([{ text: "Looks healthy.", toolUses: [FINAL_RESPONSE] }]);
+    setScript([{ text: "Looks healthy.", toolUses: [] }]);
 
     // Deliberately register no runner: the console must work during an outage.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
@@ -216,7 +201,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   });
 
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
-    setScript([{ text: "Acknowledged.", toolUses: [FINAL_RESPONSE] }]);
+    setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
     const events = collectEvents(ws);
@@ -294,7 +279,7 @@ describe("state inversion: persistence and reads are API-local", () => {
           },
         ],
       },
-      { text: "Done.", toolUses: [FINAL_RESPONSE] },
+      { text: "Done.", toolUses: [] },
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);

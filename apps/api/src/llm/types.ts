@@ -4,10 +4,6 @@
 export interface ToolSchema {
   name: string;
   description: string;
-  // When true, the provider constrains tool input to the schema (Anthropic
-  // strict tools / OpenAI strict function calling). Used by the terminal
-  // `final_response` tool so its output is schema-guaranteed, not free text.
-  strict?: boolean;
   input_schema: {
     type: "object";
     properties: Record<string, unknown>;
