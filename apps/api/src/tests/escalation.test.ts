@@ -14,7 +14,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
@@ -160,16 +160,21 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    TEST_TOKEN = createToken("test-esc-runner").token;
+    TEST_TOKEN = mintToken("test-esc-runner").id;
 
     // The runner only fields read tools now (e.g. get_container_list in the
     // budget-exhaustion case); persistence is local, so no persistence command
     // ever reaches it.
-    registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { correlationId } = msg.payload;
-      resolveCommand({ correlationId, success: true, result: [] });
-    });
+    registerRunner(
+      TEST_TOKEN,
+      TEST_RUNNER_ID,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        const { correlationId } = msg.payload;
+        resolveCommand({ correlationId, success: true, result: [] });
+      },
+      () => {},
+    );
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);

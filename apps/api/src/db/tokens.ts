@@ -1,65 +1,112 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { getDb } from "./client.js";
 
-// A deployment token row. For issue 019 the token value is still an opaque
-// random string stored in plaintext; the nwr_-prefix + SHA-256 hashing and the
-// label/lastUsedAt/revokedAt lifecycle land in issue 025.
+// Token stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
+// Plaintext is returned once at mint and never stored or logged.
 export type TokenRow = {
   id: string;
-  token: string;
-  hostname: string | null;
+  tokenHash: string;
+  label: string | null;
   createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
 };
 
-// Every read selects these aliased columns, so the untyped better-sqlite3 rows
-// line up with TokenRow; the `as TokenRow` casts below are sound for that reason.
-const SELECT_COLS = `id, token, hostname, created_at AS createdAt`;
+// Public view returned by the list endpoint: no hash, no plaintext.
+export type TokenMeta = {
+  id: string;
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
 
-export function createToken(hostname: string | null = null): TokenRow {
-  const row: TokenRow = {
-    id: randomUUID(),
-    token: randomUUID(),
-    hostname,
-    createdAt: new Date().toISOString(),
+export function hashToken(plaintext: string): string {
+  return createHash("sha256").update(plaintext).digest("hex");
+}
+
+// Mint a new deployment token. Returns the plaintext exactly once; the DB
+// stores only the SHA-256 hash. Format: nwr_ + 32 random bytes (base64url).
+export function mintToken(label?: string): { plaintext: string } & TokenMeta {
+  const plaintext = "nwr_" + randomBytes(32).toString("base64url");
+  const id = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  getDb()
+    .prepare(
+      `INSERT INTO tokens (id, token, label, created_at)
+       VALUES (@id, @tokenHash, @label, @createdAt)`,
+    )
+    .run({
+      id,
+      tokenHash: hashToken(plaintext),
+      label: label ?? null,
+      createdAt,
+    });
+
+  return {
+    plaintext,
+    id,
+    label: label ?? null,
+    createdAt,
+    lastUsedAt: null,
+    revokedAt: null,
   };
-  getDb()
-    .prepare(
-      `INSERT INTO tokens (id, token, hostname, created_at)
-       VALUES (@id, @token, @hostname, @createdAt)`,
-    )
-    .run(row);
-  return row;
 }
 
-export function findTokenByValue(token: string): TokenRow | undefined {
-  // Cast is sound: SELECT_COLS aliases the row to TokenRow (see above).
-  return getDb()
-    .prepare(`SELECT ${SELECT_COLS} FROM tokens WHERE token = ?`)
-    .get(token) as TokenRow | undefined;
-}
+const SELECT_ROW = `
+  id,
+  token       AS tokenHash,
+  label,
+  created_at  AS createdAt,
+  last_used_at AS lastUsedAt,
+  revoked_at  AS revokedAt
+`;
 
-// The single deployment token (D5): GET /token returns the earliest one, minting
-// lazily if none exists yet.
-export function oldestToken(): TokenRow | undefined {
-  // Cast is sound: SELECT_COLS aliases the row to TokenRow (see above).
+// Validate a plaintext token: hash it, look up, reject if missing or revoked.
+export function findTokenByValue(plaintext: string): TokenRow | undefined {
   return getDb()
     .prepare(
-      `SELECT ${SELECT_COLS} FROM tokens ORDER BY created_at ASC LIMIT 1`,
+      `SELECT ${SELECT_ROW} FROM tokens
+       WHERE token = ? AND revoked_at IS NULL`,
     )
-    .get() as TokenRow | undefined;
+    .get(hashToken(plaintext)) as TokenRow | undefined;
 }
 
-export function listTokens(): TokenRow[] {
-  // Cast is sound: SELECT_COLS aliases the rows to TokenRow (see above).
+// Look up a token by its UUID (used by routes that receive the token ID, not the plaintext).
+export function findTokenById(id: string): TokenRow | undefined {
   return getDb()
-    .prepare(`SELECT ${SELECT_COLS} FROM tokens ORDER BY created_at DESC`)
-    .all() as TokenRow[];
+    .prepare(
+      `SELECT ${SELECT_ROW} FROM tokens
+       WHERE id = ? AND revoked_at IS NULL`,
+    )
+    .get(id) as TokenRow | undefined;
 }
 
-// Runners report their hostname in the manifest after connecting; record it
-// against the token they authenticated with.
-export function setTokenHostname(token: string, hostname: string | null): void {
+// Touch last_used_at on every authenticated use (WS connect, ingest, chat).
+export function touchLastUsed(id: string): void {
   getDb()
-    .prepare(`UPDATE tokens SET hostname = ? WHERE token = ?`)
-    .run(hostname, token);
+    .prepare(`UPDATE tokens SET last_used_at = ? WHERE id = ?`)
+    .run(new Date().toISOString(), id);
+}
+
+// Revoke a token by id. Returns false if not found or already revoked.
+export function revokeToken(id: string): boolean {
+  const result = getDb()
+    .prepare(
+      `UPDATE tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
+    )
+    .run(new Date().toISOString(), id);
+  return result.changes > 0;
+}
+
+// Public list: no hash, no plaintext, newest first.
+export function listTokensMeta(): TokenMeta[] {
+  return getDb()
+    .prepare(
+      `SELECT id, label, created_at AS createdAt,
+              last_used_at AS lastUsedAt, revoked_at AS revokedAt
+       FROM tokens ORDER BY created_at DESC`,
+    )
+    .all() as TokenMeta[];
 }

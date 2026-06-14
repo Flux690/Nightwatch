@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { CapabilityManifest, RunnerRecord } from "@nightwatch/shared";
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../ws/server.js";
@@ -92,7 +92,7 @@ describe("multi-runner registry (token, runnerId)", () => {
   it("lists two runners on one token with independent manifests and liveness", async () => {
     // A fresh token per test isolates the registry: a prior test's async socket
     // close cannot unregister this test's identically-named runner.
-    const token = createToken("two-up").token;
+    const { plaintext: token, id: tokenId } = mintToken("two-up");
     const a = await connectRunner(
       port,
       token,
@@ -109,7 +109,7 @@ describe("multi-runner registry (token, runnerId)", () => {
     // Both manifests must be stored before asserting; the sends above are async.
     const runners = await waitFor(async () => {
       const list = await getRunners();
-      const mine = list.filter((r) => r.token === token);
+      const mine = list.filter((r) => r.token === tokenId);
       return mine.length === 2 && mine.every((r) => r.manifest !== null)
         ? mine
         : undefined;
@@ -136,7 +136,7 @@ describe("multi-runner registry (token, runnerId)", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const token = createToken("close-one").token;
+    const { plaintext: token, id: tokenId } = mintToken("close-one");
     const a = await connectRunner(
       port,
       token,
@@ -151,7 +151,7 @@ describe("multi-runner registry (token, runnerId)", () => {
     );
     await waitFor(async () =>
       (await getRunners()).filter(
-        (r) => r.token === token && r.manifest !== null,
+        (r) => r.token === tokenId && r.manifest !== null,
       ).length === 2
         ? true
         : undefined,
@@ -163,7 +163,7 @@ describe("multi-runner registry (token, runnerId)", () => {
     // single online runner, not a phantom of the dead one.
     const remaining = await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => r.token === token && r.online,
+        (r) => r.token === tokenId && r.online,
       );
       return live.length === 1 ? live : undefined;
     });

@@ -13,26 +13,21 @@ interface PendingCommand {
 
 const pending = new Map<string, PendingCommand>();
 
-// A runner liveness window: a runner whose last heartbeat is older than this is
-// treated as offline even if its socket has not yet emitted `close` (a half-open
-// connection). Matches the TTL the Redis heartbeat key used to carry.
 const HEARTBEAT_TTL_MS = 120_000;
 
-// The connection registry is the only home for per-runner liveness and
-// capability now - manifests and heartbeats live here in memory, never in Redis
-// (CONTEXT.md D2). It is keyed (token, runnerId) so a second runner sharing a
-// token can never overwrite the first's manifest or keep a dead one looking
-// alive.
+// Registry is keyed by (tokenId, runnerId) — tokenId is the UUID from the
+// tokens table, never the plaintext credential. This lets closeTokenRunners
+// close every runner for a token without touching the plaintext.
 interface RunnerConnection {
   send: (msg: string) => void;
+  close: () => void;
   manifest: CapabilityManifest | null;
   hostname: string | null;
   lastSeen: number;
 }
 
-// A single registry row surfaced to the /runners endpoint.
 export interface RunnerView {
-  token: string;
+  tokenId: string;
   runnerId: string;
   hostname: string | null;
   manifest: CapabilityManifest | null;
@@ -43,9 +38,6 @@ export interface RunnerView {
 const registry = new Map<string, Map<string, RunnerConnection>>();
 
 export class RunnerOfflineError extends Error {
-  // The message becomes a tool_result fed back to the LLM and is logged, so it
-  // must never carry the deployment token (a secret). It identifies no token:
-  // the loop already knows which deployment it is running for.
   constructor() {
     super("No runner is connected for this deployment");
     this.name = "RunnerOfflineError";
@@ -53,66 +45,74 @@ export class RunnerOfflineError extends Error {
 }
 
 function getConnection(
-  token: string,
+  tokenId: string,
   runnerId: string,
 ): RunnerConnection | undefined {
-  return registry.get(token)?.get(runnerId);
+  return registry.get(tokenId)?.get(runnerId);
 }
 
 export function registerRunner(
-  token: string,
+  tokenId: string,
   runnerId: string,
   send: (msg: string) => void,
+  close: () => void,
 ): void {
-  let runners = registry.get(token);
+  let runners = registry.get(tokenId);
   if (!runners) {
     runners = new Map();
-    registry.set(token, runners);
+    registry.set(tokenId, runners);
   }
-  // Seed lastSeen at connect so a runner is online before its first heartbeat.
   runners.set(runnerId, {
     send,
+    close,
     manifest: null,
     hostname: null,
     lastSeen: Date.now(),
   });
 }
 
-export function unregisterRunner(token: string, runnerId: string): void {
-  const runners = registry.get(token);
+export function unregisterRunner(tokenId: string, runnerId: string): void {
+  const runners = registry.get(tokenId);
   if (!runners) return;
   runners.delete(runnerId);
-  if (runners.size === 0) registry.delete(token);
+  if (runners.size === 0) registry.delete(tokenId);
+}
+
+// Close every runner socket authenticated with this token. Called by the
+// revoke route so revocation cuts access immediately, not just on next auth.
+export function closeTokenRunners(tokenId: string): void {
+  const runners = registry.get(tokenId);
+  if (!runners) return;
+  for (const conn of runners.values()) {
+    conn.close();
+  }
 }
 
 export function setRunnerManifest(
-  token: string,
+  tokenId: string,
   runnerId: string,
   manifest: CapabilityManifest,
 ): void {
-  const conn = getConnection(token, runnerId);
+  const conn = getConnection(tokenId, runnerId);
   if (!conn) return;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
 }
 
-export function recordHeartbeat(token: string, runnerId: string): void {
-  const conn = getConnection(token, runnerId);
+export function recordHeartbeat(tokenId: string, runnerId: string): void {
+  const conn = getConnection(tokenId, runnerId);
   if (!conn) return;
   conn.lastSeen = Date.now();
 }
 
-// Every connected runner, one row per (token, runnerId), with liveness derived
-// from heartbeat freshness. The /runners endpoint reads this - the fleet view is
-// per runner, not per token, so one live runner never masks a dead sibling.
 export function listRunners(): RunnerView[] {
   const now = Date.now();
   const views: RunnerView[] = [];
-  for (const [token, runners] of registry) {
+  for (const [tokenId, runners] of registry) {
     for (const [runnerId, conn] of runners) {
       views.push({
-        token,
+        tokenId,
         runnerId,
         hostname: conn.hostname,
         manifest: conn.manifest,
@@ -137,14 +137,14 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
 }
 
 export function sendCommand(
-  token: string,
+  tokenId: string,
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  // Any live runner on the token (single-runner deployments and pre-routing).
-  // Container-targeted routing by manifest is issue 026.
-  const conn = registry.get(token)?.values().next().value;
+  const conn = registry.get(tokenId)?.values().next().value as
+    | RunnerConnection
+    | undefined;
   if (!conn) throw new RunnerOfflineError();
   const { send } = conn;
 

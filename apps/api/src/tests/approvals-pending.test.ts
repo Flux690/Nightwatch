@@ -86,7 +86,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerApprovalRoutes } from "../approvals/routes.js";
@@ -145,15 +145,20 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("returns pending interrupt rows for the given token", async () => {
-    const tokA = createToken("qa").token;
-    registerRunner(tokA, RUNNER_ID + "-qa", (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: true,
-        result: [],
-      });
-    });
+    const tokA = mintToken("qa").id;
+    registerRunner(
+      tokA,
+      RUNNER_ID + "-qa",
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      () => {},
+    );
 
     setScript([
       {
@@ -215,8 +220,8 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("scopes results to queried token — different token sees no rows", async () => {
-    const tokC = createToken("scope-c").token;
-    const tokD = createToken("scope-d").token;
+    const tokC = mintToken("scope-c").id;
+    const tokD = mintToken("scope-d").id;
 
     setScript([
       {
@@ -237,14 +242,19 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
       FINAL_RESPONSE_TURN,
     ]);
 
-    registerRunner(tokC, RUNNER_ID + "-c", (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: true,
-        result: [],
-      });
-    });
+    registerRunner(
+      tokC,
+      RUNNER_ID + "-c",
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      () => {},
+    );
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokC}`, {
       method: "POST",
@@ -288,7 +298,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("returns empty list after interrupt is resolved", async () => {
-    const tokE = createToken("empty-after").token;
+    const tokE = mintToken("empty-after").id;
 
     setScript([
       {
@@ -309,14 +319,19 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
       FINAL_RESPONSE_TURN,
     ]);
 
-    registerRunner(tokE, RUNNER_ID + "-e", (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: true,
-        result: [],
-      });
-    });
+    registerRunner(
+      tokE,
+      RUNNER_ID + "-e",
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      () => {},
+    );
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokE}`, {
       method: "POST",

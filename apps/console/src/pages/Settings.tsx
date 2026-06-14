@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActionIcon,
+  Alert,
   Autocomplete,
   Badge,
   Button,
@@ -8,7 +9,6 @@ import {
   Code,
   Group,
   NumberInput,
-  PasswordInput,
   Select,
   Stack,
   Text,
@@ -17,6 +17,23 @@ import {
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
+
+// Mirrors the TokenMeta shape from apps/api/src/db/tokens.ts. Defined locally
+// because console must not import from apps/api directly.
+interface TokenMetaShape {
+  id: string;
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
+interface MintedToken {
+  id: string;
+  plaintext: string;
+  label: string | null;
+  createdAt: string;
+}
 
 type TestResult =
   | { ok: true }
@@ -34,7 +51,6 @@ function buildDelta(
 ): Partial<AgentConfig> {
   const delta: Partial<AgentConfig> = {};
   for (const key of Object.keys(form) as (keyof AgentConfig)[]) {
-    // apiKeyMasked is display-only, never patched
     if (key === "apiKeyMasked") continue;
     if (!Object.is(form[key], base[key])) {
       Object.assign(delta, { [key]: form[key] });
@@ -55,12 +71,14 @@ export function SettingsPage(): React.JSX.Element {
       }),
   });
 
-  const { data: tokenData } = useQuery<{ token: string }>({
-    queryKey: ["token"],
+  const { data: tokensData, refetch: refetchTokens } = useQuery<{
+    tokens: TokenMetaShape[];
+  }>({
+    queryKey: ["tokens"],
     queryFn: () =>
-      fetch("/api/token").then((r) => {
-        if (!r.ok) throw new Error(`token ${r.status}`);
-        return r.json() as Promise<{ token: string }>;
+      fetch("/api/tokens").then((r) => {
+        if (!r.ok) throw new Error(`tokens ${r.status}`);
+        return r.json() as Promise<{ tokens: TokenMetaShape[] }>;
       }),
   });
 
@@ -75,13 +93,18 @@ export function SettingsPage(): React.JSX.Element {
   });
 
   const availableModels = modelsData?.models ?? [];
-  const token = tokenData?.token ?? "";
+  const tokens = tokensData?.tokens ?? [];
+  const activeTokens = tokens.filter((t) => !t.revokedAt);
 
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
+  const [minting, setMinting] = useState(false);
+  const [mintLabel, setMintLabel] = useState("");
+  const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
 
   useEffect(() => {
     if (config) setForm(config);
@@ -120,7 +143,6 @@ export function SettingsPage(): React.JSX.Element {
       const data = (await res.json()) as TestResult;
       setTestResult(data);
       if (data.ok) {
-        // Refresh config so apiKeyMasked updates
         await queryClient.invalidateQueries({ queryKey: ["config"] });
         setNewApiKey("");
       }
@@ -129,11 +151,48 @@ export function SettingsPage(): React.JSX.Element {
     }
   }
 
+  async function handleMint(): Promise<void> {
+    setMinting(true);
+    try {
+      const res = await fetch("/api/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: mintLabel.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error(`mint failed ${res.status}`);
+      const data = (await res.json()) as {
+        id: string;
+        token: string;
+        label: string | null;
+        createdAt: string;
+      };
+      setMintedToken({
+        id: data.id,
+        plaintext: data.token,
+        label: data.label,
+        createdAt: data.createdAt,
+      });
+      setMintLabel("");
+      await refetchTokens();
+    } finally {
+      setMinting(false);
+    }
+  }
+
+  async function handleRevoke(id: string): Promise<void> {
+    setRevoking(id);
+    try {
+      await fetch(`/api/tokens/${id}`, { method: "DELETE" });
+      await refetchTokens();
+      queryClient.removeQueries({ queryKey: ["runners"] });
+    } finally {
+      setRevoking(null);
+    }
+  }
+
   function copy(text: string): void {
     void navigator.clipboard.writeText(text);
   }
-
-  const installCommand = `curl -fsSL ${window.location.origin}/install.sh | sh -s -- ${token}`;
 
   function setField<K extends keyof AgentConfig>(
     key: K,
@@ -147,6 +206,10 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   const isAnthropic = form?.provider === "anthropic";
+
+  const installCommand = mintedToken
+    ? `curl -fsSL ${window.location.origin}/install.sh | sh -s -- ${mintedToken.plaintext}`
+    : null;
 
   return (
     <div
@@ -186,10 +249,7 @@ export function SettingsPage(): React.JSX.Element {
               }
               value={form.baseUrl ?? ""}
               onChange={(e) =>
-                setField(
-                  "baseUrl",
-                  e.currentTarget.value || undefined,
-                )
+                setField("baseUrl", e.currentTarget.value || undefined)
               }
             />
 
@@ -244,13 +304,15 @@ export function SettingsPage(): React.JSX.Element {
               onChange={(v) => setField("maxOutputTokens", numberValue(v))}
             />
 
-            {/* Anthropic-only knobs */}
             {isAnthropic && (
               <>
                 <Select
                   label="Thinking mode"
                   data={[
-                    { value: "adaptive", label: "Adaptive (extended thinking)" },
+                    {
+                      value: "adaptive",
+                      label: "Adaptive (extended thinking)",
+                    },
                     { value: "off", label: "Off" },
                   ]}
                   value={form.thinking}
@@ -269,7 +331,6 @@ export function SettingsPage(): React.JSX.Element {
               </>
             )}
 
-            {/* OpenAI-class knobs */}
             {!isAnthropic && (
               <Select
                 label="Reasoning effort"
@@ -325,47 +386,137 @@ export function SettingsPage(): React.JSX.Element {
         </Stack>
       )}
 
-      {token && (
-        <Stack gap="sm" mt="lg">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-            Deployment
-          </Text>
-          <Group gap="xs" align="flex-end">
-            <PasswordInput
-              label="Deployment token"
-              value={token}
-              readOnly
-              style={{ flex: 1 }}
-              styles={{ innerInput: { fontFamily: "var(--nw-mono)" } }}
-            />
-            <ActionIcon
-              variant="default"
-              size="lg"
-              aria-label="Copy deployment token"
-              onClick={() => copy(token)}
-            >
-              ⧉
-            </ActionIcon>
-          </Group>
+      {/* ── Deployment tokens ─────────────────────────────────────────────── */}
+      <Stack gap="sm" mt="xl">
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+          Deployment tokens
+        </Text>
 
-          <Text size="sm" fw={500}>
-            Install command
+        {/* One-time plaintext display immediately after minting */}
+        {mintedToken && (
+          <Alert
+            color="yellow"
+            title="Copy this token now — it will not be shown again"
+            withCloseButton
+            onClose={() => setMintedToken(null)}
+          >
+            <Stack gap="xs">
+              <Group gap="xs" align="flex-start" wrap="nowrap">
+                <Code
+                  block
+                  style={{
+                    flex: 1,
+                    fontFamily: "var(--nw-mono)",
+                    wordBreak: "break-all",
+                  }}
+                  aria-label="New deployment token"
+                >
+                  {mintedToken.plaintext}
+                </Code>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  aria-label="Copy new token"
+                  onClick={() => copy(mintedToken.plaintext)}
+                >
+                  ⧉
+                </ActionIcon>
+              </Group>
+              {installCommand && (
+                <>
+                  <Text size="xs" fw={500}>
+                    Install command
+                  </Text>
+                  <Group gap="xs" align="flex-start" wrap="nowrap">
+                    <Code
+                      block
+                      style={{ flex: 1, fontFamily: "var(--nw-mono)" }}
+                    >
+                      {installCommand}
+                    </Code>
+                    <ActionIcon
+                      variant="default"
+                      size="lg"
+                      aria-label="Copy install command"
+                      onClick={() => copy(installCommand)}
+                    >
+                      ⧉
+                    </ActionIcon>
+                  </Group>
+                </>
+              )}
+            </Stack>
+          </Alert>
+        )}
+
+        {/* Token list */}
+        {tokens.length > 0 && (
+          <Stack gap={4}>
+            {tokens.map((t) => (
+              <Group
+                key={t.id}
+                justify="space-between"
+                align="center"
+                style={{
+                  borderBottom: "1px solid var(--nw-border)",
+                  paddingBottom: "var(--mantine-spacing-xs)",
+                }}
+              >
+                <Stack gap={2}>
+                  <Text size="sm" fw={500}>
+                    {t.label ?? "Unlabeled"}
+                  </Text>
+                  <Text size="xs" c="dimmed" ff="monospace">
+                    {t.id.slice(0, 8)}…
+                    {t.revokedAt
+                      ? " · revoked"
+                      : t.lastUsedAt
+                        ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
+                        : " · never used"}
+                  </Text>
+                </Stack>
+                {!t.revokedAt && (
+                  <Button
+                    size="xs"
+                    color="red"
+                    variant="subtle"
+                    loading={revoking === t.id}
+                    aria-label={`Revoke token ${t.label ?? t.id.slice(0, 8)}`}
+                    onClick={() => void handleRevoke(t.id)}
+                  >
+                    Revoke
+                  </Button>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        {activeTokens.length === 0 && !mintedToken && (
+          <Text size="sm" c="dimmed">
+            No active tokens. Mint one to connect a runner.
           </Text>
-          <Group gap="xs" align="flex-start" wrap="nowrap">
-            <Code block style={{ flex: 1, fontFamily: "var(--nw-mono)" }}>
-              {installCommand}
-            </Code>
-            <ActionIcon
-              variant="default"
-              size="lg"
-              aria-label="Copy install command"
-              onClick={() => copy(installCommand)}
-            >
-              ⧉
-            </ActionIcon>
-          </Group>
-        </Stack>
-      )}
+        )}
+
+        {/* Mint form */}
+        <Group gap="xs" align="flex-end">
+          <TextInput
+            label="Label (optional)"
+            placeholder="e.g. prod-server"
+            value={mintLabel}
+            onChange={(e) => setMintLabel(e.currentTarget.value)}
+            style={{ flex: 1 }}
+          />
+          <Button
+            loading={minting}
+            onClick={() => void handleMint()}
+            style={{ marginBottom: 0 }}
+            aria-label="Mint token"
+          >
+            Mint token
+          </Button>
+        </Group>
+      </Stack>
     </div>
   );
 }

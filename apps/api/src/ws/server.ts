@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findTokenByValue, setTokenHostname } from "../db/tokens.js";
+import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
 import {
   registerRunner,
   resolveCommand,
@@ -22,9 +22,9 @@ export async function registerWsRoutes(
     { websocket: true },
     async (socket: WebSocket, request) => {
       const authHeader = request.headers["authorization"] ?? "";
-      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const plaintext = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-      if (!token) {
+      if (!plaintext) {
         socket.close(4001, "Authorization header required");
         return;
       }
@@ -37,17 +37,25 @@ export async function registerWsRoutes(
         return;
       }
 
-      const tokenRecord = findTokenByValue(token);
+      const tokenRecord = findTokenByValue(plaintext);
       if (!tokenRecord) {
-        socket.close(4003, "Invalid token");
+        socket.close(4003, "Invalid or revoked token");
         return;
       }
 
-      registerRunner(token, runnerId, (msg) => {
-        if (socket.readyState === socket.OPEN) socket.send(msg);
-      });
+      const { id: tokenId } = tokenRecord;
+      touchLastUsed(tokenId);
 
-      fastify.log.info({ token: token.slice(0, 8) }, "runner connected");
+      registerRunner(
+        tokenId,
+        runnerId,
+        (msg) => {
+          if (socket.readyState === socket.OPEN) socket.send(msg);
+        },
+        () => socket.close(4003, "Token revoked"),
+      );
+
+      fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "runner connected");
 
       socket.on("message", (raw: Buffer | ArrayBuffer | Buffer[]) => {
         let parsed: Record<string, unknown>;
@@ -61,31 +69,34 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
-          setRunnerManifest(token, runnerId, msg.payload);
-          setTokenHostname(token, msg.payload.hostname);
-          fastify.log.info({ token: token.slice(0, 8) }, "manifest stored");
+          setRunnerManifest(tokenId, runnerId, msg.payload);
+          fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);
         } else if (type === "heartbeat") {
-          recordHeartbeat(token, runnerId);
+          recordHeartbeat(tokenId, runnerId);
         }
       });
 
       socket.on("close", () => {
-        unregisterRunner(token, runnerId);
-        fastify.log.warn({ token: token.slice(0, 8) }, "runner disconnected");
+        unregisterRunner(tokenId, runnerId);
+        fastify.log.warn(
+          { tokenId: tokenId.slice(0, 8) },
+          "runner disconnected",
+        );
       });
 
       socket.on("error", (err: Error) => {
-        fastify.log.error({ token: token.slice(0, 8), err }, "runner ws error");
+        fastify.log.error(
+          { tokenId: tokenId.slice(0, 8), err },
+          "runner ws error",
+        );
       });
 
-      // Identify this socket
-      const welcomeId = randomUUID();
       socket.send(
         JSON.stringify({
-          messageId: welcomeId,
+          messageId: randomUUID(),
           type: "connected",
           payload: {},
         }),

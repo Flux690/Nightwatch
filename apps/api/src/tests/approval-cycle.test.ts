@@ -95,7 +95,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
@@ -159,22 +159,27 @@ describe("durable approval interrupts", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    TEST_TOKEN = createToken("approval-022").token;
+    TEST_TOKEN = mintToken("approval-022").id;
 
-    registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-      if (commandName === "restart_container") {
-        restartCommands.push(commandInput);
-        resolveCommand({
-          correlationId,
-          success: true,
-          result: { restarted: true },
-        });
-      } else {
-        resolveCommand({ correlationId, success: true, result: [] });
-      }
-    });
+    registerRunner(
+      TEST_TOKEN,
+      TEST_RUNNER_ID,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        const { commandName, commandInput, correlationId } = msg.payload;
+        if (commandName === "restart_container") {
+          restartCommands.push(commandInput);
+          resolveCommand({
+            correlationId,
+            success: true,
+            result: { restarted: true },
+          });
+        } else {
+          resolveCommand({ correlationId, success: true, result: [] });
+        }
+      },
+      () => {},
+    );
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);

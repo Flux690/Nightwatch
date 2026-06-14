@@ -76,7 +76,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
@@ -119,7 +119,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    TEST_TOKEN = createToken("state-inversion").token;
+    TEST_TOKEN = mintToken("state-inversion").id;
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -255,15 +255,20 @@ describe("state inversion: persistence and reads are API-local", () => {
     // A runner that fails everything: if get_incident_history were still a runner
     // tool, the result would be an error - proving it is now platform-handled.
     const RUNNER_ID = "hostile-runner";
-    registerRunner(TEST_TOKEN, RUNNER_ID, (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: false,
-        result: null,
-        error: "runner should not have been called",
-      });
-    });
+    registerRunner(
+      TEST_TOKEN,
+      RUNNER_ID,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: false,
+          result: null,
+          error: "runner should not have been called",
+        });
+      },
+      () => {},
+    );
 
     insertIncident(TEST_TOKEN, {
       incidentId: randomUUID(),

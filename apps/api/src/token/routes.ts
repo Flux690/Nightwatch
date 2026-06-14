@@ -1,17 +1,50 @@
 import type { FastifyInstance } from "fastify";
-import { createToken, oldestToken } from "../db/tokens.js";
+import { mintToken, revokeToken, listTokensMeta } from "../db/tokens.js";
+import { closeTokenRunners } from "../ws/router.js";
+import { requireAuth } from "../auth/gate.js";
 
-// The single deployment token (D5: one token per operator, shared across all
-// runners). Read-only and idempotent: returns the earliest-created token, or
-// mints one if none exists yet, so the install command is available before any
-// runner has connected. Rotation is out of scope here - runners carry the token
-// from install time and there is no push channel to re-key them.
 export async function registerTokenRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.get("/token", async () => {
-    const existing = oldestToken();
-    if (existing) return { token: existing.token };
-    return { token: createToken().token };
-  });
+  // Mint a new deployment token. The plaintext nwr_... value is returned
+  // exactly once here and never stored — the DB holds only the SHA-256 hash.
+  fastify.post<{ Body: { label?: string } }>(
+    "/tokens",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const label =
+        typeof request.body?.label === "string"
+          ? request.body.label.trim() || undefined
+          : undefined;
+      const minted = mintToken(label);
+      return reply.code(201).send({
+        id: minted.id,
+        token: minted.plaintext,
+        label: minted.label,
+        createdAt: minted.createdAt,
+      });
+    },
+  );
+
+  // List all tokens (active and revoked). No plaintext is ever returned.
+  fastify.get("/tokens", { preHandler: requireAuth }, async () => ({
+    tokens: listTokensMeta(),
+  }));
+
+  // Revoke a token by id. Closes any live runner sockets authenticated with
+  // it immediately so revocation cuts access without waiting for reconnect.
+  fastify.delete<{ Params: { id: string } }>(
+    "/tokens/:id",
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const revoked = revokeToken(request.params.id);
+      if (!revoked) {
+        return reply
+          .code(404)
+          .send({ error: "token not found or already revoked" });
+      }
+      closeTokenRunners(request.params.id);
+      return reply.code(204).send();
+    },
+  );
 }

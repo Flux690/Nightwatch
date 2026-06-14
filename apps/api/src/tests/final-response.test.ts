@@ -68,7 +68,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
@@ -107,18 +107,23 @@ describe("final_response terminal mechanism", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    TEST_TOKEN = createToken("test-fr-runner").token;
+    TEST_TOKEN = mintToken("test-fr-runner").id;
 
     // The provider only calls final_response (platform-terminal) and persistence
     // is local, so no command reaches the runner; resolve defensively.
-    registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: true,
-        result: [],
-      });
-    });
+    registerRunner(
+      TEST_TOKEN,
+      TEST_RUNNER_ID,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      () => {},
+    );
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);

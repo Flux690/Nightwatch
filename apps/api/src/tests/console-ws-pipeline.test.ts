@@ -83,7 +83,7 @@ vi.mock("../llm/factory.js", () => ({
   createProvider: mockCreateProvider,
 }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
@@ -121,18 +121,23 @@ describe("console WS pipeline", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    TEST_TOKEN = createToken("test-runner").token;
+    TEST_TOKEN = mintToken("test-runner").id;
 
     // Persistence is local now; the provider calls no runner tool here, so the
     // runner receives nothing. Resolve defensively for any stray command.
-    registerRunner(TEST_TOKEN, TEST_RUNNER_ID, (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      resolveCommand({
-        correlationId: msg.payload.correlationId,
-        success: true,
-        result: [],
-      });
-    });
+    registerRunner(
+      TEST_TOKEN,
+      TEST_RUNNER_ID,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [],
+        });
+      },
+      () => {},
+    );
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);

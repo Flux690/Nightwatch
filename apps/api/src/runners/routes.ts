@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { createToken, listTokens } from "../db/tokens.js";
+import { listTokensMeta } from "../db/tokens.js";
 import { sendCommand, listRunners } from "../ws/router.js";
 import { requireAuth } from "../auth/gate.js";
 import { logger } from "../logger.js";
@@ -10,28 +10,27 @@ const RULES_TIMEOUT_MS = 10_000;
 export async function registerRunnerRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // The fleet view, per runner not per token (CONTEXT.md multi-runner): liveness
-  // and manifests come from the in-memory connection registry. A token with one
-  // or more live runners contributes one row each (so two runners on a shared
-  // token are visible independently); a token with no live runner still shows as
-  // a single offline row so its install command remains discoverable.
+  // Fleet view per runner (CONTEXT.md multi-runner). Live runners come from the
+  // in-memory registry (keyed by tokenId); offline tokens show as single rows so
+  // their install command remains discoverable.
   fastify.get("/runners", () => {
     const live = listRunners();
     const byToken = new Map<string, typeof live>();
     for (const r of live) {
-      const list = byToken.get(r.token);
+      const list = byToken.get(r.tokenId);
       if (list) list.push(r);
-      else byToken.set(r.token, [r]);
+      else byToken.set(r.tokenId, [r]);
     }
 
     const records: RunnerRecord[] = [];
-    for (const t of listTokens()) {
-      const runners = byToken.get(t.token);
+    for (const t of listTokensMeta()) {
+      if (t.revokedAt) continue;
+      const runners = byToken.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({
           id: t.id,
-          token: t.token,
-          hostname: t.hostname,
+          token: t.id,
+          hostname: null,
           createdAt: t.createdAt,
           online: false,
           lastSeen: null,
@@ -42,8 +41,8 @@ export async function registerRunnerRoutes(
       for (const r of runners) {
         records.push({
           id: r.runnerId,
-          token: t.token,
-          hostname: r.hostname ?? t.hostname,
+          token: t.id,
+          hostname: r.hostname,
           createdAt: t.createdAt,
           online: r.online,
           lastSeen: new Date(r.lastSeen).toISOString(),
@@ -54,22 +53,10 @@ export async function registerRunnerRoutes(
     return records;
   });
 
-  // Generate a new token for a runner deployment.
-  fastify.post<{ Body: { hostname?: string } }>(
-    "/runners",
-    { preHandler: requireAuth },
-    async (request, reply) => {
-      const tokenRecord = createToken(request.body?.hostname ?? null);
-      logger.info({ id: tokenRecord.id }, "runner token created");
-      return reply
-        .code(201)
-        .send({ id: tokenRecord.id, token: tokenRecord.token });
-    },
-  );
-
   // Push updated Prometheus alert rules to the runner (settings, not gated).
-  fastify.patch<{ Params: { token: string }; Body: { rulesYaml?: string } }>(
-    "/runners/:token/rules",
+  // The URL param is the token's UUID.
+  fastify.patch<{ Params: { tokenId: string }; Body: { rulesYaml?: string } }>(
+    "/runners/:tokenId/rules",
     { preHandler: requireAuth },
     async (request, reply) => {
       const rulesYaml = request.body?.rulesYaml;
@@ -78,7 +65,7 @@ export async function registerRunnerRoutes(
       }
       try {
         const result = await sendCommand(
-          request.params.token,
+          request.params.tokenId,
           "update_alert_rules",
           { rulesYaml },
           RULES_TIMEOUT_MS,
@@ -90,4 +77,6 @@ export async function registerRunnerRoutes(
       }
     },
   );
+
+  logger.info("runner routes registered");
 }

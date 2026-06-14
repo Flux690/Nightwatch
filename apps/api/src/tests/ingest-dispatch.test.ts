@@ -64,7 +64,7 @@ const { mockCreateProvider, releaseAll, setImmediate } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { createToken } from "../db/tokens.js";
+import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
@@ -138,7 +138,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     // A fresh token isolates this test's rate-limit counter from the others.
-    const token = createToken("dedup").token;
+    const { plaintext: token, id: tokenId } = mintToken("dedup");
     setImmediate(false); // runs park on the gate -> stay active
 
     const first = await ingest(token, alertBody("dup-1"));
@@ -150,7 +150,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
     // End the active run; its dedup marker clears (no key, no TTL).
     releaseAll();
-    await waitFor(() => !dispatcher.isInvestigating(token, "dup-1"));
+    await waitFor(() => !dispatcher.isInvestigating(tokenId, "dup-1"));
 
     // The same alert now starts a fresh investigation - no 24h suppression.
     const refire = await ingest(token, alertBody("dup-1"));
@@ -158,7 +158,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("rate-limits past 10 non-critical alerts per token per hour; critical bypasses; resets after the window", async () => {
-    const token = createToken("ratelimit").token;
+    const { plaintext: token } = mintToken("ratelimit");
     setImmediate(true); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.

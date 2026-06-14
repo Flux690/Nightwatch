@@ -17,10 +17,12 @@ function dbPath(): string {
 // CREATE TABLE IF NOT EXISTS so the bootstrap is safe to run on every boot.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS tokens (
-    id         TEXT PRIMARY KEY,
-    token      TEXT NOT NULL UNIQUE,
-    hostname   TEXT,
-    created_at TEXT NOT NULL
+    id           TEXT PRIMARY KEY,
+    token        TEXT NOT NULL UNIQUE,
+    label        TEXT,
+    created_at   TEXT NOT NULL,
+    last_used_at TEXT,
+    revoked_at   TEXT
   );
 
   CREATE TABLE IF NOT EXISTS config (

@@ -33,7 +33,12 @@ const MODELS_RESPONSE = {
   models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
 };
 
-const TOKEN = "tok-deploy-abc123";
+const MINTED = {
+  id: "11111111-2222-3333-4444-555555555555",
+  token: "nwr_aBcDeFgHiJkLmNoPqRsTuVwXyZ12",
+  label: "test-label",
+  createdAt: new Date().toISOString(),
+};
 
 function setup(configOverride?: Partial<typeof CONFIG>) {
   const config = { ...CONFIG, ...configOverride };
@@ -46,10 +51,23 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
   const fetchMock = vi
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
-      if (url.includes("/token")) {
+      if (url.includes("/tokens")) {
+        if (init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(MINTED),
+          });
+        }
+        if (init?.method === "DELETE") {
+          return Promise.resolve({
+            ok: true,
+            status: 204,
+            json: () => Promise.resolve({}),
+          });
+        }
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ token: TOKEN }),
+          json: () => Promise.resolve({ tokens: [] }),
         });
       }
       if (url.includes("/config/models")) {
@@ -141,17 +159,22 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("renders the deployment token and install command", async () => {
+  it("shows 'No active tokens' when token list is empty", async () => {
+    setup();
+    await waitFor(() => {
+      expect(screen.getByText(/no active tokens/i)).toBeInTheDocument();
+    });
+  });
+
+  it("mints a token and shows the one-time plaintext", async () => {
     const user = userEvent.setup();
-    const { clipboardWrite } = setup();
-
-    const tokenInput = await screen.findByLabelText("Deployment token");
-    expect(tokenInput).toHaveAttribute("type", "password");
-
+    setup();
     await user.click(
-      screen.getByRole("button", { name: /copy deployment token/i }),
+      await screen.findByRole("button", { name: /mint token/i }),
     );
-    expect(clipboardWrite).toHaveBeenCalledWith(TOKEN);
+    await waitFor(() => {
+      expect(screen.getByText(MINTED.token)).toBeInTheDocument();
+    });
   });
 
   // --- Model combobox ---
@@ -180,7 +203,7 @@ describe("SettingsPage", () => {
 
   it("renders the API key input as write-only (no readValue displayed)", async () => {
     setup();
-    await screen.findByLabelText("Deployment token");
+    await screen.findByLabelText(/max output tokens/i);
     // The API key text field for entering a new key must be empty on load
     // (write-only: we never populate it from the response)
     const keyInput = screen.getByPlaceholderText(/paste api key/i);
@@ -236,10 +259,10 @@ describe("SettingsPage", () => {
             json: () => Promise.resolve({ ok: false, error: "bad_key" }),
           });
         }
-        if ((url as string).includes("/token")) {
+        if ((url as string).includes("/tokens")) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ token: TOKEN }),
+            json: () => Promise.resolve({ tokens: [] }),
           });
         }
         if ((url as string).includes("/config/models")) {
