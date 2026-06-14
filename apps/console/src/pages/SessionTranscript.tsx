@@ -14,6 +14,7 @@ import type {
 } from "@nightwatch/shared";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { ChatInput } from "./ChatInput.js";
+import type { PendingInterrupt } from "./ChatInput.js";
 
 interface LiveTextItem {
   kind: "text";
@@ -27,16 +28,37 @@ interface LiveToolCard {
   toolName: string;
   input: Record<string, unknown>;
   result: unknown | null;
-  // Set on gated tools: the call waits behind a human approve/reject before it
-  // executes. incidentId addresses the approve endpoint; toolUseId correlates.
+  // Set on gated tools awaiting a human decision. incidentId addresses the
+  // resolve endpoints; interruptKind distinguishes approval from clarification.
   awaitingApproval?: boolean;
   incidentId?: string;
+  interruptKind?: "approval" | "clarification";
   risk?: string;
+  question?: string;
+  options?: Array<{ label: string; description: string }>;
+  multiSelect?: boolean;
   approval?: "pending" | "approved" | "rejected" | "answered";
   resolvedBy?: string;
 }
 
 type LiveItem = LiveTextItem | LiveToolCard;
+
+function pendingInterruptFromItems(
+  items: LiveItem[],
+): PendingInterrupt | undefined {
+  for (const item of items) {
+    if (
+      item.kind === "tool_card" &&
+      item.awaitingApproval &&
+      item.interruptKind &&
+      item.incidentId &&
+      item.approval === undefined
+    ) {
+      return { id: item.incidentId, kind: item.interruptKind };
+    }
+  }
+  return undefined;
+}
 
 function ToolCard({ card }: { card: LiveToolCard }): React.JSX.Element {
   const inputText = JSON.stringify(card.input, null, 2);
@@ -157,6 +179,101 @@ function ApprovalCard({
       )}
     </div>
   );
+}
+
+function ClarificationCard({
+  card,
+  onAnswer,
+}: {
+  card: LiveToolCard;
+  onAnswer: (answer: string | string[]) => void;
+}): React.JSX.Element {
+  const [selected, setSelected] = useState<string[]>([]);
+  const resolved = card.approval === "answered";
+
+  function handleOption(label: string): void {
+    if (resolved || card.approval === "pending") return;
+    if (card.multiSelect) {
+      setSelected((prev) =>
+        prev.includes(label)
+          ? prev.filter((l) => l !== label)
+          : [...prev, label],
+      );
+    } else {
+      onAnswer(label);
+    }
+  }
+
+  return (
+    <div
+      data-testid="clarification-card"
+      style={{
+        marginBottom: "var(--mantine-spacing-sm)",
+        border: "1px solid var(--nw-status-awaiting)",
+        borderRadius: "var(--mantine-radius-sm)",
+        background: "var(--nw-surface)",
+        padding: "var(--mantine-spacing-xs)",
+      }}
+    >
+      <Text size="xs" mb="xs">
+        {card.question}
+      </Text>
+      {resolved ? (
+        <Text size="xs" data-testid="clarification-resolution">
+          Answered{card.resolvedBy ? ` by ${card.resolvedBy}` : ""}
+        </Text>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "var(--mantine-spacing-xs)",
+          }}
+        >
+          {card.options?.map((opt) => (
+            <Button
+              key={opt.label}
+              size="xs"
+              variant={selected.includes(opt.label) ? "filled" : "outline"}
+              disabled={card.approval === "pending"}
+              onClick={() => handleOption(opt.label)}
+            >
+              {opt.label}
+            </Button>
+          ))}
+          {card.multiSelect && selected.length > 0 && (
+            <Button
+              size="xs"
+              disabled={card.approval === "pending"}
+              onClick={() => onAnswer(selected)}
+            >
+              Submit
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildInterruptItem(
+  payload: ConsoleInterrupt["payload"],
+): LiveToolCard {
+  const riskValue = payload.input["risk"];
+  return {
+    kind: "tool_card",
+    toolUseId: payload.toolUseId,
+    toolName: payload.toolName,
+    input: payload.input,
+    result: null,
+    awaitingApproval: true,
+    incidentId: payload.incidentId,
+    interruptKind: payload.kind,
+    risk: typeof riskValue === "string" ? riskValue : undefined,
+    question: payload.question,
+    options: payload.options,
+    multiSelect: payload.multiSelect,
+  };
 }
 
 // SessionView is the unified home + transcript component rendered persistently
@@ -302,20 +419,7 @@ export function SessionView({
       } else if (env.type === "INTERRUPT") {
         const payload = env.payload as ConsoleInterrupt["payload"];
         if (payload.sessionId !== sid) return;
-        const riskValue = payload.input["risk"];
-        setLiveItems((prev) => [
-          ...prev,
-          {
-            kind: "tool_card",
-            toolUseId: payload.toolUseId,
-            toolName: payload.toolName,
-            input: payload.input,
-            result: null,
-            awaitingApproval: true,
-            incidentId: payload.incidentId,
-            risk: typeof riskValue === "string" ? riskValue : undefined,
-          },
-        ]);
+        setLiveItems((prev) => [...prev, buildInterruptItem(payload)]);
       } else if (env.type === "TOOL_CALL_END") {
         const payload = env.payload as ConsoleToolCallEnd["payload"];
         if (payload.sessionId !== sid) return;
@@ -328,10 +432,11 @@ export function SessionView({
         );
       } else if (env.type === "INTERRUPT_RESOLVED") {
         const payload = env.payload as ConsoleInterruptResolved["payload"];
-        if (payload.status === "context_added") return;
-        // Extract after the guard: TypeScript doesn't narrow payload.status inside
-        // the map closure, so we pull the narrowed value out explicitly.
-        const approval = payload.status as "approved" | "rejected";
+        // context_added: the interrupt is consumed and the run resumes. Stamp
+        // approval: "pending" so pendingInterruptFromItems stops returning it
+        // and the composer returns to normal before RUN_FINISHED clears liveItems.
+        const approval =
+          payload.status === "context_added" ? "pending" : payload.status;
         const resolvedBy = payload.resolvedBy;
         setLiveItems((prev) =>
           prev.map((item) =>
@@ -364,7 +469,28 @@ export function SessionView({
     [],
   );
 
+  const handleAnswer = useCallback(
+    (card: LiveToolCard, answer: string | string[]) => {
+      if (!card.incidentId) return;
+      setLiveItems((prev) =>
+        prev.map((item) =>
+          item.kind === "tool_card" && item.toolUseId === card.toolUseId
+            ? { ...item, approval: "pending" }
+            : item,
+        ),
+      );
+      void fetch(`/api/incidents/${card.incidentId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer, resolvedBy: "console" }),
+      });
+    },
+    [],
+  );
+
   useConsoleWs(handleEnvelope);
+
+  const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
   if (!activeSessionId) {
     return (
@@ -437,6 +563,15 @@ export function SessionView({
           if (!item.awaitingApproval) {
             return <ToolCard key={item.toolUseId} card={item} />;
           }
+          if (item.interruptKind === "clarification") {
+            return (
+              <ClarificationCard
+                key={item.toolUseId}
+                card={item}
+                onAnswer={(answer) => handleAnswer(item, answer)}
+              />
+            );
+          }
           const resolved =
             item.approval === "approved" || item.approval === "rejected";
           return (
@@ -455,6 +590,7 @@ export function SessionView({
         token={token ?? ""}
         sessionId={activeSessionId}
         isRunning={isRunning}
+        pendingInterrupt={pendingInterrupt}
       />
     </div>
   );
@@ -536,20 +672,7 @@ export function SessionTranscript(): React.JSX.Element {
       } else if (env.type === "INTERRUPT") {
         const payload = env.payload as ConsoleInterrupt["payload"];
         if (payload.sessionId !== id) return;
-        const riskValue = payload.input["risk"];
-        setLiveItems((prev) => [
-          ...prev,
-          {
-            kind: "tool_card",
-            toolUseId: payload.toolUseId,
-            toolName: payload.toolName,
-            input: payload.input,
-            result: null,
-            awaitingApproval: true,
-            incidentId: payload.incidentId,
-            risk: typeof riskValue === "string" ? riskValue : undefined,
-          },
-        ]);
+        setLiveItems((prev) => [...prev, buildInterruptItem(payload)]);
       } else if (env.type === "TOOL_CALL_END") {
         const payload = env.payload as ConsoleToolCallEnd["payload"];
         if (payload.sessionId !== id) return;
@@ -561,15 +684,17 @@ export function SessionTranscript(): React.JSX.Element {
           ),
         );
       } else if (env.type === "INTERRUPT_RESOLVED") {
-        // No sessionId on this channel - correlate by toolUseId, which is global.
+        // No sessionId on this channel — correlate by toolUseId, which is global.
+        // context_added: interrupt consumed, run resumes. Stamp "pending" so
+        // pendingInterruptFromItems clears it before RUN_FINISHED wipes liveItems.
         const payload = env.payload as ConsoleInterruptResolved["payload"];
-        if (payload.status === "context_added") return;
-        const resolution = payload.status;
+        const approval =
+          payload.status === "context_added" ? "pending" : payload.status;
         const resolvedBy = payload.resolvedBy;
         setLiveItems((prev) =>
           prev.map((item) =>
             item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-              ? { ...item, approval: resolution, resolvedBy }
+              ? { ...item, approval, resolvedBy }
               : item,
           ),
         );
@@ -582,7 +707,7 @@ export function SessionTranscript(): React.JSX.Element {
     (card: LiveToolCard, action: "approve" | "reject") => {
       if (!card.incidentId) return;
       // Optimistically mark pending so both buttons disable; the durable state
-      // arrives via the approval_update event.
+      // arrives via the INTERRUPT_RESOLVED event.
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "tool_card" && item.toolUseId === card.toolUseId
@@ -599,7 +724,28 @@ export function SessionTranscript(): React.JSX.Element {
     [],
   );
 
+  const handleAnswer = useCallback(
+    (card: LiveToolCard, answer: string | string[]) => {
+      if (!card.incidentId) return;
+      setLiveItems((prev) =>
+        prev.map((item) =>
+          item.kind === "tool_card" && item.toolUseId === card.toolUseId
+            ? { ...item, approval: "pending" }
+            : item,
+        ),
+      );
+      void fetch(`/api/incidents/${card.incidentId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answer, resolvedBy: "console" }),
+      });
+    },
+    [],
+  );
+
   useConsoleWs(handleEnvelope);
+
+  const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
   return (
     <div
@@ -644,8 +790,16 @@ export function SessionTranscript(): React.JSX.Element {
           if (!item.awaitingApproval) {
             return <ToolCard key={item.toolUseId} card={item} />;
           }
-          // Gated: the approval card stands alone until resolved; only then does
-          // the execution record (tool card) appear below it.
+          if (item.interruptKind === "clarification") {
+            return (
+              <ClarificationCard
+                key={item.toolUseId}
+                card={item}
+                onAnswer={(answer) => handleAnswer(item, answer)}
+              />
+            );
+          }
+          // Approval: card stands alone until resolved; execution record appears below after.
           const resolved =
             item.approval === "approved" || item.approval === "rejected";
           return (
@@ -660,7 +814,12 @@ export function SessionTranscript(): React.JSX.Element {
         })}
       </div>
 
-      <ChatInput token={token ?? ""} sessionId={id} isRunning={isRunning} />
+      <ChatInput
+        token={token ?? ""}
+        sessionId={id}
+        isRunning={isRunning}
+        pendingInterrupt={pendingInterrupt}
+      />
     </div>
   );
 }

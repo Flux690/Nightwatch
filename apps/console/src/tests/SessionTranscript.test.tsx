@@ -679,4 +679,365 @@ describe("SessionTranscript", () => {
       });
     });
   });
+
+  describe("clarification card (INTERRUPT kind=clarification)", () => {
+    function pushClarification(extra: object = {}): void {
+      act(() => {
+        latestWs?.push({
+          messageId: "c1",
+          type: "INTERRUPT",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-clar",
+            toolName: "request_clarification",
+            input: {},
+            incidentId: "inc-clar",
+            kind: "clarification",
+            question: "Which service should I investigate first?",
+            options: [
+              { label: "nginx", description: "The web server" },
+              { label: "postgres", description: "The database" },
+            ],
+            ...extra,
+          },
+        });
+      });
+    }
+
+    it("renders question text and option buttons when clarification interrupt arrives", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const card = screen.getByTestId("clarification-card");
+      expect(
+        within(card).getByText("Which service should I investigate first?"),
+      ).toBeInTheDocument();
+      expect(
+        within(card).getByRole("button", { name: /nginx/i }),
+      ).toBeInTheDocument();
+      expect(
+        within(card).getByRole("button", { name: /postgres/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("clicking an option posts to /answer and disables options", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("clarification-card");
+      await user.click(within(card).getByRole("button", { name: /nginx/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/incidents/inc-clar/answer",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              answer: "nginx",
+              resolvedBy: "console",
+            }),
+          }),
+        );
+      });
+    });
+
+    it("shows Answered label after INTERRUPT_RESOLVED with status=answered", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "c2",
+          type: "INTERRUPT_RESOLVED",
+          payload: {
+            incidentId: "inc-clar",
+            toolUseId: "tu-clar",
+            status: "answered",
+            resolvedBy: "operator",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        const card = screen.getByTestId("clarification-card");
+        expect(
+          within(card).getByText(/answered by operator/i),
+        ).toBeInTheDocument();
+        expect(
+          within(card).queryByRole("button", { name: /nginx/i }),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("multiSelect: posts all selected options when submitted", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification({ multiSelect: true });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("clarification-card");
+      await user.click(within(card).getByRole("button", { name: /nginx/i }));
+      await user.click(within(card).getByRole("button", { name: /postgres/i }));
+      await user.click(within(card).getByRole("button", { name: /submit/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/incidents/inc-clar/answer",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              answer: ["nginx", "postgres"],
+              resolvedBy: "console",
+            }),
+          }),
+        );
+      });
+    });
+
+    it("ignores clarification INTERRUPT for a different session", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "c-other",
+          type: "INTERRUPT",
+          payload: {
+            sessionId: "other-session",
+            toolUseId: "tu-other",
+            toolName: "request_clarification",
+            input: {},
+            incidentId: "inc-other",
+            kind: "clarification",
+            question: "Should not appear",
+            options: [],
+          },
+        });
+      });
+
+      expect(
+        screen.queryByTestId("clarification-card"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("composer as Other for approval", () => {
+    function pushApprovalInterrupt(): void {
+      act(() => {
+        latestWs?.push({
+          messageId: "ap1",
+          type: "INTERRUPT",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-ap",
+            toolName: "restart_container",
+            input: { containerName: "web-01", risk: "high" },
+            incidentId: "inc-ap",
+            kind: "approval",
+          },
+        });
+      });
+    }
+
+    it("posts to /add-context when user types while approval interrupt is pending", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushApprovalInterrupt();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "Hold off, monitoring now");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/incidents/inc-ap/add-context",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              contextMessage: "Hold off, monitoring now",
+              resolvedBy: "console",
+            }),
+          }),
+        );
+      });
+
+      expect(fetch).not.toHaveBeenCalledWith(
+        "/api/sessions/s1/messages",
+        expect.anything(),
+      );
+    });
+
+    it("composer shows Add context placeholder while approval interrupt is pending", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushApprovalInterrupt();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toHaveAttribute(
+          "placeholder",
+          "Add context…",
+        );
+      });
+    });
+
+    it("clears the pending interrupt from the composer when INTERRUPT_RESOLVED context_added arrives", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushApprovalInterrupt();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toHaveAttribute(
+          "placeholder",
+          "Add context…",
+        );
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "ctx-res",
+          type: "INTERRUPT_RESOLVED",
+          payload: {
+            incidentId: "inc-ap",
+            toolUseId: "tu-ap",
+            status: "context_added",
+            resolvedBy: "console",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toHaveAttribute(
+          "placeholder",
+          "Type a message…",
+        );
+      });
+    });
+  });
+
+  describe("composer as Other for clarification", () => {
+    it("posts to /answer when user types while clarification interrupt is pending", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "clar1",
+          type: "INTERRUPT",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-clar2",
+            toolName: "request_clarification",
+            input: {},
+            incidentId: "inc-clar2",
+            kind: "clarification",
+            question: "Any other context?",
+            options: [{ label: "No", description: "Nothing else" }],
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "Check memory too");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/incidents/inc-clar2/answer",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              answer: "Check memory too",
+              resolvedBy: "console",
+            }),
+          }),
+        );
+      });
+
+      expect(fetch).not.toHaveBeenCalledWith(
+        "/api/sessions/s1/messages",
+        expect.anything(),
+      );
+    });
+  });
 });

@@ -2,10 +2,16 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Textarea } from "@mantine/core";
 
+export interface PendingInterrupt {
+  id: string;
+  kind: "approval" | "clarification";
+}
+
 export interface ChatInputProps {
   token: string;
   sessionId: string | null;
   isRunning: boolean;
+  pendingInterrupt?: PendingInterrupt;
   onSessionCreated?: (sessionId: string, firstMessage: string) => void;
 }
 
@@ -13,6 +19,7 @@ export function ChatInput({
   token,
   sessionId,
   isRunning,
+  pendingInterrupt,
   onSessionCreated,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
@@ -21,6 +28,28 @@ export function ChatInput({
   async function handleSubmit(): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed || isRunning) return;
+
+    if (pendingInterrupt) {
+      const { id, kind } = pendingInterrupt;
+      if (kind === "approval") {
+        await fetch(`/api/incidents/${id}/add-context`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contextMessage: trimmed,
+            resolvedBy: "console",
+          }),
+        });
+      } else {
+        await fetch(`/api/incidents/${id}/answer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answer: trimmed, resolvedBy: "console" }),
+        });
+      }
+      setText("");
+      return;
+    }
 
     if (sessionId === null) {
       const res = await fetch(`/api/chat/${token}`, {
@@ -47,6 +76,13 @@ export function ChatInput({
     setText("");
   }
 
+  function placeholder(): string {
+    if (isRunning) return "Agent is running…";
+    if (pendingInterrupt?.kind === "approval") return "Add context…";
+    if (pendingInterrupt?.kind === "clarification") return "Type your answer…";
+    return "Type a message…";
+  }
+
   return (
     <div
       style={{
@@ -60,7 +96,7 @@ export function ChatInput({
     >
       <Textarea
         style={{ flex: 1 }}
-        placeholder={isRunning ? "Agent is running…" : "Type a message…"}
+        placeholder={placeholder()}
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
         disabled={isRunning}

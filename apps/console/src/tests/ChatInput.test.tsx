@@ -16,7 +16,11 @@ import { ChatInput } from "../pages/ChatInput.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 function setup(
-  props: { sessionId: string | null; isRunning: boolean },
+  props: {
+    sessionId: string | null;
+    isRunning: boolean;
+    pendingInterrupt?: { id: string; kind: "approval" | "clarification" };
+  },
   routePath = "/sessions/new",
 ) {
   vi.stubGlobal(
@@ -40,6 +44,7 @@ function setup(
         token="tok-1"
         sessionId={props.sessionId}
         isRunning={props.isRunning}
+        pendingInterrupt={props.pendingInterrupt}
       />
     ),
   });
@@ -142,6 +147,98 @@ describe("ChatInput", () => {
           }),
         }),
       );
+    });
+  });
+
+  describe("pending interrupt routing", () => {
+    it("posts to /add-context when pendingInterrupt.kind is approval", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup(
+        {
+          sessionId: "s1",
+          isRunning: false,
+          pendingInterrupt: { id: "inc-1", kind: "approval" },
+        },
+        "/sessions/new",
+      );
+
+      const textarea = await screen.findByRole("textbox");
+      await user.type(textarea, "Keep the container up for now");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/incidents/inc-1/add-context",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            contextMessage: "Keep the container up for now",
+            resolvedBy: "console",
+          }),
+        }),
+      );
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/sessions/s1/messages",
+        expect.anything(),
+      );
+    });
+
+    it("posts to /answer when pendingInterrupt.kind is clarification", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup(
+        {
+          sessionId: "s1",
+          isRunning: false,
+          pendingInterrupt: { id: "inc-2", kind: "clarification" },
+        },
+        "/sessions/new",
+      );
+
+      const textarea = await screen.findByRole("textbox");
+      await user.type(textarea, "Focus on memory pressure");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/incidents/inc-2/answer",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            answer: "Focus on memory pressure",
+            resolvedBy: "console",
+          }),
+        }),
+      );
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/sessions/s1/messages",
+        expect.anything(),
+      );
+    });
+
+    it("shows 'Add context...' placeholder when approval interrupt is pending", async () => {
+      setup(
+        {
+          sessionId: "s1",
+          isRunning: false,
+          pendingInterrupt: { id: "inc-1", kind: "approval" },
+        },
+        "/sessions/new",
+      );
+
+      const textarea = await screen.findByRole("textbox");
+      expect(textarea).toHaveAttribute("placeholder", "Add context…");
+    });
+
+    it("shows 'Type your answer...' placeholder when clarification interrupt is pending", async () => {
+      setup(
+        {
+          sessionId: "s1",
+          isRunning: false,
+          pendingInterrupt: { id: "inc-2", kind: "clarification" },
+        },
+        "/sessions/new",
+      );
+
+      const textarea = await screen.findByRole("textbox");
+      expect(textarea).toHaveAttribute("placeholder", "Type your answer…");
     });
   });
 });
