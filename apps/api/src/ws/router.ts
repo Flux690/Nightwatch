@@ -136,16 +136,73 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   }
 }
 
+// Resolve which runner connection to use for a command. Single-runner
+// deployments always use the only registered runner (any-runner fallback per
+// CONTEXT.md). Multi-runner deployments route by containerName (manifest
+// lookup) or hostname; missing hint on multiple runners is an error.
+function resolveRunner(
+  tokenId: string,
+  commandInput: Record<string, unknown>,
+): RunnerConnection {
+  const runners = registry.get(tokenId);
+  if (!runners || runners.size === 0) throw new RunnerOfflineError();
+
+  if (runners.size === 1) {
+    return runners.values().next().value as RunnerConnection;
+  }
+
+  const containerName =
+    typeof commandInput["containerName"] === "string"
+      ? commandInput["containerName"]
+      : null;
+  const hostname =
+    typeof commandInput["hostname"] === "string"
+      ? commandInput["hostname"]
+      : null;
+
+  if (containerName !== null) {
+    for (const conn of runners.values()) {
+      if (conn.manifest?.capabilities.containers.includes(containerName)) {
+        return conn;
+      }
+    }
+    const known = [...runners.values()]
+      .flatMap((c) => c.manifest?.capabilities.containers ?? [])
+      .join(", ");
+    throw new Error(
+      `No runner has container '${containerName}'. Known containers: ${known || "none"}`,
+    );
+  }
+
+  if (hostname !== null) {
+    for (const conn of runners.values()) {
+      if (conn.hostname === hostname) return conn;
+    }
+    const available = [...runners.values()]
+      .map((c) => c.hostname)
+      .filter(Boolean)
+      .join(", ");
+    throw new Error(
+      `No runner has hostname '${hostname}'. Available: ${available || "none"}`,
+    );
+  }
+
+  const hostnames = [...runners.values()]
+    .map((c) => c.hostname)
+    .filter(Boolean)
+    .join(", ");
+  throw new Error(
+    `Multiple runners registered. Specify a hostname parameter: ${hostnames}`,
+  );
+}
+
 export function sendCommand(
   tokenId: string,
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  const conn = registry.get(tokenId)?.values().next().value as
-    | RunnerConnection
-    | undefined;
-  if (!conn) throw new RunnerOfflineError();
+  const conn = resolveRunner(tokenId, commandInput);
   const { send } = conn;
 
   const correlationId = randomUUID();

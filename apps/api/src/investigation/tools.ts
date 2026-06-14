@@ -62,6 +62,11 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
           type: "string",
           description: "Kubernetes namespace (optional, docker ignores this).",
         },
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+        },
       },
       required: ["environment"],
     },
@@ -137,25 +142,61 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
     name: "get_host_memory",
     description:
       "Get host memory stats (total, available, swap) and whether the OOM killer has fired recently.",
-    input_schema: { type: "object", properties: {} },
+    input_schema: {
+      type: "object",
+      properties: {
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+        },
+      },
+    },
   },
   {
     name: "get_host_cpu",
     description:
       "Get per-core and overall CPU usage, I/O wait %, and load averages (1m, 5m, 15m).",
-    input_schema: { type: "object", properties: {} },
+    input_schema: {
+      type: "object",
+      properties: {
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+        },
+      },
+    },
   },
   {
     name: "get_host_disk",
     description:
       "Get filesystem usage for all mounts and disk I/O rates per device.",
-    input_schema: { type: "object", properties: {} },
+    input_schema: {
+      type: "object",
+      properties: {
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+        },
+      },
+    },
   },
   {
     name: "get_host_network",
     description:
       "Get listening ports, TCP connection state counts, and total connection count.",
-    input_schema: { type: "object", properties: {} },
+    input_schema: {
+      type: "object",
+      properties: {
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+        },
+      },
+    },
   },
   {
     name: "get_host_dmesg",
@@ -172,6 +213,11 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
           type: "string",
           enum: ["err", "warn", "all"],
           description: "Log level filter (default: err).",
+        },
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
         },
       },
     },
@@ -247,6 +293,11 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
         maxLines: {
           type: "number",
           description: "Maximum lines to return (default 500).",
+        },
+        hostname: {
+          type: "string",
+          description:
+            "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
         },
       },
       required: ["path"],
