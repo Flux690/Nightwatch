@@ -64,7 +64,9 @@ export interface LLMProvider {
   // onDelta, when provided, receives live fragments as the turn streams; the
   // returned ChatResponse is unchanged whether or not it is passed.
   chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse>;
-  appendToolResults(results: ToolResult[]): void;
+  // additionalText, when provided, is appended to the same user message as the
+  // tool results. Used to inject mid-run alerts at each tool boundary (D10).
+  appendToolResults(results: ToolResult[], additionalText?: string): void;
   // Inject a human-authored user turn (chat / resume). Distinct from a
   // tool_result: add_context mid-approval must stay a tool_result (D10).
   appendUserMessage(message: string): void;

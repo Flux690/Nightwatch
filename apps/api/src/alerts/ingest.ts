@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit } from "./rate-limit.js";
+import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
 import { logger } from "../logger.js";
@@ -49,37 +50,46 @@ export async function registerAlertRoutes(
       let skipped = 0;
 
       for (const alert of alerts) {
+        // 1. Derived dedup: same alert already active or durably suspended.
         if (isDuplicate(alert)) {
           skipped++;
           continue;
         }
 
+        // 2. Intra-window dedup: same sourceAlertId already queued in the batch
+        //    window. True duplicate — the model would see the same alert twice.
+        if (batchWindow.has(tokenId, alert.sourceAlertId)) {
+          skipped++;
+          continue;
+        }
+
+        // 3. Rate limit.
         if (!checkRateLimit(alert.token, alert.severity)) {
           skipped++;
           fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
           continue;
         }
 
-        const accepted = dispatcher.dispatch({
-          alert,
-          sessionId: randomUUID(),
-          token: tokenId,
-          trigger: "alert",
-        });
-        if (!accepted) {
-          skipped++;
-          fastify.log.warn(
-            { alertId: alert.sourceAlertId },
-            "dispatch queue full, dropped (alert will re-fire)",
+        // 4. Route: inject into an active run or add to the batch window.
+        //    A suspended session is not in the active set, so it falls through to
+        //    the batch window and a new session is created — suspended sessions
+        //    never receive injections (CONTEXT.md alert pipeline).
+        const activeSessionId = dispatcher.getActiveSessionForToken(tokenId);
+        if (activeSessionId !== null) {
+          dispatcher.injectAlert(activeSessionId, alert);
+          fastify.log.info(
+            { alertId: alert.sourceAlertId, sessionId: activeSessionId },
+            "alert injected into active run",
           );
-          continue;
+        } else {
+          batchWindow.add(alert);
+          fastify.log.info(
+            { alertId: alert.sourceAlertId, type: alert.alertType },
+            "alert added to batch window",
+          );
         }
 
         enqueued++;
-        fastify.log.info(
-          { alertId: alert.sourceAlertId, type: alert.alertType },
-          "queued",
-        );
       }
 
       return reply

@@ -389,7 +389,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
       rawPayload: {},
     };
 
-    const { firstUserMessage } = buildInitialContext(alert);
+    const { firstUserMessage } = buildInitialContext([alert]);
     expect(firstUserMessage).toContain("memory leak in image v12");
     expect(firstUserMessage).toContain("swap exhaustion under load");
   });
@@ -408,7 +408,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
 
     // The token authenticates the alert and keys incident history, but the LLM
     // never needs it - and the opening message is sent to an external provider.
-    const { firstUserMessage } = buildInitialContext(alert);
+    const { firstUserMessage } = buildInitialContext([alert]);
     expect(firstUserMessage).not.toContain(secret);
   });
 
@@ -436,7 +436,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
       rawPayload: {},
     };
 
-    const { firstUserMessage } = buildInitialContext(alert);
+    const { firstUserMessage } = buildInitialContext([alert]);
     expect(firstUserMessage).not.toContain("stranger's secret incident");
     expect(firstUserMessage).toContain("(no past incidents)");
   });
