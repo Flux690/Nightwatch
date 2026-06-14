@@ -139,22 +139,35 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     // A fresh token isolates this test's rate-limit counter from the others.
     const { plaintext: token, id: tokenId } = mintToken("dedup");
+    // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
+    // setImmediate is NOT faked, so inject() continues to work correctly.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     setImmediate(false); // runs park on the gate -> stay active
 
     const first = await ingest(token, alertBody("dup-1"));
     expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
 
+    // Fire the batch window timer (90s) and flush any resulting promises so the
+    // run starts and parks. advanceTimersByTimeAsync flushes the microtask queue
+    // at each step, which is required since waitFor itself uses setTimeout.
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect(dispatcher.isInvestigating(tokenId, "dup-1")).toBe(true);
+
     // Same token + sourceAlertId while the first run is still active -> dropped.
     const dupe = await ingest(token, alertBody("dup-1"));
     expect(dupe).toMatchObject({ enqueued: 0, skipped: 1 });
 
-    // End the active run; its dedup marker clears (no key, no TTL).
+    // End the active run; flush the async chain so the dedup key clears.
+    setImmediate(true);
     releaseAll();
-    await waitFor(() => !dispatcher.isInvestigating(tokenId, "dup-1"));
+    await vi.advanceTimersByTimeAsync(50);
+    expect(dispatcher.isInvestigating(tokenId, "dup-1")).toBe(false);
 
     // The same alert now starts a fresh investigation - no 24h suppression.
     const refire = await ingest(token, alertBody("dup-1"));
     expect(refire).toMatchObject({ enqueued: 1, skipped: 0 });
+    // Advance the refire's batch window so no stray timer outlives this test.
+    await vi.advanceTimersByTimeAsync(90_001);
   });
 
   it("rate-limits past 10 non-critical alerts per token per hour; critical bypasses; resets after the window", async () => {

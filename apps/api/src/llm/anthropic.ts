@@ -196,15 +196,19 @@ export class AnthropicProvider implements LLMProvider {
     ];
   }
 
-  appendToolResults(results: ToolResult[]): void {
-    this.messages.push({
-      role: "user",
-      content: results.map((r) => ({
+  appendToolResults(results: ToolResult[], additionalText?: string): void {
+    const toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[] =
+      results.map((r) => ({
         type: "tool_result" as const,
         tool_use_id: r.tool_use_id,
         content: r.content,
         ...(r.is_error && { is_error: true }),
-      })),
+      }));
+    this.messages.push({
+      role: "user",
+      content: additionalText
+        ? [...toolResultBlocks, { type: "text" as const, text: additionalText }]
+        : toolResultBlocks,
     });
   }
 

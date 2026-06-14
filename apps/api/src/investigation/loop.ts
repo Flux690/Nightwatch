@@ -30,6 +30,7 @@ import {
   publishInterrupt,
   publishToolCallEnd,
 } from "../session/stream.js";
+import { dispatcher } from "../dispatch/dispatcher.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
@@ -45,6 +46,10 @@ export interface RunInvestigationInput {
   token: string;
   trigger: SessionTrigger;
   alert?: NormalizedAlert;
+  // Additional alerts that arrived within the 90s batch window alongside the
+  // primary alert. All are included in the opening message for shared root-cause
+  // analysis. Only populated on batch-triggered sessions.
+  additionalAlerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
   // Present on resume: the full tool_results for the suspended turn
@@ -80,9 +85,13 @@ export async function runInvestigation(
 
   const config = loadConfig();
   const apiKey = loadApiKey();
-  const { systemPrompt, firstUserMessage } = alert
-    ? buildInitialContext(alert)
-    : buildChatContext();
+
+  const allAlerts = [
+    ...(input.alert ? [input.alert] : []),
+    ...(input.additionalAlerts ?? []),
+  ];
+  const { systemPrompt, firstUserMessage } =
+    allAlerts.length > 0 ? buildInitialContext(allAlerts) : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 
   let persistedCount = 0;
@@ -301,6 +310,8 @@ export async function runInvestigation(
     if (gatedTool !== null) {
       // Durably suspend: persist the assistant turn + interrupt row in ONE
       // transaction (D3). The run then exits and frees its dispatcher slot.
+      // Suspended sessions never receive injections: the inbox is NOT drained
+      // here; any inbox alerts become new sessions via the dispatcher's finally.
       const isClarificationGate = gatedTool.name === "request_clarification";
       const interrupt: PendingInterrupt = {
         id: incidentId,
@@ -357,7 +368,15 @@ export async function runInvestigation(
       return;
     }
 
-    provider.appendToolResults(toolResults);
+    // Drain mid-run injected alerts at the tool boundary. They ride in the same
+    // user message as the tool results so the provider never sees two consecutive
+    // user turns (D10). The model is asked to judge each as a downstream effect
+    // or an independent incident.
+    const injected = dispatcher.drainInbox(sessionId);
+    const injectionText =
+      injected.length > 0 ? formatInjectedAlerts(injected) : undefined;
+
+    provider.appendToolResults(toolResults, injectionText);
     persist();
   }
 
@@ -366,5 +385,22 @@ export async function runInvestigation(
     incidentId,
     sessionId,
     `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
+  );
+}
+
+function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
+  const header =
+    alerts.length === 1
+      ? "\n\nINJECTED ALERT - decide: downstream effect of current incident or independent incident?"
+      : `\n\nINJECTED ALERTS (${alerts.length}) - for each, decide: downstream effect of current incident or independent incident?`;
+  return (
+    header +
+    "\n" +
+    alerts
+      .map(
+        (a) =>
+          `- [${a.alertType}] ${a.targetIdentifier} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
+      )
+      .join("\n")
   );
 }

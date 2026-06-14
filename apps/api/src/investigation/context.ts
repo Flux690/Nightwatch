@@ -25,22 +25,30 @@ export function buildChatContext(): InitialContext {
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
 }
 
-export function buildInitialContext(alert: NormalizedAlert): InitialContext {
-  // Incident history is a local read; a failure there is a real defect, so it
-  // surfaces rather than being masked. Live telemetry is not assembled here:
-  // post state-inversion the runner is stateless and pushes no snapshots, so the
-  // agent gathers current state through its read tools at the start of the run.
+// Accepts one or more alerts. When multiple alerts arrive within the 90s batch
+// window, all are surfaced in the opening message so the model judges shared
+// root cause. The first alert is the primary (used for incident history lookup).
+export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
+  const primary = alerts[0];
+  if (!primary) return buildChatContext();
+
   const historyBlock = formatIncidentHistory(
-    loadIncidentHistory(alert.token, alert.targetIdentifier, alert.alertType),
+    loadIncidentHistory(
+      primary.token,
+      primary.targetIdentifier,
+      primary.alertType,
+    ),
   );
 
-  const firstUserMessage = `INCIDENT ALERT
+  const alertsSection =
+    alerts.length === 1
+      ? formatAlert(alerts[0]!)
+      : `BATCHED ALERTS — ${alerts.length} correlated alerts\n\n` +
+        alerts.map((a, i) => `Alert ${i + 1}:\n${formatAlert(a)}`).join("\n\n");
+
+  const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
 --------------
-Alert ID:     ${alert.sourceAlertId}
-Target:       ${alert.targetIdentifier}
-Alert type:   ${alert.alertType}
-Severity:     ${alert.severity}
-Fired at:     ${alert.firedAt}
+${alertsSection}
 
 PAST INCIDENT HISTORY (last 30 days, this container + alert type)
 ----------------------------------------------------------------
@@ -49,6 +57,14 @@ ${historyBlock}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, call the final_response tool to finish.`;
 
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage };
+}
+
+function formatAlert(alert: NormalizedAlert): string {
+  return `Alert ID:     ${alert.sourceAlertId}
+Target:       ${alert.targetIdentifier}
+Alert type:   ${alert.alertType}
+Severity:     ${alert.severity}
+Fired at:     ${alert.firedAt}`;
 }
 
 const MAX_HISTORY_RECORDS = 5;

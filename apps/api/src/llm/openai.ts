@@ -159,7 +159,7 @@ export class OpenAIProvider implements LLMProvider {
     };
   }
 
-  appendToolResults(results: ToolResult[]): void {
+  appendToolResults(results: ToolResult[], additionalText?: string): void {
     for (const r of results) {
       // OpenAI has no is_error flag; fold it into the content the model reads.
       this.messages.push({
@@ -167,6 +167,9 @@ export class OpenAIProvider implements LLMProvider {
         tool_call_id: r.tool_use_id,
         content: r.is_error ? `ERROR: ${r.content}` : r.content,
       });
+    }
+    if (additionalText) {
+      this.messages.push({ role: "user", content: additionalText });
     }
   }
 
