@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import type { AddressInfo } from "node:net";
 import {
   afterAll,
   beforeAll,
@@ -9,6 +10,10 @@ import {
   it,
   vi,
 } from "vitest";
+import WebSocket from "ws";
+import Fastify from "fastify";
+import FastifyWebSocket from "@fastify/websocket";
+import type { FastifyInstance } from "fastify";
 import type {
   CapabilityManifest,
   RunnerCommandMessage,
@@ -111,6 +116,9 @@ import {
 } from "../ws/router.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
+import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerChatRoutes } from "../chat/routes.js";
+import { registerIncidentRoutes } from "../incidents/routes.js";
 
 const FINAL_RESPONSE_TURN = {
   text: "Done.",
@@ -156,9 +164,24 @@ function makeManifest(
   };
 }
 
+function waitForConnected(ws: WebSocket): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onMsg = (raw: WebSocket.RawData): void => {
+      const msg = JSON.parse(raw.toString()) as { type: string };
+      if (msg.type === "connected") {
+        ws.off("message", onMsg);
+        resolve();
+      }
+    };
+    ws.on("message", onMsg);
+  });
+}
+
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
   let tokenId: string;
+  let server: FastifyInstance;
+  let port: number;
 
   // Per-runner command logs — cleared before each test.
   const commandsA: Array<{
@@ -180,12 +203,12 @@ describe("multi-runner routing", () => {
       resolveCommand({
         correlationId,
         success: true,
-        result: { output: "ok" },
+        result: { restarted: true },
       });
     };
   }
 
-  beforeAll(() => {
+  beforeAll(async () => {
     cleanupDb = useTempDb();
     tokenId = mintToken("routing-026").id;
 
@@ -202,11 +225,20 @@ describe("multi-runner routing", () => {
       "runner-b",
       makeManifest("runner-b", tokenId, "db-02", ["postgres"]),
     );
+
+    server = Fastify({ logger: false });
+    await server.register(FastifyWebSocket);
+    await registerConsoleWsRoutes(server);
+    await registerChatRoutes(server);
+    await registerIncidentRoutes(server);
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.server.address() as AddressInfo).port;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     unregisterRunner(tokenId, "runner-a");
     unregisterRunner(tokenId, "runner-b");
+    await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
   });
@@ -347,5 +379,83 @@ describe("multi-runner routing", () => {
     );
     expect(errorMsg?.content).toMatch(/web-01/);
     expect(errorMsg?.content).toMatch(/db-02/);
+  });
+
+  it("approved remediation executes on the runner that owns the target container", async () => {
+    setScript([
+      {
+        text: "Restarting postgres.",
+        toolUses: [
+          {
+            id: "tu-restart",
+            name: "restart_container",
+            input: {
+              containerName: "postgres",
+              rationale: "OOM killed",
+              risk: "low",
+              estimatedDowntimeSeconds: 5,
+            },
+          },
+        ],
+      },
+      FINAL_RESPONSE_TURN,
+    ]);
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const events: Array<{ type: string; payload: Record<string, unknown> }> =
+      [];
+    ws.on("message", (raw) => {
+      events.push(
+        JSON.parse(raw.toString()) as {
+          type: string;
+          payload: Record<string, unknown>;
+        },
+      );
+    });
+    await waitForConnected(ws);
+
+    const res = await fetch(`http://127.0.0.1:${port}/chat/${tokenId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "postgres is crashing" }),
+    });
+    expect(res.status).toBe(202);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    // Wait for the approval interrupt — restart_container is a gated tool.
+    const interrupt = await waitFor(() =>
+      events.find(
+        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+      ),
+    );
+    const incidentId = String(interrupt.payload["incidentId"]);
+
+    // No runner has executed anything yet (sendCommand only runs after approval).
+    expect(commandsA).toHaveLength(0);
+    expect(commandsB).toHaveLength(0);
+
+    // Approve — the approve route calls sendCommand with the persisted toolInput
+    // (which has containerName: "postgres"), routing it to runner-b.
+    const approveRes = await fetch(
+      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolvedBy: "operator" }),
+      },
+    );
+    expect(approveRes.status).toBe(200);
+
+    // runner-b owns "postgres" and must receive the restart command.
+    await waitFor(() =>
+      commandsB.some((c) => c.commandName === "restart_container"),
+    );
+    expect(
+      commandsB.find((c) => c.commandName === "restart_container")
+        ?.commandInput["containerName"],
+    ).toBe("postgres");
+    expect(commandsA).toHaveLength(0);
+
+    ws.close();
   });
 });
