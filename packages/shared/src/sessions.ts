@@ -5,13 +5,9 @@
 
 export type SessionRole = "user" | "assistant";
 
-// Two triggers, one loop: an alert authors the opening message, or a human does.
-export type SessionTrigger = "alert" | "chat";
-
 export interface SessionMeta {
   sessionId: string;
   token: string;
-  trigger: SessionTrigger;
   title: string;
   createdAt: string;
 }

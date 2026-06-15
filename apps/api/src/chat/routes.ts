@@ -34,7 +34,6 @@ export async function registerChatRoutes(
       const accepted = dispatcher.dispatch({
         sessionId,
         token: tokenRecord.id,
-        trigger: "chat",
         userMessage: message,
       });
       if (!accepted) {
@@ -98,7 +97,6 @@ export async function registerChatRoutes(
       const accepted = dispatcher.dispatch({
         sessionId,
         token: tokenRecord.id,
-        trigger: session.trigger,
         seed,
         userMessage: message,
       });

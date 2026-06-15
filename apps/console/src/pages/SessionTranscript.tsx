@@ -355,7 +355,6 @@ export function SessionView({
             {
               sessionId: newId,
               token,
-              trigger: "chat",
               title: firstMessage.slice(0, 60),
               createdAt: new Date().toISOString(),
             },

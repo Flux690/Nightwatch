@@ -798,7 +798,6 @@ describe("durable approval interrupts", () => {
       alert,
       sessionId,
       token: TEST_TOKEN,
-      trigger: "alert",
     });
 
     const interrupt = await waitFor(() =>

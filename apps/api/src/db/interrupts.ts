@@ -1,6 +1,6 @@
 import { getDb } from "./client.js";
 import type { ToolResult } from "../llm/types.js";
-import type { NormalizedAlert, SessionTrigger } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwatch/shared";
 
 export interface PendingInterrupt {
   id: string;
@@ -16,7 +16,6 @@ export interface PendingInterrupt {
 export interface PendingInterruptWithSession extends PendingInterrupt {
   token: string;
   originatingAlert: NormalizedAlert | null;
-  sessionTrigger: SessionTrigger;
 }
 
 interface RawRow {
@@ -33,7 +32,6 @@ interface RawRow {
 interface RawRowWithSession extends RawRow {
   token: string;
   originatingAlert: string | null;
-  sessionTrigger: string;
 }
 
 function parseRow(row: RawRow): PendingInterrupt {
@@ -59,7 +57,6 @@ function parseRowWithSession(
       row.originatingAlert != null
         ? (JSON.parse(row.originatingAlert) as NormalizedAlert)
         : null,
-    sessionTrigger: row.sessionTrigger as SessionTrigger,
   };
 }
 
@@ -100,7 +97,7 @@ export function getInterruptWithSession(
       `SELECT pi.id, pi.session_id AS sessionId, pi.tool_use_id AS toolUseId,
               pi.kind, pi.tool_name AS toolName, pi.tool_input AS toolInput,
               pi.completed_results AS completedResults, pi.created_at AS createdAt,
-              s.token, s.originating_alert AS originatingAlert, s.trigger AS sessionTrigger
+              s.token, s.originating_alert AS originatingAlert
        FROM pending_interrupts pi
        JOIN sessions s ON s.session_id = pi.session_id
        WHERE pi.id = ?`,
@@ -117,7 +114,7 @@ export function listInterruptsByToken(
       `SELECT pi.id, pi.session_id AS sessionId, pi.tool_use_id AS toolUseId,
               pi.kind, pi.tool_name AS toolName, pi.tool_input AS toolInput,
               pi.completed_results AS completedResults, pi.created_at AS createdAt,
-              s.token, s.originating_alert AS originatingAlert, s.trigger AS sessionTrigger
+              s.token, s.originating_alert AS originatingAlert
        FROM pending_interrupts pi
        JOIN sessions s ON s.session_id = pi.session_id
        WHERE s.token = ?`,
@@ -132,7 +129,7 @@ export function listAllInterrupts(): PendingInterruptWithSession[] {
       `SELECT pi.id, pi.session_id AS sessionId, pi.tool_use_id AS toolUseId,
               pi.kind, pi.tool_name AS toolName, pi.tool_input AS toolInput,
               pi.completed_results AS completedResults, pi.created_at AS createdAt,
-              s.token, s.originating_alert AS originatingAlert, s.trigger AS sessionTrigger
+              s.token, s.originating_alert AS originatingAlert
        FROM pending_interrupts pi
        JOIN sessions s ON s.session_id = pi.session_id`,
     )

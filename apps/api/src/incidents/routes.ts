@@ -132,7 +132,6 @@ export async function registerIncidentRoutes(
       dispatcher.dispatch({
         sessionId,
         token,
-        trigger: interrupt.sessionTrigger as "alert" | "chat",
         seed,
         resumeToolResults,
       });
@@ -221,7 +220,6 @@ export async function registerIncidentRoutes(
       dispatcher.dispatch({
         sessionId,
         token,
-        trigger: interrupt.sessionTrigger as "alert" | "chat",
         seed,
         resumeToolResults,
       });
@@ -300,7 +298,6 @@ export async function registerIncidentRoutes(
       dispatcher.dispatch({
         sessionId,
         token,
-        trigger: interrupt.sessionTrigger as "alert" | "chat",
         seed,
         resumeToolResults,
       });
@@ -381,7 +378,6 @@ export async function registerIncidentRoutes(
       dispatcher.dispatch({
         sessionId,
         token,
-        trigger: interrupt.sessionTrigger as "alert" | "chat",
         seed,
         resumeToolResults,
       });

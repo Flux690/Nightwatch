@@ -355,7 +355,6 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       alert,
       sessionId,
       token: TEST_TOKEN,
-      trigger: "alert",
     });
 
     // The loop parks on the approval gate; reject it via REST.

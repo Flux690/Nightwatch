@@ -217,7 +217,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     ws.close();
 
     const stored = getSession(String(sessionId));
-    expect(stored?.trigger).toBe("chat");
+    // No originating alert is the chat-vs-alert distinction now (trigger is gone).
     expect(stored?.originatingAlert).toBeNull();
 
     const txRes = await fetch(

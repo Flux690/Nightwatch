@@ -239,7 +239,6 @@ describe("multi-runner routing", () => {
     dispatcher.dispatch({
       sessionId,
       token: tokenId,
-      trigger: "chat",
       userMessage: "investigate",
     });
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));

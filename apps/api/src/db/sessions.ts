@@ -21,14 +21,13 @@ export function createSession(
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO sessions (session_id, token, trigger, title, originating_alert, created_at)
-       VALUES (@sessionId, @token, @trigger, @title, @originatingAlert, @createdAt)
+      `INSERT INTO sessions (session_id, token, title, originating_alert, created_at)
+       VALUES (@sessionId, @token, @title, @originatingAlert, @createdAt)
        ON CONFLICT(session_id) DO NOTHING`,
     )
     .run({
       sessionId: meta.sessionId,
       token: meta.token,
-      trigger: meta.trigger,
       title: meta.title,
       originatingAlert:
         originatingAlert != null ? JSON.stringify(originatingAlert) : null,
@@ -110,7 +109,7 @@ export function listSessions(token: string): SessionMeta[] {
   // Cast is sound: the aliased columns match SessionMeta exactly.
   return getDb()
     .prepare(
-      `SELECT session_id AS sessionId, token, trigger, title, created_at AS createdAt
+      `SELECT session_id AS sessionId, token, title, created_at AS createdAt
        FROM sessions WHERE token = ? ORDER BY created_at DESC LIMIT 100`,
     )
     .all(token) as SessionMeta[];
@@ -119,7 +118,7 @@ export function listSessions(token: string): SessionMeta[] {
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, token, trigger, title,
+      `SELECT session_id AS sessionId, token, title,
               originating_alert AS originatingAlert, created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
@@ -130,7 +129,6 @@ export function getSession(sessionId: string): StoredSession | undefined {
   return {
     sessionId: row.sessionId,
     token: row.token,
-    trigger: row.trigger,
     title: row.title,
     createdAt: row.createdAt,
     // Stored as JSON text; only this layer deserializes it.

@@ -26,7 +26,6 @@ function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
     sessionId: randomUUID(),
     token: "tok-A",
-    trigger: "alert",
     title: "web-01 down",
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -78,13 +77,12 @@ describe("API-local session store", () => {
     const stored = getSession(m.sessionId);
     expect(stored).toBeDefined();
     expect(stored?.token).toBe("tok-A");
-    expect(stored?.trigger).toBe("alert");
     expect(stored?.title).toBe("web-01 down");
     expect(stored?.originatingAlert).toEqual(alert);
   });
 
   it("stores a chat session with a null originating alert", () => {
-    const m = meta({ trigger: "chat", title: "hello" });
+    const m = meta({ title: "hello" });
     createSession(m, null);
 
     expect(getSession(m.sessionId)?.originatingAlert).toBeNull();

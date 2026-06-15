@@ -181,7 +181,6 @@ describe("mid-run alert injection (loop seam)", () => {
     dispatcher.dispatch({
       sessionId,
       token: tokenId,
-      trigger: "alert",
       alert: alert(tokenId, "primary-mr"),
     });
 
@@ -239,7 +238,6 @@ describe("mid-run alert injection (loop seam)", () => {
     dispatcher.dispatch({
       sessionId,
       token: tokenId,
-      trigger: "alert",
       alert: alert(tokenId, "primary-sus"),
     });
 
@@ -258,7 +256,6 @@ describe("mid-run alert injection (loop seam)", () => {
     dispatcher.dispatch({
       sessionId: newSessionId,
       token: tokenId,
-      trigger: "alert",
       alert: alert(tokenId, "new-after-sus"),
     });
 
@@ -286,7 +283,6 @@ describe("mid-run alert injection (loop seam)", () => {
     dispatcher.dispatch({
       sessionId,
       token: tokenId,
-      trigger: "alert",
       alert: alert(tokenId, "primary-lo"),
     });
 

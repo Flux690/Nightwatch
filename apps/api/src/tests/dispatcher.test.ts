@@ -34,7 +34,7 @@ function alertInput(
     firedAt: new Date().toISOString(),
     rawPayload: {},
   };
-  return { sessionId: `s-${sourceAlertId}`, token, trigger: "alert", alert };
+  return { sessionId: `s-${sourceAlertId}`, token, alert };
 }
 
 describe("dispatcher", () => {
@@ -140,7 +140,7 @@ describe("dispatcher", () => {
       run: () => gate.promise,
     });
 
-    d.dispatch({ sessionId: "chat-1", token: "tok-1", trigger: "chat" });
+    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
     expect(d.isInvestigating("tok-1", "anything")).toBe(false);
 
     gate.resolve();

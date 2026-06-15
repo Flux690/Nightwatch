@@ -30,7 +30,6 @@ import type {
   NormalizedAlert,
   SessionMessage,
   SessionMeta,
-  SessionTrigger,
 } from "@nightwatch/shared";
 import type { ProviderMessage, ToolResult, ToolUse } from "../llm/types.js";
 import type { PendingInterrupt } from "../db/interrupts.js";
@@ -38,7 +37,6 @@ import type { PendingInterrupt } from "../db/interrupts.js";
 export interface RunInvestigationInput {
   sessionId: string;
   token: string;
-  trigger: SessionTrigger;
   alert?: NormalizedAlert;
   // Additional alerts that arrived within the 90s batch window alongside the
   // primary alert. All are included in the opening message for shared root-cause
@@ -54,7 +52,7 @@ export interface RunInvestigationInput {
 export async function runInvestigation(
   input: RunInvestigationInput,
 ): Promise<void> {
-  const { sessionId, token, trigger } = input;
+  const { sessionId, token } = input;
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
@@ -73,7 +71,11 @@ export async function runInvestigation(
     alertType: ctx.alertType,
   });
   log.info(
-    { target: ctx.containerName, severity: ctx.severity, trigger },
+    {
+      target: ctx.containerName,
+      severity: ctx.severity,
+      isChat: alert == null,
+    },
     "investigation started",
   );
 
@@ -127,9 +129,10 @@ export async function runInvestigation(
   const sessionMeta: SessionMeta = {
     sessionId,
     token,
-    trigger,
+    // No alert means a human-opened chat: title from their message. Otherwise
+    // title from the alert. (alert == null is the chat/alert distinction now.)
     title:
-      trigger === "chat" && input.userMessage
+      alert == null && input.userMessage
         ? input.userMessage.slice(0, 80)
         : `${ctx.alertType} - ${ctx.containerName}`,
     createdAt: new Date().toISOString(),

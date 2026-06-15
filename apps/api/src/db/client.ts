@@ -46,7 +46,6 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS sessions (
     session_id        TEXT PRIMARY KEY,
     token             TEXT NOT NULL,
-    trigger           TEXT NOT NULL,
     title             TEXT NOT NULL DEFAULT '',
     originating_alert TEXT,
     created_at        TEXT NOT NULL

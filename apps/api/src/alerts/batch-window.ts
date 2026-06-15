@@ -54,7 +54,6 @@ export const batchWindow = createBatchWindow({
     const accepted = dispatcher.dispatch({
       sessionId: randomUUID(),
       token: tokenId,
-      trigger: "alert",
       alert: primary,
       additionalAlerts: alerts.slice(1),
     });

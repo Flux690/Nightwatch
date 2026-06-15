@@ -55,7 +55,6 @@ const RUNNER = {
 const SESSION_1 = {
   sessionId: "s1",
   token: "tok-1",
-  trigger: "alert",
   title: "CPU spike on web-01",
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
 };
