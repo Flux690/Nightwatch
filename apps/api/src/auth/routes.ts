@@ -7,6 +7,7 @@ import {
   getSessionEpoch,
   saveOwner,
 } from "../config/store.js";
+import { createCredentialRateLimiter } from "./rate-limit.js";
 
 const MIN_PASSWORD = 12;
 
@@ -18,12 +19,19 @@ export async function registerAuthRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   const dummyHash = await hash("nightwatch-dummy-placeholder");
+  const checkSetupRateLimit = createCredentialRateLimiter();
+  const checkLoginRateLimit = createCredentialRateLimiter();
 
   fastify.post<{ Body: { email?: string; password?: string } }>(
     "/setup",
     async (request, reply) => {
       if (getOwnerCredentials()) {
         return reply.code(409).send({ error: "setup already complete" });
+      }
+      if (!checkSetupRateLimit(request.ip)) {
+        return reply
+          .code(429)
+          .send({ error: "too many attempts, try again later" });
       }
       const { email, password } = request.body ?? {};
       if (!email || !password) {
@@ -47,6 +55,11 @@ export async function registerAuthRoutes(
   fastify.post<{ Body: { email?: string; password?: string } }>(
     "/login",
     async (request, reply) => {
+      if (!checkLoginRateLimit(request.ip)) {
+        return reply
+          .code(429)
+          .send({ error: "too many attempts, try again later" });
+      }
       const { email, password } = request.body ?? {};
       const owner = getOwnerCredentials();
       const hashToVerify = owner?.hash ?? dummyHash;

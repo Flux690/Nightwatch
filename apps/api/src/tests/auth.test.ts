@@ -444,3 +444,67 @@ describe("POST /revoke-sessions", () => {
     expect(protectedRes.statusCode).toBe(200);
   });
 });
+
+// Tests share rate-limit state intentionally; each buildServer() creates a fresh limiter closure.
+describe("credential endpoint rate limiting", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = await buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/setup",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("allows the first 5 login attempts (wrong password = 401, not 429)", async () => {
+    for (let i = 0; i < 5; i++) {
+      const res = await server.inject({
+        method: "POST",
+        url: "/login",
+        payload: { email: "admin@example.com", password: "wrongpassword123" },
+      });
+      expect(res.statusCode).toBe(401);
+    }
+  });
+
+  it("blocks the 6th attempt with 429", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/login",
+      payload: { email: "admin@example.com", password: "wrongpassword123" },
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it("blocks correct credentials too while rate-limited (no bypass)", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/login",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it("allows a successful login after the window expires", async () => {
+    // toFake: ['Date'] only — keeps argon2 worker threads and Fastify's async pipeline unaffected.
+    const futureTime = Date.now() + 60 * 1000 + 1;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(futureTime);
+    const res = await server.inject({
+      method: "POST",
+      url: "/login",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+    vi.useRealTimers();
+    expect(res.statusCode).toBe(200);
+  });
+});
