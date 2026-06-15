@@ -45,6 +45,26 @@ const READ_TOOL = {
   },
 };
 
+// Build a stream mock that captures event listeners by name and can fire them.
+// Used by tests that need to simulate chunk events (e.g. reasoning_details).
+function buildCapturingStream(completionResponse: unknown) {
+  const listeners: Record<string, (data: unknown) => void> = {};
+  const stream = {
+    on: vi.fn((event: string, cb: (data: unknown) => void) => {
+      listeners[event] = cb;
+      return stream;
+    }),
+    finalChatCompletion: vi.fn(async () => {
+      listeners["chunk"]?.({
+        choices: [{ delta: { reasoning_details: [] } }],
+      });
+      return completionResponse;
+    }),
+    emit: (event: string, data: unknown) => listeners[event]?.(data),
+  };
+  return stream;
+}
+
 describe("OpenAIProvider", () => {
   let provider: OpenAIProvider;
 
@@ -132,5 +152,128 @@ describe("OpenAIProvider", () => {
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("get_container_list");
     expect(response.toolUses[0].id).toBe("call-123");
+  });
+
+  describe("OpenRouter reasoning_details", () => {
+    const FINISH_RESPONSE = {
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: "Postgres container OOM-killed.",
+            tool_calls: undefined,
+          },
+        },
+      ],
+    };
+
+    it("emits thinking deltas for reasoning.text and reasoning.summary entries", async () => {
+      const stream = buildCapturingStream(FINISH_RESPONSE);
+      stream.finalChatCompletion.mockImplementationOnce(async () => {
+        stream.emit("chunk", {
+          choices: [
+            {
+              delta: {
+                reasoning_details: [
+                  { type: "reasoning.text", text: "step 1: check logs" },
+                  { type: "reasoning.summary", text: "identified the issue" },
+                ],
+              },
+            },
+          ],
+        });
+        return FINISH_RESPONSE;
+      });
+      mockCompletionsStream.mockReturnValueOnce(stream);
+
+      const onDelta = vi.fn();
+      await provider.chat([READ_TOOL], onDelta);
+
+      expect(onDelta).toHaveBeenCalledWith({
+        kind: "thinking",
+        text: "step 1: check logs",
+      });
+      expect(onDelta).toHaveBeenCalledWith({
+        kind: "thinking",
+        text: "identified the issue",
+      });
+    });
+
+    it("skips reasoning.encrypted entries and emits nothing for them", async () => {
+      const stream = buildCapturingStream(FINISH_RESPONSE);
+      stream.finalChatCompletion.mockImplementationOnce(async () => {
+        stream.emit("chunk", {
+          choices: [
+            {
+              delta: {
+                reasoning_details: [
+                  { type: "reasoning.encrypted", data: "base64encryptedblob" },
+                  { type: "reasoning.text", text: "visible reasoning" },
+                ],
+              },
+            },
+          ],
+        });
+        return FINISH_RESPONSE;
+      });
+      mockCompletionsStream.mockReturnValueOnce(stream);
+
+      const onDelta = vi.fn();
+      await provider.chat([READ_TOOL], onDelta);
+
+      const thinkingCalls = onDelta.mock.calls.filter(
+        (c) => (c[0] as { kind: string }).kind === "thinking",
+      );
+      expect(thinkingCalls).toHaveLength(1);
+      expect(thinkingCalls[0][0]).toEqual({
+        kind: "thinking",
+        text: "visible reasoning",
+      });
+    });
+
+    it("emits no thinking deltas when reasoning_details is absent", async () => {
+      mockFinalChatCompletion.mockResolvedValueOnce(FINISH_RESPONSE);
+
+      const onDelta = vi.fn();
+      await provider.chat([READ_TOOL], onDelta);
+
+      const thinkingCalls = onDelta.mock.calls.filter(
+        (c) => (c[0] as { kind: string }).kind === "thinking",
+      );
+      expect(thinkingCalls).toHaveLength(0);
+    });
+
+    it("visible content still arrives as kind:text alongside reasoning", async () => {
+      const stream = buildCapturingStream(FINISH_RESPONSE);
+      stream.finalChatCompletion.mockImplementationOnce(async () => {
+        stream.emit("content", "some text delta");
+        stream.emit("chunk", {
+          choices: [
+            {
+              delta: {
+                reasoning_details: [
+                  { type: "reasoning.text", text: "internal thought" },
+                ],
+              },
+            },
+          ],
+        });
+        return FINISH_RESPONSE;
+      });
+      mockCompletionsStream.mockReturnValueOnce(stream);
+
+      const onDelta = vi.fn();
+      await provider.chat([READ_TOOL], onDelta);
+
+      expect(onDelta).toHaveBeenCalledWith({
+        kind: "text",
+        text: "some text delta",
+      });
+      expect(onDelta).toHaveBeenCalledWith({
+        kind: "thinking",
+        text: "internal thought",
+      });
+    });
   });
 });

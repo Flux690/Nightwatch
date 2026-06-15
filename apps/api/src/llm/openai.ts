@@ -65,6 +65,27 @@ export class OpenAIProvider implements LLMProvider {
       });
       if (onDelta) {
         stream.on("content", (delta) => onDelta({ kind: "text", text: delta }));
+        // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
+        // so the cast goes through unknown first to satisfy the compiler.
+        stream.on("chunk", (chunk) => {
+          const rawDelta = (
+            chunk as unknown as {
+              choices?: Array<{ delta?: Record<string, unknown> }>;
+            }
+          ).choices?.[0]?.delta;
+          const entries = rawDelta?.["reasoning_details"] as
+            | Array<{ type: string; text?: string }>
+            | undefined;
+          for (const entry of entries ?? []) {
+            if (
+              (entry.type === "reasoning.text" ||
+                entry.type === "reasoning.summary") &&
+              entry.text
+            ) {
+              onDelta({ kind: "thinking", text: entry.text });
+            }
+          }
+        });
       }
       response = await stream.finalChatCompletion();
     } catch (err) {
