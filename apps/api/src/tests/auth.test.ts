@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { SignJWT } from "jose";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
@@ -26,7 +27,7 @@ function setCookieHeader(res: {
 }
 
 function extractSessionValue(setCookie: string): string {
-  return /nw_session=([^;]+)/.exec(setCookie)?.[1] ?? "";
+  return /nw_auth=([^;]+)/.exec(setCookie)?.[1] ?? "";
 }
 
 // Setup and basic cookie attributes
@@ -62,7 +63,7 @@ describe("POST /setup", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("creates owner and sets session cookie for a 12+ character password", async () => {
+  it("creates owner and sets nw_auth session cookie for a 12+ character password", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/setup",
@@ -70,7 +71,7 @@ describe("POST /setup", () => {
     });
     expect(res.statusCode).toBe(200);
     const cookie = setCookieHeader(res);
-    expect(cookie).toMatch(/nw_session=[^;]+/);
+    expect(cookie).toMatch(/nw_auth=[^;]+/);
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Lax");
     expect(cookie).toContain("Path=/");
@@ -88,8 +89,6 @@ describe("POST /setup", () => {
   });
 
   it("sets the Secure flag when X-Forwarded-Proto is https", async () => {
-    // The owner was already created above; testing the Secure flag on /login
-    // instead so we don't need a clean DB just for this attribute check.
     const loginRes = await server.inject({
       method: "POST",
       url: "/login",
@@ -131,7 +130,7 @@ describe("POST /login", () => {
     cleanupDb();
   });
 
-  it("sets nw_session cookie on correct credentials", async () => {
+  it("sets nw_auth cookie on correct credentials", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/login",
@@ -139,7 +138,7 @@ describe("POST /login", () => {
     });
     expect(res.statusCode).toBe(200);
     const cookie = setCookieHeader(res);
-    expect(cookie).toMatch(/nw_session=[^;]+/);
+    expect(cookie).toMatch(/nw_auth=[^;]+/);
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Lax");
   });
@@ -177,7 +176,7 @@ describe("requireSession gate", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     server = await buildServer();
-    // Establish owner so session_epoch = 0 is in the DB
+    // Establish owner so login_version = 0 is in the DB
     await server.inject({
       method: "POST",
       url: "/setup",
@@ -195,53 +194,47 @@ describe("requireSession gate", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("returns 200 for a validly signed current cookie", async () => {
+  it("returns 200 for a valid jose JWT cookie", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${mintSession(0)}` },
+      headers: { cookie: `nw_auth=${await mintSession(0)}` },
     });
     expect(res.statusCode).toBe(200);
   });
 
   it("returns 401 for a cookie with a tampered signature", async () => {
-    const valid = mintSession(0);
+    const valid = await mintSession(0);
     const tampered = valid.slice(0, -4) + "XXXX";
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${tampered}` },
+      headers: { cookie: `nw_auth=${tampered}` },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it("returns 401 for an expired cookie", async () => {
-    const { createHmac } = await import("node:crypto");
-    const key = process.env["SECRET_KEY"] ?? "";
+  it("returns 401 for an expired jose JWT", async () => {
+    const key = new TextEncoder().encode(process.env["SECRET_KEY"] ?? "");
     const nowS = Math.floor(Date.now() / 1000);
-    const payload = JSON.stringify({
-      iat: nowS - 1000,
-      exp: nowS - 1,
-      epoch: 0,
-    });
-    const payloadB64 = Buffer.from(payload).toString("base64url");
-    const sig = createHmac("sha256", key)
-      .update(payloadB64)
-      .digest()
-      .toString("base64url");
+    const expired = await new SignJWT({ loginVersion: 0 })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(nowS - 1000)
+      .setExpirationTime(nowS - 1)
+      .sign(key);
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${payloadB64}.${sig}` },
+      headers: { cookie: `nw_auth=${expired}` },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it("returns 401 for a cookie with epoch=1 when DB has epoch=0", async () => {
+  it("returns 401 for a cookie with loginVersion=1 when DB has loginVersion=0", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${mintSession(1)}` },
+      headers: { cookie: `nw_auth=${await mintSession(1)}` },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -272,7 +265,7 @@ describe("session cookie unlocks protected routes", () => {
     const protectedRes = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${sessionValue}` },
+      headers: { cookie: `nw_auth=${sessionValue}` },
     });
     expect(protectedRes.statusCode).toBe(200);
   });
@@ -287,7 +280,7 @@ describe("session cookie unlocks protected routes", () => {
     const protectedRes = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${sessionValue}` },
+      headers: { cookie: `nw_auth=${sessionValue}` },
     });
     expect(protectedRes.statusCode).toBe(200);
   });
@@ -313,10 +306,11 @@ describe("POST /logout", () => {
     cleanupDb();
   });
 
-  it("returns 200 with Max-Age=0 to clear the cookie", async () => {
+  it("returns 200 with Max-Age=0 to clear the nw_auth cookie", async () => {
     const res = await server.inject({ method: "POST", url: "/logout" });
     expect(res.statusCode).toBe(200);
     const header = setCookieHeader(res);
+    expect(header).toContain("nw_auth=");
     expect(header).toContain("Max-Age=0");
   });
 
@@ -353,26 +347,26 @@ describe("rolling session reissue", () => {
 
   it("emits a fresh Set-Cookie when fewer than 2 days remain on the cookie", async () => {
     vi.useFakeTimers();
-    const cookie = mintSession(0); // exp = now + 7 days
+    const cookie = await mintSession(0); // exp = now + 7 days
     vi.advanceTimersByTime((7 - 1.5) * 24 * 60 * 60 * 1000); // 1.5 days left
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${cookie}` },
+      headers: { cookie: `nw_auth=${cookie}` },
     });
     vi.useRealTimers();
     expect(res.statusCode).toBe(200);
-    expect(setCookieHeader(res)).toMatch(/nw_session=[^;]+/);
+    expect(setCookieHeader(res)).toMatch(/nw_auth=[^;]+/);
   });
 
   it("does not emit Set-Cookie when more than 2 days remain on the cookie", async () => {
     vi.useFakeTimers();
-    const cookie = mintSession(0); // exp = now + 7 days
+    const cookie = await mintSession(0); // exp = now + 7 days
     vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000); // 4 days left
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${cookie}` },
+      headers: { cookie: `nw_auth=${cookie}` },
     });
     vi.useRealTimers();
     expect(res.statusCode).toBe(200);
@@ -380,8 +374,8 @@ describe("rolling session reissue", () => {
   });
 });
 
-// Revoke all sessions
-describe("POST /revoke-sessions", () => {
+// Logout-all (bumps login_version, invalidates all existing cookies)
+describe("POST /logout-all", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let validCookie: string;
@@ -405,7 +399,7 @@ describe("POST /revoke-sessions", () => {
   it("returns 401 without a valid session", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/revoke-sessions",
+      url: "/logout-all",
     });
     expect(res.statusCode).toBe(401);
   });
@@ -413,22 +407,22 @@ describe("POST /revoke-sessions", () => {
   it("returns 200 when called with a valid session", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/revoke-sessions",
-      headers: { cookie: `nw_session=${validCookie}` },
+      url: "/logout-all",
+      headers: { cookie: `nw_auth=${validCookie}` },
     });
     expect(res.statusCode).toBe(200);
   });
 
-  it("previously valid cookie is rejected after revoke", async () => {
+  it("previously valid cookie is rejected after logout-all", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${validCookie}` },
+      headers: { cookie: `nw_auth=${validCookie}` },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it("fresh login works after revoke", async () => {
+  it("fresh login works after logout-all", async () => {
     const loginRes = await server.inject({
       method: "POST",
       url: "/login",
@@ -439,7 +433,7 @@ describe("POST /revoke-sessions", () => {
     const protectedRes = await server.inject({
       method: "GET",
       url: "/protected",
-      headers: { cookie: `nw_session=${newCookie}` },
+      headers: { cookie: `nw_auth=${newCookie}` },
     });
     expect(protectedRes.statusCode).toBe(200);
   });

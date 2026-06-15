@@ -106,7 +106,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     TEST_TOKEN = mintToken("state-inversion").id;
 
     server = Fastify({ logger: false });
@@ -169,7 +169,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     // Deliberately register no runner: the console must work during an outage.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events = collectEvents(ws);
     await waitForConnected(ws);
@@ -178,7 +178,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_session=${SESSION}`,
+        Cookie: `nw_auth=${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -212,7 +212,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events = collectEvents(ws);
     await waitForConnected(ws);
@@ -221,7 +221,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_session=${SESSION}`,
+        Cookie: `nw_auth=${SESSION}`,
       },
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
@@ -296,7 +296,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 
@@ -323,7 +323,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_session=${SESSION}`,
+        Cookie: `nw_auth=${SESSION}`,
       },
       body: JSON.stringify({ message: "Has api-01 failed before?" }),
     });

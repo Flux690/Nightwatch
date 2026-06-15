@@ -32,7 +32,7 @@ function connectWs(
 ): Promise<number> {
   return new Promise<number>((resolve) => {
     const headers: Record<string, string> = {
-      Cookie: `nw_session=${session}`,
+      Cookie: `nw_auth=${session}`,
     };
     if (origin !== undefined) headers["Origin"] = origin;
 
@@ -60,7 +60,7 @@ describe("console WS origin allow-list (default: localhost)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     ({ server, port } = await buildServer());
   });
 
@@ -113,7 +113,7 @@ describe("console WS origin allow-list (custom CONSOLE_ORIGINS)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     vi.stubEnv("CONSOLE_ORIGINS", "https://nightwatch.example.com");
     ({ server, port } = await buildServer());
   });
@@ -152,7 +152,7 @@ describe("console WS origin allow-list (multiple CONSOLE_ORIGINS)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     vi.stubEnv(
       "CONSOLE_ORIGINS",
       "https://nightwatch.example.com,https://admin.example.com",

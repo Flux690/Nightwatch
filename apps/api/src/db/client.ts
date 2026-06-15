@@ -42,7 +42,7 @@ const SCHEMA = `
     reasoning_effort   TEXT,
     owner_email        TEXT,
     owner_hash         TEXT,
-    session_epoch      INTEGER NOT NULL DEFAULT 0,
+    login_version      INTEGER NOT NULL DEFAULT 0,
     updated_at         TEXT NOT NULL
   );
 

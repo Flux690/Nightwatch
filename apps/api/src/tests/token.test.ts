@@ -25,7 +25,7 @@ describe("Token lifecycle (issue 025)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerTokenRoutes(server);
@@ -45,7 +45,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.body) as { token: string; id: string };
@@ -59,7 +59,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(res.body) as {
         token: string;
@@ -77,7 +77,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "prod-server" },
       });
       expect(res.statusCode).toBe(201);
@@ -89,12 +89,12 @@ describe("Token lifecycle (issue 025)", () => {
       const a = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const b = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const tokenA = (JSON.parse(a.body) as { token: string }).token;
       const tokenB = (JSON.parse(b.body) as { token: string }).token;
@@ -107,7 +107,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "list-test" },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
@@ -115,7 +115,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "GET",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
       expect(res.body).not.toContain(token);
@@ -125,7 +125,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "meta-test" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
@@ -133,7 +133,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "GET",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(res.body) as {
         tokens: Array<{
@@ -158,7 +158,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "to-revoke" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
@@ -166,14 +166,14 @@ describe("Token lifecycle (issue 025)", () => {
       const del = await server.inject({
         method: "DELETE",
         url: `/tokens/${id}`,
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(del.statusCode).toBe(204);
 
       const list = await server.inject({
         method: "GET",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
         tokens: Array<{ id: string; revokedAt: string | null }>;
@@ -186,7 +186,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "DELETE",
         url: "/tokens/00000000-0000-0000-0000-000000000000",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(404);
     });
@@ -197,7 +197,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
 
@@ -249,7 +249,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
         token: string;
@@ -269,7 +269,7 @@ describe("Token lifecycle (issue 025)", () => {
             await server.inject({
               method: "DELETE",
               url: `/tokens/${id}`,
-              headers: { cookie: `nw_session=${SESSION}` },
+              headers: { cookie: `nw_auth=${SESSION}` },
             });
           }
         });
@@ -284,7 +284,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
         token: string;
@@ -311,7 +311,7 @@ describe("Token lifecycle (issue 025)", () => {
       const list = await server.inject({
         method: "GET",
         url: "/tokens",
-        headers: { cookie: `nw_session=${SESSION}` },
+        headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
         tokens: Array<{ id: string; lastUsedAt: string | null }>;

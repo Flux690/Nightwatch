@@ -178,11 +178,11 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
   return next;
 }
 
-export function getSessionEpoch(): number {
+export function getLoginVersion(): number {
   const row = getDb()
-    .prepare("SELECT session_epoch FROM config WHERE id = ?")
-    .get(CONFIG_ID) as { session_epoch: number } | undefined;
-  return row?.session_epoch ?? 0;
+    .prepare("SELECT login_version FROM config WHERE id = ?")
+    .get(CONFIG_ID) as { login_version: number } | undefined;
+  return row?.login_version ?? 0;
 }
 
 export function getOwnerCredentials(): { email: string; hash: string } | null {
@@ -197,13 +197,13 @@ export function getOwnerCredentials(): { email: string; hash: string } | null {
   return { email: row.email, hash: row.hash };
 }
 
-export function bumpSessionEpoch(): void {
+export function bumpLoginVersion(): void {
   getDb()
     .prepare(
-      `INSERT INTO config (id, session_epoch, updated_at)
+      `INSERT INTO config (id, login_version, updated_at)
        VALUES (@id, 1, @updatedAt)
        ON CONFLICT(id) DO UPDATE SET
-         session_epoch = session_epoch + 1,
+         login_version = login_version + 1,
          updated_at = @updatedAt`,
     )
     .run({ id: CONFIG_ID, updatedAt: new Date().toISOString() });

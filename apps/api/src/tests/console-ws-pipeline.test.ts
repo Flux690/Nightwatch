@@ -109,7 +109,7 @@ describe("console WS pipeline", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     TEST_TOKEN = mintToken("test-runner").id;
 
     // Persistence is local now; the provider calls no runner tool here, so the
@@ -146,7 +146,7 @@ describe("console WS pipeline", () => {
 
   it("delivers session_delta events then session_message, transcript loadable after", async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
@@ -166,7 +166,7 @@ describe("console WS pipeline", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `nw_session=${SESSION}`,
+        Cookie: `nw_auth=${SESSION}`,
       },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
@@ -214,7 +214,7 @@ describe("console WS pipeline", () => {
     mockCreateProvider.mockClear();
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: Array<{
       type: string;
@@ -245,7 +245,7 @@ describe("console WS pipeline", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_session=${SESSION}`,
+          Cookie: `nw_auth=${SESSION}`,
         },
         body: JSON.stringify({ message: "Is the system healthy?" }),
       },
@@ -263,7 +263,7 @@ describe("console WS pipeline", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: `nw_session=${SESSION}`,
+          Cookie: `nw_auth=${SESSION}`,
         },
         body: JSON.stringify({
           token: TEST_TOKEN,

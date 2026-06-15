@@ -116,7 +116,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
     await registerApprovalRoutes(server);
@@ -170,7 +170,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokA}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "test" }),
     });
     expect(chatRes.status).toBe(202);
@@ -196,7 +196,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
       `http://127.0.0.1:${port}/incidents/${found.incidentId}/reject`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "cleanup" }),
       },
     );
@@ -247,7 +247,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokC}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "scope test" }),
     });
     expect(chatRes.status).toBe(202);
@@ -278,7 +278,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
         `http://127.0.0.1:${port}/incidents/${bodyC[0].incidentId}/reject`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+          headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
           body: JSON.stringify({ resolvedBy: "cleanup" }),
         },
       );
@@ -324,7 +324,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat/${tokE}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "empty after resolve" }),
     });
     expect(chatRes.status).toBe(202);
@@ -341,7 +341,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     const incidentId = body[0]!.incidentId;
     await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/reject`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ resolvedBy: "op" }),
     });
 

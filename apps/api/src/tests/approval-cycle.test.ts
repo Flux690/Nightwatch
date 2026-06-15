@@ -147,7 +147,7 @@ describe("durable approval interrupts", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     TEST_TOKEN = mintToken("approval-022").id;
 
     registerRunner(
@@ -210,7 +210,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -220,7 +220,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     expect(res.status).toBe(202);
@@ -250,7 +250,7 @@ describe("durable approval interrupts", () => {
     const incidentId = String(interrupt.payload["incidentId"]);
     await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ resolvedBy: "cleanup" }),
     });
     await waitFor(() => restartCommands.length > countBefore);
@@ -279,7 +279,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -289,7 +289,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -306,7 +306,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );
@@ -355,7 +355,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -365,7 +365,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -381,7 +381,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator", comment: "too risky" }),
       },
     );
@@ -422,7 +422,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -432,7 +432,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -448,7 +448,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/add-context`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ contextMessage: "maintenance window active" }),
       },
     );
@@ -490,7 +490,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -500,7 +500,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -516,7 +516,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "op1" }),
       },
     );
@@ -526,7 +526,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "op2" }),
       },
     );
@@ -557,7 +557,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -567,7 +567,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -583,7 +583,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({
           token: TEST_TOKEN,
           message: "what do you think?",
@@ -602,7 +602,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${String(interrupt.payload["incidentId"])}/reject`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "cleanup" }),
       },
     );
@@ -631,7 +631,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -641,7 +641,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service is wedged." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -664,7 +664,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator-after-restart" }),
       },
     );
@@ -705,7 +705,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -715,7 +715,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Mixed turn test." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -743,7 +743,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );
@@ -789,7 +789,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -832,7 +832,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );
@@ -871,7 +871,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -885,7 +885,7 @@ describe("durable approval interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "No timeout test." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -913,7 +913,7 @@ describe("durable approval interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "late-operator" }),
       },
     );

@@ -1,10 +1,10 @@
 import { hash, verify } from "argon2";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { mintSession, requireSession, setCookieHeader } from "./session.js";
+import { mintSession, requireSession, cookieHeader } from "./session.js";
 import {
-  bumpSessionEpoch,
+  bumpLoginVersion,
   getOwnerCredentials,
-  getSessionEpoch,
+  getLoginVersion,
   saveOwner,
 } from "../config/store.js";
 import { createCredentialRateLimiter } from "./rate-limit.js";
@@ -46,8 +46,8 @@ export async function registerAuthRoutes(
       }
       const ownerHash = await hash(password);
       saveOwner(email, ownerHash);
-      const cookie = mintSession(getSessionEpoch());
-      reply.header("Set-Cookie", setCookieHeader(cookie, isHttps(request)));
+      const cookie = await mintSession(getLoginVersion());
+      reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
       return reply.code(200).send({ ok: true });
     },
   );
@@ -67,8 +67,8 @@ export async function registerAuthRoutes(
       if (!owner || owner.email !== email || !valid) {
         return reply.code(401).send({ error: "invalid credentials" });
       }
-      const cookie = mintSession(getSessionEpoch());
-      reply.header("Set-Cookie", setCookieHeader(cookie, isHttps(request)));
+      const cookie = await mintSession(getLoginVersion());
+      reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
       return reply.code(200).send({ ok: true });
     },
   );
@@ -76,16 +76,16 @@ export async function registerAuthRoutes(
   fastify.post("/logout", async (_request, reply) => {
     reply.header(
       "Set-Cookie",
-      "nw_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
+      "nw_auth=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
     );
     return reply.code(200).send({ ok: true });
   });
 
   fastify.post(
-    "/revoke-sessions",
+    "/logout-all",
     { preHandler: requireSession },
     async (_request, reply) => {
-      bumpSessionEpoch();
+      bumpLoginVersion();
       return reply.code(200).send({ ok: true });
     },
   );

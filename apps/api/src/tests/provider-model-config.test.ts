@@ -42,7 +42,7 @@ describe("provider/model config seam", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await registerConfigRoutes(server);
     await server.ready();
@@ -66,7 +66,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-bad-key" },
     });
 
@@ -84,7 +84,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "claude-sonnet-4-6" },
     });
 
@@ -102,7 +102,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "gpt-99-not-real" },
     });
 
@@ -119,7 +119,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-any-key" },
     });
 
@@ -183,7 +183,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "PATCH",
       url: "/config/key",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-ant-test-key-12345678" },
     });
 
@@ -199,7 +199,7 @@ describe("provider/model config seam", () => {
     const saved = await server.inject({
       method: "PATCH",
       url: "/config/key",
-      headers: { cookie: `nw_session=${SESSION}` },
+      headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey },
     });
     expect(saved.statusCode).toBe(200);

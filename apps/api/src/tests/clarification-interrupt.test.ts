@@ -152,7 +152,7 @@ describe("clarification interrupts", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     TEST_TOKEN = mintToken("clarification-023").id;
 
     registerRunner(
@@ -212,7 +212,7 @@ describe("clarification interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -222,7 +222,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service degraded." }),
     });
     expect(res.status).toBe(202);
@@ -254,7 +254,7 @@ describe("clarification interrupts", () => {
     const incidentId = String(interrupt.payload["incidentId"]);
     await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/answer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ answer: "cleanup" }),
     });
     await waitFor(() => !hasPendingInterrupt(sessionId));
@@ -279,7 +279,7 @@ describe("clarification interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -289,7 +289,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Which container?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -305,7 +305,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({
           answer: "Database overloaded",
           resolvedBy: "operator",
@@ -351,7 +351,7 @@ describe("clarification interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -361,7 +361,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Factors?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -378,7 +378,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({
           answer: ["Database overloaded", "Memory leak"],
           resolvedBy: "operator",
@@ -415,7 +415,7 @@ describe("clarification interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -425,7 +425,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Is this recurring?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -446,7 +446,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({
           answer: "Yes, recurring daily",
           resolvedBy: "operator-after-restart",
@@ -510,7 +510,7 @@ describe("clarification interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -520,7 +520,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Mixed gate test." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -542,7 +542,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${clarIncidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ answer: "Yes", resolvedBy: "operator" }),
       },
     );
@@ -565,7 +565,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${approvalIncidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );

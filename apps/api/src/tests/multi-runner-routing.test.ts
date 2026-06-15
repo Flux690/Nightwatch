@@ -198,7 +198,7 @@ describe("multi-runner routing", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    SESSION = mintTestSession();
+    SESSION = await mintTestSession();
     tokenId = mintToken("routing-026").id;
 
     registerRunner(tokenId, "runner-a", makeSend(commandsA), () => {});
@@ -390,7 +390,7 @@ describe("multi-runner routing", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
     });
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
@@ -406,7 +406,7 @@ describe("multi-runner routing", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${tokenId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "postgres is crashing" }),
     });
     expect(res.status).toBe(202);
@@ -430,7 +430,7 @@ describe("multi-runner routing", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );
