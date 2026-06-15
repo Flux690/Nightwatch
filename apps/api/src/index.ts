@@ -21,10 +21,17 @@ import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
 import { registerApprovalRoutes } from "./approvals/routes.js";
 
+const isDev = process.env["NODE_ENV"] !== "production";
+
 // Fastify keeps its own pino for HTTP logs; the investigation loop/providers
 // use the standalone logger in ./logger.js. Both emit pino JSON to stdout.
 // trustProxy honors X-Forwarded-Proto for the session cookie Secure flag.
-const fastify = Fastify({ logger: true, trustProxy: true });
+const fastify = Fastify({
+  logger: isDev
+    ? { transport: { target: "pino-pretty", options: { colorize: true } } }
+    : true,
+  trustProxy: true,
+});
 
 await fastify.register(FastifyWebSocket);
 

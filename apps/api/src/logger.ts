@@ -1,5 +1,7 @@
 import pino from "pino";
 
+const isDev = process.env["NODE_ENV"] !== "production";
+
 // One logger for the whole API: Fastify uses it for HTTP, and the
 // investigation loop/providers use child loggers so every line carries
 // its incidentId. The `err` serializer captures stack + SDK status codes,
@@ -7,4 +9,7 @@ import pino from "pino";
 export const logger = pino({
   level: process.env["LOG_LEVEL"] ?? "info",
   serializers: { err: pino.stdSerializers.err },
+  ...(isDev && {
+    transport: { target: "pino-pretty", options: { colorize: true } },
+  }),
 });
