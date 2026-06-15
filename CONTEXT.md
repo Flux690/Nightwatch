@@ -82,9 +82,9 @@ One SQLite file on the API (better-sqlite3, WAL mode). Six tables:
 |---|---|
 | `tokens` | deployment credentials (SHA-256 hash, label, createdAt, lastUsedAt, revokedAt) |
 | `config` | agent/model settings (one row; API key AES-256-GCM encrypted) |
-| `sessions` | one row per session: id, token, trigger, title, originating alert (JSON), createdAt |
+| `sessions` | one row per session: id, token, title, originating alert (JSON), createdAt. Chat vs alert is derived from whether an originating alert exists, not stored |
 | `session_messages` | the transcript; `UNIQUE(session_id, seq)`; `providerContent` JSON for exact provider-turn rebuild |
-| `incidents` | findings + episodic memory (root cause, action, resolution note, recurrence) |
+| `incidents` | currently escalation records only (root cause, action, resolution note, recurrence); finding extraction / episodic memory is deferred |
 | `pending_interrupts` | the durable "waiting on a human" marker (see Interrupts) |
 
 **Derived, never stored:**
@@ -102,8 +102,9 @@ One agentic loop, one system prompt, one session type. An **alert** authors the
 opening user message (alert + incident history context), or a **human** does
 (chat). Same tools, same gates. The loop: `provider.chat()` → dispatch tool calls
 (platform tools in-process, runner tools via `sendCommand`) → persist new
-transcript turns locally in a transaction → repeat, until `final_response`
-(validated against `InvestigationResultSchema`), an interrupt, or a budget exit.
+transcript turns locally in a transaction → repeat, until the model ends its
+turn with plain text (no tool call = a successful finish), an interrupt, or a
+budget exit.
 
 **Persistence is transactional and local** — never best-effort, never remote. The
 transcript is the checkpoint; `provider.seed(transcript)` rebuilds the in-memory
@@ -133,7 +134,7 @@ Two kinds, one mechanism (`kind: approval | clarification`):
 - **approval** — the card shows the exact command/input + risk. Actions:
   **Approve** / **Reject** (optional comment) / **Other** — typing in the
   composer while the interrupt is pending resolves it as added context the model
-  adapts to. Critical-severity rejection escalates.
+  adapts to.
 - **clarification** — AskUserQuestion-shaped: the model supplies
   `{question, options[], multiSelect?}`; the console renders option buttons; the
   composer is the free-text "Other". No timeout — if the agent needs an answer at
@@ -148,10 +149,10 @@ Every tool_use is answered by exactly one tool_result.
 **Budgets:** each dispatch gets a fresh `maxToolCalls` / `hardTimeoutMs` budget.
 Resumes require a human action, so budgets cannot loop unattended.
 
-**Escalation is a feature, not a log line.** Every escalation path (refusal,
-no-final-response, schema failure, critical rejection, budget exit) writes an
-incident with an escalated outcome and publishes a console event. A human must be
-able to find out.
+**Escalation means the agent gave up - nothing else.** The two escalation paths
+(model refusal, budget/timeout exhaustion) write an incident with an escalated
+outcome and publish a console event. A human must be able to find out. Ending a
+turn in plain text is a successful finish, not an escalation.
 
 ## Alert pipeline
 
@@ -222,8 +223,8 @@ Routes: `/` (welcome + composer; first message mints a session in place),
   card; the composer is the "Other".
 - **Clarification card** — option buttons + composer-as-Other.
 - **Transcript** — one renderer for live and persisted views (role bubbles + tool
-  cards with IN/OUT); a `final_response` renders as a **Finding**; the words
-  "conclude/concluded" never appear in the UI.
+  cards with IN/OUT); the agent's closing plain-text turn renders as its answer;
+  the words "conclude/concluded" never appear in the UI.
 - **Composer** — always mounted; routed by state (new message / add-context); the
   API enforces 409 on sessions that are running.
 - Design language: dark, high-contrast, terminal-adjacent; monospace for data,
@@ -238,19 +239,19 @@ Routes: `/` (welcome + composer; first message mints a session in place),
   a Docker thing — the capability manifest + `commands/*` dispatch generalises.
 - **Console** — the operator UI.
 - **Token** — the deployment credential (see lifecycle above).
-- **Session** — a durable, resumable agentic thread; owns its id; started by a
-  **trigger** (`alert` | `chat`). No status; never "concludes".
-- **Run** — one dispatch of the loop over a session. Ephemeral. Ends at
-  `final_response`, an interrupt, or a budget/escalation exit.
+- **Session** — a durable, resumable agentic thread; owns its id; entered via an
+  alert or a human chat message. No status; never "concludes".
+- **Run** — one dispatch of the loop over a session. Ephemeral. Ends when the
+  model replies in plain text (no tool call), an interrupt, or a budget/escalation
+  exit.
 - **Interrupt** — the durable suspension of a run awaiting a human
   (`kind: approval | clarification`). The only gate mechanism.
 - **Transcript** — the persisted `session_messages`; sufficient to rebuild exact
   provider turns on resume.
-- **Incident** — optional child artifact of a session: the structured finding
-  from `final_response`, or an escalation record. Episodic memory for future runs.
-- **Finding** — the operator-facing rendering of a result (what broke, what the
-  agent did/recommends).
-- **Trigger** — what starts a session (`alert` | `chat`).
+- **Incident** — optional child artifact of a session: currently an escalation
+  record only. Finding extraction / episodic memory for future runs is deferred.
+- **Trigger** — what starts a session: an alert or a human chat message. Derived
+  from whether an originating alert exists, not stored as a field.
 - **Escalate** — the agent hands off to the human, as a recorded incident + console
   event (never silently).
 - **Integration** — a public-SaaS source the API reaches directly with a stored
@@ -262,7 +263,7 @@ Routes: `/` (welcome + composer; first message mints a session in place),
 
 Tool catalog: the source of truth is `packages/shared/src/tools.ts` +
 `apps/api/src/investigation/tools.ts` (`PLATFORM_TOOLS`, `RUNNER_TOOLS`,
-`REQUIRES_APPROVAL`, `FINAL_RESPONSE_TOOL_NAME`).
+`REQUIRES_APPROVAL`).
 
 ## Decisions
 

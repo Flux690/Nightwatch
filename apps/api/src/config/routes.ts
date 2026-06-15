@@ -40,10 +40,10 @@ function modelsUrl(config: AgentConfig): string {
     config.baseUrl ??
     process.env["OPENAI_BASE_URL"] ??
     "https://api.openai.com/v1";
-  // Ollama uses /api/tags; all others use /v1/models. If baseUrl already ends
-  // with a path that looks like /api, assume Ollama-style; otherwise standard.
+  // Ollama uses /api/tags; all others use /models. baseUrl is always the full
+  // versioned base (e.g. https://openrouter.ai/api/v1), so append /models only.
   if (base.endsWith("/api")) return `${base}/tags`;
-  return `${base}/v1/models`;
+  return `${base}/models`;
 }
 
 // Build auth headers appropriate for the provider.

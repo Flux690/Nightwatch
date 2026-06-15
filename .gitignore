@@ -21,10 +21,6 @@ runner-id
 .claude/settings.local.json
 .claude/worktrees/
 .claude/logs/hooks*.log
-.claude/current-brief.md
-
-# Smoke test runtime — backgrounded process logs/pids
-.smoke/
 
 # Fetched skill content — regenerable from skills-lock.json (committed)
 .claude/skills/
@@ -34,7 +30,10 @@ runner-id
 Thumbs.db
 Desktop.ini
 
+# Local doc/reference dumps used while designing — not source
 mantinedocs.txt
+claudeapidocs.txt
+
 # Local work tracking — issues stay untracked
 issues
 
