@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
@@ -10,12 +10,16 @@ import { mintSession, requireSession } from "../auth/session.js";
 async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({ logger: false, trustProxy: true });
   await registerAuthRoutes(server);
-  server.get("/protected", { preHandler: requireSession }, async () => ({ ok: true }));
+  server.get("/protected", { preHandler: requireSession }, async () => ({
+    ok: true,
+  }));
   await server.ready();
   return server;
 }
 
-function setCookieHeader(res: { headers: { "set-cookie"?: string | string[] } }): string {
+function setCookieHeader(res: {
+  headers: { "set-cookie"?: string | string[] };
+}): string {
   const raw = res.headers["set-cookie"];
   const header = Array.isArray(raw) ? raw[0] : raw;
   return header ?? "";
@@ -147,7 +151,9 @@ describe("POST /login", () => {
       payload: { email: "admin@example.com", password: "wrongpassword123" },
     });
     expect(res.statusCode).toBe(401);
-    expect((JSON.parse(res.body) as { error: string }).error).toBe("invalid credentials");
+    expect((JSON.parse(res.body) as { error: string }).error).toBe(
+      "invalid credentials",
+    );
   });
 
   it("returns 401 for unknown email, same generic error", async () => {
@@ -157,7 +163,9 @@ describe("POST /login", () => {
       payload: { email: "nobody@example.com", password: "correcthorsebattery" },
     });
     expect(res.statusCode).toBe(401);
-    expect((JSON.parse(res.body) as { error: string }).error).toBe("invalid credentials");
+    expect((JSON.parse(res.body) as { error: string }).error).toBe(
+      "invalid credentials",
+    );
   });
 });
 
@@ -211,9 +219,16 @@ describe("requireSession gate", () => {
     const { createHmac } = await import("node:crypto");
     const key = process.env["SECRET_KEY"] ?? "";
     const nowS = Math.floor(Date.now() / 1000);
-    const payload = JSON.stringify({ iat: nowS - 1000, exp: nowS - 1, epoch: 0 });
+    const payload = JSON.stringify({
+      iat: nowS - 1000,
+      exp: nowS - 1,
+      epoch: 0,
+    });
     const payloadB64 = Buffer.from(payload).toString("base64url");
-    const sig = createHmac("sha256", key).update(payloadB64).digest().toString("base64url");
+    const sig = createHmac("sha256", key)
+      .update(payloadB64)
+      .digest()
+      .toString("base64url");
     const res = await server.inject({
       method: "GET",
       url: "/protected",
@@ -273,6 +288,158 @@ describe("session cookie unlocks protected routes", () => {
       method: "GET",
       url: "/protected",
       headers: { cookie: `nw_session=${sessionValue}` },
+    });
+    expect(protectedRes.statusCode).toBe(200);
+  });
+});
+
+// Logout
+describe("POST /logout", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = await buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/setup",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("returns 200 with Max-Age=0 to clear the cookie", async () => {
+    const res = await server.inject({ method: "POST", url: "/logout" });
+    expect(res.statusCode).toBe(200);
+    const header = setCookieHeader(res);
+    expect(header).toContain("Max-Age=0");
+  });
+
+  it("is safe to call when unauthenticated", async () => {
+    const res = await server.inject({ method: "POST", url: "/logout" });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("protected route is 401 without a cookie (simulates client after logout)", async () => {
+    const res = await server.inject({ method: "GET", url: "/protected" });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+// Rolling reissue
+describe("rolling session reissue", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = await buildServer();
+    await server.inject({
+      method: "POST",
+      url: "/setup",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("emits a fresh Set-Cookie when fewer than 2 days remain on the cookie", async () => {
+    vi.useFakeTimers();
+    const cookie = mintSession(0); // exp = now + 7 days
+    vi.advanceTimersByTime((7 - 1.5) * 24 * 60 * 60 * 1000); // 1.5 days left
+    const res = await server.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { cookie: `nw_session=${cookie}` },
+    });
+    vi.useRealTimers();
+    expect(res.statusCode).toBe(200);
+    expect(setCookieHeader(res)).toMatch(/nw_session=[^;]+/);
+  });
+
+  it("does not emit Set-Cookie when more than 2 days remain on the cookie", async () => {
+    vi.useFakeTimers();
+    const cookie = mintSession(0); // exp = now + 7 days
+    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000); // 4 days left
+    const res = await server.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { cookie: `nw_session=${cookie}` },
+    });
+    vi.useRealTimers();
+    expect(res.statusCode).toBe(200);
+    expect(setCookieHeader(res)).toBe("");
+  });
+});
+
+// Revoke all sessions
+describe("POST /revoke-sessions", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let validCookie: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = await buildServer();
+    const setupRes = await server.inject({
+      method: "POST",
+      url: "/setup",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+    validCookie = extractSessionValue(setCookieHeader(setupRes));
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("returns 401 without a valid session", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/revoke-sessions",
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns 200 when called with a valid session", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/revoke-sessions",
+      headers: { cookie: `nw_session=${validCookie}` },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("previously valid cookie is rejected after revoke", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { cookie: `nw_session=${validCookie}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("fresh login works after revoke", async () => {
+    const loginRes = await server.inject({
+      method: "POST",
+      url: "/login",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+    expect(loginRes.statusCode).toBe(200);
+    const newCookie = extractSessionValue(setCookieHeader(loginRes));
+    const protectedRes = await server.inject({
+      method: "GET",
+      url: "/protected",
+      headers: { cookie: `nw_session=${newCookie}` },
     });
     expect(protectedRes.statusCode).toBe(200);
   });

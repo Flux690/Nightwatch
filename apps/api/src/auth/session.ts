@@ -4,6 +4,7 @@ import { getSessionEpoch } from "../config/store.js";
 
 const SESSION_COOKIE = "nw_session";
 const SESSION_LIFETIME_S = 7 * 24 * 60 * 60;
+const REISSUE_THRESHOLD_S = 2 * 24 * 60 * 60;
 
 function hmacKey(): string {
   const key = process.env["SECRET_KEY"];
@@ -13,6 +14,17 @@ function hmacKey(): string {
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
+}
+
+export function setCookieHeader(value: string, secure: boolean): string {
+  const parts = [
+    `${SESSION_COOKIE}=${value}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
 }
 
 export function mintSession(epoch: number): string {
@@ -64,24 +76,31 @@ function extractCookieValue(header: string | undefined): string | undefined {
   return undefined;
 }
 
-export function validateSession(
-  cookieHeader: string | undefined,
-  storedEpoch: number,
-): boolean {
-  const value = extractCookieValue(cookieHeader);
-  if (!value) return false;
-  const payload = parseAndVerify(value);
-  if (!payload) return false;
-  if (payload.exp <= Math.floor(Date.now() / 1000)) return false;
-  if (payload.epoch !== storedEpoch) return false;
-  return true;
-}
-
 export async function requireSession(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
-  if (!validateSession(request.headers.cookie, getSessionEpoch())) {
+  const value = extractCookieValue(request.headers.cookie);
+  if (!value) {
     await reply.code(401).send({ error: "authentication required" });
+    return;
+  }
+  const payload = parseAndVerify(value);
+  if (!payload) {
+    await reply.code(401).send({ error: "authentication required" });
+    return;
+  }
+  const storedEpoch = getSessionEpoch();
+  const nowS = Math.floor(Date.now() / 1000);
+  if (payload.exp <= nowS || payload.epoch !== storedEpoch) {
+    await reply.code(401).send({ error: "authentication required" });
+    return;
+  }
+  if (payload.exp - nowS < REISSUE_THRESHOLD_S) {
+    const secure = request.protocol === "https";
+    reply.header(
+      "Set-Cookie",
+      setCookieHeader(mintSession(storedEpoch), secure),
+    );
   }
 }

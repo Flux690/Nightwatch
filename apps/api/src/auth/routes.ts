@@ -1,19 +1,14 @@
 import { hash, verify } from "argon2";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { mintSession } from "./session.js";
+import { mintSession, requireSession, setCookieHeader } from "./session.js";
 import {
+  bumpSessionEpoch,
   getOwnerCredentials,
   getSessionEpoch,
   saveOwner,
 } from "../config/store.js";
 
 const MIN_PASSWORD = 12;
-
-function setCookieHeader(value: string, secure: boolean): string {
-  const parts = [`nw_session=${value}`, "HttpOnly", "SameSite=Lax", "Path=/"];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
-}
 
 function isHttps(request: FastifyRequest): boolean {
   return request.protocol === "https";
@@ -72,4 +67,13 @@ export async function registerAuthRoutes(
     );
     return reply.code(200).send({ ok: true });
   });
+
+  fastify.post(
+    "/revoke-sessions",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      bumpSessionEpoch();
+      return reply.code(200).send({ ok: true });
+    },
+  );
 }

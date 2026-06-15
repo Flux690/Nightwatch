@@ -190,9 +190,23 @@ export function getOwnerCredentials(): { email: string; hash: string } | null {
     .prepare(
       "SELECT owner_email AS email, owner_hash AS hash FROM config WHERE id = ?",
     )
-    .get(CONFIG_ID) as { email: string | null; hash: string | null } | undefined;
+    .get(CONFIG_ID) as
+    | { email: string | null; hash: string | null }
+    | undefined;
   if (!row?.hash || !row.email) return null;
   return { email: row.email, hash: row.hash };
+}
+
+export function bumpSessionEpoch(): void {
+  getDb()
+    .prepare(
+      `INSERT INTO config (id, session_epoch, updated_at)
+       VALUES (@id, 1, @updatedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         session_epoch = session_epoch + 1,
+         updated_at = @updatedAt`,
+    )
+    .run({ id: CONFIG_ID, updatedAt: new Date().toISOString() });
 }
 
 export function saveOwner(email: string, hash: string): void {
