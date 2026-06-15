@@ -62,7 +62,7 @@ async function connectRunner(
   return ws;
 }
 
-describe("multi-runner registry (token, runnerId)", () => {
+describe("flat runner registry", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
@@ -90,23 +90,22 @@ describe("multi-runner registry (token, runnerId)", () => {
   }
 
   it("lists two runners on one token with independent manifests and liveness", async () => {
-    // A fresh token per test isolates the registry: a prior test's async socket
-    // close cannot unregister this test's identically-named runner.
+    // runnerId values are unique per test: the flat registry is keyed by runnerId
+    // globally, so collisions across tests would corrupt each other's state.
     const { plaintext: token, id: tokenId } = mintToken("two-up");
     const a = await connectRunner(
       port,
       token,
-      "runner-a",
-      manifest(token, "runner-a", "web-01", ["nginx", "api"]),
+      "two-up-a",
+      manifest(token, "two-up-a", "web-01", ["nginx", "api"]),
     );
     const b = await connectRunner(
       port,
       token,
-      "runner-b",
-      manifest(token, "runner-b", "db-02", ["postgres"]),
+      "two-up-b",
+      manifest(token, "two-up-b", "db-02", ["postgres"]),
     );
 
-    // Both manifests must be stored before asserting; the sends above are async.
     const runners = await waitFor(async () => {
       const list = await getRunners();
       const mine = list.filter((r) => r.token === tokenId);
@@ -116,18 +115,16 @@ describe("multi-runner registry (token, runnerId)", () => {
     });
 
     const byId = new Map(runners.map((r) => [r.id, r]));
-    const ra = byId.get("runner-a");
-    const rb = byId.get("runner-b");
+    const ra = byId.get("two-up-a");
+    const rb = byId.get("two-up-b");
     expect(ra).toBeDefined();
     expect(rb).toBeDefined();
 
-    // One runner's manifest or hostname never overwrites the other's.
     expect(ra?.hostname).toBe("web-01");
     expect(rb?.hostname).toBe("db-02");
     expect(ra?.manifest?.capabilities.containers).toEqual(["nginx", "api"]);
     expect(rb?.manifest?.capabilities.containers).toEqual(["postgres"]);
 
-    // Both are independently online (each has its own fresh heartbeat).
     expect(ra?.online).toBe(true);
     expect(rb?.online).toBe(true);
 
@@ -140,14 +137,14 @@ describe("multi-runner registry (token, runnerId)", () => {
     const a = await connectRunner(
       port,
       token,
-      "runner-a",
-      manifest(token, "runner-a", "web-01", ["nginx"]),
+      "close-one-a",
+      manifest(token, "close-one-a", "web-01", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       token,
-      "runner-b",
-      manifest(token, "runner-b", "db-02", ["postgres"]),
+      "close-one-b",
+      manifest(token, "close-one-b", "db-02", ["postgres"]),
     );
     await waitFor(async () =>
       (await getRunners()).filter(
@@ -159,16 +156,51 @@ describe("multi-runner registry (token, runnerId)", () => {
 
     a.close();
 
-    // After a's socket closes only b remains live; the token still resolves to a
-    // single online runner, not a phantom of the dead one.
     const remaining = await waitFor(async () => {
       const live = (await getRunners()).filter(
         (r) => r.token === tokenId && r.online,
       );
       return live.length === 1 ? live : undefined;
     });
-    expect(remaining[0].id).toBe("runner-b");
+    expect(remaining[0].id).toBe("close-one-b");
 
+    b.close();
+  });
+
+  it("two runners on different tokens both appear in the fleet", async () => {
+    const { plaintext: tokenA, id: tokenAId } = mintToken("cross-a");
+    const { plaintext: tokenB, id: tokenBId } = mintToken("cross-b");
+
+    const a = await connectRunner(
+      port,
+      tokenA,
+      "cross-runner-a",
+      manifest(tokenA, "cross-runner-a", "host-a", ["nginx"]),
+    );
+    const b = await connectRunner(
+      port,
+      tokenB,
+      "cross-runner-b",
+      manifest(tokenB, "cross-runner-b", "host-b", ["postgres"]),
+    );
+
+    const runners = await waitFor(async () => {
+      const list = await getRunners();
+      const mine = list.filter(
+        (r) => r.token === tokenAId || r.token === tokenBId,
+      );
+      return mine.length === 2 && mine.every((r) => r.manifest !== null)
+        ? mine
+        : undefined;
+    });
+
+    const byId = new Map(runners.map((r) => [r.id, r]));
+    expect(byId.get("cross-runner-a")?.hostname).toBe("host-a");
+    expect(byId.get("cross-runner-b")?.hostname).toBe("host-b");
+    expect(byId.get("cross-runner-a")?.online).toBe(true);
+    expect(byId.get("cross-runner-b")?.online).toBe(true);
+
+    a.close();
     b.close();
   });
 });

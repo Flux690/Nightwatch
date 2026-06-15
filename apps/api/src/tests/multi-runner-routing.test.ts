@@ -180,6 +180,12 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
+  // runner-c is on a different token to test cross-token routing.
+  let tokenId2: string;
+  const commandsC: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
 
   function makeSend(
     log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
@@ -197,6 +203,7 @@ describe("multi-runner routing", () => {
   }
 
   beforeAll(async () => {
+    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     tokenId = mintToken("routing-026").id;
@@ -215,6 +222,14 @@ describe("multi-runner routing", () => {
       makeManifest("runner-b", tokenId, "db-02", ["postgres"]),
     );
 
+    tokenId2 = mintToken("routing-cross").id;
+    registerRunner(tokenId2, "runner-c", makeSend(commandsC), () => {});
+    setRunnerManifest(
+      tokenId2,
+      "runner-c",
+      makeManifest("runner-c", tokenId2, "cache-01", ["redis"]),
+    );
+
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
@@ -227,6 +242,7 @@ describe("multi-runner routing", () => {
   afterAll(async () => {
     unregisterRunner(tokenId, "runner-a");
     unregisterRunner(tokenId, "runner-b");
+    unregisterRunner(tokenId2, "runner-c");
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -235,6 +251,7 @@ describe("multi-runner routing", () => {
   beforeEach(() => {
     commandsA.length = 0;
     commandsB.length = 0;
+    commandsC.length = 0;
   });
 
   async function runSession(): Promise<string> {
@@ -447,5 +464,31 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
 
     ws.close();
+  });
+
+  it("cross-token: routes to a runner connected under a different token by container name", async () => {
+    // runner-c is registered under tokenId2, not tokenId. The session dispatches
+    // with tokenId. With the flat registry, sendCommand routes globally by
+    // container name, so "redis" (only on runner-c) must still be reached.
+    setScript([
+      {
+        text: "Checking redis.",
+        toolUses: [
+          {
+            id: "tu-cross",
+            name: "get_container_logs",
+            input: { containerName: "redis" },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runSession();
+
+    expect(commandsC).toHaveLength(1);
+    expect(commandsC[0].commandName).toBe("get_container_logs");
+    expect(commandsA).toHaveLength(0);
+    expect(commandsB).toHaveLength(0);
   });
 });

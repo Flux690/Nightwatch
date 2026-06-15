@@ -15,10 +15,11 @@ const pending = new Map<string, PendingCommand>();
 
 const HEARTBEAT_TTL_MS = 120_000;
 
-// Registry is keyed by (tokenId, runnerId) — tokenId is the UUID from the
-// tokens table, never the plaintext credential. This lets closeTokenRunners
-// close every runner for a token without touching the plaintext.
+// Flat registry keyed by runnerId (a stable per-runner UUID). The tokenId is
+// stored inside the connection for revocation only - it does not scope routing.
+// D14: the runner token authenticates a connection but is not a grouping key.
 interface RunnerConnection {
+  tokenId: string;
   send: (msg: string) => void;
   close: () => void;
   manifest: CapabilityManifest | null;
@@ -35,7 +36,7 @@ export interface RunnerView {
   online: boolean;
 }
 
-const registry = new Map<string, Map<string, RunnerConnection>>();
+const registry = new Map<string, RunnerConnection>();
 
 export class RunnerOfflineError extends Error {
   constructor() {
@@ -44,25 +45,14 @@ export class RunnerOfflineError extends Error {
   }
 }
 
-function getConnection(
-  tokenId: string,
-  runnerId: string,
-): RunnerConnection | undefined {
-  return registry.get(tokenId)?.get(runnerId);
-}
-
 export function registerRunner(
   tokenId: string,
   runnerId: string,
   send: (msg: string) => void,
   close: () => void,
 ): void {
-  let runners = registry.get(tokenId);
-  if (!runners) {
-    runners = new Map();
-    registry.set(tokenId, runners);
-  }
-  runners.set(runnerId, {
+  registry.set(runnerId, {
+    tokenId,
     send,
     close,
     manifest: null,
@@ -71,37 +61,32 @@ export function registerRunner(
   });
 }
 
-export function unregisterRunner(tokenId: string, runnerId: string): void {
-  const runners = registry.get(tokenId);
-  if (!runners) return;
-  runners.delete(runnerId);
-  if (runners.size === 0) registry.delete(tokenId);
+export function unregisterRunner(_tokenId: string, runnerId: string): void {
+  registry.delete(runnerId);
 }
 
 // Close every runner socket authenticated with this token. Called by the
 // revoke route so revocation cuts access immediately, not just on next auth.
 export function closeTokenRunners(tokenId: string): void {
-  const runners = registry.get(tokenId);
-  if (!runners) return;
-  for (const conn of runners.values()) {
-    conn.close();
+  for (const conn of registry.values()) {
+    if (conn.tokenId === tokenId) conn.close();
   }
 }
 
 export function setRunnerManifest(
-  tokenId: string,
+  _tokenId: string,
   runnerId: string,
   manifest: CapabilityManifest,
 ): void {
-  const conn = getConnection(tokenId, runnerId);
+  const conn = registry.get(runnerId);
   if (!conn) return;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
 }
 
-export function recordHeartbeat(tokenId: string, runnerId: string): void {
-  const conn = getConnection(tokenId, runnerId);
+export function recordHeartbeat(_tokenId: string, runnerId: string): void {
+  const conn = registry.get(runnerId);
   if (!conn) return;
   conn.lastSeen = Date.now();
 }
@@ -109,17 +94,15 @@ export function recordHeartbeat(tokenId: string, runnerId: string): void {
 export function listRunners(): RunnerView[] {
   const now = Date.now();
   const views: RunnerView[] = [];
-  for (const [tokenId, runners] of registry) {
-    for (const [runnerId, conn] of runners) {
-      views.push({
-        tokenId,
-        runnerId,
-        hostname: conn.hostname,
-        manifest: conn.manifest,
-        lastSeen: conn.lastSeen,
-        online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
-      });
-    }
+  for (const [runnerId, conn] of registry) {
+    views.push({
+      tokenId: conn.tokenId,
+      runnerId,
+      hostname: conn.hostname,
+      manifest: conn.manifest,
+      lastSeen: conn.lastSeen,
+      online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+    });
   }
   return views;
 }
@@ -136,19 +119,18 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   }
 }
 
-// Resolve which runner connection to use for a command. Single-runner
-// deployments always use the only registered runner (any-runner fallback per
-// CONTEXT.md). Multi-runner deployments route by containerName (manifest
-// lookup) or hostname; missing hint on multiple runners is an error.
+// Route across the whole flat fleet. Single-runner deployments use the
+// any-runner fallback. Multi-runner deployments route by containerName
+// (manifest lookup) or hostname; ambiguous host-level commands error with
+// the known set so the model can retry with a hostname parameter.
 function resolveRunner(
-  tokenId: string,
   commandInput: Record<string, unknown>,
 ): RunnerConnection {
-  const runners = registry.get(tokenId);
-  if (!runners || runners.size === 0) throw new RunnerOfflineError();
+  if (registry.size === 0) throw new RunnerOfflineError();
 
-  if (runners.size === 1) {
-    return runners.values().next().value as RunnerConnection;
+  if (registry.size === 1) {
+    // size is confirmed 1 above; the iterator value is guaranteed to be defined
+    return registry.values().next().value as RunnerConnection;
   }
 
   const containerName =
@@ -161,12 +143,12 @@ function resolveRunner(
       : null;
 
   if (containerName !== null) {
-    for (const conn of runners.values()) {
+    for (const conn of registry.values()) {
       if (conn.manifest?.capabilities.containers.includes(containerName)) {
         return conn;
       }
     }
-    const known = [...runners.values()]
+    const known = [...registry.values()]
       .flatMap((c) => c.manifest?.capabilities.containers ?? [])
       .join(", ");
     throw new Error(
@@ -175,10 +157,10 @@ function resolveRunner(
   }
 
   if (hostname !== null) {
-    for (const conn of runners.values()) {
+    for (const conn of registry.values()) {
       if (conn.hostname === hostname) return conn;
     }
-    const available = [...runners.values()]
+    const available = [...registry.values()]
       .map((c) => c.hostname)
       .filter(Boolean)
       .join(", ");
@@ -187,7 +169,7 @@ function resolveRunner(
     );
   }
 
-  const hostnames = [...runners.values()]
+  const hostnames = [...registry.values()]
     .map((c) => c.hostname)
     .filter(Boolean)
     .join(", ");
@@ -197,12 +179,12 @@ function resolveRunner(
 }
 
 export function sendCommand(
-  tokenId: string,
+  _tokenId: string,
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
 ): Promise<unknown> {
-  const conn = resolveRunner(tokenId, commandInput);
+  const conn = resolveRunner(commandInput);
   const { send } = conn;
 
   const correlationId = randomUUID();
