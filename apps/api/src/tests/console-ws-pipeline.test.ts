@@ -146,7 +146,7 @@ describe("console WS pipeline", () => {
 
   it("delivers session_delta events then session_message, transcript loadable after", async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
@@ -164,7 +164,10 @@ describe("console WS pipeline", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_session=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
     expect(res.status).toBe(202);
@@ -211,7 +214,7 @@ describe("console WS pipeline", () => {
     mockCreateProvider.mockClear();
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: Array<{
       type: string;
@@ -240,7 +243,10 @@ describe("console WS pipeline", () => {
       `http://127.0.0.1:${port}/chat/${TEST_TOKEN}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_session=${SESSION}`,
+        },
         body: JSON.stringify({ message: "Is the system healthy?" }),
       },
     );
@@ -255,7 +261,10 @@ describe("console WS pipeline", () => {
       `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_session=${SESSION}`,
+        },
         body: JSON.stringify({
           token: TEST_TOKEN,
           message: "Follow-up question.",

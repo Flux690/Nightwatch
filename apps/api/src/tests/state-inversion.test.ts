@@ -169,7 +169,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     // Deliberately register no runner: the console must work during an outage.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events = collectEvents(ws);
     await waitForConnected(ws);
@@ -212,7 +212,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events = collectEvents(ws);
     await waitForConnected(ws);
@@ -296,7 +296,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 

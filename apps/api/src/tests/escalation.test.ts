@@ -208,7 +208,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     // Open the console WS before dispatching so we don't miss the ESCALATED
     // event that fires synchronously after the investigation ends.
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 
@@ -263,7 +263,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     mockCreateProvider.mockImplementationOnce(makeFinishProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 
@@ -338,7 +338,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     };
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 
@@ -391,7 +391,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     mockCreateProvider.mockImplementationOnce(makeToolLoopProvider);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     await waitForConnected(ws);
 

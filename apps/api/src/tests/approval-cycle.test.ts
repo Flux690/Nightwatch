@@ -210,7 +210,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -279,7 +279,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -355,7 +355,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -422,7 +422,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -490,7 +490,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -557,7 +557,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -631,7 +631,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -705,7 +705,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -789,7 +789,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
@@ -871,7 +871,7 @@ describe("durable approval interrupts", () => {
     ]);
 
     const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_session=${SESSION}` },
+      headers: { Cookie: `nw_session=${SESSION}`, Origin: "http://localhost" },
     });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
