@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { loadConfig, loadApiKey, updateConfig, saveApiKey } from "./store.js";
 import { encrypt, maskKey } from "./crypto.js";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwatch/shared";
 
@@ -126,7 +126,7 @@ export async function registerConfigRoutes(
 
   fastify.patch(
     "/config",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const parsed = ConfigPatchSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -171,7 +171,7 @@ export async function registerConfigRoutes(
   // configured endpoint. Returns success or a categorised error.
   fastify.post(
     "/config/test",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const parsed = TestBodySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -193,7 +193,7 @@ export async function registerConfigRoutes(
   // fields. Use POST /config/test when you also want to probe the endpoint.
   fastify.patch(
     "/config/key",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const parsed = KeyBodySchema.safeParse(request.body);
       if (!parsed.success) {

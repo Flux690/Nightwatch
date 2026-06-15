@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "0.100.1",
     "@fastify/websocket": "11.2.0",
     "@nightwatch/shared": "workspace:*",
+    "argon2": "^0.44.0",
     "better-auth": "1.6.14",
     "better-sqlite3": "12.10.0",
     "dotenv": "17.4.2",

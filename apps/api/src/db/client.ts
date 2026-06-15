@@ -40,6 +40,9 @@ const SCHEMA = `
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,
     reasoning_effort   TEXT,
+    owner_email        TEXT,
+    owner_hash         TEXT,
+    session_epoch      INTEGER NOT NULL DEFAULT 0,
     updated_at         TEXT NOT NULL
   );
 
@@ -118,4 +121,13 @@ export function getDb(): Database.Database {
 // rather than on the first request.
 export function initDb(): void {
   getDb();
+}
+
+// Close and clear the singleton. Used by tests to get a truly fresh connection
+// between suites when NIGHTWATCH_DB_PATH is re-stubbed.
+export function resetDb(): void {
+  if (_db) {
+    _db.close();
+    _db = undefined;
+  }
 }

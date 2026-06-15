@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { listTokensMeta } from "../db/tokens.js";
 import { sendCommand, listRunners } from "../ws/router.js";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
@@ -57,7 +57,7 @@ export async function registerRunnerRoutes(
   // The URL param is the token's UUID.
   fastify.patch<{ Params: { tokenId: string }; Body: { rulesYaml?: string } }>(
     "/runners/:tokenId/rules",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const rulesYaml = request.body?.rulesYaml;
       if (!rulesYaml) {

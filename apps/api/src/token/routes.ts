@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { mintToken, revokeToken, listTokensMeta } from "../db/tokens.js";
 import { closeTokenRunners } from "../ws/router.js";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 
 export async function registerTokenRoutes(
   fastify: FastifyInstance,
@@ -10,7 +10,7 @@ export async function registerTokenRoutes(
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
   fastify.post<{ Body: { label?: string } }>(
     "/tokens",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const label =
         typeof request.body?.label === "string"
@@ -27,7 +27,7 @@ export async function registerTokenRoutes(
   );
 
   // List all tokens (active and revoked). No plaintext is ever returned.
-  fastify.get("/tokens", { preHandler: requireAuth }, async () => ({
+  fastify.get("/tokens", { preHandler: requireSession }, async () => ({
     tokens: listTokensMeta(),
   }));
 
@@ -35,7 +35,7 @@ export async function registerTokenRoutes(
   // it immediately so revocation cuts access without waiting for reconnect.
   fastify.delete<{ Params: { id: string } }>(
     "/tokens/:id",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const revoked = revokeToken(request.params.id);
       if (!revoked) {

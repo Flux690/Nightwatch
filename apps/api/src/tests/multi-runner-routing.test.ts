@@ -107,6 +107,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import {
   registerRunner,
@@ -166,6 +167,7 @@ function waitForConnected(ws: WebSocket): Promise<void> {
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
   let tokenId: string;
+  let SESSION: string;
   let server: FastifyInstance;
   let port: number;
 
@@ -196,6 +198,7 @@ describe("multi-runner routing", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     tokenId = mintToken("routing-026").id;
 
     registerRunner(tokenId, "runner-a", makeSend(commandsA), () => {});
@@ -386,7 +389,9 @@ describe("multi-runner routing", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
     ws.on("message", (raw) => {
@@ -401,7 +406,7 @@ describe("multi-runner routing", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${tokenId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "postgres is crashing" }),
     });
     expect(res.status).toBe(202);
@@ -425,7 +430,7 @@ describe("multi-runner routing", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );

@@ -94,6 +94,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
@@ -145,11 +146,13 @@ describe("clarification interrupts", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let SESSION: string;
   const TEST_RUNNER_ID = "runner-clarification-023";
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     TEST_TOKEN = mintToken("clarification-023").id;
 
     registerRunner(
@@ -208,7 +211,9 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
       events.push(JSON.parse(raw.toString()) as WsEvent);
@@ -217,7 +222,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Service degraded." }),
     });
     expect(res.status).toBe(202);
@@ -249,7 +254,7 @@ describe("clarification interrupts", () => {
     const incidentId = String(interrupt.payload["incidentId"]);
     await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/answer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ answer: "cleanup" }),
     });
     await waitFor(() => !hasPendingInterrupt(sessionId));
@@ -273,7 +278,9 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
       events.push(JSON.parse(raw.toString()) as WsEvent);
@@ -282,7 +289,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Which container?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -298,7 +305,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({
           answer: "Database overloaded",
           resolvedBy: "operator",
@@ -343,7 +350,9 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
       events.push(JSON.parse(raw.toString()) as WsEvent);
@@ -352,7 +361,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Factors?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -369,7 +378,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({
           answer: ["Database overloaded", "Memory leak"],
           resolvedBy: "operator",
@@ -405,7 +414,9 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
       events.push(JSON.parse(raw.toString()) as WsEvent);
@@ -414,7 +425,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Is this recurring?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -435,7 +446,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({
           answer: "Yes, recurring daily",
           resolvedBy: "operator-after-restart",
@@ -498,7 +509,9 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: WsEvent[] = [];
     ws.on("message", (raw) => {
       events.push(JSON.parse(raw.toString()) as WsEvent);
@@ -507,7 +520,7 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Mixed gate test." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -529,7 +542,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${clarIncidentId}/answer`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({ answer: "Yes", resolvedBy: "operator" }),
       },
     );
@@ -552,7 +565,7 @@ describe("clarification interrupts", () => {
       `http://127.0.0.1:${port}/incidents/${approvalIncidentId}/approve`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "operator" }),
       },
     );

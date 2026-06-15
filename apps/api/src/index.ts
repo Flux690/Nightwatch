@@ -9,6 +9,7 @@ if (!process.env["SECRET_KEY"]) {
 }
 import FastifyWebSocket from "@fastify/websocket";
 import { initDb } from "./db/client.js";
+import { registerAuthRoutes } from "./auth/routes.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
@@ -22,10 +23,12 @@ import { registerApprovalRoutes } from "./approvals/routes.js";
 
 // Fastify keeps its own pino for HTTP logs; the investigation loop/providers
 // use the standalone logger in ./logger.js. Both emit pino JSON to stdout.
-const fastify = Fastify({ logger: true });
+// trustProxy honors X-Forwarded-Proto for the session cookie Secure flag.
+const fastify = Fastify({ logger: true, trustProxy: true });
 
 await fastify.register(FastifyWebSocket);
 
+await registerAuthRoutes(fastify);
 await registerWsRoutes(fastify);
 await registerConsoleWsRoutes(fastify);
 await registerAlertRoutes(fastify);
@@ -47,7 +50,8 @@ const start = async (): Promise<void> => {
     // Investigations run on the in-process dispatcher (CONTEXT.md D2); it is a
     // module singleton with no separate worker to boot. No Redis, no BullMQ.
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
-    await fastify.listen({ port, host: "0.0.0.0" });
+    const host = process.env["HOST"] ?? "127.0.0.1";
+    await fastify.listen({ port, host });
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

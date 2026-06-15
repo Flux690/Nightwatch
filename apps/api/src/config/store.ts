@@ -178,6 +178,36 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
   return next;
 }
 
+export function getSessionEpoch(): number {
+  const row = getDb()
+    .prepare("SELECT session_epoch FROM config WHERE id = ?")
+    .get(CONFIG_ID) as { session_epoch: number } | undefined;
+  return row?.session_epoch ?? 0;
+}
+
+export function getOwnerCredentials(): { email: string; hash: string } | null {
+  const row = getDb()
+    .prepare(
+      "SELECT owner_email AS email, owner_hash AS hash FROM config WHERE id = ?",
+    )
+    .get(CONFIG_ID) as { email: string | null; hash: string | null } | undefined;
+  if (!row?.hash || !row.email) return null;
+  return { email: row.email, hash: row.hash };
+}
+
+export function saveOwner(email: string, hash: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO config (id, owner_email, owner_hash, updated_at)
+       VALUES (@id, @email, @hash, @updatedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         owner_email = excluded.owner_email,
+         owner_hash = excluded.owner_hash,
+         updated_at = excluded.updated_at`,
+    )
+    .run({ id: CONFIG_ID, email, hash, updatedAt: new Date().toISOString() });
+}
+
 // Persists the encrypted key without touching other config fields. On first
 // write the row is created with column defaults for everything else.
 export function saveApiKey(apiKeyEncrypted: string): void {

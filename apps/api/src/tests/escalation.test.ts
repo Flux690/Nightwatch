@@ -16,6 +16,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
@@ -155,6 +156,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let SESSION: string;
   const TEST_RUNNER_ID = "test-runner-esc";
 
   // Incidents are now written to the API's local store; read them back from there
@@ -167,6 +169,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     TEST_TOKEN = mintToken("test-esc-runner").id;
 
     // The runner only fields read tools now (e.g. get_container_list in the
@@ -204,7 +207,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
     // Open the console WS before dispatching so we don't miss the ESCALATED
     // event that fires synchronously after the investigation ends.
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
@@ -233,7 +238,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Do something dangerous." }),
     });
     expect(res.status).toBe(202);
@@ -257,7 +262,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   it("free-form text finish does NOT escalate: no incident written", async () => {
     mockCreateProvider.mockImplementationOnce(makeFinishProvider);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
@@ -300,7 +307,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Wrap up." }),
     });
     expect(res.status).toBe(202);
@@ -330,7 +337,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       rawPayload: {},
     };
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     await waitForConnected(ws);
 
     let resolveEscalated!: (e: WsEvent) => void;
@@ -363,7 +372,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({ resolvedBy: "test" }),
       },
     );
@@ -381,7 +390,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   it("tool budget exhaustion escalates: writes incident and emits ESCALATED", async () => {
     mockCreateProvider.mockImplementationOnce(makeToolLoopProvider);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     await waitForConnected(ws);
 
     let targetSessionId: string | undefined;
@@ -408,7 +419,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Investigate forever." }),
     });
     expect(res.status).toBe(202);
@@ -426,7 +437,9 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   async function waitForPendingApproval(toolName: string): Promise<string> {
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
-      const res = await fetch(`http://127.0.0.1:${port}/incidents/pending`);
+      const res = await fetch(`http://127.0.0.1:${port}/incidents/pending`, {
+        headers: { Cookie: `nw_session=${SESSION}` },
+      });
       const body = (await res.json()) as {
         pending: Array<{ incidentId: string; toolName: string; token: string }>;
       };

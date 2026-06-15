@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { registerTokenRoutes } from "../token/routes.js";
 import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
 
 function sha256hex(s: string): string {
@@ -20,9 +21,11 @@ describe("Token lifecycle (issue 025)", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
+  let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerTokenRoutes(server);
@@ -39,7 +42,11 @@ describe("Token lifecycle (issue 025)", () => {
 
   describe("POST /tokens", () => {
     it("returns nwr_-prefixed plaintext with a UUID id", async () => {
-      const res = await server.inject({ method: "POST", url: "/tokens" });
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.body) as { token: string; id: string };
       expect(body.token).toMatch(/^nwr_[A-Za-z0-9_-]{43}$/);
@@ -49,7 +56,11 @@ describe("Token lifecycle (issue 025)", () => {
     });
 
     it("stores only the SHA-256 hash in the DB, never the plaintext", async () => {
-      const res = await server.inject({ method: "POST", url: "/tokens" });
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { token, id } = JSON.parse(res.body) as {
         token: string;
         id: string;
@@ -66,6 +77,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
         payload: { label: "prod-server" },
       });
       expect(res.statusCode).toBe(201);
@@ -74,8 +86,16 @@ describe("Token lifecycle (issue 025)", () => {
     });
 
     it("each mint produces a unique token", async () => {
-      const a = await server.inject({ method: "POST", url: "/tokens" });
-      const b = await server.inject({ method: "POST", url: "/tokens" });
+      const a = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
+      const b = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const tokenA = (JSON.parse(a.body) as { token: string }).token;
       const tokenB = (JSON.parse(b.body) as { token: string }).token;
       expect(tokenA).not.toBe(tokenB);
@@ -87,13 +107,17 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
         payload: { label: "list-test" },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
 
-      const res = await server.inject({ method: "GET", url: "/tokens" });
+      const res = await server.inject({
+        method: "GET",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       expect(res.statusCode).toBe(200);
-      // The full plaintext must not appear anywhere in the response body
       expect(res.body).not.toContain(token);
     });
 
@@ -101,11 +125,16 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
         payload: { label: "meta-test" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
 
-      const res = await server.inject({ method: "GET", url: "/tokens" });
+      const res = await server.inject({
+        method: "GET",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { tokens } = JSON.parse(res.body) as {
         tokens: Array<{
           id: string;
@@ -129,6 +158,7 @@ describe("Token lifecycle (issue 025)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
         payload: { label: "to-revoke" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
@@ -136,10 +166,15 @@ describe("Token lifecycle (issue 025)", () => {
       const del = await server.inject({
         method: "DELETE",
         url: `/tokens/${id}`,
+        headers: { cookie: `nw_session=${SESSION}` },
       });
       expect(del.statusCode).toBe(204);
 
-      const list = await server.inject({ method: "GET", url: "/tokens" });
+      const list = await server.inject({
+        method: "GET",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { tokens } = JSON.parse(list.body) as {
         tokens: Array<{ id: string; revokedAt: string | null }>;
       };
@@ -151,6 +186,7 @@ describe("Token lifecycle (issue 025)", () => {
       const res = await server.inject({
         method: "DELETE",
         url: "/tokens/00000000-0000-0000-0000-000000000000",
+        headers: { cookie: `nw_session=${SESSION}` },
       });
       expect(res.statusCode).toBe(404);
     });
@@ -158,7 +194,11 @@ describe("Token lifecycle (issue 025)", () => {
 
   describe("runner WS connect", () => {
     it("accepts a valid token and sends connected", async () => {
-      const mint = await server.inject({ method: "POST", url: "/tokens" });
+      const mint = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { token } = JSON.parse(mint.body) as { token: string };
 
       await new Promise<void>((resolve, reject) => {
@@ -206,7 +246,11 @@ describe("Token lifecycle (issue 025)", () => {
     });
 
     it("disconnects live runner sockets immediately on token revoke", async () => {
-      const mint = await server.inject({ method: "POST", url: "/tokens" });
+      const mint = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { token, id } = JSON.parse(mint.body) as {
         token: string;
         id: string;
@@ -222,8 +266,11 @@ describe("Token lifecycle (issue 025)", () => {
         ws.on("message", async (raw) => {
           const msg = JSON.parse(String(raw)) as { type: string };
           if (msg.type === "connected") {
-            // Revoke the token; the socket should close with 4003
-            await server.inject({ method: "DELETE", url: `/tokens/${id}` });
+            await server.inject({
+              method: "DELETE",
+              url: `/tokens/${id}`,
+              headers: { cookie: `nw_session=${SESSION}` },
+            });
           }
         });
         ws.on("close", (c) => resolve(c));
@@ -234,7 +281,11 @@ describe("Token lifecycle (issue 025)", () => {
 
   describe("lastUsedAt", () => {
     it("is set after a successful runner WS connect", async () => {
-      const mint = await server.inject({ method: "POST", url: "/tokens" });
+      const mint = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { token, id } = JSON.parse(mint.body) as {
         token: string;
         id: string;
@@ -257,7 +308,11 @@ describe("Token lifecycle (issue 025)", () => {
         ws.on("error", reject);
       });
 
-      const list = await server.inject({ method: "GET", url: "/tokens" });
+      const list = await server.inject({
+        method: "GET",
+        url: "/tokens",
+        headers: { cookie: `nw_session=${SESSION}` },
+      });
       const { tokens } = JSON.parse(list.body) as {
         tokens: Array<{ id: string; lastUsedAt: string | null }>;
       };

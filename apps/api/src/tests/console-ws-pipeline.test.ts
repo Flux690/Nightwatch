@@ -71,6 +71,7 @@ vi.mock("../llm/factory.js", () => ({
 
 import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
@@ -103,10 +104,12 @@ describe("console WS pipeline", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let SESSION: string;
   const TEST_RUNNER_ID = "test-runner-1";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     TEST_TOKEN = mintToken("test-runner").id;
 
     // Persistence is local now; the provider calls no runner tool here, so the
@@ -142,7 +145,9 @@ describe("console WS pipeline", () => {
   });
 
   it("delivers session_delta events then session_message, transcript loadable after", async () => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: Array<{ type: string; payload: Record<string, unknown> }> =
       [];
 
@@ -159,7 +164,7 @@ describe("console WS pipeline", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
     expect(res.status).toBe(202);
@@ -205,7 +210,9 @@ describe("console WS pipeline", () => {
   it("resume of ended session seeds provider from persisted transcript", async () => {
     mockCreateProvider.mockClear();
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events: Array<{
       type: string;
       payload: { sessionId: string; message?: { role: string } };
@@ -233,7 +240,7 @@ describe("console WS pipeline", () => {
       `http://127.0.0.1:${port}/chat/${TEST_TOKEN}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({ message: "Is the system healthy?" }),
       },
     );
@@ -248,7 +255,7 @@ describe("console WS pipeline", () => {
       `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: `nw_session=${SESSION}` },
         body: JSON.stringify({
           token: TEST_TOKEN,
           message: "Follow-up question.",

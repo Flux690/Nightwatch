@@ -14,7 +14,7 @@ import { dispatcher } from "../dispatch/dispatcher.js";
 import { escalate } from "../investigation/result.js";
 import { sendCommand } from "../ws/router.js";
 import { loadConfig } from "../config/store.js";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 import { getIncidentById, updateResolutionNote } from "../db/incidents.js";
 import { logger } from "../logger.js";
 import type { ApprovalRequest, ApprovalResponse } from "@nightwatch/shared";
@@ -61,7 +61,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/approve",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const id = request.params.id;
 
@@ -149,7 +149,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/reject",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const id = request.params.id;
 
@@ -237,7 +237,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: ApprovalBody }>(
     "/incidents/:id/add-context",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const id = request.params.id;
 
@@ -315,7 +315,7 @@ export async function registerIncidentRoutes(
 
   fastify.post<{ Params: { id: string }; Body: AnswerBody }>(
     "/incidents/:id/answer",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const id = request.params.id;
 
@@ -410,7 +410,7 @@ export async function registerIncidentRoutes(
     Body: { note?: string };
   }>(
     "/incidents/:id/resolve",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const incidentId = request.params.id;
       const note = request.body?.note?.trim();

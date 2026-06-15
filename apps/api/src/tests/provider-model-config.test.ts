@@ -12,6 +12,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { registerConfigRoutes } from "../config/routes.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
 function mockResponse(
@@ -36,10 +37,12 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
 describe("provider/model config seam", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
+  let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
+    SESSION = mintTestSession();
     server = Fastify({ logger: false });
     await registerConfigRoutes(server);
     await server.ready();
@@ -63,6 +66,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey: "sk-bad-key" },
     });
 
@@ -80,6 +84,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "claude-sonnet-4-6" },
     });
 
@@ -97,6 +102,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "gpt-99-not-real" },
     });
 
@@ -113,6 +119,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "POST",
       url: "/config/test",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey: "sk-any-key" },
     });
 
@@ -176,6 +183,7 @@ describe("provider/model config seam", () => {
     const res = await server.inject({
       method: "PATCH",
       url: "/config/key",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey: "sk-ant-test-key-12345678" },
     });
 
@@ -191,6 +199,7 @@ describe("provider/model config seam", () => {
     const saved = await server.inject({
       method: "PATCH",
       url: "/config/key",
+      headers: { cookie: `nw_session=${SESSION}` },
       payload: { apiKey },
     });
     expect(saved.statusCode).toBe(200);

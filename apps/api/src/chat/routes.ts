@@ -4,7 +4,7 @@ import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenById, touchLastUsed } from "../db/tokens.js";
 import { getSession, getSessionMessages } from "../db/sessions.js";
 import { hasPendingInterrupt } from "../db/interrupts.js";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { ProviderMessage } from "../llm/types.js";
 
@@ -15,7 +15,7 @@ export async function registerChatRoutes(
   // plaintext credential — the Console obtains it from GET /tokens).
   fastify.post<{ Params: { tokenId: string }; Body: { message?: string } }>(
     "/chat/:tokenId",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const { tokenId } = request.params;
       const message = request.body?.message?.trim();
@@ -55,7 +55,7 @@ export async function registerChatRoutes(
     Body: { token?: string; message?: string };
   }>(
     "/sessions/:id/messages",
-    { preHandler: requireAuth },
+    { preHandler: requireSession },
     async (request, reply) => {
       const sessionId = request.params.id;
       const tokenId = request.body?.token;

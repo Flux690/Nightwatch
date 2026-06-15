@@ -78,6 +78,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { mintToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
@@ -101,9 +102,11 @@ describe("state inversion: persistence and reads are API-local", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = mintTestSession();
     TEST_TOKEN = mintToken("state-inversion").id;
 
     server = Fastify({ logger: false });
@@ -165,13 +168,18 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Looks healthy.", toolUses: [] }]);
 
     // Deliberately register no runner: the console must work during an outage.
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events = collectEvents(ws);
     await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_session=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Is the system healthy?" }),
     });
     expect(res.status).toBe(202);
@@ -203,13 +211,18 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     const events = collectEvents(ws);
     await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_session=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -282,7 +295,9 @@ describe("state inversion: persistence and reads are API-local", () => {
       { text: "Done.", toolUses: [] },
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_session=${SESSION}` },
+    });
     await waitForConnected(ws);
 
     let sessionId: string | undefined;
@@ -306,7 +321,10 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_session=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Has api-01 failed before?" }),
     });
     ({ sessionId } = (await res.json()) as { sessionId: string });

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { requireAuth } from "../auth/gate.js";
+import { requireSession } from "../auth/session.js";
 import { subscribeConsole } from "../session/bus.js";
 
 // The console's real-time feed. It subscribes to the in-process event bus and
@@ -14,7 +14,7 @@ export async function registerConsoleWsRoutes(
 ): Promise<void> {
   fastify.get(
     "/console/connect",
-    { websocket: true, preHandler: requireAuth },
+    { websocket: true, preHandler: requireSession },
     async (socket: WebSocket) => {
       const unsubscribe = subscribeConsole((envelope: string) => {
         if (socket.readyState === socket.OPEN) socket.send(envelope);
