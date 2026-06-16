@@ -82,7 +82,7 @@ One SQLite file on the API (better-sqlite3, WAL mode). Six tables:
 |---|---|
 | `tokens` | deployment credentials (SHA-256 hash, label, createdAt, lastUsedAt, revokedAt) |
 | `config` | agent/model settings (one row; API key AES-256-GCM encrypted) |
-| `sessions` | one row per session: id, token, title, originating alert (JSON), createdAt. Chat vs alert is derived from whether an originating alert exists, not stored |
+| `sessions` | one row per session: id, title, originating alert (JSON), createdAt. Top-level (operator-owned), not scoped to a runner token; the originating runner is metadata inside the alert JSON. Chat vs alert is derived from whether an originating alert exists, not stored |
 | `session_messages` | the transcript; `UNIQUE(session_id, seq)`; `providerContent` JSON for exact provider-turn rebuild |
 | `incidents` | currently escalation records only (root cause, action, resolution note, recurrence); finding extraction / episodic memory is deferred |
 | `pending_interrupts` | the durable "waiting on a human" marker (see Interrupts) |
@@ -156,52 +156,57 @@ turn in plain text is a successful finish, not an escalation.
 
 ## Alert pipeline
 
-1. **Validate the token** against the DB (hash lookup). Unknown token → 401.
+1. **Validate the runner token** against the DB (hash lookup). Unknown token → 401.
    Never run an investigation for an unauthenticated alert.
 2. Parse to `NormalizedAlert` (source-agnostic: anything that can POST a webhook).
 3. **Dedup is derived, not stored:** an active run or pending interrupt with the
-   same `token + sourceAlertId` → drop. A crashed run leaves no marker, so a
+   same `runnerId + sourceAlertId` → drop. A crashed run leaves no marker, so a
    re-fired alert correctly re-investigates.
-4. Rate limit: in-memory counter per token (critical severity bypasses).
-5. **Batch window (90s):** the first alert per token holds; same-token alerts
-   arriving inside the window join it; one session opens with all of them so the
-   model judges shared root cause. Crash during the window loses only the buffer
-   — the alert re-fires. Correlated alerts are batched, never dropped.
+4. Rate limit: in-memory counter per runner (critical severity bypasses).
+5. **Batch window (90s), operator-wide:** the first alert holds; any alerts (from
+   any runner) arriving inside the window join it; one session opens with all of
+   them so the model judges shared root cause across servers. Crash during the
+   window loses only the buffer — the alert re-fires. Correlated alerts are
+   batched, never dropped.
 6. Dispatch: bounded in-memory FIFO + concurrency cap (~30 lines). Queue full →
    log + drop (the alert re-fires).
 
-**Mid-run injection:** a new alert for a token with an *actively running* session
-goes into that run's in-memory inbox, drained at the next tool boundary into the
-same user message as the tool results ("decide: downstream effect or independent
-incident"). Suspended sessions never receive injections — a new session starts
-instead. Inbox leftovers at run end become new sessions.
+**Mid-run injection:** a new alert arriving while an investigation is *actively
+running* goes into that run's in-memory inbox, drained at the next tool boundary
+into the same user message as the tool results ("decide: downstream effect or
+independent incident"). Suspended sessions never receive injections — a new
+session starts instead. Inbox leftovers at run end become new sessions.
 
 ## Multi-runner
 
-- Registry, manifests, and heartbeats are all keyed **(token, runnerId)** — never
-  token alone (one runner must not overwrite another's manifest or keep a dead
-  one looking alive).
+- Registry, manifests, and heartbeats are keyed by **runnerId** (a stable
+  per-runner UUID). The runner token authenticates the connection; it is *not* a
+  grouping key (D14). The flat registry means the agent sees every runner.
 - Routing: container-targeted commands resolve `containerName → runnerId` via the
   stored manifests; host-level commands take a `hostname` when more than one
   runner is registered; any-runner fallback only for single-runner deployments.
-- A **session belongs to the deployment (token)** and may span runners. Approval
+- A **session is top-level (operator-owned)** and may span runners. Approval
   cards are per write-action, not per runner.
 
-## Token lifecycle
+## Runner token lifecycle
 
 - Format: `nwr_` + 32 random bytes (crypto.randomBytes), base64url. The prefix
-  makes tokens grep-able and secret-scanner-friendly.
-- Stored as **SHA-256 hash only**; plaintext shown exactly once at mint.
-- Lifecycle: **mint** (admin-authed), **revoke** (sets `revokedAt` and closes any
-  live runner sockets on it), **rotate** = mint new + re-key runners (env var,
-  restart) + revoke old.
-- One token shared across all runners is the default (`runnerId` distinguishes
-  them); minting per-server tokens is supported for finer revocation.
+  makes tokens grep-able and secret-scanner-friendly, and distinct from the
+  `nw_auth` owner-session cookie.
+- Stored as **SHA-256 hash only**; plaintext shown exactly once when generated.
+- Lifecycle: **generate** (admin-authed, one per server), **revoke = delete**
+  (removes the row and closes that runner's socket — no tombstone, D4),
+  **rotate** = generate new + re-point the runner (env var, restart) + delete old.
+- **One runner token per server** is the model; each authenticates that server's
+  runner WS and its bundled alert ingest. Tokens are **auth-only** — they never
+  group or scope sessions (D14).
 
 ## Security invariants
 
-- Every surface that accepts a token (ingest, chat, runner WS connect, console
-  WS) validates it. The console WS authenticates like the REST routes.
+- Every **machine** surface that accepts a runner token (ingest, runner WS
+  connect) validates it. **Human** surfaces (console REST, console WS, chat)
+  authenticate with the owner session (`nw_auth`; D15). The console WS validates
+  the cookie and an `Origin` allow-list.
 - Bearer tokens never appear in identifiers, logs, or URLs we control
   (incident/session ids are UUIDs).
 - The approval gate is architectural: a runner receives a write command only
@@ -213,9 +218,10 @@ instead. Inbox leftovers at run end become new sessions.
 
 ## Console
 
-Routes: `/` (welcome + composer; first message mints a session in place),
-`/sessions/:id` (transcript), `/runners` (fleet by runner, not by token),
-`/settings` (provider/model/loop config, token management, install command).
+Routes: `/` (welcome + composer; first message starts a session in place),
+`/sessions/:id` (transcript), `/runners` (fleet + server management: generate a
+server, the one-time `connect.sh` command, remove a server), `/settings`
+(provider/model/loop config, account), `/login` (setup-or-login, two-state).
 
 - **Attention queue** — global, shell-level count of sessions awaiting a human,
   read from `pending_interrupts` (correct on first load, live via WS).
@@ -238,9 +244,14 @@ Routes: `/` (welcome + composer; first message mints a session in place),
   reaches what the API can't (docker socket, /proc, k8s later). The "hands". Not
   a Docker thing — the capability manifest + `commands/*` dispatch generalises.
 - **Console** — the operator UI.
-- **Token** — the deployment credential (see lifecycle above).
+- **Runner token** — the per-server machine credential (`nwr_`, SHA-256 hashed);
+  **auth-only**, authenticating a runner's WS and that server's alert ingest.
+  Generated per server; revoke = delete. Never a grouping or tenancy key (D14).
+- **Owner session** — the human login: a stateless `jose` JWT in the `nw_auth`
+  cookie, signed with `SECRET_KEY`; invalidated en masse by bumping `loginVersion`.
 - **Session** — a durable, resumable agentic thread; owns its id; entered via an
-  alert or a human chat message. No status; never "concludes".
+  alert or a human chat message. **Top-level (operator-owned), not scoped to a
+  runner; may span runners.** No status; never "concludes".
 - **Run** — one dispatch of the loop over a session. Ephemeral. Ends when the
   model replies in plain text (no tool call), an interrupt, or a budget/escalation
   exit.
@@ -281,8 +292,11 @@ Tool catalog: the source of truth is `packages/shared/src/tools.ts` +
   Claude Code SDK's own guidance for waits that outlive the process.
 - **D4 No speculative state.** No status enums, no checkpoint/job/audit tables.
   Anything derivable is derived; the transcript is the audit trail.
-- **D5 Single admin, deployment token.** One operator owns the deployment;
-  tokens are hashed credentials with mint/rotate/revoke.
+- **D5 Single admin; owner session + runner tokens.** One operator owns the
+  deployment. The human authenticates with an **owner session** (stateless
+  `nw_auth` JWT; see D15); machines authenticate with per-server **runner tokens**
+  (`nwr_`, hashed, generate/rotate/revoke=delete) — auth-only, never a grouping
+  key (D14).
 - **D6 BYOK only.** The operator brings an Anthropic/OpenAI-compatible key;
   provider abstraction is a hand-rolled port + two adapters (`createProvider`).
   No proxy inference.
@@ -301,6 +315,25 @@ Tool catalog: the source of truth is `packages/shared/src/tools.ts` +
 - **D13 BYO monitoring.** We never own monitoring; anything that can POST a
   webhook is a signal source. The bundled Prometheus/Alertmanager/cAdvisor
   container is a convenience for users who have nothing.
+- **D14 No tenancy; flat runner registry.** The runner registry is keyed by
+  `runnerId`; the runner token authenticates a connection but is *not* a grouping
+  key. Sessions are top-level (operator-owned) and may span runners; alert
+  rate-limit/dedup are per-runner while the batch window and mid-run injection are
+  operator-wide; console data and chat are human-authed, never token-scoped. This
+  removes the vestigial SaaS-era coupling (token ≈ installation ≈ tenant) the OSS
+  pivot left behind — there is one operator and one flat fleet.
+- **D15 Owner session = stateless JWT, no auth framework.** The human login is a
+  stateless `jose` JWT (HS256) signed with `SECRET_KEY`, carried in the `nw_auth`
+  cookie, with a rolling 7-day expiry and a `loginVersion` claim bumped to
+  invalidate every session at once. Password hashed with argon2id. BetterAuth was
+  rejected: its DB-backed sessions and multi-user schema reverse D4 (no speculative
+  state) and D5 (single admin). Token-versioning is the standard stateless
+  invalidation pattern and needs no `sessions` table.
+- **D16 Self-provisioning SECRET_KEY.** On first boot, if `SECRET_KEY` is unset,
+  the API generates one and persists it beside the SQLite file (`0600`), reusing it
+  on restart; an env value overrides. Losing the file equals rotating the key
+  (invalidates sessions, makes the stored LLM key undecryptable) — documented, not
+  silent.
 
 ## Deliberately not built
 
