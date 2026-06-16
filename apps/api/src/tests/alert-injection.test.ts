@@ -119,7 +119,7 @@ const { mockCreateProvider, releaseNext, releaseAll, setTurns } = vi.hoisted(
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import type { NormalizedAlert } from "@nightwatch/shared";
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
@@ -172,7 +172,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
-    const tokenId = mintToken("inject-midrun").id;
+    const tokenId = generateToken("inject-midrun").id;
 
     // Turn 1: platform read tool (no runner). Turn 2: free-form finish.
     setTurns([READ_TURN, FINISH_TURN]);
@@ -212,7 +212,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
-    const tokenId = mintToken("inject-sus").id;
+    const tokenId = generateToken("inject-sus").id;
 
     // Turn 1: gated tool → run suspends. Turn 2: free-form finish for the resume.
     setTurns([
@@ -273,7 +273,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
-    const tokenId = mintToken("inject-leftover").id;
+    const tokenId = generateToken("inject-leftover").id;
 
     // Single turn: free-form finish immediately. The loop exits before any
     // appendToolResults call, so the inbox is never drained by the loop itself.
@@ -314,3 +314,4 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => dispatcher.getActiveSessionForToken(tokenId) === null);
   });
 });
+

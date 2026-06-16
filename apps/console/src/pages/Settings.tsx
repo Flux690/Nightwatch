@@ -25,10 +25,9 @@ interface TokenMetaShape {
   label: string | null;
   createdAt: string;
   lastUsedAt: string | null;
-  revokedAt: string | null;
 }
 
-interface MintedToken {
+interface GeneratedToken {
   id: string;
   plaintext: string;
   label: string | null;
@@ -94,17 +93,16 @@ export function SettingsPage(): React.JSX.Element {
 
   const availableModels = modelsData?.models ?? [];
   const tokens = tokensData?.tokens ?? [];
-  const activeTokens = tokens.filter((t) => !t.revokedAt);
 
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
-  const [minting, setMinting] = useState(false);
-  const [mintLabel, setMintLabel] = useState("");
-  const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
-  const [revoking, setRevoking] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [tokenLabel, setTokenLabel] = useState("");
+  const [generatedToken, setGeneratedToken] = useState<GeneratedToken | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (config) setForm(config);
@@ -151,42 +149,42 @@ export function SettingsPage(): React.JSX.Element {
     }
   }
 
-  async function handleMint(): Promise<void> {
-    setMinting(true);
+  async function handleGenerate(): Promise<void> {
+    setGenerating(true);
     try {
       const res = await fetch("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: mintLabel.trim() || undefined }),
+        body: JSON.stringify({ label: tokenLabel.trim() || undefined }),
       });
-      if (!res.ok) throw new Error(`mint failed ${res.status}`);
+      if (!res.ok) throw new Error(`generate failed ${res.status}`);
       const data = (await res.json()) as {
         id: string;
         token: string;
         label: string | null;
         createdAt: string;
       };
-      setMintedToken({
+      setGeneratedToken({
         id: data.id,
         plaintext: data.token,
         label: data.label,
         createdAt: data.createdAt,
       });
-      setMintLabel("");
+      setTokenLabel("");
       await refetchTokens();
     } finally {
-      setMinting(false);
+      setGenerating(false);
     }
   }
 
-  async function handleRevoke(id: string): Promise<void> {
-    setRevoking(id);
+  async function handleDelete(id: string): Promise<void> {
+    setDeleting(id);
     try {
       await fetch(`/api/tokens/${id}`, { method: "DELETE" });
       await refetchTokens();
       queryClient.removeQueries({ queryKey: ["runners"] });
     } finally {
-      setRevoking(null);
+      setDeleting(null);
     }
   }
 
@@ -207,8 +205,8 @@ export function SettingsPage(): React.JSX.Element {
 
   const isAnthropic = form?.provider === "anthropic";
 
-  const installCommand = mintedToken
-    ? `curl -fsSL ${window.location.origin}/install.sh | sh -s -- ${mintedToken.plaintext}`
+  const installCommand = generatedToken
+    ? `curl -fsSL ${window.location.origin}/install.sh | sh -s -- ${generatedToken.plaintext}`
     : null;
 
   return (
@@ -386,19 +384,19 @@ export function SettingsPage(): React.JSX.Element {
         </Stack>
       )}
 
-      {/* ── Deployment tokens ─────────────────────────────────────────────── */}
+      {/* ── Runner tokens ──────────────────────────────────────────────────── */}
       <Stack gap="sm" mt="xl">
         <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-          Deployment tokens
+          Runner tokens
         </Text>
 
-        {/* One-time plaintext display immediately after minting */}
-        {mintedToken && (
+        {/* One-time plaintext display immediately after generation */}
+        {generatedToken && (
           <Alert
             color="yellow"
             title="Copy this token now — it will not be shown again"
             withCloseButton
-            onClose={() => setMintedToken(null)}
+            onClose={() => setGeneratedToken(null)}
           >
             <Stack gap="xs">
               <Group gap="xs" align="flex-start" wrap="nowrap">
@@ -409,15 +407,15 @@ export function SettingsPage(): React.JSX.Element {
                     fontFamily: "var(--nw-mono)",
                     wordBreak: "break-all",
                   }}
-                  aria-label="New deployment token"
+                  aria-label="New runner token"
                 >
-                  {mintedToken.plaintext}
+                  {generatedToken.plaintext}
                 </Code>
                 <ActionIcon
                   variant="default"
                   size="lg"
                   aria-label="Copy new token"
-                  onClick={() => copy(mintedToken.plaintext)}
+                  onClick={() => copy(generatedToken.plaintext)}
                 >
                   ⧉
                 </ActionIcon>
@@ -468,52 +466,48 @@ export function SettingsPage(): React.JSX.Element {
                   </Text>
                   <Text size="xs" c="dimmed" ff="monospace">
                     {t.id.slice(0, 8)}…
-                    {t.revokedAt
-                      ? " · revoked"
-                      : t.lastUsedAt
-                        ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
-                        : " · never used"}
+                    {t.lastUsedAt
+                      ? ` · last used ${new Date(t.lastUsedAt).toLocaleDateString()}`
+                      : " · never used"}
                   </Text>
                 </Stack>
-                {!t.revokedAt && (
-                  <Button
-                    size="xs"
-                    color="red"
-                    variant="subtle"
-                    loading={revoking === t.id}
-                    aria-label={`Revoke token ${t.label ?? t.id.slice(0, 8)}`}
-                    onClick={() => void handleRevoke(t.id)}
-                  >
-                    Revoke
-                  </Button>
-                )}
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="subtle"
+                  loading={deleting === t.id}
+                  aria-label={`Delete token ${t.label ?? t.id.slice(0, 8)}`}
+                  onClick={() => void handleDelete(t.id)}
+                >
+                  Delete
+                </Button>
               </Group>
             ))}
           </Stack>
         )}
 
-        {activeTokens.length === 0 && !mintedToken && (
+        {tokens.length === 0 && !generatedToken && (
           <Text size="sm" c="dimmed">
-            No active tokens. Mint one to connect a runner.
+            No active tokens. Generate one to connect a runner.
           </Text>
         )}
 
-        {/* Mint form */}
+        {/* Generate form */}
         <Group gap="xs" align="flex-end">
           <TextInput
             label="Label (optional)"
             placeholder="e.g. prod-server"
-            value={mintLabel}
-            onChange={(e) => setMintLabel(e.currentTarget.value)}
+            value={tokenLabel}
+            onChange={(e) => setTokenLabel(e.currentTarget.value)}
             style={{ flex: 1 }}
           />
           <Button
-            loading={minting}
-            onClick={() => void handleMint()}
+            loading={generating}
+            onClick={() => void handleGenerate()}
             style={{ marginBottom: 0 }}
-            aria-label="Mint token"
+            aria-label="Generate token"
           >
-            Mint token
+            Generate token
           </Button>
         </Group>
       </Stack>

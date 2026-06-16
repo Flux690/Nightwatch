@@ -23,8 +23,7 @@ const SCHEMA = `
     token        TEXT NOT NULL UNIQUE,
     label        TEXT,
     created_at   TEXT NOT NULL,
-    last_used_at TEXT,
-    revoked_at   TEXT
+    last_used_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS config (

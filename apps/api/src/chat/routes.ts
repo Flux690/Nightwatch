@@ -25,7 +25,7 @@ export async function registerChatRoutes(
 
       const tokenRecord = findTokenById(tokenId);
       if (!tokenRecord) {
-        return reply.code(404).send({ error: "unknown or revoked token" });
+        return reply.code(404).send({ error: "unknown token" });
       }
 
       touchLastUsed(tokenRecord.id);
@@ -82,7 +82,7 @@ export async function registerChatRoutes(
 
       const tokenRecord = findTokenById(tokenId);
       if (!tokenRecord) {
-        return reply.code(404).send({ error: "unknown or revoked token" });
+        return reply.code(404).send({ error: "unknown token" });
       }
 
       touchLastUsed(tokenRecord.id);

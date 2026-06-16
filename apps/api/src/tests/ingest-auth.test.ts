@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { useTempDb } from "./temp-db.js";
 
@@ -39,7 +39,7 @@ describe("POST /alerts/ingest auth", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    VALID_TOKEN = mintToken("test-ingest-runner").plaintext;
+    VALID_TOKEN = generateToken("test-ingest-runner").plaintext;
 
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
@@ -86,3 +86,4 @@ describe("POST /alerts/ingest auth", () => {
     expect(body.received).toBe(1);
   });
 });
+

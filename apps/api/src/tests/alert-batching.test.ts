@@ -51,7 +51,7 @@ const { mockCreateProvider, releaseAll, setRunImmediate } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 
@@ -121,7 +121,7 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   it("three same-token alerts within 90s produce one session whose opening message contains all three; none are dropped", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const { plaintext: token } = mintToken("batch-three");
+    const { plaintext: token } = generateToken("batch-three");
 
     const r1 = await ingest(token, alertBody("fp-1"));
     const r2 = await ingest(token, alertBody("fp-2"));
@@ -152,8 +152,8 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   it("alerts for different tokens do not batch together", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const { plaintext: tokenA } = mintToken("batch-tok-a");
-    const { plaintext: tokenB } = mintToken("batch-tok-b");
+    const { plaintext: tokenA } = generateToken("batch-tok-a");
+    const { plaintext: tokenB } = generateToken("batch-tok-b");
 
     // Two for tokenA, one for tokenB
     await ingest(tokenA, alertBody("fp-a1"));
@@ -186,7 +186,7 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   it("dedup drops true duplicates (same sourceAlertId) within the window", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const { plaintext: token } = mintToken("batch-dedup");
+    const { plaintext: token } = generateToken("batch-dedup");
 
     // First occurrence
     const r1 = await ingest(token, alertBody("dup-fp"));
@@ -212,3 +212,4 @@ describe("alert batching (REST seam + fake timers)", () => {
     expect(openingMsg).toContain("other-fp");
   });
 });
+

@@ -92,7 +92,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -153,7 +153,7 @@ describe("clarification interrupts", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = mintToken("clarification-023").id;
+    TEST_TOKEN = generateToken("clarification-023").id;
 
     registerRunner(
       TEST_TOKEN,
@@ -579,3 +579,4 @@ describe("clarification interrupts", () => {
     ws.close();
   });
 });
+

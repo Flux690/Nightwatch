@@ -51,7 +51,7 @@ const { mockCreateProvider, releaseAll, setImmediate } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
@@ -125,7 +125,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     // A fresh token isolates this test's rate-limit counter from the others.
-    const { plaintext: token, id: tokenId } = mintToken("dedup");
+    const { plaintext: token, id: tokenId } = generateToken("dedup");
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -158,7 +158,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("rate-limits past 10 non-critical alerts per token per hour; critical bypasses; resets after the window", async () => {
-    const { plaintext: token } = mintToken("ratelimit");
+    const { plaintext: token } = generateToken("ratelimit");
     setImmediate(true); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.
@@ -192,3 +192,4 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     });
   });
 });
+

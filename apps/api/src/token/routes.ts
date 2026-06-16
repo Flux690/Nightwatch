@@ -1,12 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import { mintToken, revokeToken, listTokensMeta } from "../db/tokens.js";
+import { generateToken, deleteToken, listTokensMeta } from "../db/tokens.js";
 import { closeTokenRunners } from "../ws/router.js";
 import { requireSession } from "../auth/session.js";
 
 export async function registerTokenRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // Mint a new deployment token. The plaintext nwr_... value is returned
+  // Generate a new runner token. The plaintext nwr_... value is returned
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
   fastify.post<{ Body: { label?: string } }>(
     "/tokens",
@@ -16,12 +16,12 @@ export async function registerTokenRoutes(
         typeof request.body?.label === "string"
           ? request.body.label.trim() || undefined
           : undefined;
-      const minted = mintToken(label);
+      const generated = generateToken(label);
       return reply.code(201).send({
-        id: minted.id,
-        token: minted.plaintext,
-        label: minted.label,
-        createdAt: minted.createdAt,
+        id: generated.id,
+        token: generated.plaintext,
+        label: generated.label,
+        createdAt: generated.createdAt,
       });
     },
   );
@@ -31,17 +31,15 @@ export async function registerTokenRoutes(
     tokens: listTokensMeta(),
   }));
 
-  // Revoke a token by id. Closes any live runner sockets authenticated with
-  // it immediately so revocation cuts access without waiting for reconnect.
+  // Delete a runner token by id. Closes any live runner sockets authenticated
+  // with it immediately so deletion cuts access without waiting for reconnect.
   fastify.delete<{ Params: { id: string } }>(
     "/tokens/:id",
     { preHandler: requireSession },
     async (request, reply) => {
-      const revoked = revokeToken(request.params.id);
-      if (!revoked) {
-        return reply
-          .code(404)
-          .send({ error: "token not found or already revoked" });
+      const deleted = deleteToken(request.params.id);
+      if (!deleted) {
+        return reply.code(404).send({ error: "token not found" });
       }
       closeTokenRunners(request.params.id);
       return reply.code(204).send();

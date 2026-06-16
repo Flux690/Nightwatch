@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { CapabilityManifest, RunnerRecord } from "@nightwatch/shared";
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../ws/server.js";
@@ -92,7 +92,7 @@ describe("flat runner registry", () => {
   it("lists two runners on one token with independent manifests and liveness", async () => {
     // runnerId values are unique per test: the flat registry is keyed by runnerId
     // globally, so collisions across tests would corrupt each other's state.
-    const { plaintext: token, id: tokenId } = mintToken("two-up");
+    const { plaintext: token, id: tokenId } = generateToken("two-up");
     const a = await connectRunner(
       port,
       token,
@@ -133,7 +133,7 @@ describe("flat runner registry", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const { plaintext: token, id: tokenId } = mintToken("close-one");
+    const { plaintext: token, id: tokenId } = generateToken("close-one");
     const a = await connectRunner(
       port,
       token,
@@ -168,8 +168,8 @@ describe("flat runner registry", () => {
   });
 
   it("two runners on different tokens both appear in the fleet", async () => {
-    const { plaintext: tokenA, id: tokenAId } = mintToken("cross-a");
-    const { plaintext: tokenB, id: tokenBId } = mintToken("cross-b");
+    const { plaintext: tokenA, id: tokenAId } = generateToken("cross-a");
+    const { plaintext: tokenB, id: tokenBId } = generateToken("cross-b");
 
     const a = await connectRunner(
       port,
@@ -204,3 +204,4 @@ describe("flat runner registry", () => {
     b.close();
   });
 });
+

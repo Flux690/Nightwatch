@@ -105,7 +105,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -206,7 +206,7 @@ describe("multi-runner routing", () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    tokenId = mintToken("routing-026").id;
+    tokenId = generateToken("routing-026").id;
 
     registerRunner(tokenId, "runner-a", makeSend(commandsA), () => {});
     setRunnerManifest(
@@ -222,7 +222,7 @@ describe("multi-runner routing", () => {
       makeManifest("runner-b", tokenId, "db-02", ["postgres"]),
     );
 
-    tokenId2 = mintToken("routing-cross").id;
+    tokenId2 = generateToken("routing-cross").id;
     registerRunner(tokenId2, "runner-c", makeSend(commandsC), () => {});
     setRunnerManifest(
       tokenId2,
@@ -492,3 +492,4 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
   });
 });
+

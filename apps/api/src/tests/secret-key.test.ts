@@ -1,10 +1,21 @@
 import "dotenv/config";
+import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveSecretKey } from "../config/secret-key.js";
 import { encrypt, decrypt } from "../config/crypto.js";
+
+function expectRestrictedPermissions(file: string): void {
+  if (platform() === "win32") {
+    const acl = execSync(`icacls "${file}"`).toString();
+    expect(acl).not.toMatch(/Everyone/);
+    expect(acl).not.toMatch(/BUILTIN\\Users/);
+  } else {
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  }
+}
 
 describe("resolveSecretKey", () => {
   let dir: string;
@@ -27,13 +38,13 @@ describe("resolveSecretKey", () => {
     expect(resolveSecretKey()).toBe("an-explicit-secret");
   });
 
-  it("generates a 0600 key file beside the database when unset", () => {
+  it("generates a restricted-access key file beside the database when unset", () => {
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);
 
     const keyFile = join(dir, "secret.key");
-    const stat = statSync(keyFile);
-    expect(stat.mode & 0o777).toBe(0o600);
+    statSync(keyFile);
+    expectRestrictedPermissions(keyFile);
   });
 
   it("regenerates when the key file exists but is empty (crash mid-write, full disk)", () => {
@@ -42,7 +53,7 @@ describe("resolveSecretKey", () => {
 
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);
-    expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+    expectRestrictedPermissions(keyFile);
   });
 
   it("creates the data directory on a truly fresh deploy where it doesn't exist yet", () => {
@@ -51,7 +62,7 @@ describe("resolveSecretKey", () => {
 
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);
-    expect(statSync(join(freshDir, "secret.key")).mode & 0o777).toBe(0o600);
+    expectRestrictedPermissions(join(freshDir, "secret.key"));
   });
 
   it("reuses the same key across two boots (a value encrypted on boot 1 still decrypts on boot 2)", () => {

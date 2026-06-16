@@ -86,7 +86,7 @@ const { mockCreateProvider, setScript } = vi.hoisted(() => {
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -134,7 +134,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("returns pending interrupt rows for the given token", async () => {
-    const tokA = mintToken("qa").id;
+    const tokA = generateToken("qa").id;
     registerRunner(
       tokA,
       RUNNER_ID + "-qa",
@@ -209,8 +209,8 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("scopes results to queried token — different token sees no rows", async () => {
-    const tokC = mintToken("scope-c").id;
-    const tokD = mintToken("scope-d").id;
+    const tokC = generateToken("scope-c").id;
+    const tokD = generateToken("scope-d").id;
 
     setScript([
       {
@@ -287,7 +287,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("returns empty list after interrupt is resolved", async () => {
-    const tokE = mintToken("empty-after").id;
+    const tokE = generateToken("empty-after").id;
 
     setScript([
       {
@@ -363,3 +363,4 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     unregisterRunner(tokE, RUNNER_ID + "-e");
   });
 });
+

@@ -2,14 +2,13 @@ import { randomBytes, createHash, randomUUID } from "node:crypto";
 import { getDb } from "./client.js";
 
 // Token stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
-// Plaintext is returned once at mint and never stored or logged.
+// Plaintext is returned once at generation and never stored or logged.
 export type TokenRow = {
   id: string;
   tokenHash: string;
   label: string | null;
   createdAt: string;
   lastUsedAt: string | null;
-  revokedAt: string | null;
 };
 
 // Public view returned by the list endpoint: no hash, no plaintext.
@@ -18,16 +17,15 @@ export type TokenMeta = {
   label: string | null;
   createdAt: string;
   lastUsedAt: string | null;
-  revokedAt: string | null;
 };
 
 export function hashToken(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-// Mint a new deployment token. Returns the plaintext exactly once; the DB
+// Generate a new runner token. Returns the plaintext exactly once; the DB
 // stores only the SHA-256 hash. Format: nwr_ + 32 random bytes (base64url).
-export function mintToken(label?: string): { plaintext: string } & TokenMeta {
+export function generateToken(label?: string): { plaintext: string } & TokenMeta {
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -50,7 +48,7 @@ export function mintToken(label?: string): { plaintext: string } & TokenMeta {
     label: label ?? null,
     createdAt,
     lastUsedAt: null,
-    revokedAt: null,
+
   };
 }
 
@@ -59,16 +57,14 @@ const SELECT_ROW = `
   token       AS tokenHash,
   label,
   created_at  AS createdAt,
-  last_used_at AS lastUsedAt,
-  revoked_at  AS revokedAt
+  last_used_at AS lastUsedAt
 `;
 
-// Validate a plaintext token: hash it, look up, reject if missing or revoked.
+// Validate a plaintext token: hash it and look up.
 export function findTokenByValue(plaintext: string): TokenRow | undefined {
   return getDb()
     .prepare(
-      `SELECT ${SELECT_ROW} FROM tokens
-       WHERE token = ? AND revoked_at IS NULL`,
+      `SELECT ${SELECT_ROW} FROM tokens WHERE token = ?`,
     )
     .get(hashToken(plaintext)) as TokenRow | undefined;
 }
@@ -77,8 +73,7 @@ export function findTokenByValue(plaintext: string): TokenRow | undefined {
 export function findTokenById(id: string): TokenRow | undefined {
   return getDb()
     .prepare(
-      `SELECT ${SELECT_ROW} FROM tokens
-       WHERE id = ? AND revoked_at IS NULL`,
+      `SELECT ${SELECT_ROW} FROM tokens WHERE id = ?`,
     )
     .get(id) as TokenRow | undefined;
 }
@@ -90,13 +85,11 @@ export function touchLastUsed(id: string): void {
     .run(new Date().toISOString(), id);
 }
 
-// Revoke a token by id. Returns false if not found or already revoked.
-export function revokeToken(id: string): boolean {
+// Delete a runner token by id (hard delete — no tombstone). Returns false if not found.
+export function deleteToken(id: string): boolean {
   const result = getDb()
-    .prepare(
-      `UPDATE tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`,
-    )
-    .run(new Date().toISOString(), id);
+    .prepare(`DELETE FROM tokens WHERE id = ?`)
+    .run(id);
   return result.changes > 0;
 }
 
@@ -105,7 +98,7 @@ export function listTokensMeta(): TokenMeta[] {
   return getDb()
     .prepare(
       `SELECT id, label, created_at AS createdAt,
-              last_used_at AS lastUsedAt, revoked_at AS revokedAt
+              last_used_at AS lastUsedAt
        FROM tokens ORDER BY created_at DESC`,
     )
     .all() as TokenMeta[];

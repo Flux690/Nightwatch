@@ -14,7 +14,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { mintToken } from "../db/tokens.js";
+import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
@@ -170,7 +170,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = mintToken("test-esc-runner").id;
+    TEST_TOKEN = generateToken("test-esc-runner").id;
 
     // The runner only fields read tools now (e.g. get_container_list in the
     // budget-exhaustion case); persistence is local, so no persistence command
@@ -452,3 +452,4 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     throw new Error(`timeout: ${toolName} approval never became pending`);
   }
 });
+

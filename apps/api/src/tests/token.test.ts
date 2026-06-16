@@ -12,12 +12,14 @@ import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
+import { generateToken } from "../db/tokens.js";
+import { createSession } from "../db/sessions.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
-describe("Token lifecycle (issue 025)", () => {
+describe("Runner token lifecycle (issue 038)", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
@@ -85,7 +87,7 @@ describe("Token lifecycle (issue 025)", () => {
       expect(body.label).toBe("prod-server");
     });
 
-    it("each mint produces a unique token", async () => {
+    it("each generate produces a unique token", async () => {
       const a = await server.inject({
         method: "POST",
         url: "/tokens",
@@ -121,7 +123,7 @@ describe("Token lifecycle (issue 025)", () => {
       expect(res.body).not.toContain(token);
     });
 
-    it("includes id, label, createdAt, lastUsedAt, revokedAt", async () => {
+    it("includes id, label, createdAt, lastUsedAt", async () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
@@ -141,7 +143,6 @@ describe("Token lifecycle (issue 025)", () => {
           label: string | null;
           createdAt: string;
           lastUsedAt: string | null;
-          revokedAt: string | null;
         }>;
       };
       const found = tokens.find((t) => t.id === id);
@@ -149,17 +150,16 @@ describe("Token lifecycle (issue 025)", () => {
       expect(found!.label).toBe("meta-test");
       expect(found!.createdAt).toBeTruthy();
       expect(found!.lastUsedAt).toBeNull();
-      expect(found!.revokedAt).toBeNull();
     });
   });
 
   describe("DELETE /tokens/:id", () => {
-    it("returns 204 and sets revokedAt on the token", async () => {
+    it("returns 204 and removes the token row entirely", async () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { label: "to-revoke" },
+        payload: { label: "to-delete" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
 
@@ -176,10 +176,9 @@ describe("Token lifecycle (issue 025)", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
-        tokens: Array<{ id: string; revokedAt: string | null }>;
+        tokens: Array<{ id: string }>;
       };
-      const found = tokens.find((t) => t.id === id);
-      expect(found!.revokedAt).toBeTruthy();
+      expect(tokens.find((t) => t.id === id)).toBeUndefined();
     });
 
     it("returns 404 for unknown id", async () => {
@@ -189,6 +188,36 @@ describe("Token lifecycle (issue 025)", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(404);
+    });
+
+    it("denies reconnect with the deleted token", async () => {
+      const mint = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      const { token, id } = JSON.parse(mint.body) as {
+        token: string;
+        id: string;
+      };
+
+      await server.inject({
+        method: "DELETE",
+        url: `/tokens/${id}`,
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+
+      const code = await new Promise<number>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Nightwatch-Runner-Id": "runner-reconnect-denied",
+          },
+        });
+        ws.on("close", (c) => resolve(c));
+        ws.on("error", () => resolve(4003));
+      });
+      expect(code).toBe(4003);
     });
   });
 
@@ -245,7 +274,7 @@ describe("Token lifecycle (issue 025)", () => {
       expect(code).toBe(4001);
     });
 
-    it("disconnects live runner sockets immediately on token revoke", async () => {
+    it("disconnects live runner sockets immediately on token delete", async () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
@@ -320,4 +349,31 @@ describe("Token lifecycle (issue 025)", () => {
       expect(found!.lastUsedAt).toBeTruthy();
     });
   });
+
+  describe("session history after token deletion", () => {
+    it("session row survives hard-deleting its runner token", async () => {
+      const { id: tokenId } = generateToken("history-test");
+      createSession(
+        {
+          sessionId: "sess-history-1",
+          token: tokenId,
+          title: "history session",
+          createdAt: new Date().toISOString(),
+        },
+        null,
+      );
+
+      await server.inject({
+        method: "DELETE",
+        url: `/tokens/${tokenId}`,
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+
+      const row = getDb()
+        .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
+        .get("sess-history-1") as { session_id: string } | undefined;
+      expect(row).toBeDefined();
+    });
+  });
 });
+

@@ -24,7 +24,6 @@ export async function registerRunnerRoutes(
 
     const records: RunnerRecord[] = [];
     for (const t of listTokensMeta()) {
-      if (t.revokedAt) continue;
       const runners = byToken.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({
