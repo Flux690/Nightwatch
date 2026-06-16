@@ -203,7 +203,8 @@ describe("console WS pipeline", () => {
     expect(messages[0].payload.sessionId).toBe(sessionId);
 
     const transcriptRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}?token=${TEST_TOKEN}`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(transcriptRes.status).toBe(200);
     const transcript = (await transcriptRes.json()) as unknown[];

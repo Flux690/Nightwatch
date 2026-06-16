@@ -188,15 +188,16 @@ describe("state inversion: persistence and reads are API-local", () => {
     await waitFor(() => hasAssistantRunFinished(events, sessionId));
     ws.close();
 
-    const listRes = await fetch(
-      `http://127.0.0.1:${port}/sessions?token=${TEST_TOKEN}`,
-    );
+    const listRes = await fetch(`http://127.0.0.1:${port}/sessions`, {
+      headers: { Cookie: `nw_auth=${SESSION}` },
+    });
     expect(listRes.status).toBe(200);
     const sessions = (await listRes.json()) as Array<{ sessionId: string }>;
     expect(sessions.some((s) => s.sessionId === sessionId)).toBe(true);
 
     const txRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}?token=${TEST_TOKEN}`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(txRes.status).toBe(200);
     const transcript = (await txRes.json()) as Array<{
@@ -234,7 +235,8 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(stored?.originatingAlert).toBeNull();
 
     const txRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}?token=${TEST_TOKEN}`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     const transcript = (await txRes.json()) as Array<{
       role: string;
@@ -338,6 +340,16 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(String(end.payload["result"])).toContain(
       "ran out of file descriptors",
     );
+  });
+
+  it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {
+    const listRes = await fetch(`http://127.0.0.1:${port}/sessions`);
+    expect(listRes.status).toBe(401);
+
+    const txRes = await fetch(
+      `http://127.0.0.1:${port}/sessions/nonexistent-id`,
+    );
+    expect(txRes.status).toBe(401);
   });
 });
 

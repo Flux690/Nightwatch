@@ -115,6 +115,15 @@ export function listSessions(token: string): SessionMeta[] {
     .all(token) as SessionMeta[];
 }
 
+export function listAllSessions(): SessionMeta[] {
+  return getDb()
+    .prepare(
+      `SELECT session_id AS sessionId, token, title, created_at AS createdAt
+       FROM sessions ORDER BY created_at DESC LIMIT 100`,
+    )
+    .all() as SessionMeta[];
+}
+
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(

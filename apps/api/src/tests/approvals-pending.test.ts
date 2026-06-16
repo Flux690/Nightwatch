@@ -133,7 +133,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns pending interrupt rows for the given token", async () => {
+  it("returns pending interrupt rows with session cookie", async () => {
     const tokA = generateToken("qa").id;
     registerRunner(
       tokA,
@@ -177,9 +177,9 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // Wait for the interrupt row to appear in DB via the endpoint
     const body = await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/approvals/pending?token=${tokA}`,
-      );
+      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      });
       const data = (await r.json()) as ApprovalRequest[];
       return data.length > 0 ? data : null;
     });
@@ -203,14 +203,13 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     unregisterRunner(tokA, RUNNER_ID + "-qa");
   });
 
-  it("returns 400 when token query param is missing", async () => {
+  it("returns 401 without a valid nw_auth cookie", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/approvals/pending`);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
-  it("scopes results to queried token — different token sees no rows", async () => {
+  it("returns interrupts from all runner tokens (operator-wide)", async () => {
     const tokC = generateToken("scope-c").id;
-    const tokD = generateToken("scope-d").id;
 
     setScript([
       {
@@ -252,37 +251,27 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     });
     expect(chatRes.status).toBe(202);
 
-    // Wait for interrupt for tokC
-    await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/approvals/pending?token=${tokC}`,
-      );
+    // Operator-wide: endpoint returns the interrupt without needing a token param
+    const body = await waitFor(async () => {
+      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      });
       const data = (await r.json()) as ApprovalRequest[];
-      return data.length > 0 ? true : null;
+      return data.some((row) => row.token === tokC) ? data : null;
     });
 
-    // tokD (different token) must see empty
-    const resD = await fetch(
-      `http://127.0.0.1:${port}/approvals/pending?token=${tokD}`,
-    );
-    const bodyD = (await resD.json()) as ApprovalRequest[];
-    expect(bodyD).toHaveLength(0);
+    expect(body.some((row) => row.token === tokC)).toBe(true);
 
     // Cleanup
-    const resC = await fetch(
-      `http://127.0.0.1:${port}/approvals/pending?token=${tokC}`,
+    const found = body.find((row) => row.token === tokC)!;
+    await fetch(
+      `http://127.0.0.1:${port}/incidents/${found.incidentId}/reject`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+        body: JSON.stringify({ resolvedBy: "cleanup" }),
+      },
     );
-    const bodyC = (await resC.json()) as ApprovalRequest[];
-    if (bodyC[0]) {
-      await fetch(
-        `http://127.0.0.1:${port}/incidents/${bodyC[0].incidentId}/reject`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-          body: JSON.stringify({ resolvedBy: "cleanup" }),
-        },
-      );
-    }
     unregisterRunner(tokC, RUNNER_ID + "-c");
   });
 
@@ -331,34 +320,34 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // Wait for interrupt
     const body = await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/approvals/pending?token=${tokE}`,
-      );
+      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      });
       const data = (await r.json()) as ApprovalRequest[];
-      return data.length > 0 ? data : null;
+      return data.some((row) => row.token === tokE) ? data : null;
     });
 
-    const incidentId = body[0]!.incidentId;
+    const incidentId = body.find((row) => row.token === tokE)!.incidentId;
     await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ resolvedBy: "op" }),
     });
 
-    // After resolution the list is empty
+    // After resolution the row for tokE is gone
     await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/approvals/pending?token=${tokE}`,
-      );
+      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      });
       const data = (await r.json()) as ApprovalRequest[];
-      return data.length === 0 ? true : null;
+      return !data.some((row) => row.token === tokE) ? true : null;
     });
 
-    const resAfter = await fetch(
-      `http://127.0.0.1:${port}/approvals/pending?token=${tokE}`,
-    );
+    const resAfter = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+      headers: { Cookie: `nw_auth=${SESSION}` },
+    });
     const bodyAfter = (await resAfter.json()) as ApprovalRequest[];
-    expect(bodyAfter).toHaveLength(0);
+    expect(bodyAfter.some((row) => row.token === tokE)).toBe(false);
 
     unregisterRunner(tokE, RUNNER_ID + "-e");
   });

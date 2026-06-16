@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { listSessions, getSessionMessages } from "../db/sessions.js";
+import { listAllSessions, getSessionMessages } from "../db/sessions.js";
+import { requireSession } from "../auth/session.js";
 
 // Read-only session views for the console, served from the API's SQLite (state
 // inversion): sessions and transcripts are readable even when every runner is
@@ -7,18 +8,15 @@ import { listSessions, getSessionMessages } from "../db/sessions.js";
 export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.get<{ Querystring: { token?: string } }>(
+  fastify.get(
     "/sessions",
-    async (request, reply) => {
-      const token = request.query.token;
-      if (!token) {
-        return reply.code(400).send({ error: "token is required" });
-      }
-      return listSessions(token);
-    },
+    { preHandler: requireSession },
+    async () => listAllSessions(),
   );
 
-  fastify.get<{ Params: { id: string } }>("/sessions/:id", async (request) =>
-    getSessionMessages(request.params.id),
+  fastify.get<{ Params: { id: string } }>(
+    "/sessions/:id",
+    { preHandler: requireSession },
+    async (request) => getSessionMessages(request.params.id),
   );
 }
