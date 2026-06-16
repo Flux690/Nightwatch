@@ -1,13 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
-
-if (!process.env["SECRET_KEY"]) {
-  console.error(
-    "FATAL: SECRET_KEY environment variable is required for API key encryption. Set it before starting the API.",
-  );
-  process.exit(1);
-}
 import FastifyWebSocket from "@fastify/websocket";
+import { resolveSecretKey } from "./config/secret-key.js";
 import { initDb } from "./db/client.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerWsRoutes } from "./ws/server.js";
@@ -20,6 +14,11 @@ import { registerSessionRoutes } from "./sessions/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
 import { registerApprovalRoutes } from "./approvals/routes.js";
+
+// Self-provisioning (D16): an explicit env var wins; otherwise a key file
+// beside the SQLite database is reused or generated on first boot. No more
+// fatal exit - a fresh deploy boots with no manual secret step.
+process.env["SECRET_KEY"] = resolveSecretKey();
 
 const isDev = process.env["NODE_ENV"] !== "production";
 

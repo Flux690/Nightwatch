@@ -6,8 +6,10 @@ import Database from "better-sqlite3";
 // D1). One file, WAL mode, idempotent DDL bootstrapped on first open - the same
 // pattern the runner uses for its history db. Postgres/Prisma are gone.
 // Resolved lazily (inside getDb) so tests can set NIGHTWATCH_DB_PATH before the
-// connection opens.
-function dbPath(): string {
+// connection opens. Exported so the SECRET_KEY self-provisioning (D16) can
+// place the key file beside the database without a second source of truth for
+// the data directory.
+export function dbPath(): string {
   return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
 }
 
