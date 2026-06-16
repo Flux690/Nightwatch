@@ -139,18 +139,18 @@ export function listAllInterrupts(): PendingInterruptWithSession[] {
 
 // Dedup: true if a session for this alert is durably suspended.
 export function hasPendingInterruptForAlert(
-  token: string,
+  tokenId: string,
   sourceAlertId: string,
 ): boolean {
   const row = getDb()
     .prepare(
       `SELECT 1 FROM pending_interrupts pi
        JOIN sessions s ON s.session_id = pi.session_id
-       WHERE s.token = ?
+       WHERE json_extract(s.originating_alert, '$.token') = ?
          AND json_extract(s.originating_alert, '$.sourceAlertId') = ?
        LIMIT 1`,
     )
-    .get(token, sourceAlertId);
+    .get(tokenId, sourceAlertId);
   return row != null;
 }
 

@@ -3,9 +3,6 @@ import { createDispatcher } from "../dispatch/dispatcher.js";
 import type { RunInvestigationInput } from "../investigation/loop.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// A controllable unit of work: dispatch starts it, the test settles it by hand.
-// This lets the concurrency, FIFO, and drop behavior be asserted deterministically
-// without driving the whole investigation loop.
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => {
@@ -14,9 +11,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
-// Drain all pending microtasks. A settle -> drain -> settle chain hops through
-// several promise ticks (the run wrapper's .catch().finally()), so a single
-// macrotask boundary is the deterministic way to let the dispatcher quiesce.
+// Drain all pending microtasks through the async promise chain (.catch, .finally).
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -38,32 +33,94 @@ function alertInput(
 }
 
 describe("dispatcher", () => {
-  it("runs work immediately while under the concurrency cap", async () => {
+  it("starts work immediately — no cap, no queue", async () => {
     const started: string[] = [];
     const gate = deferred();
     const d = createDispatcher({
-      maxConcurrent: 2,
-      maxQueue: 10,
       run: (input) => {
         started.push(input.sessionId);
         return gate.promise;
       },
     });
 
-    expect(d.dispatch(alertInput("a"))).toBe(true);
-    expect(d.dispatch(alertInput("b"))).toBe(true);
-    // Both are under the cap of 2, so both start synchronously on dispatch.
+    d.dispatch(alertInput("a"));
+    d.dispatch(alertInput("b"));
+    // Both start immediately — no concurrency ceiling
     expect(started).toEqual(["s-a", "s-b"]);
 
     gate.resolve();
   });
 
-  it("caps concurrency and drains the queue in FIFO order as slots free", async () => {
+  it("dedup keyed by tokenId+sourceAlertId; clears when settled", async () => {
+    const gate = deferred();
+    const d = createDispatcher({ run: () => gate.promise });
+
+    d.dispatch(alertInput("dup", "tok-1"));
+
+    // Same token + sourceAlertId → duplicate
+    expect(d.isInvestigating("tok-1", "dup")).toBe(true);
+    // Same sourceAlertId but DIFFERENT token → not a duplicate
+    expect(d.isInvestigating("tok-2", "dup")).toBe(false);
+    expect(d.isInvestigating("tok-1", "never")).toBe(false);
+
+    gate.resolve();
+    await flush();
+
+    expect(d.isInvestigating("tok-1", "dup")).toBe(false);
+  });
+
+  it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
+    const gate = deferred();
+    const d = createDispatcher({ run: () => gate.promise });
+
+    expect(d.getActiveAlertSession()).toBeNull();
+
+    d.dispatch(alertInput("a"));
+    expect(d.getActiveAlertSession()).toBe("s-a");
+
+    gate.resolve();
+    await flush();
+
+    expect(d.getActiveAlertSession()).toBeNull();
+  });
+
+  it("getActiveAlertSession is null for chat/resume inputs (no alert)", async () => {
+    const gate = deferred();
+    const d = createDispatcher({ run: () => gate.promise });
+
+    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
+    expect(d.getActiveAlertSession()).toBeNull();
+
+    gate.resolve();
+  });
+
+  it("does not track chat/resume inputs for dedup", async () => {
+    const gate = deferred();
+    const d = createDispatcher({ run: () => gate.promise });
+
+    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
+    expect(d.isInvestigating("tok-1", "anything")).toBe(false);
+
+    gate.resolve();
+  });
+
+  it("isSessionRunning is true while running, false after settled", async () => {
+    const gate = deferred();
+    const d = createDispatcher({ run: () => gate.promise });
+
+    d.dispatch(alertInput("a"));
+    expect(d.isSessionRunning("s-a")).toBe(true);
+
+    gate.resolve();
+    await flush();
+
+    expect(d.isSessionRunning("s-a")).toBe(false);
+  });
+
+  it("inbox leftovers re-dispatch as new sessions when the run ends", async () => {
     const started: string[] = [];
     const gates = new Map<string, ReturnType<typeof deferred>>();
     const d = createDispatcher({
-      maxConcurrent: 1,
-      maxQueue: 10,
       run: (input) => {
         started.push(input.sessionId);
         const g = deferred();
@@ -72,77 +129,29 @@ describe("dispatcher", () => {
       },
     });
 
-    d.dispatch(alertInput("a"));
-    d.dispatch(alertInput("b"));
-    d.dispatch(alertInput("c"));
+    d.dispatch(alertInput("primary"));
+    const primaryId = "s-primary";
 
-    // Only the first runs; b and c wait behind the cap of 1.
-    expect(started).toEqual(["s-a"]);
+    const leftover: NormalizedAlert = {
+      sourceAlertId: "leftover",
+      token: "tok",
+      targetIdentifier: "web-01",
+      alertType: "HighCPU",
+      severity: "warning",
+      firedAt: new Date().toISOString(),
+      rawPayload: {},
+    };
+    d.injectAlert(primaryId, leftover);
 
-    // Finish a -> b drains. Finish b -> c drains. Strict FIFO.
-    gates.get("s-a")!.resolve();
+    gates.get(primaryId)!.resolve();
+    // Two flushes: the finally block runs, then the newly dispatched run starts.
     await flush();
-    expect(started).toEqual(["s-a", "s-b"]);
-
-    gates.get("s-b")!.resolve();
-    await flush();
-    expect(started).toEqual(["s-a", "s-b", "s-c"]);
-
-    gates.get("s-c")!.resolve();
-  });
-
-  it("drops new work and reports it once active + queue are full", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      maxConcurrent: 1,
-      maxQueue: 1,
-      run: () => gate.promise,
-    });
-
-    expect(d.dispatch(alertInput("a"))).toBe(true); // active
-    expect(d.dispatch(alertInput("b"))).toBe(true); // queued (queue size 1)
-    expect(d.dispatch(alertInput("c"))).toBe(false); // dropped: no slot, queue full
-
-    gate.resolve();
-  });
-
-  it("reports an active or queued alert for dedup, and clears it once settled", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      maxConcurrent: 1,
-      maxQueue: 10,
-      run: () => gate.promise,
-    });
-
-    d.dispatch(alertInput("dup", "tok-1"));
-    d.dispatch(alertInput("dup-q", "tok-1")); // queued, still counts
-
-    expect(d.isInvestigating("tok-1", "dup")).toBe(true);
-    expect(d.isInvestigating("tok-1", "dup-q")).toBe(true);
-    // Same id on a different token is not the same alert.
-    expect(d.isInvestigating("tok-2", "dup")).toBe(false);
-    expect(d.isInvestigating("tok-1", "never")).toBe(false);
-
-    gate.resolve();
     await flush();
 
-    // Both runs have settled; their dedup keys are released so a re-fire
-    // re-investigates.
-    expect(d.isInvestigating("tok-1", "dup")).toBe(false);
-    expect(d.isInvestigating("tok-1", "dup-q")).toBe(false);
-  });
+    expect(started.length).toBe(2);
+    expect(started[1]).not.toBe(primaryId);
 
-  it("does not track chat/resume inputs (no alert) for dedup", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      maxConcurrent: 2,
-      maxQueue: 10,
-      run: () => gate.promise,
-    });
-
-    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
-    expect(d.isInvestigating("tok-1", "anything")).toBe(false);
-
-    gate.resolve();
+    // Clean up the leftover run
+    gates.get(started[1]!)?.resolve();
   });
 });

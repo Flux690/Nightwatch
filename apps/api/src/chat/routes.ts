@@ -31,16 +31,11 @@ export async function registerChatRoutes(
       touchLastUsed(tokenRecord.id);
 
       const sessionId = randomUUID();
-      const accepted = dispatcher.dispatch({
+      dispatcher.dispatch({
         sessionId,
         token: tokenRecord.id,
         userMessage: message,
       });
-      if (!accepted) {
-        return reply
-          .code(503)
-          .send({ error: "investigation queue full, retry shortly" });
-      }
       logger.info(
         { tokenId: tokenRecord.id.slice(0, 8), sessionId },
         "chat session started",
@@ -94,17 +89,12 @@ export async function registerChatRoutes(
         providerContent: m.providerContent,
       }));
 
-      const accepted = dispatcher.dispatch({
+      dispatcher.dispatch({
         sessionId,
         token: tokenRecord.id,
         seed,
         userMessage: message,
       });
-      if (!accepted) {
-        return reply
-          .code(503)
-          .send({ error: "investigation queue full, retry shortly" });
-      }
       logger.info(
         { tokenId: tokenRecord.id.slice(0, 8), sessionId, seeded: seed.length },
         "session resumed",

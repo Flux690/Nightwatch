@@ -150,38 +150,34 @@ describe("alert batching (REST seam + fake timers)", () => {
     expect(openingMsg).toContain("fp-3");
   });
 
-  it("alerts for different tokens do not batch together", async () => {
+  it("alerts from different tokens batch into one operator-wide session", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { plaintext: tokenA } = generateToken("batch-tok-a");
     const { plaintext: tokenB } = generateToken("batch-tok-b");
 
-    // Two for tokenA, one for tokenB
+    // Two alerts for tokenA and one for tokenB all arrive within the 90s window
     await ingest(tokenA, alertBody("fp-a1"));
     await ingest(tokenB, alertBody("fp-b1"));
     await ingest(tokenA, alertBody("fp-a2"));
 
+    // Batch window is holding — no session started yet
     expect(mockCreateProvider.mock.calls).toHaveLength(0);
 
     vi.advanceTimersByTime(90_001);
 
-    // Two sessions — one per token
-    expect(mockCreateProvider.mock.calls).toHaveLength(2);
+    // One operator-wide session containing all three alerts so the agent can
+    // judge shared root cause across servers (CONTEXT.md alert pipeline).
+    expect(mockCreateProvider.mock.calls).toHaveLength(1);
 
-    const openingMsgs = mockCreateProvider.mock.results.map((r) => {
-      const p = r.value as { start: ReturnType<typeof vi.fn> };
-      return p.start.mock.calls[0]![0] as string;
-    });
+    const openingMsg = (
+      mockCreateProvider.mock.results[0]!.value as {
+        start: ReturnType<typeof vi.fn>;
+      }
+    ).start.mock.calls[0]![0] as string;
 
-    const msgA = openingMsgs.find(
-      (m) => m.includes("fp-a1") && m.includes("fp-a2"),
-    )!;
-    expect(msgA).toBeDefined();
-    expect(msgA).not.toContain("fp-b1");
-
-    const msgB = openingMsgs.find((m) => m.includes("fp-b1"))!;
-    expect(msgB).toBeDefined();
-    expect(msgB).not.toContain("fp-a1");
-    expect(msgB).not.toContain("fp-a2");
+    expect(openingMsg).toContain("fp-a1");
+    expect(openingMsg).toContain("fp-a2");
+    expect(openingMsg).toContain("fp-b1");
   });
 
   it("dedup drops true duplicates (same sourceAlertId) within the window", async () => {

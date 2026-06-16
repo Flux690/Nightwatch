@@ -4,43 +4,44 @@ import { dispatcher } from "../dispatch/dispatcher.js";
 import { logger } from "../logger.js";
 
 export interface BatchWindow {
-  // Add an alert to the window for its token. If this is the first alert for
-  // the token, starts the 90s hold timer. Subsequent same-token alerts join.
+  // Add an alert to the operator-wide batch window. If the window is not yet
+  // open, starts the 90s hold timer. Subsequent alerts from any runner join.
   add(alert: NormalizedAlert): void;
-  // True if an alert with this exact sourceAlertId is already pending for
-  // this token. Used for intra-window dedup.
+  // True if an alert with this tokenId+sourceAlertId is already pending.
+  // Used for intra-window dedup: prevents the model seeing the same alert twice.
   has(tokenId: string, sourceAlertId: string): boolean;
 }
 
 export function createBatchWindow(opts: {
   windowMs: number;
-  onBatch: (tokenId: string, alerts: NormalizedAlert[]) => void;
+  onBatch: (alerts: NormalizedAlert[]) => void;
 }): BatchWindow {
   const { windowMs, onBatch } = opts;
-  const pending = new Map<string, NormalizedAlert[]>();
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Single operator-wide pending list: alerts from any runner batch together so
+  // the agent can judge shared root cause across servers (CONTEXT.md alert pipeline).
+  let pending: NormalizedAlert[] | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
   return {
     add(alert: NormalizedAlert): void {
-      const existing = pending.get(alert.token);
-      if (existing) {
-        existing.push(alert);
-        return;
+      if (pending === null) {
+        pending = [alert];
+        timer = setTimeout(() => {
+          const batch = pending!;
+          pending = null;
+          timer = null;
+          onBatch(batch);
+        }, windowMs);
+      } else {
+        pending.push(alert);
       }
-      pending.set(alert.token, [alert]);
-      const timer = setTimeout(() => {
-        const alerts = pending.get(alert.token) ?? [];
-        pending.delete(alert.token);
-        timers.delete(alert.token);
-        onBatch(alert.token, alerts);
-      }, windowMs);
-      timers.set(alert.token, timer);
     },
 
     has(tokenId: string, sourceAlertId: string): boolean {
       return (
-        pending.get(tokenId)?.some((a) => a.sourceAlertId === sourceAlertId) ??
-        false
+        pending?.some(
+          (a) => a.token === tokenId && a.sourceAlertId === sourceAlertId,
+        ) ?? false
       );
     },
   };
@@ -48,20 +49,18 @@ export function createBatchWindow(opts: {
 
 export const batchWindow = createBatchWindow({
   windowMs: 90_000,
-  onBatch: (tokenId, alerts) => {
+  onBatch: (alerts) => {
     const primary = alerts[0];
     if (!primary) return;
-    const accepted = dispatcher.dispatch({
+    dispatcher.dispatch({
       sessionId: randomUUID(),
-      token: tokenId,
+      token: primary.token,
       alert: primary,
       additionalAlerts: alerts.slice(1),
     });
-    if (!accepted) {
-      logger.warn(
-        { tokenId, alertCount: alerts.length },
-        "batch window fired but dispatch queue full, batch dropped (alerts will re-fire)",
-      );
-    }
+    logger.info(
+      { alertCount: alerts.length, primaryId: primary.sourceAlertId },
+      "batch window fired",
+    );
   },
 });

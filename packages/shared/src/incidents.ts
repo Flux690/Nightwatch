@@ -7,6 +7,8 @@ export type IncidentStatus =
 
 export interface NormalizedAlert {
   sourceAlertId: string;
+  // token is the tokenId (UUID primary key) of the runner token that authenticated
+  // this alert. It is the stable per-server key for dedup and rate-limit.
   token: string;
   targetIdentifier: string;
   alertType: string;

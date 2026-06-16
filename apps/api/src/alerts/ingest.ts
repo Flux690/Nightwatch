@@ -56,25 +56,26 @@ export async function registerAlertRoutes(
           continue;
         }
 
-        // 2. Intra-window dedup: same sourceAlertId already queued in the batch
-        //    window. True duplicate — the model would see the same alert twice.
-        if (batchWindow.has(tokenId, alert.sourceAlertId)) {
+        // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
+        //    the batch window. True duplicate — the model would see it twice.
+        if (batchWindow.has(alert.token, alert.sourceAlertId)) {
           skipped++;
           continue;
         }
 
-        // 3. Rate limit.
+        // 3. Rate limit: per-server budget.
         if (!checkRateLimit(alert.token, alert.severity)) {
           skipped++;
           fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
           continue;
         }
 
-        // 4. Route: inject into an active run or add to the batch window.
-        //    A suspended session is not in the active set, so it falls through to
-        //    the batch window and a new session is created — suspended sessions
-        //    never receive injections (CONTEXT.md alert pipeline).
-        const activeSessionId = dispatcher.getActiveSessionForToken(tokenId);
+        // 4. Route: inject into the one active alert investigation (if any) or
+        //    add to the operator-wide batch window. A suspended session is not
+        //    in the active set, so it falls through to the batch window and a
+        //    new session is created — suspended sessions never receive injections
+        //    (CONTEXT.md alert pipeline).
+        const activeSessionId = dispatcher.getActiveAlertSession();
         if (activeSessionId !== null) {
           dispatcher.injectAlert(activeSessionId, alert);
           fastify.log.info(

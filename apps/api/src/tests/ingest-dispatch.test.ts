@@ -157,7 +157,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     await vi.advanceTimersByTimeAsync(90_001);
   });
 
-  it("rate-limits past 10 non-critical alerts per token per hour; critical bypasses; resets after the window", async () => {
+  it("rate-limits past 10 non-critical alerts per runner per hour; critical bypasses; resets after the window", async () => {
     const { plaintext: token } = generateToken("ratelimit");
     setImmediate(true); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking

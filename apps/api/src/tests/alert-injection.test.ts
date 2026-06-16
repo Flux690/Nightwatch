@@ -137,7 +137,10 @@ const READ_TURN = {
   toolUses: [{ id: "tu-read", name: "get_incident_history", input: {} }],
 };
 
-function alert(tokenId: string, sourceAlertId: string): NormalizedAlert {
+function alert(
+  tokenId: string,
+  sourceAlertId: string,
+): NormalizedAlert {
   return {
     sourceAlertId,
     token: tokenId,
@@ -246,10 +249,10 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => hasPendingInterrupt(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
-    // After suspension the token has no active session
-    expect(dispatcher.getActiveSessionForToken(tokenId)).toBeNull();
+    // After suspension there is no active alert session operator-wide
+    expect(dispatcher.getActiveAlertSession()).toBeNull();
 
-    // Dispatching a new alert for the same token creates a new session (not injected)
+    // Dispatching a new alert creates a new session (not injected into the suspended one)
     const callsBefore = mockCreateProvider.mock.calls.length;
     const newSessionId = randomUUID();
 
@@ -263,7 +266,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     // New session is running independently
     expect(dispatcher.isSessionRunning(newSessionId)).toBe(true);
-    expect(dispatcher.getActiveSessionForToken(tokenId)).toBe(newSessionId);
+    expect(dispatcher.getActiveAlertSession()).toBe(newSessionId);
 
     // The suspended session's inbox was not touched
     expect(dispatcher.drainInbox(sessionId)).toHaveLength(0);
@@ -311,7 +314,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     // The leftover session's opening message is for the leftover alert
     releaseNext(); // free-form finish for the leftover session
-    await waitFor(() => dispatcher.getActiveSessionForToken(tokenId) === null);
+    await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
 });
 
