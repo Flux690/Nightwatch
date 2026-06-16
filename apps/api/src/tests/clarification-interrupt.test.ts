@@ -220,7 +220,7 @@ describe("clarification interrupts", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Service degraded." }),
@@ -287,7 +287,7 @@ describe("clarification interrupts", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Which container?" }),
@@ -359,7 +359,7 @@ describe("clarification interrupts", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Factors?" }),
@@ -423,7 +423,7 @@ describe("clarification interrupts", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Is this recurring?" }),
@@ -518,7 +518,7 @@ describe("clarification interrupts", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Mixed gate test." }),

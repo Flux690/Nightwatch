@@ -421,7 +421,7 @@ describe("multi-runner routing", () => {
     });
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${tokenId}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "postgres is crashing" }),

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { findTokenById, touchLastUsed } from "../db/tokens.js";
 import { getSession, getSessionMessages } from "../db/sessions.js";
 import { hasPendingInterrupt } from "../db/interrupts.js";
 import { requireSession } from "../auth/session.js";
@@ -11,58 +10,45 @@ import type { ProviderMessage } from "../llm/types.js";
 export async function registerChatRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // Start a new chat session. The URL param is the token's UUID (not the
-  // plaintext credential — the Console obtains it from GET /tokens).
-  fastify.post<{ Params: { tokenId: string }; Body: { message?: string } }>(
-    "/chat/:tokenId",
+  // Start a new chat session. Authenticated by the owner session cookie; no
+  // runner token in the path — the agent reaches the whole flat fleet via the
+  // registry (D14).
+  fastify.post<{ Body: { message?: string } }>(
+    "/chat",
     { preHandler: requireSession },
     async (request, reply) => {
-      const { tokenId } = request.params;
       const message = request.body?.message?.trim();
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
       }
 
-      const tokenRecord = findTokenById(tokenId);
-      if (!tokenRecord) {
-        return reply.code(404).send({ error: "unknown token" });
-      }
-
-      touchLastUsed(tokenRecord.id);
-
       const sessionId = randomUUID();
       dispatcher.dispatch({
         sessionId,
-        token: tokenRecord.id,
+        token: "",
         userMessage: message,
       });
-      logger.info(
-        { tokenId: tokenRecord.id.slice(0, 8), sessionId },
-        "chat session started",
-      );
+      logger.info({ sessionId }, "chat session started");
       return reply.code(202).send({ sessionId });
     },
   );
 
-  // Resume an existing session. The body token is the token's UUID.
+  // Resume an existing session addressed by its uuid.
   fastify.post<{
     Params: { id: string };
-    Body: { token?: string; message?: string };
+    Body: { message?: string };
   }>(
     "/sessions/:id/messages",
     { preHandler: requireSession },
     async (request, reply) => {
       const sessionId = request.params.id;
-      const tokenId = request.body?.token;
       const message = request.body?.message?.trim();
-      if (!tokenId || !message) {
-        return reply
-          .code(400)
-          .send({ error: "token and message are required" });
+      if (!message) {
+        return reply.code(400).send({ error: "message is required" });
       }
 
       const session = getSession(sessionId);
-      if (!session || session.token !== tokenId) {
+      if (!session) {
         return reply.code(404).send({ error: "unknown session" });
       }
 
@@ -75,13 +61,6 @@ export async function registerChatRoutes(
           .send({ error: "session is busy: running or awaiting approval" });
       }
 
-      const tokenRecord = findTokenById(tokenId);
-      if (!tokenRecord) {
-        return reply.code(404).send({ error: "unknown token" });
-      }
-
-      touchLastUsed(tokenRecord.id);
-
       const history = getSessionMessages(sessionId);
       const seed: ProviderMessage[] = history.map((m) => ({
         role: m.role,
@@ -91,12 +70,12 @@ export async function registerChatRoutes(
 
       dispatcher.dispatch({
         sessionId,
-        token: tokenRecord.id,
+        token: session.token,
         seed,
         userMessage: message,
       });
       logger.info(
-        { tokenId: tokenRecord.id.slice(0, 8), sessionId, seeded: seed.length },
+        { sessionId, seeded: seed.length },
         "session resumed",
       );
       return reply.code(202).send({ sessionId });

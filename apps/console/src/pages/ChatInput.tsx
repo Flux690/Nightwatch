@@ -8,7 +8,6 @@ export interface PendingInterrupt {
 }
 
 export interface ChatInputProps {
-  token: string;
   sessionId: string | null;
   isRunning: boolean;
   pendingInterrupt?: PendingInterrupt;
@@ -16,7 +15,6 @@ export interface ChatInputProps {
 }
 
 export function ChatInput({
-  token,
   sessionId,
   isRunning,
   pendingInterrupt,
@@ -52,7 +50,7 @@ export function ChatInput({
     }
 
     if (sessionId === null) {
-      const res = await fetch(`/api/chat/${token}`, {
+      const res = await fetch(`/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: trimmed }),
@@ -69,7 +67,7 @@ export function ChatInput({
       await fetch(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, message: trimmed }),
+        body: JSON.stringify({ message: trimmed }),
       });
     }
 

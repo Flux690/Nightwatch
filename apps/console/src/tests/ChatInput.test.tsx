@@ -41,7 +41,6 @@ function setup(
     path: "/sessions/new",
     component: () => (
       <ChatInput
-        token="tok-1"
         sessionId={props.sessionId}
         isRunning={props.isRunning}
         pendingInterrupt={props.pendingInterrupt}
@@ -105,7 +104,7 @@ describe("ChatInput", () => {
   });
 
   describe("submit from new session (sessionId=null)", () => {
-    it("calls POST /api/chat/:token and navigates to the new session", async () => {
+    it("calls POST /api/chat and navigates to the new session", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ sessionId: null, isRunning: false });
 
@@ -114,7 +113,7 @@ describe("ChatInput", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/chat/tok-1",
+        "/api/chat",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({ message: "Is nginx down?" }),
@@ -141,10 +140,7 @@ describe("ChatInput", () => {
         "/api/sessions/s1/messages",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({
-            token: "tok-1",
-            message: "Why did that tool call fail?",
-          }),
+          body: JSON.stringify({ message: "Why did that tool call fail?" }),
         }),
       );
     });

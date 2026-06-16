@@ -514,7 +514,6 @@ export function SessionView({
           </Text>
         </div>
         <ChatInput
-          token={token ?? ""}
           sessionId={null}
           isRunning={false}
           onSessionCreated={handleSessionCreated}
@@ -586,7 +585,6 @@ export function SessionView({
       </div>
 
       <ChatInput
-        token={token ?? ""}
         sessionId={activeSessionId}
         isRunning={isRunning}
         pendingInterrupt={pendingInterrupt}
@@ -814,7 +812,6 @@ export function SessionTranscript(): React.JSX.Element {
       </div>
 
       <ChatInput
-        token={token ?? ""}
         sessionId={id}
         isRunning={isRunning}
         pendingInterrupt={pendingInterrupt}

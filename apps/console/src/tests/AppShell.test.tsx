@@ -91,7 +91,7 @@ function setup(pendingCount = 0) {
           json: () => Promise.resolve(pendingApprovals),
         });
       }
-      if (url.includes("/chat/")) {
+      if (url.includes("/chat")) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ sessionId: "new-s1" }),
