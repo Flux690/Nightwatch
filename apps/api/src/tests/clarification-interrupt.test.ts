@@ -157,7 +157,6 @@ describe("clarification interrupts", () => {
 
     registerRunner(
       TEST_TOKEN,
-      TEST_RUNNER_ID,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
@@ -187,7 +186,7 @@ describe("clarification interrupts", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
+    unregisterRunner(TEST_TOKEN);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

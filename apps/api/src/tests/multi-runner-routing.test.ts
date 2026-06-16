@@ -128,13 +128,11 @@ const FINISH_TURN = {
 };
 
 function makeManifest(
-  runnerId: string,
   token: string,
   hostname: string,
   containers: string[],
 ): CapabilityManifest {
   return {
-    runnerId,
     token,
     hostname,
     runnerVersion: "2.0.0",
@@ -166,7 +164,8 @@ function waitForConnected(ws: WebSocket): Promise<void> {
 
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
-  let tokenId: string;
+  let tokenIdA: string;
+  let tokenIdB: string;
   let SESSION: string;
   let server: FastifyInstance;
   let port: number;
@@ -206,28 +205,26 @@ describe("multi-runner routing", () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    tokenId = generateToken("routing-026").id;
+    tokenIdA = generateToken("routing-a").id;
+    tokenIdB = generateToken("routing-b").id;
 
-    registerRunner(tokenId, "runner-a", makeSend(commandsA), () => {});
+    registerRunner(tokenIdA, makeSend(commandsA), () => {});
     setRunnerManifest(
-      tokenId,
-      "runner-a",
-      makeManifest("runner-a", tokenId, "web-01", ["nginx", "api"]),
+      tokenIdA,
+      makeManifest(tokenIdA, "web-01", ["nginx", "api"]),
     );
 
-    registerRunner(tokenId, "runner-b", makeSend(commandsB), () => {});
+    registerRunner(tokenIdB, makeSend(commandsB), () => {});
     setRunnerManifest(
-      tokenId,
-      "runner-b",
-      makeManifest("runner-b", tokenId, "db-02", ["postgres"]),
+      tokenIdB,
+      makeManifest(tokenIdB, "db-02", ["postgres"]),
     );
 
     tokenId2 = generateToken("routing-cross").id;
-    registerRunner(tokenId2, "runner-c", makeSend(commandsC), () => {});
+    registerRunner(tokenId2, makeSend(commandsC), () => {});
     setRunnerManifest(
       tokenId2,
-      "runner-c",
-      makeManifest("runner-c", tokenId2, "cache-01", ["redis"]),
+      makeManifest(tokenId2, "cache-01", ["redis"]),
     );
 
     server = Fastify({ logger: false });
@@ -240,9 +237,9 @@ describe("multi-runner routing", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(tokenId, "runner-a");
-    unregisterRunner(tokenId, "runner-b");
-    unregisterRunner(tokenId2, "runner-c");
+    unregisterRunner(tokenIdA);
+    unregisterRunner(tokenIdB);
+    unregisterRunner(tokenId2);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -258,7 +255,7 @@ describe("multi-runner routing", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      token: tokenId,
+      token: tokenIdA,
       userMessage: "investigate",
     });
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));

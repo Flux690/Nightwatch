@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { hostname } from "node:os";
 import { promisify } from "node:util";
 import type { CapabilityManifest } from "@nightwatch/shared";
-import { getRunnerId } from "./identity.js";
 
 const execFileAsync = promisify(execFile);
 const RUNNER_VERSION = "0.2.0";
@@ -17,7 +16,6 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
   return {
-    runnerId: getRunnerId(),
     token: process.env["NIGHTWATCH_TOKEN"] ?? "unknown",
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,

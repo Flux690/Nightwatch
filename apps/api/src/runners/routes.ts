@@ -39,7 +39,7 @@ export async function registerRunnerRoutes(
       }
       for (const r of runners) {
         records.push({
-          id: r.runnerId,
+          id: t.id,
           token: t.id,
           hostname: r.hostname,
           createdAt: t.createdAt,

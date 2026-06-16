@@ -14,12 +14,10 @@ import { registerRunnerRoutes } from "../runners/routes.js";
 
 function manifest(
   token: string,
-  runnerId: string,
   hostname: string,
   containers: string[],
 ): CapabilityManifest {
   return {
-    runnerId,
     token,
     hostname,
     runnerVersion: "2.0.0",
@@ -41,13 +39,11 @@ function manifest(
 async function connectRunner(
   port: number,
   token: string,
-  runnerId: string,
   m: CapabilityManifest,
 ): Promise<WebSocket> {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
     headers: {
       authorization: `Bearer ${token}`,
-      "x-nightwatch-runner-id": runnerId,
     },
   });
   await new Promise<void>((resolve, reject) => {
@@ -89,34 +85,33 @@ describe("flat runner registry", () => {
     return JSON.parse(res.body) as RunnerRecord[];
   }
 
-  it("lists two runners on one token with independent manifests and liveness", async () => {
-    // runnerId values are unique per test: the flat registry is keyed by runnerId
-    // globally, so collisions across tests would corrupt each other's state.
-    const { plaintext: token, id: tokenId } = generateToken("two-up");
+  it("lists two runners each on their own token with correct manifests", async () => {
+    const { plaintext: tokenA, id: tokenAId } = generateToken("one-up-a");
+    const { plaintext: tokenB, id: tokenBId } = generateToken("one-up-b");
     const a = await connectRunner(
       port,
-      token,
-      "two-up-a",
-      manifest(token, "two-up-a", "web-01", ["nginx", "api"]),
+      tokenA,
+      manifest(tokenA, "web-01", ["nginx", "api"]),
     );
     const b = await connectRunner(
       port,
-      token,
-      "two-up-b",
-      manifest(token, "two-up-b", "db-02", ["postgres"]),
+      tokenB,
+      manifest(tokenB, "db-02", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {
       const list = await getRunners();
-      const mine = list.filter((r) => r.token === tokenId);
+      const mine = list.filter(
+        (r) => r.token === tokenAId || r.token === tokenBId,
+      );
       return mine.length === 2 && mine.every((r) => r.manifest !== null)
         ? mine
         : undefined;
     });
 
     const byId = new Map(runners.map((r) => [r.id, r]));
-    const ra = byId.get("two-up-a");
-    const rb = byId.get("two-up-b");
+    const ra = byId.get(tokenAId);
+    const rb = byId.get(tokenBId);
     expect(ra).toBeDefined();
     expect(rb).toBeDefined();
 
@@ -133,36 +128,36 @@ describe("flat runner registry", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const { plaintext: token, id: tokenId } = generateToken("close-one");
+    const { plaintext: tokenA, id: tokenAId } = generateToken("close-one-a");
+    const { plaintext: tokenB, id: tokenBId } = generateToken("close-one-b");
     const a = await connectRunner(
       port,
-      token,
-      "close-one-a",
-      manifest(token, "close-one-a", "web-01", ["nginx"]),
+      tokenA,
+      manifest(tokenA, "web-01", ["nginx"]),
     );
     const b = await connectRunner(
       port,
-      token,
-      "close-one-b",
-      manifest(token, "close-one-b", "db-02", ["postgres"]),
+      tokenB,
+      manifest(tokenB, "db-02", ["postgres"]),
     );
-    await waitFor(async () =>
-      (await getRunners()).filter(
-        (r) => r.token === tokenId && r.manifest !== null,
-      ).length === 2
-        ? true
-        : undefined,
-    );
+    await waitFor(async () => {
+      const live = (await getRunners()).filter(
+        (r) =>
+          (r.token === tokenAId || r.token === tokenBId) &&
+          r.manifest !== null,
+      );
+      return live.length === 2 ? true : undefined;
+    });
 
     a.close();
 
     const remaining = await waitFor(async () => {
       const live = (await getRunners()).filter(
-        (r) => r.token === tokenId && r.online,
+        (r) => (r.token === tokenAId || r.token === tokenBId) && r.online,
       );
       return live.length === 1 ? live : undefined;
     });
-    expect(remaining[0].id).toBe("close-one-b");
+    expect(remaining[0].id).toBe(tokenBId);
 
     b.close();
   });
@@ -174,14 +169,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      "cross-runner-a",
-      manifest(tokenA, "cross-runner-a", "host-a", ["nginx"]),
+      manifest(tokenA, "host-a", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      "cross-runner-b",
-      manifest(tokenB, "cross-runner-b", "host-b", ["postgres"]),
+      manifest(tokenB, "host-b", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {
@@ -195,10 +188,10 @@ describe("flat runner registry", () => {
     });
 
     const byId = new Map(runners.map((r) => [r.id, r]));
-    expect(byId.get("cross-runner-a")?.hostname).toBe("host-a");
-    expect(byId.get("cross-runner-b")?.hostname).toBe("host-b");
-    expect(byId.get("cross-runner-a")?.online).toBe(true);
-    expect(byId.get("cross-runner-b")?.online).toBe(true);
+    expect(byId.get(tokenAId)?.hostname).toBe("host-a");
+    expect(byId.get(tokenBId)?.hostname).toBe("host-b");
+    expect(byId.get(tokenAId)?.online).toBe(true);
+    expect(byId.get(tokenBId)?.online).toBe(true);
 
     a.close();
     b.close();

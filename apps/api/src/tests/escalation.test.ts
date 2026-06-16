@@ -175,7 +175,6 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     // ever reaches it.
     registerRunner(
       TEST_TOKEN,
-      TEST_RUNNER_ID,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { correlationId } = msg.payload;
@@ -194,7 +193,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
+    unregisterRunner(TEST_TOKEN);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

@@ -137,7 +137,6 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     const tokA = generateToken("qa").id;
     registerRunner(
       tokA,
-      RUNNER_ID + "-qa",
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -200,7 +199,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
         body: JSON.stringify({ resolvedBy: "cleanup" }),
       },
     );
-    unregisterRunner(tokA, RUNNER_ID + "-qa");
+    unregisterRunner(tokA);
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
@@ -232,7 +231,6 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     registerRunner(
       tokC,
-      RUNNER_ID + "-c",
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -272,7 +270,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
         body: JSON.stringify({ resolvedBy: "cleanup" }),
       },
     );
-    unregisterRunner(tokC, RUNNER_ID + "-c");
+    unregisterRunner(tokC);
   });
 
   it("returns empty list after interrupt is resolved", async () => {
@@ -299,7 +297,6 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     registerRunner(
       tokE,
-      RUNNER_ID + "-e",
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -349,7 +346,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     const bodyAfter = (await resAfter.json()) as ApprovalRequest[];
     expect(bodyAfter.length).toBe(0);
 
-    unregisterRunner(tokE, RUNNER_ID + "-e");
+    unregisterRunner(tokE);
   });
 });
 

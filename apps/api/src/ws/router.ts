@@ -15,9 +15,8 @@ const pending = new Map<string, PendingCommand>();
 
 const HEARTBEAT_TTL_MS = 120_000;
 
-// Flat registry keyed by runnerId (a stable per-runner UUID). The tokenId is
-// stored inside the connection for revocation only - it does not scope routing.
-// D14: the runner token authenticates a connection but is not a grouping key.
+// Flat registry keyed by tokenId. One token = one server in this deployment
+// model; the token authenticates the connection and is the stable per-server key.
 interface RunnerConnection {
   tokenId: string;
   send: (msg: string) => void;
@@ -29,7 +28,6 @@ interface RunnerConnection {
 
 export interface RunnerView {
   tokenId: string;
-  runnerId: string;
   hostname: string | null;
   manifest: CapabilityManifest | null;
   lastSeen: number;
@@ -47,11 +45,10 @@ export class RunnerOfflineError extends Error {
 
 export function registerRunner(
   tokenId: string,
-  runnerId: string,
   send: (msg: string) => void,
   close: () => void,
 ): void {
-  registry.set(runnerId, {
+  registry.set(tokenId, {
     tokenId,
     send,
     close,
@@ -61,32 +58,29 @@ export function registerRunner(
   });
 }
 
-export function unregisterRunner(_tokenId: string, runnerId: string): void {
-  registry.delete(runnerId);
+export function unregisterRunner(tokenId: string): void {
+  registry.delete(tokenId);
 }
 
 // Close every runner socket authenticated with this token. Called by the
 // revoke route so revocation cuts access immediately, not just on next auth.
 export function closeTokenRunners(tokenId: string): void {
-  for (const conn of registry.values()) {
-    if (conn.tokenId === tokenId) conn.close();
-  }
+  registry.get(tokenId)?.close();
 }
 
 export function setRunnerManifest(
-  _tokenId: string,
-  runnerId: string,
+  tokenId: string,
   manifest: CapabilityManifest,
 ): void {
-  const conn = registry.get(runnerId);
+  const conn = registry.get(tokenId);
   if (!conn) return;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
 }
 
-export function recordHeartbeat(_tokenId: string, runnerId: string): void {
-  const conn = registry.get(runnerId);
+export function recordHeartbeat(tokenId: string): void {
+  const conn = registry.get(tokenId);
   if (!conn) return;
   conn.lastSeen = Date.now();
 }
@@ -94,10 +88,9 @@ export function recordHeartbeat(_tokenId: string, runnerId: string): void {
 export function listRunners(): RunnerView[] {
   const now = Date.now();
   const views: RunnerView[] = [];
-  for (const [runnerId, conn] of registry) {
+  for (const [tokenId, conn] of registry) {
     views.push({
-      tokenId: conn.tokenId,
-      runnerId,
+      tokenId,
       hostname: conn.hostname,
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
@@ -105,6 +98,10 @@ export function listRunners(): RunnerView[] {
     });
   }
   return views;
+}
+
+export function getRunnerHostname(tokenId: string): string | undefined {
+  return registry.get(tokenId)?.hostname ?? undefined;
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {

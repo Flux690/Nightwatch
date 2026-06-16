@@ -257,7 +257,6 @@ describe("state inversion: persistence and reads are API-local", () => {
     const RUNNER_ID = "hostile-runner";
     registerRunner(
       TEST_TOKEN,
-      RUNNER_ID,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -334,7 +333,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const end = await histEnd;
     ws.close();
-    unregisterRunner(TEST_TOKEN, RUNNER_ID);
+    unregisterRunner(TEST_TOKEN);
 
     expect(end.payload["isError"]).toBeFalsy();
     expect(String(end.payload["result"])).toContain(

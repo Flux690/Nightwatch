@@ -116,7 +116,6 @@ describe("console WS pipeline", () => {
     // runner receives nothing. Resolve defensively for any stray command.
     registerRunner(
       TEST_TOKEN,
-      TEST_RUNNER_ID,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -138,7 +137,7 @@ describe("console WS pipeline", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN, TEST_RUNNER_ID);
+    unregisterRunner(TEST_TOKEN);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

@@ -6,6 +6,7 @@ import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
+import { getRunnerHostname } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -37,10 +38,13 @@ export async function registerAlertRoutes(
       // Use the token's UUID as the internal identifier for all dispatch,
       // session, and incident records — the plaintext never flows downstream.
       const tokenId = tokenRecord.id;
+      // Stamp the server hostname at alert creation time so session history
+      // remains readable after a token is deleted (runner token lifecycle).
+      const hostname = getRunnerHostname(tokenId);
 
       let alerts: NormalizedAlert[];
       try {
-        alerts = parseSource(userAgent, request.body, tokenId);
+        alerts = parseSource(userAgent, request.body, tokenId, hostname);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return reply.code(400).send({ error: msg });
@@ -112,12 +116,13 @@ function parseSource(
   userAgent: string,
   body: unknown,
   tokenId: string,
+  hostname: string | undefined,
 ): NormalizedAlert[] {
   if (
     userAgent.toLowerCase().includes("alertmanager") ||
     isAlertmanagerShape(body)
   ) {
-    return parseAlertmanager(body, tokenId);
+    return parseAlertmanager(body, tokenId, hostname);
   }
   logger.warn(
     { preview: JSON.stringify(body).slice(0, 200) },

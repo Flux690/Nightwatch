@@ -1,5 +1,4 @@
 export interface CapabilityManifest {
-  runnerId: string;
   token: string;
   hostname: string;
   runnerVersion: string;
@@ -17,7 +16,6 @@ export interface CapabilityManifest {
 
 export interface MetricSnapshot {
   token: string;
-  runnerId: string;
   capturedAt: string;
   metrics: Array<{
     containerName: string;

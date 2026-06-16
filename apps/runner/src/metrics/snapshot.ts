@@ -15,7 +15,6 @@ const PROMETHEUS_URL = process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
 export async function captureMetricSnapshot(
   token: string,
-  runnerId: string,
   containerNames: string[],
 ): Promise<MetricSnapshot> {
   const capturedAt = new Date().toISOString();
@@ -49,7 +48,6 @@ export async function captureMetricSnapshot(
 
   return {
     token,
-    runnerId,
     capturedAt,
     metrics,
     host: {
