@@ -159,12 +159,10 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   let SESSION: string;
   const TEST_RUNNER_ID = "test-runner-esc";
 
-  // Incidents are now written to the API's local store; read them back from there
+  // Incidents are written to the API's local store; read them back from there
   // (the public seam) instead of intercepting a WS persistence command.
   function escalationFor(sessionId: string): IncidentRecord | undefined {
-    return getRecentIncidents(TEST_TOKEN).find(
-      (i) => i.sessionId === sessionId,
-    );
+    return getRecentIncidents().find((i) => i.sessionId === sessionId);
   }
 
   beforeAll(async () => {
@@ -236,7 +234,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       }
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Do something dangerous." }),
@@ -305,7 +303,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       }
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Wrap up." }),
@@ -417,7 +415,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       }
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ message: "Investigate forever." }),

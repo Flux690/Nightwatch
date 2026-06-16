@@ -173,9 +173,8 @@ describe("API-local incident store", () => {
   });
 
   function incident(
-    token: string,
-    overrides: Partial<Parameters<typeof insertIncident>[1]> = {},
-  ): Parameters<typeof insertIncident>[1] {
+    overrides: Partial<Parameters<typeof insertIncident>[0]> = {},
+  ): Parameters<typeof insertIncident>[0] {
     return {
       incidentId: randomUUID(),
       sessionId: randomUUID(),
@@ -191,50 +190,27 @@ describe("API-local incident store", () => {
     };
   }
 
-  it("scopes recent incidents to the token (no cross-deployment leakage)", () => {
-    insertIncident("tok-1", incident("tok-1", { rootCause: "mine" }));
-    insertIncident("tok-2", incident("tok-2", { rootCause: "theirs" }));
+  it("filters by container and alert type", () => {
+    insertIncident(incident({ containerName: "web-01", alertType: "ContainerDown" }));
+    insertIncident(incident({ containerName: "db-01", alertType: "HighMemory" }));
 
-    const mine = getRecentIncidents("tok-1");
-    expect(mine).toHaveLength(1);
-    expect(mine[0].rootCause).toBe("mine");
-  });
-
-  it("filters by container and alert type within the token", () => {
-    const token = `tok-${randomUUID()}`;
-    insertIncident(
-      token,
-      incident(token, { containerName: "web-01", alertType: "ContainerDown" }),
-    );
-    insertIncident(
-      token,
-      incident(token, { containerName: "db-01", alertType: "HighMemory" }),
-    );
-
-    expect(getRecentIncidents(token, "web-01")).toHaveLength(1);
-    expect(getRecentIncidents(token, "web-01", "ContainerDown")).toHaveLength(
-      1,
-    );
-    expect(getRecentIncidents(token, "web-01", "HighMemory")).toHaveLength(0);
+    expect(getRecentIncidents("web-01")).toHaveLength(1);
+    expect(getRecentIncidents("web-01", "ContainerDown")).toHaveLength(1);
+    expect(getRecentIncidents("web-01", "HighMemory")).toHaveLength(0);
   });
 
   it("excludes incidents older than the lookback window", () => {
-    const token = `tok-${randomUUID()}`;
     const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
-    insertIncident(
-      token,
-      incident(token, { timestamp: old, rootCause: "ancient" }),
-    );
-    insertIncident(token, incident(token, { rootCause: "recent" }));
+    insertIncident(incident({ containerName: "time-01", alertType: "ContainerDown", timestamp: old, rootCause: "ancient" }));
+    insertIncident(incident({ containerName: "time-01", alertType: "ContainerDown", rootCause: "recent" }));
 
-    const within30 = getRecentIncidents(token, undefined, undefined, 30);
+    const within30 = getRecentIncidents("time-01", undefined, 30);
     expect(within30.map((i) => i.rootCause)).toEqual(["recent"]);
   });
 
   it("round-trips a resolution note onto an escalated incident", () => {
-    const token = `tok-${randomUUID()}`;
-    const rec = incident(token, { outcome: "escalated" });
-    insertIncident(token, rec);
+    const rec = incident({ outcome: "escalated" });
+    insertIncident(rec);
 
     updateResolutionNote(rec.incidentId, "rotated the credentials");
 

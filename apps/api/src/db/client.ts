@@ -55,9 +55,6 @@ const SCHEMA = `
     created_at        TEXT NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS idx_sessions_token
-    ON sessions(token, created_at);
-
   CREATE TABLE IF NOT EXISTS session_messages (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id       TEXT NOT NULL REFERENCES sessions(session_id),
@@ -71,8 +68,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS incidents (
     id                    TEXT PRIMARY KEY,
-    token                 TEXT NOT NULL,
-    session_id            TEXT,
+    session_id            TEXT NOT NULL,
     outcome               TEXT NOT NULL DEFAULT 'finding',
     timestamp             TEXT NOT NULL,
     container_name        TEXT NOT NULL,
@@ -85,7 +81,7 @@ const SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_incidents_lookup
-    ON incidents(token, container_name, alert_type, timestamp);
+    ON incidents(container_name, alert_type, timestamp);
 
   CREATE TABLE IF NOT EXISTS pending_interrupts (
     id                TEXT PRIMARY KEY,

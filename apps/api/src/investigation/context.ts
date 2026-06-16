@@ -34,7 +34,6 @@ export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
 
   const historyBlock = formatIncidentHistory(
     loadIncidentHistory(
-      primary.token,
       primary.targetIdentifier,
       primary.alertType,
     ),
@@ -70,15 +69,14 @@ Fired at:     ${alert.firedAt}`;
 const MAX_HISTORY_RECORDS = 5;
 
 // Episodic memory comes from the API's central store, not the runner: incident
-// history is one place per deployment regardless of which runner the alert
-// concerned, and it is readable even when every runner is offline.
+// history is readable regardless of which runner the alert concerned, and even
+// when every runner is offline.
 function loadIncidentHistory(
-  token: string,
   containerName: string,
   alertType: string,
 ): IncidentRecord[] {
   return collapseHistory(
-    getRecentIncidents(token, containerName, alertType, 30),
+    getRecentIncidents(containerName, alertType, 30),
   );
 }
 

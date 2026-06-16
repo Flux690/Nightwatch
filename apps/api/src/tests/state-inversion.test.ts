@@ -174,7 +174,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     const events = collectEvents(ws);
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -218,7 +218,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     const events = collectEvents(ws);
     await waitForConnected(ws);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -270,7 +270,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       () => {},
     );
 
-    insertIncident(TEST_TOKEN, {
+    insertIncident({
       incidentId: randomUUID(),
       sessionId: randomUUID(),
       outcome: "finding",
@@ -321,7 +321,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       }
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat/${TEST_TOKEN}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -366,10 +366,10 @@ describe("state inversion: episodic memory loads from the central store", () => 
     vi.unstubAllEnvs();
   });
 
-  it("injects past incidents for the deployment regardless of which runner recorded them", async () => {
-    // Two incidents for the same deployment + container, as if recorded by
+  it("injects past incidents by container and alert type", async () => {
+    // Two incidents for the same container, as if recorded by
     // different runners across time - all in one central store.
-    insertIncident(TOKEN, {
+    insertIncident({
       incidentId: randomUUID(),
       sessionId: randomUUID(),
       outcome: "finding",
@@ -381,7 +381,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
       resolvedAt: null,
       recurrenceCount: 0,
     });
-    insertIncident(TOKEN, {
+    insertIncident({
       incidentId: randomUUID(),
       sessionId: randomUUID(),
       outcome: "escalated",
@@ -421,39 +421,10 @@ describe("state inversion: episodic memory loads from the central store", () => 
       rawPayload: {},
     };
 
-    // The token authenticates the alert and keys incident history, but the LLM
-    // never needs it - and the opening message is sent to an external provider.
+    // The token authenticates the alert but the LLM never needs it -
+    // and the opening message is sent to an external provider.
     const { firstUserMessage } = buildInitialContext([alert]);
     expect(firstUserMessage).not.toContain(secret);
-  });
-
-  it("does not leak another deployment's incidents into the opening context", async () => {
-    insertIncident("tok-stranger", {
-      incidentId: randomUUID(),
-      sessionId: randomUUID(),
-      outcome: "finding",
-      timestamp: new Date().toISOString(),
-      containerName: "web-01",
-      alertType: "HighMemory",
-      rootCause: "stranger's secret incident",
-      resolutionAction: null,
-      resolvedAt: null,
-      recurrenceCount: 0,
-    });
-
-    const alert: NormalizedAlert = {
-      sourceAlertId: "src-10",
-      token: `tok-empty-${randomUUID()}`,
-      targetIdentifier: "web-01",
-      alertType: "HighMemory",
-      severity: "warning",
-      firedAt: new Date().toISOString(),
-      rawPayload: {},
-    };
-
-    const { firstUserMessage } = buildInitialContext([alert]);
-    expect(firstUserMessage).not.toContain("stranger's secret incident");
-    expect(firstUserMessage).toContain("(no past incidents)");
   });
 });
 

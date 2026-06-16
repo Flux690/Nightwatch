@@ -57,7 +57,6 @@ export async function runInvestigation(
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
   const ctx: IncidentContext & { severity: NormalizedAlert["severity"] } = {
-    token,
     containerName: alert?.targetIdentifier ?? "chat",
     alertType: alert?.alertType ?? "chat",
     firedAt: alert?.firedAt ?? new Date().toISOString(),
@@ -231,7 +230,7 @@ export async function runInvestigation(
           toolName: tool.name,
           input: tool.input,
         });
-        const result = await handlePlatformTool(tool, token, incidentId);
+        const result = await handlePlatformTool(tool);
         toolResults.push(result);
         publishToolCallEnd({
           sessionId,

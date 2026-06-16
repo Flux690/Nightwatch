@@ -5,13 +5,11 @@ import type { ToolUse, ToolResult } from "../llm/types.js";
 
 export async function handlePlatformTool(
   tool: ToolUse,
-  token: string,
-  incidentId: string,
 ): Promise<ToolResult> {
   if (tool.name === "get_incident_history") {
-    // Episodic memory now lives in the API's central store (state inversion);
-    // the runner no longer answers this. Token-scoped so one deployment never
-    // sees another's incidents.
+    // Episodic memory lives in the API's central store (state inversion);
+    // the runner no longer answers this. Queried by container + alert type only -
+    // incidents are not scoped to a runner token (flat fleet, D14).
     // tool.input is the model-supplied Record<string, unknown>; reading these
     // optional fields off it is the documented schema (see tools.ts).
     const input = tool.input as {
@@ -20,7 +18,6 @@ export async function handlePlatformTool(
       limitDays?: number;
     };
     const records = getRecentIncidents(
-      token,
       input.containerName,
       input.alertType,
       input.limitDays,
