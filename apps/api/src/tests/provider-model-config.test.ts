@@ -164,10 +164,21 @@ describe("provider/model config seam", () => {
     expect(body.models).toEqual([]);
   });
 
+  // --- requireSession gate ---
+
+  it("GET /config: returns 401 without a valid nw_auth cookie", async () => {
+    const res = await server.inject({ method: "GET", url: "/config" });
+    expect(res.statusCode).toBe(401);
+  });
+
   // --- Key never returned to browser ---
 
   it("GET /config: never returns apiKeyEncrypted or plaintext key in the response", async () => {
-    const res = await server.inject({ method: "GET", url: "/config" });
+    const res = await server.inject({
+      method: "GET",
+      url: "/config",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
@@ -206,7 +217,11 @@ describe("provider/model config seam", () => {
 
     // GET /config reads the row, decrypts, and masks - proving the encrypt →
     // store → decrypt → mask round-trip without ever returning the plaintext.
-    const res = await server.inject({ method: "GET", url: "/config" });
+    const res = await server.inject({
+      method: "GET",
+      url: "/config",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
     expect(body["apiKeyMasked"]).toBe("sk-...9999");

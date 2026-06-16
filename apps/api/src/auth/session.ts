@@ -41,41 +41,50 @@ function extractCookieValue(header: string | undefined): string | undefined {
   return undefined;
 }
 
-export async function requireSession(
-  request: FastifyRequest,
-  reply: FastifyReply,
-): Promise<void> {
-  const value = extractCookieValue(request.headers.cookie);
-  if (!value) {
-    await reply.code(401).send({ error: "authentication required" });
-    return;
-  }
+// Verifies the nw_auth cookie (signature, expiry, and loginVersion against the
+// stored value) without writing a reply. The returned loginVersion is read
+// exactly once per call so a concurrent epoch bump can't be validated against
+// one value and reissued under another.
+async function verifySessionCookie(
+  cookieHeaderValue: string | undefined,
+): Promise<{ loginVersion: number; exp: number } | null> {
+  const value = extractCookieValue(cookieHeaderValue);
+  if (!value) return null;
 
-  let loginVersion: unknown;
-  let exp: number;
   try {
     const { payload } = await jwtVerify(value, signingKey(), {
       algorithms: ["HS256"],
     });
-    loginVersion = payload["loginVersion"];
-    exp = payload.exp ?? 0;
+    const loginVersion = getLoginVersion();
+    if (payload["loginVersion"] !== loginVersion) return null;
+    return { loginVersion, exp: payload.exp ?? 0 };
   } catch {
-    await reply.code(401).send({ error: "authentication required" });
-    return;
+    return null;
   }
+}
 
-  const storedVersion = getLoginVersion();
-  if (loginVersion !== storedVersion) {
+export async function isAuthenticated(
+  request: FastifyRequest,
+): Promise<boolean> {
+  return (await verifySessionCookie(request.headers.cookie)) !== null;
+}
+
+export async function requireSession(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const verified = await verifySessionCookie(request.headers.cookie);
+  if (!verified) {
     await reply.code(401).send({ error: "authentication required" });
     return;
   }
 
   const nowS = Math.floor(Date.now() / 1000);
-  if (exp - nowS < REISSUE_THRESHOLD_S) {
+  if (verified.exp - nowS < REISSUE_THRESHOLD_S) {
     const secure = request.protocol === "https";
     reply.header(
       "Set-Cookie",
-      cookieHeader(await mintSession(storedVersion), secure),
+      cookieHeader(await mintSession(verified.loginVersion), secure),
     );
   }
 }

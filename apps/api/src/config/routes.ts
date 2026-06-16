@@ -118,7 +118,9 @@ export async function registerConfigRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   // GET /config — returns AgentConfig without any encrypted/plaintext key.
-  fastify.get("/config", async () => {
+  // Still gated: provider, model, baseUrl, and the masked key are not for
+  // unauthenticated eyes.
+  fastify.get("/config", { preHandler: requireSession }, async () => {
     const config = loadConfig();
     // apiKeyMasked is safe to return; apiKeyEncrypted never reaches here.
     return config;

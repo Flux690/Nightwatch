@@ -110,6 +110,89 @@ describe("POST /setup", () => {
   });
 });
 
+// GET /auth/status - the console's single bootstrap call (setup vs login vs app)
+describe("GET /auth/status", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    server = await buildServer();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("returns { ownerExists: false } before setup", async () => {
+    const res = await server.inject({ method: "GET", url: "/auth/status" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ownerExists: false });
+  });
+
+  it("returns { ownerExists: true, authenticated: false } once an owner exists but with no cookie", async () => {
+    await server.inject({
+      method: "POST",
+      url: "/setup",
+      payload: { email: "admin@example.com", password: "correcthorsebattery" },
+    });
+    const res = await server.inject({ method: "GET", url: "/auth/status" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      ownerExists: true,
+      authenticated: false,
+    });
+  });
+
+  it("returns authenticated: false for an invalid cookie", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/auth/status",
+      headers: { cookie: "nw_auth=garbage" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      ownerExists: true,
+      authenticated: false,
+    });
+  });
+
+  it("returns { ownerExists: true, authenticated: true } with a valid cookie", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/auth/status",
+      headers: { cookie: `nw_auth=${await mintSession(0)}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      ownerExists: true,
+      authenticated: true,
+    });
+  });
+
+  it("returns authenticated: false for a cookie revoked by logout-all", async () => {
+    const staleCookie = await mintSession(0);
+    const logoutAllRes = await server.inject({
+      method: "POST",
+      url: "/logout-all",
+      headers: { cookie: `nw_auth=${staleCookie}` },
+    });
+    expect(logoutAllRes.statusCode).toBe(200);
+
+    const res = await server.inject({
+      method: "GET",
+      url: "/auth/status",
+      headers: { cookie: `nw_auth=${staleCookie}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      ownerExists: true,
+      authenticated: false,
+    });
+  });
+});
+
 // Login behavior
 describe("POST /login", () => {
   let server: FastifyInstance;

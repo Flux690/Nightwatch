@@ -1,6 +1,11 @@
 import { hash, verify } from "argon2";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { mintSession, requireSession, cookieHeader } from "./session.js";
+import {
+  mintSession,
+  requireSession,
+  isAuthenticated,
+  cookieHeader,
+} from "./session.js";
 import {
   bumpLoginVersion,
   getOwnerCredentials,
@@ -89,4 +94,9 @@ export async function registerAuthRoutes(
       return reply.code(200).send({ ok: true });
     },
   );
+
+  fastify.get("/auth/status", async (request) => {
+    if (!getOwnerCredentials()) return { ownerExists: false };
+    return { ownerExists: true, authenticated: await isAuthenticated(request) };
+  });
 }
