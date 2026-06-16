@@ -170,7 +170,7 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     setup();
     await user.click(
-      await screen.findByRole("button", { name: /mint token/i }),
+      await screen.findByRole("button", { name: /generate token/i }),
     );
     await waitFor(() => {
       expect(screen.getByText(MINTED.token)).toBeInTheDocument();
