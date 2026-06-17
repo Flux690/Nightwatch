@@ -1,0 +1,124 @@
+import "dotenv/config";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+import { useTempDb } from "./temp-db.js";
+import { mintTestSession } from "./session-helper.js";
+import { generateToken } from "../db/tokens.js";
+import { registerConnectRoutes } from "../connect/routes.js";
+
+describe("GET /connect.sh", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let SESSION: string;
+  let TOKEN: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    TOKEN = generateToken("test-server").plaintext;
+    server = Fastify({ logger: false, trustProxy: true });
+    await registerConnectRoutes(server);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+  });
+
+  it("returns 401 without a session cookie", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns 400 when the token query param is missing", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("returns 404 for a token not in the DB", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh?token=nwr_notarealtoken_just_a_fake_value_xxxx",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns a shell script with Content-Type text/x-shellscript", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/text\/x-shellscript/);
+  });
+
+  it("script contains the baked-in platform origin", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        host: "control.example.com:3000",
+      },
+    });
+    expect(res.body).toContain("http://control.example.com:3000");
+  });
+
+  it("script contains the ws:// runner WS URL", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        host: "control.example.com:3000",
+      },
+    });
+    expect(res.body).toContain(
+      "ws://control.example.com:3000/clients/connect",
+    );
+  });
+
+  it("uses wss:// for https requests", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        host: "my-host.example.com",
+        "x-forwarded-proto": "https",
+      },
+    });
+    expect(res.body).toContain("https://my-host.example.com");
+    expect(res.body).toContain("wss://my-host.example.com/clients/connect");
+  });
+
+  it("script contains the runner token", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.body).toContain(TOKEN);
+  });
+
+  it("script contains neither nightwatch.sh nor inst_", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.body).not.toContain("nightwatch.sh");
+    expect(res.body).not.toContain("inst_");
+  });
+});

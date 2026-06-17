@@ -83,11 +83,11 @@ COPY --from=binaries /opt/cadvisor/ /opt/cadvisor/
 
 COPY --from=builder /app /app
 
-COPY install/s6/init-configure/ /etc/s6-overlay/s6-rc.d/init-configure/
-COPY install/s6/runner/ /etc/s6-overlay/s6-rc.d/runner/
-COPY install/s6/prometheus/ /etc/s6-overlay/s6-rc.d/prometheus/
-COPY install/s6/alertmanager/ /etc/s6-overlay/s6-rc.d/alertmanager/
-COPY install/s6/cadvisor/ /etc/s6-overlay/s6-rc.d/cadvisor/
+COPY apps/runner/install/s6/init-configure/ /etc/s6-overlay/s6-rc.d/init-configure/
+COPY apps/runner/install/s6/runner/ /etc/s6-overlay/s6-rc.d/runner/
+COPY apps/runner/install/s6/prometheus/ /etc/s6-overlay/s6-rc.d/prometheus/
+COPY apps/runner/install/s6/alertmanager/ /etc/s6-overlay/s6-rc.d/alertmanager/
+COPY apps/runner/install/s6/cadvisor/ /etc/s6-overlay/s6-rc.d/cadvisor/
 
 RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/init-configure \
           /etc/s6-overlay/s6-rc.d/user/contents.d/runner \
@@ -100,8 +100,8 @@ RUN for svc in runner prometheus alertmanager cadvisor; do \
       && touch "/etc/s6-overlay/s6-rc.d/${svc}/dependencies.d/init-configure"; \
     done
 
-COPY install/configs/ /etc/nightwatch/templates/
-COPY install/configure.sh /etc/nightwatch/configure.sh
+COPY apps/runner/install/configs/ /etc/nightwatch/templates/
+COPY apps/runner/install/configure.sh /etc/nightwatch/configure.sh
 
 RUN chmod +x /etc/nightwatch/configure.sh \
              /etc/s6-overlay/s6-rc.d/runner/run \

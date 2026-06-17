@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
+# {{PLATFORM_URL}}, {{WS_URL}}, and {{NIGHTWATCH_TOKEN}} are substituted at
+# serve time by GET /connect.sh — do not edit them here.
 set -euo pipefail
 
 IMAGE="${NIGHTWATCH_IMAGE:-nightwatch/runner:latest}"
 CONTAINER_NAME="nightwatch"
-PLATFORM_URL="${PLATFORM_URL:-https://api.nightwatch.sh}"
-WS_URL="${WS_URL:-wss://api.nightwatch.sh/clients/connect}"
-NIGHTWATCH_TOKEN="${NIGHTWATCH_TOKEN:-${1:-}}"
-
-if [ -z "$NIGHTWATCH_TOKEN" ]; then
-  echo "Usage: install.sh <token>"
-  echo "   or: NIGHTWATCH_TOKEN=inst_xxx install.sh"
-  exit 1
-fi
+PLATFORM_URL="{{PLATFORM_URL}}"
+WS_URL="{{WS_URL}}"
+NIGHTWATCH_TOKEN="{{NIGHTWATCH_TOKEN}}"
 
 detect_service() {
   local port="$1" health_path="$2"
@@ -107,7 +103,6 @@ echo ""
 echo "Nightwatch is running."
 echo ""
 echo "  Container:    ${CONTAINER_NAME}"
-echo "  Token:        ${NIGHTWATCH_TOKEN}"
 echo "  Platform:     ${PLATFORM_URL}"
 echo "  Prometheus:   ${PROMETHEUS_URL:-http://localhost:9090 (bundled)}"
 echo "  Alertmanager: ${ALERTMANAGER_URL:-http://localhost:9093 (bundled)}"

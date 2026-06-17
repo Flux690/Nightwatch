@@ -14,6 +14,7 @@ import { registerSessionRoutes } from "./sessions/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
 import { registerApprovalRoutes } from "./approvals/routes.js";
+import { registerConnectRoutes } from "./connect/routes.js";
 
 // Self-provisioning (D16): an explicit env var wins; otherwise a key file
 // beside the SQLite database is reused or generated on first boot. No more
@@ -45,6 +46,7 @@ await registerSessionRoutes(fastify);
 await registerRunnerRoutes(fastify);
 await registerTokenRoutes(fastify);
 await registerApprovalRoutes(fastify);
+await registerConnectRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 
