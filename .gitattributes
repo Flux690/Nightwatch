@@ -1,0 +1,5 @@
+* text=auto
+
+*.sh text eol=lf
+apps/runner/install/s6/*/run text eol=lf
+apps/runner/install/s6/*/up text eol=lf
