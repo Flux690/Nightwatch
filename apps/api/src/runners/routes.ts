@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { listTokensMeta } from "../db/tokens.js";
+import { findTokenById, listTokensMeta } from "../db/tokens.js";
 import { sendCommand, listRunners } from "../ws/router.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -27,7 +27,7 @@ export async function registerRunnerRoutes(
       const runners = byToken.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({
-          id: t.id,
+          id: t.runnerId ?? t.id,
           token: t.id,
           hostname: null,
           createdAt: t.createdAt,
@@ -39,7 +39,7 @@ export async function registerRunnerRoutes(
       }
       for (const r of runners) {
         records.push({
-          id: t.id,
+          id: r.runnerId ?? t.runnerId ?? t.id,
           token: t.id,
           hostname: r.hostname,
           createdAt: t.createdAt,
@@ -62,12 +62,13 @@ export async function registerRunnerRoutes(
       if (!rulesYaml) {
         return reply.code(400).send({ error: "rulesYaml is required" });
       }
+      const token = findTokenById(request.params.tokenId);
       try {
         const result = await sendCommand(
-          request.params.tokenId,
           "update_alert_rules",
           { rulesYaml },
           RULES_TIMEOUT_MS,
+          token?.runnerId ?? undefined,
         );
         return result;
       } catch (err) {

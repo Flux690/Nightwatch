@@ -163,7 +163,7 @@ describe("ChatInput", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/incidents/inc-1/add-context",
+        "/api/sessions/s1/add-context",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
@@ -194,7 +194,7 @@ describe("ChatInput", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/incidents/inc-2/answer",
+        "/api/sessions/s1/answer",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({

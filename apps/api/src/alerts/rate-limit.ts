@@ -14,15 +14,15 @@ interface Counter {
 const counters = new Map<string, Counter>();
 
 export function checkRateLimit(
-  tokenId: string,
+  runnerId: string,
   severity: NormalizedAlert["severity"],
 ): boolean {
   if (severity === "critical") return true;
 
   const now = Date.now();
-  const existing = counters.get(tokenId);
+  const existing = counters.get(runnerId);
   if (!existing || now >= existing.resetAt) {
-    counters.set(tokenId, { count: 1, resetAt: now + WINDOW_MS });
+    counters.set(runnerId, { count: 1, resetAt: now + WINDOW_MS });
     return true;
   }
 

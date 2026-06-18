@@ -12,10 +12,10 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 // at any time. Chat sessions run freely in parallel.
 export interface Dispatcher {
   dispatch(input: RunInvestigationInput): void;
-  // Derived dedup source: true while a run for this tokenId + sourceAlertId is
-  // active. Keyed by tokenId — the stable per-server identity. No TTLs — a
+  // Derived dedup source: true while a run for this runnerId + sourceAlertId is
+  // active. Keyed by runnerId — the stable per-server identity. No TTLs — a
   // crashed run leaves no marker, so a re-fired alert re-investigates (CONTEXT.md D2/D4).
-  isInvestigating(tokenId: string, sourceAlertId: string): boolean;
+  isInvestigating(runnerId: string, sourceAlertId: string): boolean;
   // True while a run for this sessionId is active. Used for the 409 guard on
   // POST /sessions/:id/messages.
   isSessionRunning(sessionId: string): boolean;
@@ -36,11 +36,11 @@ export interface DispatcherOptions {
   run: (input: RunInvestigationInput) => Promise<void>;
 }
 
-// A NUL separator cannot appear in a tokenId (UUID) or sourceAlertId
+// A NUL separator cannot appear in a runnerId or sourceAlertId
 // (fingerprint/string from webhook payload), so this maps to exactly one key.
 const KEY_SEP = " ";
-function dedupKey(tokenId: string, sourceAlertId: string): string {
-  return `${tokenId}${KEY_SEP}${sourceAlertId}`;
+function dedupKey(runnerId: string, sourceAlertId: string): string {
+  return `${runnerId}${KEY_SEP}${sourceAlertId}`;
 }
 
 export function createDispatcher(opts: DispatcherOptions): Dispatcher {
@@ -69,7 +69,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   function start(input: RunInvestigationInput): void {
     const key =
       input.alert != null
-        ? dedupKey(input.alert.token, input.alert.sourceAlertId)
+        ? dedupKey(input.alert.runnerId, input.alert.sourceAlertId)
         : null;
 
     retain(key);
@@ -98,7 +98,6 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
           if (leftovers.length > 0) {
             start({
               sessionId: randomUUID(),
-              token: leftovers[0]!.token,
               alert: leftovers[0]!,
               additionalAlerts: leftovers.slice(1),
             });
@@ -111,8 +110,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   return {
     dispatch: start,
 
-    isInvestigating(tokenId: string, sourceAlertId: string): boolean {
-      return active.has(dedupKey(tokenId, sourceAlertId));
+    isInvestigating(runnerId: string, sourceAlertId: string): boolean {
+      return active.has(dedupKey(runnerId, sourceAlertId));
     },
 
     isSessionRunning(sessionId: string): boolean {

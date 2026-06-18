@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
+import { findTokenByValue, setTokenRunnerId, touchLastUsed } from "../db/tokens.js";
 import {
   registerRunner,
   resolveCommand,
@@ -61,6 +61,7 @@ export async function registerWsRoutes(
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
           setRunnerManifest(tokenId, msg.payload);
+          setTokenRunnerId(tokenId, msg.payload.runnerId);
           fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;

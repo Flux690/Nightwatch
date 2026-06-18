@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { sendCommand } from "../ws/router.js";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import {
@@ -32,11 +31,10 @@ import type {
   SessionMeta,
 } from "@nightwatch/shared";
 import type { ProviderMessage, ToolResult, ToolUse } from "../llm/types.js";
-import type { PendingInterrupt } from "../db/interrupts.js";
+import type { PendingHumanInput } from "../db/interrupts.js";
 
 export interface RunInvestigationInput {
   sessionId: string;
-  token: string;
   alert?: NormalizedAlert;
   // Additional alerts that arrived within the 90s batch window alongside the
   // primary alert. All are included in the opening message for shared root-cause
@@ -52,7 +50,7 @@ export interface RunInvestigationInput {
 export async function runInvestigation(
   input: RunInvestigationInput,
 ): Promise<void> {
-  const { sessionId, token } = input;
+  const { sessionId } = input;
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
@@ -63,9 +61,7 @@ export async function runInvestigation(
     severity: alert?.severity ?? "info",
   };
 
-  const incidentId = randomUUID();
   const log = logger.child({
-    incidentId,
     sessionId,
     alertType: ctx.alertType,
   });
@@ -127,7 +123,6 @@ export async function runInvestigation(
 
   const sessionMeta: SessionMeta = {
     sessionId,
-    token,
     // No alert means a human-opened chat: title from their message. Otherwise
     // title from the alert. (alert == null is the chat/alert distinction now.)
     title:
@@ -180,7 +175,7 @@ export async function runInvestigation(
     persist();
 
     if (response.stopReason === "refusal") {
-      escalate(ctx, incidentId, sessionId, "Model refused to continue");
+      escalate(ctx, sessionId, "Model refused to continue");
       return;
     }
 
@@ -250,10 +245,10 @@ export async function runInvestigation(
         });
         try {
           const result = await sendCommand(
-            token,
             tool.name,
             tool.input,
             config.toolTimeoutMs,
+            alert?.runnerId,
           );
           toolResults.push({
             tool_use_id: tool.id,
@@ -292,14 +287,14 @@ export async function runInvestigation(
       // Suspended sessions never receive injections: the inbox is NOT drained
       // here; any inbox alerts become new sessions via the dispatcher's finally.
       const isClarificationGate = gatedTool.name === "request_clarification";
-      const interrupt: PendingInterrupt = {
-        id: incidentId,
+      const interrupt: PendingHumanInput = {
         sessionId,
         toolUseId: gatedTool.id,
         kind: isClarificationGate ? "clarification" : "approval",
         toolName: gatedTool.name,
         toolInput: gatedTool.input,
         completedResults: toolResults,
+        claimedAt: null,
         createdAt: new Date().toISOString(),
       };
       const snap = provider.snapshot();
@@ -319,7 +314,7 @@ export async function runInvestigation(
       appendMessagesAndInterrupt(newMessages, interrupt);
       for (const message of newMessages) publishRunFinished(sessionId, message);
       persistedCount = snap.length;
-      // Publish INTERRUPT after the row is durably in the DB.
+      // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
       const clarInput = isClarificationGate
         ? (gatedTool.input as {
             question: string;
@@ -332,7 +327,6 @@ export async function runInvestigation(
         toolUseId: gatedTool.id,
         toolName: gatedTool.name,
         input: gatedTool.input,
-        incidentId,
         kind: isClarificationGate ? "clarification" : "approval",
         ...(clarInput !== null && {
           question: clarInput.question,
@@ -341,8 +335,8 @@ export async function runInvestigation(
         }),
       });
       log.info(
-        { tool: gatedTool.name, kind: interrupt.kind, incidentId },
-        "run suspended: pending interrupt",
+        { tool: gatedTool.name, kind: interrupt.kind },
+        "run suspended: pending human input",
       );
       return;
     }
@@ -361,7 +355,6 @@ export async function runInvestigation(
 
   escalate(
     ctx,
-    incidentId,
     sessionId,
     `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
   );

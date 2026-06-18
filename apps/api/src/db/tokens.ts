@@ -6,6 +6,7 @@ import { getDb } from "./client.js";
 export type TokenRow = {
   id: string;
   tokenHash: string;
+  runnerId: string | null;
   label: string | null;
   createdAt: string;
   lastUsedAt: string | null;
@@ -14,6 +15,7 @@ export type TokenRow = {
 // Public view returned by the list endpoint: no hash, no plaintext.
 export type TokenMeta = {
   id: string;
+  runnerId: string | null;
   label: string | null;
   createdAt: string;
   lastUsedAt: string | null;
@@ -45,6 +47,7 @@ export function generateToken(label?: string): { plaintext: string } & TokenMeta
   return {
     plaintext,
     id,
+    runnerId: null,
     label: label ?? null,
     createdAt,
     lastUsedAt: null,
@@ -55,10 +58,17 @@ export function generateToken(label?: string): { plaintext: string } & TokenMeta
 const SELECT_ROW = `
   id,
   token       AS tokenHash,
+  runner_id   AS runnerId,
   label,
   created_at  AS createdAt,
   last_used_at AS lastUsedAt
 `;
+
+export function setTokenRunnerId(id: string, runnerId: string): void {
+  getDb()
+    .prepare(`UPDATE tokens SET runner_id = ? WHERE id = ?`)
+    .run(runnerId, id);
+}
 
 // Validate a plaintext token: hash it and look up.
 export function findTokenByValue(plaintext: string): TokenRow | undefined {
@@ -98,7 +108,7 @@ export function listTokensMeta(): TokenMeta[] {
   return getDb()
     .prepare(
       `SELECT id, label, created_at AS createdAt,
-              last_used_at AS lastUsedAt
+              runner_id AS runnerId, last_used_at AS lastUsedAt
        FROM tokens ORDER BY created_at DESC`,
     )
     .all() as TokenMeta[];

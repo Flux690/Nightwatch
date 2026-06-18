@@ -1,5 +1,4 @@
-import { getRecentIncidents } from "../db/incidents.js";
-import type { NormalizedAlert, IncidentRecord } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwatch/shared";
 
 export interface InitialContext {
   systemPrompt: string;
@@ -27,17 +26,9 @@ export function buildChatContext(): InitialContext {
 
 // Accepts one or more alerts. When multiple alerts arrive within the 90s batch
 // window, all are surfaced in the opening message so the model judges shared
-// root cause. The first alert is the primary (used for incident history lookup).
+// root cause.
 export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
-  const primary = alerts[0];
-  if (!primary) return buildChatContext();
-
-  const historyBlock = formatIncidentHistory(
-    loadIncidentHistory(
-      primary.targetIdentifier,
-      primary.alertType,
-    ),
-  );
+  if (!alerts[0]) return buildChatContext();
 
   const alertsSection =
     alerts.length === 1
@@ -48,10 +39,6 @@ export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
   const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
 --------------
 ${alertsSection}
-
-PAST INCIDENT HISTORY (last 30 days, this container + alert type)
-----------------------------------------------------------------
-${historyBlock}
 
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
@@ -64,50 +51,4 @@ Target:       ${alert.targetIdentifier}
 Alert type:   ${alert.alertType}
 Severity:     ${alert.severity}
 Fired at:     ${alert.firedAt}`;
-}
-
-const MAX_HISTORY_RECORDS = 5;
-
-// Episodic memory comes from the API's central store, not the runner: incident
-// history is readable regardless of which runner the alert concerned, and even
-// when every runner is offline.
-function loadIncidentHistory(
-  containerName: string,
-  alertType: string,
-): IncidentRecord[] {
-  return collapseHistory(
-    getRecentIncidents(containerName, alertType, 30),
-  );
-}
-
-// Same root cause recurring is one signal, not five. Collapse duplicates into a
-// single representative (the newest) carrying an occurrence count, then cap.
-function collapseHistory(records: IncidentRecord[]): IncidentRecord[] {
-  const byCause = new Map<string, IncidentRecord>();
-  for (const record of records) {
-    const existing = byCause.get(record.rootCause);
-    if (!existing) {
-      byCause.set(record.rootCause, { ...record, recurrenceCount: 1 });
-      continue;
-    }
-    const newest = record.timestamp > existing.timestamp ? record : existing;
-    byCause.set(record.rootCause, {
-      ...newest,
-      recurrenceCount: existing.recurrenceCount + 1,
-    });
-  }
-  return [...byCause.values()]
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    .slice(0, MAX_HISTORY_RECORDS);
-}
-
-function formatIncidentHistory(records: IncidentRecord[]): string {
-  if (records.length === 0) return "(no past incidents)";
-  return records
-    .map((r) =>
-      r.outcome === "escalated"
-        ? `[${r.timestamp}] ${r.alertType} — ESCALATED TO HUMAN (no root cause diagnosed): ${r.rootCause} (recurrences: ${r.recurrenceCount})`
-        : `[${r.timestamp}] ${r.alertType} — ${r.rootCause} — action: ${r.resolutionAction ?? "none"} (recurrences: ${r.recurrenceCount})`,
-    )
-    .join("\n");
 }

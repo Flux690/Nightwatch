@@ -18,18 +18,20 @@ function flush(): Promise<void> {
 
 function alertInput(
   sourceAlertId: string,
+  runnerId = "runner-1",
   token = "tok",
 ): RunInvestigationInput {
   const alert: NormalizedAlert = {
     sourceAlertId,
     token,
+    runnerId,
     targetIdentifier: "web-01",
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),
     rawPayload: {},
   };
-  return { sessionId: `s-${sourceAlertId}`, token, alert };
+  return { sessionId: `s-${sourceAlertId}`, alert };
 }
 
 describe("dispatcher", () => {
@@ -51,22 +53,22 @@ describe("dispatcher", () => {
     gate.resolve();
   });
 
-  it("dedup keyed by tokenId+sourceAlertId; clears when settled", async () => {
+  it("dedup keyed by runnerId+sourceAlertId; clears when settled", async () => {
     const gate = deferred();
     const d = createDispatcher({ run: () => gate.promise });
 
-    d.dispatch(alertInput("dup", "tok-1"));
+    d.dispatch(alertInput("dup", "runner-1", "tok-1"));
 
     // Same token + sourceAlertId → duplicate
-    expect(d.isInvestigating("tok-1", "dup")).toBe(true);
-    // Same sourceAlertId but DIFFERENT token → not a duplicate
-    expect(d.isInvestigating("tok-2", "dup")).toBe(false);
-    expect(d.isInvestigating("tok-1", "never")).toBe(false);
+    expect(d.isInvestigating("runner-1", "dup")).toBe(true);
+    // Same sourceAlertId but DIFFERENT runner → not a duplicate
+    expect(d.isInvestigating("runner-2", "dup")).toBe(false);
+    expect(d.isInvestigating("runner-1", "never")).toBe(false);
 
     gate.resolve();
     await flush();
 
-    expect(d.isInvestigating("tok-1", "dup")).toBe(false);
+    expect(d.isInvestigating("runner-1", "dup")).toBe(false);
   });
 
   it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
@@ -88,7 +90,7 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({ run: () => gate.promise });
 
-    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
+    d.dispatch({ sessionId: "chat-1" });
     expect(d.getActiveAlertSession()).toBeNull();
 
     gate.resolve();
@@ -98,8 +100,8 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({ run: () => gate.promise });
 
-    d.dispatch({ sessionId: "chat-1", token: "tok-1" });
-    expect(d.isInvestigating("tok-1", "anything")).toBe(false);
+    d.dispatch({ sessionId: "chat-1" });
+    expect(d.isInvestigating("runner-1", "anything")).toBe(false);
 
     gate.resolve();
   });
@@ -135,6 +137,7 @@ describe("dispatcher", () => {
     const leftover: NormalizedAlert = {
       sourceAlertId: "leftover",
       token: "tok",
+      runnerId: "runner-1",
       targetIdentifier: "web-01",
       alertType: "HighCPU",
       severity: "warning",

@@ -7,7 +7,6 @@ export type SessionRole = "user" | "assistant";
 
 export interface SessionMeta {
   sessionId: string;
-  token: string;
   title: string;
   createdAt: string;
 }

@@ -7,13 +7,11 @@ import { registerAuthRoutes } from "./auth/routes.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
-import { registerIncidentRoutes } from "./incidents/routes.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { registerChatRoutes } from "./chat/routes.js";
 import { registerSessionRoutes } from "./sessions/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerTokenRoutes } from "./token/routes.js";
-import { registerApprovalRoutes } from "./approvals/routes.js";
 import { registerConnectRoutes } from "./connect/routes.js";
 
 // Self-provisioning (D16): an explicit env var wins; otherwise a key file
@@ -39,13 +37,11 @@ await registerAuthRoutes(fastify);
 await registerWsRoutes(fastify);
 await registerConsoleWsRoutes(fastify);
 await registerAlertRoutes(fastify);
-await registerIncidentRoutes(fastify);
 await registerConfigRoutes(fastify);
 await registerChatRoutes(fastify);
 await registerSessionRoutes(fastify);
 await registerRunnerRoutes(fastify);
 await registerTokenRoutes(fastify);
-await registerApprovalRoutes(fastify);
 await registerConnectRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));

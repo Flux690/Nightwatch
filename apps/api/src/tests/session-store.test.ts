@@ -11,21 +11,14 @@ import { useTempDb } from "./temp-db.js";
 import {
   createSession,
   appendSessionMessages,
-  listSessions,
+  listAllSessions,
   getSession,
   getSessionMessages,
 } from "../db/sessions.js";
-import {
-  insertIncident,
-  getRecentIncidents,
-  getIncidentById,
-  updateResolutionNote,
-} from "../db/incidents.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
     sessionId: randomUUID(),
-    token: "tok-A",
     title: "web-01 down",
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -51,6 +44,7 @@ function msg(
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
   token: "tok-A",
+  runnerId: "runner-A",
   targetIdentifier: "web-01",
   alertType: "ContainerDown",
   severity: "critical",
@@ -76,7 +70,6 @@ describe("API-local session store", () => {
 
     const stored = getSession(m.sessionId);
     expect(stored).toBeDefined();
-    expect(stored?.token).toBe("tok-A");
     expect(stored?.title).toBe("web-01 down");
     expect(stored?.originatingAlert).toEqual(alert);
   });
@@ -132,90 +125,30 @@ describe("API-local session store", () => {
     expect(getSessionMessages(m.sessionId).map((t) => t.seq)).toEqual([0]);
   });
 
-  it("lists sessions for a token, newest first, scoped to that token", () => {
-    const token = `tok-${randomUUID()}`;
+  it("lists sessions newest first", () => {
     const older = meta({
-      token,
       title: "older",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     const newer = meta({
-      token,
       title: "newer",
       createdAt: "2026-02-01T00:00:00.000Z",
     });
-    const other = meta({ token: "tok-other", title: "other" });
+    const other = meta({ title: "other" });
     createSession(older, alert);
     createSession(newer, alert);
     createSession(other, alert);
 
-    const list = listSessions(token);
-    expect(list.map((s) => s.title)).toEqual(["newer", "older"]);
-    expect(list.every((s) => s.token === token)).toBe(true);
+    const list = listAllSessions().filter((session) =>
+      [other.sessionId, newer.sessionId, older.sessionId].includes(
+        session.sessionId,
+      ),
+    );
+    expect(list.map((s) => s.title)).toEqual(["other", "newer", "older"]);
   });
 
   it("returns undefined for an unknown session", () => {
     expect(getSession("nope")).toBeUndefined();
     expect(getSessionMessages("nope")).toEqual([]);
-  });
-});
-
-describe("API-local incident store", () => {
-  let cleanupDb: () => void;
-
-  beforeAll(() => {
-    cleanupDb = useTempDb();
-  });
-
-  afterAll(() => {
-    cleanupDb();
-    vi.unstubAllEnvs();
-  });
-
-  function incident(
-    overrides: Partial<Parameters<typeof insertIncident>[0]> = {},
-  ): Parameters<typeof insertIncident>[0] {
-    return {
-      incidentId: randomUUID(),
-      sessionId: randomUUID(),
-      outcome: "finding",
-      timestamp: new Date().toISOString(),
-      containerName: "web-01",
-      alertType: "ContainerDown",
-      rootCause: "wedged process table",
-      resolutionAction: "restart_container",
-      resolvedAt: null,
-      recurrenceCount: 0,
-      ...overrides,
-    };
-  }
-
-  it("filters by container and alert type", () => {
-    insertIncident(incident({ containerName: "web-01", alertType: "ContainerDown" }));
-    insertIncident(incident({ containerName: "db-01", alertType: "HighMemory" }));
-
-    expect(getRecentIncidents("web-01")).toHaveLength(1);
-    expect(getRecentIncidents("web-01", "ContainerDown")).toHaveLength(1);
-    expect(getRecentIncidents("web-01", "HighMemory")).toHaveLength(0);
-  });
-
-  it("excludes incidents older than the lookback window", () => {
-    const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
-    insertIncident(incident({ containerName: "time-01", alertType: "ContainerDown", timestamp: old, rootCause: "ancient" }));
-    insertIncident(incident({ containerName: "time-01", alertType: "ContainerDown", rootCause: "recent" }));
-
-    const within30 = getRecentIncidents("time-01", undefined, 30);
-    expect(within30.map((i) => i.rootCause)).toEqual(["recent"]);
-  });
-
-  it("round-trips a resolution note onto an escalated incident", () => {
-    const rec = incident({ outcome: "escalated" });
-    insertIncident(rec);
-
-    updateResolutionNote(rec.incidentId, "rotated the credentials");
-
-    expect(getIncidentById(rec.incidentId)?.humanResolutionNote).toBe(
-      "rotated the credentials",
-    );
   });
 });

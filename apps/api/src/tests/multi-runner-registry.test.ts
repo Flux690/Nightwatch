@@ -18,6 +18,7 @@ function manifest(
   containers: string[],
 ): CapabilityManifest {
   return {
+    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -120,9 +121,9 @@ describe("flat runner registry", () => {
         : undefined;
     });
 
-    const byId = new Map(runners.map((r) => [r.id, r]));
-    const ra = byId.get(tokenAId);
-    const rb = byId.get(tokenBId);
+    const byToken = new Map(runners.map((r) => [r.token, r]));
+    const ra = byToken.get(tokenAId);
+    const rb = byToken.get(tokenBId);
     expect(ra).toBeDefined();
     expect(rb).toBeDefined();
 
@@ -170,7 +171,7 @@ describe("flat runner registry", () => {
       );
       return live.length === 1 ? live : undefined;
     });
-    expect(remaining[0].id).toBe(tokenBId);
+    expect(remaining[0].token).toBe(tokenBId);
 
     b.close();
   });
@@ -200,11 +201,11 @@ describe("flat runner registry", () => {
         : undefined;
     });
 
-    const byId = new Map(runners.map((r) => [r.id, r]));
-    expect(byId.get(tokenAId)?.hostname).toBe("host-a");
-    expect(byId.get(tokenBId)?.hostname).toBe("host-b");
-    expect(byId.get(tokenAId)?.online).toBe(true);
-    expect(byId.get(tokenBId)?.online).toBe(true);
+    const byToken = new Map(runners.map((r) => [r.token, r]));
+    expect(byToken.get(tokenAId)?.hostname).toBe("host-a");
+    expect(byToken.get(tokenBId)?.hostname).toBe("host-b");
+    expect(byToken.get(tokenAId)?.online).toBe(true);
+    expect(byToken.get(tokenBId)?.online).toBe(true);
 
     a.close();
     b.close();

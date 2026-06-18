@@ -90,7 +90,6 @@ import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerApprovalRoutes } from "../approvals/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
@@ -107,7 +106,7 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
-describe("GET /approvals/pending reads from DB (not in-memory)", () => {
+describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
@@ -119,7 +118,6 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerApprovalRoutes(server);
     await registerIncidentRoutes(server);
     await registerChatRoutes(server);
     await registerSessionRoutes(server);
@@ -176,7 +174,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // Wait for the interrupt row to appear in DB via the endpoint
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
       const data = (await r.json()) as ApprovalRequest[];
@@ -188,11 +186,11 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     const found = body[0];
     expect(found.toolName).toBe("restart_container");
     expect(found.status).toBe("pending");
-    expect(found.incidentId).toBeTruthy();
+    expect(found.sessionId).toBeTruthy();
 
     // Cleanup: reject to free the interrupt row
     await fetch(
-      `http://127.0.0.1:${port}/incidents/${found.incidentId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${found.sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -203,7 +201,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/approvals/pending`);
+    const res = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`);
     expect(res.status).toBe(401);
   });
 
@@ -251,7 +249,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // Operator-wide: endpoint returns the interrupt without needing a token param
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
       const data = (await r.json()) as ApprovalRequest[];
@@ -263,7 +261,7 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
     // Cleanup
     const found = body[0];
     await fetch(
-      `http://127.0.0.1:${port}/incidents/${found.incidentId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${found.sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -317,15 +315,15 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // Wait for interrupt
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
       const data = (await r.json()) as ApprovalRequest[];
       return data.length > 0 ? data : null;
     });
 
-    const incidentId = body[0].incidentId;
-    await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/reject`, {
+    const sessionId = body[0].sessionId;
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ resolvedBy: "op" }),
@@ -333,14 +331,14 @@ describe("GET /approvals/pending reads from DB (not in-memory)", () => {
 
     // After resolution the list is empty
     await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
       const data = (await r.json()) as ApprovalRequest[];
       return data.length === 0 ? true : null;
     });
 
-    const resAfter = await fetch(`http://127.0.0.1:${port}/approvals/pending`, {
+    const resAfter = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
     const bodyAfter = (await resAfter.json()) as ApprovalRequest[];

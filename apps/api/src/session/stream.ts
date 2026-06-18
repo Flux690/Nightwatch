@@ -58,7 +58,7 @@ export function publishToolCallStart(
 export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
   const env: ConsoleInterrupt = {
     messageId: randomUUID(),
-    type: "INTERRUPT",
+    type: "HUMAN_INPUT_REQUIRED",
     payload,
   };
   publishRaw(env);
@@ -80,7 +80,7 @@ export function publishInterruptResolved(
 ): void {
   const env: ConsoleInterruptResolved = {
     messageId: randomUUID(),
-    type: "INTERRUPT_RESOLVED",
+    type: "HUMAN_INPUT_RESOLVED",
     payload,
   };
   publishRaw(env);

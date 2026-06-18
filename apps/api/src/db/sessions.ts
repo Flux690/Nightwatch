@@ -4,7 +4,7 @@ import type {
   SessionMeta,
 } from "@nightwatch/shared";
 import { getDb } from "./client.js";
-import type { PendingInterrupt } from "./interrupts.js";
+import type { PendingHumanInput } from "./interrupts.js";
 
 // A session row plus its originating alert (null for chat sessions). The alert is
 // the durable source of severity-dependent behavior on resume, so a run that no
@@ -21,13 +21,12 @@ export function createSession(
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO sessions (session_id, token, title, originating_alert, created_at)
-       VALUES (@sessionId, @token, @title, @originatingAlert, @createdAt)
+      `INSERT INTO sessions (session_id, title, originating_alert, created_at)
+       VALUES (@sessionId, @title, @originatingAlert, @createdAt)
        ON CONFLICT(session_id) DO NOTHING`,
     )
     .run({
       sessionId: meta.sessionId,
-      token: meta.token,
       title: meta.title,
       originatingAlert:
         originatingAlert != null ? JSON.stringify(originatingAlert) : null,
@@ -67,17 +66,17 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
 // is always in a consistent state: both exist or neither does (D3).
 export function appendMessagesAndInterrupt(
   messages: SessionMessage[],
-  interrupt: PendingInterrupt,
+  pendingHumanInput: PendingHumanInput,
 ): void {
   const insertMsg = getDb().prepare(
     `INSERT INTO session_messages
        (session_id, seq, role, content, provider_content, created_at)
      VALUES (@sessionId, @seq, @role, @content, @providerContent, @createdAt)`,
   );
-  const insertInterrupt = getDb().prepare(
-    `INSERT INTO pending_interrupts
-       (id, session_id, tool_use_id, kind, tool_name, tool_input, completed_results, created_at)
-     VALUES (@id, @sessionId, @toolUseId, @kind, @toolName, @toolInput, @completedResults, @createdAt)`,
+  const insertHumanInput = getDb().prepare(
+    `INSERT INTO pending_human_input
+       (session_id, tool_use_id, kind, tool_name, tool_input, completed_results, claimed_at, created_at)
+     VALUES (@sessionId, @toolUseId, @kind, @toolName, @toolInput, @completedResults, @claimedAt, @createdAt)`,
   );
   const txn = getDb().transaction(() => {
     for (const m of messages) {
@@ -91,34 +90,24 @@ export function appendMessagesAndInterrupt(
         createdAt: m.createdAt,
       });
     }
-    insertInterrupt.run({
-      id: interrupt.id,
-      sessionId: interrupt.sessionId,
-      toolUseId: interrupt.toolUseId,
-      kind: interrupt.kind,
-      toolName: interrupt.toolName,
-      toolInput: JSON.stringify(interrupt.toolInput),
-      completedResults: JSON.stringify(interrupt.completedResults),
-      createdAt: interrupt.createdAt,
+    insertHumanInput.run({
+      sessionId: pendingHumanInput.sessionId,
+      toolUseId: pendingHumanInput.toolUseId,
+      kind: pendingHumanInput.kind,
+      toolName: pendingHumanInput.toolName,
+      toolInput: JSON.stringify(pendingHumanInput.toolInput),
+      completedResults: JSON.stringify(pendingHumanInput.completedResults),
+      claimedAt: pendingHumanInput.claimedAt ?? null,
+      createdAt: pendingHumanInput.createdAt,
     });
   });
   txn();
 }
 
-export function listSessions(token: string): SessionMeta[] {
-  // Cast is sound: the aliased columns match SessionMeta exactly.
-  return getDb()
-    .prepare(
-      `SELECT session_id AS sessionId, token, title, created_at AS createdAt
-       FROM sessions WHERE token = ? ORDER BY created_at DESC LIMIT 100`,
-    )
-    .all(token) as SessionMeta[];
-}
-
 export function listAllSessions(): SessionMeta[] {
   return getDb()
     .prepare(
-      `SELECT session_id AS sessionId, token, title, created_at AS createdAt
+      `SELECT session_id AS sessionId, title, created_at AS createdAt
        FROM sessions ORDER BY created_at DESC LIMIT 100`,
     )
     .all() as SessionMeta[];
@@ -127,17 +116,16 @@ export function listAllSessions(): SessionMeta[] {
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, token, title,
+      `SELECT session_id AS sessionId, title,
               originating_alert AS originatingAlert, created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
     .get(sessionId) as
-    | (SessionMeta & { originatingAlert: string | null })
+    | (StoredSession & { originatingAlert: string | null })
     | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,
-    token: row.token,
     title: row.title,
     createdAt: row.createdAt,
     // Stored as JSON text; only this layer deserializes it.
@@ -173,4 +161,23 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
       r.providerContent != null ? JSON.parse(r.providerContent) : undefined,
     createdAt: r.createdAt,
   }));
+}
+
+export function appendSyntheticAssistantMessage(
+  sessionId: string,
+  content: string,
+): SessionMessage {
+  const nextSeq =
+    ((getDb()
+      .prepare(`SELECT MAX(seq) AS maxSeq FROM session_messages WHERE session_id = ?`)
+      .get(sessionId) as { maxSeq: number | null }).maxSeq ?? -1) + 1;
+  const message: SessionMessage = {
+    sessionId,
+    seq: nextSeq,
+    role: "assistant",
+    content,
+    createdAt: new Date().toISOString(),
+  };
+  appendSessionMessages([message]);
+  return message;
 }

@@ -28,9 +28,11 @@ export function ChatInput({
     if (!trimmed || isRunning) return;
 
     if (pendingInterrupt) {
-      const { id, kind } = pendingInterrupt;
+      if (sessionId === null) return;
+
+      const { kind } = pendingInterrupt;
       if (kind === "approval") {
-        await fetch(`/api/incidents/${id}/add-context`, {
+        await fetch(`/api/sessions/${sessionId}/add-context`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -39,7 +41,7 @@ export function ChatInput({
           }),
         });
       } else {
-        await fetch(`/api/incidents/${id}/answer`, {
+        await fetch(`/api/sessions/${sessionId}/answer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ answer: trimmed, resolvedBy: "console" }),

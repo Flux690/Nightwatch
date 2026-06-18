@@ -6,12 +6,11 @@ export type ApprovalStatus =
   | "answered";
 
 export interface ApprovalRequest {
-  id: string;
-  incidentId: string;
-  token: string;
+  sessionId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   toolUseId: string; // Anthropic tool_use_id — correlation key
+  kind?: "approval" | "clarification";
   status: ApprovalStatus;
   comment?: string;
   createdAt: string;
@@ -26,7 +25,7 @@ export interface ApprovalDecision {
 }
 
 export interface ApprovalResponse {
-  incidentId: string;
+  sessionId: string;
   toolUseId: string;
   status: ApprovalStatus;
   resolvedBy: string;

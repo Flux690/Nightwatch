@@ -118,12 +118,17 @@ const { mockCreateProvider, releaseNext, releaseAll, setTurns } = vi.hoisted(
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { hasPendingInterrupt } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
+import {
+  registerRunner,
+  resolveCommand,
+  unregisterRunner,
+} from "../ws/router.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -131,10 +136,16 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
-// Platform tool — handled in-process, no runner needed.
+// Runner read tool — keeps the loop moving without introducing a human gate.
 const READ_TURN = {
   text: "",
-  toolUses: [{ id: "tu-read", name: "get_incident_history", input: {} }],
+  toolUses: [
+    {
+      id: "tu-read",
+      name: "get_container_list",
+      input: { environment: "docker" },
+    },
+  ],
 };
 
 function alert(
@@ -144,6 +155,7 @@ function alert(
   return {
     sourceAlertId,
     token: tokenId,
+    runnerId: tokenId,
     targetIdentifier: "web-01",
     alertType: "HighCPU",
     severity: "warning",
@@ -176,14 +188,25 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
     const tokenId = generateToken("inject-midrun").id;
+    registerRunner(
+      tokenId,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: [{ name: "web-01", status: "running" }],
+        });
+      },
+      () => {},
+    );
 
-    // Turn 1: platform read tool (no runner). Turn 2: free-form finish.
+    // Turn 1: runner read tool. Turn 2: free-form finish.
     setTurns([READ_TURN, FINISH_TURN]);
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      token: tokenId,
       alert: alert(tokenId, "primary-mr"),
     });
 
@@ -195,7 +218,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // Inject while parked at turn 1's chat()
     dispatcher.injectAlert(sessionId, alert(tokenId, "injected-mr"));
 
-    // Release turn 1 → loop executes get_incident_history, drains inbox,
+    // Release turn 1 → loop executes get_container_list, drains inbox,
     // then calls appendToolResults(results, injectionText)
     releaseNext();
 
@@ -212,6 +235,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // Release turn 2 and let the run finish cleanly.
     releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    unregisterRunner(tokenId);
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
@@ -240,13 +264,12 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      token: tokenId,
       alert: alert(tokenId, "primary-sus"),
     });
 
     // Release turn 1 → restart_container is gated → run suspends
     releaseNext();
-    await waitFor(() => hasPendingInterrupt(sessionId));
+    await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
     // After suspension there is no active alert session operator-wide
@@ -258,7 +281,6 @@ describe("mid-run alert injection (loop seam)", () => {
 
     dispatcher.dispatch({
       sessionId: newSessionId,
-      token: tokenId,
       alert: alert(tokenId, "new-after-sus"),
     });
 
@@ -285,7 +307,6 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      token: tokenId,
       alert: alert(tokenId, "primary-lo"),
     });
 

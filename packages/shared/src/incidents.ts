@@ -7,9 +7,10 @@ export type IncidentStatus =
 
 export interface NormalizedAlert {
   sourceAlertId: string;
-  // token is the tokenId (UUID primary key) of the runner token that authenticated
-  // this alert. It is the stable per-server key for dedup and rate-limit.
+  // token is the tokenId (UUID primary key) of the runner credential that
+  // authenticated this alert. It is auth lifecycle only, not stable machine identity.
   token: string;
+  runnerId: string;
   // hostname of the server that sent this alert, stamped at ingest time from the
   // live runner registry. Preserved on the session row so history survives token
   // deletion (CONTEXT.md runner token lifecycle).

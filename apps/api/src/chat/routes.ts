@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { getSession, getSessionMessages } from "../db/sessions.js";
-import { hasPendingInterrupt } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { ProviderMessage } from "../llm/types.js";
@@ -25,7 +25,6 @@ export async function registerChatRoutes(
       const sessionId = randomUUID();
       dispatcher.dispatch({
         sessionId,
-        token: "",
         userMessage: message,
       });
       logger.info({ sessionId }, "chat session started");
@@ -54,7 +53,7 @@ export async function registerChatRoutes(
 
       if (
         dispatcher.isSessionRunning(sessionId) ||
-        hasPendingInterrupt(sessionId)
+        hasPendingHumanInput(sessionId)
       ) {
         return reply
           .code(409)
@@ -70,7 +69,6 @@ export async function registerChatRoutes(
 
       dispatcher.dispatch({
         sessionId,
-        token: session.token,
         seed,
         userMessage: message,
       });

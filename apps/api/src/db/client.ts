@@ -21,6 +21,7 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS tokens (
     id           TEXT PRIMARY KEY,
     token        TEXT NOT NULL UNIQUE,
+    runner_id    TEXT,
     label        TEXT,
     created_at   TEXT NOT NULL,
     last_used_at TEXT
@@ -49,7 +50,6 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS sessions (
     session_id        TEXT PRIMARY KEY,
-    token             TEXT NOT NULL,
     title             TEXT NOT NULL DEFAULT '',
     originating_alert TEXT,
     created_at        TEXT NOT NULL
@@ -66,36 +66,20 @@ const SCHEMA = `
     UNIQUE(session_id, seq)
   );
 
-  CREATE TABLE IF NOT EXISTS incidents (
-    id                    TEXT PRIMARY KEY,
-    session_id            TEXT NOT NULL,
-    outcome               TEXT NOT NULL DEFAULT 'finding',
-    timestamp             TEXT NOT NULL,
-    container_name        TEXT NOT NULL,
-    alert_type            TEXT NOT NULL,
-    root_cause            TEXT NOT NULL DEFAULT '',
-    resolution_action     TEXT,
-    resolved_at           TEXT,
-    human_resolution_note TEXT,
-    recurrence_count      INTEGER NOT NULL DEFAULT 0
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_incidents_lookup
-    ON incidents(container_name, alert_type, timestamp);
-
-  CREATE TABLE IF NOT EXISTS pending_interrupts (
-    id                TEXT PRIMARY KEY,
+  CREATE TABLE IF NOT EXISTS pending_human_input (
     session_id        TEXT NOT NULL REFERENCES sessions(session_id),
     tool_use_id       TEXT NOT NULL UNIQUE,
     kind              TEXT NOT NULL DEFAULT 'approval',
     tool_name         TEXT NOT NULL,
     tool_input        TEXT NOT NULL,
     completed_results TEXT NOT NULL DEFAULT '[]',
-    created_at        TEXT NOT NULL
+    claimed_at        TEXT,
+    created_at        TEXT NOT NULL,
+    PRIMARY KEY (session_id)
   );
 
-  CREATE INDEX IF NOT EXISTS idx_pending_interrupts_session
-    ON pending_interrupts(session_id);
+  CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
+    ON pending_human_input(claimed_at);
 `;
 
 let _db: Database.Database | undefined;
@@ -117,7 +101,8 @@ export function getDb(): Database.Database {
 // Open + bootstrap eagerly at boot so a misconfigured data path fails fast
 // rather than on the first request.
 export function initDb(): void {
-  getDb();
+  const db = getDb();
+  db.prepare(`UPDATE pending_human_input SET claimed_at = NULL`).run();
 }
 
 // Close and clear the singleton. Used by tests to get a truly fresh connection

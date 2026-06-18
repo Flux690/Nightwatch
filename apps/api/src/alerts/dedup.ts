@@ -1,5 +1,5 @@
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { hasPendingInterruptForAlert } from "../db/interrupts.js";
+import { hasPendingHumanInputForAlert } from "../db/interrupts.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 // Dedup is derived, never stored (CONTEXT.md D2/D4): an alert is a duplicate iff
@@ -8,7 +8,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 // stable per-server identity. No keys, no TTLs.
 export function isDuplicate(alert: NormalizedAlert): boolean {
   return (
-    dispatcher.isInvestigating(alert.token, alert.sourceAlertId) ||
-    hasPendingInterruptForAlert(alert.token, alert.sourceAlertId)
+    dispatcher.isInvestigating(alert.runnerId, alert.sourceAlertId) ||
+    hasPendingHumanInputForAlert(alert.runnerId, alert.sourceAlertId)
   );
 }

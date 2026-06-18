@@ -6,7 +6,7 @@ import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
-import { getRunnerHostname } from "../ws/router.js";
+import { getRunnerIdentity } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -38,13 +38,19 @@ export async function registerAlertRoutes(
       // Use the token's UUID as the internal identifier for all dispatch,
       // session, and incident records — the plaintext never flows downstream.
       const tokenId = tokenRecord.id;
-      // Stamp the server hostname at alert creation time so session history
-      // remains readable after a token is deleted (runner token lifecycle).
-      const hostname = getRunnerHostname(tokenId);
+      const identity = getRunnerIdentity(tokenId);
+      const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
+      const hostname = identity?.hostname ?? undefined;
 
       let alerts: NormalizedAlert[];
       try {
-        alerts = parseSource(userAgent, request.body, tokenId, hostname);
+        alerts = parseSource(
+          userAgent,
+          request.body,
+          tokenId,
+          runnerId,
+          hostname,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return reply.code(400).send({ error: msg });
@@ -62,13 +68,13 @@ export async function registerAlertRoutes(
 
         // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
         //    the batch window. True duplicate — the model would see it twice.
-        if (batchWindow.has(alert.token, alert.sourceAlertId)) {
+        if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) {
           skipped++;
           continue;
         }
 
         // 3. Rate limit: per-server budget.
-        if (!checkRateLimit(alert.token, alert.severity)) {
+        if (!checkRateLimit(alert.runnerId, alert.severity)) {
           skipped++;
           fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
           continue;
@@ -121,13 +127,14 @@ function parseSource(
   userAgent: string,
   body: unknown,
   tokenId: string,
+  runnerId: string,
   hostname: string | undefined,
 ): NormalizedAlert[] {
   if (
     userAgent.toLowerCase().includes("alertmanager") ||
     isAlertmanagerShape(body)
   ) {
-    return parseAlertmanager(body, tokenId, hostname);
+    return parseAlertmanager(body, tokenId, runnerId, hostname);
   }
   logger.warn(
     { preview: JSON.stringify(body).slice(0, 200) },

@@ -7,11 +7,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  ApprovalRequest,
-  RunnerRecord,
-  WsEnvelope,
-} from "@nightwatch/shared";
+import type { ApprovalRequest, WsEnvelope } from "@nightwatch/shared";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { SessionsSidebar } from "./Sessions.js";
 import { SessionView } from "./SessionTranscript.js";
@@ -46,25 +42,13 @@ function NavLink({
 }
 
 function useAttentionCount(): number {
-  const { data: runners } = useQuery<RunnerRecord[]>({
-    queryKey: ["runners"],
-    queryFn: () =>
-      fetch("/api/runners").then((r) => {
-        if (!r.ok) throw new Error(`runners ${r.status}`);
-        return r.json() as Promise<RunnerRecord[]>;
-      }),
-  });
-
-  const token = runners?.[0]?.token;
-
   const { data: pending = [] } = useQuery<ApprovalRequest[]>({
-    queryKey: ["approvals-pending", token],
+    queryKey: ["sessions-pending-human-input"],
     queryFn: () =>
-      fetch(`/api/approvals/pending?token=${token}`).then((r) => {
-        if (!r.ok) throw new Error(`approvals ${r.status}`);
+      fetch("/api/sessions/pending-human-input").then((r) => {
+        if (!r.ok) throw new Error(`pending-human-input ${r.status}`);
         return r.json() as Promise<ApprovalRequest[]>;
       }),
-    enabled: !!token,
   });
 
   const [delta, setDelta] = useState(0);

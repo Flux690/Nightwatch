@@ -20,11 +20,13 @@ import { mintTestSession } from "./session-helper.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
+import { registerSessionRoutes } from "../sessions/routes.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { getRecentIncidents } from "../db/incidents.js";
-import type { IncidentRecord, NormalizedAlert } from "@nightwatch/shared";
+import { getSessionMessages } from "../db/sessions.js";
+import type { NormalizedAlert } from "@nightwatch/shared";
 import {
   registerRunner,
+  setRunnerManifest,
   unregisterRunner,
   resolveCommand,
 } from "../ws/router.js";
@@ -151,7 +153,7 @@ function makeToolLoopProvider() {
   };
 }
 
-describe("escalation paths write an incident and emit ESCALATED", () => {
+describe("escalation paths append transcript evidence and emit ESCALATED", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
@@ -159,10 +161,12 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
   let SESSION: string;
   const TEST_RUNNER_ID = "test-runner-esc";
 
-  // Incidents are written to the API's local store; read them back from there
-  // (the public seam) instead of intercepting a WS persistence command.
-  function escalationFor(sessionId: string): IncidentRecord | undefined {
-    return getRecentIncidents().find((i) => i.sessionId === sessionId);
+  function escalationMessage(sessionId: string): string | undefined {
+    return getSessionMessages(sessionId).find(
+      (message) =>
+        message.role === "assistant" &&
+        message.content.startsWith("Escalated to human:"),
+    )?.content;
   }
 
   beforeAll(async () => {
@@ -182,12 +186,28 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
       },
       () => {},
     );
+    setRunnerManifest(TEST_TOKEN, {
+      runnerId: TEST_RUNNER_ID,
+      hostname: "esc-host",
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        containers: ["web-01"],
+        prometheus: { available: false },
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: true,
+      },
+    });
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
     await registerChatRoutes(server);
     await registerIncidentRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -246,14 +266,8 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(event.payload["sessionId"]).toBe(sessionId);
-    expect(event.payload["incidentId"]).toBeTruthy();
     expect(String(event.payload["reason"])).toMatch(/refus/i);
-
-    const record = escalationFor(sessionId);
-    expect(record).toBeDefined();
-    expect(record?.rootCause).toBeTruthy();
-    expect(record?.alertType).toBe("chat");
-    expect(record?.outcome).toBe("escalated");
+    expect(escalationMessage(sessionId)).toMatch(/refus/i);
   });
 
   it("free-form text finish does NOT escalate: no incident written", async () => {
@@ -317,7 +331,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     const message = event.payload["message"] as { content: string };
     expect(message.content).toContain("I am done.");
     expect(escalated).toBe(false);
-    expect(escalationFor(sessionId)).toBeUndefined();
+    expect(escalationMessage(sessionId)).toBeUndefined();
   });
 
   it("rejected critical write escalates: writes incident and emits ESCALATED", async () => {
@@ -327,6 +341,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
       token: TEST_TOKEN,
+      runnerId: TEST_RUNNER_ID,
       targetIdentifier: "web-01",
       alertType: "ContainerDown",
       severity: "critical",
@@ -360,13 +375,12 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     dispatcher.dispatch({
       alert,
       sessionId,
-      token: TEST_TOKEN,
     });
 
     // The loop parks on the approval gate; reject it via REST.
-    const incidentId = await waitForPendingApproval("restart_container");
+    const pending = await waitForPendingApproval(sessionId, "restart_container");
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${pending.sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -379,9 +393,7 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(String(event.payload["reason"])).toMatch(/rejected/i);
-    const record = escalationFor(sessionId);
-    expect(record?.outcome).toBe("escalated");
-    expect(String(record?.rootCause)).toMatch(/rejected/i);
+    expect(escalationMessage(sessionId)).toMatch(/rejected/i);
   });
 
   it("tool budget exhaustion escalates: writes incident and emits ESCALATED", async () => {
@@ -428,22 +440,25 @@ describe("escalation paths write an incident and emit ESCALATED", () => {
     ws.close();
 
     expect(String(event.payload["reason"])).toMatch(/exceeded/i);
-    expect(escalationFor(String(targetSessionId))?.outcome).toBe("escalated");
+    expect(escalationMessage(String(targetSessionId))).toMatch(/exceeded/i);
   });
 
-  async function waitForPendingApproval(toolName: string): Promise<string> {
+  async function waitForPendingApproval(sessionId: string, toolName: string): Promise<{
+    sessionId: string;
+  }> {
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
-      const res = await fetch(`http://127.0.0.1:${port}/incidents/pending`, {
+      const res = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
         headers: { Cookie: `nw_auth=${SESSION}` },
       });
-      const body = (await res.json()) as {
-        pending: Array<{ incidentId: string; toolName: string; token: string }>;
-      };
-      const match = body.pending.find(
-        (p) => p.toolName === toolName && p.token === TEST_TOKEN,
+      const body = (await res.json()) as Array<{
+        sessionId: string;
+        toolName: string;
+      }>;
+      const match = body.find(
+        (p) => p.toolName === toolName && p.sessionId === sessionId,
       );
-      if (match) return match.incidentId;
+      if (match) return { sessionId: match.sessionId };
       await new Promise((r) => setTimeout(r, 50));
     }
     throw new Error(`timeout: ${toolName} approval never became pending`);

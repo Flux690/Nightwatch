@@ -524,7 +524,7 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/incidents/inc-1/approve",
+          "/api/sessions/s1/approve",
           expect.objectContaining({ method: "POST" }),
         );
         expect(
@@ -752,7 +752,7 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/incidents/inc-clar/answer",
+          "/api/sessions/s1/answer",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
@@ -826,7 +826,7 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/incidents/inc-clar/answer",
+          "/api/sessions/s1/answer",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
@@ -910,7 +910,7 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/incidents/inc-ap/add-context",
+          "/api/sessions/s1/add-context",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
@@ -1023,7 +1023,7 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/incidents/inc-clar2/answer",
+          "/api/sessions/s1/answer",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({

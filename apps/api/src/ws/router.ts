@@ -19,6 +19,7 @@ const HEARTBEAT_TTL_MS = 120_000;
 // model; the token authenticates the connection and is the stable per-server key.
 interface RunnerConnection {
   tokenId: string;
+  runnerId: string | null;
   send: (msg: string) => void;
   close: () => void;
   manifest: CapabilityManifest | null;
@@ -27,6 +28,7 @@ interface RunnerConnection {
 }
 
 export interface RunnerView {
+  runnerId: string | null;
   tokenId: string;
   hostname: string | null;
   manifest: CapabilityManifest | null;
@@ -34,6 +36,7 @@ export interface RunnerView {
   online: boolean;
 }
 
+const connectionsByTokenId = new Map<string, RunnerConnection>();
 const registry = new Map<string, RunnerConnection>();
 
 export class RunnerOfflineError extends Error {
@@ -48,8 +51,9 @@ export function registerRunner(
   send: (msg: string) => void,
   close: () => void,
 ): void {
-  registry.set(tokenId, {
+  connectionsByTokenId.set(tokenId, {
     tokenId,
+    runnerId: null,
     send,
     close,
     manifest: null,
@@ -59,28 +63,35 @@ export function registerRunner(
 }
 
 export function unregisterRunner(tokenId: string): void {
-  registry.delete(tokenId);
+  const conn = connectionsByTokenId.get(tokenId);
+  if (conn?.runnerId) registry.delete(conn.runnerId);
+  connectionsByTokenId.delete(tokenId);
 }
 
 // Close every runner socket authenticated with this token. Called by the
 // revoke route so revocation cuts access immediately, not just on next auth.
 export function closeTokenRunners(tokenId: string): void {
-  registry.get(tokenId)?.close();
+  connectionsByTokenId.get(tokenId)?.close();
 }
 
 export function setRunnerManifest(
   tokenId: string,
   manifest: CapabilityManifest,
 ): void {
-  const conn = registry.get(tokenId);
+  const conn = connectionsByTokenId.get(tokenId);
   if (!conn) return;
+  if (conn.runnerId && conn.runnerId !== manifest.runnerId) {
+    registry.delete(conn.runnerId);
+  }
+  conn.runnerId = manifest.runnerId;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
+  registry.set(manifest.runnerId, conn);
 }
 
 export function recordHeartbeat(tokenId: string): void {
-  const conn = registry.get(tokenId);
+  const conn = connectionsByTokenId.get(tokenId);
   if (!conn) return;
   conn.lastSeen = Date.now();
 }
@@ -88,9 +99,10 @@ export function recordHeartbeat(tokenId: string): void {
 export function listRunners(): RunnerView[] {
   const now = Date.now();
   const views: RunnerView[] = [];
-  for (const [tokenId, conn] of registry) {
+  for (const conn of connectionsByTokenId.values()) {
     views.push({
-      tokenId,
+      runnerId: conn.runnerId,
+      tokenId: conn.tokenId,
       hostname: conn.hostname,
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
@@ -100,8 +112,12 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
-export function getRunnerHostname(tokenId: string): string | undefined {
-  return registry.get(tokenId)?.hostname ?? undefined;
+export function getRunnerIdentity(tokenId: string):
+  | { runnerId: string; hostname: string | null }
+  | undefined {
+  const conn = connectionsByTokenId.get(tokenId);
+  if (!conn?.runnerId) return undefined;
+  return { runnerId: conn.runnerId, hostname: conn.hostname };
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
@@ -122,8 +138,14 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
 // the known set so the model can retry with a hostname parameter.
 function resolveRunner(
   commandInput: Record<string, unknown>,
+  runnerIdHint?: string,
 ): RunnerConnection {
   if (registry.size === 0) throw new RunnerOfflineError();
+
+  if (runnerIdHint) {
+    const hinted = registry.get(runnerIdHint);
+    if (hinted) return hinted;
+  }
 
   if (registry.size === 1) {
     // size is confirmed 1 above; the iterator value is guaranteed to be defined
@@ -176,12 +198,12 @@ function resolveRunner(
 }
 
 export function sendCommand(
-  _tokenId: string,
   commandName: string,
   commandInput: Record<string, unknown>,
   timeoutMs = 15_000,
+  runnerIdHint?: string,
 ): Promise<unknown> {
-  const conn = resolveRunner(commandInput);
+  const conn = resolveRunner(commandInput, runnerIdHint);
   const { send } = conn;
 
   const correlationId = randomUUID();

@@ -72,16 +72,18 @@ export interface ConsoleIncidentUpdate extends WsEnvelope {
 
 // API → Console: interrupt resolved (approved, rejected, context added, or clarification answered).
 // AG-UI: INTERRUPT_RESOLVED — paired with the INTERRUPT that preceded it.
-export interface ConsoleInterruptResolved extends WsEnvelope {
-  type: "INTERRUPT_RESOLVED";
+export interface ConsoleHumanInputResolved extends WsEnvelope {
+  type: "HUMAN_INPUT_RESOLVED";
   payload: {
-    incidentId: string;
+    sessionId: string;
     toolUseId: string;
     status: "approved" | "rejected" | "context_added" | "answered";
     resolvedBy?: string;
     resolvedAt?: string;
   };
 }
+
+export type ConsoleInterruptResolved = ConsoleHumanInputResolved;
 
 // API → Console: a live token delta from an in-progress turn. Ephemeral (rides
 // the in-process event bus only); never persisted - the durable record is the
@@ -123,14 +125,13 @@ export interface ConsoleToolCallStart extends WsEnvelope {
 // clarifying question is waiting for an answer. incidentId addresses
 // POST /incidents/:id/approve (approval) or /incidents/:id/answer (clarification).
 // AG-UI: INTERRUPT
-export interface ConsoleInterrupt extends WsEnvelope {
-  type: "INTERRUPT";
+export interface ConsoleHumanInputRequired extends WsEnvelope {
+  type: "HUMAN_INPUT_REQUIRED";
   payload: {
     sessionId: string;
     toolUseId: string;
     toolName: string;
     input: Record<string, unknown>;
-    incidentId: string;
     kind: "approval" | "clarification";
     // Present when kind=clarification:
     question?: string;
@@ -138,6 +139,8 @@ export interface ConsoleInterrupt extends WsEnvelope {
     multiSelect?: boolean;
   };
 }
+
+export type ConsoleInterrupt = ConsoleHumanInputRequired;
 
 // API → Console: a tool call completed. Fires for both gated and non-gated
 // tools once the runner/platform responds.
@@ -159,7 +162,6 @@ export interface ConsoleEscalated extends WsEnvelope {
   type: "ESCALATED";
   payload: {
     sessionId: string;
-    incidentId: string;
     reason: string;
   };
 }

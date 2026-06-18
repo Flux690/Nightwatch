@@ -44,14 +44,6 @@ function broadcast(envelope: object): void {
   allWsInstances.forEach((ws) => ws.push(envelope));
 }
 
-const RUNNER = {
-  id: "inst-1",
-  token: "tok-1",
-  hostname: "host-1",
-  online: true,
-  createdAt: "2024-01-01T00:00:00Z",
-};
-
 const SESSION_1 = {
   sessionId: "s1",
   token: "tok-1",
@@ -68,6 +60,7 @@ function setup(pendingCount = 0) {
   const pendingApprovals = Array.from({ length: pendingCount }, (_, i) => ({
     id: `appr-${i}`,
     incidentId: `inc-${i}`,
+    sessionId: `s-${i}`,
     token: "tok-1",
     toolName: "restart_container",
     toolInput: {},
@@ -79,13 +72,7 @@ function setup(pendingCount = 0) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/runners")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([RUNNER]),
-        });
-      }
-      if (url.includes("/approvals/pending")) {
+      if (url.includes("/sessions/pending-human-input")) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(pendingApprovals),

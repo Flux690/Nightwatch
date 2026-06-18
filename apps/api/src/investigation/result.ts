@@ -1,10 +1,9 @@
-import type { IncidentRecord } from "@nightwatch/shared";
-import { insertIncident } from "../db/incidents.js";
 import { publishEscalated } from "../session/stream.js";
 import { logger } from "../logger.js";
+import { appendSyntheticAssistantMessage } from "../db/sessions.js";
 
-// The incident store is session-keyed. The escalation writer carries just the
-// fields an incident needs - not a whole NormalizedAlert (a chat session has none).
+// Escalation is session-scoped. This keeps the live control plane on the
+// transcript/event model instead of depending on a separate incident record.
 export interface IncidentContext {
   containerName: string;
   alertType: string;
@@ -13,29 +12,18 @@ export interface IncidentContext {
 
 export function escalate(
   ctx: IncidentContext,
-  incidentId: string,
   sessionId: string,
   reason: string,
 ): void {
   logger.warn(
-    { incidentId, sessionId, reason },
+    { sessionId, reason },
     "investigation escalated to human",
   );
 
-  const record: IncidentRecord = {
-    incidentId,
+  appendSyntheticAssistantMessage(
     sessionId,
-    outcome: "escalated",
-    timestamp: new Date().toISOString(),
-    containerName: ctx.containerName,
-    alertType: ctx.alertType,
-    rootCause: reason,
-    resolutionAction: null,
-    resolvedAt: null,
-    recurrenceCount: 0,
-  };
+    `Escalated to human: ${reason}`,
+  );
 
-  insertIncident(record);
-
-  publishEscalated({ sessionId, incidentId, reason });
+  publishEscalated({ sessionId, reason });
 }

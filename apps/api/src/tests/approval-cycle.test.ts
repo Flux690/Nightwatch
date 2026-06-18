@@ -103,11 +103,11 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
-import { registerApprovalRoutes } from "../approvals/routes.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { hasPendingInterrupt } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
   registerRunner,
+  setRunnerManifest,
   unregisterRunner,
   resolveCommand,
 } from "../ws/router.js";
@@ -168,6 +168,21 @@ describe("durable approval interrupts", () => {
       },
       () => {},
     );
+    setRunnerManifest(TEST_TOKEN, {
+      runnerId: TEST_RUNNER_ID,
+      hostname: "approval-host",
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        containers: ["web-01"],
+        prometheus: { available: false },
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: true,
+      },
+    });
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -175,7 +190,6 @@ describe("durable approval interrupts", () => {
     await registerChatRoutes(server);
     await registerSessionRoutes(server);
     await registerIncidentRoutes(server);
-    await registerApprovalRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -227,7 +241,7 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
 
@@ -235,19 +249,17 @@ describe("durable approval interrupts", () => {
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // Interrupt row must be in the DB
-    expect(hasPendingInterrupt(sessionId)).toBe(true);
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Runner must NOT have executed the write yet
     const countBefore = restartCommands.length;
 
     expect(interrupt.payload["toolName"]).toBe("restart_container");
-    expect(typeof interrupt.payload["incidentId"]).toBe("string");
 
     ws.close();
 
     // cleanup: approve to prevent leaking into later tests
-    const incidentId = String(interrupt.payload["incidentId"]);
-    await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/approve`, {
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/approve`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ resolvedBy: "cleanup" }),
@@ -295,14 +307,12 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     // Approve via REST
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -317,7 +327,7 @@ describe("durable approval interrupts", () => {
     await waitFor(() =>
       events.some(
         (e) =>
-          e.type === "INTERRUPT_RESOLVED" &&
+          e.type === "HUMAN_INPUT_RESOLVED" &&
           e.payload["toolUseId"] === "tu-apr-1",
       ),
     );
@@ -327,7 +337,7 @@ describe("durable approval interrupts", () => {
     expect(restartCommands[0]["containerName"]).toBe("web-01");
 
     // Interrupt row is gone from DB after resolution
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
   });
@@ -371,13 +381,11 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -391,11 +399,11 @@ describe("durable approval interrupts", () => {
     await waitFor(() =>
       events.some(
         (e) =>
-          e.type === "INTERRUPT_RESOLVED" && e.payload["status"] === "rejected",
+          e.type === "HUMAN_INPUT_RESOLVED" && e.payload["status"] === "rejected",
       ),
     );
 
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
     ws.close();
   });
 
@@ -438,13 +446,11 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     const ctxRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/add-context`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/add-context`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -458,12 +464,12 @@ describe("durable approval interrupts", () => {
     await waitFor(() =>
       events.some(
         (e) =>
-          e.type === "INTERRUPT_RESOLVED" &&
+          e.type === "HUMAN_INPUT_RESOLVED" &&
           e.payload["status"] === "context_added",
       ),
     );
 
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
     ws.close();
   });
 
@@ -506,13 +512,11 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     const first = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -522,7 +526,7 @@ describe("durable approval interrupts", () => {
     expect(first.status).toBe(200);
 
     const second = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -573,7 +577,7 @@ describe("durable approval interrupts", () => {
 
     await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
 
@@ -592,10 +596,10 @@ describe("durable approval interrupts", () => {
 
     // cleanup
     const interrupt = events.find(
-      (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+      (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
     )!;
     await fetch(
-      `http://127.0.0.1:${port}/incidents/${String(interrupt.payload["incidentId"])}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -644,20 +648,18 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     // Assert: run has exited (simulates what a restart would see — no in-memory state)
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // Assert: interrupt row is in DB (survives a restart because it's persisted)
-    expect(hasPendingInterrupt(sessionId)).toBe(true);
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Resolve via REST — works purely from DB state (as it would after restart)
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -718,7 +720,7 @@ describe("durable approval interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
 
@@ -734,9 +736,8 @@ describe("durable approval interrupts", () => {
     // The gated tool was NOT called on the runner yet
     expect(restartCommands).toHaveLength(0);
 
-    const incidentId = String(interrupt.payload["incidentId"]);
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -758,6 +759,7 @@ describe("durable approval interrupts", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
       token: TEST_TOKEN,
+      runnerId: TEST_RUNNER_ID,
       targetIdentifier: "web-01",
       alertType: "ContainerDown",
       severity: "critical",
@@ -814,18 +816,15 @@ describe("durable approval interrupts", () => {
     dispatcher.dispatch({
       alert,
       sessionId,
-      token: TEST_TOKEN,
     });
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -839,7 +838,7 @@ describe("durable approval interrupts", () => {
 
     expect(String(escEvent.payload["reason"])).toMatch(/rejected/i);
     // Interrupt row must be deleted (resolved)
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
   });
 
   // RED: no timeout — interrupt is still resolvable with fake timers
@@ -890,23 +889,21 @@ describe("durable approval interrupts", () => {
     vi.advanceTimersByTime(24 * 60 * 60 * 1_000);
 
     // The interrupt row must still be there (no timeout deleted it)
-    await waitFor(() => hasPendingInterrupt(sessionId), { timeout: 5_000 });
-    expect(hasPendingInterrupt(sessionId)).toBe(true);
+    await waitFor(() => hasPendingHumanInput(sessionId), { timeout: 5_000 });
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Should still be resolvable via REST
     const interrupt = await waitFor(
       () =>
         events.find(
-          (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+          (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
         ),
       { timeout: 5_000 },
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     vi.useRealTimers();
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },

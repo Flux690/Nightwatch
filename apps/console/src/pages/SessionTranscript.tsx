@@ -7,7 +7,6 @@ import type {
   ConsoleInterruptResolved,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
-  RunnerRecord,
   SessionMeta,
   SessionMessage,
   WsEnvelope,
@@ -28,10 +27,9 @@ interface LiveToolCard {
   toolName: string;
   input: Record<string, unknown>;
   result: unknown | null;
-  // Set on gated tools awaiting a human decision. incidentId addresses the
-  // resolve endpoints; interruptKind distinguishes approval from clarification.
+  // Set on gated tools awaiting a human decision; interruptKind distinguishes
+  // approval from clarification while toolUseId remains the correlation key.
   awaitingApproval?: boolean;
-  incidentId?: string;
   interruptKind?: "approval" | "clarification";
   risk?: string;
   question?: string;
@@ -51,10 +49,9 @@ function pendingInterruptFromItems(
       item.kind === "tool_card" &&
       item.awaitingApproval &&
       item.interruptKind &&
-      item.incidentId &&
       item.approval === undefined
     ) {
-      return { id: item.incidentId, kind: item.interruptKind };
+      return { id: item.toolUseId, kind: item.interruptKind };
     }
   }
   return undefined;
@@ -267,7 +264,6 @@ function buildInterruptItem(
     input: payload.input,
     result: null,
     awaitingApproval: true,
-    incidentId: payload.incidentId,
     interruptKind: payload.kind,
     risk: typeof riskValue === "string" ? riskValue : undefined,
     question: payload.question,
@@ -321,24 +317,14 @@ export function SessionView({
     setActiveSessionId(curr);
   }, [sessionIdFromRoute]);
 
-  const { data: runners } = useQuery<RunnerRecord[]>({
-    queryKey: ["runners"],
-    queryFn: () =>
-      fetch("/api/runners").then((r) => {
-        if (!r.ok) throw new Error(`runners ${r.status}`);
-        return r.json() as Promise<RunnerRecord[]>;
-      }),
-  });
-  const token = runners?.[0]?.token;
-
   const { data: messages = [] } = useQuery<SessionMessage[]>({
     queryKey: ["session", activeSessionId],
     queryFn: () =>
-      fetch(`/api/sessions/${activeSessionId}?token=${token}`).then((r) => {
+      fetch(`/api/sessions/${activeSessionId}`).then((r) => {
         if (!r.ok) throw new Error(`sessions/${activeSessionId} ${r.status}`);
         return r.json() as Promise<SessionMessage[]>;
       }),
-    enabled: !!token && !!activeSessionId,
+    enabled: !!activeSessionId,
   });
 
   const handleSessionCreated = useCallback(
@@ -348,22 +334,17 @@ export function SessionView({
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      if (token) {
-        queryClient.setQueryData<SessionMeta[]>(
-          ["sessions", token],
-          (prev = []) => [
-            {
-              sessionId: newId,
-              token,
-              title: firstMessage.slice(0, 60),
-              createdAt: new Date().toISOString(),
-            },
-            ...prev,
-          ],
-        );
-      }
+      queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) => [
+        {
+          sessionId: newId,
+          token: "",
+          title: firstMessage.slice(0, 60),
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
     },
-    [token, queryClient],
+    [queryClient],
   );
 
   const handleEnvelope = useCallback(
@@ -451,7 +432,6 @@ export function SessionView({
 
   const handleResolve = useCallback(
     (card: LiveToolCard, action: "approve" | "reject") => {
-      if (!card.incidentId) return;
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "tool_card" && item.toolUseId === card.toolUseId
@@ -459,18 +439,17 @@ export function SessionView({
             : item,
         ),
       );
-      void fetch(`/api/incidents/${card.incidentId}/${action}`, {
+      void fetch(`/api/sessions/${activeSessionId}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resolvedBy: "console" }),
       });
     },
-    [],
+    [activeSessionId],
   );
 
   const handleAnswer = useCallback(
     (card: LiveToolCard, answer: string | string[]) => {
-      if (!card.incidentId) return;
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "tool_card" && item.toolUseId === card.toolUseId
@@ -478,13 +457,13 @@ export function SessionView({
             : item,
         ),
       );
-      void fetch(`/api/incidents/${card.incidentId}/answer`, {
+      void fetch(`/api/sessions/${activeSessionId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answer, resolvedBy: "console" }),
       });
     },
-    [],
+    [activeSessionId],
   );
 
   useConsoleWs(handleEnvelope);
@@ -599,25 +578,14 @@ export function SessionTranscript(): React.JSX.Element {
   const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
-  const { data: runners } = useQuery<RunnerRecord[]>({
-    queryKey: ["runners"],
-    queryFn: () =>
-      fetch("/api/runners").then((r) => {
-        if (!r.ok) throw new Error(`runners ${r.status}`);
-        return r.json() as Promise<RunnerRecord[]>;
-      }),
-  });
-
-  const token = runners?.[0]?.token;
-
   const { data: messages = [] } = useQuery<SessionMessage[]>({
     queryKey: ["session", id],
     queryFn: () =>
-      fetch(`/api/sessions/${id}?token=${token}`).then((r) => {
+      fetch(`/api/sessions/${id}`).then((r) => {
         if (!r.ok) throw new Error(`sessions/${id} ${r.status}`);
         return r.json() as Promise<SessionMessage[]>;
       }),
-    enabled: !!token,
+    enabled: !!id,
   });
 
   const handleEnvelope = useCallback(
@@ -702,7 +670,6 @@ export function SessionTranscript(): React.JSX.Element {
 
   const handleResolve = useCallback(
     (card: LiveToolCard, action: "approve" | "reject") => {
-      if (!card.incidentId) return;
       // Optimistically mark pending so both buttons disable; the durable state
       // arrives via the INTERRUPT_RESOLVED event.
       setLiveItems((prev) =>
@@ -712,18 +679,17 @@ export function SessionTranscript(): React.JSX.Element {
             : item,
         ),
       );
-      void fetch(`/api/incidents/${card.incidentId}/${action}`, {
+      void fetch(`/api/sessions/${id}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resolvedBy: "console" }),
       });
     },
-    [],
+    [id],
   );
 
   const handleAnswer = useCallback(
     (card: LiveToolCard, answer: string | string[]) => {
-      if (!card.incidentId) return;
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "tool_card" && item.toolUseId === card.toolUseId
@@ -731,13 +697,13 @@ export function SessionTranscript(): React.JSX.Element {
             : item,
         ),
       );
-      void fetch(`/api/incidents/${card.incidentId}/answer`, {
+      void fetch(`/api/sessions/${id}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answer, resolvedBy: "console" }),
       });
     },
-    [],
+    [id],
   );
 
   useConsoleWs(handleEnvelope);

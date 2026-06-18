@@ -120,6 +120,7 @@ import { getSessionMessages } from "../db/sessions.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
+import { registerSessionRoutes } from "../sessions/routes.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -132,6 +133,7 @@ function makeManifest(
   containers: string[],
 ): CapabilityManifest {
   return {
+    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -230,6 +232,7 @@ describe("multi-runner routing", () => {
     await registerConsoleWsRoutes(server);
     await registerChatRoutes(server);
     await registerIncidentRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -253,7 +256,6 @@ describe("multi-runner routing", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      token: tokenIdA,
       userMessage: "investigate",
     });
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
@@ -427,11 +429,9 @@ describe("multi-runner routing", () => {
     // Wait for the approval interrupt — restart_container is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     // No runner has executed anything yet (sendCommand only runs after approval).
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
@@ -439,7 +439,7 @@ describe("multi-runner routing", () => {
     // Approve — the approve route calls sendCommand with the persisted toolInput
     // (which has containerName: "postgres"), routing it to runner-b.
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },

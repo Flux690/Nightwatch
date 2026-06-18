@@ -356,7 +356,6 @@ describe("Runner token lifecycle (issue 038)", () => {
       createSession(
         {
           sessionId: "sess-history-1",
-          token: tokenId,
           title: "history session",
           createdAt: new Date().toISOString(),
         },

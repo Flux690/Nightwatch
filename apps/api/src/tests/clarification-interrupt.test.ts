@@ -100,11 +100,11 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { registerIncidentRoutes } from "../incidents/routes.js";
-import { registerApprovalRoutes } from "../approvals/routes.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { hasPendingInterrupt } from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
   registerRunner,
+  setRunnerManifest,
   unregisterRunner,
   resolveCommand,
 } from "../ws/router.js";
@@ -173,6 +173,21 @@ describe("clarification interrupts", () => {
       },
       () => {},
     );
+    setRunnerManifest(TEST_TOKEN, {
+      runnerId: TEST_RUNNER_ID,
+      hostname: "clarification-host",
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        containers: ["web-01"],
+        prometheus: { available: false },
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: true,
+      },
+    });
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -180,7 +195,6 @@ describe("clarification interrupts", () => {
     await registerChatRoutes(server);
     await registerSessionRoutes(server);
     await registerIncidentRoutes(server);
-    await registerApprovalRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -229,7 +243,7 @@ describe("clarification interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
 
@@ -237,7 +251,7 @@ describe("clarification interrupts", () => {
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
 
     // DB row must have kind=clarification
-    expect(hasPendingInterrupt(sessionId)).toBe(true);
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // INTERRUPT event carries kind + question + options
     expect(interrupt.payload["kind"]).toBe("clarification");
@@ -250,13 +264,12 @@ describe("clarification interrupts", () => {
     ws.close();
 
     // cleanup
-    const incidentId = String(interrupt.payload["incidentId"]);
-    await fetch(`http://127.0.0.1:${port}/incidents/${incidentId}/answer`, {
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
       body: JSON.stringify({ answer: "cleanup" }),
     });
-    await waitFor(() => !hasPendingInterrupt(sessionId));
+    await waitFor(() => !hasPendingHumanInput(sessionId));
   });
 
   it("answer resolves: resumes run, tool result contains answer, reaches free-form finish", async () => {
@@ -295,13 +308,11 @@ describe("clarification interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -319,13 +330,13 @@ describe("clarification interrupts", () => {
     await waitFor(() =>
       events.some(
         (e) =>
-          e.type === "INTERRUPT_RESOLVED" &&
+          e.type === "HUMAN_INPUT_RESOLVED" &&
           e.payload["toolUseId"] === "tu-ans-1",
       ),
     );
 
     // Interrupt row gone after resolution
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
   });
@@ -367,14 +378,13 @@ describe("clarification interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
     expect(interrupt.payload["multiSelect"]).toBe(true);
 
-    const incidentId = String(interrupt.payload["incidentId"]);
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -389,11 +399,11 @@ describe("clarification interrupts", () => {
     await waitFor(() =>
       events.some(
         (e) =>
-          e.type === "INTERRUPT_RESOLVED" &&
+          e.type === "HUMAN_INPUT_RESOLVED" &&
           e.payload["toolUseId"] === "tu-ms-1",
       ),
     );
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
   });
@@ -431,18 +441,16 @@ describe("clarification interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "INTERRUPT" && e.payload["sessionId"] === sessionId,
+        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
       ),
     );
-    const incidentId = String(interrupt.payload["incidentId"]);
-
     // Simulate process exit: run has exited, no in-memory state needed
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
-    expect(hasPendingInterrupt(sessionId)).toBe(true);
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Resolve purely from DB state
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${incidentId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -454,8 +462,8 @@ describe("clarification interrupts", () => {
     );
     expect(answerRes.status).toBe(200);
 
-    await waitFor(() => !hasPendingInterrupt(sessionId));
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    await waitFor(() => !hasPendingHumanInput(sessionId));
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
   });
@@ -528,7 +536,7 @@ describe("clarification interrupts", () => {
     const clarInterrupt = await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "INTERRUPT" &&
+          e.type === "HUMAN_INPUT_REQUIRED" &&
           e.payload["sessionId"] === sessionId &&
           e.payload["kind"] === "clarification",
       ),
@@ -536,9 +544,8 @@ describe("clarification interrupts", () => {
     expect(clarInterrupt.payload["kind"]).toBe("clarification");
     expect(restartCommands).toHaveLength(0);
 
-    const clarIncidentId = String(clarInterrupt.payload["incidentId"]);
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${clarIncidentId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -551,7 +558,7 @@ describe("clarification interrupts", () => {
     const approvalInterrupt = await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "INTERRUPT" &&
+          e.type === "HUMAN_INPUT_REQUIRED" &&
           e.payload["sessionId"] === sessionId &&
           e.payload["kind"] === "approval",
       ),
@@ -559,9 +566,8 @@ describe("clarification interrupts", () => {
     expect(approvalInterrupt.payload["toolName"]).toBe("restart_container");
     expect(restartCommands).toHaveLength(0);
 
-    const approvalIncidentId = String(approvalInterrupt.payload["incidentId"]);
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/incidents/${approvalIncidentId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
@@ -573,7 +579,7 @@ describe("clarification interrupts", () => {
     // Restart executes exactly once, run completes
     await waitFor(() => restartCommands.length > 0);
     expect(restartCommands).toHaveLength(1);
-    expect(hasPendingInterrupt(sessionId)).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
   });

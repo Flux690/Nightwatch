@@ -83,7 +83,6 @@ import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
-import { insertIncident } from "../db/incidents.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../investigation/context.js";
 import {
@@ -251,96 +250,6 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(transcript[0].content).not.toMatch(/INCIDENT ALERT/);
   });
 
-  it("serves get_incident_history from the API store without routing to a runner", async () => {
-    // A runner that fails everything: if get_incident_history were still a runner
-    // tool, the result would be an error - proving it is now platform-handled.
-    const RUNNER_ID = "hostile-runner";
-    registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        resolveCommand({
-          correlationId: msg.payload.correlationId,
-          success: false,
-          result: null,
-          error: "runner should not have been called",
-        });
-      },
-      () => {},
-    );
-
-    insertIncident({
-      incidentId: randomUUID(),
-      sessionId: randomUUID(),
-      outcome: "finding",
-      timestamp: new Date().toISOString(),
-      containerName: "api-01",
-      alertType: "ContainerDown",
-      rootCause: "ran out of file descriptors",
-      resolutionAction: "restart_container",
-      resolvedAt: null,
-      recurrenceCount: 0,
-    });
-
-    setScript([
-      {
-        text: "Checking history.",
-        toolUses: [
-          {
-            id: "hist-1",
-            name: "get_incident_history",
-            input: { containerName: "api-01" },
-          },
-        ],
-      },
-      { text: "Done.", toolUses: [] },
-    ]);
-
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    let sessionId: string | undefined;
-    let resolveHist!: (e: WsEvent) => void;
-    const histEnd = new Promise<WsEvent>((res, rej) => {
-      resolveHist = res;
-      setTimeout(
-        () => rej(new Error("timeout: no get_incident_history end")),
-        10_000,
-      );
-    });
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString()) as WsEvent;
-      if (
-        msg.type === "TOOL_CALL_END" &&
-        msg.payload["toolUseId"] === "hist-1"
-      ) {
-        resolveHist(msg);
-      }
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "Has api-01 failed before?" }),
-    });
-    ({ sessionId } = (await res.json()) as { sessionId: string });
-    expect(typeof sessionId).toBe("string");
-
-    const end = await histEnd;
-    ws.close();
-    unregisterRunner(TEST_TOKEN);
-
-    expect(end.payload["isError"]).toBeFalsy();
-    expect(String(end.payload["result"])).toContain(
-      "ran out of file descriptors",
-    );
-  });
-
   it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {
     const listRes = await fetch(`http://127.0.0.1:${port}/sessions`);
     expect(listRes.status).toBe(401);
@@ -352,7 +261,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   });
 });
 
-describe("state inversion: episodic memory loads from the central store", () => {
+describe("state inversion: opening alert context stays alert-scoped", () => {
   let cleanupDb: () => void;
   const TOKEN = `tok-${randomUUID()}`;
 
@@ -365,37 +274,11 @@ describe("state inversion: episodic memory loads from the central store", () => 
     vi.unstubAllEnvs();
   });
 
-  it("injects past incidents by container and alert type", async () => {
-    // Two incidents for the same container, as if recorded by
-    // different runners across time - all in one central store.
-    insertIncident({
-      incidentId: randomUUID(),
-      sessionId: randomUUID(),
-      outcome: "finding",
-      timestamp: new Date(Date.now() - 86_400_000).toISOString(),
-      containerName: "web-01",
-      alertType: "HighMemory",
-      rootCause: "memory leak in image v12",
-      resolutionAction: "rollback_deploy",
-      resolvedAt: null,
-      recurrenceCount: 0,
-    });
-    insertIncident({
-      incidentId: randomUUID(),
-      sessionId: randomUUID(),
-      outcome: "escalated",
-      timestamp: new Date().toISOString(),
-      containerName: "web-01",
-      alertType: "HighMemory",
-      rootCause: "swap exhaustion under load",
-      resolutionAction: null,
-      resolvedAt: null,
-      recurrenceCount: 0,
-    });
-
+  it("does not inject past incident history into the opening alert context", async () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
       token: TOKEN,
+      runnerId: "runner-history",
       targetIdentifier: "web-01",
       alertType: "HighMemory",
       severity: "warning",
@@ -404,8 +287,10 @@ describe("state inversion: episodic memory loads from the central store", () => 
     };
 
     const { firstUserMessage } = buildInitialContext([alert]);
-    expect(firstUserMessage).toContain("memory leak in image v12");
-    expect(firstUserMessage).toContain("swap exhaustion under load");
+    expect(firstUserMessage).toContain("INCIDENT ALERT");
+    expect(firstUserMessage).not.toContain("PAST INCIDENT HISTORY");
+    expect(firstUserMessage).not.toContain("memory leak in image v12");
+    expect(firstUserMessage).not.toContain("swap exhaustion under load");
   });
 
   it("never puts the deployment token in the opening context (it is a secret)", () => {
@@ -413,6 +298,7 @@ describe("state inversion: episodic memory loads from the central store", () => 
     const alert: NormalizedAlert = {
       sourceAlertId: "src-token",
       token: secret,
+      runnerId: "runner-secret",
       targetIdentifier: "web-01",
       alertType: "HighCPU",
       severity: "warning",
