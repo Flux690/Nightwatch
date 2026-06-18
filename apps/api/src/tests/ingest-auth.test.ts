@@ -85,5 +85,18 @@ describe("POST /alerts/ingest auth", () => {
     const body = JSON.parse(res.body) as { received: number };
     expect(body.received).toBe(1);
   });
+
+  it("accepts a valid Authorization bearer token and processes the alert", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { authorization: `Bearer ${VALID_TOKEN}` },
+      payload: ALERTMANAGER_BODY,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { received: number };
+    expect(body.received).toBe(1);
+  });
 });
 

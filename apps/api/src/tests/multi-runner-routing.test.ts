@@ -128,12 +128,10 @@ const FINISH_TURN = {
 };
 
 function makeManifest(
-  token: string,
   hostname: string,
   containers: string[],
 ): CapabilityManifest {
   return {
-    token,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -211,20 +209,20 @@ describe("multi-runner routing", () => {
     registerRunner(tokenIdA, makeSend(commandsA), () => {});
     setRunnerManifest(
       tokenIdA,
-      makeManifest(tokenIdA, "web-01", ["nginx", "api"]),
+      makeManifest("web-01", ["nginx", "api"]),
     );
 
     registerRunner(tokenIdB, makeSend(commandsB), () => {});
     setRunnerManifest(
       tokenIdB,
-      makeManifest(tokenIdB, "db-02", ["postgres"]),
+      makeManifest("db-02", ["postgres"]),
     );
 
     tokenId2 = generateToken("routing-cross").id;
     registerRunner(tokenId2, makeSend(commandsC), () => {});
     setRunnerManifest(
       tokenId2,
-      makeManifest(tokenId2, "cache-01", ["redis"]),
+      makeManifest("cache-01", ["redis"]),
     );
 
     server = Fastify({ logger: false });

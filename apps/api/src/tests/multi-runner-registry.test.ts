@@ -7,18 +7,17 @@ import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { CapabilityManifest, RunnerRecord } from "@nightwatch/shared";
 import { generateToken } from "../db/tokens.js";
+import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../ws/server.js";
 import { registerRunnerRoutes } from "../runners/routes.js";
 
 function manifest(
-  token: string,
   hostname: string,
   containers: string[],
 ): CapabilityManifest {
   return {
-    token,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -62,9 +61,11 @@ describe("flat runner registry", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
+  let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerWsRoutes(server);
@@ -79,8 +80,18 @@ describe("flat runner registry", () => {
     vi.unstubAllEnvs();
   });
 
-  async function getRunners(): Promise<RunnerRecord[]> {
+  it("returns 401 without a valid nw_auth cookie", async () => {
     const res = await server.inject({ method: "GET", url: "/runners" });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  async function getRunners(): Promise<RunnerRecord[]> {
+    const res = await server.inject({
+      method: "GET",
+      url: "/runners",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as RunnerRecord[];
   }
@@ -91,12 +102,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      manifest(tokenA, "web-01", ["nginx", "api"]),
+      manifest("web-01", ["nginx", "api"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      manifest(tokenB, "db-02", ["postgres"]),
+      manifest("db-02", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {
@@ -119,6 +130,8 @@ describe("flat runner registry", () => {
     expect(rb?.hostname).toBe("db-02");
     expect(ra?.manifest?.capabilities.containers).toEqual(["nginx", "api"]);
     expect(rb?.manifest?.capabilities.containers).toEqual(["postgres"]);
+    expect(ra?.manifest).not.toHaveProperty("token");
+    expect(rb?.manifest).not.toHaveProperty("token");
 
     expect(ra?.online).toBe(true);
     expect(rb?.online).toBe(true);
@@ -133,12 +146,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      manifest(tokenA, "web-01", ["nginx"]),
+      manifest("web-01", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      manifest(tokenB, "db-02", ["postgres"]),
+      manifest("db-02", ["postgres"]),
     );
     await waitFor(async () => {
       const live = (await getRunners()).filter(
@@ -169,12 +182,12 @@ describe("flat runner registry", () => {
     const a = await connectRunner(
       port,
       tokenA,
-      manifest(tokenA, "host-a", ["nginx"]),
+      manifest("host-a", ["nginx"]),
     );
     const b = await connectRunner(
       port,
       tokenB,
-      manifest(tokenB, "host-b", ["postgres"]),
+      manifest("host-b", ["postgres"]),
     );
 
     const runners = await waitFor(async () => {

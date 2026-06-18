@@ -11,5 +11,9 @@ route:
 receivers:
   - name: nightwatch
     webhook_configs:
-      - url: "${PLATFORM_URL}/alerts/ingest?token=${NIGHTWATCH_TOKEN}"
+      - url: "${PLATFORM_URL}/alerts/ingest"
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: "${NIGHTWATCH_TOKEN}"
         send_resolved: true

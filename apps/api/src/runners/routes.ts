@@ -13,7 +13,7 @@ export async function registerRunnerRoutes(
   // Fleet view per runner (CONTEXT.md multi-runner). Live runners come from the
   // in-memory registry (keyed by tokenId); offline tokens show as single rows so
   // their install command remains discoverable.
-  fastify.get("/runners", () => {
+  fastify.get("/runners", { preHandler: requireSession }, () => {
     const live = listRunners();
     const byToken = new Map<string, typeof live>();
     for (const r of live) {

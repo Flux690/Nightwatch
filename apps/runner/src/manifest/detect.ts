@@ -16,7 +16,6 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
   return {
-    token: process.env["NIGHTWATCH_TOKEN"] ?? "unknown",
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,
     capabilities: {

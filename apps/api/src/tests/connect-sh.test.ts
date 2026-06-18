@@ -112,6 +112,18 @@ describe("GET /connect.sh", () => {
     expect(res.body).toContain(TOKEN);
   });
 
+  it("script prints header-based Alertmanager config instead of a token query parameter", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+
+    expect(res.body).not.toContain("/alerts/ingest?token=");
+    expect(res.body).toContain("authorization:");
+    expect(res.body).toContain("credentials: '${NIGHTWATCH_TOKEN}'");
+  });
+
   it("script contains neither nightwatch.sh nor inst_", async () => {
     const res = await server.inject({
       method: "GET",

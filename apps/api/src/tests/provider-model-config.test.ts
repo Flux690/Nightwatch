@@ -129,6 +129,12 @@ describe("provider/model config seam", () => {
 
   // --- GET /config/models ---
 
+  it("GET /config/models: returns 401 without a valid nw_auth cookie", async () => {
+    const res = await server.inject({ method: "GET", url: "/config/models" });
+
+    expect(res.statusCode).toBe(401);
+  });
+
   it("GET /config/models: returns models array proxied from upstream endpoint", async () => {
     stubFetch(() =>
       mockResponse(200, {
@@ -140,7 +146,11 @@ describe("provider/model config seam", () => {
       }),
     );
 
-    const res = await server.inject({ method: "GET", url: "/config/models" });
+    const res = await server.inject({
+      method: "GET",
+      url: "/config/models",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { models: string[] };
@@ -157,7 +167,11 @@ describe("provider/model config seam", () => {
       vi.fn().mockRejectedValue(new TypeError("fetch failed")),
     );
 
-    const res = await server.inject({ method: "GET", url: "/config/models" });
+    const res = await server.inject({
+      method: "GET",
+      url: "/config/models",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { models: string[] };

@@ -149,7 +149,7 @@ export async function registerConfigRoutes(
 
   // GET /config/models — proxies the configured endpoint's model list so the
   // browser never calls the LLM endpoint directly.
-  fastify.get("/config/models", async () => {
+  fastify.get("/config/models", { preHandler: requireSession }, async () => {
     const config = loadConfig();
     const apiKey =
       loadApiKey() ??

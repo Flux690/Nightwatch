@@ -116,7 +116,11 @@ if [ -n "$ALERTMANAGER_URL" ]; then
   echo "  receivers:"
   echo "    - name: nightwatch"
   echo "      webhook_configs:"
-  echo "        - url: '${PLATFORM_URL}/alerts/ingest?token=${NIGHTWATCH_TOKEN}'"
+  echo "        - url: '${PLATFORM_URL}/alerts/ingest'"
+  echo "          http_config:"
+  echo "            authorization:"
+  echo "              type: Bearer"
+  echo "              credentials: '${NIGHTWATCH_TOKEN}'"
   echo ""
 fi
 

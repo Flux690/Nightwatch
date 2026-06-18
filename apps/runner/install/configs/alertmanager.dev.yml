@@ -11,5 +11,9 @@ route:
 receivers:
   - name: nightwatch
     webhook_configs:
-      - url: "http://host.docker.internal:3000/alerts/ingest?token=inst_local"
+      - url: "http://host.docker.internal:3000/alerts/ingest"
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: "inst_local"
         send_resolved: true

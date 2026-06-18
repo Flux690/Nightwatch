@@ -1,5 +1,4 @@
 export interface CapabilityManifest {
-  token: string;
   hostname: string;
   runnerVersion: string;
   capabilities: {

@@ -109,6 +109,11 @@ function extractToken(
 ): string | null {
   const token = headers["x-nightwatch-token"];
   if (typeof token === "string" && token.length > 0) return token;
+  const auth = headers["authorization"];
+  if (typeof auth === "string") {
+    const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+    if (bearer.length > 0 && bearer !== auth) return bearer;
+  }
   return null;
 }
 
