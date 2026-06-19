@@ -180,9 +180,11 @@ session starts instead. Inbox leftovers at run end become new sessions.
 
 ## Multi-runner
 
-- Registry, manifests, and heartbeats are keyed by **runnerId** (a stable
-  per-runner UUID). The runner token authenticates the connection; it is *not* a
-  grouping key (D14). The flat registry means the agent sees every runner.
+- Connections are tracked by **tokenId** as the primary lifecycle key (heartbeats,
+  revoke-closes). Once a runner sends its capability manifest, the connection is
+  also indexed by **runnerId** (the stable per-server UUID) for routing. The runner
+  token authenticates the connection; it is *not* a grouping key (D14). The flat
+  registry means the agent sees every runner.
 - Routing: container-targeted commands resolve `containerName → runnerId` via the
   stored manifests; host-level commands take a `hostname` when more than one
   runner is registered; any-runner fallback only for single-runner deployments.
@@ -220,18 +222,19 @@ session starts instead. Inbox leftovers at run end become new sessions.
 ## Console
 
 Routes: `/` (welcome + composer; first message starts a session in place),
-`/sessions/:id` (transcript), `/runners` (fleet + server management: generate a
-server, the one-time `connect.sh` command, remove a server), `/settings`
-(provider/model/loop config, account), `/login` (setup-or-login, two-state).
+`/sessions/:id` (transcript), `/runners` (read-only fleet view), `/settings`
+(provider/model/loop config, account). Auth screen (`/login`) and Runners server
+management ("Add a server", connect.sh, Remove) are tracked by PRD B (ui-prd.md)
+and not yet built.
 
 - **Attention queue** — global, shell-level count of sessions awaiting a human,
   read from `pending_human_input` (correct on first load, live via WS).
 - **Approval card** — exact command + risk + Approve/Reject; precedes the tool
   card; the composer is the "Other".
 - **Clarification card** — option buttons + composer-as-Other.
-- **Transcript** — one renderer for live and persisted views (role bubbles + tool
-  cards with IN/OUT); the agent's closing plain-text turn renders as its answer;
-  the words "conclude/concluded" never appear in the UI.
+- **Transcript** — tool cards (IN/OUT) and approval/clarification cards are
+  rendered live and on reload; message content renders as flat text (no role
+  bubbles, no markdown). PRD B tracks the unified renderer with role bubbles.
 - **Composer** — always mounted; routed by state (new message / add-context); the
   API enforces 409 on sessions that are running.
 - Design language: dark, high-contrast, terminal-adjacent; monospace for data,

@@ -337,7 +337,6 @@ export function SessionView({
       queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) => [
         {
           sessionId: newId,
-          token: "",
           title: firstMessage.slice(0, 60),
           createdAt: new Date().toISOString(),
         },
