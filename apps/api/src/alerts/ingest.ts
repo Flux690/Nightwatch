@@ -31,8 +31,8 @@ export async function registerAlertRoutes(
     // Touch before any processing so lastUsedAt reflects authenticated use.
     touchLastUsed(tokenRecord.id);
 
-    // Use the token's UUID as the internal identifier for all dispatch,
-    // session, and incident records — the plaintext never flows downstream.
+    // Use the token's UUID as the internal identifier for all dispatch and
+    // session records — the plaintext never flows downstream.
     const tokenId = tokenRecord.id;
     const identity = getRunnerIdentity(tokenId);
     const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
@@ -40,13 +40,7 @@ export async function registerAlertRoutes(
 
     let alerts: NormalizedAlert[];
     try {
-      alerts = parseSource(
-        userAgent,
-        request.body,
-        tokenId,
-        runnerId,
-        hostname,
-      );
+      alerts = parseSource(userAgent, request.body, runnerId, hostname);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: msg });
@@ -119,7 +113,6 @@ function extractToken(
 function parseSource(
   userAgent: string,
   body: unknown,
-  tokenId: string,
   runnerId: string,
   hostname: string | undefined,
 ): NormalizedAlert[] {
@@ -127,7 +120,7 @@ function parseSource(
     userAgent.toLowerCase().includes("alertmanager") ||
     isAlertmanagerShape(body)
   ) {
-    return parseAlertmanager(body, tokenId, runnerId, hostname);
+    return parseAlertmanager(body, runnerId, hostname);
   }
   logger.warn(
     { preview: JSON.stringify(body).slice(0, 200) },

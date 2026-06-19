@@ -99,7 +99,6 @@ import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
-import { registerIncidentRoutes } from "../incidents/routes.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
@@ -194,7 +193,6 @@ describe("clarification interrupts", () => {
     await registerConsoleWsRoutes(server);
     await registerChatRoutes(server);
     await registerSessionRoutes(server);
-    await registerIncidentRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });

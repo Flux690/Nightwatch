@@ -43,7 +43,6 @@ function msg(
 
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
-  token: "tok-A",
   runnerId: "runner-A",
   targetIdentifier: "web-01",
   alertType: "ContainerDown",

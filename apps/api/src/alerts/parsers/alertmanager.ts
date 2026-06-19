@@ -12,7 +12,6 @@ interface AlertmanagerWebhook {
 
 export function parseAlertmanager(
   body: unknown,
-  token: string,
   runnerId: string,
   hostname?: string,
 ): NormalizedAlert[] {
@@ -23,7 +22,6 @@ export function parseAlertmanager(
 
   return payload.alerts.map((alert) => ({
     sourceAlertId: alert.fingerprint,
-    token,
     runnerId,
     ...(hostname !== undefined && { hostname }),
     // `name` is what cAdvisor sets and what our shipped rules.yml alerts carry

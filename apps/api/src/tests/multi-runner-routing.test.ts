@@ -119,7 +119,6 @@ import { dispatcher } from "../dispatch/dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
-import { registerIncidentRoutes } from "../incidents/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -222,7 +221,6 @@ describe("multi-runner routing", () => {
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
     await registerChatRoutes(server);
-    await registerIncidentRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
