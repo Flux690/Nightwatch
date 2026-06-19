@@ -13,101 +13,94 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.post<{ Body: unknown; Querystring: { token?: string } }>(
-    "/alerts/ingest",
-    async (request, reply) => {
-      const userAgent = request.headers["user-agent"] ?? "";
-      const plaintext =
-        extractToken(request.headers) ??
-        (typeof request.query.token === "string" ? request.query.token : null);
+  fastify.post<{ Body: unknown }>("/alerts/ingest", async (request, reply) => {
+    const userAgent = request.headers["user-agent"] ?? "";
+    const plaintext = extractToken(request.headers);
 
-      if (!plaintext) {
-        return reply.code(401).send({
-          error: "token query param or X-Nightwatch-Token header required",
-        });
+    if (!plaintext) {
+      return reply.code(401).send({
+        error: "X-Nightwatch-Token or Authorization: Bearer token required",
+      });
+    }
+
+    const tokenRecord = findTokenByValue(plaintext);
+    if (!tokenRecord) {
+      return reply.code(401).send({ error: "unknown or revoked token" });
+    }
+
+    // Touch before any processing so lastUsedAt reflects authenticated use.
+    touchLastUsed(tokenRecord.id);
+
+    // Use the token's UUID as the internal identifier for all dispatch,
+    // session, and incident records — the plaintext never flows downstream.
+    const tokenId = tokenRecord.id;
+    const identity = getRunnerIdentity(tokenId);
+    const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
+    const hostname = identity?.hostname ?? undefined;
+
+    let alerts: NormalizedAlert[];
+    try {
+      alerts = parseSource(
+        userAgent,
+        request.body,
+        tokenId,
+        runnerId,
+        hostname,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(400).send({ error: msg });
+    }
+
+    let enqueued = 0;
+    let skipped = 0;
+
+    for (const alert of alerts) {
+      // 1. Derived dedup: same alert already active or durably suspended.
+      if (isDuplicate(alert)) {
+        skipped++;
+        continue;
       }
 
-      const tokenRecord = findTokenByValue(plaintext);
-      if (!tokenRecord) {
-        return reply.code(401).send({ error: "unknown or revoked token" });
+      // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
+      //    the batch window. True duplicate — the model would see it twice.
+      if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) {
+        skipped++;
+        continue;
       }
 
-      // Touch before any processing so lastUsedAt reflects authenticated use.
-      touchLastUsed(tokenRecord.id);
+      // 3. Rate limit: per-server budget.
+      if (!checkRateLimit(alert.runnerId, alert.severity)) {
+        skipped++;
+        fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
+        continue;
+      }
 
-      // Use the token's UUID as the internal identifier for all dispatch,
-      // session, and incident records — the plaintext never flows downstream.
-      const tokenId = tokenRecord.id;
-      const identity = getRunnerIdentity(tokenId);
-      const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
-      const hostname = identity?.hostname ?? undefined;
-
-      let alerts: NormalizedAlert[];
-      try {
-        alerts = parseSource(
-          userAgent,
-          request.body,
-          tokenId,
-          runnerId,
-          hostname,
+      // 4. Route: inject into the one active alert investigation (if any) or
+      //    add to the operator-wide batch window. A suspended session is not
+      //    in the active set, so it falls through to the batch window and a
+      //    new session is created — suspended sessions never receive injections
+      //    (CONTEXT.md alert pipeline).
+      const activeSessionId = dispatcher.getActiveAlertSession();
+      if (activeSessionId !== null) {
+        dispatcher.injectAlert(activeSessionId, alert);
+        fastify.log.info(
+          { alertId: alert.sourceAlertId, sessionId: activeSessionId },
+          "alert injected into active run",
         );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(400).send({ error: msg });
+      } else {
+        batchWindow.add(alert);
+        fastify.log.info(
+          { alertId: alert.sourceAlertId, type: alert.alertType },
+          "alert added to batch window",
+        );
       }
 
-      let enqueued = 0;
-      let skipped = 0;
+      enqueued++;
+    }
 
-      for (const alert of alerts) {
-        // 1. Derived dedup: same alert already active or durably suspended.
-        if (isDuplicate(alert)) {
-          skipped++;
-          continue;
-        }
-
-        // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
-        //    the batch window. True duplicate — the model would see it twice.
-        if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) {
-          skipped++;
-          continue;
-        }
-
-        // 3. Rate limit: per-server budget.
-        if (!checkRateLimit(alert.runnerId, alert.severity)) {
-          skipped++;
-          fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
-          continue;
-        }
-
-        // 4. Route: inject into the one active alert investigation (if any) or
-        //    add to the operator-wide batch window. A suspended session is not
-        //    in the active set, so it falls through to the batch window and a
-        //    new session is created — suspended sessions never receive injections
-        //    (CONTEXT.md alert pipeline).
-        const activeSessionId = dispatcher.getActiveAlertSession();
-        if (activeSessionId !== null) {
-          dispatcher.injectAlert(activeSessionId, alert);
-          fastify.log.info(
-            { alertId: alert.sourceAlertId, sessionId: activeSessionId },
-            "alert injected into active run",
-          );
-        } else {
-          batchWindow.add(alert);
-          fastify.log.info(
-            { alertId: alert.sourceAlertId, type: alert.alertType },
-            "alert added to batch window",
-          );
-        }
-
-        enqueued++;
-      }
-
-      return reply
-        .code(200)
-        .send({ received: alerts.length, enqueued, skipped });
-    },
-  );
+    return reply.code(200).send({ received: alerts.length, enqueued, skipped });
+  });
 }
 
 function extractToken(

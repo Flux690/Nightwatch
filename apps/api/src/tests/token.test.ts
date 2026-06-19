@@ -211,7 +211,6 @@ describe("Runner token lifecycle (issue 038)", () => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Nightwatch-Runner-Id": "runner-reconnect-denied",
           },
         });
         ws.on("close", (c) => resolve(c));
@@ -234,7 +233,6 @@ describe("Runner token lifecycle (issue 038)", () => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Nightwatch-Runner-Id": "runner-accept",
           },
         });
         ws.on("message", (raw) => {
@@ -254,7 +252,6 @@ describe("Runner token lifecycle (issue 038)", () => {
           headers: {
             Authorization:
               "Bearer nwr_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            "X-Nightwatch-Runner-Id": "runner-reject",
           },
         });
         ws.on("close", (c) => resolve(c));
@@ -265,9 +262,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
     it("closes with 4001 when no Authorization header is sent", async () => {
       const code = await new Promise<number>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
-          headers: { "X-Nightwatch-Runner-Id": "runner-noauth" },
-        });
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`);
         ws.on("close", (c) => resolve(c));
         ws.on("error", () => resolve(4001));
       });
@@ -289,7 +284,6 @@ describe("Runner token lifecycle (issue 038)", () => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Nightwatch-Runner-Id": "runner-revoke",
           },
         });
         ws.on("message", async (raw) => {
@@ -324,7 +318,6 @@ describe("Runner token lifecycle (issue 038)", () => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Nightwatch-Runner-Id": "runner-lastseen",
           },
         });
         ws.on("message", (raw) => {
@@ -375,4 +368,3 @@ describe("Runner token lifecycle (issue 038)", () => {
     });
   });
 });
-
