@@ -29,8 +29,47 @@ import type {
   SessionMessage,
   SessionMeta,
 } from "@nightwatch/shared";
-import type { ProviderMessage, ToolResult, ToolUse } from "../llm/types.js";
+import type {
+  LLMProvider,
+  ProviderMessage,
+  ToolResult,
+  ToolUse,
+} from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
+
+// Sole writer of session_messages. Diffs the provider's own snapshot against
+// what's already persisted, writes exactly that diff (plain append, or atomically
+// with an interrupt row when suspending), and publishes each new message. A
+// hand-authored message can never reach the transcript because nothing but the
+// provider's snapshot ever feeds this function.
+function persistNewTurns(
+  provider: LLMProvider,
+  sessionId: string,
+  fromSeq: number,
+  interrupt?: PendingHumanInput,
+): number {
+  const snap = provider.snapshot();
+  const newMessages: SessionMessage[] = [];
+  for (let seq = fromSeq; seq < snap.length; seq++) {
+    const m = snap[seq];
+    if (!m) continue;
+    newMessages.push({
+      sessionId,
+      seq,
+      role: m.role,
+      content: m.content,
+      providerContent: m.providerContent,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  if (interrupt) {
+    appendMessagesAndInterrupt(newMessages, interrupt);
+  } else {
+    appendSessionMessages(newMessages);
+  }
+  for (const message of newMessages) publishRunFinished(sessionId, message);
+  return snap.length;
+}
 
 export interface RunInvestigationInput {
   sessionId: string;
@@ -88,23 +127,7 @@ export async function runInvestigation(
     }
     provider.appendToolResults(input.resumeToolResults);
     // Persist the tool_results turn (with correct providerContent from the provider).
-    const snap = provider.snapshot();
-    const newMessages: SessionMessage[] = [];
-    for (let seq = persistedCount; seq < snap.length; seq++) {
-      const m = snap[seq];
-      if (!m) continue;
-      newMessages.push({
-        sessionId,
-        seq,
-        role: m.role,
-        content: m.content,
-        providerContent: m.providerContent,
-        createdAt: new Date().toISOString(),
-      });
-    }
-    appendSessionMessages(newMessages);
-    for (const message of newMessages) publishRunFinished(sessionId, message);
-    persistedCount = snap.length;
+    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     if (input.userMessage) provider.appendUserMessage(input.userMessage);
@@ -126,23 +149,7 @@ export async function runInvestigation(
   createSession(sessionMeta, alert);
 
   const persist = (): void => {
-    const snap = provider.snapshot();
-    const newMessages: SessionMessage[] = [];
-    for (let seq = persistedCount; seq < snap.length; seq++) {
-      const m = snap[seq];
-      if (!m) continue;
-      newMessages.push({
-        sessionId,
-        seq,
-        role: m.role,
-        content: m.content,
-        providerContent: m.providerContent,
-        createdAt: new Date().toISOString(),
-      });
-    }
-    appendSessionMessages(newMessages);
-    for (const message of newMessages) publishRunFinished(sessionId, message);
-    persistedCount = snap.length;
+    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   };
 
   let toolCallCount = 0;
@@ -288,23 +295,12 @@ export async function runInvestigation(
         claimedAt: null,
         createdAt: new Date().toISOString(),
       };
-      const snap = provider.snapshot();
-      const newMessages: SessionMessage[] = [];
-      for (let seq = persistedCount; seq < snap.length; seq++) {
-        const m = snap[seq];
-        if (!m) continue;
-        newMessages.push({
-          sessionId,
-          seq,
-          role: m.role,
-          content: m.content,
-          providerContent: m.providerContent,
-          createdAt: new Date().toISOString(),
-        });
-      }
-      appendMessagesAndInterrupt(newMessages, interrupt);
-      for (const message of newMessages) publishRunFinished(sessionId, message);
-      persistedCount = snap.length;
+      persistedCount = persistNewTurns(
+        provider,
+        sessionId,
+        persistedCount,
+        interrupt,
+      );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
       const clarInput = isClarificationGate
         ? (gatedTool.input as {
