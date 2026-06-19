@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AgentConfig } from "@nightwatch/shared";
+import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
 const mockFinalChatCompletion = vi.fn();
@@ -152,6 +153,37 @@ describe("OpenAIProvider", () => {
     expect(response.toolUses).toHaveLength(1);
     expect(response.toolUses[0].name).toBe("get_container_list");
     expect(response.toolUses[0].id).toBe("call-123");
+  });
+
+  describe("seed", () => {
+    it("reconstructs a well-formed message from role/content when providerContent is null", async () => {
+      provider.seed([
+        { role: "user", content: "CPU spike detected.", providerContent: null },
+      ]);
+      mockFinalChatCompletion.mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: "ack",
+              tool_calls: undefined,
+            },
+          },
+        ],
+      });
+
+      await provider.chat([READ_TOOL]);
+
+      const callArgs = mockCompletionsStream.mock.calls[0]?.[0] as {
+        messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+      };
+      expect(callArgs.messages).toContainEqual({
+        role: "user",
+        content: "CPU spike detected.",
+      });
+      expect(callArgs.messages.every((m) => m !== undefined)).toBe(true);
+    });
   });
 
   describe("OpenRouter reasoning_details", () => {

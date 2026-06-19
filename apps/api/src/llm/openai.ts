@@ -145,12 +145,15 @@ export class OpenAIProvider implements LLMProvider {
 
   seed(history: ProviderMessage[]): void {
     // The system prompt lives in the message array for OpenAI, so it is
-    // re-prepended here rather than restored from the transcript.
+    // re-prepended here rather than restored from the transcript. Messages
+    // persisted without providerContent (predating its introduction) fall
+    // back to a plain role/content reconstruction, matching Anthropic.
     this.messages = [
       { role: "system", content: this.system },
-      ...history.map(
-        (m) =>
-          m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+      ...history.map((m) =>
+        m.providerContent != null
+          ? (m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam)
+          : { role: m.role, content: m.content },
       ),
     ];
   }
