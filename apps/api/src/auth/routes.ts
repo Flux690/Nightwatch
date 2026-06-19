@@ -1,5 +1,6 @@
 import { hash, verify } from "argon2";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { AuthStatusResponse } from "@nightwatch/shared";
 import {
   mintSession,
   requireSession,
@@ -95,8 +96,12 @@ export async function registerAuthRoutes(
     },
   );
 
-  fastify.get("/auth/status", async (request) => {
-    if (!getOwnerCredentials()) return { ownerExists: false };
-    return { ownerExists: true, authenticated: await isAuthenticated(request) };
+  fastify.get("/auth/status", async (request): Promise<AuthStatusResponse> => {
+    const owner = getOwnerCredentials();
+    if (!owner) return { ownerExists: false };
+    if (!(await isAuthenticated(request))) {
+      return { ownerExists: true, authenticated: false };
+    }
+    return { ownerExists: true, authenticated: true, email: owner.email };
   });
 }

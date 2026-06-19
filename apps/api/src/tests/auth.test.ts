@@ -158,7 +158,7 @@ describe("GET /auth/status", () => {
     });
   });
 
-  it("returns { ownerExists: true, authenticated: true } with a valid cookie", async () => {
+  it("returns { ownerExists: true, authenticated: true, email } with a valid cookie", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/auth/status",
@@ -168,6 +168,7 @@ describe("GET /auth/status", () => {
     expect(JSON.parse(res.body)).toEqual({
       ownerExists: true,
       authenticated: true,
+      email: "admin@example.com",
     });
   });
 

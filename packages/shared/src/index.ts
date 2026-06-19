@@ -1,4 +1,5 @@
 export type { AlertSeverity, NormalizedAlert } from "./alerts.js";
+export type { AuthStatusResponse } from "./auth.js";
 export type {
   GetContainerListInput,
   ContainerInfo,
@@ -60,7 +61,11 @@ export type {
   ApprovalResponse,
   RespondRequest,
 } from "./approvals.js";
-export type { CapabilityManifest, MetricSnapshot, RunnerRecord } from "./runner.js";
+export type {
+  CapabilityManifest,
+  MetricSnapshot,
+  RunnerRecord,
+} from "./runner.js";
 export type { SessionRole, SessionMeta, SessionMessage } from "./sessions.js";
 export type {
   LLMProviderName,
