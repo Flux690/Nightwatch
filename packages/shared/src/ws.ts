@@ -57,19 +57,6 @@ export interface RunnerHeartbeatMessage extends WsEnvelope {
   payload: { timestamp: string };
 }
 
-// API → Console: real-time incident update
-// AG-UI: INCIDENT_UPDATE
-export interface ConsoleIncidentUpdate extends WsEnvelope {
-  type: "INCIDENT_UPDATE";
-  payload: {
-    incidentId: string;
-    token: string;
-    status: string;
-    rootCauseSummary?: string;
-    awaitingApproval?: boolean;
-  };
-}
-
 // API → Console: interrupt resolved (approved, rejected, context added, or clarification answered).
 // AG-UI: INTERRUPT_RESOLVED — paired with the INTERRUPT that preceded it.
 export interface ConsoleHumanInputResolved extends WsEnvelope {
@@ -122,8 +109,8 @@ export interface ConsoleToolCallStart extends WsEnvelope {
 }
 
 // API → Console: a gated tool call is paused awaiting human approval or a
-// clarifying question is waiting for an answer. incidentId addresses
-// POST /incidents/:id/approve (approval) or /incidents/:id/answer (clarification).
+// clarifying question is waiting for an answer. Resolved via
+// POST /sessions/:id/respond.
 // AG-UI: INTERRUPT
 export interface ConsoleHumanInputRequired extends WsEnvelope {
   type: "HUMAN_INPUT_REQUIRED";

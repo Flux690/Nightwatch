@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -263,7 +262,6 @@ describe("state inversion: persistence and reads are API-local", () => {
 
 describe("state inversion: opening alert context stays alert-scoped", () => {
   let cleanupDb: () => void;
-  const TOKEN = `tok-${randomUUID()}`;
 
   beforeAll(() => {
     cleanupDb = useTempDb();
@@ -277,7 +275,6 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
   it("does not inject past incident history into the opening alert context", async () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
-      token: TOKEN,
       runnerId: "runner-history",
       targetIdentifier: "web-01",
       alertType: "HighMemory",
@@ -292,24 +289,4 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
     expect(firstUserMessage).not.toContain("memory leak in image v12");
     expect(firstUserMessage).not.toContain("swap exhaustion under load");
   });
-
-  it("never puts the deployment token in the opening context (it is a secret)", () => {
-    const secret = `nwr_${randomUUID()}-supersecret`;
-    const alert: NormalizedAlert = {
-      sourceAlertId: "src-token",
-      token: secret,
-      runnerId: "runner-secret",
-      targetIdentifier: "web-01",
-      alertType: "HighCPU",
-      severity: "warning",
-      firedAt: new Date().toISOString(),
-      rawPayload: {},
-    };
-
-    // The token authenticates the alert but the LLM never needs it -
-    // and the opening message is sent to an external provider.
-    const { firstUserMessage } = buildInitialContext([alert]);
-    expect(firstUserMessage).not.toContain(secret);
-  });
 });
-

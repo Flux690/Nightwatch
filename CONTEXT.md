@@ -37,7 +37,7 @@ the v1 infrastructure:
 - **Redis + BullMQ are gone.** They existed for multi-instance SaaS scaling. A
   single-operator deployment is one Node process; queuing is an in-process
   dispatcher, live events are an in-process event bus.
-- **Postgres + Prisma are gone.** The API's durable state is six small tables in
+- **Postgres + Prisma are gone.** The API's durable state is five small tables in
   one SQLite file.
 - **"Runner is the system of record" is inverted.** That invariant existed so
   user data never touched the *hosted* API. Self-hosted, the API runs on the
@@ -76,7 +76,7 @@ Operator (console chat)    ──→ POST /chat ──────────�
 
 ## State model
 
-One SQLite file on the API (better-sqlite3, WAL mode). Six tables:
+One SQLite file on the API (better-sqlite3, WAL mode). Five tables:
 
 | Table | Holds |
 |---|---|
@@ -84,13 +84,12 @@ One SQLite file on the API (better-sqlite3, WAL mode). Six tables:
 | `config` | agent/model settings (one row; API key AES-256-GCM encrypted) |
 | `sessions` | one row per session: id, title, originating alert (JSON), createdAt. Top-level (operator-owned), not scoped to a runner token; the originating runner is metadata inside the alert JSON. Chat vs alert is derived from whether an originating alert exists, not stored |
 | `session_messages` | the transcript; `UNIQUE(session_id, seq)`; `providerContent` JSON for exact provider-turn rebuild |
-| `incidents` | currently escalation records only (root cause, action, resolution note, recurrence); finding extraction / episodic memory is deferred |
-| `pending_interrupts` | the durable "waiting on a human" marker (see Interrupts) |
+| `pending_human_input` | the durable "waiting on a human" marker (see Interrupts) |
 
 **Derived, never stored:**
 - *running* = sessionId is in the in-memory active set (a crash means it is not
   running, so storing it would lie)
-- *awaiting human* = a `pending_interrupts` row exists
+- *awaiting human* = a `pending_human_input` row exists
 - a session has **no status column and no run-state enum** — a session is a
   thread, not a state machine
 
@@ -99,7 +98,7 @@ The runner stores nothing. No history.db, no transcript tables.
 ## The loop (one loop, two triggers)
 
 One agentic loop, one system prompt, one session type. An **alert** authors the
-opening user message (alert + incident history context), or a **human** does
+opening user message (alert context), or a **human** does
 (chat). Same tools, same gates. The loop: `provider.chat()` → dispatch tool calls
 (platform tools in-process, runner tools via `sendCommand`) → persist new
 transcript turns locally in a transaction → repeat, until the model ends its
@@ -114,7 +113,7 @@ conversation with zero LLM calls.
 
 When the model calls a gated tool (`REQUIRES_APPROVAL`) or `request_clarification`:
 
-1. Persist the assistant turn + one `pending_interrupts` row
+1. Persist the assistant turn + one `pending_human_input` row
    `{sessionId, toolUseId, kind, toolName, toolInput, completedResults, createdAt}`
    in the same transaction.
 2. Publish the `INTERRUPT` event to the console.
@@ -149,10 +148,12 @@ Every tool_use is answered by exactly one tool_result.
 **Budgets:** each dispatch gets a fresh `maxToolCalls` / `hardTimeoutMs` budget.
 Resumes require a human action, so budgets cannot loop unattended.
 
-**Escalation means the agent gave up - nothing else.** The two escalation paths
-(model refusal, budget/timeout exhaustion) write an incident with an escalated
-outcome and publish a console event. A human must be able to find out. Ending a
-turn in plain text is a successful finish, not an escalation.
+**There is no escalation concept.** Refusal, rejection, and a normal finish all
+end the same way: the model's own plain-text turn. Budget/timeout exhaustion
+triggers one forced wrap-up turn (`provider.chat()` with an empty tool list, so
+the model must answer in prose) before the run ends. There is no synthetic
+assistant message, no separate "agent gave up" state, and no console event for
+it - the transcript only ever holds what the provider actually produced.
 
 ## Alert pipeline
 
@@ -208,7 +209,7 @@ session starts instead. Inbox leftovers at run end become new sessions.
   authenticate with the owner session (`nw_auth`; D15). The console WS validates
   the cookie and an `Origin` allow-list.
 - Bearer tokens never appear in identifiers, logs, or URLs we control
-  (incident/session ids are UUIDs).
+  (session ids are UUIDs).
 - The approval gate is architectural: a runner receives a write command only
   after a human resolved the interrupt. The LLM cannot tell the gate exists.
 - Env var **values** are never read (names only). Log/tool content is untrusted
@@ -224,7 +225,7 @@ server, the one-time `connect.sh` command, remove a server), `/settings`
 (provider/model/loop config, account), `/login` (setup-or-login, two-state).
 
 - **Attention queue** — global, shell-level count of sessions awaiting a human,
-  read from `pending_interrupts` (correct on first load, live via WS).
+  read from `pending_human_input` (correct on first load, live via WS).
 - **Approval card** — exact command + risk + Approve/Reject; precedes the tool
   card; the composer is the "Other".
 - **Clarification card** — option buttons + composer-as-Other.
@@ -253,18 +254,14 @@ server, the one-time `connect.sh` command, remove a server), `/settings`
   alert or a human chat message. **Top-level (operator-owned), not scoped to a
   runner; may span runners.** No status; never "concludes".
 - **Run** — one dispatch of the loop over a session. Ephemeral. Ends when the
-  model replies in plain text (no tool call), an interrupt, or a budget/escalation
-  exit.
+  model replies in plain text (no tool call), an interrupt, or a budget wrap-up
+  turn.
 - **Interrupt** — the durable suspension of a run awaiting a human
   (`kind: approval | clarification`). The only gate mechanism.
 - **Transcript** — the persisted `session_messages`; sufficient to rebuild exact
   provider turns on resume.
-- **Incident** — optional child artifact of a session: currently an escalation
-  record only. Finding extraction / episodic memory for future runs is deferred.
 - **Trigger** — what starts a session: an alert or a human chat message. Derived
   from whether an originating alert exists, not stored as a field.
-- **Escalate** — the agent hands off to the human, as a recorded incident + console
-  event (never silently).
 - **Integration** — a public-SaaS source the API reaches directly with a stored
   credential (GitHub, Slack…). Distinct from a runner: no in-network agent needed.
 - **Vertical slice / tracer bullet** — an issue that cuts through all layers and
@@ -308,9 +305,10 @@ Tool catalog: the source of truth is `packages/shared/src/tools.ts` +
   mixed turns suspend cleanly. Parallel reads across runners are a core win.
 - **D10 Every tool_use is answered by exactly one tool_result** (provider
   contract; injections ride inside the tool_results user message).
-- **D11 better-sqlite3 everywhere, no ORM.** Six tables don't need Prisma;
+- **D11 better-sqlite3 everywhere, no ORM.** Five tables don't need Prisma;
   synchronous, transactional, one driver.
-- **D12 Episodic memory is plain text.** Recent incident records injected at run
+- **D12 Episodic memory will be plain text.** Deferred (no incident/finding
+  table exists yet); when built, recent incident records get injected at run
   start. No vector store, no embeddings, no RAG at this scale.
 - **D13 BYO monitoring.** We never own monitoring; anything that can POST a
   webhook is a signal source. The bundled Prometheus/Alertmanager/cAdvisor

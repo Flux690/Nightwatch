@@ -7,7 +7,7 @@ load-bearing walls of the system.
 - Shared types belong in `packages/shared` only. Never define TypeScript types
   or interfaces in `apps/`.
 - The API's SQLite file is the single system of record (`tokens`, `config`,
-  `sessions`, `session_messages`, `incidents`, `pending_interrupts`). The runner
+  `sessions`, `session_messages`, `pending_human_input`). The runner
   is stateless — its only persistent state is its `runner-id` file. Never add
   durable storage to the runner.
 - No Redis, no BullMQ, no Postgres, no ORM. Background work runs on the
@@ -20,7 +20,7 @@ load-bearing walls of the system.
   to a runner. No code in `apps/api` may write to a runner socket directly.
 - `REQUIRES_APPROVAL` in `apps/api/src/investigation/tools.ts` is the gate set.
   Gated tools and `request_clarification` suspend the run via a
-  `pending_interrupts` row — the loop never awaits a human decision in memory,
+  `pending_human_input` row — the loop never awaits a human decision in memory,
   and there is no decision timeout. Resolution = append tool_result, delete the
   row, reseed from the transcript, redispatch. Any new remediation tool must be
   added to `REQUIRES_APPROVAL` before its handler is wired up — never after.
@@ -34,5 +34,5 @@ load-bearing walls of the system.
   appears in logs, identifiers, or URLs we control. Every surface that accepts a
   token (ingest, chat, runner WS, console WS) validates it.
 - Sessions have no status column and runs have no state enum. "Awaiting human"
-  is derived from `pending_interrupts`; "running" from the in-memory active set.
+  is derived from `pending_human_input`; "running" from the in-memory active set.
   Do not persist what can be derived.

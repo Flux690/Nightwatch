@@ -178,7 +178,6 @@ function alertmanagerBody(fingerprint: string, severity = "warning") {
 function alert(tokenId: string, sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
-    token: tokenId,
     runnerId: tokenId,
     targetIdentifier: "web-01",
     alertType: "HighCPU",

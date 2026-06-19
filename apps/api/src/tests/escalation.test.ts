@@ -25,7 +25,6 @@ import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerChatRoutes } from "../chat/routes.js";
-import { registerIncidentRoutes } from "../incidents/routes.js";
 import { registerSessionRoutes } from "../sessions/routes.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
@@ -97,7 +96,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
     await registerChatRoutes(server);
-    await registerIncidentRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -239,7 +237,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
-      token: TEST_TOKEN,
       runnerId: TEST_RUNNER_ID,
       targetIdentifier: "web-01",
       alertType: "ContainerDown",

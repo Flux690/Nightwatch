@@ -22,7 +22,6 @@ function makeAlert(
 ): NormalizedAlert {
   return {
     sourceAlertId,
-    token: "tok",
     runnerId,
     targetIdentifier: "web-01",
     alertType: "HighCPU",
