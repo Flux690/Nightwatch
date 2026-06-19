@@ -119,11 +119,14 @@ const { mockCreateProvider, releaseNext, releaseAll, setTurns } = vi.hoisted(
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
+import Fastify from "fastify";
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import { approvePendingHumanInput } from "../human-input/service.js";
+import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
   resolveCommand,
@@ -147,6 +150,30 @@ const READ_TURN = {
     },
   ],
 };
+
+// Alertmanager-shaped body for driving the real POST /alerts/ingest route.
+function alertmanagerBody(fingerprint: string, severity = "warning") {
+  return {
+    alerts: [
+      {
+        status: "firing",
+        labels: { alertname: "HighCPU", severity, container: "web-01" },
+        annotations: { summary: "CPU high" },
+        startsAt: new Date().toISOString(),
+        endsAt: "0001-01-01T00:00:00Z",
+        fingerprint,
+      },
+    ],
+    version: "4",
+    groupKey: "test",
+    receiver: "nightwatch",
+    status: "firing",
+    groupLabels: {},
+    commonLabels: {},
+    commonAnnotations: {},
+    externalURL: "http://localhost:9093",
+  };
+}
 
 function alert(
   tokenId: string,
@@ -336,6 +363,100 @@ describe("mid-run alert injection (loop seam)", () => {
     // The leftover session's opening message is for the leftover alert
     releaseNext(); // free-form finish for the leftover session
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
+  });
+
+  // Regression for H3: a resume dispatch (human-input/service.ts) carries no
+  // `alert` field, so the dispatcher must recover alert identity from the
+  // session itself - otherwise the post-approval phase looks alert-free and
+  // the real /alerts/ingest route misroutes correlated alerts into new
+  // sessions instead of injecting them, and re-fires of the same alert are
+  // no longer deduped.
+  it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
+    const { id: tokenId, plaintext: tokenPlaintext } =
+      generateToken("inject-resume");
+    registerRunner(
+      tokenId,
+      (raw: string) => {
+        const msg = JSON.parse(raw) as RunnerCommandMessage;
+        resolveCommand({
+          correlationId: msg.payload.correlationId,
+          success: true,
+          result: { restarted: true },
+        });
+      },
+      () => {},
+    );
+
+    const GATED_TURN = {
+      text: "Restarting.",
+      toolUses: [
+        {
+          id: "tu-gate-resume",
+          name: "restart_container",
+          input: {
+            containerName: "web-01",
+            rationale: "test",
+            risk: "low",
+            estimatedDowntimeSeconds: 1,
+          },
+        },
+      ],
+    };
+    // Turn 1: gated tool -> run suspends. Turn 2: free-form finish for the resume.
+    setTurns([GATED_TURN, FINISH_TURN]);
+
+    const sessionId = randomUUID();
+    dispatcher.dispatch({
+      sessionId,
+      alert: alert(tokenId, "primary-resume"),
+    });
+
+    releaseNext();
+    await waitFor(() => hasPendingHumanInput(sessionId));
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+    // Approve: the resume dispatch this issues carries no `alert` field.
+    await approvePendingHumanInput(sessionId);
+    await waitFor(() => dispatcher.isSessionRunning(sessionId));
+
+    // The core H3 fix: the resumed session is still recognized as the active
+    // alert investigation even though this dispatch carried no alert.
+    expect(dispatcher.getActiveAlertSession()).toBe(sessionId);
+
+    const server = Fastify({ logger: false });
+    await registerAlertRoutes(server);
+    await server.ready();
+
+    // A correlated alert from the same server, ingested through the real
+    // route, must inject into the resumed session rather than spawn a new one.
+    const correlated = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": tokenPlaintext },
+      payload: alertmanagerBody("correlated-resume"),
+    });
+    expect(JSON.parse(correlated.body)).toMatchObject({
+      enqueued: 1,
+      skipped: 0,
+    });
+    expect(dispatcher.drainInbox(sessionId)).toHaveLength(1);
+
+    // The same alert re-firing while the resumed run is active is deduped.
+    const refire = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": tokenPlaintext },
+      payload: alertmanagerBody("primary-resume"),
+    });
+    expect(JSON.parse(refire.body)).toMatchObject({
+      enqueued: 0,
+      skipped: 1,
+    });
+
+    await server.close();
+    releaseNext(); // free-form finish for the resumed run
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    unregisterRunner(tokenId);
   });
 });
 

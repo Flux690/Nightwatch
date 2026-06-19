@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { runInvestigation } from "../investigation/loop.js";
 import type { RunInvestigationInput } from "../investigation/loop.js";
+import { getSession } from "../db/sessions.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -34,6 +35,10 @@ export interface Dispatcher {
 
 export interface DispatcherOptions {
   run: (input: RunInvestigationInput) => Promise<void>;
+  // The session's durable originating alert (null for chat sessions). A resume
+  // dispatch never carries `input.alert` (see human-input/service.ts), so alert
+  // identity must be derivable from the session itself, not just the live input.
+  getAlertForSession: (sessionId: string) => NormalizedAlert | null;
 }
 
 // A NUL separator cannot appear in a runnerId or sourceAlertId
@@ -44,15 +49,20 @@ function dedupKey(runnerId: string, sourceAlertId: string): string {
 }
 
 export function createDispatcher(opts: DispatcherOptions): Dispatcher {
-  const { run } = opts;
+  const { run, getAlertForSession } = opts;
 
   // Multiset: a dedup key is present while any active run carries it.
   const active = new Map<string, number>();
   const activeSessionIds = new Set<string>();
-  // The single active alert session, if any. Alert injection is operator-wide.
-  let activeAlertSessionId: string | null = null;
   // Per-session inbox for mid-run injected alerts. Drained at tool boundaries.
   const inbox = new Map<string, NormalizedAlert[]>();
+
+  // D4: derive, don't cache. `input.alert` is only present on the original
+  // dispatch - a resume carries no alert, so identity falls back to the
+  // session's durable originating alert.
+  function resolveAlert(input: RunInvestigationInput): NormalizedAlert | null {
+    return input.alert ?? getAlertForSession(input.sessionId);
+  }
 
   function retain(key: string | null): void {
     if (key === null) return;
@@ -67,16 +77,12 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   }
 
   function start(input: RunInvestigationInput): void {
+    const alert = resolveAlert(input);
     const key =
-      input.alert != null
-        ? dedupKey(input.alert.runnerId, input.alert.sourceAlertId)
-        : null;
+      alert != null ? dedupKey(alert.runnerId, alert.sourceAlertId) : null;
 
     retain(key);
     activeSessionIds.add(input.sessionId);
-    if (input.alert != null) {
-      activeAlertSessionId = input.sessionId;
-    }
 
     void run(input)
       .catch((err: unknown) => {
@@ -87,8 +93,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       })
       .finally(() => {
         activeSessionIds.delete(input.sessionId);
-        if (input.alert != null) {
-          activeAlertSessionId = null;
+        if (alert != null) {
           // Dispatch inbox leftovers as one new session (CONTEXT.md alert pipeline:
           // "inbox leftovers at run end become new sessions"). Multiple leftovers
           // batch together as additionalAlerts — identical to the batch-window
@@ -119,7 +124,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     },
 
     getActiveAlertSession(): string | null {
-      return activeAlertSessionId;
+      for (const sessionId of activeSessionIds) {
+        if (getAlertForSession(sessionId) != null) return sessionId;
+      }
+      return null;
     },
 
     injectAlert(sessionId: string, alert: NormalizedAlert): void {
@@ -136,4 +144,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   };
 }
 
-export const dispatcher = createDispatcher({ run: runInvestigation });
+export const dispatcher = createDispatcher({
+  run: runInvestigation,
+  getAlertForSession: (sessionId) =>
+    getSession(sessionId)?.originatingAlert ?? null,
+});

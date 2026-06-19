@@ -16,14 +16,13 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function alertInput(
+function makeAlert(
   sourceAlertId: string,
   runnerId = "runner-1",
-  token = "tok",
-): RunInvestigationInput {
-  const alert: NormalizedAlert = {
+): NormalizedAlert {
+  return {
     sourceAlertId,
-    token,
+    token: "tok",
     runnerId,
     targetIdentifier: "web-01",
     alertType: "HighCPU",
@@ -31,7 +30,37 @@ function alertInput(
     firedAt: new Date().toISOString(),
     rawPayload: {},
   };
-  return { sessionId: `s-${sourceAlertId}`, alert };
+}
+
+function alertInput(
+  sourceAlertId: string,
+  runnerId = "runner-1",
+): RunInvestigationInput {
+  return {
+    sessionId: `s-${sourceAlertId}`,
+    alert: makeAlert(sourceAlertId, runnerId),
+  };
+}
+
+// Fakes the durable session->alert lookup (the real one is
+// `getSession(id)?.originatingAlert ?? null`). Tests register a session's alert
+// here the same way `createSession` would have persisted it, so a resumed
+// dispatch (no `input.alert`) still resolves correctly via the lookup fallback.
+function fakeAlertLookup(): {
+  getAlertForSession: (sessionId: string) => NormalizedAlert | null;
+  register: (sessionId: string, alert: NormalizedAlert) => void;
+} {
+  const bySession = new Map<string, NormalizedAlert>();
+  return {
+    getAlertForSession: (sessionId) => bySession.get(sessionId) ?? null,
+    register: (sessionId, alert) => bySession.set(sessionId, alert),
+  };
+}
+
+// No lookup match for any session — for tests that only exercise input.alert
+// (the lookup is purely a resume-time fallback) or chat/resume-without-alert.
+function noAlertLookup(): NormalizedAlert | null {
+  return null;
 }
 
 describe("dispatcher", () => {
@@ -43,6 +72,7 @@ describe("dispatcher", () => {
         started.push(input.sessionId);
         return gate.promise;
       },
+      getAlertForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("a"));
@@ -55,9 +85,12 @@ describe("dispatcher", () => {
 
   it("dedup keyed by runnerId+sourceAlertId; clears when settled", async () => {
     const gate = deferred();
-    const d = createDispatcher({ run: () => gate.promise });
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertForSession: noAlertLookup,
+    });
 
-    d.dispatch(alertInput("dup", "runner-1", "tok-1"));
+    d.dispatch(alertInput("dup", "runner-1"));
 
     // Same token + sourceAlertId → duplicate
     expect(d.isInvestigating("runner-1", "dup")).toBe(true);
@@ -73,11 +106,17 @@ describe("dispatcher", () => {
 
   it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
     const gate = deferred();
-    const d = createDispatcher({ run: () => gate.promise });
+    const lookup = fakeAlertLookup();
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertForSession: lookup.getAlertForSession,
+    });
 
     expect(d.getActiveAlertSession()).toBeNull();
 
-    d.dispatch(alertInput("a"));
+    const input = alertInput("a");
+    lookup.register(input.sessionId, input.alert!);
+    d.dispatch(input);
     expect(d.getActiveAlertSession()).toBe("s-a");
 
     gate.resolve();
@@ -88,7 +127,10 @@ describe("dispatcher", () => {
 
   it("getActiveAlertSession is null for chat/resume inputs (no alert)", async () => {
     const gate = deferred();
-    const d = createDispatcher({ run: () => gate.promise });
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertForSession: noAlertLookup,
+    });
 
     d.dispatch({ sessionId: "chat-1" });
     expect(d.getActiveAlertSession()).toBeNull();
@@ -98,7 +140,10 @@ describe("dispatcher", () => {
 
   it("does not track chat/resume inputs for dedup", async () => {
     const gate = deferred();
-    const d = createDispatcher({ run: () => gate.promise });
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertForSession: noAlertLookup,
+    });
 
     d.dispatch({ sessionId: "chat-1" });
     expect(d.isInvestigating("runner-1", "anything")).toBe(false);
@@ -108,7 +153,10 @@ describe("dispatcher", () => {
 
   it("isSessionRunning is true while running, false after settled", async () => {
     const gate = deferred();
-    const d = createDispatcher({ run: () => gate.promise });
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertForSession: noAlertLookup,
+    });
 
     d.dispatch(alertInput("a"));
     expect(d.isSessionRunning("s-a")).toBe(true);
@@ -129,21 +177,13 @@ describe("dispatcher", () => {
         gates.set(input.sessionId, g);
         return g.promise;
       },
+      getAlertForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("primary"));
     const primaryId = "s-primary";
 
-    const leftover: NormalizedAlert = {
-      sourceAlertId: "leftover",
-      token: "tok",
-      runnerId: "runner-1",
-      targetIdentifier: "web-01",
-      alertType: "HighCPU",
-      severity: "warning",
-      firedAt: new Date().toISOString(),
-      rawPayload: {},
-    };
+    const leftover = makeAlert("leftover");
     d.injectAlert(primaryId, leftover);
 
     gates.get(primaryId)!.resolve();
@@ -156,5 +196,92 @@ describe("dispatcher", () => {
 
     // Clean up the leftover run
     gates.get(started[1]!)?.resolve();
+  });
+
+  // Regression for H3: a resume dispatch never carries `input.alert` (see
+  // human-input/service.ts), so all alert-derived behavior must fall back to
+  // the injected session->alert lookup instead of going stale.
+  describe("resumed alert runs (no input.alert, derived via lookup)", () => {
+    it("getActiveAlertSession recovers the alert session on resume", async () => {
+      const gate = deferred();
+      const lookup = fakeAlertLookup();
+      const d = createDispatcher({
+        run: () => gate.promise,
+        getAlertForSession: lookup.getAlertForSession,
+      });
+
+      const resumedAlert = makeAlert("resumed");
+      lookup.register("s-resumed", resumedAlert);
+
+      // Resume dispatch: no `alert` field, just seed + resumeToolResults.
+      d.dispatch({ sessionId: "s-resumed", seed: [], resumeToolResults: [] });
+
+      expect(d.getActiveAlertSession()).toBe("s-resumed");
+
+      gate.resolve();
+      await flush();
+
+      expect(d.getActiveAlertSession()).toBeNull();
+    });
+
+    it("isInvestigating dedup is retained for a resumed alert run", async () => {
+      const gate = deferred();
+      const lookup = fakeAlertLookup();
+      const d = createDispatcher({
+        run: () => gate.promise,
+        getAlertForSession: lookup.getAlertForSession,
+      });
+
+      const resumedAlert = makeAlert("resumed-dup", "runner-9");
+      lookup.register("s-resumed-dup", resumedAlert);
+
+      d.dispatch({
+        sessionId: "s-resumed-dup",
+        seed: [],
+        resumeToolResults: [],
+      });
+
+      expect(d.isInvestigating("runner-9", "resumed-dup")).toBe(true);
+
+      gate.resolve();
+      await flush();
+
+      expect(d.isInvestigating("runner-9", "resumed-dup")).toBe(false);
+    });
+
+    it("inbox leftovers re-dispatch when a resumed alert run ends", async () => {
+      const started: string[] = [];
+      const gates = new Map<string, ReturnType<typeof deferred>>();
+      const lookup = fakeAlertLookup();
+      const d = createDispatcher({
+        run: (input) => {
+          started.push(input.sessionId);
+          const g = deferred();
+          gates.set(input.sessionId, g);
+          return g.promise;
+        },
+        getAlertForSession: lookup.getAlertForSession,
+      });
+
+      const resumedAlert = makeAlert("resumed-leftover");
+      lookup.register("s-resumed-leftover", resumedAlert);
+      d.dispatch({
+        sessionId: "s-resumed-leftover",
+        seed: [],
+        resumeToolResults: [],
+      });
+
+      const leftover = makeAlert("leftover-after-resume");
+      d.injectAlert("s-resumed-leftover", leftover);
+
+      gates.get("s-resumed-leftover")!.resolve();
+      await flush();
+      await flush();
+
+      expect(started.length).toBe(2);
+      expect(started[1]).not.toBe("s-resumed-leftover");
+
+      gates.get(started[1]!)?.resolve();
+    });
   });
 });
