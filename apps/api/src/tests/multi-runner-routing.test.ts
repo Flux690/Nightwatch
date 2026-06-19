@@ -209,23 +209,14 @@ describe("multi-runner routing", () => {
     tokenIdB = generateToken("routing-b").id;
 
     registerRunner(tokenIdA, makeSend(commandsA), () => {});
-    setRunnerManifest(
-      tokenIdA,
-      makeManifest("web-01", ["nginx", "api"]),
-    );
+    setRunnerManifest(tokenIdA, makeManifest("web-01", ["nginx", "api"]));
 
     registerRunner(tokenIdB, makeSend(commandsB), () => {});
-    setRunnerManifest(
-      tokenIdB,
-      makeManifest("db-02", ["postgres"]),
-    );
+    setRunnerManifest(tokenIdB, makeManifest("db-02", ["postgres"]));
 
     tokenId2 = generateToken("routing-cross").id;
     registerRunner(tokenId2, makeSend(commandsC), () => {});
-    setRunnerManifest(
-      tokenId2,
-      makeManifest("cache-01", ["redis"]),
-    );
+    setRunnerManifest(tokenId2, makeManifest("cache-01", ["redis"]));
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
@@ -420,7 +411,10 @@ describe("multi-runner routing", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "postgres is crashing" }),
     });
     expect(res.status).toBe(202);
@@ -429,7 +423,9 @@ describe("multi-runner routing", () => {
     // Wait for the approval interrupt — restart_container is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
       ),
     );
     // No runner has executed anything yet (sendCommand only runs after approval).
@@ -439,11 +435,14 @@ describe("multi-runner routing", () => {
     // Approve — the approve route calls sendCommand with the persisted toolInput
     // (which has containerName: "postgres"), routing it to runner-b.
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -487,4 +486,3 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
   });
 });
-

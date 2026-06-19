@@ -30,23 +30,11 @@ export function ChatInput({
     if (pendingInterrupt) {
       if (sessionId === null) return;
 
-      const { kind } = pendingInterrupt;
-      if (kind === "approval") {
-        await fetch(`/api/sessions/${sessionId}/add-context`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contextMessage: trimmed,
-            resolvedBy: "console",
-          }),
-        });
-      } else {
-        await fetch(`/api/sessions/${sessionId}/answer`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answer: trimmed, resolvedBy: "console" }),
-        });
-      }
+      await fetch(`/api/sessions/${sessionId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed, resolvedBy: "console" }),
+      });
       setText("");
       return;
     }

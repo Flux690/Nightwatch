@@ -503,7 +503,7 @@ describe("SessionTranscript", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("posts to the approve endpoint and disables both buttons on Approve", async () => {
+    it("posts to /respond with decision=approve and disables both buttons on Approve", async () => {
       setup();
 
       await waitFor(() => {
@@ -524,8 +524,14 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/approve",
-          expect.objectContaining({ method: "POST" }),
+          "/api/sessions/s1/respond",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              decision: "approve",
+              resolvedBy: "console",
+            }),
+          }),
         );
         expect(
           within(card).getByRole("button", { name: /approve/i }),
@@ -731,7 +737,7 @@ describe("SessionTranscript", () => {
       ).toBeInTheDocument();
     });
 
-    it("clicking an option posts to /answer and disables options", async () => {
+    it("clicking an option posts to /respond with text and disables options", async () => {
       setup();
 
       await waitFor(() => {
@@ -752,11 +758,11 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/answer",
+          "/api/sessions/s1/respond",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
-              answer: "nginx",
+              text: "nginx",
               resolvedBy: "console",
             }),
           }),
@@ -803,7 +809,7 @@ describe("SessionTranscript", () => {
       });
     });
 
-    it("multiSelect: posts all selected options when submitted", async () => {
+    it("multiSelect: joins selected options and posts to /respond as text", async () => {
       setup();
 
       await waitFor(() => {
@@ -826,11 +832,11 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/answer",
+          "/api/sessions/s1/respond",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
-              answer: ["nginx", "postgres"],
+              text: "nginx, postgres",
               resolvedBy: "console",
             }),
           }),
@@ -889,7 +895,7 @@ describe("SessionTranscript", () => {
       });
     }
 
-    it("posts to /add-context when user types while approval interrupt is pending", async () => {
+    it("posts to /respond with text when user types while approval interrupt is pending", async () => {
       setup();
 
       await waitFor(() => {
@@ -910,11 +916,11 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/add-context",
+          "/api/sessions/s1/respond",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
-              contextMessage: "Hold off, monitoring now",
+              text: "Hold off, monitoring now",
               resolvedBy: "console",
             }),
           }),
@@ -987,7 +993,7 @@ describe("SessionTranscript", () => {
   });
 
   describe("composer as Other for clarification", () => {
-    it("posts to /answer when user types while clarification interrupt is pending", async () => {
+    it("posts to /respond with text when user types while clarification interrupt is pending", async () => {
       setup();
 
       await waitFor(() => {
@@ -1023,11 +1029,11 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/answer",
+          "/api/sessions/s1/respond",
           expect.objectContaining({
             method: "POST",
             body: JSON.stringify({
-              answer: "Check memory too",
+              text: "Check memory too",
               resolvedBy: "console",
             }),
           }),

@@ -125,7 +125,7 @@ import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { approvePendingHumanInput } from "../human-input/service.js";
+import { respondToPendingHumanInput } from "../human-input/service.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
@@ -175,10 +175,7 @@ function alertmanagerBody(fingerprint: string, severity = "warning") {
   };
 }
 
-function alert(
-  tokenId: string,
-  sourceAlertId: string,
-): NormalizedAlert {
+function alert(tokenId: string, sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
     token: tokenId,
@@ -416,7 +413,7 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
     // Approve: the resume dispatch this issues carries no `alert` field.
-    await approvePendingHumanInput(sessionId);
+    await respondToPendingHumanInput(sessionId, { decision: "approve" });
     await waitFor(() => dispatcher.isSessionRunning(sessionId));
 
     // The core H3 fix: the resumed session is still recognized as the active
@@ -459,4 +456,3 @@ describe("mid-run alert injection (loop seam)", () => {
     unregisterRunner(tokenId);
   });
 });
-

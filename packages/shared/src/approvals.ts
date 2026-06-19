@@ -12,16 +12,8 @@ export interface ApprovalRequest {
   toolUseId: string; // Anthropic tool_use_id — correlation key
   kind?: "approval" | "clarification";
   status: ApprovalStatus;
-  comment?: string;
   createdAt: string;
   resolvedAt?: string;
-}
-
-export interface ApprovalDecision {
-  toolUseId: string;
-  action: "approve" | "reject" | "add_context";
-  comment?: string;
-  contextMessage?: string; // for add_context — injected as user message
 }
 
 export interface ApprovalResponse {
@@ -30,4 +22,10 @@ export interface ApprovalResponse {
   status: ApprovalStatus;
   resolvedBy: string;
   resolvedAt: string;
+}
+
+export interface RespondRequest {
+  decision?: "approve" | "reject";
+  text?: string;
+  resolvedBy?: string;
 }

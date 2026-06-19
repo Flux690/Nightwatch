@@ -167,16 +167,22 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "test" }),
     });
     expect(chatRes.status).toBe(202);
 
     // Wait for the interrupt row to appear in DB via the endpoint
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
-        headers: { Cookie: `nw_auth=${SESSION}` },
-      });
+      const r = await fetch(
+        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        {
+          headers: { Cookie: `nw_auth=${SESSION}` },
+        },
+      );
       const data = (await r.json()) as ApprovalRequest[];
       return data.length > 0 ? data : null;
     });
@@ -190,18 +196,23 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
     // Cleanup: reject to free the interrupt row
     await fetch(
-      `http://127.0.0.1:${port}/sessions/${found.sessionId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${found.sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-        body: JSON.stringify({ resolvedBy: "cleanup" }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
       },
     );
     unregisterRunner(tokA);
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`);
+    const res = await fetch(
+      `http://127.0.0.1:${port}/sessions/pending-human-input`,
+    );
     expect(res.status).toBe(401);
   });
 
@@ -242,16 +253,22 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "scope test" }),
     });
     expect(chatRes.status).toBe(202);
 
     // Operator-wide: endpoint returns the interrupt without needing a token param
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
-        headers: { Cookie: `nw_auth=${SESSION}` },
-      });
+      const r = await fetch(
+        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        {
+          headers: { Cookie: `nw_auth=${SESSION}` },
+        },
+      );
       const data = (await r.json()) as ApprovalRequest[];
       return data.length > 0 ? data : null;
     });
@@ -261,11 +278,14 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // Cleanup
     const found = body[0];
     await fetch(
-      `http://127.0.0.1:${port}/sessions/${found.sessionId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${found.sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-        body: JSON.stringify({ resolvedBy: "cleanup" }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
       },
     );
     unregisterRunner(tokC);
@@ -308,43 +328,57 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "empty after resolve" }),
     });
     expect(chatRes.status).toBe(202);
 
     // Wait for interrupt
     const body = await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
-        headers: { Cookie: `nw_auth=${SESSION}` },
-      });
+      const r = await fetch(
+        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        {
+          headers: { Cookie: `nw_auth=${SESSION}` },
+        },
+      );
       const data = (await r.json()) as ApprovalRequest[];
       return data.length > 0 ? data : null;
     });
 
     const sessionId = body[0].sessionId;
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/reject`, {
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-      body: JSON.stringify({ resolvedBy: "op" }),
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ decision: "reject", resolvedBy: "op" }),
     });
 
     // After resolution the list is empty
     await waitFor(async () => {
-      const r = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
-        headers: { Cookie: `nw_auth=${SESSION}` },
-      });
+      const r = await fetch(
+        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        {
+          headers: { Cookie: `nw_auth=${SESSION}` },
+        },
+      );
       const data = (await r.json()) as ApprovalRequest[];
       return data.length === 0 ? true : null;
     });
 
-    const resAfter = await fetch(`http://127.0.0.1:${port}/sessions/pending-human-input`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
-    });
+    const resAfter = await fetch(
+      `http://127.0.0.1:${port}/sessions/pending-human-input`,
+      {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      },
+    );
     const bodyAfter = (await resAfter.json()) as ApprovalRequest[];
     expect(bodyAfter.length).toBe(0);
 
     unregisterRunner(tokE);
   });
 });
-

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { getSession, getSessionMessages } from "../db/sessions.js";
+import { getSession } from "../db/sessions.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { ProviderMessage } from "../llm/types.js";
+import { buildSeed } from "../session/seed.js";
 
 export async function registerChatRoutes(
   fastify: FastifyInstance,
@@ -60,22 +60,13 @@ export async function registerChatRoutes(
           .send({ error: "session is busy: running or awaiting approval" });
       }
 
-      const history = getSessionMessages(sessionId);
-      const seed: ProviderMessage[] = history.map((m) => ({
-        role: m.role,
-        content: m.content,
-        providerContent: m.providerContent,
-      }));
-
+      const seed = buildSeed(sessionId);
       dispatcher.dispatch({
         sessionId,
         seed,
         userMessage: message,
       });
-      logger.info(
-        { sessionId, seeded: seed.length },
-        "session resumed",
-      );
+      logger.info({ sessionId, seeded: seed.length }, "session resumed");
       return reply.code(202).send({ sessionId });
     },
   );

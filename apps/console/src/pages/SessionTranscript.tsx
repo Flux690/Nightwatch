@@ -439,10 +439,10 @@ export function SessionView({
             : item,
         ),
       );
-      void fetch(`/api/sessions/${activeSessionId}/${action}`, {
+      void fetch(`/api/sessions/${activeSessionId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolvedBy: "console" }),
+        body: JSON.stringify({ decision: action, resolvedBy: "console" }),
       });
     },
     [activeSessionId],
@@ -457,10 +457,11 @@ export function SessionView({
             : item,
         ),
       );
-      void fetch(`/api/sessions/${activeSessionId}/answer`, {
+      const text = Array.isArray(answer) ? answer.join(", ") : answer;
+      void fetch(`/api/sessions/${activeSessionId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer, resolvedBy: "console" }),
+        body: JSON.stringify({ text, resolvedBy: "console" }),
       });
     },
     [activeSessionId],
@@ -679,10 +680,10 @@ export function SessionTranscript(): React.JSX.Element {
             : item,
         ),
       );
-      void fetch(`/api/sessions/${id}/${action}`, {
+      void fetch(`/api/sessions/${id}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolvedBy: "console" }),
+        body: JSON.stringify({ decision: action, resolvedBy: "console" }),
       });
     },
     [id],
@@ -697,10 +698,11 @@ export function SessionTranscript(): React.JSX.Element {
             : item,
         ),
       );
-      void fetch(`/api/sessions/${id}/answer`, {
+      const text = Array.isArray(answer) ? answer.join(", ") : answer;
+      void fetch(`/api/sessions/${id}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answer, resolvedBy: "console" }),
+        body: JSON.stringify({ text, resolvedBy: "console" }),
       });
     },
     [id],
