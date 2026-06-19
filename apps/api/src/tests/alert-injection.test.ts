@@ -10,111 +10,15 @@ import {
   it,
   vi,
 } from "vitest";
+import {
+  createContractFakeProvider,
+  createGateController,
+  type ScriptedTurn,
+} from "./contract-fake-provider.js";
 
-// Scripted provider: each chat() call parks until releaseNext() is called,
-// then resolves with the next turn in the script. snapshot() accumulates
-// messages so persist() inside the loop writes real session_message rows.
-const { mockCreateProvider, releaseNext, releaseAll, setTurns } = vi.hoisted(
-  () => {
-    type ToolUseItem = {
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-    };
-    type Turn = { toolUses: ToolUseItem[]; text: string };
-
-    let turns: Turn[] = [];
-    let turnIndex = 0;
-    const gates: Array<() => void> = [];
-
-    const make = () => {
-      const messages: Array<{
-        role: "user" | "assistant";
-        content: string;
-        providerContent: unknown;
-      }> = [];
-
-      return {
-        start: vi.fn((msg: string) => {
-          messages.push({
-            role: "user",
-            content: msg,
-            providerContent: { role: "user", content: msg },
-          });
-        }),
-        seed: vi.fn(),
-        snapshot: vi.fn(() => [...messages]),
-        appendToolResults: vi.fn(
-          (
-            results: Array<{ tool_use_id: string; content: string }>,
-            additionalText?: string,
-          ) => {
-            const text = [
-              results.map((r) => r.content).join("\n"),
-              additionalText,
-            ]
-              .filter(Boolean)
-              .join("\n");
-            messages.push({
-              role: "user",
-              content: text,
-              providerContent: { role: "user", content: results },
-            });
-          },
-        ),
-        appendUserMessage: vi.fn((msg: string) => {
-          messages.push({
-            role: "user",
-            content: msg,
-            providerContent: { role: "user", content: msg },
-          });
-        }),
-        chat: vi.fn(
-          (): Promise<{
-            stopReason: "tool_use";
-            toolUses: ToolUseItem[];
-            text: string;
-          }> => {
-            const turn = turns[turnIndex++] ??
-              turns[turns.length - 1] ?? { toolUses: [], text: "" };
-            return new Promise((resolve) => {
-              gates.push(() => {
-                messages.push({
-                  role: "assistant",
-                  content: turn.text,
-                  providerContent: { role: "assistant", content: turn.text },
-                });
-                resolve({
-                  stopReason: "tool_use",
-                  toolUses: turn.toolUses,
-                  text: turn.text,
-                });
-              });
-            });
-          },
-        ),
-      };
-    };
-
-    return {
-      mockCreateProvider: vi.fn(make),
-      releaseNext: (): void => {
-        gates.shift()?.();
-      },
-      releaseAll: (): void => {
-        const copy = [...gates];
-        gates.length = 0;
-        for (const g of copy) g();
-      },
-      setTurns: (t: Turn[]): void => {
-        turns = t;
-        turnIndex = 0;
-        gates.length = 0;
-        mockCreateProvider.mockImplementation(make);
-      },
-    };
-  },
-);
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
+}));
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
@@ -133,14 +37,26 @@ import {
   unregisterRunner,
 } from "../ws/router.js";
 
+// Shared FIFO gate: every chat() parks until released, so an alert can be
+// injected (or state asserted) while a run is parked mid-turn.
+const gate = createGateController();
+
+// Queue one provider per run, in order. A resume / leftover dispatch is a
+// separate run, so chain one script per run (per-instance scriptIndex). All
+// gated, so each chat() parks until releaseNext()/releaseAll().
+function queueRuns(...scripts: ScriptedTurn[][]): void {
+  for (const script of scripts) {
+    mockCreateProvider.mockImplementationOnce(() =>
+      createContractFakeProvider(script, { gate: gate.gate }),
+    );
+  }
+}
+
 // A free-form text finish: no tool call ends the run successfully.
-const FINISH_TURN = {
-  text: "Investigation complete.",
-  toolUses: [],
-};
+const FINISH: ScriptedTurn = { toolUses: [], text: "Investigation complete." };
 
 // Runner read tool — keeps the loop moving without introducing a human gate.
-const READ_TURN = {
+const READ: ScriptedTurn = {
   text: "",
   toolUses: [
     {
@@ -200,11 +116,11 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   beforeEach(() => {
-    mockCreateProvider.mockClear();
+    mockCreateProvider.mockReset();
   });
 
   afterEach(async () => {
-    releaseAll();
+    gate.releaseAll();
     // Let any remaining microtasks / run finally-blocks settle before cleanup.
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
@@ -224,8 +140,8 @@ describe("mid-run alert injection (loop seam)", () => {
       () => {},
     );
 
-    // Turn 1: runner read tool. Turn 2: free-form finish.
-    setTurns([READ_TURN, FINISH_TURN]);
+    // One run, two turns: runner read tool, then free-form finish.
+    queueRuns([READ, FINISH]);
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -243,7 +159,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     // Release turn 1 → loop executes get_container_list, drains inbox,
     // then calls appendToolResults(results, injectionText)
-    releaseNext();
+    gate.releaseNext();
 
     await waitFor(() => provider.appendToolResults.mock.calls.length > 0);
 
@@ -256,7 +172,7 @@ describe("mid-run alert injection (loop seam)", () => {
     expect(additionalText).toContain("injected-mr");
 
     // Release turn 2 and let the run finish cleanly.
-    releaseNext();
+    gate.releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
     unregisterRunner(tokenId);
   });
@@ -264,25 +180,27 @@ describe("mid-run alert injection (loop seam)", () => {
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const tokenId = generateToken("inject-sus").id;
 
-    // Turn 1: gated tool → run suspends. Turn 2: free-form finish for the resume.
-    setTurns([
-      {
-        text: "",
-        toolUses: [
-          {
-            id: "tu-gate",
-            name: "restart_container",
-            input: {
-              containerName: "web-01",
-              rationale: "test",
-              risk: "low",
-              estimatedDowntimeSeconds: 1,
+    // R1: gated tool → run suspends. R2 (new session): free-form finish.
+    queueRuns(
+      [
+        {
+          text: "",
+          toolUses: [
+            {
+              id: "tu-gate",
+              name: "restart_container",
+              input: {
+                containerName: "web-01",
+                rationale: "test",
+                risk: "low",
+                estimatedDowntimeSeconds: 1,
+              },
             },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
+          ],
+        },
+      ],
+      [FINISH],
+    );
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -291,7 +209,7 @@ describe("mid-run alert injection (loop seam)", () => {
     });
 
     // Release turn 1 → restart_container is gated → run suspends
-    releaseNext();
+    gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
@@ -316,16 +234,16 @@ describe("mid-run alert injection (loop seam)", () => {
     // The suspended session's inbox was not touched
     expect(dispatcher.drainInbox(sessionId)).toHaveLength(0);
 
-    releaseNext(); // free-form finish for the new session
+    gate.releaseNext(); // free-form finish for the new session
     await waitFor(() => !dispatcher.isSessionRunning(newSessionId));
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
     const tokenId = generateToken("inject-leftover").id;
 
-    // Single turn: free-form finish immediately. The loop exits before any
-    // appendToolResults call, so the inbox is never drained by the loop itself.
-    setTurns([FINISH_TURN]);
+    // R1: free-form finish immediately (loop exits before any appendToolResults,
+    // so the inbox is never drained by the loop). R2: leftover's new session.
+    queueRuns([FINISH], [FINISH]);
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -339,7 +257,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const callsBefore = mockCreateProvider.mock.calls.length;
 
     // Release: chat() resolves with free-form finish → run exits without draining inbox
-    releaseNext();
+    gate.releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
     // The dispatcher's finally block dispatches leftovers as new sessions.
@@ -357,7 +275,7 @@ describe("mid-run alert injection (loop seam)", () => {
     expect(openingMsg).toBeDefined();
 
     // The leftover session's opening message is for the leftover alert
-    releaseNext(); // free-form finish for the leftover session
+    gate.releaseNext(); // free-form finish for the leftover session
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
 
@@ -383,23 +301,27 @@ describe("mid-run alert injection (loop seam)", () => {
       () => {},
     );
 
-    const GATED_TURN = {
-      text: "Restarting.",
-      toolUses: [
+    // R1: gated tool → run suspends. R2 (resume): free-form finish.
+    queueRuns(
+      [
         {
-          id: "tu-gate-resume",
-          name: "restart_container",
-          input: {
-            containerName: "web-01",
-            rationale: "test",
-            risk: "low",
-            estimatedDowntimeSeconds: 1,
-          },
+          text: "Restarting.",
+          toolUses: [
+            {
+              id: "tu-gate-resume",
+              name: "restart_container",
+              input: {
+                containerName: "web-01",
+                rationale: "test",
+                risk: "low",
+                estimatedDowntimeSeconds: 1,
+              },
+            },
+          ],
         },
       ],
-    };
-    // Turn 1: gated tool -> run suspends. Turn 2: free-form finish for the resume.
-    setTurns([GATED_TURN, FINISH_TURN]);
+      [FINISH],
+    );
 
     const sessionId = randomUUID();
     dispatcher.dispatch({
@@ -407,7 +329,7 @@ describe("mid-run alert injection (loop seam)", () => {
       alert: alert(tokenId, "primary-resume"),
     });
 
-    releaseNext();
+    gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
@@ -450,7 +372,7 @@ describe("mid-run alert injection (loop seam)", () => {
     });
 
     await server.close();
-    releaseNext(); // free-form finish for the resumed run
+    gate.releaseNext(); // free-form finish for the resumed run
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
     unregisterRunner(tokenId);
   });

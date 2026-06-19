@@ -6,51 +6,19 @@ import type { FastifyInstance } from "fastify";
 
 // Minimal scripted provider: finishes in one free-form turn so the loop exits
 // without runner tools, letting tests focus on the chat route boundary.
-const { mockCreateProvider } = vi.hoisted(() => {
-  type Msg = {
-    role: "user" | "assistant";
-    content: string;
-    providerContent: unknown;
-  };
-  const makeProvider = () => {
-    const messages: Msg[] = [];
-    return {
-      start: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-      seed: vi.fn((history: Msg[]) => {
-        messages.length = 0;
-        messages.push(...history);
-      }),
-      snapshot: vi.fn((): Msg[] => [...messages]),
-      chat: vi.fn(
-        (
-          _tools: unknown,
-          onDelta?: (d: { kind: string; text: string }) => void,
-        ) => {
-          onDelta?.({ kind: "text", text: "Done." });
-          messages.push({
-            role: "assistant",
-            content: "Done.",
-            providerContent: {},
-          });
-          return Promise.resolve({
-            stopReason: "end_turn" as const,
-            toolUses: [],
-            text: "Done.",
-          });
-        },
-      ),
-      appendToolResults: vi.fn(),
-      appendUserMessage: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-    };
-  };
-  return { mockCreateProvider: vi.fn(makeProvider) };
-});
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
+}));
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+
+import { createContractFakeProvider } from "./contract-fake-provider.js";
+
+// Every run finishes in one free-form turn so the loop exits without runner
+// tools, letting these tests focus on the chat route boundary.
+mockCreateProvider.mockImplementation(() =>
+  createContractFakeProvider([{ toolUses: [], text: "Done." }]),
+);
 
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";

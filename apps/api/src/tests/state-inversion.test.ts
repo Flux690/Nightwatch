@@ -10,70 +10,21 @@ import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
 // per-turn persistence writes real transcript rows. The script is supplied per
 // test via the hoisted setter.
-const { mockCreateProvider, setScript } = vi.hoisted(() => {
-  type ProvMsg = {
-    role: "user" | "assistant";
-    content: string;
-    providerContent: unknown;
-  };
-  type Turn = {
-    text: string;
-    toolUses: Array<{
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-    }>;
-  };
-  let script: Turn[] = [];
-  let scriptIndex = 0;
-
-  const makeProvider = () => {
-    const messages: ProvMsg[] = [];
-    return {
-      start: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-      seed: vi.fn((history: ProvMsg[]) => {
-        messages.length = 0;
-        messages.push(...history);
-      }),
-      snapshot: vi.fn((): ProvMsg[] => [...messages]),
-      chat: vi.fn(
-        (
-          _tools: unknown,
-          onDelta?: (d: { kind: string; text: string }) => void,
-        ) => {
-          const turn = script[scriptIndex++] ?? script[script.length - 1];
-          onDelta?.({ kind: "text", text: turn.text });
-          messages.push({
-            role: "assistant",
-            content: turn.text,
-            providerContent: {},
-          });
-          return Promise.resolve({
-            stopReason: "tool_use" as const,
-            toolUses: turn.toolUses,
-            text: turn.text,
-          });
-        },
-      ),
-      appendToolResults: vi.fn(),
-      appendUserMessage: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-    };
-  };
-
-  return {
-    mockCreateProvider: vi.fn(makeProvider),
-    setScript: (turns: Turn[]) => {
-      script = turns;
-      scriptIndex = 0;
-    },
-  };
-});
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
+}));
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+
+import {
+  createScriptRunner,
+  type ScriptedTurn,
+} from "./contract-fake-provider.js";
+
+const scriptRunner = createScriptRunner();
+mockCreateProvider.mockImplementation(() => scriptRunner.create());
+const setScript = (turns: ScriptedTurn[]): void =>
+  scriptRunner.setScript(turns);
 
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";

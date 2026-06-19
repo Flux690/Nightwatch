@@ -105,11 +105,16 @@ export type ContractFakeProvider = {
   [K in keyof LLMProvider]: LLMProvider[K] & ReturnType<typeof vi.fn>;
 };
 
-export function createContractFakeProvider(
-  script: ScriptedTurn[],
+const DEFAULT_TURN: ScriptedTurn = { toolUses: [], text: "Done." };
+
+// Core fake builder. `nextTurn` is called once per chat() to get the turn to
+// emit - either an array-backed per-instance source (createContractFakeProvider)
+// or a module-level shared-index source (createScriptRunner).
+function makeProvider(
+  nextTurn: () => ScriptedTurn,
+  opts?: { gate?: () => Promise<void> },
 ): ContractFakeProvider {
   const messages: NativeMessage[] = [];
-  let scriptIndex = 0;
 
   function toProviderMessages(): ProviderMessage[] {
     return messages.map((m) => ({
@@ -134,12 +139,15 @@ export function createContractFakeProvider(
     snapshot: vi.fn((): ProviderMessage[] => toProviderMessages()),
 
     chat: vi.fn(
-      (
+      async (
         _tools: unknown,
         onDelta?: (d: { kind: string; text: string }) => void,
       ): Promise<ChatResponse> => {
-        const turn = script[scriptIndex++] ??
-          script[script.length - 1] ?? { toolUses: [], text: "Done." };
+        // Optional gate: park here until the test releases this turn, so timing
+        // tests can act (e.g. inject an alert) while a run is mid-chat. No gate
+        // means immediate resolution (the common case).
+        if (opts?.gate) await opts.gate();
+        const turn = nextTurn();
         if (onDelta && turn.text) {
           onDelta({ kind: "text", text: turn.text });
         }
@@ -187,5 +195,65 @@ export function createContractFakeProvider(
     appendUserMessage: vi.fn((msg: string) => {
       messages.push({ role: "user", content: msg });
     }),
+  };
+}
+
+// Per-instance script: each provider consumes its own copy from the start. A
+// resume/leftover run is a separate run, so chain one provider per run.
+export function createContractFakeProvider(
+  script: ScriptedTurn[],
+  opts?: { gate?: () => Promise<void> },
+): ContractFakeProvider {
+  let i = 0;
+  return makeProvider(
+    () => script[i++] ?? script[script.length - 1] ?? DEFAULT_TURN,
+    opts,
+  );
+}
+
+// Module-level script shared across provider instances: setScript resets the
+// sequence and successive runs (e.g. a suspend then a resume) continue from
+// where the previous run left off. Preserves the long-standing per-file
+// setScript([...]) pattern so converting a file needs no per-run rewrites.
+export interface ScriptRunner {
+  setScript: (turns: ScriptedTurn[]) => void;
+  create: (opts?: { gate?: () => Promise<void> }) => ContractFakeProvider;
+}
+
+export function createScriptRunner(): ScriptRunner {
+  let script: ScriptedTurn[] = [];
+  let i = 0;
+  const nextTurn = (): ScriptedTurn =>
+    script[i++] ?? script[script.length - 1] ?? DEFAULT_TURN;
+  return {
+    setScript: (turns: ScriptedTurn[]) => {
+      script = turns;
+      i = 0;
+    },
+    create: (opts) => makeProvider(nextTurn, opts),
+  };
+}
+
+// A FIFO gate shared across provider instances in a test file. Pass `gate` to
+// createContractFakeProvider so each chat() parks until releaseNext()/releaseAll()
+// lets it proceed - the faithful equivalent of the old per-file `gates` arrays,
+// used by timing tests (e.g. mid-run alert injection) that must act while a run
+// is parked. Non-timing tests omit it and chat() resolves immediately.
+export interface GateController {
+  gate: () => Promise<void>;
+  releaseNext: () => void;
+  releaseAll: () => void;
+}
+
+export function createGateController(): GateController {
+  const pending: Array<() => void> = [];
+  return {
+    gate: () => new Promise<void>((resolve) => pending.push(resolve)),
+    releaseNext: () => pending.shift()?.(),
+    releaseAll: () => {
+      const copy = [...pending];
+      pending.length = 0;
+      for (const resolve of copy) resolve();
+    },
   };
 }

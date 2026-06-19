@@ -1,5 +1,4 @@
 import "dotenv/config";
-import type { AddressInfo } from "node:net";
 import {
   afterAll,
   afterEach,
@@ -11,51 +10,43 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import {
+  createContractFakeProvider,
+  createGateController,
+  type ScriptedTurn,
+} from "./contract-fake-provider.js";
 
-// The provider is scripted: by default chat() parks the run on a gate the test
-// releases, so a run stays "active" long enough to assert derived dedup against
-// it. Switching to immediate mode lets runs complete at once for rate-limit math.
-const { mockCreateProvider, releaseAll, setImmediate } = vi.hoisted(() => {
-  let immediate = false;
-  const gates: Array<() => void> = [];
-  // A free-form text finish: no tool call ends the run successfully.
-  const finalTurn = {
-    stopReason: "end_turn" as const,
-    toolUses: [] as never[],
-    text: "Investigation complete.",
-  };
-  const make = () => ({
-    start: vi.fn(),
-    seed: vi.fn(),
-    snapshot: vi.fn((): unknown[] => []),
-    appendToolResults: vi.fn(),
-    appendUserMessage: vi.fn(),
-    chat: vi.fn(() => {
-      if (immediate) return Promise.resolve(finalTurn);
-      return new Promise((resolve) => {
-        gates.push(() => resolve(finalTurn));
-      });
-    }),
-  });
-  return {
-    mockCreateProvider: vi.fn(make),
-    releaseAll: (): void => {
-      for (const g of gates) g();
-      gates.length = 0;
-    },
-    setImmediate: (v: boolean): void => {
-      immediate = v;
-    },
-  };
-});
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
+}));
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
-import { waitFor } from "./wait.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
+
+// A free-form finish: no tool call ends the run successfully.
+const FINISH: ScriptedTurn[] = [
+  { toolUses: [], text: "Investigation complete." },
+];
+
+// Shared FIFO gate. In gated mode a run parks on chat() so it stays "active"
+// long enough to assert derived dedup against it; releaseAll() lets it finish.
+const gate = createGateController();
+
+function useGatedProvider(): void {
+  mockCreateProvider.mockImplementation(() =>
+    createContractFakeProvider(FINISH, { gate: gate.gate }),
+  );
+}
+
+function useImmediateProvider(): void {
+  mockCreateProvider.mockImplementation(() =>
+    createContractFakeProvider(FINISH),
+  );
+}
 
 // One firing Alertmanager alert with a caller-chosen fingerprint (-> sourceAlertId)
 // and severity, so dedup and rate-limit can be driven precisely.
@@ -101,8 +92,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   afterEach(() => {
     // Drain any parked runs so a later test never inherits a held dedup key.
-    setImmediate(false);
-    releaseAll();
+    gate.releaseAll();
     vi.useRealTimers();
   });
 
@@ -129,7 +119,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    setImmediate(false); // runs park on the gate -> stay active
+    useGatedProvider(); // runs park on the gate -> stay active
 
     const first = await ingest(token, alertBody("dup-1"));
     expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
@@ -145,21 +135,21 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     expect(dupe).toMatchObject({ enqueued: 0, skipped: 1 });
 
     // End the active run; flush the async chain so the dedup key clears.
-    setImmediate(true);
-    releaseAll();
+    gate.releaseAll();
     await vi.advanceTimersByTimeAsync(50);
     expect(dispatcher.isInvestigating(tokenId, "dup-1")).toBe(false);
 
     // The same alert now starts a fresh investigation - no 24h suppression.
     const refire = await ingest(token, alertBody("dup-1"));
     expect(refire).toMatchObject({ enqueued: 1, skipped: 0 });
-    // Advance the refire's batch window so no stray timer outlives this test.
+    // Advance the refire's batch window so no stray timer outlives this test;
+    // it parks on the gate and is drained by afterEach.
     await vi.advanceTimersByTimeAsync(90_001);
   });
 
   it("rate-limits past 10 non-critical alerts per runner per hour; critical bypasses; resets after the window", async () => {
     const { plaintext: token } = generateToken("ratelimit");
-    setImmediate(true); // runs complete at once; rate-limit is independent of them
+    useImmediateProvider(); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -192,4 +182,3 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     });
   });
 });
-

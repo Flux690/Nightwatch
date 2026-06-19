@@ -11,49 +11,25 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import {
+  createContractFakeProvider,
+  type ScriptedTurn,
+} from "./contract-fake-provider.js";
 
-// Same provider mock pattern as ingest-dispatch.test.ts: chat() parks by default
-// (so we can observe mid-window state), immediate mode makes runs finish quickly.
-const { mockCreateProvider, releaseAll, setRunImmediate } = vi.hoisted(() => {
-  let immediate = true;
-  const gates: Array<() => void> = [];
-  // A free-form text finish: no tool call ends the run successfully.
-  const finalTurn = {
-    stopReason: "end_turn" as const,
-    toolUses: [] as never[],
-    text: "Investigation complete.",
-  };
-  const make = () => ({
-    start: vi.fn(),
-    seed: vi.fn(),
-    snapshot: vi.fn((): unknown[] => []),
-    appendToolResults: vi.fn(),
-    appendUserMessage: vi.fn(),
-    chat: vi.fn(() => {
-      if (immediate) return Promise.resolve(finalTurn);
-      return new Promise<typeof finalTurn>((resolve) => {
-        gates.push(() => resolve(finalTurn));
-      });
-    }),
-  });
-  return {
-    mockCreateProvider: vi.fn(make),
-    releaseAll: (): void => {
-      const copy = [...gates];
-      gates.length = 0;
-      for (const g of copy) g();
-    },
-    setRunImmediate: (v: boolean): void => {
-      immediate = v;
-    },
-  };
-});
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
+}));
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
+
+// A free-form finish: no tool call ends the run successfully and immediately.
+const FINISH: ScriptedTurn[] = [
+  { toolUses: [], text: "Investigation complete." },
+];
 
 function alertBody(fingerprint: string, severity = "warning") {
   return {
@@ -96,12 +72,13 @@ describe("alert batching (REST seam + fake timers)", () => {
   });
 
   beforeEach(() => {
-    mockCreateProvider.mockClear();
-    setRunImmediate(true);
+    mockCreateProvider.mockReset();
+    mockCreateProvider.mockImplementation(() =>
+      createContractFakeProvider(FINISH),
+    );
   });
 
   afterEach(() => {
-    releaseAll();
     vi.useRealTimers();
   });
 
@@ -208,4 +185,3 @@ describe("alert batching (REST seam + fake timers)", () => {
     expect(openingMsg).toContain("other-fp");
   });
 });
-
