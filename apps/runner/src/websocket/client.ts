@@ -17,7 +17,10 @@ export function startWebSocketClient(
   dispatch: Map<string, CommandHandler>,
 ): void {
   const wsUrl =
-    process.env["WS_URL"] ?? "wss://api.nightwatch.sh/clients/connect";
+    process.env["WS_URL"] ||
+    (() => {
+      throw new Error("WS_URL environment variable is required");
+    })();
   const token = process.env["NIGHTWATCH_TOKEN"]!;
 
   let ws: WebSocket | null = null;

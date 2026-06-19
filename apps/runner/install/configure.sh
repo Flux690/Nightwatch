@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-PLATFORM_URL="${PLATFORM_URL:-https://api.nightwatch.sh}"
+PLATFORM_URL="${PLATFORM_URL:?PLATFORM_URL is required}"
 NIGHTWATCH_TOKEN="${NIGHTWATCH_TOKEN:?NIGHTWATCH_TOKEN is required}"
 
 mkdir -p /var/nightwatch/prometheus /var/nightwatch/alertmanager /etc/nightwatch
