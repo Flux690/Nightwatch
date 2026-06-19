@@ -269,14 +269,18 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
 
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "test", comment: "too risky" }),
+        body: JSON.stringify({
+          decision: "reject",
+          text: "too risky",
+          resolvedBy: "test",
+        }),
       },
     );
     expect(rejectRes.status).toBe(200);

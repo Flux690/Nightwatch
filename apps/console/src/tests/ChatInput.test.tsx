@@ -147,7 +147,7 @@ describe("ChatInput", () => {
   });
 
   describe("pending interrupt routing", () => {
-    it("posts to /add-context when pendingInterrupt.kind is approval", async () => {
+    it("posts to /respond with text when pendingInterrupt.kind is approval", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup(
         {
@@ -163,11 +163,11 @@ describe("ChatInput", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/sessions/s1/add-context",
+        "/api/sessions/s1/respond",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            contextMessage: "Keep the container up for now",
+            text: "Keep the container up for now",
             resolvedBy: "console",
           }),
         }),
@@ -178,7 +178,7 @@ describe("ChatInput", () => {
       );
     });
 
-    it("posts to /answer when pendingInterrupt.kind is clarification", async () => {
+    it("posts to /respond with text when pendingInterrupt.kind is clarification", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup(
         {
@@ -194,11 +194,11 @@ describe("ChatInput", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/sessions/s1/answer",
+        "/api/sessions/s1/respond",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            answer: "Focus on memory pressure",
+            text: "Focus on memory pressure",
             resolvedBy: "console",
           }),
         }),

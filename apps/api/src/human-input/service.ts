@@ -4,16 +4,16 @@ import {
   deletePendingHumanInput,
   getPendingHumanInputWithSessionBySessionId,
 } from "../db/interrupts.js";
-import { getSessionMessages } from "../db/sessions.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import type { ProviderMessage, ToolResult } from "../llm/types.js";
+import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import {
   publishInterruptResolved,
   publishToolCallEnd,
 } from "../session/stream.js";
+import { buildSeed } from "../session/seed.js";
 import { sendCommand } from "../ws/router.js";
-import type { ApprovalResponse } from "@nightwatch/shared";
+import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 
 export class HumanInputError extends Error {
   constructor(
@@ -28,24 +28,24 @@ export interface HumanInputActionResult extends ApprovalResponse {
   sessionId: string;
 }
 
-function buildSeed(sessionId: string): ProviderMessage[] {
-  return getSessionMessages(sessionId).map((message) => ({
-    role: message.role,
-    content: message.content,
-    providerContent: message.providerContent,
-  }));
-}
-
 function requirePendingHumanInput(sessionId: string) {
-  const pendingHumanInput =
-    getPendingHumanInputWithSessionBySessionId(sessionId);
-  if (!pendingHumanInput) {
+  const pending = getPendingHumanInputWithSessionBySessionId(sessionId);
+  if (!pending) {
     throw new HumanInputError(
       409,
       `No pending human input for session: ${sessionId}`,
     );
   }
-  return pendingHumanInput;
+  return pending;
+}
+
+function claimOrThrow(sessionId: string): void {
+  if (!claimPendingHumanInput(sessionId)) {
+    throw new HumanInputError(
+      409,
+      "Human input already claimed by another request",
+    );
+  }
 }
 
 function ensureDeleted(sessionId: string): void {
@@ -57,248 +57,155 @@ function ensureDeleted(sessionId: string): void {
   }
 }
 
-function resolvedAt(): string {
-  return new Date().toISOString();
-}
-
-function buildResponse(
+function unpause(
   sessionId: string,
   toolUseId: string,
-  status: HumanInputActionResult["status"],
+  status: "approved" | "rejected" | "context_added" | "answered",
   resolvedBy: string,
-  at: string,
+  completedResults: ToolResult[],
+  gatedResult: ToolResult,
 ): HumanInputActionResult {
-  return {
+  ensureDeleted(sessionId);
+
+  const resolvedAt = new Date().toISOString();
+
+  if (status === "approved") {
+    publishToolCallEnd({
+      sessionId,
+      toolUseId,
+      result: gatedResult.content,
+      isError: gatedResult.is_error,
+    });
+  }
+
+  publishInterruptResolved({
     sessionId,
     toolUseId,
     status,
     resolvedBy,
-    resolvedAt: at,
-  };
+    resolvedAt,
+  });
+
+  dispatcher.dispatch({
+    sessionId,
+    seed: buildSeed(sessionId),
+    resumeToolResults: [...completedResults, gatedResult],
+  });
+
+  return { sessionId, toolUseId, status, resolvedBy, resolvedAt };
 }
 
-export async function approvePendingHumanInput(
+export async function respondToPendingHumanInput(
   sessionId: string,
+  request: RespondRequest,
   resolvedBy = "console",
 ): Promise<HumanInputActionResult> {
-  const pendingHumanInput = requirePendingHumanInput(sessionId);
-  if (!claimPendingHumanInput(sessionId)) {
-    throw new HumanInputError(
-      409,
-      "Human input already claimed by another request",
+  const pending = requirePendingHumanInput(sessionId);
+  const { decision, text } = request;
+
+  if (pending.kind === "clarification") {
+    if (decision !== undefined) {
+      throw new HumanInputError(
+        400,
+        "Clarification interrupts do not accept a decision; send text only",
+      );
+    }
+    const answer = text?.trim();
+    if (!answer) {
+      throw new HumanInputError(400, "text is required for clarification");
+    }
+    claimOrThrow(sessionId);
+    logger.info({ sessionId, resolvedBy }, "clarification answered");
+    return unpause(
+      sessionId,
+      pending.toolUseId,
+      "answered",
+      resolvedBy,
+      pending.completedResults,
+      { tool_use_id: pending.toolUseId, content: answer },
     );
   }
-  const config = loadConfig();
 
-  let gatedResult: ToolResult;
-  try {
-    const result = await sendCommand(
-      pendingHumanInput.toolName,
-      pendingHumanInput.toolInput,
-      config.toolTimeoutMs,
-      pendingHumanInput.originatingAlert?.runnerId,
+  // kind === "approval"
+  if (decision === "approve") {
+    claimOrThrow(sessionId);
+    const config = loadConfig();
+    let gatedResult: ToolResult;
+    try {
+      const result = await sendCommand(
+        pending.toolName,
+        pending.toolInput,
+        config.toolTimeoutMs,
+        pending.originatingAlert?.runnerId,
+      );
+      gatedResult = {
+        tool_use_id: pending.toolUseId,
+        content: JSON.stringify(result),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      gatedResult = {
+        tool_use_id: pending.toolUseId,
+        content: `Error executing ${pending.toolName}: ${message}`,
+        is_error: true,
+      };
+    }
+    logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
+    return unpause(
+      sessionId,
+      pending.toolUseId,
+      "approved",
+      resolvedBy,
+      pending.completedResults,
+      gatedResult,
     );
-    gatedResult = {
-      tool_use_id: pendingHumanInput.toolUseId,
-      content: JSON.stringify(result),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    gatedResult = {
-      tool_use_id: pendingHumanInput.toolUseId,
-      content: `Error executing ${pendingHumanInput.toolName}: ${message}`,
+  }
+
+  if (decision === "reject") {
+    const isCritical =
+      (pending.originatingAlert?.severity ?? "info") === "critical";
+    const comment = text?.trim() ?? "";
+    const gatedResult: ToolResult = {
+      tool_use_id: pending.toolUseId,
+      content: isCritical
+        ? `The operator rejected this tool use as too risky. The action was NOT executed. Comment: ${comment || "no comment"}. Reassess the situation, summarize what you observed, and suggest a safer alternative.`
+        : `The operator rejected this tool use. The action was NOT executed - no changes were made to the system. Comment: ${comment || "no comment"}. Stop current remediation, explain why you chose this tool, and ask for guidance.`,
       is_error: true,
     };
-  }
-
-  ensureDeleted(sessionId);
-
-  const at = resolvedAt();
-  publishToolCallEnd({
-    sessionId,
-    toolUseId: pendingHumanInput.toolUseId,
-    result: gatedResult.content,
-    isError: gatedResult.is_error,
-  });
-  publishInterruptResolved({
-    sessionId,
-    toolUseId: pendingHumanInput.toolUseId,
-    status: "approved",
-    resolvedBy,
-    resolvedAt: at,
-  });
-
-  logger.info(
-    { sessionId, tool: pendingHumanInput.toolName, resolvedBy },
-    "approved",
-  );
-
-  dispatcher.dispatch({
-    sessionId,
-    seed: buildSeed(sessionId),
-    resumeToolResults: [...pendingHumanInput.completedResults, gatedResult],
-  });
-
-  return buildResponse(
-    sessionId,
-    pendingHumanInput.toolUseId,
-    "approved",
-    resolvedBy,
-    at,
-  );
-}
-
-export function rejectPendingHumanInput(
-  sessionId: string,
-  comment?: string,
-  resolvedBy = "console",
-): HumanInputActionResult {
-  const pendingHumanInput = requirePendingHumanInput(sessionId);
-  const isCritical =
-    (pendingHumanInput.originatingAlert?.severity ?? "info") === "critical";
-  const gatedResult: ToolResult = {
-    tool_use_id: pendingHumanInput.toolUseId,
-    content: isCritical
-      ? `The operator rejected this tool use as too risky. The action was NOT executed. Comment: ${comment ?? "no comment"}. Reassess the situation, summarize what you observed, and suggest a safer alternative.`
-      : `The operator rejected this tool use. The action was NOT executed - no changes were made to the system. Comment: ${comment ?? "no comment"}. Stop current remediation, explain why you chose this tool, and ask for guidance.`,
-    is_error: true,
-  };
-
-  ensureDeleted(sessionId);
-
-  const at = resolvedAt();
-  publishInterruptResolved({
-    sessionId,
-    toolUseId: pendingHumanInput.toolUseId,
-    status: "rejected",
-    resolvedBy,
-    resolvedAt: at,
-  });
-
-  logger.info(
-    { sessionId, tool: pendingHumanInput.toolName, resolvedBy },
-    "rejected",
-  );
-
-  dispatcher.dispatch({
-    sessionId,
-    seed: buildSeed(sessionId),
-    resumeToolResults: [...pendingHumanInput.completedResults, gatedResult],
-  });
-
-  return buildResponse(
-    sessionId,
-    pendingHumanInput.toolUseId,
-    "rejected",
-    resolvedBy,
-    at,
-  );
-}
-
-export function addPendingHumanInputContext(
-  sessionId: string,
-  contextMessage?: string,
-  comment?: string,
-  resolvedBy = "console",
-): HumanInputActionResult {
-  const pendingHumanInput = requirePendingHumanInput(sessionId);
-  if (pendingHumanInput.kind === "clarification") {
-    throw new HumanInputError(
-      400,
-      "Use POST /sessions/:id/answer for clarifications",
+    claimOrThrow(sessionId);
+    logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
+    return unpause(
+      sessionId,
+      pending.toolUseId,
+      "rejected",
+      resolvedBy,
+      pending.completedResults,
+      gatedResult,
     );
   }
 
-  const resolvedContext = contextMessage?.trim() ?? comment?.trim();
-  if (!resolvedContext) {
-    throw new HumanInputError(400, "contextMessage is required");
+  // No decision — treat as add-context (Other path)
+  const context = text?.trim();
+  if (!context) {
+    throw new HumanInputError(
+      400,
+      "approval interrupts require decision (approve/reject) or text (add context)",
+    );
   }
-
-  const gatedResult: ToolResult = {
-    tool_use_id: pendingHumanInput.toolUseId,
-    content: `Human added context: ${resolvedContext}`,
-  };
-
-  ensureDeleted(sessionId);
-
-  const at = resolvedAt();
-  publishInterruptResolved({
-    sessionId,
-    toolUseId: pendingHumanInput.toolUseId,
-    status: "context_added",
-    resolvedBy,
-    resolvedAt: at,
-  });
-
+  claimOrThrow(sessionId);
   logger.info(
-    { sessionId, tool: pendingHumanInput.toolName, resolvedBy },
+    { sessionId, tool: pending.toolName, resolvedBy },
     "context added",
   );
-
-  dispatcher.dispatch({
+  return unpause(
     sessionId,
-    seed: buildSeed(sessionId),
-    resumeToolResults: [...pendingHumanInput.completedResults, gatedResult],
-  });
-
-  return buildResponse(
-    sessionId,
-    pendingHumanInput.toolUseId,
+    pending.toolUseId,
     "context_added",
     resolvedBy,
-    at,
-  );
-}
-
-export function answerPendingHumanInput(
-  sessionId: string,
-  answer: string | string[] | undefined,
-  resolvedBy = "console",
-): HumanInputActionResult {
-  const pendingHumanInput = requirePendingHumanInput(sessionId);
-  if (pendingHumanInput.kind !== "clarification") {
-    throw new HumanInputError(
-      400,
-      "This session is not waiting for clarification",
-    );
-  }
-
-  if (!answer || (typeof answer === "string" && !answer.trim())) {
-    throw new HumanInputError(400, "answer is required");
-  }
-
-  const gatedResult: ToolResult = {
-    tool_use_id: pendingHumanInput.toolUseId,
-    content: Array.isArray(answer) ? answer.join(", ") : answer,
-  };
-
-  ensureDeleted(sessionId);
-
-  const at = resolvedAt();
-  publishInterruptResolved({
-    sessionId,
-    toolUseId: pendingHumanInput.toolUseId,
-    status: "answered",
-    resolvedBy,
-    resolvedAt: at,
-  });
-
-  logger.info(
-    { sessionId, tool: pendingHumanInput.toolName, resolvedBy },
-    "clarification answered",
-  );
-
-  dispatcher.dispatch({
-    sessionId,
-    seed: buildSeed(sessionId),
-    resumeToolResults: [...pendingHumanInput.completedResults, gatedResult],
-  });
-
-  return buildResponse(
-    sessionId,
-    pendingHumanInput.toolUseId,
-    "answered",
-    resolvedBy,
-    at,
+    pending.completedResults,
+    {
+      tool_use_id: pending.toolUseId,
+      content: `Human added context: ${context}`,
+    },
   );
 }

@@ -235,7 +235,10 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Service degraded." }),
     });
     expect(res.status).toBe(202);
@@ -243,7 +246,9 @@ describe("clarification interrupts", () => {
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
       ),
     );
 
@@ -263,11 +268,14 @@ describe("clarification interrupts", () => {
 
     ws.close();
 
-    // cleanup
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/answer`, {
+    // cleanup via /respond
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-      body: JSON.stringify({ answer: "cleanup" }),
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ text: "cleanup" }),
     });
     await waitFor(() => !hasPendingHumanInput(sessionId));
   });
@@ -301,23 +309,31 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Which container?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
       ),
     );
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
         body: JSON.stringify({
-          answer: "Database overloaded",
+          text: "Database overloaded",
           resolvedBy: "operator",
         }),
       },
@@ -371,25 +387,34 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Factors?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
       ),
     );
     expect(interrupt.payload["multiSelect"]).toBe(true);
 
+    // Console pre-joins selections; server receives a plain string
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
         body: JSON.stringify({
-          answer: ["Database overloaded", "Memory leak"],
+          text: "Database overloaded, Memory leak",
           resolvedBy: "operator",
         }),
       },
@@ -406,6 +431,76 @@ describe("clarification interrupts", () => {
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
     ws.close();
+  });
+
+  it("clarification with decision body returns 400", async () => {
+    setScript([
+      {
+        text: "Need clarification.",
+        toolUses: [
+          {
+            id: "tu-clar-val-1",
+            name: "request_clarification",
+            input: { question: "Confirm?", options: TEST_OPTIONS },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+    });
+    const events: WsEvent[] = [];
+    ws.on("message", (raw) => {
+      events.push(JSON.parse(raw.toString()) as WsEvent);
+    });
+    await waitForConnected(ws);
+
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Test." }),
+    });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    await waitFor(() =>
+      events.find(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    );
+
+    // Sending decision:"approve" on a clarification interrupt must return 400
+    const badRes = await fetch(
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "approve" }),
+      },
+    );
+    expect(badRes.status).toBe(400);
+
+    ws.close();
+
+    // cleanup
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ text: "cleanup" }),
+    });
+    await waitFor(() => !hasPendingHumanInput(sessionId));
   });
 
   it("restart-resume: clarification interrupt survives process exit, resolve still works", async () => {
@@ -434,14 +529,19 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Is this recurring?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     const interrupt = await waitFor(() =>
       events.find(
-        (e) => e.type === "HUMAN_INPUT_REQUIRED" && e.payload["sessionId"] === sessionId,
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
       ),
     );
     // Simulate process exit: run has exited, no in-memory state needed
@@ -450,12 +550,15 @@ describe("clarification interrupts", () => {
 
     // Resolve purely from DB state
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
         body: JSON.stringify({
-          answer: "Yes, recurring daily",
+          text: "Yes, recurring daily",
           resolvedBy: "operator-after-restart",
         }),
       },
@@ -527,7 +630,10 @@ describe("clarification interrupts", () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
       body: JSON.stringify({ message: "Mixed gate test." }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
@@ -545,11 +651,14 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/answer`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-        body: JSON.stringify({ answer: "Yes", resolvedBy: "operator" }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ text: "Yes", resolvedBy: "operator" }),
       },
     );
     expect(answerRes.status).toBe(200);
@@ -567,11 +676,14 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: `nw_auth=${SESSION}` },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -584,4 +696,3 @@ describe("clarification interrupts", () => {
     ws.close();
   });
 });
-

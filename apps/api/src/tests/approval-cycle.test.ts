@@ -263,14 +263,14 @@ describe("durable approval interrupts", () => {
 
     ws.close();
 
-    // cleanup: approve to prevent leaking into later tests
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/approve`, {
+    // cleanup: approve via /respond to prevent leaking into later tests
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "approve", resolvedBy: "cleanup" }),
     });
     await waitFor(() => restartCommands.length > countBefore);
   });
@@ -323,16 +323,16 @@ describe("durable approval interrupts", () => {
           e.payload["sessionId"] === sessionId,
       ),
     );
-    // Approve via REST
+    // Approve via /respond
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -359,7 +359,7 @@ describe("durable approval interrupts", () => {
   });
 
   // RED: reject feeds rejection result, model adapts, run resumes
-  it("reject: feeds rejection result, run resumes with model adapting", async () => {
+  it("reject: feeds rejection result with is_error, run resumes with model adapting", async () => {
     setScript([
       {
         text: "Restarting.",
@@ -406,14 +406,18 @@ describe("durable approval interrupts", () => {
       ),
     );
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator", comment: "too risky" }),
+        body: JSON.stringify({
+          decision: "reject",
+          text: "too risky",
+          resolvedBy: "operator",
+        }),
       },
     );
     expect(rejectRes.status).toBe(200);
@@ -432,8 +436,8 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: add-context feeds text, model continues
-  it("add-context: feeds context, run resumes and model continues", async () => {
+  // RED: add-context (text with no decision) feeds text, model continues
+  it("add-context: text without decision feeds context, run resumes and model continues", async () => {
     setScript([
       {
         text: "Restarting.",
@@ -480,14 +484,14 @@ describe("durable approval interrupts", () => {
       ),
     );
     const ctxRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/add-context`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ contextMessage: "maintenance window active" }),
+        body: JSON.stringify({ text: "maintenance window active" }),
       },
     );
     expect(ctxRes.status).toBe(200);
@@ -554,31 +558,116 @@ describe("durable approval interrupts", () => {
       ),
     );
     const first = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "op1" }),
+        body: JSON.stringify({ decision: "approve", resolvedBy: "op1" }),
       },
     );
     expect(first.status).toBe(200);
 
     const second = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "op2" }),
+        body: JSON.stringify({ decision: "approve", resolvedBy: "op2" }),
       },
     );
     expect(second.status).toBe(409);
 
+    ws.close();
+  });
+
+  // H4: concurrent approve+reject — only one wins, tool runs at most once
+  it("concurrent approve+reject: exactly one succeeds, exactly one gets 409, tool runs at most once", async () => {
+    restartCommands.length = 0;
+    setScript([
+      {
+        text: "Restarting.",
+        toolUses: [
+          {
+            id: "tu-h4-1",
+            name: "restart_container",
+            input: {
+              containerName: "web-01",
+              rationale: "concurrent",
+              risk: "high",
+              estimatedDowntimeSeconds: 5,
+            },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+    });
+    const events: WsEvent[] = [];
+    ws.on("message", (raw) => {
+      events.push(JSON.parse(raw.toString()) as WsEvent);
+    });
+    await waitForConnected(ws);
+
+    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Service is wedged." }),
+    });
+    const { sessionId } = (await chatRes.json()) as { sessionId: string };
+
+    await waitFor(() =>
+      events.find(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    );
+
+    // Fire approve and reject concurrently
+    const [approveRes, rejectRes] = await Promise.all([
+      fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "approve", resolvedBy: "op-approve" }),
+      }),
+      fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ decision: "reject", resolvedBy: "op-reject" }),
+      }),
+    ]);
+
+    const statuses = [approveRes.status, rejectRes.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    // Tool must not run more than once regardless of which path wins
+    if (approveRes.status === 200) {
+      await waitFor(() => restartCommands.length > 0);
+      expect(restartCommands).toHaveLength(1);
+    } else {
+      // reject won — tool should NOT have run
+      expect(restartCommands).toHaveLength(0);
+    }
+
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
     ws.close();
   });
 
@@ -647,18 +736,87 @@ describe("durable approval interrupts", () => {
     ws.close();
 
     // cleanup
-    const interrupt = events.find(
-      (e) =>
-        e.type === "HUMAN_INPUT_REQUIRED" &&
-        e.payload["sessionId"] === sessionId,
-    )!;
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/reject`, {
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+    });
+  });
+
+  // RED: validation — clarification body rejected with a decision on approval interrupt
+  it("approval interrupt with clarification-only body (no decision, no text) returns 400", async () => {
+    setScript([
+      {
+        text: "Restarting.",
+        toolUses: [
+          {
+            id: "tu-val-1",
+            name: "restart_container",
+            input: {
+              containerName: "web-01",
+              rationale: "validation",
+              risk: "high",
+              estimatedDowntimeSeconds: 5,
+            },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+    });
+    const events: WsEvent[] = [];
+    ws.on("message", (raw) => {
+      events.push(JSON.parse(raw.toString()) as WsEvent);
+    });
+    await waitForConnected(ws);
+
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Service is wedged." }),
+    });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    await waitFor(() =>
+      events.find(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    );
+
+    // Empty body — no decision, no text — must return 400 for approval kind
+    const validationRes = await fetch(
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(validationRes.status).toBe(400);
+
+    // Cleanup
+    ws.close();
+    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
     });
   });
 
@@ -718,14 +876,17 @@ describe("durable approval interrupts", () => {
 
     // Resolve via REST — works purely from DB state (as it would after restart)
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator-after-restart" }),
+        body: JSON.stringify({
+          decision: "approve",
+          resolvedBy: "operator-after-restart",
+        }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -804,14 +965,14 @@ describe("durable approval interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -874,14 +1035,14 @@ describe("durable approval interrupts", () => {
       ),
     );
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/reject`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "reject", resolvedBy: "operator" }),
       },
     );
     expect(rejectRes.status).toBe(200);
@@ -971,14 +1132,17 @@ describe("durable approval interrupts", () => {
     vi.useRealTimers();
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/approve`,
+      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "late-operator" }),
+        body: JSON.stringify({
+          decision: "approve",
+          resolvedBy: "late-operator",
+        }),
       },
     );
     expect(approveRes.status).toBe(200);

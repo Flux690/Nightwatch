@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ApprovalRequest } from "@nightwatch/shared";
+import type { ApprovalRequest, RespondRequest } from "@nightwatch/shared";
 import {
   listAllPendingHumanInput,
   type PendingHumanInputWithSession,
@@ -7,23 +7,9 @@ import {
 import { listAllSessions, getSessionMessages } from "../db/sessions.js";
 import { requireSession } from "../auth/session.js";
 import {
-  addPendingHumanInputContext,
-  answerPendingHumanInput,
-  approvePendingHumanInput,
   HumanInputError,
-  rejectPendingHumanInput,
+  respondToPendingHumanInput,
 } from "../human-input/service.js";
-
-interface HumanInputBody {
-  resolvedBy?: string;
-  comment?: string;
-  contextMessage?: string;
-}
-
-interface AnswerBody {
-  answer: string | string[];
-  resolvedBy?: string;
-}
 
 function toApprovalRequest(i: PendingHumanInputWithSession): ApprovalRequest {
   return {
@@ -37,7 +23,14 @@ function toApprovalRequest(i: PendingHumanInputWithSession): ApprovalRequest {
   };
 }
 
-function sendHumanInputError(reply: { code: (statusCode: number) => { send: (body: { error: string }) => unknown } }, error: unknown) {
+function sendHumanInputError(
+  reply: {
+    code: (statusCode: number) => {
+      send: (body: { error: string }) => unknown;
+    };
+  },
+  error: unknown,
+) {
   if (error instanceof HumanInputError) {
     return reply.code(error.statusCode).send({ error: error.message });
   }
@@ -57,10 +50,8 @@ export async function registerSessionRoutes(
     async () => listAllPendingHumanInput().map(toApprovalRequest),
   );
 
-  fastify.get(
-    "/sessions",
-    { preHandler: requireSession },
-    async () => listAllSessions(),
+  fastify.get("/sessions", { preHandler: requireSession }, async () =>
+    listAllSessions(),
   );
 
   fastify.get<{ Params: { id: string } }>(
@@ -69,66 +60,16 @@ export async function registerSessionRoutes(
     async (request) => getSessionMessages(request.params.id),
   );
 
-  fastify.post<{ Params: { id: string }; Body: HumanInputBody }>(
-    "/sessions/:id/add-context",
+  fastify.post<{ Params: { id: string }; Body: RespondRequest }>(
+    "/sessions/:id/respond",
     { preHandler: requireSession },
     async (request, reply) => {
       try {
-        const response = addPendingHumanInputContext(
+        const { decision, text, resolvedBy } = request.body ?? {};
+        const response = await respondToPendingHumanInput(
           request.params.id,
-          request.body?.contextMessage,
-          request.body?.comment,
-          request.body?.resolvedBy,
-        );
-        return reply.code(200).send(response);
-      } catch (error) {
-        return sendHumanInputError(reply, error);
-      }
-    },
-  );
-
-  fastify.post<{ Params: { id: string }; Body: HumanInputBody }>(
-    "/sessions/:id/reject",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      try {
-        const response = rejectPendingHumanInput(
-          request.params.id,
-          request.body?.comment,
-          request.body?.resolvedBy,
-        );
-        return reply.code(200).send(response);
-      } catch (error) {
-        return sendHumanInputError(reply, error);
-      }
-    },
-  );
-
-  fastify.post<{ Params: { id: string }; Body: AnswerBody }>(
-    "/sessions/:id/answer",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      try {
-        const response = answerPendingHumanInput(
-          request.params.id,
-          request.body?.answer,
-          request.body?.resolvedBy,
-        );
-        return reply.code(200).send(response);
-      } catch (error) {
-        return sendHumanInputError(reply, error);
-      }
-    },
-  );
-
-  fastify.post<{ Params: { id: string }; Body: HumanInputBody }>(
-    "/sessions/:id/approve",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      try {
-        const response = await approvePendingHumanInput(
-          request.params.id,
-          request.body?.resolvedBy,
+          { decision, text },
+          resolvedBy,
         );
         return reply.code(200).send(response);
       } catch (error) {
