@@ -9,7 +9,6 @@ import {
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import { handlePlatformTool } from "./platform.js";
-import { escalate, type IncidentContext } from "./result.js";
 import {
   createSession,
   appendSessionMessages,
@@ -54,21 +53,14 @@ export async function runInvestigation(
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
-  const ctx: IncidentContext & { severity: NormalizedAlert["severity"] } = {
-    containerName: alert?.targetIdentifier ?? "chat",
-    alertType: alert?.alertType ?? "chat",
-    firedAt: alert?.firedAt ?? new Date().toISOString(),
-    severity: alert?.severity ?? "info",
-  };
-
   const log = logger.child({
     sessionId,
-    alertType: ctx.alertType,
+    alertType: alert?.alertType ?? "chat",
   });
   log.info(
     {
-      target: ctx.containerName,
-      severity: ctx.severity,
+      target: alert?.targetIdentifier ?? "chat",
+      severity: alert?.severity ?? "info",
       isChat: alert == null,
     },
     "investigation started",
@@ -128,7 +120,7 @@ export async function runInvestigation(
     title:
       alert == null && input.userMessage
         ? input.userMessage.slice(0, 80)
-        : `${ctx.alertType} - ${ctx.containerName}`,
+        : `${alert?.alertType ?? "chat"} - ${alert?.targetIdentifier ?? "chat"}`,
     createdAt: new Date().toISOString(),
   };
   createSession(sessionMeta, alert);
@@ -175,13 +167,12 @@ export async function runInvestigation(
     persist();
 
     if (response.stopReason === "refusal") {
-      escalate(ctx, sessionId, "Model refused to continue");
+      log.warn({ turn }, "model refused to continue");
       return;
     }
 
     // No tool calls means the model is done: its free-form text is the answer.
-    // persist() above already published it via RUN_FINISHED, so the run simply
-    // ends here - a prose finish is success, not an escalation.
+    // persist() above already saved and published it via RUN_FINISHED.
     if (response.toolUses.length === 0) {
       log.info({ turn }, "investigation finished with free-form response");
       return;
@@ -353,11 +344,10 @@ export async function runInvestigation(
     persist();
   }
 
-  escalate(
-    ctx,
-    sessionId,
-    `Exceeded ${config.maxToolCalls} tool calls or ${config.hardTimeoutMs / 60_000}m timeout`,
-  );
+  log.info({ turn, toolCallCount }, "budget exhausted, running wrap-up turn");
+  await provider.chat([], (d) => publishTextMessageContent(sessionId, d));
+  persist();
+  log.info("investigation finished with budget wrap-up");
 }
 
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {

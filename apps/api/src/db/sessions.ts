@@ -162,22 +162,3 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
     createdAt: r.createdAt,
   }));
 }
-
-export function appendSyntheticAssistantMessage(
-  sessionId: string,
-  content: string,
-): SessionMessage {
-  const nextSeq =
-    ((getDb()
-      .prepare(`SELECT MAX(seq) AS maxSeq FROM session_messages WHERE session_id = ?`)
-      .get(sessionId) as { maxSeq: number | null }).maxSeq ?? -1) + 1;
-  const message: SessionMessage = {
-    sessionId,
-    seq: nextSeq,
-    role: "assistant",
-    content,
-    createdAt: new Date().toISOString(),
-  };
-  appendSessionMessages([message]);
-  return message;
-}

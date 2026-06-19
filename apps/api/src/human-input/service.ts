@@ -6,7 +6,6 @@ import {
 } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { dispatcher } from "../dispatch/dispatcher.js";
-import { escalate } from "../investigation/result.js";
 import type { ProviderMessage, ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import {
@@ -38,7 +37,8 @@ function buildSeed(sessionId: string): ProviderMessage[] {
 }
 
 function requirePendingHumanInput(sessionId: string) {
-  const pendingHumanInput = getPendingHumanInputWithSessionBySessionId(sessionId);
+  const pendingHumanInput =
+    getPendingHumanInputWithSessionBySessionId(sessionId);
   if (!pendingHumanInput) {
     throw new HumanInputError(
       409,
@@ -154,12 +154,14 @@ export function rejectPendingHumanInput(
   resolvedBy = "console",
 ): HumanInputActionResult {
   const pendingHumanInput = requirePendingHumanInput(sessionId);
+  const isCritical =
+    (pendingHumanInput.originatingAlert?.severity ?? "info") === "critical";
   const gatedResult: ToolResult = {
     tool_use_id: pendingHumanInput.toolUseId,
-    content:
-      (pendingHumanInput.originatingAlert?.severity ?? "info") === "critical"
-        ? `The operator rejected this tool use as too risky. The action was NOT executed. Comment: ${comment ?? "no comment"}. This incident has been escalated. Summarize what you observed for the on-call engineer.`
-        : `The operator rejected this tool use. The action was NOT executed - no changes were made to the system. Comment: ${comment ?? "no comment"}. Stop current remediation, explain why you chose this tool, and ask for guidance.`,
+    content: isCritical
+      ? `The operator rejected this tool use as too risky. The action was NOT executed. Comment: ${comment ?? "no comment"}. Reassess the situation, summarize what you observed, and suggest a safer alternative.`
+      : `The operator rejected this tool use. The action was NOT executed - no changes were made to the system. Comment: ${comment ?? "no comment"}. Stop current remediation, explain why you chose this tool, and ask for guidance.`,
+    is_error: true,
   };
 
   ensureDeleted(sessionId);
@@ -177,20 +179,6 @@ export function rejectPendingHumanInput(
     { sessionId, tool: pendingHumanInput.toolName, resolvedBy },
     "rejected",
   );
-
-  if ((pendingHumanInput.originatingAlert?.severity ?? "info") === "critical") {
-    escalate(
-      {
-        containerName:
-          pendingHumanInput.originatingAlert?.targetIdentifier ?? "unknown",
-        alertType: pendingHumanInput.originatingAlert?.alertType ?? "unknown",
-        firedAt:
-          pendingHumanInput.originatingAlert?.firedAt ?? new Date().toISOString(),
-      },
-      sessionId,
-      `Write action rejected: ${pendingHumanInput.toolName}`,
-    );
-  }
 
   dispatcher.dispatch({
     sessionId,

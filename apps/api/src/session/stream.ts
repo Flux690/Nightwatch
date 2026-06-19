@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { publishConsoleEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
-  ConsoleEscalated,
   ConsoleInterrupt,
   ConsoleInterruptResolved,
   ConsoleRunFinished,
@@ -81,15 +80,6 @@ export function publishInterruptResolved(
   const env: ConsoleInterruptResolved = {
     messageId: randomUUID(),
     type: "HUMAN_INPUT_RESOLVED",
-    payload,
-  };
-  publishRaw(env);
-}
-
-export function publishEscalated(payload: ConsoleEscalated["payload"]): void {
-  const env: ConsoleEscalated = {
-    messageId: randomUUID(),
-    type: "ESCALATED",
     payload,
   };
   publishRaw(env);
