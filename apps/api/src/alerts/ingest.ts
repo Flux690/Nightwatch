@@ -6,6 +6,7 @@ import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatcher.js";
 import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
+import { extractBearerToken } from "../auth/bearer.js";
 import { getRunnerIdentity } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
@@ -102,12 +103,7 @@ function extractToken(
 ): string | null {
   const token = headers["x-nightwatch-token"];
   if (typeof token === "string" && token.length > 0) return token;
-  const auth = headers["authorization"];
-  if (typeof auth === "string") {
-    const bearer = auth.replace(/^Bearer\s+/i, "").trim();
-    if (bearer.length > 0 && bearer !== auth) return bearer;
-  }
-  return null;
+  return extractBearerToken(headers["authorization"]);
 }
 
 function parseSource(

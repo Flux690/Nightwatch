@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
+import { extractBearerToken } from "../auth/bearer.js";
 import { findTokenByValue } from "../db/tokens.js";
 
 const TEMPLATE = readFileSync(
@@ -32,13 +33,15 @@ function buildScript(
 export async function registerConnectRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.get<{ Querystring: { token?: string } }>(
+  fastify.get(
     "/connect.sh",
     { preHandler: requireSession },
     async (request, reply) => {
-      const { token } = request.query;
+      const token = extractBearerToken(request.headers.authorization);
       if (!token) {
-        return reply.code(400).send({ error: "token query param is required" });
+        return reply.code(400).send({
+          error: "runner token required in Authorization: Bearer header",
+        });
       }
 
       const record = findTokenByValue(token);

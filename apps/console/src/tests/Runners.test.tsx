@@ -204,7 +204,7 @@ describe("RunnersPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("calls POST /api/tokens then GET /api/connect.sh with the plaintext token", async () => {
+    it("calls POST /api/tokens then GET /api/connect.sh with the token in the Authorization header", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
 
@@ -216,7 +216,10 @@ describe("RunnersPage", () => {
           expect.objectContaining({ method: "POST" }),
         );
         expect(fetchMock).toHaveBeenCalledWith(
-          `/api/connect.sh?token=${encodeURIComponent(GENERATED_TOKEN.token)}`,
+          "/api/connect.sh",
+          expect.objectContaining({
+            headers: { Authorization: `Bearer ${GENERATED_TOKEN.token}` },
+          }),
         );
       });
     });

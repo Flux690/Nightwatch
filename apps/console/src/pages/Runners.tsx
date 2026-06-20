@@ -70,9 +70,9 @@ export function RunnersPage(): React.JSX.Element {
       // Response shape guaranteed by POST /api/tokens contract
       const { token: plaintext } = (await tokenRes.json()) as { token: string };
 
-      const scriptRes = await fetch(
-        `/api/connect.sh?token=${encodeURIComponent(plaintext)}`,
-      );
+      const scriptRes = await fetch("/api/connect.sh", {
+        headers: { Authorization: `Bearer ${plaintext}` },
+      });
       if (!scriptRes.ok) throw new Error(`connect.sh ${scriptRes.status}`);
       const scriptText = await scriptRes.text();
 

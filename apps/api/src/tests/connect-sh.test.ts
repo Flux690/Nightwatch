@@ -30,12 +30,13 @@ describe("GET /connect.sh", () => {
   it("returns 401 without a session cookie", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
+      url: "/connect.sh",
+      headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it("returns 400 when the token query param is missing", async () => {
+  it("returns 400 when the Authorization header is missing", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/connect.sh",
@@ -44,11 +45,23 @@ describe("GET /connect.sh", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("does not accept the token as a query parameter", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: `/connect.sh?token=${TOKEN}`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("returns 404 for a token not in the DB", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh?token=nwr_notarealtoken_just_a_fake_value_xxxx",
-      headers: { cookie: `nw_auth=${SESSION}` },
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: "Bearer nwr_notarealtoken_just_a_fake_value_xxxx",
+      },
     });
     expect(res.statusCode).toBe(404);
   });
@@ -56,8 +69,11 @@ describe("GET /connect.sh", () => {
   it("returns a shell script with Content-Type text/x-shellscript", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
-      headers: { cookie: `nw_auth=${SESSION}` },
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
+      },
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toMatch(/text\/x-shellscript/);
@@ -66,9 +82,10 @@ describe("GET /connect.sh", () => {
   it("script contains the baked-in platform origin", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
+      url: "/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
         host: "control.example.com:3000",
       },
     });
@@ -78,23 +95,23 @@ describe("GET /connect.sh", () => {
   it("script contains the ws:// runner WS URL", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
+      url: "/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
         host: "control.example.com:3000",
       },
     });
-    expect(res.body).toContain(
-      "ws://control.example.com:3000/clients/connect",
-    );
+    expect(res.body).toContain("ws://control.example.com:3000/clients/connect");
   });
 
   it("uses wss:// for https requests", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
+      url: "/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
         host: "my-host.example.com",
         "x-forwarded-proto": "https",
       },
@@ -106,8 +123,11 @@ describe("GET /connect.sh", () => {
   it("script contains the runner token", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
-      headers: { cookie: `nw_auth=${SESSION}` },
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
+      },
     });
     expect(res.body).toContain(TOKEN);
   });
@@ -115,8 +135,11 @@ describe("GET /connect.sh", () => {
   it("script prints header-based Alertmanager config instead of a token query parameter", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
-      headers: { cookie: `nw_auth=${SESSION}` },
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
+      },
     });
 
     expect(res.body).not.toContain("/alerts/ingest?token=");
@@ -127,8 +150,11 @@ describe("GET /connect.sh", () => {
   it("script contains neither nightwatch.sh nor inst_", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
-      headers: { cookie: `nw_auth=${SESSION}` },
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
+      },
     });
     expect(res.body).not.toContain("nightwatch.sh");
     expect(res.body).not.toContain("inst_");

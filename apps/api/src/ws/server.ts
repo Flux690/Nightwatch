@@ -1,7 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findTokenByValue, setTokenRunnerId, touchLastUsed } from "../db/tokens.js";
+import {
+  findTokenByValue,
+  setTokenRunnerId,
+  touchLastUsed,
+} from "../db/tokens.js";
+import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
   resolveCommand,
@@ -21,8 +26,7 @@ export async function registerWsRoutes(
     "/clients/connect",
     { websocket: true },
     async (socket: WebSocket, request) => {
-      const authHeader = request.headers["authorization"] ?? "";
-      const plaintext = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const plaintext = extractBearerToken(request.headers.authorization);
 
       if (!plaintext) {
         socket.close(4001, "Authorization header required");
