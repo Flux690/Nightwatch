@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SessionMeta,
   SessionMessage,
-  WsEnvelope,
+  ConsoleEvent,
+  ConsoleHumanInputRequired,
+  ApprovalRequest,
 } from "@nightwatch/shared";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { ChatInput } from "./ChatInput.js";
@@ -13,6 +15,43 @@ import { applyLiveEvent } from "../transcript/liveConverter.js";
 import { convertPersistedMessages } from "../transcript/persistedConverter.js";
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
+
+// A session that was suspended awaiting a human is durable: the operator may
+// load this page minutes or hours after the live HUMAN_INPUT_REQUIRED event
+// fired (CONTEXT.md's "3am story"). Reconstruct the same envelope the API
+// would have published live, so it flows through the one shared converter
+// instead of a second, hand-rolled card-building path.
+function pendingApprovalToEnvelope(
+  p: ApprovalRequest,
+): ConsoleHumanInputRequired {
+  const isClarification = p.kind === "clarification";
+  // Clarification's question/options/multiSelect ride inside toolInput - the
+  // API embeds them there at publish time (investigation/loop.ts) because
+  // they originate from the tool call's own input, not a separate column.
+  const clarInput = isClarification
+    ? (p.toolInput as {
+        question: string;
+        options: Array<{ label: string; description: string }>;
+        multiSelect?: boolean;
+      })
+    : null;
+  return {
+    messageId: `pending-${p.toolUseId}`,
+    type: "HUMAN_INPUT_REQUIRED",
+    payload: {
+      sessionId: p.sessionId,
+      toolUseId: p.toolUseId,
+      toolName: p.toolName,
+      input: p.toolInput,
+      kind: isClarification ? "clarification" : "approval",
+      ...(clarInput !== null && {
+        question: clarInput.question,
+        options: clarInput.options,
+        multiSelect: clarInput.multiSelect,
+      }),
+    },
+  };
+}
 
 function pendingInterruptFromItems(
   items: TranscriptItem[],
@@ -133,6 +172,36 @@ export function SessionView({
     enabled: !!activeSessionId,
   });
 
+  // Shares the Shell's attention-queue query (same key, same cache entry, no
+  // extra request) so a reload can re-show the card a live event would have
+  // shown, instead of the operator only finding out by watching it happen.
+  const { data: pendingHumanInput = [] } = useQuery<ApprovalRequest[]>({
+    queryKey: ["sessions-pending-human-input"],
+    queryFn: () =>
+      fetch("/api/sessions/pending-human-input").then((r) => {
+        if (!r.ok) throw new Error(`pending-human-input ${r.status}`);
+        return r.json() as Promise<ApprovalRequest[]>;
+      }),
+  });
+  const pendingForSession = pendingHumanInput.find(
+    (p) => p.sessionId === activeSessionId,
+  );
+
+  useEffect(() => {
+    if (!activeSessionId || !pendingForSession) return;
+    const env = pendingApprovalToEnvelope(pendingForSession);
+    setLiveItems((prev) => {
+      const alreadySeeded = prev.some(
+        (item) =>
+          (item.kind === "approval_card" ||
+            item.kind === "clarification_card") &&
+          item.toolUseId === pendingForSession.toolUseId,
+      );
+      if (alreadySeeded) return prev;
+      return applyLiveEvent(prev, env, activeSessionId);
+    });
+  }, [activeSessionId, pendingForSession]);
+
   const handleSessionCreated = useCallback(
     (newId: string, firstMessage: string) => {
       activeSessionIdRef.current = newId;
@@ -151,15 +220,12 @@ export function SessionView({
   );
 
   const handleEnvelope = useCallback(
-    (env: WsEnvelope) => {
+    (env: ConsoleEvent) => {
       const sid = activeSessionIdRef.current;
       if (!sid) return;
 
       if (env.type === "RUN_FINISHED") {
-        const { sessionId, message } = env.payload as {
-          sessionId: string;
-          message: SessionMessage;
-        };
+        const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
         setLiveItems([]);
@@ -171,8 +237,7 @@ export function SessionView({
       }
 
       if (env.type === "TEXT_MESSAGE_CONTENT") {
-        const { sessionId } = env.payload as { sessionId: string };
-        if (sessionId === sid) setIsRunning(true);
+        if (env.payload.sessionId === sid) setIsRunning(true);
       }
 
       setLiveItems((prev) => applyLiveEvent(prev, env, sid));

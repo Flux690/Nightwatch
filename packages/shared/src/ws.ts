@@ -141,3 +141,14 @@ export interface ConsoleToolCallEnd extends WsEnvelope {
     isError?: boolean;
   };
 }
+
+// The discriminated union of every message the API sends down the console
+// WebSocket. Narrowing on `type` against this union (rather than the loose
+// `WsEnvelope` wire envelope) gives callers a typed `payload` for free.
+export type ConsoleEvent =
+  | ConsoleTextMessageContent
+  | ConsoleRunFinished
+  | ConsoleToolCallStart
+  | ConsoleHumanInputRequired
+  | ConsoleToolCallEnd
+  | ConsoleHumanInputResolved;

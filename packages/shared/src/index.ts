@@ -54,6 +54,7 @@ export type {
   ConsoleHumanInputRequired,
   ConsoleInterrupt,
   ConsoleToolCallEnd,
+  ConsoleEvent,
 } from "./ws.js";
 export type {
   ApprovalStatus,

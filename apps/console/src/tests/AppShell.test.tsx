@@ -562,7 +562,7 @@ describe("Shell", () => {
       act(() => {
         broadcast({
           messageId: "m-int",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
@@ -591,7 +591,7 @@ describe("Shell", () => {
       act(() => {
         broadcast({
           messageId: "m-res",
-          type: "INTERRUPT_RESOLVED",
+          type: "HUMAN_INPUT_RESOLVED",
           payload: {
             incidentId: "inc-0",
             toolUseId: "tool-0",

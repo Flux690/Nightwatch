@@ -1,10 +1,4 @@
-import type {
-  WsEnvelope,
-  ConsoleToolCallStart,
-  ConsoleInterrupt,
-  ConsoleToolCallEnd,
-  ConsoleInterruptResolved,
-} from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwatch/shared";
 import type {
   TranscriptItem,
   ThinkingItem,
@@ -26,15 +20,11 @@ function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
 
 export function applyLiveEvent(
   items: TranscriptItem[],
-  env: WsEnvelope,
+  env: ConsoleEvent,
   sessionId: string,
 ): TranscriptItem[] {
   if (env.type === "TEXT_MESSAGE_CONTENT") {
-    const payload = env.payload as {
-      sessionId: string;
-      kind: string;
-      delta: string;
-    };
+    const payload = env.payload;
     if (payload.sessionId !== sessionId) return items;
 
     if (payload.kind === "thinking") {
@@ -73,7 +63,7 @@ export function applyLiveEvent(
   }
 
   if (env.type === "TOOL_CALL_START") {
-    const payload = env.payload as ConsoleToolCallStart["payload"];
+    const payload = env.payload;
     if (payload.sessionId !== sessionId) return items;
     return [
       ...finalizeTrailingThinking(items),
@@ -87,8 +77,8 @@ export function applyLiveEvent(
     ];
   }
 
-  if (env.type === "INTERRUPT") {
-    const payload = env.payload as ConsoleInterrupt["payload"];
+  if (env.type === "HUMAN_INPUT_REQUIRED") {
+    const payload = env.payload;
     if (payload.sessionId !== sessionId) return items;
     items = finalizeTrailingThinking(items);
 
@@ -122,7 +112,7 @@ export function applyLiveEvent(
   }
 
   if (env.type === "TOOL_CALL_END") {
-    const payload = env.payload as ConsoleToolCallEnd["payload"];
+    const payload = env.payload;
     if (payload.sessionId !== sessionId) return items;
     return items.map((item) => {
       if (
@@ -135,8 +125,8 @@ export function applyLiveEvent(
     });
   }
 
-  if (env.type === "INTERRUPT_RESOLVED") {
-    const payload = env.payload as ConsoleInterruptResolved["payload"];
+  if (env.type === "HUMAN_INPUT_RESOLVED") {
+    const payload = env.payload;
     const { status, resolvedBy } = payload;
     return items.map((item) => {
       if (

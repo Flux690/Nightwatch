@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionView } from "../pages/SessionTranscript.js";
+import { SessionView } from "../pages/SessionView.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
@@ -53,13 +53,22 @@ const SESSION_MESSAGE_2 = {
   createdAt: "2024-01-01T00:02:00Z",
 };
 
-function setup(messages: object[] = [SESSION_MESSAGE_1]) {
+function setup(
+  messages: object[] = [SESSION_MESSAGE_1],
+  pendingHumanInput: object[] = [],
+) {
   latestWs = null;
 
   vi.stubGlobal("WebSocket", MockWs);
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
+      if (url.includes("pending-human-input")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(pendingHumanInput),
+        });
+      }
       if (url.includes("/sessions/s1")) {
         return Promise.resolve({
           ok: true,
@@ -103,7 +112,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("SessionTranscript", () => {
+describe("SessionView", () => {
   describe("initial render", () => {
     it("renders all durable messages fetched from the API", async () => {
       setup([SESSION_MESSAGE_1, SESSION_MESSAGE_2]);
@@ -658,7 +667,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "a1",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
@@ -759,7 +768,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "a2",
-          type: "INTERRUPT_RESOLVED",
+          type: "HUMAN_INPUT_RESOLVED",
           payload: {
             incidentId: "inc-1",
             toolUseId: "tu-gated",
@@ -811,6 +820,126 @@ describe("SessionTranscript", () => {
         ).not.toBeInTheDocument();
         expect(screen.getByText(/restarted/)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("reload reconstruction (pending interrupt on load)", () => {
+    it("shows an approval card on load for a session with a durable pending approval, with no live event", async () => {
+      setup(
+        [SESSION_MESSAGE_1],
+        [
+          {
+            sessionId: "s1",
+            toolUseId: "tu-durable",
+            toolName: "restart_container",
+            toolInput: { containerName: "web-01", risk: "high" },
+            kind: "approval",
+            status: "pending",
+            createdAt: "2024-01-01T00:05:00Z",
+          },
+        ],
+      );
+
+      await waitFor(() => {
+        const card = screen.getByTestId("approval-card");
+        expect(within(card).getByText("restart_container")).toBeInTheDocument();
+        expect(within(card).getByText(/high/i)).toBeInTheDocument();
+        expect(
+          within(card).getByRole("button", { name: /approve/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("shows a clarification card on load for a session with a durable pending clarification", async () => {
+      setup(
+        [SESSION_MESSAGE_1],
+        [
+          {
+            sessionId: "s1",
+            toolUseId: "tu-durable-clar",
+            toolName: "request_clarification",
+            toolInput: {
+              question: "Which service first?",
+              options: [{ label: "nginx", description: "The web server" }],
+            },
+            kind: "clarification",
+            status: "pending",
+            createdAt: "2024-01-01T00:05:00Z",
+          },
+        ],
+      );
+
+      await waitFor(() => {
+        const card = screen.getByTestId("clarification-card");
+        expect(
+          within(card).getByText("Which service first?"),
+        ).toBeInTheDocument();
+        expect(
+          within(card).getByRole("button", { name: /nginx/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("approving a reconstructed card posts to /respond exactly like a live one", async () => {
+      setup(
+        [SESSION_MESSAGE_1],
+        [
+          {
+            sessionId: "s1",
+            toolUseId: "tu-durable",
+            toolName: "restart_container",
+            toolInput: { containerName: "web-01", risk: "high" },
+            kind: "approval",
+            status: "pending",
+            createdAt: "2024-01-01T00:05:00Z",
+          },
+        ],
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("approval-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("approval-card");
+      await user.click(within(card).getByRole("button", { name: /approve/i }));
+
+      await waitFor(() => {
+        expect(fetch).toHaveBeenCalledWith(
+          "/api/sessions/s1/respond",
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({
+              decision: "approve",
+              resolvedBy: "console",
+            }),
+          }),
+        );
+      });
+    });
+
+    it("ignores a pending interrupt belonging to a different session", async () => {
+      setup(
+        [SESSION_MESSAGE_1],
+        [
+          {
+            sessionId: "other-session",
+            toolUseId: "tu-other",
+            toolName: "restart_container",
+            toolInput: { risk: "high" },
+            kind: "approval",
+            status: "pending",
+            createdAt: "2024-01-01T00:05:00Z",
+          },
+        ],
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("approval-card")).not.toBeInTheDocument();
     });
   });
 
@@ -890,7 +1019,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "c1",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-clar",
@@ -987,7 +1116,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "c2",
-          type: "INTERRUPT_RESOLVED",
+          type: "HUMAN_INPUT_RESOLVED",
           payload: {
             incidentId: "inc-clar",
             toolUseId: "tu-clar",
@@ -1055,7 +1184,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "c-other",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "other-session",
             toolUseId: "tu-other",
@@ -1081,7 +1210,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "ap1",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-ap",
@@ -1172,7 +1301,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "ctx-res",
-          type: "INTERRUPT_RESOLVED",
+          type: "HUMAN_INPUT_RESOLVED",
           payload: {
             incidentId: "inc-ap",
             toolUseId: "tu-ap",
@@ -1204,7 +1333,7 @@ describe("SessionTranscript", () => {
       act(() => {
         latestWs?.push({
           messageId: "clar1",
-          type: "INTERRUPT",
+          type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-clar2",

@@ -1,26 +1,26 @@
 import { describe, it, expect } from "vitest";
-import type { WsEnvelope } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwatch/shared";
 
 import { applyLiveEvent } from "../transcript/liveConverter.js";
 import type { TranscriptItem, ThinkingItem } from "../transcript/types.js";
 
-function textDelta(delta: string): WsEnvelope {
+function textDelta(delta: string): ConsoleEvent {
   return {
     messageId: "m1",
     type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId: "s1", kind: "text", delta },
-  } as WsEnvelope;
+  };
 }
 
-function thinkingDelta(delta: string): WsEnvelope {
+function thinkingDelta(delta: string): ConsoleEvent {
   return {
     messageId: "m1",
     type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId: "s1", kind: "thinking", delta },
-  } as WsEnvelope;
+  };
 }
 
-function toolCallStart(toolUseId: string): WsEnvelope {
+function toolCallStart(toolUseId: string): ConsoleEvent {
   return {
     messageId: "m1",
     type: "TOOL_CALL_START",
@@ -30,13 +30,13 @@ function toolCallStart(toolUseId: string): WsEnvelope {
       toolName: "check_service_status",
       input: {},
     },
-  } as WsEnvelope;
+  };
 }
 
-function interrupt(toolUseId: string): WsEnvelope {
+function interrupt(toolUseId: string): ConsoleEvent {
   return {
     messageId: "m1",
-    type: "INTERRUPT",
+    type: "HUMAN_INPUT_REQUIRED",
     payload: {
       sessionId: "s1",
       kind: "approval",
@@ -44,7 +44,7 @@ function interrupt(toolUseId: string): WsEnvelope {
       toolName: "restart_container",
       input: { risk: "high" },
     },
-  } as WsEnvelope;
+  };
 }
 
 describe("applyLiveEvent — thinking", () => {

@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
-import type { WsEnvelope } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwatch/shared";
 
-export function useConsoleWs(onMessage: (envelope: WsEnvelope) => void): void {
+export function useConsoleWs(
+  onMessage: (envelope: ConsoleEvent) => void,
+): void {
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
 
@@ -12,7 +14,11 @@ export function useConsoleWs(onMessage: (envelope: WsEnvelope) => void): void {
 
     ws.onmessage = (event: MessageEvent) => {
       try {
-        const envelope = JSON.parse(event.data as string) as WsEnvelope;
+        // The wire frame is untyped JSON (it also includes a one-off
+        // "connected" ack that isn't part of ConsoleEvent); this is the one
+        // place the console trusts the API's shape. Callers switch on `type`
+        // and any frame that doesn't match a known case is a no-op for them.
+        const envelope = JSON.parse(event.data as string) as ConsoleEvent;
         handlerRef.current(envelope);
       } catch {
         // Ignore malformed frames

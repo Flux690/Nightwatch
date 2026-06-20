@@ -8,11 +8,11 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import type { ApprovalRequest, WsEnvelope } from "@nightwatch/shared";
+import type { ApprovalRequest, ConsoleEvent } from "@nightwatch/shared";
 import { useAuth } from "../auth/AuthContext.js";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { SessionsSidebar } from "./Sessions.js";
-import { SessionView } from "./SessionTranscript.js";
+import { SessionView } from "./SessionView.js";
 
 const SIDEBAR_KEY = "nw:sidebar-expanded";
 const EXPANDED_WIDTH = 250;
@@ -176,9 +176,9 @@ function useAttentionCount(): number {
 
   const [delta, setDelta] = useState(0);
 
-  const handleEnvelope = useCallback((envelope: WsEnvelope) => {
-    if (envelope.type === "INTERRUPT") setDelta((d) => d + 1);
-    if (envelope.type === "INTERRUPT_RESOLVED") setDelta((d) => d - 1);
+  const handleEnvelope = useCallback((envelope: ConsoleEvent) => {
+    if (envelope.type === "HUMAN_INPUT_REQUIRED") setDelta((d) => d + 1);
+    if (envelope.type === "HUMAN_INPUT_RESOLVED") setDelta((d) => d - 1);
   }, []);
 
   useConsoleWs(handleEnvelope);
