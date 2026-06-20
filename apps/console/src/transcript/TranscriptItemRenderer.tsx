@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Button, Text } from "@mantine/core";
+import { Button, Text, UnstyledButton } from "@mantine/core";
 import Markdown from "react-markdown";
 import type {
   TranscriptItem,
+  ThinkingItem,
   ApprovalCardItem,
   ClarificationCardItem,
   ToolCardItem,
@@ -43,6 +44,42 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
       }}
     >
       <Markdown>{text}</Markdown>
+    </div>
+  );
+}
+
+function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
+  // Always starts collapsed, live or reloaded alike - the operator opens it
+  // explicitly; nothing auto-expands or forces it shut.
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div data-testid="thinking-block" data-streaming={item.streaming}>
+      <UnstyledButton
+        onClick={() => setExpanded((prev) => !prev)}
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+      >
+        <Text
+          size="xs"
+          c="dimmed"
+          fw={600}
+          className={item.streaming ? "nw-thinking-pulse" : undefined}
+        >
+          Thinking
+        </Text>
+        <Text size="xs" c="dimmed" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
+        </Text>
+      </UnstyledButton>
+      <div style={{ display: expanded ? "block" : "none" }}>
+        <Text
+          size="xs"
+          c="dimmed"
+          style={{ whiteSpace: "pre-wrap", paddingLeft: 16, paddingTop: 4 }}
+        >
+          {item.text}
+        </Text>
+      </div>
     </div>
   );
 }
@@ -267,6 +304,8 @@ export function TranscriptItemRenderer({
       return <UserBubble text={item.text} />;
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
+    case "thinking":
+      return <ThinkingBlock item={item} />;
     case "tool_card":
       return (
         <ToolCardPanel

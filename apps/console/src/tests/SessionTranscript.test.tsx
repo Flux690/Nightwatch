@@ -127,6 +127,42 @@ describe("SessionTranscript", () => {
         ).toBeInTheDocument();
       });
     });
+
+    it("renders a reloaded session's thinking blocks collapsed, in order", async () => {
+      setup([
+        SESSION_MESSAGE_1,
+        {
+          ...SESSION_MESSAGE_2,
+          providerContent: [
+            { type: "thinking", thinking: "Checked the container logs" },
+            { type: "text", text: "Restarting nginx should fix it." },
+          ],
+        },
+      ]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+        expect(
+          screen.getByText("Restarting nginx should fix it."),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText("Checked the container logs")).not.toBeVisible();
+    });
+
+    it("renders no thinking dropdown for a reloaded session with no thinking blocks", async () => {
+      setup([
+        SESSION_MESSAGE_1,
+        {
+          ...SESSION_MESSAGE_2,
+          providerContent: [{ type: "text", text: "All clear." }],
+        },
+      ]);
+
+      await waitFor(() => {
+        expect(screen.getByText("All clear.")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+    });
   });
 
   describe("live streaming (TEXT_MESSAGE_CONTENT)", () => {
@@ -433,6 +469,187 @@ describe("SessionTranscript", () => {
       });
 
       expect(screen.queryByText("should_not_appear")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("thinking choreography (TEXT_MESSAGE_CONTENT kind=thinking)", () => {
+    it("renders a pulsing, collapsed-by-default block while thinking deltas stream", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "thinking",
+            delta: "Let me check the logs",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Let me check the logs")).not.toBeVisible();
+    });
+
+    it("expands a streaming thinking block when clicked", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /thinking/i }));
+
+      expect(screen.getByText("Reasoning")).toBeVisible();
+    });
+
+    it("renders the answer alongside a still-collapsed thinking block", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
+        });
+      });
+      act(() => {
+        latestWs?.push({
+          messageId: "m4",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "The answer." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("The answer.")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Reasoning")).not.toBeVisible();
+    });
+
+    it("renders multiple thinking bursts as independent, ordered blocks", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: "First burst" },
+        });
+      });
+      act(() => {
+        latestWs?.push({
+          messageId: "m4",
+          type: "TOOL_CALL_START",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-1",
+            toolName: "check_service_status",
+            input: {},
+          },
+        });
+      });
+      act(() => {
+        latestWs?.push({
+          messageId: "m5",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "thinking",
+            delta: "Second burst",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByText("Thinking")).toHaveLength(2);
+      });
+
+      const user = userEvent.setup();
+      const buttons = screen.getAllByRole("button", { name: /thinking/i });
+      await user.click(buttons[0]);
+      await user.click(buttons[1]);
+
+      expect(screen.getByText("First burst")).toBeVisible();
+      expect(screen.getByText("Second burst")).toBeVisible();
+    });
+
+    it("clears thinking blocks once RUN_FINISHED flushes the turn", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m3",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m4",
+          type: "RUN_FINISHED",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 3,
+              role: "assistant",
+              content: "Done.",
+              createdAt: "2024-01-01T00:03:00Z",
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+        expect(screen.getByText("Done.")).toBeInTheDocument();
+      });
     });
   });
 

@@ -29,7 +29,12 @@ function pendingInterruptFromItems(
 }
 
 function itemKey(item: TranscriptItem): string {
-  if (item.kind === "user_turn" || item.kind === "agent_text") return item.id;
+  if (
+    item.kind === "user_turn" ||
+    item.kind === "agent_text" ||
+    item.kind === "thinking"
+  )
+    return item.id;
   return item.toolUseId;
 }
 

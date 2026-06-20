@@ -1,6 +1,7 @@
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
+  | ThinkingItem
   | ToolCardItem
   | ApprovalCardItem
   | ClarificationCardItem;
@@ -15,6 +16,16 @@ export interface AgentTextItem {
   kind: "agent_text";
   id: string;
   text: string;
+}
+
+export interface ThinkingItem {
+  kind: "thinking";
+  id: string;
+  text: string;
+  // streaming is true only while live deltas are still arriving for this
+  // burst; reload-path items are never streaming. Always renders collapsed
+  // by default (live and reload alike) - the operator opens it explicitly.
+  streaming: boolean;
 }
 
 export interface ToolCardItem {

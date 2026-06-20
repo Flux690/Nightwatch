@@ -80,6 +80,91 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
+  describe("thinking", () => {
+    it("shows a pulsing Thinking label with a chevron while streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: true,
+      });
+
+      const label = screen.getByText("Thinking");
+      expect(label).toBeInTheDocument();
+      expect(label.closest('[data-testid="thinking-block"]')).toHaveAttribute(
+        "data-streaming",
+        "true",
+      );
+    });
+
+    it("renders collapsed by default while streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: true,
+      });
+
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+    });
+
+    it("renders collapsed by default for a reloaded (non-streaming) block", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+      });
+
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+    });
+
+    it("expands to show the text when the header is clicked", async () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+      });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /thinking/i }));
+
+      expect(screen.getByText("Checking the logs")).toBeVisible();
+    });
+
+    it("collapses again when the header is clicked while expanded", async () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+      });
+
+      const user = userEvent.setup();
+      const button = screen.getByRole("button", { name: /thinking/i });
+      await user.click(button);
+      await user.click(button);
+
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+    });
+
+    it("does not pulse once the burst has finished streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+      });
+
+      expect(screen.getByTestId("thinking-block")).toHaveAttribute(
+        "data-streaming",
+        "false",
+      );
+    });
+  });
+
   describe("tool_card", () => {
     const toolItem: TranscriptItem = {
       kind: "tool_card",
