@@ -1,153 +1,209 @@
 # Nightwatch
 
-Nightwatch is an autonomous SRE agent that monitors Docker containers, detects infrastructure incidents from logs, and automatically remediates them using Gemini as the reasoning engine. It runs as a continuous control loop — observing logs, identifying incidents, planning Docker command sequences, and executing fixes with your approval.
+![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
+![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
+![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
 
-## Prerequisites
+Nightwatch is a self-hosted, open-source AI SRE agent for Docker workloads. It watches your servers, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
 
-- Node.js 18+
-- Docker daemon running
-- Gemini API key
+## Why Nightwatch
 
-## Setup
+An alert fires at 3am. Normally that means waking up, SSHing into a box, reading logs, checking `docker ps`, correlating a recent deploy, and only then deciding what to do. The investigation is slow, manual, and always lands on a tired human.
 
-1. Clone the repo and install dependencies:
+Nightwatch does that first pass for you. The moment an alert arrives, it starts pulling logs, container state, host metrics, and recent deploys, reasons about the root cause, and drafts a concrete remediation such as restarting a container or rolling back a deploy. By the time you look at your screen, the investigation is already written up and a fix is sitting there waiting for one click.
+
+The important part is what it will not do. Nightwatch never changes anything on a server without your explicit approval. It reads freely and acts only on permission, so you get the speed of an automated responder with the safety of a human gate.
+
+## How it works
+
+```
+Each monitored server                                    Operator
+  cAdvisor -> Prometheus -> Alertmanager --> POST /alerts/ingest --+
+                                              Console chat ---------+
+                                                                    |
+                                                                    v
+                                       API  (Node, SQLite)
+                                       agentic loop, approvals, event bus
+                                             |  wss://         |  REST + WS
+                                             v                 v
+                                        Runner(s)           Console
+                                        docker socket        live transcript
+                                        /proc, metrics       approval cards
+                                                             fleet, settings
+```
+
+When an alert fires, Alertmanager posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (container logs, process lists, metrics, recent commits), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer.
+
+### The three pieces
+
+**API** is the brain, and the only place an LLM ever runs. It owns all durable state in a single SQLite file, drives the agentic loop, gates every write action behind human approval, and talks to runners exclusively over an outbound-initiated WSS connection.
+
+**Runner** is a stateless executor you install on each server you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do, and executes the commands the API sends. It also bundles its own Prometheus, Alertmanager, and cAdvisor as sidecar processes, so a single install command gives you both the executor and the full monitoring stack. The only file it ever writes locally is its own runner id.
+
+**Console** is the operator UI: a live, streaming session transcript, approval and clarification cards, the runner fleet view, and settings.
+
+## Features
+
+- **Human-in-the-loop by default.** Write actions like `restart_container`, `rollback_deploy`, and `exec_command` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
+- **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits.
+- **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
+- **Bring your own key.** Use Anthropic, OpenAI, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama). Inference goes straight to your provider and your key never leaves your network.
+- **Multi-server.** One API coordinates as many runners as you have servers, and a single investigation can span more than one runner.
+- **No external infrastructure.** State lives in one SQLite file. There is no Redis, no Postgres, and no message queue to run.
+- **Self-contained runner.** Each runner ships with Prometheus, Alertmanager, and cAdvisor built in, so the target server needs nothing installed beyond the one-liner.
+
+## Getting started
+
+You need Node.js 20 or newer, pnpm 11 or newer, and an Anthropic or OpenAI-compatible API key.
+
+### 1. Clone and install
 
 ```bash
-npm install
+git clone https://github.com/Flux690/nightwatch
+cd nightwatch
+pnpm install
 ```
 
-2. Create a `.env` file in the project root:
-
-```env
-GEMINI_API_KEY=your_key_here
-```
-
-3. Have a `docker-compose.yaml` for the infrastructure you want to monitor, and make sure its containers are running:
+### 2. Configure the API
 
 ```bash
-docker compose up -d
+cp apps/api/.env.example apps/api/.env
 ```
 
-## Running Nightwatch
+Open `apps/api/.env` and set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. That is the only required value to boot; the full list of variables and their defaults is in [Configuration](#configuration).
 
-**Development (without building):**
+### 3. Start everything
 
 ```bash
-npm run dev -- --compose path/to/docker-compose.yaml
+pnpm dev
 ```
 
-Note the `--` before flags — npm requires this to forward arguments to the underlying script. If you're running against the included Clipper stack, there's a shortcut:
+This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
+
+### 4. Connect a runner
+
+In the console go to **Runners**, then **Add a server**. Nightwatch mints a runner token and shows you a ready-to-run install script with the token already baked in. Copy it and run it on the server you want to monitor:
 
 ```bash
-npm run dev:clipper
+# paste the script shown in the console; it runs the runner container via docker
 ```
 
-**Production (build first, then run):**
+The runner appears in your fleet within seconds. It brings its own Prometheus, Alertmanager, and cAdvisor, so there is nothing else to install on that server.
+
+### 5. Connect an existing Alertmanager (optional)
+
+Each runner's bundled Alertmanager already posts alerts to the API. If you run your own Alertmanager and want it to feed Nightwatch too, point a receiver at the ingest endpoint and authenticate with a runner token. The endpoint reads the token from either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header; Alertmanager's `http_config.authorization` sets the former:
+
+```yaml
+# alertmanager.yml
+receivers:
+  - name: nightwatch
+    webhook_configs:
+      - url: https://your-api/alerts/ingest
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: nwr_your_runner_token
+```
+
+The ingest endpoint speaks the Alertmanager webhook format and identifies the source by its `Alertmanager` user-agent. You can also start an investigation at any time from the console chat, with no alert source at all.
+
+## Configuration
+
+### API (`apps/api/.env`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `LLM_PROVIDER` | no | `anthropic` or `openai`. Any value other than `openai` resolves to `anthropic` (default: `anthropic`). |
+| `ANTHROPIC_API_KEY` | one of | Anthropic API key. Required when the provider is `anthropic`. |
+| `OPENAI_API_KEY` | one of | OpenAI or OpenAI-compatible key. Required when the provider is `openai`. |
+| `OPENAI_BASE_URL` | no | Base URL for OpenAI-compatible providers, e.g. `https://openrouter.ai/api/v1`. |
+| `ANTHROPIC_MODEL` | no | Model id for the Anthropic provider (default: `claude-sonnet-4-6`). |
+| `OPENAI_MODEL` | no | Model id for the OpenAI provider (default: `openai/gpt-oss-120b:free`). |
+| `PORT` | no | HTTP port the API listens on (default: `3000`). |
+| `HOST` | no | Bind address (default: `127.0.0.1`). |
+| `NIGHTWATCH_DB_PATH` | no | Path to the SQLite file (default: `/var/nightwatch/nightwatch.db`). The parent directory is created on boot if it does not exist. |
+| `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file beside the database, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
+| `GITHUB_TOKEN` | no | Enables the `get_recent_commits` tool so the agent can correlate alerts with recent deploys. |
+| `INVESTIGATION_CONCURRENCY` | no | Maximum investigations running at once (default: `5`). |
+| `INVESTIGATION_QUEUE_MAX` | no | Bounded in-memory backlog size; overflow is dropped and the alert re-fires (default: `100`). |
+
+### Runner (`apps/runner/.env`)
+
+| Variable | Required | Description |
+|---|---|---|
+| `NIGHTWATCH_TOKEN` | yes | Runner credential minted from the console |
+| `WS_URL` | yes | API WebSocket endpoint, e.g. `wss://your-api/clients/connect` |
+| `REMEDIATION_ENABLED` | no | Set to `true` to allow `exec_command` (disabled by default) |
+| `HOST_PROC` | no | `/proc` mount path when running inside a container (default: `/proc`) |
+
+## Development
+
+`pnpm dev` is all you need for day-to-day work; it runs every app from source with live reload, so there is no build step involved.
+
+To exercise the alert pipeline locally without deploying a runner, start the bundled monitoring stack. It runs cAdvisor, Prometheus, and Alertmanager in Docker and points them at your local API, so a real alert can flow end to end on your machine:
 
 ```bash
-npm run build
-node dist/index.js --compose path/to/docker-compose.yaml
+pnpm dev:infra
 ```
 
-Or install globally and use the `nightwatch` binary directly:
+Type-check and run the test suites across every package:
 
 ```bash
-npm install -g .
-nightwatch --compose path/to/docker-compose.yaml
+pnpm typecheck
+pnpm test
 ```
 
-### CLI Options
+A production build (compiled output for deployment) is available with:
 
 ```bash
-nightwatch                                        # Auto-discover compose files in current directory
-nightwatch --compose docker-compose.yaml          # Point to a specific file
-nightwatch --compose db.yml,api.yml,cache.yml     # Multiple files (comma-separated)
-nightwatch --compose ./services/                  # Auto-discover in a subdirectory
-nightwatch --mode observe                         # Diagnose only, no changes made
-nightwatch --mode remediate                       # Full remediation (default)
-nightwatch --max-retries 5                        # Max replan attempts before escalating (default: 3)
+pnpm build
 ```
 
-**Example:**
+### Monorepo layout
 
-```bash
-nightwatch --compose ./clipper/docker-compose.yaml --mode remediate --max-retries 3
-```
-
-## Modes
-
-### `remediate` (default)
-Full autonomous operation. Nightwatch detects incidents, plans a remediation, asks for your approval, executes it, and verifies the fix.
-
-### `observe`
-Diagnostic only. Nightwatch analyzes incidents and reports its findings but makes no changes to your infrastructure.
-
-## How It Works
-
-Nightwatch runs a continuous loop over your container logs. When it detects error patterns it triggers an incident investigation. Gemini acts as the orchestrator, selecting which capability to invoke at each step:
+Nightwatch is a pnpm workspace. Apps consume shared code only through the `@nightwatch/shared` package, never through relative paths.
 
 ```
-Logs → analyzeIncident → assessFeasibility → planRemediation → validatePlan → executePlan → verifyPlan → resolved
+apps/
+  api/                  Fastify API: the brain
+    src/
+      agent/            agentic loop, tools, prompt context
+      alerts/           Alertmanager ingest, dedup, batching
+      auth/             owner password, runner token minting
+      config/           settings routes and LLM config
+      db/               SQLite client and table modules
+      llm/              provider factory (Anthropic / OpenAI)
+      runners/          runner registry, connect.sh handler
+      session/          session routes, human-input suspend/resume
+      ws/               runner WebSocket router and console event bus
+      dispatcher.ts     single entry point for every investigation
+  runner/               Stateless executor: the hands
+    src/
+      commands/         read tools (container, host, files, deploy) + remediation
+      manifest/         capability advertisement to the API
+      metrics/          host and container metric collection
+      safety/           command allowlist and secret redaction
+      websocket/        outbound WSS client to the API
+  console/              React operator UI
+    src/
+      auth/             login and owner-password setup
+      hooks/            console WebSocket, attention counter
+      pages/            shell, session view, sidebar, runners, settings
+      transcript/       live and persisted transcript rendering
+      utils/            shared client helpers
+packages/
+  shared/               Shared TypeScript types: the contract
+    src/
+      ws.ts             runner wire protocol
+      console-events.ts console event envelopes
+      tools.ts          LLM tool schemas
+      sessions.ts       session and message shapes
+      approvals.ts      approval and clarification shapes
 ```
 
-Each stage is a specialized LLM agent with access to Docker inspection tools. Stages share conversation history so later agents have full context from earlier investigation. Tool results are cached per incident to avoid redundant Docker API calls.
+## License
 
-When Nightwatch needs input from you — to approve a plan, answer a missing-context question, or decide on escalation — it pauses and presents an interactive prompt.
+Nightwatch is licensed under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must make your source available to its users.
 
-## Capabilities
-
-| Capability | What it does |
-|---|---|
-| `analyzeIncident` | Reads logs and Docker state to build an incident graph of affected components |
-| `assessFeasibility` | Determines whether safe automated remediation is possible |
-| `planRemediation` | Generates a sequence of Docker commands to fix the incident |
-| `validatePlan` | Checks commands against safety rules before execution |
-| `executePlan` | Runs the plan sequentially, stops on first failure |
-| `verifyPlan` | Confirms the fix worked by re-inspecting container state |
-| `consultUser` | Asks for plan approval, missing context, or escalation decisions |
-| `reportFindings` | Produces a diagnostic summary (observe mode only) |
-
-## Safety
-
-All commands are validated before execution:
-
-- Only `docker` CLI commands are allowed
-- Shell operators (`|`, `>`, `;`, `&&`) and command substitution are blocked
-- Each command must target exactly one known container
-- Destructive patterns (`rm -rf`, `dd if=`) are blocked
-
-## Knowledge Persistence
-
-When Nightwatch asks you a question and you answer it, that fact is saved to `.nightwatch/knowledge.md` relative to your compose file location. On the next incident, it consults this file before asking you the same question again.
-
-## Project Structure
-
-```
-src/
-├── index.ts                  # CLI entry point
-├── config.ts                 # Runtime config type
-├── globals.ts                # Singleton context store
-├── capabilities/             # analyzeIncident, assessFeasibility, planRemediation, ...
-├── orchestration/
-│   ├── workflow.ts           # Main control loop
-│   ├── registry.ts           # Capability declarations exposed to Gemini
-│   ├── composeLoader.ts      # Compose file discovery and parsing
-│   ├── resolvedStore.ts      # Incident deduplication (5-min TTL)
-│   └── prompt.md             # Orchestrator system prompt
-├── llm/
-│   ├── runtime.ts            # Agent loop with tool calling
-│   ├── model.ts              # Gemini SDK setup
-│   └── knowledge.ts          # Knowledge file read/write
-├── tools/
-│   ├── docker.ts             # list, inspect, stats, logs, top
-│   └── cache.ts              # Per-incident tool result cache
-├── execution/
-│   ├── validator.ts          # Command safety validation
-│   └── executor.ts           # Sequential command runner
-├── observation/
-│   ├── logBuffer.ts          # Error pattern detection and batching
-│   └── observeContainerLogs.ts
-└── utils/
-    ├── formInput.ts          # Interactive TUI (approval, escalation, context prompts)
-    └── colors.ts / logger.ts / helpers.ts
-```
+For commercial or proprietary use outside the terms of the AGPL, contact the maintainers about a separate license.

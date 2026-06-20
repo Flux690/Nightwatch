@@ -16,17 +16,14 @@ import { convertPersistedMessages } from "../transcript/persistedConverter.js";
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
 
-// A session that was suspended awaiting a human is durable: the operator may
-// load this page minutes or hours after the live HUMAN_INPUT_REQUIRED event
-// fired (CONTEXT.md's "3am story"). Reconstruct the same envelope the API
-// would have published live, so it flows through the one shared converter
-// instead of a second, hand-rolled card-building path.
+// durable: operator may reload minutes or hours after the live HUMAN_INPUT_REQUIRED event fired.
+// Reconstruct the same envelope so it flows through the shared converter, not a second hand-rolled path.
 function pendingApprovalToEnvelope(
   p: ApprovalRequest,
 ): ConsoleHumanInputRequired {
   const isClarification = p.kind === "clarification";
   // Clarification's question/options/multiSelect ride inside toolInput - the
-  // API embeds them there at publish time (investigation/loop.ts) because
+  // API embeds them there at publish time (agent/loop.ts) because
   // they originate from the tool call's own input, not a separate column.
   const clarInput = isClarification
     ? (p.toolInput as {

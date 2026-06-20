@@ -29,7 +29,7 @@
 @.claude/rules/workflow.md
 
 ## References
-- Project, architecture, glossary, decisions (single source of truth): CONTEXT.md
+- Project overview and architecture: README.md
 - Work backlog (vertical-slice issues): issues/
 
 ## Session protocol
