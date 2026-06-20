@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Autocomplete,
   Badge,
@@ -12,6 +12,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
 import { useAuth } from "../auth/AuthContext.js";
@@ -39,8 +40,6 @@ function buildDelta(
   }
   return delta;
 }
-
-const SAVE_DEBOUNCE_MS = 400;
 
 export function SettingsPage(): React.JSX.Element {
   const { logoutAll } = useAuth();
@@ -70,29 +69,40 @@ export function SettingsPage(): React.JSX.Element {
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (config) setForm(config);
   }, [config]);
 
-  async function save(): Promise<void> {
+  async function handleSave(): Promise<void> {
     if (!form || !config) return;
     const delta = buildDelta(form, config);
     if (Object.keys(delta).length === 0) return;
-    const res = await fetch("/api/config", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(delta),
-    });
-    if (!res.ok) throw new Error(`config patch ${res.status}`);
-    const updated = (await res.json()) as AgentConfig;
-    queryClient.setQueryData(["config"], updated);
-  }
-
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function requestSave(): void {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(delta),
+      });
+      if (!res.ok) throw new Error(`config patch ${res.status}`);
+      const updated = (await res.json()) as AgentConfig;
+      queryClient.setQueryData(["config"], updated);
+      notifications.show({
+        color: "green",
+        title: "Settings saved",
+        message: "Your changes have been saved.",
+      });
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Save failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleTestConnection(): Promise<void> {
@@ -128,6 +138,8 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   const isAnthropic = form?.provider === "anthropic";
+  const hasChanges =
+    form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
 
   return (
     <div
@@ -298,7 +310,12 @@ export function SettingsPage(): React.JSX.Element {
             />
           </Stack>
 
-          <Button onClick={requestSave} style={{ alignSelf: "flex-start" }}>
+          <Button
+            onClick={() => void handleSave()}
+            disabled={!hasChanges || saving}
+            loading={saving}
+            style={{ alignSelf: "flex-start" }}
+          >
             Save
           </Button>
         </Stack>
