@@ -8,6 +8,15 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Plus,
+  Server,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+} from "lucide-react";
 import type { ApprovalRequest, ConsoleEvent } from "@nightwatch/shared";
 import { useAuth } from "../auth/AuthContext.js";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
@@ -17,136 +26,7 @@ import { SessionView } from "./SessionView.js";
 const SIDEBAR_KEY = "nw:sidebar-expanded";
 const EXPANDED_WIDTH = 250;
 const COLLAPSED_WIDTH = 60;
-
-function IconPlus(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M9 3.75v10.5M3.75 9h10.5" />
-    </svg>
-  );
-}
-
-function IconServer(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="2" y="2.5" width="14" height="5" rx="1" />
-      <rect x="2" y="10.5" width="14" height="5" rx="1" />
-      <circle cx="5" cy="5" r="0.75" fill="currentColor" stroke="none" />
-      <circle cx="5" cy="13" r="0.75" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function IconGear(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="9" cy="9" r="2.5" />
-      <path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.1 3.1l1.4 1.4M13.5 13.5l1.4 1.4M3.1 14.9l1.4-1.4M13.5 4.5l1.4-1.4" />
-    </svg>
-  );
-}
-
-function IconLogOut(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M7 3H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4" />
-      <path d="M12 13l4-4-4-4M16 9H7" />
-    </svg>
-  );
-}
-
-function IconChevronLeft(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M11 13l-4-4 4-4" />
-    </svg>
-  );
-}
-
-function IconChevronRight(): React.JSX.Element {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M7 5l4 4-4 4" />
-    </svg>
-  );
-}
-
-function IconChevronDown(): React.JSX.Element {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 5l4 4 4-4" />
-    </svg>
-  );
-}
+const ICON_PROPS = { size: 18, strokeWidth: 1.5, "aria-hidden": true } as const;
 
 function useSidebarExpanded(): [boolean, () => void] {
   const [expanded, setExpanded] = useState<boolean>(
@@ -304,14 +184,18 @@ export function Shell(): React.JSX.Element {
                 color: "var(--nw-text-muted)",
               }}
             >
-              {expanded ? <IconChevronLeft /> : <IconChevronRight />}
+              {expanded ? (
+                <ChevronLeft {...ICON_PROPS} />
+              ) : (
+                <ChevronRight {...ICON_PROPS} />
+              )}
             </UnstyledButton>
           </Tooltip>
         </div>
 
         {expanded ? (
           <Button
-            leftSection={<IconPlus />}
+            leftSection={<Plus {...ICON_PROPS} />}
             variant="light"
             size="sm"
             fullWidth
@@ -335,7 +219,7 @@ export function Shell(): React.JSX.Element {
                 alignSelf: "center",
               }}
             >
-              <IconPlus />
+              <Plus {...ICON_PROPS} />
             </UnstyledButton>
           </Tooltip>
         )}
@@ -398,7 +282,11 @@ export function Shell(): React.JSX.Element {
               >
                 Recent sessions
               </Text>
-              {sessionsOpen ? <IconChevronDown /> : <IconChevronRight />}
+              {sessionsOpen ? (
+                <ChevronDown size={14} strokeWidth={1.5} aria-hidden="true" />
+              ) : (
+                <ChevronRight {...ICON_PROPS} />
+              )}
             </UnstyledButton>
             {sessionsOpen && (
               <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
@@ -420,13 +308,13 @@ export function Shell(): React.JSX.Element {
         >
           <NavLink
             to="/runners"
-            icon={<IconServer />}
+            icon={<Server {...ICON_PROPS} />}
             label="Runners"
             compact={!expanded}
           />
           <NavLink
             to="/settings"
-            icon={<IconGear />}
+            icon={<Settings {...ICON_PROPS} />}
             label="Settings"
             compact={!expanded}
           />
@@ -452,7 +340,7 @@ export function Shell(): React.JSX.Element {
             <Button
               size="xs"
               variant="subtle"
-              leftSection={<IconLogOut />}
+              leftSection={<LogOut {...ICON_PROPS} />}
               style={{ alignSelf: "flex-start" }}
               onClick={() => void logout()}
             >
@@ -473,7 +361,7 @@ export function Shell(): React.JSX.Element {
                   color: "var(--nw-text-muted)",
                 }}
               >
-                <IconLogOut />
+                <LogOut {...ICON_PROPS} />
               </UnstyledButton>
             </Tooltip>
           )}
