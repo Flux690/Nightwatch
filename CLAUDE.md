@@ -27,6 +27,7 @@
 @.claude/rules/git.md
 @.claude/rules/architecture.md
 @.claude/rules/workflow.md
+@.claude/rules/versioning.md
 
 ## References
 - Project overview and architecture: README.md
