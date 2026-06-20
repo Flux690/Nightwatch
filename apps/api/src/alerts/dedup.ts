@@ -1,4 +1,4 @@
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInputForAlert } from "../db/interrupts.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 

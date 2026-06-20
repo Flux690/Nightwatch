@@ -4,7 +4,7 @@ import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
 import { getRunnerIdentity } from "../ws/router.js";
 import { logger } from "../logger.js";

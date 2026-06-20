@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { NormalizedAlert } from "@nightwatch/shared";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 
 export interface BatchWindow {

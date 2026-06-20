@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createDispatcher } from "../dispatch/dispatcher.js";
-import type { RunInvestigationInput } from "../investigation/loop.js";
+import { createDispatcher } from "../dispatcher.js";
+import type { RunInvestigationInput } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {

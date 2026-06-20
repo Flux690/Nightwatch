@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { generateToken } from "../db/tokens.js";
-import { registerConnectRoutes } from "../connect/routes.js";
+import { registerConnectRoutes } from "../runners/connect.js";
 
 describe("GET /connect.sh", () => {
   let server: FastifyInstance;

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { generateToken, deleteToken, listTokensMeta } from "../db/tokens.js";
 import { closeTokenRunners } from "../ws/router.js";
-import { requireSession } from "../auth/session.js";
+import { requireSession } from "./session.js";
 
 export async function registerTokenRoutes(
   fastify: FastifyInstance,

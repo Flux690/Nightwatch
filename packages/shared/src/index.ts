@@ -46,6 +46,8 @@ export type {
   RunnerManifestMessage,
   RunnerResultMessage,
   RunnerHeartbeatMessage,
+} from "./ws.js";
+export type {
   ConsoleHumanInputResolved,
   ConsoleInterruptResolved,
   ConsoleTextMessageContent,
@@ -55,7 +57,7 @@ export type {
   ConsoleInterrupt,
   ConsoleToolCallEnd,
   ConsoleEvent,
-} from "./ws.js";
+} from "./console-events.js";
 export type {
   ApprovalStatus,
   ApprovalRequest,

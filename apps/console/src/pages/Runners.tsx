@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { timeAgo } from "../time.js";
+import { timeAgo } from "../utils/time.js";
 
 type RunnerStatus = "awaiting connection" | "online" | "offline";
 

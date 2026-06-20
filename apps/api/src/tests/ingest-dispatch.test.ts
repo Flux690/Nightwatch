@@ -25,7 +25,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 
 // A free-form finish: no tool call ends the run successfully.
 const FINISH: ScriptedTurn[] = [

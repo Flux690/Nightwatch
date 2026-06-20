@@ -4,14 +4,14 @@ import {
   deletePendingHumanInput,
   getPendingHumanInputWithSessionBySessionId,
 } from "../db/interrupts.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import {
   publishInterruptResolved,
   publishToolCallEnd,
-} from "../session/stream.js";
-import { buildSeed } from "../session/seed.js";
+} from "./stream.js";
+import { buildSeed } from "./seed.js";
 import { sendCommand } from "../ws/router.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 

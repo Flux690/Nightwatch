@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Text } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionMeta } from "@nightwatch/shared";
-import { timeAgo } from "../time.js";
+import { timeAgo } from "../utils/time.js";
 
 export function SessionsSidebar(): React.JSX.Element {
   const navigate = useNavigate();

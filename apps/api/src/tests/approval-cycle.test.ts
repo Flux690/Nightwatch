@@ -32,9 +32,9 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
-import { registerChatRoutes } from "../chat/routes.js";
-import { registerSessionRoutes } from "../sessions/routes.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+
+import { registerSessionRoutes } from "../session/routes.js";
+import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
   registerRunner,
@@ -118,8 +118,7 @@ describe("durable approval interrupts", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-    await registerChatRoutes(server);
-    await registerSessionRoutes(server);
+        await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });

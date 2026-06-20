@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { runInvestigation } from "../investigation/loop.js";
-import type { RunInvestigationInput } from "../investigation/loop.js";
-import { getSession } from "../db/sessions.js";
-import { logger } from "../logger.js";
+import { runInvestigation } from "./agent/loop.js";
+import type { RunInvestigationInput } from "./agent/loop.js";
+import { getSession } from "./db/sessions.js";
+import { logger } from "./logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 // The single entry to the investigation loop (architecture invariant): alert,

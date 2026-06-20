@@ -27,9 +27,9 @@ import Fastify from "fastify";
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { respondToPendingHumanInput } from "../human-input/service.js";
+import { respondToPendingHumanInput } from "../session/human-input.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,

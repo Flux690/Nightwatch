@@ -6,7 +6,7 @@ import { requireSession } from "../auth/session.js";
 import { findTokenByValue } from "../db/tokens.js";
 
 const TEMPLATE = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "connect.sh"),
+  join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
   "utf8",
 );
 
@@ -19,9 +19,12 @@ function buildWsUrl(origin: string): string {
   return `${wsProto}://${origin.replace(/^https?:\/\//, "")}/clients/connect`;
 }
 
-function buildScript(platformUrl: string, wsUrl: string, token: string): string {
-  return TEMPLATE
-    .replaceAll("{{PLATFORM_URL}}", platformUrl)
+function buildScript(
+  platformUrl: string,
+  wsUrl: string,
+  token: string,
+): string {
+  return TEMPLATE.replaceAll("{{PLATFORM_URL}}", platformUrl)
     .replaceAll("{{WS_URL}}", wsUrl)
     .replaceAll("{{NIGHTWATCH_TOKEN}}", token);
 }

@@ -22,7 +22,7 @@ import {
   publishInterrupt,
   publishToolCallEnd,
 } from "../session/stream.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,

@@ -13,6 +13,7 @@ import type {
   GetContainerLogsInput,
   GetContainerProcessesInput,
   GetContainerStatsInput,
+  GetEnvVariableNamesInput,
 } from "@nightwatch/shared";
 
 const exec = promisify(execFile);
@@ -270,4 +271,19 @@ function normalizeEventType(action: string): ContainerEvent["eventType"] {
     destroy: "destroy",
   };
   return map[action] ?? "die";
+}
+
+export async function getEnvVariableNames(
+  input: GetEnvVariableNamesInput,
+): Promise<{ names: string[] }> {
+  const { stdout } = await exec("docker", ["inspect", input.containerName]);
+  const arr = JSON.parse(stdout) as Array<Record<string, unknown>>;
+  const raw = arr[0];
+  if (!raw) throw new Error(`Container not found: ${input.containerName}`);
+
+  const config = raw["Config"] as Record<string, unknown> | undefined;
+  const env = (config?.["Env"] as string[] | undefined) ?? [];
+  const names = env.map((e) => e.split("=")[0] ?? e);
+
+  return { names };
 }

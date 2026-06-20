@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionsSidebar } from "../pages/Sessions.js";
+import { SessionsSidebar } from "../pages/SessionsSidebar.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 const RUNNER = {

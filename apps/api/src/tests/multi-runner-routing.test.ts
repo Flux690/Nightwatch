@@ -47,11 +47,11 @@ import {
   setRunnerManifest,
   resolveCommand,
 } from "../ws/router.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
-import { registerChatRoutes } from "../chat/routes.js";
-import { registerSessionRoutes } from "../sessions/routes.js";
+
+import { registerSessionRoutes } from "../session/routes.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -152,8 +152,7 @@ describe("multi-runner routing", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-    await registerChatRoutes(server);
-    await registerSessionRoutes(server);
+        await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });

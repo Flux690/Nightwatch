@@ -7,7 +7,7 @@ import FastifyWebSocket from "@fastify/websocket";
 import WebSocket from "ws";
 import type { AddressInfo } from "node:net";
 
-import { registerTokenRoutes } from "../token/routes.js";
+import { registerTokenRoutes } from "../auth/token.js";
 import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";

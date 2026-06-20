@@ -23,9 +23,9 @@ mockCreateProvider.mockImplementation(() =>
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerChatRoutes } from "../chat/routes.js";
-import { registerSessionRoutes } from "../sessions/routes.js";
-import { dispatcher } from "../dispatch/dispatcher.js";
+
+import { registerSessionRoutes } from "../session/routes.js";
+import { dispatcher } from "../dispatcher.js";
 
 describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   let server: FastifyInstance;
@@ -38,8 +38,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerChatRoutes(server);
-    await registerSessionRoutes(server);
+        await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });

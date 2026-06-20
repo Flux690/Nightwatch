@@ -28,8 +28,8 @@ import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerChatRoutes } from "../chat/routes.js";
-import { registerSessionRoutes } from "../sessions/routes.js";
+
+import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
   unregisterRunner,
@@ -55,8 +55,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerChatRoutes(server);
-    await registerSessionRoutes(server);
+        await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
