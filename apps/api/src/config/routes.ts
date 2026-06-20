@@ -30,7 +30,6 @@ const KeyBodySchema = z.object({
   apiKey: z.string().min(1),
 });
 
-// Build the upstream model-list URL for the configured provider/baseUrl.
 function modelsUrl(config: AgentConfig): string {
   if (config.provider === "anthropic") {
     const base = config.baseUrl ?? "https://api.anthropic.com";
@@ -46,7 +45,6 @@ function modelsUrl(config: AgentConfig): string {
   return `${base}/models`;
 }
 
-// Build auth headers appropriate for the provider.
 function authHeaders(
   provider: AgentConfig["provider"],
   apiKey: string,
@@ -60,7 +58,6 @@ function authHeaders(
   return { Authorization: `Bearer ${apiKey}` };
 }
 
-// Extract model id strings from whatever shape the upstream endpoint returns.
 function extractModels(data: unknown): string[] {
   if (typeof data !== "object" || data === null) return [];
   const d = data as Record<string, unknown>;
@@ -117,12 +114,10 @@ async function probeEndpoint(
 export async function registerConfigRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // GET /config — returns AgentConfig without any encrypted/plaintext key.
-  // Still gated: provider, model, baseUrl, and the masked key are not for
-  // unauthenticated eyes.
+  // gated: config includes provider/model/baseUrl — not for unauthenticated eyes
   fastify.get("/config", { preHandler: requireSession }, async () => {
     const config = loadConfig();
-    // apiKeyMasked is safe to return; apiKeyEncrypted never reaches here.
+    // apiKeyMasked is safe to return; apiKeyEncrypted never reaches here
     return config;
   });
 
@@ -147,8 +142,7 @@ export async function registerConfigRoutes(
     },
   );
 
-  // GET /config/models — proxies the configured endpoint's model list so the
-  // browser never calls the LLM endpoint directly.
+  // proxies model list so the browser never calls the LLM endpoint directly
   fastify.get("/config/models", { preHandler: requireSession }, async () => {
     const config = loadConfig();
     const apiKey =
@@ -169,8 +163,6 @@ export async function registerConfigRoutes(
     }
   });
 
-  // POST /config/test — encrypts + persists the API key, then probes the
-  // configured endpoint. Returns success or a categorised error.
   fastify.post(
     "/config/test",
     { preHandler: requireSession },
@@ -191,8 +183,6 @@ export async function registerConfigRoutes(
     },
   );
 
-  // PATCH /config/key — updates the encrypted key without touching other config
-  // fields. Use POST /config/test when you also want to probe the endpoint.
   fastify.patch(
     "/config/key",
     { preHandler: requireSession },

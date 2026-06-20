@@ -1,6 +1,5 @@
 // LLM tool input/output types — matched to Anthropic TOOL_SCHEMAS in apps/api
 
-// Container tools
 export interface GetContainerListInput {
   environment: "docker" | "kubernetes";
   namespace?: string;
@@ -30,7 +29,9 @@ export interface ContainerLogsResult {
   compressionNote: string;
 }
 
-export interface GetContainerInspectInput { containerName: string }
+export interface GetContainerInspectInput {
+  containerName: string;
+}
 export interface ContainerInspectResult {
   name: string;
   image: string;
@@ -39,12 +40,19 @@ export interface ContainerInspectResult {
   mounts: unknown[];
   ports: unknown[];
   restartPolicy: string;
-  healthCheck: { test: string[]; interval: number; retries: number; lastResult: string };
+  healthCheck: {
+    test: string[];
+    interval: number;
+    retries: number;
+    lastResult: string;
+  };
   createdAt: string;
   startedAt: string;
 }
 
-export interface GetContainerStatsInput { containerName: string }
+export interface GetContainerStatsInput {
+  containerName: string;
+}
 export interface ContainerStatsResult {
   cpuPercent: number;
   memoryUsedBytes: number;
@@ -57,15 +65,29 @@ export interface ContainerStatsResult {
   pids: number;
 }
 
-export interface GetContainerEventsInput { containerName: string; sinceMinutes?: number }
+export interface GetContainerEventsInput {
+  containerName: string;
+  sinceMinutes?: number;
+}
 export interface ContainerEvent {
   timestamp: string;
-  eventType: "start" | "stop" | "restart" | "oom" | "die" | "health_status" | "pull" | "create" | "destroy";
+  eventType:
+    | "start"
+    | "stop"
+    | "restart"
+    | "oom"
+    | "die"
+    | "health_status"
+    | "pull"
+    | "create"
+    | "destroy";
   message: string;
   actor: string;
 }
 
-export interface GetContainerProcessesInput { containerName: string }
+export interface GetContainerProcessesInput {
+  containerName: string;
+}
 export interface ContainerProcess {
   pid: number;
   ppid: number;
@@ -75,7 +97,6 @@ export interface ContainerProcess {
   command: string;
 }
 
-// Host tools
 export interface GetHostMemoryResult {
   totalBytes: number;
   availableBytes: number;
@@ -96,8 +117,19 @@ export interface GetHostCpuResult {
 }
 
 export interface GetHostDiskResult {
-  filesystems: Array<{ mount: string; device: string; totalBytes: number; usedBytes: number; usedPercent: number }>;
-  diskIO: Array<{ device: string; readBytesPerSec: number; writeBytesPerSec: number; iowaitPercent: number }>;
+  filesystems: Array<{
+    mount: string;
+    device: string;
+    totalBytes: number;
+    usedBytes: number;
+    usedPercent: number;
+  }>;
+  diskIO: Array<{
+    device: string;
+    readBytesPerSec: number;
+    writeBytesPerSec: number;
+    iowaitPercent: number;
+  }>;
 }
 
 export interface GetHostNetworkResult {
@@ -106,14 +138,16 @@ export interface GetHostNetworkResult {
   totalConnections: number;
 }
 
-export interface GetHostDmesgInput { tailLines?: number; filterLevel?: "err" | "warn" | "all" }
+export interface GetHostDmesgInput {
+  tailLines?: number;
+  filterLevel?: "err" | "warn" | "all";
+}
 export interface GetHostDmesgResult {
   lines: Array<{ timestamp: string; level: string; message: string }>;
   oomEventsFound: boolean;
   fsErrorsFound: boolean;
 }
 
-// Metrics + history
 export interface QueryPrometheusInput {
   query: string;
   startTime: string;
@@ -129,10 +163,17 @@ export interface PrometheusResult {
   firstAnomalyTimestamp?: string;
 }
 
-export interface GetAlertHistoryInput { containerName?: string; limitDays?: number }
+export interface GetAlertHistoryInput {
+  containerName?: string;
+  limitDays?: number;
+}
 
-// Code + deploy
-export interface GetRecentCommitsInput { repoOwner: string; repoName: string; branch?: string; limit?: number }
+export interface GetRecentCommitsInput {
+  repoOwner: string;
+  repoName: string;
+  branch?: string;
+  limit?: number;
+}
 export interface CommitInfo {
   sha: string;
   shortSha: string;
@@ -144,7 +185,9 @@ export interface CommitInfo {
   deletions: number;
 }
 
-export interface GetRecentDeploysInput { containerName: string }
+export interface GetRecentDeploysInput {
+  containerName: string;
+}
 export interface DeployInfo {
   currentImageDigest: string;
   currentImageCreatedAt: string;
@@ -153,14 +196,25 @@ export interface DeployInfo {
   timeSinceChangeMinutes?: number;
 }
 
-export interface GetEnvVariableNamesInput { containerName: string }
-export interface ReadFileInput { path: string; maxLines?: number }
-export interface ReadFileResult { content: string; lineCount: number; path: string; redactedLineCount: number }
+export interface GetEnvVariableNamesInput {
+  containerName: string;
+}
+export interface ReadFileInput {
+  path: string;
+  maxLines?: number;
+}
+export interface ReadFileResult {
+  content: string;
+  lineCount: number;
+  path: string;
+  redactedLineCount: number;
+}
 
-// Clarification
-export interface RequestClarificationInput { question: string; context: string }
+export interface RequestClarificationInput {
+  question: string;
+  context: string;
+}
 
-// Remediation (approval-gated)
 export type RiskLevel = "low" | "medium" | "high";
 
 export interface RestartContainerInput {

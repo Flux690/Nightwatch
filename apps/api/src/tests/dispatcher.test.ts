@@ -197,9 +197,7 @@ describe("dispatcher", () => {
     gates.get(started[1]!)?.resolve();
   });
 
-  // Regression for H3: a resume dispatch never carries `input.alert` (see
-  // human-input/service.ts), so all alert-derived behavior must fall back to
-  // the injected session->alert lookup instead of going stale.
+  // resume dispatch never carries input.alert; all alert-derived behavior must fall back to the session lookup
   describe("resumed alert runs (no input.alert, derived via lookup)", () => {
     it("getActiveAlertSession recovers the alert session on resume", async () => {
       const gate = deferred();

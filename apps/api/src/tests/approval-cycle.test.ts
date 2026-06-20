@@ -130,7 +130,6 @@ describe("durable approval interrupts", () => {
     vi.unstubAllEnvs();
   });
 
-  // RED: gated tool suspends — interrupt row in DB, run exited, INTERRUPT published
   it("gated tool suspends: interrupt row exists in DB, run exited, INTERRUPT published", async () => {
     setScript([
       {
@@ -204,7 +203,6 @@ describe("durable approval interrupts", () => {
     await waitFor(() => restartCommands.length > countBefore);
   });
 
-  // RED: approve executes runner tool exactly once, run resumes and reaches finding
   it("approve: executes tool on runner exactly once, run resumes, reaches free-form finish", async () => {
     restartCommands.length = 0;
     setScript([
@@ -287,7 +285,6 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: reject feeds rejection result, model adapts, run resumes
   it("reject: feeds rejection result with is_error, run resumes with model adapting", async () => {
     setScript([
       {
@@ -365,7 +362,6 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: add-context (text with no decision) feeds text, model continues
   it("add-context: text without decision feeds context, run resumes and model continues", async () => {
     setScript([
       {
@@ -439,7 +435,6 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: second resolution of same interrupt returns 409
   it("second resolution of same interrupt returns 409", async () => {
     setScript([
       {
@@ -600,7 +595,6 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: message to suspended session returns 409
   it("message to a suspended session returns 409", async () => {
     setScript([
       {
@@ -675,7 +669,6 @@ describe("durable approval interrupts", () => {
     });
   });
 
-  // RED: validation — clarification body rejected with a decision on approval interrupt
   it("approval interrupt with clarification-only body (no decision, no text) returns 400", async () => {
     setScript([
       {
@@ -749,7 +742,6 @@ describe("durable approval interrupts", () => {
     });
   });
 
-  // RED: restart-resume — run exited + interrupt in DB, approve still works (no in-memory state needed)
   it("restart-resume: interrupt survives process exit, resolve works and run completes", async () => {
     restartCommands.length = 0;
     setScript([
@@ -827,7 +819,6 @@ describe("durable approval interrupts", () => {
     ws.close();
   });
 
-  // RED: mixed parallel turn — non-gated tool runs first, resume has tool_results for ALL tool_uses
   it("mixed parallel turn: non-gated tools execute first, resume covers all tool_uses", async () => {
     restartCommands.length = 0;
     setScript([
@@ -993,7 +984,6 @@ describe("durable approval interrupts", () => {
     ).toBe(false);
   });
 
-  // RED: no timeout — interrupt is still resolvable with fake timers
   it("no timeout: interrupt pending for hours is still resolvable", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     restartCommands.length = 0;

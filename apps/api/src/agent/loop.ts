@@ -37,11 +37,7 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-// Sole writer of session_messages. Diffs the provider's own snapshot against
-// what's already persisted, writes exactly that diff (plain append, or atomically
-// with an interrupt row when suspending), and publishes each new message. A
-// hand-authored message can never reach the transcript because nothing but the
-// provider's snapshot ever feeds this function.
+// sole writer of session_messages; diffs provider snapshot against persisted, writes the diff atomically
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
@@ -126,7 +122,6 @@ export async function runInvestigation(
       persistedCount = input.seed.length;
     }
     provider.appendToolResults(input.resumeToolResults);
-    // Persist the tool_results turn (with correct providerContent from the provider).
     persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
@@ -138,8 +133,7 @@ export async function runInvestigation(
 
   const sessionMeta: SessionMeta = {
     sessionId,
-    // No alert means a human-opened chat: title from their message. Otherwise
-    // title from the alert. (alert == null is the chat/alert distinction now.)
+    // null alert = chat session; title from user message. alert session = alert type + target.
     title:
       alert == null && input.userMessage
         ? input.userMessage.slice(0, 80)
@@ -178,8 +172,6 @@ export async function runInvestigation(
       return;
     }
 
-    // No tool calls means the model is done: its free-form text is the answer.
-    // persist() above already saved and published it via RUN_FINISHED.
     if (response.toolUses.length === 0) {
       log.info({ turn }, "investigation finished with free-form response");
       return;
@@ -201,7 +193,6 @@ export async function runInvestigation(
 
       if (isClarification || isApproval) {
         if (gatedTool === null) {
-          // Capture the first gated tool; execution deferred to the resume run.
           gatedTool = tool;
         } else {
           // Only one gate per turn; reject subsequent gated tools so every

@@ -1,22 +1,16 @@
 import type { ToolSchema } from "../llm/types.js";
 
-// Runner tools that require human approval before execution.
-// This is a property of certain runner tools, not a separate routing destination.
+// approval gate — a property of the tool, not a separate routing destination
 export const REQUIRES_APPROVAL = new Set([
   "restart_container",
   "rollback_deploy",
   "exec_command",
 ]);
 
-// Tools handled entirely on the platform (API) side — never reach the runner.
-// request_clarification is NOT here — it suspends the run via a durable interrupt
-// (kind: clarification) rather than executing inline.
-export const PLATFORM_TOOLS = new Set([
-  "get_recent_commits",
-]);
+// platform-side only; request_clarification is absent because it suspends via interrupt, not inline exec
+export const PLATFORM_TOOLS = new Set(["get_recent_commits"]);
 
-// Every tool that routes to the runner via sendCommand.
-// REQUIRES_APPROVAL is a subset: those tools go through the approval gate first.
+// REQUIRES_APPROVAL is a subset that goes through the approval gate first
 export const RUNNER_TOOLS = new Set([
   "get_container_list",
   "get_container_logs",

@@ -104,18 +104,14 @@ describe("alert batching (REST seam + fake timers)", () => {
     const r2 = await ingest(token, alertBody("fp-2"));
     const r3 = await ingest(token, alertBody("fp-3"));
 
-    // All three accepted — none dropped
     expect(r1).toMatchObject({ enqueued: 1, skipped: 0 });
     expect(r2).toMatchObject({ enqueued: 1, skipped: 0 });
     expect(r3).toMatchObject({ enqueued: 1, skipped: 0 });
 
-    // Batch window is holding — no session started yet
     expect(mockCreateProvider.mock.calls).toHaveLength(0);
 
-    // Fire the 90s window
     vi.advanceTimersByTime(90_001);
 
-    // Exactly one session (all three collapsed into one)
     expect(mockCreateProvider.mock.calls).toHaveLength(1);
 
     const firstProvider = mockCreateProvider.mock.results[0]!.value as {
@@ -132,18 +128,14 @@ describe("alert batching (REST seam + fake timers)", () => {
     const { plaintext: tokenA } = generateToken("batch-tok-a");
     const { plaintext: tokenB } = generateToken("batch-tok-b");
 
-    // Two alerts for tokenA and one for tokenB all arrive within the 90s window
     await ingest(tokenA, alertBody("fp-a1"));
     await ingest(tokenB, alertBody("fp-b1"));
     await ingest(tokenA, alertBody("fp-a2"));
 
-    // Batch window is holding — no session started yet
     expect(mockCreateProvider.mock.calls).toHaveLength(0);
 
     vi.advanceTimersByTime(90_001);
 
-    // One operator-wide session containing all three alerts so the agent can
-    // judge shared root cause across servers (CONTEXT.md alert pipeline).
     expect(mockCreateProvider.mock.calls).toHaveLength(1);
 
     const openingMsg = (
@@ -161,21 +153,17 @@ describe("alert batching (REST seam + fake timers)", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { plaintext: token } = generateToken("batch-dedup");
 
-    // First occurrence
     const r1 = await ingest(token, alertBody("dup-fp"));
     expect(r1).toMatchObject({ enqueued: 1, skipped: 0 });
 
-    // Same fingerprint again — true duplicate, should be dropped
     const r2 = await ingest(token, alertBody("dup-fp"));
     expect(r2).toMatchObject({ enqueued: 0, skipped: 1 });
 
-    // Different fingerprint — joins the batch
     const r3 = await ingest(token, alertBody("other-fp"));
     expect(r3).toMatchObject({ enqueued: 1, skipped: 0 });
 
     vi.advanceTimersByTime(90_001);
 
-    // One session, opening message has both fingerprints (not the duplicate)
     expect(mockCreateProvider.mock.calls).toHaveLength(1);
     const p = mockCreateProvider.mock.results[0]!.value as {
       start: ReturnType<typeof vi.fn>;

@@ -2,21 +2,12 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 
-// The API's SQLite file is the single system of record (architecture invariant
-// D1). One file, WAL mode, idempotent DDL bootstrapped on first open - the same
-// pattern the runner uses for its history db. Postgres/Prisma are gone.
-// Resolved lazily (inside getDb) so tests can set NIGHTWATCH_DB_PATH before the
-// connection opens. Exported so the SECRET_KEY self-provisioning (D16) can
-// place the key file beside the database without a second source of truth for
-// the data directory.
+// D1: single SQLite source of record. Lazy open so tests can set NIGHTWATCH_DB_PATH before
+// first query; exported so D16 self-provisioning can place the key file beside the database.
 export function dbPath(): string {
   return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
 }
 
-// Tables land here as the refactor proceeds; issue 019 introduces the first two
-// (tokens, config); issue 020 adds sessions, session_messages, and incidents as
-// part of the state inversion (the runner is now stateless). Each statement is
-// CREATE TABLE IF NOT EXISTS so the bootstrap is safe to run on every boot.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS tokens (
     id           TEXT PRIMARY KEY,
@@ -84,8 +75,6 @@ const SCHEMA = `
 
 let _db: Database.Database | undefined;
 
-// Lazily open the connection so tests can point NIGHTWATCH_DB_PATH at a throwaway
-// file before the first query, and so importing this module never touches disk.
 export function getDb(): Database.Database {
   if (!_db) {
     const path = dbPath();
@@ -105,8 +94,6 @@ export function initDb(): void {
   db.prepare(`UPDATE pending_human_input SET claimed_at = NULL`).run();
 }
 
-// Close and clear the singleton. Used by tests to get a truly fresh connection
-// between suites when NIGHTWATCH_DB_PATH is re-stubbed.
 export function resetDb(): void {
   if (_db) {
     _db.close();

@@ -7,7 +7,6 @@ import { useTempDb } from "./temp-db.js";
 import { registerAuthRoutes } from "../auth/routes.js";
 import { mintSession, requireSession } from "../auth/session.js";
 
-// All test servers honor X-Forwarded-Proto via trustProxy.
 async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({ logger: false, trustProxy: true });
   await registerAuthRoutes(server);
@@ -30,7 +29,6 @@ function extractSessionValue(setCookie: string): string {
   return /nw_auth=([^;]+)/.exec(setCookie)?.[1] ?? "";
 }
 
-// Setup and basic cookie attributes
 describe("POST /setup", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -110,7 +108,6 @@ describe("POST /setup", () => {
   });
 });
 
-// GET /auth/status - the console's single bootstrap call (setup vs login vs app)
 describe("GET /auth/status", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -194,7 +191,6 @@ describe("GET /auth/status", () => {
   });
 });
 
-// Login behavior
 describe("POST /login", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -252,7 +248,6 @@ describe("POST /login", () => {
   });
 });
 
-// requireSession gate behavior
 describe("requireSession gate", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -324,7 +319,6 @@ describe("requireSession gate", () => {
   });
 });
 
-// End-to-end: cookie from setup/login gate
 describe("session cookie unlocks protected routes", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -370,7 +364,6 @@ describe("session cookie unlocks protected routes", () => {
   });
 });
 
-// Logout
 describe("POST /logout", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -409,7 +402,6 @@ describe("POST /logout", () => {
   });
 });
 
-// Rolling reissue
 describe("rolling session reissue", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -458,7 +450,6 @@ describe("rolling session reissue", () => {
   });
 });
 
-// Logout-all (bumps login_version, invalidates all existing cookies)
 describe("POST /logout-all", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;

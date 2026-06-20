@@ -5,8 +5,6 @@ export interface InitialContext {
   firstUserMessage: string;
 }
 
-// The system prompt is identical for both triggers (one loop, one prompt). A
-// chat session authors its own opening message, so it needs no incident header.
 const SYSTEM_PROMPT = `You are Nightwatch, an autonomous reliability engineer embedded in a production infrastructure platform. You investigate one incident at a time: find the root cause from evidence, then remediate or recommend the minimum-viable fix.
 
 How you operate:
@@ -18,15 +16,10 @@ How you operate:
 
 Budget: at most 24 tool calls and 5 minutes of investigation time (human approval wait excluded).`;
 
-// A chat session is opened by the human's own message; there is no alert to
-// summarize, so the opening context is just the system prompt.
 export function buildChatContext(): InitialContext {
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
 }
 
-// Accepts one or more alerts. When multiple alerts arrive within the 90s batch
-// window, all are surfaced in the opening message so the model judges shared
-// root cause.
 export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
   if (!alerts[0]) return buildChatContext();
 

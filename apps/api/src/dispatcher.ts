@@ -5,39 +5,23 @@ import { getSession } from "./db/sessions.js";
 import { logger } from "./logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// The single entry to the investigation loop (architecture invariant): alert,
-// chat, and resume all funnel through dispatch(). An in-process runner with no
-// concurrency cap — every session starts immediately. The injection rule is the
-// natural concurrency control for alert sessions: any new alert while one is
-// running is injected into it, so there is at most one active alert investigation
-// at any time. Chat sessions run freely in parallel.
+// Architecture invariant: alert, chat, and resume all funnel through dispatch().
+// Alert injection is the concurrency control: any new alert while one is running
+// is injected rather than starting a second; chat sessions run freely in parallel.
 export interface Dispatcher {
   dispatch(input: RunInvestigationInput): void;
-  // Derived dedup source: true while a run for this runnerId + sourceAlertId is
-  // active. Keyed by runnerId — the stable per-server identity. No TTLs — a
-  // crashed run leaves no marker, so a re-fired alert re-investigates (CONTEXT.md D2/D4).
+  // D2/D4: derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
   isInvestigating(runnerId: string, sourceAlertId: string): boolean;
-  // True while a run for this sessionId is active. Used for the 409 guard on
-  // POST /sessions/:id/messages.
+  // guards the 409 on POST /sessions/:id/messages
   isSessionRunning(sessionId: string): boolean;
-  // Returns the sessionId of the currently active alert investigation, or null
-  // if none is running. Alert injection is operator-wide: a new alert arriving
-  // while any alert session is running goes into that session regardless of which
-  // runner sent it.
   getActiveAlertSession(): string | null;
-  // Push an alert into the inbox of an actively running session. The loop drains
-  // it at the next tool boundary.
   injectAlert(sessionId: string, alert: NormalizedAlert): void;
-  // Pop and return all inbox alerts for the session. Called by the loop at each
-  // tool boundary. Returns empty array if the session has no inbox.
   drainInbox(sessionId: string): NormalizedAlert[];
 }
 
 export interface DispatcherOptions {
   run: (input: RunInvestigationInput) => Promise<void>;
-  // The session's durable originating alert (null for chat sessions). A resume
-  // dispatch never carries `input.alert` (see human-input/service.ts), so alert
-  // identity must be derivable from the session itself, not just the live input.
+  // resume dispatch never carries input.alert; derive alert identity from the session
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
 }
 
@@ -51,10 +35,8 @@ function dedupKey(runnerId: string, sourceAlertId: string): string {
 export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const { run, getAlertForSession } = opts;
 
-  // Multiset: a dedup key is present while any active run carries it.
   const active = new Map<string, number>();
   const activeSessionIds = new Set<string>();
-  // Per-session inbox for mid-run injected alerts. Drained at tool boundaries.
   const inbox = new Map<string, NormalizedAlert[]>();
 
   // D4: derive, don't cache. `input.alert` is only present on the original
