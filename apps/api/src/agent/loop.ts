@@ -112,6 +112,17 @@ export async function runInvestigation(
     allAlerts.length > 0 ? buildInitialContext(allAlerts) : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 
+  const sessionMeta: SessionMeta = {
+    sessionId,
+    // null alert = chat session; title from user message. alert session = alert type + target.
+    title:
+      alert == null && input.userMessage
+        ? input.userMessage.slice(0, 80)
+        : `${alert?.alertType ?? "chat"} - ${alert?.targetIdentifier ?? "chat"}`,
+    createdAt: new Date().toISOString(),
+  };
+  createSession(sessionMeta, alert);
+
   let persistedCount = 0;
 
   if (input.resumeToolResults && input.resumeToolResults.length > 0) {
@@ -125,22 +136,17 @@ export async function runInvestigation(
     persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
-    if (input.userMessage) provider.appendUserMessage(input.userMessage);
     persistedCount = input.seed.length;
+    // Persist the new user turn immediately so the console shows it the moment
+    // it's sent, instead of waiting for the assistant's reply to flush both at once.
+    if (input.userMessage) {
+      provider.appendUserMessage(input.userMessage);
+      persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    }
   } else {
     provider.start(input.userMessage ?? firstUserMessage);
+    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   }
-
-  const sessionMeta: SessionMeta = {
-    sessionId,
-    // null alert = chat session; title from user message. alert session = alert type + target.
-    title:
-      alert == null && input.userMessage
-        ? input.userMessage.slice(0, 80)
-        : `${alert?.alertType ?? "chat"} - ${alert?.targetIdentifier ?? "chat"}`,
-    createdAt: new Date().toISOString(),
-  };
-  createSession(sessionMeta, alert);
 
   const persist = (): void => {
     persistedCount = persistNewTurns(provider, sessionId, persistedCount);

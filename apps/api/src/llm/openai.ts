@@ -11,6 +11,21 @@ import type {
   ToolUse,
 } from "./types.js";
 
+// Neutral content-block shape the console's persistedConverter already knows how
+// to read (mirrors Anthropic's native blocks). OpenAI's own message shape has no
+// field for reasoning, so a turn that thinks gets reassembled into this shape
+// before it is persisted - otherwise the reasoning is visible only while it
+// streams and is lost the moment the turn is written to the transcript.
+type ProviderBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string }
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    };
+
 // Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
 // OPENAI_BASE_URL selects the host; the model comes from the global config.
 export class OpenAIProvider implements LLMProvider {
@@ -19,6 +34,11 @@ export class OpenAIProvider implements LLMProvider {
   private readonly system: string;
   private readonly config: AgentConfig;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  // Reasoning text accumulated per assistant turn, keyed by its index in
+  // `messages`. Captured from streamed `reasoning_details` chunks, which the
+  // OpenAI SDK's finalChatCompletion() accumulator drops (it's an
+  // OpenRouter-only extension), so it has to be tracked separately here.
+  private readonly thinkingByIndex = new Map<number, string>();
 
   constructor(system: string, config: AgentConfig, apiKey?: string) {
     this.system = system;
@@ -45,6 +65,7 @@ export class OpenAIProvider implements LLMProvider {
 
   async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
     let response: OpenAI.Chat.Completions.ChatCompletion;
+    let thinking = "";
     try {
       // Stream and accumulate via finalChatCompletion(): a large response (up
       // to maxOutputTokens) can't trip the single-read request timeout. The
@@ -63,29 +84,32 @@ export class OpenAIProvider implements LLMProvider {
           },
         })),
       });
+      // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
+      // so the cast goes through unknown first to satisfy the compiler. Listened
+      // for unconditionally (not just when onDelta is passed) so the
+      // accumulated text below survives even on the no-callback wrap-up turn.
+      stream.on("chunk", (chunk) => {
+        const rawDelta = (
+          chunk as unknown as {
+            choices?: Array<{ delta?: Record<string, unknown> }>;
+          }
+        ).choices?.[0]?.delta;
+        const entries = rawDelta?.["reasoning_details"] as
+          | Array<{ type: string; text?: string }>
+          | undefined;
+        for (const entry of entries ?? []) {
+          if (
+            (entry.type === "reasoning.text" ||
+              entry.type === "reasoning.summary") &&
+            entry.text
+          ) {
+            thinking += entry.text;
+            onDelta?.({ kind: "thinking", text: entry.text });
+          }
+        }
+      });
       if (onDelta) {
         stream.on("content", (delta) => onDelta({ kind: "text", text: delta }));
-        // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
-        // so the cast goes through unknown first to satisfy the compiler.
-        stream.on("chunk", (chunk) => {
-          const rawDelta = (
-            chunk as unknown as {
-              choices?: Array<{ delta?: Record<string, unknown> }>;
-            }
-          ).choices?.[0]?.delta;
-          const entries = rawDelta?.["reasoning_details"] as
-            | Array<{ type: string; text?: string }>
-            | undefined;
-          for (const entry of entries ?? []) {
-            if (
-              (entry.type === "reasoning.text" ||
-                entry.type === "reasoning.summary") &&
-              entry.text
-            ) {
-              onDelta({ kind: "thinking", text: entry.text });
-            }
-          }
-        });
       }
       response = await stream.finalChatCompletion();
     } catch (err) {
@@ -105,6 +129,7 @@ export class OpenAIProvider implements LLMProvider {
     const choice = response.choices[0];
     if (!choice) return { stopReason: "end_turn", toolUses: [], text: "" };
 
+    if (thinking) this.thinkingByIndex.set(this.messages.length, thinking);
     this.messages.push(choice.message);
 
     const toolUses: ToolUse[] = [];
@@ -150,24 +175,79 @@ export class OpenAIProvider implements LLMProvider {
     // back to a plain role/content reconstruction, matching Anthropic.
     this.messages = [
       { role: "system", content: this.system },
-      ...history.map((m) =>
-        m.providerContent != null
-          ? (m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam)
-          : { role: m.role, content: m.content },
-      ),
+      ...history.map((m) => this.toNativeMessage(m)),
     ];
+  }
+
+  // A turn that thought is persisted as a ProviderBlock[] (see snapshot()),
+  // which OpenAI's API won't accept back as input - the reasoning isn't
+  // needed to replay context, so it's dropped and only text/tool_calls
+  // round-trip into a native message.
+  private toNativeMessage(
+    m: ProviderMessage,
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam {
+    if (Array.isArray(m.providerContent)) {
+      const blocks = m.providerContent as ProviderBlock[];
+      const text = blocks.find((b) => b.type === "text")?.text ?? null;
+      const toolCalls = blocks
+        .filter(
+          (b): b is ProviderBlock & { type: "tool_use" } =>
+            b.type === "tool_use",
+        )
+        .map((b) => ({
+          id: b.id,
+          type: "function" as const,
+          function: { name: b.name, arguments: JSON.stringify(b.input) },
+        }));
+      return {
+        role: "assistant",
+        content: text,
+        ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+      };
+    }
+    if (m.providerContent != null) {
+      return m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam;
+    }
+    return { role: m.role, content: m.content };
   }
 
   snapshot(): ProviderMessage[] {
     // The system message is not part of the transcript; skip it. Tool-role
     // messages are persisted on the user side for display, native role kept.
     return this.messages
-      .filter((m) => m.role !== "system")
-      .map((m) => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: typeof m.content === "string" ? m.content : "",
-        providerContent: m,
-      }));
+      .map((m, i) => ({ m, i }))
+      .filter(({ m }) => m.role !== "system")
+      .map(({ m, i }) => {
+        const content = typeof m.content === "string" ? m.content : "";
+        const thinking = this.thinkingByIndex.get(i);
+        if (m.role === "assistant" && thinking) {
+          const blocks: ProviderBlock[] = [{ type: "thinking", thinking }];
+          if (content) blocks.push({ type: "text", text: content });
+          for (const call of m.tool_calls ?? []) {
+            if (call.type !== "function") continue;
+            blocks.push({
+              type: "tool_use",
+              id: call.id,
+              name: call.function.name,
+              input: JSON.parse(call.function.arguments) as Record<
+                string,
+                unknown
+              >,
+            });
+          }
+          return {
+            role: "assistant" as const,
+            content,
+            providerContent: blocks,
+          };
+        }
+        return {
+          role:
+            m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content,
+          providerContent: m,
+        };
+      });
   }
 }
 
