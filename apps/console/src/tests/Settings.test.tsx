@@ -41,20 +41,8 @@ const MODELS_RESPONSE = {
   models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
 };
 
-const MINTED = {
-  id: "11111111-2222-3333-4444-555555555555",
-  token: "nwr_aBcDeFgHiJkLmNoPqRsTuVwXyZ12",
-  label: "test-label",
-  createdAt: new Date().toISOString(),
-};
-
 function setup(configOverride?: Partial<typeof CONFIG>) {
   const config = { ...CONFIG, ...configOverride };
-  const clipboardWrite = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, "clipboard", {
-    value: { writeText: clipboardWrite },
-    configurable: true,
-  });
 
   const fetchMock = vi
     .fn()
@@ -64,25 +52,6 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
           ok: true,
           status: 200,
           json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
-        });
-      }
-      if (url.includes("/tokens")) {
-        if (init?.method === "POST") {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(MINTED),
-          });
-        }
-        if (init?.method === "DELETE") {
-          return Promise.resolve({
-            ok: true,
-            status: 204,
-            json: () => Promise.resolve({}),
-          });
-        }
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ tokens: [] }),
         });
       }
       if (url.includes("/config/models")) {
@@ -138,7 +107,7 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
     </MantineProvider>,
   );
 
-  return { fetchMock, clipboardWrite };
+  return { fetchMock };
 }
 
 afterEach(() => {
@@ -173,24 +142,6 @@ describe("SettingsPage", () => {
       );
       expect(patchCall).toBeDefined();
       expect(patchCall?.[0]).toContain("/config");
-    });
-  });
-
-  it("shows 'No active tokens' when token list is empty", async () => {
-    setup();
-    await waitFor(() => {
-      expect(screen.getByText(/no active tokens/i)).toBeInTheDocument();
-    });
-  });
-
-  it("mints a token and shows the one-time plaintext", async () => {
-    const user = userEvent.setup();
-    setup();
-    await user.click(
-      await screen.findByRole("button", { name: /generate token/i }),
-    );
-    await waitFor(() => {
-      expect(screen.getByText(MINTED.token)).toBeInTheDocument();
     });
   });
 
@@ -281,12 +232,6 @@ describe("SettingsPage", () => {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve({ ok: false, error: "bad_key" }),
-          });
-        }
-        if ((url as string).includes("/tokens")) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve({ tokens: [] }),
           });
         }
         if ((url as string).includes("/config/models")) {
