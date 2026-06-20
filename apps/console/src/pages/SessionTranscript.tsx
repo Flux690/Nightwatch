@@ -1,12 +1,7 @@
-import { useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Text } from "@mantine/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Text } from "@mantine/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  ConsoleInterrupt,
-  ConsoleInterruptResolved,
-  ConsoleToolCallEnd,
-  ConsoleToolCallStart,
   SessionMeta,
   SessionMessage,
   WsEnvelope,
@@ -14,262 +9,70 @@ import type {
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { ChatInput } from "./ChatInput.js";
 import type { PendingInterrupt } from "./ChatInput.js";
-
-interface LiveTextItem {
-  kind: "text";
-  id: string;
-  text: string;
-}
-
-interface LiveToolCard {
-  kind: "tool_card";
-  toolUseId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  result: unknown | null;
-  // Set on gated tools awaiting a human decision; interruptKind distinguishes
-  // approval from clarification while toolUseId remains the correlation key.
-  awaitingApproval?: boolean;
-  interruptKind?: "approval" | "clarification";
-  risk?: string;
-  question?: string;
-  options?: Array<{ label: string; description: string }>;
-  multiSelect?: boolean;
-  approval?: "pending" | "approved" | "rejected" | "answered";
-  resolvedBy?: string;
-}
-
-type LiveItem = LiveTextItem | LiveToolCard;
+import { applyLiveEvent } from "../transcript/liveConverter.js";
+import { convertPersistedMessages } from "../transcript/persistedConverter.js";
+import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
+import type { TranscriptItem } from "../transcript/types.js";
 
 function pendingInterruptFromItems(
-  items: LiveItem[],
+  items: TranscriptItem[],
 ): PendingInterrupt | undefined {
   for (const item of items) {
-    if (
-      item.kind === "tool_card" &&
-      item.awaitingApproval &&
-      item.interruptKind &&
-      item.approval === undefined
-    ) {
-      return { id: item.toolUseId, kind: item.interruptKind };
+    if (item.kind === "approval_card" && !item.approval) {
+      return { id: item.toolUseId, kind: "approval" };
+    }
+    if (item.kind === "clarification_card" && !item.approval) {
+      return { id: item.toolUseId, kind: "clarification" };
     }
   }
   return undefined;
 }
 
-function ToolCard({ card }: { card: LiveToolCard }): React.JSX.Element {
-  const inputText = JSON.stringify(card.input, null, 2);
-
-  return (
-    <div style={{ marginBottom: "var(--mantine-spacing-sm)" }}>
-      <Text size="xs" ff="monospace" fw={600} mb={4}>
-        {card.toolName}
-      </Text>
-      <div
-        style={{
-          border: "1px solid var(--nw-border)",
-          borderRadius: "var(--mantine-radius-sm)",
-          background: "var(--nw-surface)",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ padding: "var(--mantine-spacing-xs)" }}>
-          <Text size="xs" c="dimmed" ff="monospace" mb={4}>
-            IN
-          </Text>
-          <pre
-            style={{
-              margin: 0,
-              fontFamily: "var(--nw-mono)",
-              fontSize: 12,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-all",
-            }}
-          >
-            {inputText}
-          </pre>
-        </div>
-        <div style={{ borderTop: "1px solid var(--nw-border)" }} />
-        <div style={{ padding: "var(--mantine-spacing-xs)" }}>
-          <Text size="xs" c="dimmed" ff="monospace" mb={4}>
-            OUT
-          </Text>
-          {card.result === null ? (
-            <Text
-              size="xs"
-              c="dimmed"
-              ff="monospace"
-              data-testid="tool-card-out-loading"
-            >
-              …
-            </Text>
-          ) : (
-            <pre
-              style={{
-                margin: 0,
-                fontFamily: "var(--nw-mono)",
-                fontSize: 12,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-              }}
-            >
-              {JSON.stringify(card.result, null, 2)}
-            </pre>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function itemKey(item: TranscriptItem): string {
+  if (item.kind === "user_turn" || item.kind === "agent_text") return item.id;
+  return item.toolUseId;
 }
 
-function ApprovalCard({
-  card,
+function TranscriptColumn({
+  persistedMessages,
+  liveItems,
   onResolve,
-}: {
-  card: LiveToolCard;
-  onResolve: (action: "approve" | "reject") => void;
-}): React.JSX.Element {
-  const resolved = card.approval === "approved" || card.approval === "rejected";
-
-  return (
-    <div
-      data-testid="approval-card"
-      style={{
-        marginBottom: "var(--mantine-spacing-sm)",
-        border: "1px solid var(--nw-status-awaiting)",
-        borderRadius: "var(--mantine-radius-sm)",
-        background: "var(--nw-surface)",
-        padding: "var(--mantine-spacing-xs)",
-      }}
-    >
-      <Text size="xs" ff="monospace" fw={600}>
-        {card.toolName}
-      </Text>
-      <Text size="xs" c="dimmed" mb="xs">
-        Risk: {card.risk ?? "unknown"}
-      </Text>
-      {resolved ? (
-        <Text size="xs" data-testid="approval-resolution">
-          {card.approval === "approved" ? "Approved" : "Rejected"}
-          {card.resolvedBy ? ` by ${card.resolvedBy}` : ""}
-        </Text>
-      ) : (
-        <div style={{ display: "flex", gap: "var(--mantine-spacing-xs)" }}>
-          <Button
-            size="xs"
-            color="streaming"
-            disabled={card.approval === "pending"}
-            onClick={() => onResolve("approve")}
-          >
-            Approve
-          </Button>
-          <Button
-            size="xs"
-            color="escalated"
-            variant="outline"
-            disabled={card.approval === "pending"}
-            onClick={() => onResolve("reject")}
-          >
-            Reject
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ClarificationCard({
-  card,
   onAnswer,
 }: {
-  card: LiveToolCard;
-  onAnswer: (answer: string | string[]) => void;
+  persistedMessages: SessionMessage[];
+  liveItems: TranscriptItem[];
+  onResolve: (toolUseId: string, action: "approve" | "reject") => void;
+  onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
-  const [selected, setSelected] = useState<string[]>([]);
-  const resolved = card.approval === "answered";
-
-  function handleOption(label: string): void {
-    if (resolved || card.approval === "pending") return;
-    if (card.multiSelect) {
-      setSelected((prev) =>
-        prev.includes(label)
-          ? prev.filter((l) => l !== label)
-          : [...prev, label],
-      );
-    } else {
-      onAnswer(label);
-    }
-  }
+  const persistedItems = useMemo(
+    () => convertPersistedMessages(persistedMessages),
+    [persistedMessages],
+  );
+  const allItems = [...persistedItems, ...liveItems];
 
   return (
     <div
-      data-testid="clarification-card"
+      data-testid="transcript-column"
       style={{
-        marginBottom: "var(--mantine-spacing-sm)",
-        border: "1px solid var(--nw-status-awaiting)",
-        borderRadius: "var(--mantine-radius-sm)",
-        background: "var(--nw-surface)",
-        padding: "var(--mantine-spacing-xs)",
+        maxWidth: 860,
+        margin: "0 auto",
+        padding: "0 var(--mantine-spacing-lg)",
       }}
     >
-      <Text size="xs" mb="xs">
-        {card.question}
-      </Text>
-      {resolved ? (
-        <Text size="xs" data-testid="clarification-resolution">
-          Answered{card.resolvedBy ? ` by ${card.resolvedBy}` : ""}
-        </Text>
-      ) : (
+      {allItems.map((item) => (
         <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "var(--mantine-spacing-xs)",
-          }}
+          key={itemKey(item)}
+          style={{ marginBottom: "var(--mantine-spacing-sm)" }}
         >
-          {card.options?.map((opt) => (
-            <Button
-              key={opt.label}
-              size="xs"
-              variant={selected.includes(opt.label) ? "filled" : "outline"}
-              disabled={card.approval === "pending"}
-              onClick={() => handleOption(opt.label)}
-            >
-              {opt.label}
-            </Button>
-          ))}
-          {card.multiSelect && selected.length > 0 && (
-            <Button
-              size="xs"
-              disabled={card.approval === "pending"}
-              onClick={() => onAnswer(selected)}
-            >
-              Submit
-            </Button>
-          )}
+          <TranscriptItemRenderer
+            item={item}
+            onResolve={onResolve}
+            onAnswer={onAnswer}
+          />
         </div>
-      )}
+      ))}
     </div>
   );
-}
-
-function buildInterruptItem(
-  payload: ConsoleInterrupt["payload"],
-): LiveToolCard {
-  const riskValue = payload.input["risk"];
-  return {
-    kind: "tool_card",
-    toolUseId: payload.toolUseId,
-    toolName: payload.toolName,
-    input: payload.input,
-    result: null,
-    awaitingApproval: true,
-    interruptKind: payload.kind,
-    risk: typeof riskValue === "string" ? riskValue : undefined,
-    question: payload.question,
-    options: payload.options,
-    multiSelect: payload.multiSelect,
-  };
 }
 
 // SessionView is the unified home + transcript component rendered persistently
@@ -288,11 +91,10 @@ export function SessionView({
   // Ref lets the WS handler (stale closure) always read the latest value.
   const activeSessionIdRef = useRef<string | null>(sessionIdFromRoute);
 
-  const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
+  const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const queryClient = useQueryClient();
 
-  // Track previous route-derived id so we can detect session switches.
   const prevRouteIdRef = useRef<string | null>(sessionIdFromRoute);
   useEffect(() => {
     const prev = prevRouteIdRef.current;
@@ -307,7 +109,6 @@ export function SessionView({
       return;
     }
 
-    // Switching between two concrete sessions: clear stale live items.
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
@@ -329,8 +130,6 @@ export function SessionView({
 
   const handleSessionCreated = useCallback(
     (newId: string, firstMessage: string) => {
-      // Set ref immediately so the WS handler captures events for newId before
-      // TanStack Router completes the navigation to /sessions/:id.
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
@@ -351,25 +150,7 @@ export function SessionView({
       const sid = activeSessionIdRef.current;
       if (!sid) return;
 
-      if (env.type === "TEXT_MESSAGE_CONTENT") {
-        const { sessionId, delta } = env.payload as {
-          sessionId: string;
-          delta: string;
-          kind: string;
-        };
-        if (sessionId !== sid) return;
-        setIsRunning(true);
-        setLiveItems((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.kind === "text") {
-            return [...prev.slice(0, -1), { ...last, text: last.text + delta }];
-          }
-          return [
-            ...prev,
-            { kind: "text", id: `text-${Date.now()}`, text: delta },
-          ];
-        });
-      } else if (env.type === "RUN_FINISHED") {
+      if (env.type === "RUN_FINISHED") {
         const { sessionId, message } = env.payload as {
           sessionId: string;
           message: SessionMessage;
@@ -381,59 +162,24 @@ export function SessionView({
           ["session", sid],
           (prev = []) => [...prev, message],
         );
-      } else if (env.type === "TOOL_CALL_START") {
-        const payload = env.payload as ConsoleToolCallStart["payload"];
-        if (payload.sessionId !== sid) return;
-        setLiveItems((prev) => [
-          ...prev,
-          {
-            kind: "tool_card",
-            toolUseId: payload.toolUseId,
-            toolName: payload.toolName,
-            input: payload.input,
-            result: null,
-            awaitingApproval: false,
-          },
-        ]);
-      } else if (env.type === "INTERRUPT") {
-        const payload = env.payload as ConsoleInterrupt["payload"];
-        if (payload.sessionId !== sid) return;
-        setLiveItems((prev) => [...prev, buildInterruptItem(payload)]);
-      } else if (env.type === "TOOL_CALL_END") {
-        const payload = env.payload as ConsoleToolCallEnd["payload"];
-        if (payload.sessionId !== sid) return;
-        setLiveItems((prev) =>
-          prev.map((item) =>
-            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-              ? { ...item, result: payload.result ?? null }
-              : item,
-          ),
-        );
-      } else if (env.type === "INTERRUPT_RESOLVED") {
-        const payload = env.payload as ConsoleInterruptResolved["payload"];
-        // context_added: the interrupt is consumed and the run resumes. Stamp
-        // approval: "pending" so pendingInterruptFromItems stops returning it
-        // and the composer returns to normal before RUN_FINISHED clears liveItems.
-        const approval =
-          payload.status === "context_added" ? "pending" : payload.status;
-        const resolvedBy = payload.resolvedBy;
-        setLiveItems((prev) =>
-          prev.map((item) =>
-            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-              ? { ...item, approval, resolvedBy }
-              : item,
-          ),
-        );
+        return;
       }
+
+      if (env.type === "TEXT_MESSAGE_CONTENT") {
+        const { sessionId } = env.payload as { sessionId: string };
+        if (sessionId === sid) setIsRunning(true);
+      }
+
+      setLiveItems((prev) => applyLiveEvent(prev, env, sid));
     },
     [queryClient],
   );
 
   const handleResolve = useCallback(
-    (card: LiveToolCard, action: "approve" | "reject") => {
+    (toolUseId: string, action: "approve" | "reject") => {
       setLiveItems((prev) =>
         prev.map((item) =>
-          item.kind === "tool_card" && item.toolUseId === card.toolUseId
+          item.kind === "approval_card" && item.toolUseId === toolUseId
             ? { ...item, approval: "pending" }
             : item,
         ),
@@ -448,10 +194,10 @@ export function SessionView({
   );
 
   const handleAnswer = useCallback(
-    (card: LiveToolCard, answer: string | string[]) => {
+    (toolUseId: string, answer: string | string[]) => {
       setLiveItems((prev) =>
         prev.map((item) =>
-          item.kind === "tool_card" && item.toolUseId === card.toolUseId
+          item.kind === "clarification_card" && item.toolUseId === toolUseId
             ? { ...item, approval: "pending" }
             : item,
         ),
@@ -509,277 +255,20 @@ export function SessionView({
       <div
         style={{
           flex: 1,
-          padding: "var(--mantine-spacing-md)",
+          padding: "var(--mantine-spacing-md) 0",
           overflowY: "auto",
         }}
       >
-        {messages.map((msg) => (
-          <div
-            key={msg.seq}
-            style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-          >
-            <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-              {msg.content}
-            </Text>
-          </div>
-        ))}
-
-        {liveItems.map((item) => {
-          if (item.kind === "text") {
-            return (
-              <div
-                key={item.id}
-                style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-              >
-                <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                  {item.text}
-                </Text>
-              </div>
-            );
-          }
-          if (!item.awaitingApproval) {
-            return <ToolCard key={item.toolUseId} card={item} />;
-          }
-          if (item.interruptKind === "clarification") {
-            return (
-              <ClarificationCard
-                key={item.toolUseId}
-                card={item}
-                onAnswer={(answer) => handleAnswer(item, answer)}
-              />
-            );
-          }
-          const resolved =
-            item.approval === "approved" || item.approval === "rejected";
-          return (
-            <div key={item.toolUseId}>
-              <ApprovalCard
-                card={item}
-                onResolve={(action) => handleResolve(item, action)}
-              />
-              {resolved ? <ToolCard card={item} /> : null}
-            </div>
-          );
-        })}
+        <TranscriptColumn
+          persistedMessages={messages}
+          liveItems={liveItems}
+          onResolve={handleResolve}
+          onAnswer={handleAnswer}
+        />
       </div>
 
       <ChatInput
         sessionId={activeSessionId}
-        isRunning={isRunning}
-        pendingInterrupt={pendingInterrupt}
-      />
-    </div>
-  );
-}
-
-export function SessionTranscript(): React.JSX.Element {
-  const { id } = useParams({ strict: false }) as { id: string };
-  const queryClient = useQueryClient();
-  const [liveItems, setLiveItems] = useState<LiveItem[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-
-  const { data: messages = [] } = useQuery<SessionMessage[]>({
-    queryKey: ["session", id],
-    queryFn: () =>
-      fetch(`/api/sessions/${id}`).then((r) => {
-        if (!r.ok) throw new Error(`sessions/${id} ${r.status}`);
-        return r.json() as Promise<SessionMessage[]>;
-      }),
-    enabled: !!id,
-  });
-
-  const handleEnvelope = useCallback(
-    (env: WsEnvelope) => {
-      if (env.type === "TEXT_MESSAGE_CONTENT") {
-        const { sessionId, delta } = env.payload as {
-          sessionId: string;
-          delta: string;
-          kind: string;
-        };
-        if (sessionId !== id) return;
-        setIsRunning(true);
-        setLiveItems((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.kind === "text") {
-            return [...prev.slice(0, -1), { ...last, text: last.text + delta }];
-          }
-          return [
-            ...prev,
-            { kind: "text", id: `text-${Date.now()}`, text: delta },
-          ];
-        });
-      } else if (env.type === "RUN_FINISHED") {
-        const { sessionId, message } = env.payload as {
-          sessionId: string;
-          message: SessionMessage;
-        };
-        if (sessionId !== id) return;
-        setIsRunning(false);
-        setLiveItems([]);
-        queryClient.setQueryData<SessionMessage[]>(
-          ["session", id],
-          (prev = []) => [...prev, message],
-        );
-      } else if (env.type === "TOOL_CALL_START") {
-        const payload = env.payload as ConsoleToolCallStart["payload"];
-        if (payload.sessionId !== id) return;
-        setLiveItems((prev) => [
-          ...prev,
-          {
-            kind: "tool_card",
-            toolUseId: payload.toolUseId,
-            toolName: payload.toolName,
-            input: payload.input,
-            result: null,
-            awaitingApproval: false,
-          },
-        ]);
-      } else if (env.type === "INTERRUPT") {
-        const payload = env.payload as ConsoleInterrupt["payload"];
-        if (payload.sessionId !== id) return;
-        setLiveItems((prev) => [...prev, buildInterruptItem(payload)]);
-      } else if (env.type === "TOOL_CALL_END") {
-        const payload = env.payload as ConsoleToolCallEnd["payload"];
-        if (payload.sessionId !== id) return;
-        setLiveItems((prev) =>
-          prev.map((item) =>
-            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-              ? { ...item, result: payload.result ?? null }
-              : item,
-          ),
-        );
-      } else if (env.type === "INTERRUPT_RESOLVED") {
-        // No sessionId on this channel — correlate by toolUseId, which is global.
-        // context_added: interrupt consumed, run resumes. Stamp "pending" so
-        // pendingInterruptFromItems clears it before RUN_FINISHED wipes liveItems.
-        const payload = env.payload as ConsoleInterruptResolved["payload"];
-        const approval =
-          payload.status === "context_added" ? "pending" : payload.status;
-        const resolvedBy = payload.resolvedBy;
-        setLiveItems((prev) =>
-          prev.map((item) =>
-            item.kind === "tool_card" && item.toolUseId === payload.toolUseId
-              ? { ...item, approval, resolvedBy }
-              : item,
-          ),
-        );
-      }
-    },
-    [id, queryClient],
-  );
-
-  const handleResolve = useCallback(
-    (card: LiveToolCard, action: "approve" | "reject") => {
-      // Optimistically mark pending so both buttons disable; the durable state
-      // arrives via the INTERRUPT_RESOLVED event.
-      setLiveItems((prev) =>
-        prev.map((item) =>
-          item.kind === "tool_card" && item.toolUseId === card.toolUseId
-            ? { ...item, approval: "pending" }
-            : item,
-        ),
-      );
-      void fetch(`/api/sessions/${id}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: action, resolvedBy: "console" }),
-      });
-    },
-    [id],
-  );
-
-  const handleAnswer = useCallback(
-    (card: LiveToolCard, answer: string | string[]) => {
-      setLiveItems((prev) =>
-        prev.map((item) =>
-          item.kind === "tool_card" && item.toolUseId === card.toolUseId
-            ? { ...item, approval: "pending" }
-            : item,
-        ),
-      );
-      const text = Array.isArray(answer) ? answer.join(", ") : answer;
-      void fetch(`/api/sessions/${id}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, resolvedBy: "console" }),
-      });
-    },
-    [id],
-  );
-
-  useConsoleWs(handleEnvelope);
-
-  const pendingInterrupt = pendingInterruptFromItems(liveItems);
-
-  return (
-    <div
-      className="nw-page"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          padding: "var(--mantine-spacing-md)",
-          overflowY: "auto",
-        }}
-      >
-        {messages.map((msg) => (
-          <div
-            key={msg.seq}
-            style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-          >
-            <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-              {msg.content}
-            </Text>
-          </div>
-        ))}
-
-        {liveItems.map((item) => {
-          if (item.kind === "text") {
-            return (
-              <div
-                key={item.id}
-                style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-              >
-                <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                  {item.text}
-                </Text>
-              </div>
-            );
-          }
-          if (!item.awaitingApproval) {
-            return <ToolCard key={item.toolUseId} card={item} />;
-          }
-          if (item.interruptKind === "clarification") {
-            return (
-              <ClarificationCard
-                key={item.toolUseId}
-                card={item}
-                onAnswer={(answer) => handleAnswer(item, answer)}
-              />
-            );
-          }
-          // Approval: card stands alone until resolved; execution record appears below after.
-          const resolved =
-            item.approval === "approved" || item.approval === "rejected";
-          return (
-            <div key={item.toolUseId}>
-              <ApprovalCard
-                card={item}
-                onResolve={(action) => handleResolve(item, action)}
-              />
-              {resolved ? <ToolCard card={item} /> : null}
-            </div>
-          );
-        })}
-      </div>
-
-      <ChatInput
-        sessionId={id}
         isRunning={isRunning}
         pendingInterrupt={pendingInterrupt}
       />
