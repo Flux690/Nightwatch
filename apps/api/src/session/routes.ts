@@ -10,6 +10,7 @@ import {
   listAllSessions,
   getSessionMessages,
   getSession,
+  deleteSession,
 } from "../db/sessions.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -60,6 +61,33 @@ export async function registerSessionRoutes(
     "/sessions/:id",
     { preHandler: requireSession },
     async (request) => getSessionMessages(request.params.id),
+  );
+
+  fastify.delete<{ Params: { id: string } }>(
+    "/sessions/:id",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const sessionId = request.params.id;
+      if (dispatcher.isSessionRunning(sessionId)) {
+        return reply
+          .code(409)
+          .send({ error: "session is running: stop it before deleting" });
+      }
+      deleteSession(sessionId);
+      return reply.code(204).send();
+    },
+  );
+
+  fastify.post<{ Params: { id: string } }>(
+    "/sessions/:id/stop",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const stopped = dispatcher.stop(request.params.id);
+      if (!stopped) {
+        return reply.code(409).send({ error: "session is not running" });
+      }
+      return reply.code(200).send({ stopped: true });
+    },
   );
 
   fastify.post<{ Params: { id: string }; Body: RespondRequest }>(

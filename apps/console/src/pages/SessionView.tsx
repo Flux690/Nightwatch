@@ -233,6 +233,16 @@ export function SessionView({
         return;
       }
 
+      if (env.type === "RUN_STOPPED") {
+        const { sessionId } = env.payload;
+        if (sessionId !== sid) return;
+        // The partial turn was already persisted and appended to the query
+        // cache via RUN_FINISHED events emitted from persist() before this.
+        setIsRunning(false);
+        setLiveItems([]);
+        return;
+      }
+
       if (env.type === "TEXT_MESSAGE_CONTENT") {
         if (env.payload.sessionId === sid) setIsRunning(true);
       }

@@ -58,8 +58,13 @@ export interface LLMProvider {
   // Current conversation in neutral form, for incremental persistence.
   snapshot(): ProviderMessage[];
   // onDelta, when provided, receives live fragments as the turn streams; the
-  // returned ChatResponse is unchanged whether or not it is passed.
-  chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse>;
+  // returned ChatResponse is unchanged whether or not it is passed. signal,
+  // when provided, aborts the in-flight request when the run is stopped.
+  chat(
+    tools: ToolSchema[],
+    onDelta?: OnDelta,
+    signal?: AbortSignal,
+  ): Promise<ChatResponse>;
   // additionalText, when provided, is appended to the same user message as the
   // tool results. Used to inject mid-run alerts at each tool boundary (D10).
   appendToolResults(results: ToolResult[], additionalText?: string): void;

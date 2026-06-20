@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Textarea } from "@mantine/core";
+import { Square } from "lucide-react";
+
+const STOP_ICON_PROPS = {
+  size: 14,
+  strokeWidth: 1.5,
+  "aria-hidden": true,
+} as const;
 
 export interface PendingInterrupt {
   id: string;
@@ -64,6 +71,11 @@ export function ChatInput({
     setText("");
   }
 
+  async function handleStop(): Promise<void> {
+    if (sessionId === null) return;
+    await fetch(`/api/sessions/${sessionId}/stop`, { method: "POST" });
+  }
+
   function placeholder(): string {
     if (isRunning) return "Agent is running…";
     if (pendingInterrupt?.kind === "approval") return "Add context…";
@@ -98,13 +110,21 @@ export function ChatInput({
           }
         }}
       />
-      <Button
-        disabled={isRunning}
-        onClick={() => void handleSubmit()}
-        size="sm"
-      >
-        Send
-      </Button>
+      {isRunning ? (
+        <Button
+          color="red"
+          variant="light"
+          onClick={() => void handleStop()}
+          size="sm"
+          leftSection={<Square {...STOP_ICON_PROPS} />}
+        >
+          Stop
+        </Button>
+      ) : (
+        <Button onClick={() => void handleSubmit()} size="sm">
+          Send
+        </Button>
+      )}
     </div>
   );
 }

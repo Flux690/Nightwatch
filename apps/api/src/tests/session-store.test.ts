@@ -11,10 +11,13 @@ import { useTempDb } from "./temp-db.js";
 import {
   createSession,
   appendSessionMessages,
+  appendMessagesAndInterrupt,
   listAllSessions,
   getSession,
   getSessionMessages,
+  deleteSession,
 } from "../db/sessions.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -149,5 +152,30 @@ describe("API-local session store", () => {
   it("returns undefined for an unknown session", () => {
     expect(getSession("nope")).toBeUndefined();
     expect(getSessionMessages("nope")).toEqual([]);
+  });
+
+  it("deleteSession removes the session, its messages, and any pending interrupt", () => {
+    const m = meta();
+    createSession(m, alert);
+    appendMessagesAndInterrupt([msg(m.sessionId, 0)], {
+      sessionId: m.sessionId,
+      toolUseId: "tu-del-1",
+      kind: "approval",
+      toolName: "restart_container",
+      toolInput: {},
+      completedResults: [],
+      claimedAt: null,
+      createdAt: new Date().toISOString(),
+    });
+
+    deleteSession(m.sessionId);
+
+    expect(getSession(m.sessionId)).toBeUndefined();
+    expect(getSessionMessages(m.sessionId)).toEqual([]);
+    expect(hasPendingHumanInput(m.sessionId)).toBe(false);
+  });
+
+  it("deleteSession on an unknown session is a no-op", () => {
+    expect(() => deleteSession("nope")).not.toThrow();
   });
 });

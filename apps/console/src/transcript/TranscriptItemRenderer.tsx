@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Text, UnstyledButton } from "@mantine/core";
+import { Button, Text, Textarea, UnstyledButton } from "@mantine/core";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -225,6 +225,8 @@ function ClarificationCardPanel({
   onAnswer?: (answer: string | string[]) => void;
 }): React.JSX.Element {
   const [selected, setSelected] = useState<string[]>([]);
+  const [showOther, setShowOther] = useState(false);
+  const [otherText, setOtherText] = useState("");
   const resolved = item.approval === "answered";
 
   function handleOption(label: string): void {
@@ -240,54 +242,108 @@ function ClarificationCardPanel({
     }
   }
 
+  function handleSubmitOther(): void {
+    const trimmed = otherText.trim();
+    if (!trimmed) return;
+    onAnswer?.(trimmed);
+  }
+
   return (
-    <div
-      data-testid="clarification-card"
-      style={{
-        border: "1px solid var(--nw-status-awaiting)",
-        borderRadius: "var(--mantine-radius-sm)",
-        background: "var(--nw-surface)",
-        padding: "var(--mantine-spacing-xs)",
-      }}
-    >
-      <Text size="xs" mb="xs">
-        {item.question}
-      </Text>
-      {resolved ? (
-        <Text size="xs" data-testid="clarification-resolution">
-          Answered{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
+    <>
+      <div
+        data-testid="clarification-card"
+        style={{
+          border: "1px solid var(--nw-status-awaiting)",
+          borderRadius: "var(--mantine-radius-sm)",
+          background: "var(--nw-surface)",
+          padding: "var(--mantine-spacing-xs)",
+          marginBottom: "var(--mantine-spacing-xs)",
+        }}
+      >
+        <Text size="xs" mb="xs">
+          {item.question}
         </Text>
-      ) : (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "var(--mantine-spacing-xs)",
-          }}
-        >
-          {item.options?.map((opt) => (
+        {resolved ? (
+          <Text size="xs" data-testid="clarification-resolution">
+            Answered{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
+          </Text>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--mantine-spacing-xs)",
+            }}
+          >
+            {item.options?.map((opt) => (
+              <Button
+                key={opt.label}
+                size="xs"
+                fullWidth
+                variant={selected.includes(opt.label) ? "filled" : "outline"}
+                disabled={item.approval === "pending"}
+                onClick={() => handleOption(opt.label)}
+              >
+                {opt.label}
+              </Button>
+            ))}
             <Button
-              key={opt.label}
               size="xs"
-              variant={selected.includes(opt.label) ? "filled" : "outline"}
+              fullWidth
+              variant={showOther ? "filled" : "outline"}
               disabled={item.approval === "pending"}
-              onClick={() => handleOption(opt.label)}
+              onClick={() => setShowOther((prev) => !prev)}
             >
-              {opt.label}
+              Other
             </Button>
-          ))}
-          {item.multiSelect && selected.length > 0 && (
-            <Button
-              size="xs"
-              disabled={item.approval === "pending"}
-              onClick={() => onAnswer?.(selected)}
-            >
-              Submit
-            </Button>
-          )}
-        </div>
+            {showOther && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "var(--mantine-spacing-xs)",
+                  alignItems: "flex-end",
+                }}
+              >
+                <Textarea
+                  style={{ flex: 1 }}
+                  size="xs"
+                  placeholder="Type your answer…"
+                  value={otherText}
+                  onChange={(e) => setOtherText(e.currentTarget.value)}
+                  disabled={item.approval === "pending"}
+                  autosize
+                  minRows={1}
+                  maxRows={4}
+                />
+                <Button
+                  size="xs"
+                  disabled={item.approval === "pending" || !otherText.trim()}
+                  onClick={handleSubmitOther}
+                >
+                  Submit
+                </Button>
+              </div>
+            )}
+            {item.multiSelect && selected.length > 0 && (
+              <Button
+                size="xs"
+                disabled={item.approval === "pending"}
+                onClick={() => onAnswer?.(selected)}
+              >
+                Submit
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      {resolved && item.result !== undefined && (
+        <ToolCardPanel
+          toolName={item.toolName}
+          input={item.input}
+          result={item.result}
+        />
       )}
-    </div>
+    </>
   );
 }
 

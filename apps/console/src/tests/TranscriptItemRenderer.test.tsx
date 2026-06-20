@@ -329,6 +329,50 @@ describe("TranscriptItemRenderer", () => {
 
       expect(onAnswer).toHaveBeenCalledWith("tu-clar", ["nginx", "postgres"]);
     });
+
+    it("reveals a free-text input when Other is toggled and submits its text", async () => {
+      const onAnswer = vi.fn();
+      wrap(clarItem, { onAnswer });
+
+      const user = userEvent.setup();
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /other/i }));
+      const textbox = screen.getByRole("textbox");
+      await user.type(textbox, "Both, but nginx first");
+      await user.click(screen.getByRole("button", { name: /submit/i }));
+
+      expect(onAnswer).toHaveBeenCalledWith("tu-clar", "Both, but nginx first");
+    });
+
+    it("does not submit an empty Other answer", async () => {
+      const onAnswer = vi.fn();
+      wrap(clarItem, { onAnswer });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /other/i }));
+
+      expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
+      expect(onAnswer).not.toHaveBeenCalled();
+    });
+
+    it("renders the resolved tool result when answered with a result", () => {
+      wrap({
+        ...clarItem,
+        approval: "answered",
+        resolvedBy: "operator",
+        result: "nginx",
+      });
+
+      expect(screen.getByText("OUT")).toBeInTheDocument();
+      expect(screen.getByText(/"nginx"/)).toBeInTheDocument();
+    });
+
+    it("does not render a tool result panel when answered with no result", () => {
+      wrap({ ...clarItem, approval: "answered", resolvedBy: "operator" });
+
+      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
+    });
   });
 
   describe("transcript column layout", () => {

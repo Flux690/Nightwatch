@@ -166,6 +166,36 @@ describe("dispatcher", () => {
     expect(d.isSessionRunning("s-a")).toBe(false);
   });
 
+  it("stop aborts the signal passed to the running input and returns true", async () => {
+    const gate = deferred();
+    let receivedSignal: AbortSignal | undefined;
+    const d = createDispatcher({
+      run: (input) => {
+        receivedSignal = input.signal;
+        return gate.promise;
+      },
+      getAlertForSession: noAlertLookup,
+    });
+
+    d.dispatch(alertInput("a"));
+    expect(receivedSignal?.aborted).toBe(false);
+
+    expect(d.stop("s-a")).toBe(true);
+    expect(receivedSignal?.aborted).toBe(true);
+
+    gate.resolve();
+    await flush();
+  });
+
+  it("stop returns false for a session that is not running", () => {
+    const d = createDispatcher({
+      run: () => Promise.resolve(),
+      getAlertForSession: noAlertLookup,
+    });
+
+    expect(d.stop("unknown")).toBe(false);
+  });
+
   it("inbox leftovers re-dispatch as new sessions when the run ends", async () => {
     const started: string[] = [];
     const gates = new Map<string, ReturnType<typeof deferred>>();

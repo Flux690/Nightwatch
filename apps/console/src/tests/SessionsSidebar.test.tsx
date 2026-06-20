@@ -206,6 +206,55 @@ describe("SessionsSidebar", () => {
     });
   });
 
+  describe("delete", () => {
+    it("renders a delete button per session row", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: /delete session/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("deletes the session when confirmed and removes it from the list", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      setup();
+      const fetchMock = vi.mocked(fetch);
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /delete session/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1", {
+        method: "DELETE",
+      });
+      await waitFor(() => {
+        expect(
+          screen.queryByText("CPU spike on web-01"),
+        ).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not delete when the confirmation is dismissed", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /delete session/i }));
+
+      expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+    });
+  });
+
   describe("navigation", () => {
     it("navigates to /sessions/:id when a session row is clicked", async () => {
       const user = userEvent.setup();

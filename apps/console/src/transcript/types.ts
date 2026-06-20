@@ -57,4 +57,8 @@ export interface ClarificationCardItem {
   multiSelect?: boolean;
   approval?: "pending" | "answered";
   resolvedBy?: string;
+  // Present when reconstructed from a persisted, already-answered transcript -
+  // the recorded tool_result, shown the same way ApprovalCardPanel nests a
+  // resolved ToolCardPanel.
+  result?: unknown;
 }

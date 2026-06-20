@@ -5,6 +5,7 @@ import type {
   ConsoleInterrupt,
   ConsoleInterruptResolved,
   ConsoleRunFinished,
+  ConsoleRunStopped,
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
@@ -70,6 +71,15 @@ export function publishToolCallEnd(
     messageId: randomUUID(),
     type: "TOOL_CALL_END",
     payload,
+  };
+  publishRaw(env);
+}
+
+export function publishRunStopped(sessionId: string): void {
+  const env: ConsoleRunStopped = {
+    messageId: randomUUID(),
+    type: "RUN_STOPPED",
+    payload: { sessionId },
   };
   publishRaw(env);
 }

@@ -64,7 +64,11 @@ export class OpenAIProvider implements LLMProvider {
     ];
   }
 
-  async chat(tools: ToolSchema[], onDelta?: OnDelta): Promise<ChatResponse> {
+  async chat(
+    tools: ToolSchema[],
+    onDelta?: OnDelta,
+    signal?: AbortSignal,
+  ): Promise<ChatResponse> {
     let response: OpenAI.Chat.Completions.ChatCompletion;
     let thinking = "";
     try {
@@ -92,7 +96,9 @@ export class OpenAIProvider implements LLMProvider {
           effort: this.config.reasoningEffort,
         };
       }
-      const stream = this.client.chat.completions.stream(streamParams);
+      const stream = this.client.chat.completions.stream(streamParams, {
+        signal,
+      });
       // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
       // so the cast goes through unknown first to satisfy the compiler. Listened
       // for unconditionally (not just when onDelta is passed) so the

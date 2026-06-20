@@ -21,6 +21,7 @@ import {
   publishToolCallStart,
   publishInterrupt,
   publishToolCallEnd,
+  publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
@@ -30,6 +31,7 @@ import type {
   SessionMeta,
 } from "@nightwatch/shared";
 import type {
+  ChatResponse,
   LLMProvider,
   ProviderMessage,
   ToolResult,
@@ -79,12 +81,14 @@ export interface RunInvestigationInput {
   // Present on resume: the full tool_results for the suspended turn
   // (completedResults from interrupt row + the newly resolved gated result).
   resumeToolResults?: ToolResult[];
+  // Aborts the LLM request in flight when the dispatcher stops this run.
+  signal?: AbortSignal;
 }
 
 export async function runInvestigation(
   input: RunInvestigationInput,
 ): Promise<void> {
-  const { sessionId } = input;
+  const { sessionId, signal } = input;
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
@@ -159,9 +163,28 @@ export async function runInvestigation(
   while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
     turn++;
     const startedAt = Date.now();
-    const response = await provider.chat(TOOL_SCHEMAS, (d) =>
-      publishTextMessageContent(sessionId, d),
-    );
+    let response: ChatResponse;
+    try {
+      response = await provider.chat(
+        TOOL_SCHEMAS,
+        (d) => publishTextMessageContent(sessionId, d),
+        signal,
+      );
+    } catch (err) {
+      if (signal?.aborted) {
+        log.info({ turn }, "run stopped by user");
+        persist();
+        publishRunStopped(sessionId);
+        return;
+      }
+      throw err;
+    }
+    if (signal?.aborted) {
+      log.info({ turn }, "run stopped by user");
+      persist();
+      publishRunStopped(sessionId);
+      return;
+    }
     log.info(
       {
         turn,
@@ -338,8 +361,21 @@ export async function runInvestigation(
   }
 
   log.info({ turn, toolCallCount }, "budget exhausted, running wrap-up turn");
-  await provider.chat([], (d) => publishTextMessageContent(sessionId, d));
+  try {
+    await provider.chat(
+      [],
+      (d) => publishTextMessageContent(sessionId, d),
+      signal,
+    );
+  } catch (err) {
+    if (!signal?.aborted) throw err;
+  }
   persist();
+  if (signal?.aborted) {
+    publishRunStopped(sessionId);
+    log.info("run stopped by user during wrap-up");
+    return;
+  }
   log.info("investigation finished with budget wrap-up");
 }
 

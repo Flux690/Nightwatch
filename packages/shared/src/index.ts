@@ -56,6 +56,7 @@ export type {
   ConsoleHumanInputRequired,
   ConsoleInterrupt,
   ConsoleToolCallEnd,
+  ConsoleRunStopped,
   ConsoleEvent,
 } from "./console-events.js";
 export type {

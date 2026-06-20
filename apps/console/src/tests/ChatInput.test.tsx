@@ -92,14 +92,28 @@ describe("ChatInput", () => {
   });
 
   describe("running state (isRunning=true)", () => {
-    it("disables the textarea and send button while agent is running", async () => {
+    it("disables the textarea and shows a stop button while agent is running", async () => {
       setup({ sessionId: null, isRunning: true });
 
       const textarea = await screen.findByRole("textbox");
-      const button = screen.getByRole("button", { name: /send/i });
 
       expect(textarea).toBeDisabled();
-      expect(button).toBeDisabled();
+      expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /send/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("posts to /api/sessions/:id/stop when the stop button is clicked", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup({ sessionId: "s1", isRunning: true });
+
+      const stopButton = await screen.findByRole("button", { name: /stop/i });
+      await user.click(stopButton);
+
+      expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1/stop", {
+        method: "POST",
+      });
     });
   });
 

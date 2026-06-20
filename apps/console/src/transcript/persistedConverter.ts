@@ -88,6 +88,30 @@ export function convertPersistedMessages(
               streaming: false,
             });
           } else if (block.type === "tool_use") {
+            if (block.name === "request_clarification") {
+              // The clarification card itself (not a generic tool_card) is the
+              // single rendering of this tool_use - while pending, the
+              // live/seeded card already covers it (see SessionView.tsx); once
+              // answered, rebuild it here so it survives a reload.
+              if (!toolResults.has(block.id)) continue;
+              const input = block.input as {
+                question?: string;
+                options?: Array<{ label: string; description: string }>;
+                multiSelect?: boolean;
+              };
+              items.push({
+                kind: "clarification_card",
+                toolUseId: block.id,
+                toolName: block.name,
+                input: block.input,
+                question: input.question,
+                options: input.options,
+                multiSelect: input.multiSelect,
+                approval: "answered",
+                result: toolResults.get(block.id),
+              });
+              continue;
+            }
             items.push({
               kind: "tool_card",
               toolUseId: block.id,

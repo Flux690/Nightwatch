@@ -69,6 +69,13 @@ export interface ConsoleToolCallEnd extends WsEnvelope {
   };
 }
 
+export interface ConsoleRunStopped extends WsEnvelope {
+  type: "RUN_STOPPED";
+  payload: {
+    sessionId: string;
+  };
+}
+
 // Discriminated union of all API→console WebSocket messages.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -77,4 +84,5 @@ export type ConsoleEvent =
   | ConsoleToolCallStart
   | ConsoleHumanInputRequired
   | ConsoleToolCallEnd
-  | ConsoleHumanInputResolved;
+  | ConsoleHumanInputResolved
+  | ConsoleRunStopped;

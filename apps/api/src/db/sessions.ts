@@ -104,6 +104,21 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
+// Cascades manually: no FK has ON DELETE CASCADE (architecture invariant), so
+// children are deleted before the parent row, all inside one transaction.
+export function deleteSession(sessionId: string): void {
+  const txn = getDb().transaction(() => {
+    getDb()
+      .prepare(`DELETE FROM pending_human_input WHERE session_id = ?`)
+      .run(sessionId);
+    getDb()
+      .prepare(`DELETE FROM session_messages WHERE session_id = ?`)
+      .run(sessionId);
+    getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
+  });
+  txn();
+}
+
 export function listAllSessions(): SessionMeta[] {
   return getDb()
     .prepare(

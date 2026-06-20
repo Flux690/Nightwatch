@@ -963,7 +963,9 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         expect(screen.getByRole("textbox")).toBeDisabled();
-        expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: /stop/i }),
+        ).toBeInTheDocument();
       });
     });
 

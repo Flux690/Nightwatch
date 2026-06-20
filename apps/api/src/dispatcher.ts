@@ -17,6 +17,9 @@ export interface Dispatcher {
   getActiveAlertSession(): string | null;
   injectAlert(sessionId: string, alert: NormalizedAlert): void;
   drainInbox(sessionId: string): NormalizedAlert[];
+  // Aborts the in-flight LLM request for a running session. Returns false if
+  // the session isn't currently running.
+  stop(sessionId: string): boolean;
 }
 
 export interface DispatcherOptions {
@@ -38,6 +41,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const active = new Map<string, number>();
   const activeSessionIds = new Set<string>();
   const inbox = new Map<string, NormalizedAlert[]>();
+  const controllers = new Map<string, AbortController>();
 
   // D4: derive, don't cache. `input.alert` is only present on the original
   // dispatch - a resume carries no alert, so identity falls back to the
@@ -65,8 +69,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
     retain(key);
     activeSessionIds.add(input.sessionId);
+    const controller = new AbortController();
+    controllers.set(input.sessionId, controller);
 
-    void run(input)
+    void run({ ...input, signal: controller.signal })
       .catch((err: unknown) => {
         logger.error(
           { err, sessionId: input.sessionId },
@@ -75,6 +81,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       })
       .finally(() => {
         activeSessionIds.delete(input.sessionId);
+        controllers.delete(input.sessionId);
         if (alert != null) {
           // Dispatch inbox leftovers as one new session (CONTEXT.md alert pipeline:
           // "inbox leftovers at run end become new sessions"). Multiple leftovers
@@ -122,6 +129,13 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       const arr = inbox.get(sessionId) ?? [];
       inbox.delete(sessionId);
       return arr;
+    },
+
+    stop(sessionId: string): boolean {
+      const controller = controllers.get(sessionId);
+      if (!controller) return false;
+      controller.abort();
+      return true;
     },
   };
 }
