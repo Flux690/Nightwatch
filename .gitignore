@@ -20,7 +20,7 @@ runner-id
 # Claude Code — personal/generated only; settings.json, hooks/, rules/, agents/ are committed
 .claude/settings.local.json
 .claude/worktrees/
-.claude/logs/hooks*.log
+.claude/logs/
 
 # Fetched skill content — regenerable from skills-lock.json (committed)
 .claude/skills/

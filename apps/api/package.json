@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && node --input-type=module -e \"import{cpSync}from'node:fs';cpSync('src/connect/connect.sh','dist/connect/connect.sh')\"",
+    "build": "tsc",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
