@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Text, UnstyledButton } from "@mantine/core";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type {
   TranscriptItem,
   ThinkingItem,
@@ -43,7 +44,7 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
         lineHeight: 1.6,
       }}
     >
-      <Markdown>{text}</Markdown>
+      <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
     </div>
   );
 }

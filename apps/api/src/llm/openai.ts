@@ -24,7 +24,8 @@ type ProviderBlock =
       id: string;
       name: string;
       input: Record<string, unknown>;
-    };
+    }
+  | { type: "tool_result"; tool_use_id: string; content: unknown };
 
 // Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
 // OPENAI_BASE_URL selects the host; the model comes from the global config.
@@ -71,7 +72,7 @@ export class OpenAIProvider implements LLMProvider {
       // to maxOutputTokens) can't trip the single-read request timeout. The
       // accumulated completion has the same shape as a non-streamed one, so
       // everything downstream is unchanged.
-      const stream = this.client.chat.completions.stream({
+      const streamParams = {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
         messages: this.messages,
@@ -83,7 +84,15 @@ export class OpenAIProvider implements LLMProvider {
             parameters: t.input_schema,
           },
         })),
-      });
+      };
+      // OpenRouter-only param requesting reasoning_details on the stream; the
+      // official SDK types don't know it, hence the cast through unknown.
+      if (this.config.reasoningEffort) {
+        (streamParams as unknown as Record<string, unknown>)["reasoning"] = {
+          effort: this.config.reasoningEffort,
+        };
+      }
+      const stream = this.client.chat.completions.stream(streamParams);
       // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
       // so the cast goes through unknown first to satisfy the compiler. Listened
       // for unconditionally (not just when onDelta is passed) so the
@@ -188,6 +197,23 @@ export class OpenAIProvider implements LLMProvider {
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam {
     if (Array.isArray(m.providerContent)) {
       const blocks = m.providerContent as ProviderBlock[];
+      const toolResult = blocks.find(
+        (b): b is ProviderBlock & { type: "tool_result" } =>
+          b.type === "tool_result",
+      );
+      // A tool's output round-trips as its own native "tool" message, not an
+      // assistant turn - the console persists it under role "user" (see
+      // snapshot()) purely for display grouping.
+      if (toolResult) {
+        return {
+          role: "tool",
+          tool_call_id: toolResult.tool_use_id,
+          content:
+            typeof toolResult.content === "string"
+              ? toolResult.content
+              : JSON.stringify(toolResult.content),
+        };
+      }
       const text = blocks.find((b) => b.type === "text")?.text ?? null;
       const toolCalls = blocks
         .filter(
@@ -212,16 +238,38 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   snapshot(): ProviderMessage[] {
-    // The system message is not part of the transcript; skip it. Tool-role
-    // messages are persisted on the user side for display, native role kept.
+    // The system message is not part of the transcript; skip it.
     return this.messages
       .map((m, i) => ({ m, i }))
       .filter(({ m }) => m.role !== "system")
       .map(({ m, i }) => {
+        // A tool's output is always reconstructed as the same ProviderBlock[]
+        // shape the console reads for Anthropic, regardless of which provider
+        // ran - persisted under role "user" purely for display grouping.
+        if (m.role === "tool") {
+          const blocks: ProviderBlock[] = [
+            {
+              type: "tool_result",
+              tool_use_id: m.tool_call_id,
+              content: m.content,
+            },
+          ];
+          return {
+            role: "user" as const,
+            content: typeof m.content === "string" ? m.content : "",
+            providerContent: blocks,
+          };
+        }
+
         const content = typeof m.content === "string" ? m.content : "";
-        const thinking = this.thinkingByIndex.get(i);
-        if (m.role === "assistant" && thinking) {
-          const blocks: ProviderBlock[] = [{ type: "thinking", thinking }];
+
+        if (m.role === "assistant") {
+          // Always build the block shape (even with no thinking and no tool
+          // calls) so the console's persistedConverter, which only recognizes
+          // ProviderBlock[] for assistant turns, renders every turn the same way.
+          const thinking = this.thinkingByIndex.get(i);
+          const blocks: ProviderBlock[] = [];
+          if (thinking) blocks.push({ type: "thinking", thinking });
           if (content) blocks.push({ type: "text", text: content });
           for (const call of m.tool_calls ?? []) {
             if (call.type !== "function") continue;
@@ -241,9 +289,9 @@ export class OpenAIProvider implements LLMProvider {
             providerContent: blocks,
           };
         }
+
         return {
-          role:
-            m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          role: "user" as const,
           content,
           providerContent: m,
         };
