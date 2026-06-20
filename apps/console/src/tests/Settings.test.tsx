@@ -9,6 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
+import { Notifications, notifications } from "@mantine/notifications";
+import type { AgentConfig } from "@nightwatch/shared";
 
 import { AuthProvider } from "../auth/AuthContext.js";
 import { SettingsPage } from "../pages/Settings.js";
@@ -21,7 +23,7 @@ const AUTH_STATUS_RESPONSE = {
   email: OWNER_EMAIL,
 };
 
-const CONFIG: import("@nightwatch/shared").AgentConfig = {
+const CONFIG: AgentConfig = {
   provider: "anthropic",
   model: "claude-sonnet-4-6",
   thinking: "adaptive",
@@ -99,6 +101,7 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
       cssVariablesResolver={cssVariablesResolver}
       defaultColorScheme="light"
     >
+      <Notifications />
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <SettingsPage />
@@ -113,6 +116,7 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  notifications.clean();
 });
 
 describe("SettingsPage", () => {
@@ -142,6 +146,171 @@ describe("SettingsPage", () => {
       );
       expect(patchCall).toBeDefined();
       expect(patchCall?.[0]).toContain("/config");
+    });
+  });
+
+  // --- Dirty-aware Save ---
+
+  it("disables Save when the form matches the persisted config", async () => {
+    setup();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    });
+  });
+
+  it("enables Save the moment a field is edited", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    const modelInput = await screen.findByLabelText(/^model$/i);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    });
+
+    await user.type(modelInput, "-edited");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+    });
+  });
+
+  it("shows a spinner on Save while the PATCH request is in flight", async () => {
+    const user = userEvent.setup();
+    let resolvePatch: ((value: AgentConfig) => void) | undefined;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes("/auth/status")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
+          });
+        }
+        if (url.includes("/config/models")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(MODELS_RESPONSE),
+          });
+        }
+        if (url.includes("/config") && init?.method === "PATCH") {
+          return new Promise((resolve) => {
+            resolvePatch = (value: AgentConfig) =>
+              resolve({ ok: true, json: () => Promise.resolve(value) });
+          });
+        }
+        if (url.includes("/config")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(CONFIG),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <MantineProvider
+        theme={theme}
+        cssVariablesResolver={cssVariablesResolver}
+        defaultColorScheme="light"
+      >
+        <Notifications />
+        <QueryClientProvider client={qc}>
+          <AuthProvider>
+            <SettingsPage />
+          </AuthProvider>
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+
+    const modelInput = await screen.findByLabelText(/^model$/i);
+    await user.type(modelInput, "-edited");
+    const saveButton = screen.getByRole("button", { name: /save/i });
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(saveButton).toHaveAttribute("data-loading", "true");
+    });
+
+    resolvePatch?.(CONFIG);
+
+    await waitFor(() => {
+      expect(saveButton).not.toHaveAttribute("data-loading", "true");
+    });
+  });
+
+  it("shows a success notification after a successful save", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    const modelInput = await screen.findByLabelText(/^model$/i);
+    await user.type(modelInput, "-edited");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/settings saved/i)).toBeInTheDocument();
+    });
+  });
+
+  it("shows an error notification when the save fails", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes("/auth/status")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
+          });
+        }
+        if (url.includes("/config/models")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(MODELS_RESPONSE),
+          });
+        }
+        if (url.includes("/config") && init?.method === "PATCH") {
+          return Promise.resolve({ ok: false, status: 500 });
+        }
+        if (url.includes("/config")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(CONFIG),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <MantineProvider
+        theme={theme}
+        cssVariablesResolver={cssVariablesResolver}
+        defaultColorScheme="light"
+      >
+        <Notifications />
+        <QueryClientProvider client={qc}>
+          <AuthProvider>
+            <SettingsPage />
+          </AuthProvider>
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+
+    const modelInput = await screen.findByLabelText(/^model$/i);
+    await user.type(modelInput, "-edited");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/save failed/i)).toBeInTheDocument();
     });
   });
 
@@ -264,6 +433,7 @@ describe("SettingsPage", () => {
         cssVariablesResolver={cssVariablesResolver}
         defaultColorScheme="light"
       >
+        <Notifications />
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
