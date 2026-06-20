@@ -6,13 +6,11 @@ import { MantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
-  createRoute,
   createRouter,
-  Outlet,
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionTranscript } from "../pages/SessionTranscript.js";
+import { SessionView } from "../pages/SessionTranscript.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
@@ -39,14 +37,6 @@ class MockWs {
   }
 }
 
-const RUNNER = {
-  id: "inst-1",
-  token: "tok-1",
-  hostname: "host-1",
-  online: true,
-  createdAt: "2024-01-01T00:00:00Z",
-};
-
 const SESSION_MESSAGE_1 = {
   sessionId: "s1",
   seq: 1,
@@ -70,19 +60,13 @@ function setup(messages: object[] = [SESSION_MESSAGE_1]) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/runners")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([RUNNER]),
-        });
-      }
       if (url.includes("/sessions/s1")) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(messages),
         });
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     }),
   );
 
@@ -90,15 +74,13 @@ function setup(messages: object[] = [SESSION_MESSAGE_1]) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const root = createRootRoute({ component: Outlet });
-  const sessionIdRoute = createRoute({
-    getParentRoute: () => root,
-    path: "/sessions/$id",
-    component: SessionTranscript,
+  // ChatInput uses useNavigate, so a router context is required.
+  const root = createRootRoute({
+    component: () => <SessionView sessionId="s1" />,
   });
   const router = createRouter({
-    routeTree: root.addChildren([sessionIdRoute]),
-    history: createMemoryHistory({ initialEntries: ["/sessions/s1"] }),
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
   });
 
   render(
@@ -1044,6 +1026,84 @@ describe("SessionTranscript", () => {
         "/api/sessions/s1/messages",
         expect.anything(),
       );
+    });
+  });
+
+  describe("role-based rendering", () => {
+    it("renders a persisted user message as a right-aligned bubble", async () => {
+      setup([SESSION_MESSAGE_1]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-bubble")).toBeInTheDocument();
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("renders a persisted assistant message as markdown (paragraph element)", async () => {
+      setup([SESSION_MESSAGE_2]);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("I will investigate the service downtime."),
+        ).toBeInTheDocument();
+        // react-markdown wraps plain text in a <p>
+        const p = document.querySelector("p");
+        expect(p).toBeInTheDocument();
+      });
+    });
+
+    it("live stream and persisted path render the same text after RUN_FINISHED", async () => {
+      setup([SESSION_MESSAGE_1]);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "All clear." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("All clear.")).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m2",
+          type: "RUN_FINISHED",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "assistant",
+              content: "All clear.",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      // After flush, the persisted converter takes over — same text still visible.
+      await waitFor(() => {
+        expect(screen.getByText("All clear.")).toBeInTheDocument();
+      });
+    });
+
+    it("renders the centered transcript column", async () => {
+      setup([SESSION_MESSAGE_1]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("transcript-column")).toBeInTheDocument();
+      });
     });
   });
 });
