@@ -72,12 +72,23 @@ export function convertPersistedMessages(
     } else if (msg.role === "assistant") {
       if (isProviderBlockArray(msg.providerContent)) {
         let textIdx = 0;
+        let thinkingIdx = 0;
         for (const block of msg.providerContent) {
           if (block.type === "text" && block.text) {
             items.push({
               kind: "agent_text",
               id: `agent-${msg.seq}-${textIdx++}`,
               text: block.text,
+            });
+          } else if (block.type === "thinking" && block.thinking) {
+            // Reload is never streaming; every block renders collapsed so
+            // the forensic record doesn't dominate the view.
+            items.push({
+              kind: "thinking",
+              id: `thinking-${msg.seq}-${thinkingIdx++}`,
+              text: block.thinking,
+              streaming: false,
+              collapsed: true,
             });
           } else if (block.type === "tool_use") {
             items.push({
@@ -88,7 +99,6 @@ export function convertPersistedMessages(
               result: toolResults.get(block.id) ?? null,
             });
           }
-          // thinking blocks are reserved for issue 052.
         }
       } else {
         // Flat content fallback when providerContent is absent.

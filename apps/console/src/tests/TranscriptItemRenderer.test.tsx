@@ -80,6 +80,80 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
+  describe("thinking", () => {
+    it("shows a pulsing Thinking label while streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: true,
+        collapsed: false,
+      });
+
+      const label = screen.getByText("Thinking");
+      expect(label).toBeInTheDocument();
+      expect(label.closest('[data-testid="thinking-block"]')).toHaveAttribute(
+        "data-streaming",
+        "true",
+      );
+    });
+
+    it("auto-expands and shows the streamed text while streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: true,
+        collapsed: false,
+      });
+
+      expect(screen.getByText("Checking the logs")).toBeVisible();
+    });
+
+    it("renders collapsed (text hidden) when collapsed and not streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+        collapsed: true,
+      });
+
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+    });
+
+    it("expands again when the header is clicked", async () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+        collapsed: true,
+      });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /thinking/i }));
+
+      expect(screen.getByText("Checking the logs")).toBeVisible();
+    });
+
+    it("does not pulse once collapsed and no longer streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
+        collapsed: true,
+      });
+
+      expect(screen.getByTestId("thinking-block")).toHaveAttribute(
+        "data-streaming",
+        "false",
+      );
+    });
+  });
+
   describe("tool_card", () => {
     const toolItem: TranscriptItem = {
       kind: "tool_card",

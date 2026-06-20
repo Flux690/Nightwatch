@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Button, Text } from "@mantine/core";
+import { useEffect, useRef, useState } from "react";
+import { Button, Text, UnstyledButton } from "@mantine/core";
 import Markdown from "react-markdown";
 import type {
   TranscriptItem,
+  ThinkingItem,
   ApprovalCardItem,
   ClarificationCardItem,
   ToolCardItem,
@@ -43,6 +44,50 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
       }}
     >
       <Markdown>{text}</Markdown>
+    </div>
+  );
+}
+
+function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
+  const [expanded, setExpanded] = useState(!item.collapsed);
+  // Mirrors the item's own collapsed transitions (auto-expand on the first
+  // delta, auto-collapse once the next thing begins) while still letting the
+  // operator manually reopen a finished, collapsed burst by clicking.
+  const prevCollapsed = useRef(item.collapsed);
+  useEffect(() => {
+    if (item.collapsed !== prevCollapsed.current) {
+      setExpanded(!item.collapsed);
+      prevCollapsed.current = item.collapsed;
+    }
+  }, [item.collapsed]);
+
+  return (
+    <div data-testid="thinking-block" data-streaming={item.streaming}>
+      <UnstyledButton
+        onClick={() => setExpanded((prev) => !prev)}
+        style={{ display: "flex", alignItems: "center", gap: 6 }}
+      >
+        <Text size="xs" c="dimmed" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
+        </Text>
+        <Text
+          size="xs"
+          c="dimmed"
+          fw={600}
+          className={item.streaming ? "nw-thinking-pulse" : undefined}
+        >
+          Thinking
+        </Text>
+      </UnstyledButton>
+      <div style={{ display: expanded ? "block" : "none" }}>
+        <Text
+          size="xs"
+          c="dimmed"
+          style={{ whiteSpace: "pre-wrap", paddingLeft: 16, paddingTop: 4 }}
+        >
+          {item.text}
+        </Text>
+      </div>
     </div>
   );
 }
@@ -267,6 +312,8 @@ export function TranscriptItemRenderer({
       return <UserBubble text={item.text} />;
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
+    case "thinking":
+      return <ThinkingBlock item={item} />;
     case "tool_card":
       return (
         <ToolCardPanel

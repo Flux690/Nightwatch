@@ -80,3 +80,17 @@ body {
   min-height: 100%;
   background: var(--nw-bg);
 }
+
+@keyframes nw-thinking-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.nw-thinking-pulse {
+  animation: nw-thinking-pulse 1.6s ease-in-out infinite;
+}

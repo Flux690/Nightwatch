@@ -7,9 +7,27 @@ import type {
 } from "@nightwatch/shared";
 import type {
   TranscriptItem,
+  ThinkingItem,
   ApprovalCardItem,
   ClarificationCardItem,
 } from "./types.js";
+
+// Once a non-thinking event arrives, the most recent thinking burst (if still
+// streaming) is finalized: it stops pulsing and tucks itself away. A later
+// thinking delta then opens a fresh, independent item rather than reopening
+// this one.
+function collapseTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
+  const last = items[items.length - 1];
+  if (last?.kind === "thinking" && last.streaming) {
+    const collapsed: ThinkingItem = {
+      ...last,
+      streaming: false,
+      collapsed: true,
+    };
+    return [...items.slice(0, -1), collapsed];
+  }
+  return items;
+}
 
 export function applyLiveEvent(
   items: TranscriptItem[],
@@ -22,18 +40,40 @@ export function applyLiveEvent(
       kind: string;
       delta: string;
     };
-    if (payload.sessionId !== sessionId || payload.kind !== "text")
-      return items;
+    if (payload.sessionId !== sessionId) return items;
 
-    const last = items[items.length - 1];
+    if (payload.kind === "thinking") {
+      const last = items[items.length - 1];
+      if (last?.kind === "thinking" && last.streaming) {
+        return [
+          ...items.slice(0, -1),
+          { ...last, text: last.text + payload.delta },
+        ];
+      }
+      return [
+        ...items,
+        {
+          kind: "thinking",
+          id: `thinking-${Date.now()}`,
+          text: payload.delta,
+          streaming: true,
+          collapsed: false,
+        },
+      ];
+    }
+
+    if (payload.kind !== "text") return items;
+
+    const settled = collapseTrailingThinking(items);
+    const last = settled[settled.length - 1];
     if (last?.kind === "agent_text") {
       return [
-        ...items.slice(0, -1),
+        ...settled.slice(0, -1),
         { ...last, text: last.text + payload.delta },
       ];
     }
     return [
-      ...items,
+      ...settled,
       { kind: "agent_text", id: `agent-${Date.now()}`, text: payload.delta },
     ];
   }
@@ -42,7 +82,7 @@ export function applyLiveEvent(
     const payload = env.payload as ConsoleToolCallStart["payload"];
     if (payload.sessionId !== sessionId) return items;
     return [
-      ...items,
+      ...collapseTrailingThinking(items),
       {
         kind: "tool_card",
         toolUseId: payload.toolUseId,
@@ -56,6 +96,7 @@ export function applyLiveEvent(
   if (env.type === "INTERRUPT") {
     const payload = env.payload as ConsoleInterrupt["payload"];
     if (payload.sessionId !== sessionId) return items;
+    items = collapseTrailingThinking(items);
 
     if (payload.kind === "clarification") {
       return [

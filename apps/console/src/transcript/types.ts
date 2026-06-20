@@ -1,6 +1,7 @@
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
+  | ThinkingItem
   | ToolCardItem
   | ApprovalCardItem
   | ClarificationCardItem;
@@ -15,6 +16,18 @@ export interface AgentTextItem {
   kind: "agent_text";
   id: string;
   text: string;
+}
+
+export interface ThinkingItem {
+  kind: "thinking";
+  id: string;
+  text: string;
+  // streaming is true only while live deltas are still arriving for this
+  // burst; reload-path items are never streaming.
+  streaming: boolean;
+  // collapsed starts false on the live path (auto-expand on first delta) and
+  // true on the reload path (forensic context, not the focal point).
+  collapsed: boolean;
 }
 
 export interface ToolCardItem {
