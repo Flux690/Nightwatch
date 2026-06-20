@@ -5,6 +5,7 @@ import {
   Center,
   PasswordInput,
   Stack,
+  Text,
   TextInput,
   Title,
 } from "@mantine/core";
@@ -61,11 +62,16 @@ function SetupForm(): React.JSX.Element {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" maw={360}>
+      <Stack gap="sm" maw={440}>
         <Title order={2} size="h4">
           Create your account
         </Title>
-        {serverError && <Alert color="red">{serverError}</Alert>}
+        <Alert
+          color="red"
+          style={{ visibility: serverError ? "visible" : "hidden" }}
+        >
+          {serverError || " "}
+        </Alert>
         <TextInput
           label="Email"
           type="email"
@@ -73,22 +79,42 @@ function SetupForm(): React.JSX.Element {
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
         />
-        <PasswordInput
-          label="Password"
-          required
-          value={password}
-          error={passwordError}
-          onChange={(e) => setPassword(e.currentTarget.value)}
-          onBlur={(e) => validatePassword(e.currentTarget.value)}
-        />
-        <PasswordInput
-          label="Confirm password"
-          required
-          value={confirmPassword}
-          error={confirmError}
-          onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-          onBlur={(e) => validateConfirm(e.currentTarget.value, password)}
-        />
+        <div>
+          <PasswordInput
+            label="Password"
+            required
+            value={password}
+            error={Boolean(passwordError)}
+            onChange={(e) => setPassword(e.currentTarget.value)}
+            onBlur={(e) => validatePassword(e.currentTarget.value)}
+          />
+          <Text
+            size="xs"
+            c="red"
+            mih={18}
+            style={{ visibility: passwordError ? "visible" : "hidden" }}
+          >
+            {passwordError || " "}
+          </Text>
+        </div>
+        <div>
+          <PasswordInput
+            label="Confirm password"
+            required
+            value={confirmPassword}
+            error={Boolean(confirmError)}
+            onChange={(e) => setConfirmPassword(e.currentTarget.value)}
+            onBlur={(e) => validateConfirm(e.currentTarget.value, password)}
+          />
+          <Text
+            size="xs"
+            c="red"
+            mih={18}
+            style={{ visibility: confirmError ? "visible" : "hidden" }}
+          >
+            {confirmError || " "}
+          </Text>
+        </div>
         <Button type="submit">Create account</Button>
       </Stack>
     </form>
@@ -109,11 +135,16 @@ function LoginForm(): React.JSX.Element {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" maw={360}>
+      <Stack gap="sm" maw={440}>
         <Title order={2} size="h4">
           Log in
         </Title>
-        {serverError && <Alert color="red">{serverError}</Alert>}
+        <Alert
+          color="red"
+          style={{ visibility: serverError ? "visible" : "hidden" }}
+        >
+          {serverError || " "}
+        </Alert>
         <TextInput
           label="Email"
           type="email"
