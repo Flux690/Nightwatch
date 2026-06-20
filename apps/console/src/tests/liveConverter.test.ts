@@ -48,7 +48,7 @@ function interrupt(toolUseId: string): WsEnvelope {
 }
 
 describe("applyLiveEvent — thinking", () => {
-  it("opens an auto-expanded, streaming thinking item on the first delta", () => {
+  it("opens a streaming thinking item on the first delta", () => {
     const items = applyLiveEvent([], thinkingDelta("Let me check"), "s1");
 
     expect(items).toHaveLength(1);
@@ -56,7 +56,6 @@ describe("applyLiveEvent — thinking", () => {
     expect(item.kind).toBe("thinking");
     expect(item.text).toBe("Let me check");
     expect(item.streaming).toBe(true);
-    expect(item.collapsed).toBe(false);
   });
 
   it("accumulates consecutive thinking deltas into the same item", () => {
@@ -68,7 +67,7 @@ describe("applyLiveEvent — thinking", () => {
     expect((items[0] as ThinkingItem).text).toBe("Let me check the logs");
   });
 
-  it("collapses the thinking item the moment a text delta arrives", () => {
+  it("stops streaming the thinking item the moment a text delta arrives", () => {
     let items: TranscriptItem[] = [];
     items = applyLiveEvent(items, thinkingDelta("Let me check"), "s1");
     items = applyLiveEvent(items, textDelta("Checked."), "s1");
@@ -76,11 +75,10 @@ describe("applyLiveEvent — thinking", () => {
     expect(items).toHaveLength(2);
     const thinking = items[0] as ThinkingItem;
     expect(thinking.streaming).toBe(false);
-    expect(thinking.collapsed).toBe(true);
     expect(items[1]).toMatchObject({ kind: "agent_text", text: "Checked." });
   });
 
-  it("collapses the thinking item the moment a tool call starts", () => {
+  it("stops streaming the thinking item the moment a tool call starts", () => {
     let items: TranscriptItem[] = [];
     items = applyLiveEvent(items, thinkingDelta("Let me check"), "s1");
     items = applyLiveEvent(items, toolCallStart("tu-1"), "s1");
@@ -88,18 +86,17 @@ describe("applyLiveEvent — thinking", () => {
     expect(items).toHaveLength(2);
     const thinking = items[0] as ThinkingItem;
     expect(thinking.streaming).toBe(false);
-    expect(thinking.collapsed).toBe(true);
     expect(items[1]).toMatchObject({ kind: "tool_card", toolUseId: "tu-1" });
   });
 
-  it("collapses the thinking item the moment an interrupt arrives", () => {
+  it("stops streaming the thinking item the moment an interrupt arrives", () => {
     let items: TranscriptItem[] = [];
     items = applyLiveEvent(items, thinkingDelta("Should I restart it?"), "s1");
     items = applyLiveEvent(items, interrupt("tu-gate"), "s1");
 
     expect(items).toHaveLength(2);
     const thinking = items[0] as ThinkingItem;
-    expect(thinking.collapsed).toBe(true);
+    expect(thinking.streaming).toBe(false);
     expect(items[1]).toMatchObject({
       kind: "approval_card",
       toolUseId: "tu-gate",
@@ -114,11 +111,10 @@ describe("applyLiveEvent — thinking", () => {
 
     expect(items).toHaveLength(3);
     expect((items[0] as ThinkingItem).text).toBe("First burst");
-    expect((items[0] as ThinkingItem).collapsed).toBe(true);
+    expect((items[0] as ThinkingItem).streaming).toBe(false);
     const second = items[2] as ThinkingItem;
     expect(second.text).toBe("Second burst");
     expect(second.streaming).toBe(true);
-    expect(second.collapsed).toBe(false);
   });
 
   it("ignores thinking deltas for a different session", () => {

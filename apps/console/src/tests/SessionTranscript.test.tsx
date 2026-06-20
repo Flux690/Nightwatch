@@ -473,7 +473,7 @@ describe("SessionTranscript", () => {
   });
 
   describe("thinking choreography (TEXT_MESSAGE_CONTENT kind=thinking)", () => {
-    it("streams thinking deltas into a visible, pulsing block", async () => {
+    it("renders a pulsing, collapsed-by-default block while thinking deltas stream", async () => {
       setup();
 
       await waitFor(() => {
@@ -496,11 +496,11 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Thinking")).toBeInTheDocument();
-        expect(screen.getByText("Let me check the logs")).toBeVisible();
       });
+      expect(screen.getByText("Let me check the logs")).not.toBeVisible();
     });
 
-    it("auto-collapses the thinking block once the answer begins", async () => {
+    it("expands a streaming thinking block when clicked", async () => {
       setup();
 
       await waitFor(() => {
@@ -517,24 +517,16 @@ describe("SessionTranscript", () => {
         });
       });
       await waitFor(() => {
-        expect(screen.getByText("Reasoning")).toBeVisible();
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
       });
 
-      act(() => {
-        latestWs?.push({
-          messageId: "m4",
-          type: "TEXT_MESSAGE_CONTENT",
-          payload: { sessionId: "s1", kind: "text", delta: "The answer." },
-        });
-      });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /thinking/i }));
 
-      await waitFor(() => {
-        expect(screen.getByText("The answer.")).toBeInTheDocument();
-        expect(screen.getByText("Reasoning")).not.toBeVisible();
-      });
+      expect(screen.getByText("Reasoning")).toBeVisible();
     });
 
-    it("auto-collapses the thinking block once a tool call starts", async () => {
+    it("renders the answer alongside a still-collapsed thinking block", async () => {
       setup();
 
       await waitFor(() => {
@@ -547,34 +539,21 @@ describe("SessionTranscript", () => {
         latestWs?.push({
           messageId: "m3",
           type: "TEXT_MESSAGE_CONTENT",
-          payload: {
-            sessionId: "s1",
-            kind: "thinking",
-            delta: "Should I restart it",
-          },
+          payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
         });
       });
-      await waitFor(() => {
-        expect(screen.getByText("Should I restart it")).toBeVisible();
-      });
-
       act(() => {
         latestWs?.push({
           messageId: "m4",
-          type: "TOOL_CALL_START",
-          payload: {
-            sessionId: "s1",
-            toolUseId: "tu-1",
-            toolName: "check_service_status",
-            input: {},
-          },
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "The answer." },
         });
       });
 
       await waitFor(() => {
-        expect(screen.getByText("check_service_status")).toBeInTheDocument();
-        expect(screen.getByText("Should I restart it")).not.toBeVisible();
+        expect(screen.getByText("The answer.")).toBeInTheDocument();
       });
+      expect(screen.getByText("Reasoning")).not.toBeVisible();
     });
 
     it("renders multiple thinking bursts as independent, ordered blocks", async () => {
@@ -593,10 +572,6 @@ describe("SessionTranscript", () => {
           payload: { sessionId: "s1", kind: "thinking", delta: "First burst" },
         });
       });
-      await waitFor(() => {
-        expect(screen.getByText("First burst")).toBeVisible();
-      });
-
       act(() => {
         latestWs?.push({
           messageId: "m4",
@@ -623,8 +598,15 @@ describe("SessionTranscript", () => {
 
       await waitFor(() => {
         expect(screen.getAllByText("Thinking")).toHaveLength(2);
-        expect(screen.getByText("Second burst")).toBeVisible();
       });
+
+      const user = userEvent.setup();
+      const buttons = screen.getAllByRole("button", { name: /thinking/i });
+      await user.click(buttons[0]);
+      await user.click(buttons[1]);
+
+      expect(screen.getByText("First burst")).toBeVisible();
+      expect(screen.getByText("Second burst")).toBeVisible();
     });
 
     it("clears thinking blocks once RUN_FINISHED flushes the turn", async () => {
@@ -644,7 +626,7 @@ describe("SessionTranscript", () => {
         });
       });
       await waitFor(() => {
-        expect(screen.getByText("Reasoning")).toBeVisible();
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
       });
 
       act(() => {

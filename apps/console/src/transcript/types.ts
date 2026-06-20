@@ -23,11 +23,9 @@ export interface ThinkingItem {
   id: string;
   text: string;
   // streaming is true only while live deltas are still arriving for this
-  // burst; reload-path items are never streaming.
+  // burst; reload-path items are never streaming. Always renders collapsed
+  // by default (live and reload alike) - the operator opens it explicitly.
   streaming: boolean;
-  // collapsed starts false on the live path (auto-expand on first delta) and
-  // true on the reload path (forensic context, not the focal point).
-  collapsed: boolean;
 }
 
 export interface ToolCardItem {

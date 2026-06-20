@@ -81,13 +81,12 @@ describe("TranscriptItemRenderer", () => {
   });
 
   describe("thinking", () => {
-    it("shows a pulsing Thinking label while streaming", () => {
+    it("shows a pulsing Thinking label with a chevron while streaming", () => {
       wrap({
         kind: "thinking",
         id: "th-1",
         text: "Checking the logs",
         streaming: true,
-        collapsed: false,
       });
 
       const label = screen.getByText("Thinking");
@@ -98,38 +97,35 @@ describe("TranscriptItemRenderer", () => {
       );
     });
 
-    it("auto-expands and shows the streamed text while streaming", () => {
+    it("renders collapsed by default while streaming", () => {
       wrap({
         kind: "thinking",
         id: "th-1",
         text: "Checking the logs",
         streaming: true,
-        collapsed: false,
       });
 
-      expect(screen.getByText("Checking the logs")).toBeVisible();
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
     });
 
-    it("renders collapsed (text hidden) when collapsed and not streaming", () => {
+    it("renders collapsed by default for a reloaded (non-streaming) block", () => {
       wrap({
         kind: "thinking",
         id: "th-1",
         text: "Checking the logs",
         streaming: false,
-        collapsed: true,
       });
 
       expect(screen.getByText("Thinking")).toBeInTheDocument();
       expect(screen.queryByText("Checking the logs")).not.toBeVisible();
     });
 
-    it("expands again when the header is clicked", async () => {
+    it("expands to show the text when the header is clicked", async () => {
       wrap({
         kind: "thinking",
         id: "th-1",
         text: "Checking the logs",
         streaming: false,
-        collapsed: true,
       });
 
       const user = userEvent.setup();
@@ -138,13 +134,28 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("Checking the logs")).toBeVisible();
     });
 
-    it("does not pulse once collapsed and no longer streaming", () => {
+    it("collapses again when the header is clicked while expanded", async () => {
       wrap({
         kind: "thinking",
         id: "th-1",
         text: "Checking the logs",
         streaming: false,
-        collapsed: true,
+      });
+
+      const user = userEvent.setup();
+      const button = screen.getByRole("button", { name: /thinking/i });
+      await user.click(button);
+      await user.click(button);
+
+      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+    });
+
+    it("does not pulse once the burst has finished streaming", () => {
+      wrap({
+        kind: "thinking",
+        id: "th-1",
+        text: "Checking the logs",
+        streaming: false,
       });
 
       expect(screen.getByTestId("thinking-block")).toHaveAttribute(

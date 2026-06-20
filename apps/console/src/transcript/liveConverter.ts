@@ -13,18 +13,13 @@ import type {
 } from "./types.js";
 
 // Once a non-thinking event arrives, the most recent thinking burst (if still
-// streaming) is finalized: it stops pulsing and tucks itself away. A later
-// thinking delta then opens a fresh, independent item rather than reopening
-// this one.
-function collapseTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
+// streaming) stops pulsing - it's done. A later thinking delta then opens a
+// fresh, independent item rather than reopening this one.
+function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   const last = items[items.length - 1];
   if (last?.kind === "thinking" && last.streaming) {
-    const collapsed: ThinkingItem = {
-      ...last,
-      streaming: false,
-      collapsed: true,
-    };
-    return [...items.slice(0, -1), collapsed];
+    const finalized: ThinkingItem = { ...last, streaming: false };
+    return [...items.slice(0, -1), finalized];
   }
   return items;
 }
@@ -57,14 +52,13 @@ export function applyLiveEvent(
           id: `thinking-${Date.now()}`,
           text: payload.delta,
           streaming: true,
-          collapsed: false,
         },
       ];
     }
 
     if (payload.kind !== "text") return items;
 
-    const settled = collapseTrailingThinking(items);
+    const settled = finalizeTrailingThinking(items);
     const last = settled[settled.length - 1];
     if (last?.kind === "agent_text") {
       return [
@@ -82,7 +76,7 @@ export function applyLiveEvent(
     const payload = env.payload as ConsoleToolCallStart["payload"];
     if (payload.sessionId !== sessionId) return items;
     return [
-      ...collapseTrailingThinking(items),
+      ...finalizeTrailingThinking(items),
       {
         kind: "tool_card",
         toolUseId: payload.toolUseId,
@@ -96,7 +90,7 @@ export function applyLiveEvent(
   if (env.type === "INTERRUPT") {
     const payload = env.payload as ConsoleInterrupt["payload"];
     if (payload.sessionId !== sessionId) return items;
-    items = collapseTrailingThinking(items);
+    items = finalizeTrailingThinking(items);
 
     if (payload.kind === "clarification") {
       return [

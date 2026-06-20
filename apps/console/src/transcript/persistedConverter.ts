@@ -81,14 +81,11 @@ export function convertPersistedMessages(
               text: block.text,
             });
           } else if (block.type === "thinking" && block.thinking) {
-            // Reload is never streaming; every block renders collapsed so
-            // the forensic record doesn't dominate the view.
             items.push({
               kind: "thinking",
               id: `thinking-${msg.seq}-${thinkingIdx++}`,
               text: block.thinking,
               streaming: false,
-              collapsed: true,
             });
           } else if (block.type === "tool_use") {
             items.push({

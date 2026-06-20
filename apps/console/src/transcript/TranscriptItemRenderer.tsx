@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button, Text, UnstyledButton } from "@mantine/core";
 import Markdown from "react-markdown";
 import type {
@@ -49,17 +49,9 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
 }
 
 function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
-  const [expanded, setExpanded] = useState(!item.collapsed);
-  // Mirrors the item's own collapsed transitions (auto-expand on the first
-  // delta, auto-collapse once the next thing begins) while still letting the
-  // operator manually reopen a finished, collapsed burst by clicking.
-  const prevCollapsed = useRef(item.collapsed);
-  useEffect(() => {
-    if (item.collapsed !== prevCollapsed.current) {
-      setExpanded(!item.collapsed);
-      prevCollapsed.current = item.collapsed;
-    }
-  }, [item.collapsed]);
+  // Always starts collapsed, live or reloaded alike - the operator opens it
+  // explicitly; nothing auto-expands or forces it shut.
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div data-testid="thinking-block" data-streaming={item.streaming}>
@@ -67,9 +59,6 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
         onClick={() => setExpanded((prev) => !prev)}
         style={{ display: "flex", alignItems: "center", gap: 6 }}
       >
-        <Text size="xs" c="dimmed" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
-        </Text>
         <Text
           size="xs"
           c="dimmed"
@@ -77,6 +66,9 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
           className={item.streaming ? "nw-thinking-pulse" : undefined}
         >
           Thinking
+        </Text>
+        <Text size="xs" c="dimmed" aria-hidden="true">
+          {expanded ? "▾" : "▸"}
         </Text>
       </UnstyledButton>
       <div style={{ display: expanded ? "block" : "none" }}>

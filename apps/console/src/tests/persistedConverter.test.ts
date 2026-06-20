@@ -20,7 +20,7 @@ function assistantMessage(
 }
 
 describe("convertPersistedMessages — thinking", () => {
-  it("extracts a thinking block as a collapsed, non-streaming item", () => {
+  it("extracts a thinking block as a non-streaming item", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [
         { type: "thinking", thinking: "Checking the logs first" },
@@ -33,7 +33,6 @@ describe("convertPersistedMessages — thinking", () => {
     expect(thinking.kind).toBe("thinking");
     expect(thinking.text).toBe("Checking the logs first");
     expect(thinking.streaming).toBe(false);
-    expect(thinking.collapsed).toBe(true);
     expect(items[1]).toMatchObject({ kind: "agent_text", text: "Looks fine." });
   });
 
