@@ -101,6 +101,7 @@ function setup(statusResponse: object) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe("AuthGate", () => {
@@ -113,7 +114,7 @@ describe("AuthGate", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("link", { name: /sessions/i }),
+        screen.getByRole("link", { name: /runners/i }),
       ).toBeInTheDocument();
     });
     expect(router.state.location.pathname).toBe("/");
@@ -162,7 +163,7 @@ describe("AuthGate", () => {
 
     expect(screen.queryByText("LOGIN")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /sessions/i }),
+      screen.queryByRole("link", { name: /runners/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -220,7 +221,7 @@ describe("AuthGate", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("link", { name: /sessions/i }),
+        screen.getByRole("link", { name: /runners/i }),
       ).toBeInTheDocument();
     });
 
