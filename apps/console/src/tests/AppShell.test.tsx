@@ -169,16 +169,14 @@ function setup(pendingCount = 0) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 describe("Shell", () => {
   describe("nav + sidebar structure", () => {
-    it("renders nav links for Sessions, Runners, and Settings", async () => {
+    it("renders nav links for Runners and Settings", async () => {
       setup();
       await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /sessions/i }),
-        ).toBeInTheDocument();
         expect(
           screen.getByRole("link", { name: /runners/i }),
         ).toBeInTheDocument();
@@ -204,6 +202,206 @@ describe("Shell", () => {
       expect(screen.queryByText("concluded")).not.toBeInTheDocument();
       expect(screen.queryByText("streaming")).not.toBeInTheDocument();
       expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("sidebar collapsible rail", () => {
+    it("the standalone Sessions nav link is absent", async () => {
+      setup();
+      // Wait for the sidebar to be fully mounted
+      await waitFor(() =>
+        expect(
+          screen.getByRole("link", { name: /runners/i }),
+        ).toBeInTheDocument(),
+      );
+      // There should be no link whose accessible name is exactly "Sessions"
+      expect(
+        screen.queryByRole("link", { name: "Sessions" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("New session button is present in expanded view", async () => {
+      setup();
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /new session/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("Recent sessions heading and session list are present in expanded view", async () => {
+      setup();
+      await waitFor(() => {
+        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+    });
+
+    it("owner email and Log out button are present in expanded view", async () => {
+      setup();
+      await waitFor(() => {
+        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: /log out/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("toggle collapses sidebar: text labels disappear and links remain accessible via aria-label", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      // Start expanded: text labels visible
+      await waitFor(() => {
+        expect(screen.getByText("Runners")).toBeInTheDocument();
+        expect(screen.getByText("Settings")).toBeInTheDocument();
+      });
+
+      // Collapse
+      await user.click(
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+
+      await waitFor(() => {
+        // Text labels gone
+        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
+        expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+        // Links still accessible via aria-label
+        expect(
+          screen.getByRole("link", { name: /runners/i }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("link", { name: /settings/i }),
+        ).toBeInTheDocument();
+        // Session list hidden
+        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
+      });
+    });
+
+    it("toggle expands sidebar: text labels reappear", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      // Collapse first
+      await waitFor(() =>
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+
+      // Verify collapsed
+      await waitFor(() =>
+        expect(screen.queryByText("Runners")).not.toBeInTheDocument(),
+      );
+
+      // Expand again
+      await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Runners")).toBeInTheDocument();
+        expect(screen.getByText("Settings")).toBeInTheDocument();
+        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
+      });
+    });
+
+    it("collapsing writes false to localStorage", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await waitFor(() =>
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+
+      await waitFor(() =>
+        expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe(
+          "false",
+        ),
+      );
+    });
+
+    it("expanding after collapse writes true to localStorage", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await waitFor(() =>
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+      await waitFor(() =>
+        screen.getByRole("button", { name: /expand sidebar/i }),
+      );
+      await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
+
+      await waitFor(() =>
+        expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe("true"),
+      );
+    });
+
+    it("starts collapsed when localStorage has false", async () => {
+      window.localStorage.setItem("nw:sidebar-expanded", "false");
+      setup();
+
+      await waitFor(() => {
+        // In collapsed state labels are absent
+        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
+        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
+        // But links are still accessible
+        expect(
+          screen.getByRole("link", { name: /runners/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("New session button navigates to home", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      // Navigate away to /runners first
+      await waitFor(() => screen.getByRole("link", { name: /runners/i }));
+      await user.click(screen.getByRole("link", { name: /runners/i }));
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/runners"),
+      );
+
+      // Click New session
+      const newSessionBtn = screen.getByRole("button", {
+        name: /new session/i,
+      });
+      await user.click(newSessionBtn);
+
+      await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    });
+
+    it("Log out is reachable via icon button in rail mode", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+
+      // Collapse
+      await waitFor(() =>
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /collapse sidebar/i }),
+      );
+
+      // Logout button still present (aria-label)
+      const logoutBtn = await screen.findByRole("button", {
+        name: /log out/i,
+      });
+      await user.click(logoutBtn);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/logout",
+          expect.objectContaining({ method: "POST" }),
+        );
+      });
     });
   });
 
@@ -411,7 +609,7 @@ describe("Shell", () => {
 
     it("shows no indicator when count is zero", async () => {
       setup(0);
-      await screen.findByRole("link", { name: /sessions/i });
+      await screen.findByRole("link", { name: /runners/i });
       expect(
         screen.queryByRole("status", { name: /awaiting approval/i }),
       ).not.toBeInTheDocument();
