@@ -10,8 +10,16 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 
+import { AuthProvider } from "../auth/AuthContext.js";
 import { SettingsPage } from "../pages/Settings.js";
 import { theme, cssVariablesResolver } from "../theme.js";
+
+const OWNER_EMAIL = "admin@example.com";
+const AUTH_STATUS_RESPONSE = {
+  ownerExists: true,
+  authenticated: true,
+  email: OWNER_EMAIL,
+};
 
 const CONFIG: import("@nightwatch/shared").AgentConfig = {
   provider: "anthropic",
@@ -51,6 +59,13 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
   const fetchMock = vi
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes("/auth/status")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
+        });
+      }
       if (url.includes("/tokens")) {
         if (init?.method === "POST") {
           return Promise.resolve({
@@ -116,7 +131,9 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
       defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
-        <SettingsPage />
+        <AuthProvider>
+          <SettingsPage />
+        </AuthProvider>
       </QueryClientProvider>
     </MantineProvider>,
   );
@@ -253,6 +270,13 @@ describe("SettingsPage", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if ((url as string).includes("/auth/status")) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
+          });
+        }
         if ((url as string).includes("/config/test")) {
           return Promise.resolve({
             ok: true,
@@ -296,7 +320,9 @@ describe("SettingsPage", () => {
         defaultColorScheme="light"
       >
         <QueryClientProvider client={qc}>
-          <SettingsPage />
+          <AuthProvider>
+            <SettingsPage />
+          </AuthProvider>
         </QueryClientProvider>
       </MantineProvider>,
     );
@@ -343,5 +369,23 @@ describe("SettingsPage", () => {
     expect(
       screen.queryByLabelText(/reasoning effort/i),
     ).not.toBeInTheDocument();
+  });
+
+  // --- Account ---
+
+  it("Log out all devices posts /api/logout-all", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup();
+
+    await user.click(
+      await screen.findByRole("button", { name: /log out all devices/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/logout-all",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
   });
 });

@@ -17,6 +17,7 @@ import {
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
+import { useAuth } from "../auth/AuthContext.js";
 
 // Mirrors the TokenMeta shape from apps/api/src/db/tokens.ts. Defined locally
 // because console must not import from apps/api directly.
@@ -61,6 +62,7 @@ function buildDelta(
 const SAVE_DEBOUNCE_MS = 400;
 
 export function SettingsPage(): React.JSX.Element {
+  const { logoutAll } = useAuth();
   const { data: config } = useQuery<AgentConfig>({
     queryKey: ["config"],
     queryFn: () =>
@@ -101,7 +103,9 @@ export function SettingsPage(): React.JSX.Element {
   const [testing, setTesting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [tokenLabel, setTokenLabel] = useState("");
-  const [generatedToken, setGeneratedToken] = useState<GeneratedToken | null>(null);
+  const [generatedToken, setGeneratedToken] = useState<GeneratedToken | null>(
+    null,
+  );
   const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
@@ -510,6 +514,20 @@ export function SettingsPage(): React.JSX.Element {
             Generate token
           </Button>
         </Group>
+      </Stack>
+
+      <Stack gap="sm" mt="xl">
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+          Account
+        </Text>
+        <Button
+          color="red"
+          variant="subtle"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => void logoutAll()}
+        >
+          Log out all devices
+        </Button>
       </Stack>
     </div>
   );

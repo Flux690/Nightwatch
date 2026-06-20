@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { AppShell, Text } from "@mantine/core";
+import { AppShell, Button, Text } from "@mantine/core";
 import {
   Link,
   Outlet,
@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import type { ApprovalRequest, WsEnvelope } from "@nightwatch/shared";
+import { useAuth } from "../auth/AuthContext.js";
 import { useConsoleWs } from "../hooks/useConsoleWs.js";
 import { SessionsSidebar } from "./Sessions.js";
 import { SessionView } from "./SessionTranscript.js";
@@ -67,6 +68,7 @@ export function Shell(): React.JSX.Element {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const params = useParams({ strict: false }) as { id?: string };
   const attentionCount = useAttentionCount();
+  const { phase, logout } = useAuth();
 
   const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
 
@@ -134,6 +136,31 @@ export function Shell(): React.JSX.Element {
           }}
         >
           {isSessionArea && <SessionsSidebar />}
+        </div>
+
+        <div
+          style={{
+            borderTop: "1px solid var(--nw-border)",
+            marginTop: "var(--mantine-spacing-xs)",
+            paddingTop: "var(--mantine-spacing-xs)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {phase.kind === "authenticated" && (
+            <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>
+              {phase.email}
+            </Text>
+          )}
+          <Button
+            size="xs"
+            variant="subtle"
+            style={{ alignSelf: "flex-start" }}
+            onClick={() => void logout()}
+          >
+            Log out
+          </Button>
         </div>
       </AppShell.Navbar>
 

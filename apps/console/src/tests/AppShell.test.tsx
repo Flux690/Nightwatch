@@ -11,8 +11,11 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
+import { AuthProvider } from "../auth/AuthContext.js";
 import { Shell } from "../pages/Shell.js";
 import { theme, cssVariablesResolver } from "../theme.js";
+
+const OWNER_EMAIL = "admin@example.com";
 
 let latestWs: MockWs | null = null;
 const allWsInstances: MockWs[] = [];
@@ -69,36 +72,46 @@ function setup(pendingCount = 0) {
     createdAt: new Date().toISOString(),
   }));
 
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/sessions/pending-human-input")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(pendingApprovals),
-        });
-      }
-      if (url.includes("/chat")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ sessionId: "new-s1" }),
-        });
-      }
-      if (/\/sessions\/[^?]+/.test(url)) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([]),
-        });
-      }
-      if (url.includes("/sessions")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([SESSION_1]),
-        });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    }),
-  );
+  const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("/auth/status")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            ownerExists: true,
+            authenticated: true,
+            email: OWNER_EMAIL,
+          }),
+      });
+    }
+    if (url.includes("/sessions/pending-human-input")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(pendingApprovals),
+      });
+    }
+    if (url.includes("/chat")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ sessionId: "new-s1" }),
+      });
+    }
+    if (/\/sessions\/[^?]+/.test(url)) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      });
+    }
+    if (url.includes("/sessions")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([SESSION_1]),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
+  vi.stubGlobal("fetch", fetchMock);
 
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -143,12 +156,14 @@ function setup(pendingCount = 0) {
       defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
-        <RouterProvider router={router} />
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
       </QueryClientProvider>
     </MantineProvider>,
   );
 
-  return { router, qc };
+  return { router, qc, fetchMock };
 }
 
 afterEach(() => {
@@ -400,6 +415,32 @@ describe("Shell", () => {
       expect(
         screen.queryByRole("status", { name: /awaiting approval/i }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("account", () => {
+    it("shows the logged-in operator's email", async () => {
+      setup();
+      await waitFor(() => {
+        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
+      });
+    });
+
+    it("Log out posts /api/logout", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+
+      const logoutButton = await screen.findByRole("button", {
+        name: /log out/i,
+      });
+      await user.click(logoutButton);
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/logout",
+          expect.objectContaining({ method: "POST" }),
+        );
+      });
     });
   });
 });
