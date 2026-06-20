@@ -281,7 +281,7 @@ describe("TranscriptItemRenderer", () => {
       ],
     };
 
-    it("renders the question and option buttons", () => {
+    it("renders the question and a radio per option, plus Other", () => {
       wrap(clarItem);
 
       const card = screen.getByTestId("clarification-card");
@@ -289,19 +289,23 @@ describe("TranscriptItemRenderer", () => {
         within(card).getByText("Which service first?"),
       ).toBeInTheDocument();
       expect(
-        within(card).getByRole("button", { name: /nginx/i }),
+        within(card).getByRole("radio", { name: /^nginx$/i }),
       ).toBeInTheDocument();
       expect(
-        within(card).getByRole("button", { name: /postgres/i }),
+        within(card).getByRole("radio", { name: /^postgres$/i }),
+      ).toBeInTheDocument();
+      expect(
+        within(card).getByRole("radio", { name: /^other$/i }),
       ).toBeInTheDocument();
     });
 
-    it("calls onAnswer when an option button is clicked", async () => {
+    it("calls onAnswer with the selected radio once Submit is clicked", async () => {
       const onAnswer = vi.fn();
       wrap(clarItem, { onAnswer });
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: /nginx/i }));
+      await user.click(screen.getByRole("radio", { name: /^nginx$/i }));
+      await user.click(screen.getByRole("button", { name: /submit/i }));
 
       expect(onAnswer).toHaveBeenCalledWith("tu-clar", "nginx");
     });
@@ -314,30 +318,30 @@ describe("TranscriptItemRenderer", () => {
         within(card).getByText(/answered by operator/i),
       ).toBeInTheDocument();
       expect(
-        within(card).queryByRole("button", { name: /nginx/i }),
+        within(card).queryByRole("radio", { name: /^nginx$/i }),
       ).not.toBeInTheDocument();
     });
 
-    it("multiSelect: accumulates selection and posts all on Submit", async () => {
+    it("multiSelect: accumulates checkbox selection and posts all on Submit", async () => {
       const onAnswer = vi.fn();
       wrap({ ...clarItem, multiSelect: true }, { onAnswer });
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: /nginx/i }));
-      await user.click(screen.getByRole("button", { name: /postgres/i }));
+      await user.click(screen.getByRole("checkbox", { name: /^nginx$/i }));
+      await user.click(screen.getByRole("checkbox", { name: /^postgres$/i }));
       await user.click(screen.getByRole("button", { name: /submit/i }));
 
       expect(onAnswer).toHaveBeenCalledWith("tu-clar", ["nginx", "postgres"]);
     });
 
-    it("reveals a free-text input when Other is toggled and submits its text", async () => {
+    it("reveals a free-text input when Other is selected and submits its text", async () => {
       const onAnswer = vi.fn();
       wrap(clarItem, { onAnswer });
 
       const user = userEvent.setup();
       expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /other/i }));
+      await user.click(screen.getByRole("radio", { name: /^other$/i }));
       const textbox = screen.getByRole("textbox");
       await user.type(textbox, "Both, but nginx first");
       await user.click(screen.getByRole("button", { name: /submit/i }));
@@ -350,7 +354,7 @@ describe("TranscriptItemRenderer", () => {
       wrap(clarItem, { onAnswer });
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: /other/i }));
+      await user.click(screen.getByRole("radio", { name: /^other$/i }));
 
       expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
       expect(onAnswer).not.toHaveBeenCalled();

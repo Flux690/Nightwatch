@@ -270,7 +270,7 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     name: "request_clarification",
     description:
-      "Suspend the investigation and ask the on-call engineer a clarifying question. Present selectable options; the engineer may also answer in free text.",
+      "Suspend the investigation and ask the on-call engineer a clarifying question. The UI always offers a free-text 'Other' answer alongside your options, do not add one of your own. List only the specific, named choices.",
     input_schema: {
       type: "object",
       properties: {
@@ -291,7 +291,8 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
             },
             required: ["label", "description"],
           },
-          description: "Selectable answers for the question.",
+          description:
+            "Selectable answers for the question. Do not include a catch-all option like 'Other' or 'None of the above' - the UI adds that automatically.",
         },
         multiSelect: {
           type: "boolean",

@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Button, Text, Textarea, UnstyledButton } from "@mantine/core";
+import {
+  Button,
+  Checkbox,
+  Radio,
+  Text,
+  Textarea,
+  UnstyledButton,
+} from "@mantine/core";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type {
@@ -225,12 +232,17 @@ function ClarificationCardPanel({
   onAnswer?: (answer: string | string[]) => void;
 }): React.JSX.Element {
   const [selected, setSelected] = useState<string[]>([]);
-  const [showOther, setShowOther] = useState(false);
+  const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
   const resolved = item.approval === "answered";
+  const disabled = item.approval === "pending";
 
-  function handleOption(label: string): void {
-    if (resolved || item.approval === "pending") return;
+  // The request_clarification tool description tells the LLM the UI already
+  // offers a free-text Other answer, so it should never include one of its
+  // own in options.
+  const options = item.options ?? [];
+
+  function toggleOption(label: string): void {
     if (item.multiSelect) {
       setSelected((prev) =>
         prev.includes(label)
@@ -238,15 +250,40 @@ function ClarificationCardPanel({
           : [...prev, label],
       );
     } else {
-      onAnswer?.(label);
+      setOtherChecked(false);
+      setSelected([label]);
     }
   }
 
-  function handleSubmitOther(): void {
-    const trimmed = otherText.trim();
-    if (!trimmed) return;
-    onAnswer?.(trimmed);
+  function toggleOther(): void {
+    if (item.multiSelect) {
+      setOtherChecked((prev) => !prev);
+    } else {
+      setSelected([]);
+      setOtherChecked(true);
+    }
   }
+
+  function handleSubmit(): void {
+    const otherTrimmed = otherText.trim();
+    if (item.multiSelect) {
+      const answers =
+        otherChecked && otherTrimmed ? [...selected, otherTrimmed] : selected;
+      if (answers.length === 0) return;
+      onAnswer?.(answers);
+    } else {
+      if (otherChecked) {
+        if (!otherTrimmed) return;
+        onAnswer?.(otherTrimmed);
+      } else if (selected.length > 0) {
+        onAnswer?.(selected[0]);
+      }
+    }
+  }
+
+  const canSubmit = item.multiSelect
+    ? selected.length > 0 || (otherChecked && otherText.trim().length > 0)
+    : (otherChecked && otherText.trim().length > 0) || selected.length > 0;
 
   return (
     <>
@@ -275,64 +312,73 @@ function ClarificationCardPanel({
               gap: "var(--mantine-spacing-xs)",
             }}
           >
-            {item.options?.map((opt) => (
-              <Button
-                key={opt.label}
-                size="xs"
-                fullWidth
-                variant={selected.includes(opt.label) ? "filled" : "outline"}
-                disabled={item.approval === "pending"}
-                onClick={() => handleOption(opt.label)}
-              >
-                {opt.label}
-              </Button>
-            ))}
-            <Button
-              size="xs"
-              fullWidth
-              variant={showOther ? "filled" : "outline"}
-              disabled={item.approval === "pending"}
-              onClick={() => setShowOther((prev) => !prev)}
-            >
-              Other
-            </Button>
-            {showOther && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "var(--mantine-spacing-xs)",
-                  alignItems: "flex-end",
+            {item.multiSelect ? (
+              <>
+                {options.map((opt) => (
+                  <Checkbox
+                    key={opt.label}
+                    label={opt.label}
+                    checked={selected.includes(opt.label)}
+                    disabled={disabled}
+                    onChange={() => toggleOption(opt.label)}
+                  />
+                ))}
+                <Checkbox
+                  label="Other"
+                  checked={otherChecked}
+                  disabled={disabled}
+                  onChange={toggleOther}
+                />
+              </>
+            ) : (
+              <Radio.Group
+                value={otherChecked ? "__other__" : (selected[0] ?? "")}
+                onChange={(value) => {
+                  if (value === "__other__") {
+                    toggleOther();
+                  } else {
+                    toggleOption(value);
+                  }
                 }}
               >
-                <Textarea
-                  style={{ flex: 1 }}
-                  size="xs"
-                  placeholder="Type your answer…"
-                  value={otherText}
-                  onChange={(e) => setOtherText(e.currentTarget.value)}
-                  disabled={item.approval === "pending"}
-                  autosize
-                  minRows={1}
-                  maxRows={4}
-                />
-                <Button
-                  size="xs"
-                  disabled={item.approval === "pending" || !otherText.trim()}
-                  onClick={handleSubmitOther}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--mantine-spacing-xs)",
+                  }}
                 >
-                  Submit
-                </Button>
-              </div>
+                  {options.map((opt) => (
+                    <Radio
+                      key={opt.label}
+                      value={opt.label}
+                      label={opt.label}
+                      disabled={disabled}
+                    />
+                  ))}
+                  <Radio value="__other__" label="Other" disabled={disabled} />
+                </div>
+              </Radio.Group>
             )}
-            {item.multiSelect && selected.length > 0 && (
-              <Button
+            {otherChecked && (
+              <Textarea
                 size="xs"
-                disabled={item.approval === "pending"}
-                onClick={() => onAnswer?.(selected)}
-              >
-                Submit
-              </Button>
+                placeholder="Type your answer…"
+                value={otherText}
+                onChange={(e) => setOtherText(e.currentTarget.value)}
+                disabled={disabled}
+                autosize
+                minRows={1}
+                maxRows={4}
+              />
             )}
+            <Button
+              size="xs"
+              disabled={disabled || !canSubmit}
+              onClick={handleSubmit}
+            >
+              Submit
+            </Button>
           </div>
         )}
       </div>

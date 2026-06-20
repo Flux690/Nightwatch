@@ -875,7 +875,7 @@ describe("SessionView", () => {
           within(card).getByText("Which service first?"),
         ).toBeInTheDocument();
         expect(
-          within(card).getByRole("button", { name: /nginx/i }),
+          within(card).getByRole("radio", { name: /^nginx$/i }),
         ).toBeInTheDocument();
       });
     });
@@ -1060,14 +1060,14 @@ describe("SessionView", () => {
         within(card).getByText("Which service should I investigate first?"),
       ).toBeInTheDocument();
       expect(
-        within(card).getByRole("button", { name: /nginx/i }),
+        within(card).getByRole("radio", { name: /^nginx$/i }),
       ).toBeInTheDocument();
       expect(
-        within(card).getByRole("button", { name: /postgres/i }),
+        within(card).getByRole("radio", { name: /^postgres$/i }),
       ).toBeInTheDocument();
     });
 
-    it("clicking an option posts to /respond with text and disables options", async () => {
+    it("selecting an option and submitting posts to /respond with text and disables options", async () => {
       setup();
 
       await waitFor(() => {
@@ -1084,7 +1084,8 @@ describe("SessionView", () => {
 
       const user = userEvent.setup();
       const card = screen.getByTestId("clarification-card");
-      await user.click(within(card).getByRole("button", { name: /nginx/i }));
+      await user.click(within(card).getByRole("radio", { name: /^nginx$/i }));
+      await user.click(within(card).getByRole("button", { name: /submit/i }));
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
@@ -1134,7 +1135,7 @@ describe("SessionView", () => {
           within(card).getByText(/answered by operator/i),
         ).toBeInTheDocument();
         expect(
-          within(card).queryByRole("button", { name: /nginx/i }),
+          within(card).queryByRole("radio", { name: /^nginx$/i }),
         ).not.toBeInTheDocument();
       });
     });
@@ -1156,8 +1157,12 @@ describe("SessionView", () => {
 
       const user = userEvent.setup();
       const card = screen.getByTestId("clarification-card");
-      await user.click(within(card).getByRole("button", { name: /nginx/i }));
-      await user.click(within(card).getByRole("button", { name: /postgres/i }));
+      await user.click(
+        within(card).getByRole("checkbox", { name: /^nginx$/i }),
+      );
+      await user.click(
+        within(card).getByRole("checkbox", { name: /^postgres$/i }),
+      );
       await user.click(within(card).getByRole("button", { name: /submit/i }));
 
       await waitFor(() => {
