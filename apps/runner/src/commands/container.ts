@@ -136,9 +136,15 @@ export async function getContainerStats(
     raw.cpu_stats.cpu_usage.percpu_usage?.length ||
     1;
   const cpuPercent =
-    systemDelta > 0 ? (cpuDelta / systemDelta) * numCPUs * 100 : 0;
+    systemDelta > 0 ? Math.max(0, (cpuDelta / systemDelta) * numCPUs * 100) : 0;
 
-  const memoryUsedBytes = raw.memory_stats.usage ?? 0;
+  // memory_stats.usage includes reclaimable page cache on cgroup v1. Docker's
+  // own CLI subtracts total_inactive_file (cgroup v1) or inactive_file (cgroup
+  // v2) to match what is actually in use by the workload.
+  const statsObj = raw.memory_stats.stats as Record<string, number> | undefined;
+  const inactiveFile =
+    statsObj?.["total_inactive_file"] ?? statsObj?.["inactive_file"] ?? 0;
+  const memoryUsedBytes = (raw.memory_stats.usage ?? 0) - inactiveFile;
   const memoryLimitBytes = raw.memory_stats.limit ?? 0;
   const memoryPercent =
     memoryLimitBytes > 0 ? (memoryUsedBytes / memoryLimitBytes) * 100 : 0;
