@@ -4,7 +4,7 @@ import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolSchema } from "../llm/types.js";
 
 export interface ToolExecuteResult {
-  content: string;
+  content: unknown;
   is_error?: boolean;
 }
 
@@ -32,7 +32,7 @@ async function runnerExecute(
 ): Promise<ToolExecuteResult> {
   try {
     const result = await sendCommand(toolName, input, ctx.toolTimeoutMs, ctx.runnerId);
-    return { content: JSON.stringify(result) };
+    return { content: result };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn({ tool: toolName, err }, "runner tool failed");
@@ -339,7 +339,7 @@ export const TOOL_REGISTRY: Tool[] = [
         const commits = await fetchGitHubCommits(
           input as unknown as GetRecentCommitsInput,
         );
-        return { content: JSON.stringify(commits) };
+        return { content: commits };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { content: `GitHub fetch failed: ${msg}`, is_error: true };

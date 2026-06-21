@@ -255,7 +255,10 @@ export async function runInvestigation(
       const result = await entry.execute(tool.input, execCtx);
       toolResults.push({
         tool_use_id: tool.id,
-        content: result.content,
+        content:
+          typeof result.content === "string"
+            ? result.content
+            : JSON.stringify(result.content),
         is_error: result.is_error,
       });
       publishToolCallEnd({
