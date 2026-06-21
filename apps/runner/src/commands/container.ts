@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type {
   ContainerEvent,
   ContainerInfo,
@@ -15,57 +13,55 @@ import type {
   GetContainerStatsInput,
   GetEnvVariableNamesInput,
 } from "@nightwatch/shared";
-
-const exec = promisify(execFile);
+import { getDocker, parseDockerMux } from "../docker-client.js";
 
 export async function getContainerList(
   _input: GetContainerListInput,
 ): Promise<{ containers: ContainerInfo[] }> {
-  const { stdout } = await exec("docker", [
-    "ps",
-    "-a",
-    "--format",
-    "{{json .}}",
-  ]);
-  const containers = stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const raw = JSON.parse(line) as Record<string, string>;
-      const status = raw["Status"] ?? "";
-      const image = raw["Image"] ?? "";
-      return {
-        name: (raw["Names"] ?? "").replace(/^\//, ""),
-        id: (raw["ID"] ?? "").slice(0, 12),
-        image,
-        imageTag: image.includes(":")
-          ? (image.split(":")[1] ?? "latest")
-          : "latest",
-        status,
-        restartCount: 0,
-        uptimeSeconds: parseUptime(status),
-        healthStatus: status.includes("(healthy)")
-          ? "healthy"
-          : status.includes("(unhealthy)")
-            ? "unhealthy"
-            : "unknown",
-      };
-    });
+  const docker = getDocker();
+  const raw = await docker.listContainers({ all: true });
+  const containers = raw.map((c) => {
+    const status = c.Status;
+    const image = c.Image;
+    return {
+      name: (c.Names[0] ?? "").replace(/^\//, ""),
+      id: c.Id.slice(0, 12),
+      image,
+      imageTag: image.includes(":")
+        ? (image.split(":")[1] ?? "latest")
+        : "latest",
+      status,
+      restartCount: 0,
+      uptimeSeconds: parseUptime(status),
+      healthStatus: status.includes("(healthy)")
+        ? "healthy"
+        : status.includes("(unhealthy)")
+          ? "unhealthy"
+          : "unknown",
+    };
+  });
   return { containers };
 }
 
 export async function getContainerLogs(
   input: GetContainerLogsInput,
 ): Promise<ContainerLogsResult> {
-  const args = ["logs", "--tail", String(input.tailLines ?? 200)];
-  if (input.sinceTimestamp) args.push("--since", input.sinceTimestamp);
-  if (input.stderrOnly) args.push("--stderr");
-  args.push(input.containerName);
+  const docker = getDocker();
+  const container = docker.getContainer(input.containerName);
 
-  const { stdout, stderr } = await exec("docker", args, {
-    maxBuffer: 10 * 1024 * 1024,
+  const since = input.sinceTimestamp
+    ? Math.floor(new Date(input.sinceTimestamp).getTime() / 1000)
+    : undefined;
+
+  const buf = await container.logs({
+    stdout: !input.stderrOnly,
+    stderr: true,
+    follow: false,
+    tail: input.tailLines ?? 200,
+    ...(since !== undefined && { since }),
   });
+
+  const { stdout, stderr } = parseDockerMux(buf);
   const allLines = (stdout + stderr).split("\n").filter(Boolean);
 
   const ERROR_RE =
@@ -97,103 +93,114 @@ export async function getContainerLogs(
 export async function getContainerInspect(
   input: GetContainerInspectInput,
 ): Promise<ContainerInspectResult> {
-  const { stdout } = await exec("docker", ["inspect", input.containerName]);
-  const arr = JSON.parse(stdout) as Array<Record<string, unknown>>;
-  const raw = arr[0];
-  if (!raw) throw new Error(`Container not found: ${input.containerName}`);
+  const docker = getDocker();
+  const raw = await docker.getContainer(input.containerName).inspect();
 
-  const config = raw["Config"] as Record<string, unknown>;
-  const state = raw["State"] as Record<string, unknown>;
-  const hostConfig = raw["HostConfig"] as Record<string, unknown>;
-  const networkSettings = raw["NetworkSettings"] as Record<string, unknown>;
-  const health = state["Health"] as Record<string, unknown> | undefined;
-  const healthcheck = config["Healthcheck"] as
-    | Record<string, unknown>
-    | undefined;
-
-  const envVarNames = ((config["Env"] as string[] | undefined) ?? []).map(
-    (e) => e.split("=")[0] ?? e,
-  );
+  const envVarNames = (raw.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
 
   return {
-    name: (raw["Name"] as string).replace(/^\//, ""),
-    image: config["Image"] as string,
-    imageDigest: raw["Image"] as string,
+    name: raw.Name.replace(/^\//, ""),
+    image: raw.Config.Image,
+    imageDigest: raw.Image,
     envVarNames,
-    mounts: (raw["Mounts"] as unknown[]) ?? [],
-    ports: Object.keys(
-      (networkSettings["Ports"] as Record<string, unknown>) ?? {},
-    ),
-    restartPolicy:
-      ((hostConfig["RestartPolicy"] as Record<string, unknown>)?.[
-        "Name"
-      ] as string) ?? "no",
+    mounts: raw.Mounts,
+    ports: Object.keys(raw.NetworkSettings.Ports ?? {}),
+    restartPolicy: raw.HostConfig.RestartPolicy?.Name ?? "no",
     healthCheck: {
-      test: (healthcheck?.["Test"] as string[]) ?? [],
-      interval: ((healthcheck?.["Interval"] as number) ?? 0) / 1e9,
-      retries: (healthcheck?.["Retries"] as number) ?? 0,
-      lastResult: (health?.["Status"] as string) ?? "none",
+      test: raw.Config.Healthcheck?.Test ?? [],
+      interval: (raw.Config.Healthcheck?.Interval ?? 0) / 1e9,
+      retries: raw.Config.Healthcheck?.Retries ?? 0,
+      lastResult: raw.State.Health?.Status ?? "none",
     },
-    createdAt: raw["Created"] as string,
-    startedAt: state["StartedAt"] as string,
+    createdAt: raw.Created,
+    startedAt: raw.State.StartedAt,
   };
 }
 
 export async function getContainerStats(
   input: GetContainerStatsInput,
 ): Promise<ContainerStatsResult> {
-  const { stdout } = await exec("docker", [
-    "stats",
-    "--no-stream",
-    "--format",
-    "{{json .}}",
-    input.containerName,
-  ]);
-  const raw = JSON.parse(stdout.trim()) as Record<string, string>;
+  const docker = getDocker();
+  const raw = await docker
+    .getContainer(input.containerName)
+    .stats({ stream: false });
 
-  const memParts = (raw["MemUsage"] ?? "0B / 0B").split(" / ");
-  const netParts = (raw["NetIO"] ?? "0B / 0B").split(" / ");
-  const blockParts = (raw["BlockIO"] ?? "0B / 0B").split(" / ");
+  const cpuDelta =
+    raw.cpu_stats.cpu_usage.total_usage -
+    raw.precpu_stats.cpu_usage.total_usage;
+  const systemDelta =
+    (raw.cpu_stats.system_cpu_usage ?? 0) -
+    (raw.precpu_stats.system_cpu_usage ?? 0);
+  const numCPUs =
+    raw.cpu_stats.online_cpus ||
+    raw.cpu_stats.cpu_usage.percpu_usage?.length ||
+    1;
+  const cpuPercent =
+    systemDelta > 0 ? (cpuDelta / systemDelta) * numCPUs * 100 : 0;
+
+  const memoryUsedBytes = raw.memory_stats.usage ?? 0;
+  const memoryLimitBytes = raw.memory_stats.limit ?? 0;
+  const memoryPercent =
+    memoryLimitBytes > 0 ? (memoryUsedBytes / memoryLimitBytes) * 100 : 0;
+
+  let networkRxBytes = 0;
+  let networkTxBytes = 0;
+  for (const iface of Object.values(raw.networks ?? {})) {
+    networkRxBytes += iface.rx_bytes ?? 0;
+    networkTxBytes += iface.tx_bytes ?? 0;
+  }
+
+  let blockReadBytes = 0;
+  let blockWriteBytes = 0;
+  for (const entry of raw.blkio_stats?.io_service_bytes_recursive ?? []) {
+    if (entry.op === "Read") blockReadBytes += entry.value;
+    else if (entry.op === "Write") blockWriteBytes += entry.value;
+  }
 
   return {
-    cpuPercent: parseFloat(raw["CPUPerc"] ?? "0"),
-    memoryUsedBytes: parseHumanBytes(memParts[0] ?? "0B"),
-    memoryLimitBytes: parseHumanBytes(memParts[1] ?? "0B"),
-    memoryPercent: parseFloat(raw["MemPerc"] ?? "0"),
-    networkRxBytes: parseHumanBytes(netParts[0] ?? "0B"),
-    networkTxBytes: parseHumanBytes(netParts[1] ?? "0B"),
-    blockReadBytes: parseHumanBytes(blockParts[0] ?? "0B"),
-    blockWriteBytes: parseHumanBytes(blockParts[1] ?? "0B"),
-    pids: parseInt(raw["PIDs"] ?? "0", 10),
+    cpuPercent,
+    memoryUsedBytes,
+    memoryLimitBytes,
+    memoryPercent,
+    networkRxBytes,
+    networkTxBytes,
+    blockReadBytes,
+    blockWriteBytes,
+    pids: raw.pids_stats?.current ?? 0,
   };
 }
 
 export async function getContainerEvents(
   input: GetContainerEventsInput,
 ): Promise<{ events: ContainerEvent[] }> {
-  const since = `${input.sinceMinutes ?? 60}m`;
-  const { stdout } = await exec("docker", [
-    "events",
-    "--since",
-    since,
-    "--until",
-    "0s",
-    "--format",
-    "{{json .}}",
-    "--filter",
-    `name=${input.containerName}`,
-  ]);
+  const docker = getDocker();
+  const now = Math.floor(Date.now() / 1000);
+  const since = now - (input.sinceMinutes ?? 60) * 60;
 
-  const events: ContainerEvent[] = stdout
+  const stream = await docker.getEvents({
+    since,
+    until: now,
+    filters: JSON.stringify({ name: [input.containerName] }),
+  });
+
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+
+  const text = Buffer.concat(chunks).toString("utf8");
+  const events: ContainerEvent[] = text
     .trim()
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const raw = JSON.parse(line) as Record<string, unknown>;
-      const action = String(raw["Action"] ?? "");
-      const actor = raw["Actor"] as Record<string, unknown> | undefined;
+      const data = JSON.parse(line) as Record<string, unknown>;
+      const action = String(data["Action"] ?? "");
+      const actor = data["Actor"] as Record<string, unknown> | undefined;
       return {
-        timestamp: new Date(Number(raw["time"]) * 1000).toISOString(),
+        timestamp: new Date(Number(data["time"]) * 1000).toISOString(),
         eventType: normalizeEventType(action),
         message: action,
         actor: String(actor?.["ID"] ?? "").slice(0, 12),
@@ -206,24 +213,38 @@ export async function getContainerEvents(
 export async function getContainerProcesses(
   input: GetContainerProcessesInput,
 ): Promise<{ processes: ContainerProcess[] }> {
-  const { stdout } = await exec("docker", ["top", input.containerName]);
-  const lines = stdout.trim().split("\n");
-  if (lines.length < 2) return { processes: [] };
+  const docker = getDocker();
+  const top = (await docker.getContainer(input.containerName).top()) as {
+    Titles: string[];
+    Processes: string[][];
+  };
 
-  // docker top: UID PID PPID C STIME TTY TIME CMD
-  const processes: ContainerProcess[] = lines.slice(1).map((line) => {
-    const cols = line.trim().split(/\s+/);
-    return {
-      pid: parseInt(cols[1] ?? "0", 10),
-      ppid: parseInt(cols[2] ?? "0", 10),
-      user: cols[0] ?? "unknown",
-      cpuPercent: parseFloat(cols[3] ?? "0"),
-      memPercent: 0,
-      command: cols.slice(7).join(" ") || cols.slice(4).join(" "),
-    };
-  });
+  const titles = top.Titles ?? [];
+  const uidIdx = titles.indexOf("UID");
+  const pidIdx = titles.indexOf("PID");
+  const ppidIdx = titles.indexOf("PPID");
+  const cIdx = titles.indexOf("C");
+  const cmdIdx = titles.indexOf("CMD");
+
+  const processes: ContainerProcess[] = (top.Processes ?? []).map((row) => ({
+    pid: parseInt(row[pidIdx] ?? "0", 10),
+    ppid: parseInt(row[ppidIdx] ?? "0", 10),
+    user: row[uidIdx] ?? "unknown",
+    cpuPercent: parseFloat(row[cIdx] ?? "0"),
+    memPercent: 0,
+    command: row[cmdIdx] ?? "",
+  }));
 
   return { processes };
+}
+
+export async function getEnvVariableNames(
+  input: GetEnvVariableNamesInput,
+): Promise<{ names: string[] }> {
+  const docker = getDocker();
+  const info = await docker.getContainer(input.containerName).inspect();
+  const names = (info.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
+  return { names };
 }
 
 function parseUptime(status: string): number {
@@ -247,17 +268,6 @@ function extractLineTimestamp(line: string): number | null {
   return null;
 }
 
-function parseHumanBytes(s: string): number {
-  const t = s.trim();
-  const n = parseFloat(t);
-  if (isNaN(n)) return 0;
-  if (t.endsWith("GiB") || t.endsWith("GB")) return Math.round(n * 1024 ** 3);
-  if (t.endsWith("MiB") || t.endsWith("MB")) return Math.round(n * 1024 ** 2);
-  if (t.endsWith("KiB") || t.endsWith("kB") || t.endsWith("KB"))
-    return Math.round(n * 1024);
-  return Math.round(n);
-}
-
 function normalizeEventType(action: string): ContainerEvent["eventType"] {
   const map: Record<string, ContainerEvent["eventType"]> = {
     start: "start",
@@ -271,19 +281,4 @@ function normalizeEventType(action: string): ContainerEvent["eventType"] {
     destroy: "destroy",
   };
   return map[action] ?? "die";
-}
-
-export async function getEnvVariableNames(
-  input: GetEnvVariableNamesInput,
-): Promise<{ names: string[] }> {
-  const { stdout } = await exec("docker", ["inspect", input.containerName]);
-  const arr = JSON.parse(stdout) as Array<Record<string, unknown>>;
-  const raw = arr[0];
-  if (!raw) throw new Error(`Container not found: ${input.containerName}`);
-
-  const config = raw["Config"] as Record<string, unknown> | undefined;
-  const env = (config?.["Env"] as string[] | undefined) ?? [];
-  const names = env.map((e) => e.split("=")[0] ?? e);
-
-  return { names };
 }

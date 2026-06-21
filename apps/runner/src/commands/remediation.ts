@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { promisify } from "node:util";
 import type {
   ExecCommandInput,
   ExecCommandResult,
@@ -10,11 +8,8 @@ import type {
   RollbackDeployInput,
   RollbackDeployResult,
 } from "@nightwatch/shared";
+import { getDocker, parseDockerMux } from "../docker-client.js";
 
-const exec = promisify(execFile);
-
-// Live file Prometheus reads; the persisted copy on the mounted volume survives
-// container restarts (configure.sh prefers it on boot).
 const RULES_PATH =
   process.env["NIGHTWATCH_RULES_PATH"] ?? "/etc/nightwatch/rules.yml";
 const RULES_OVERRIDE_PATH =
@@ -50,30 +45,20 @@ export async function restartContainer(
   input: RestartContainerInput,
 ): Promise<RestartContainerResult> {
   const startedAt = new Date().toISOString();
+  const docker = getDocker();
+  const container = docker.getContainer(input.containerName);
 
-  const { stdout: inspectBefore } = await exec("docker", [
-    "inspect",
-    input.containerName,
-  ]);
-  const before = (
-    JSON.parse(inspectBefore) as Array<Record<string, unknown>>
-  )[0];
-  const stateBefore = before?.["State"] as Record<string, unknown> | undefined;
-  const previousExitCode = Number(stateBefore?.["ExitCode"] ?? 0);
+  const before = await container.inspect();
+  const previousExitCode = before.State.ExitCode ?? 0;
 
   if (input.delaySeconds && input.delaySeconds > 0) {
     await new Promise((r) => setTimeout(r, input.delaySeconds! * 1000));
   }
 
-  await exec("docker", ["restart", input.containerName]);
+  await container.restart();
 
-  const { stdout: inspectAfter } = await exec("docker", [
-    "inspect",
-    input.containerName,
-  ]);
-  const after = (JSON.parse(inspectAfter) as Array<Record<string, unknown>>)[0];
-  const stateAfter = after?.["State"] as Record<string, unknown> | undefined;
-  const newStatus = String(stateAfter?.["Status"] ?? "unknown");
+  const after = await container.inspect();
+  const newStatus = after.State.Status ?? "unknown";
 
   return {
     success: newStatus === "running",
@@ -104,29 +89,30 @@ export async function execCommand(
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");
 
-  let exitCode = 0;
-  let stdout = "";
-  let stderr = "";
+  const docker = getDocker();
+  const container = docker.getContainer(input.containerName);
 
-  try {
-    const out = await exec("docker", [
-      "exec",
-      input.containerName,
-      cmd,
-      ...args,
-    ]);
-    stdout = out.stdout;
-    stderr = out.stderr;
-  } catch (err: unknown) {
-    const e = err as NodeJS.ErrnoException & {
-      code?: number;
-      stdout?: string;
-      stderr?: string;
-    };
-    stdout = e.stdout ?? "";
-    stderr = e.stderr ?? String(e.message);
-    exitCode = typeof e.code === "number" ? e.code : 1;
-  }
+  const exec = await container.exec({
+    Cmd: [cmd, ...args],
+    AttachStdout: true,
+    AttachStderr: true,
+  });
 
-  return { exitCode, stdout, stderr, executedAt };
+  const stream = await exec.start({});
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+
+  const { stdout, stderr } = parseDockerMux(Buffer.concat(chunks));
+  const info = await exec.inspect();
+
+  return {
+    exitCode: info.ExitCode ?? 0,
+    stdout,
+    stderr,
+    executedAt,
+  };
 }

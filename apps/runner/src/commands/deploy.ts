@@ -1,57 +1,40 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { DeployInfo, GetRecentDeploysInput } from "@nightwatch/shared";
+import { getDocker } from "../docker-client.js";
 
-const exec = promisify(execFile);
+interface ImageLayer {
+  Id: string;
+  Created: number;
+}
 
 export async function getRecentDeploys(
   input: GetRecentDeploysInput,
 ): Promise<DeployInfo> {
   const { containerName } = input;
-  const { stdout: inspectOut } = await exec("docker", [
-    "inspect",
-    containerName,
-  ]);
-  const arr = JSON.parse(inspectOut) as Array<Record<string, unknown>>;
-  const raw = arr[0];
-  if (!raw) throw new Error(`Container not found: ${containerName}`);
+  const docker = getDocker();
 
-  const currentImageDigest = String(raw["Image"] ?? "");
-  const createdAt = String(
-    (raw["Created"] as string | undefined) ?? new Date().toISOString(),
-  );
-
-  const { stdout: historyOut } = await exec("docker", [
-    "image",
-    "history",
-    "--format",
-    "{{json .}}",
-    currentImageDigest,
-  ]).catch(() => ({ stdout: "" }));
+  const inspect = await docker.getContainer(containerName).inspect();
+  const currentImageDigest = inspect.Image;
+  const createdAt = inspect.Created;
 
   let previousImageDigest: string | undefined;
   let imageChangedAt: string | undefined;
   let timeSinceChangeMinutes: number | undefined;
 
-  if (historyOut) {
-    const historyLines = historyOut
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => JSON.parse(l) as Record<string, string>);
-
-    const prev = historyLines[1];
-    if (prev) {
-      previousImageDigest = prev["ID"] ?? undefined;
-      const createdStr = prev["CreatedAt"];
-      if (createdStr) {
-        imageChangedAt = createdStr;
-        const created = new Date(createdStr);
-        timeSinceChangeMinutes = Math.round(
-          (Date.now() - created.getTime()) / 60_000,
-        );
-      }
+  try {
+    const history = (await docker
+      .getImage(currentImageDigest)
+      .history()) as ImageLayer[];
+    const prev = history[1];
+    if (prev && prev.Id && prev.Id !== "<missing>") {
+      previousImageDigest = prev.Id;
+      const created = new Date(prev.Created * 1000);
+      imageChangedAt = created.toISOString();
+      timeSinceChangeMinutes = Math.round(
+        (Date.now() - created.getTime()) / 60_000,
+      );
     }
+  } catch {
+    // image history is non-critical; proceed without it
   }
 
   return {

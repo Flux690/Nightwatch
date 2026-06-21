@@ -1,10 +1,8 @@
-import { execFile } from "node:child_process";
 import { hostname } from "node:os";
-import { promisify } from "node:util";
 import type { CapabilityManifest } from "@nightwatch/shared";
+import { getDocker } from "../docker-client.js";
 import { getRunnerId } from "./identity.js";
 
-const execFileAsync = promisify(execFile);
 const RUNNER_VERSION = "0.2.0";
 
 export async function detectCapabilities(): Promise<CapabilityManifest> {
@@ -44,12 +42,9 @@ async function detectDocker(): Promise<{
   containers: string[];
 }> {
   try {
-    const { stdout } = await execFileAsync(
-      "docker",
-      ["ps", "--format", "{{.Names}}"],
-      { timeout: 3000 },
-    );
-    const containers = stdout.trim().split("\n").filter(Boolean);
+    const docker = getDocker();
+    const list = await docker.listContainers({ all: false });
+    const containers = list.map((c) => (c.Names[0] ?? "").replace(/^\//, ""));
     return { available: true, containers };
   } catch {
     return { available: false, containers: [] };
