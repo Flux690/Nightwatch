@@ -18,12 +18,15 @@ load-bearing walls of the system.
   `new OpenAIProvider()` directly.
 - `sendCommand()` in `apps/api/src/ws/router.ts` is the only path from the API
   to a runner. No code in `apps/api` may write to a runner socket directly.
-- `REQUIRES_APPROVAL` in `apps/api/src/investigation/tools.ts` is the gate set.
-  Gated tools and `request_clarification` suspend the run via a
-  `pending_human_input` row — the loop never awaits a human decision in memory,
-  and there is no decision timeout. Resolution = append tool_result, delete the
-  row, reseed from the transcript, redispatch. Any new remediation tool must be
-  added to `REQUIRES_APPROVAL` before its handler is wired up — never after.
+- `TOOL_REGISTRY` in `apps/api/src/agent/tools.ts` is the single source of truth
+  for every tool. Each entry carries its schema, `access` (`"read" | "write" | "ask"`),
+  supported providers, and an `execute()` that hides whether it runs in-process or
+  on a runner. The loop gates on `access`: `write` and `ask` suspend via a
+  `pending_human_input` row; `read` executes immediately. The loop never awaits a
+  human decision in memory, and there is no decision timeout. Resolution = append
+  tool_result, delete the row, reseed from the transcript, redispatch. Adding a new
+  write tool requires setting `access: "write"` in its registry entry - there is no
+  separate set to forget.
 - Investigations enter only through the dispatcher (alert, chat, and resume all
   funnel through it). Never invoke the investigation loop directly.
 - Every runner command must have a matching type in `packages/shared/src/ws.ts`

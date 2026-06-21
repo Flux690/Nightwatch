@@ -1,14 +1,8 @@
-import { sendCommand } from "../ws/router.js";
 import { buildInitialContext, buildChatContext } from "./context.js";
-import {
-  TOOL_SCHEMAS,
-  PLATFORM_TOOLS,
-  RUNNER_TOOLS,
-  REQUIRES_APPROVAL,
-} from "./tools.js";
+import { TOOL_REGISTRY, getToolSchemas } from "./tools.js";
+import type { Tool, ToolExecuteContext } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
-import { handlePlatformTool } from "./platform.js";
 import {
   createSession,
   appendSessionMessages,
@@ -166,7 +160,7 @@ export async function runInvestigation(
     let response: ChatResponse;
     try {
       response = await provider.chat(
-        TOOL_SCHEMAS,
+        getToolSchemas(),
         (d) => publishTextMessageContent(sessionId, d),
         signal,
       );
@@ -212,20 +206,35 @@ export async function runInvestigation(
     // message the provider contract requires (D9, D10).
     const toolResults: ToolResult[] = [];
     let gatedTool: ToolUse | null = null;
+    let gatedEntry: Tool | null = null;
+
+    const execCtx: ToolExecuteContext = {
+      runnerId: alert?.runnerId ?? undefined,
+      toolTimeoutMs: config.toolTimeoutMs,
+    };
 
     for (const tool of response.toolUses) {
       toolCallCount++;
 
-      const isClarification = tool.name === "request_clarification";
-      const isApproval =
-        RUNNER_TOOLS.has(tool.name) && REQUIRES_APPROVAL.has(tool.name);
+      const entry = TOOL_REGISTRY.find((t) => t.schema.name === tool.name);
 
-      if (isClarification || isApproval) {
+      if (!entry) {
+        log.warn({ tool: tool.name }, "LLM requested unknown tool");
+        toolResults.push({
+          tool_use_id: tool.id,
+          content: `Unknown tool "${tool.name}". Platform configuration error. Do not retry.`,
+          is_error: true,
+        });
+        continue;
+      }
+
+      if (entry.access === "write" || entry.access === "ask") {
         if (gatedTool === null) {
-          gatedTool = tool;
-        } else {
           // Only one gate per turn; reject subsequent gated tools so every
           // tool_use in this assistant message still gets a tool_result (D10).
+          gatedTool = tool;
+          gatedEntry = entry;
+        } else {
           toolResults.push({
             tool_use_id: tool.id,
             content:
@@ -236,79 +245,37 @@ export async function runInvestigation(
         continue;
       }
 
-      if (PLATFORM_TOOLS.has(tool.name)) {
-        publishToolCallStart({
-          sessionId,
-          toolUseId: tool.id,
-          toolName: tool.name,
-          input: tool.input,
-        });
-        const result = await handlePlatformTool(tool);
-        toolResults.push(result);
-        publishToolCallEnd({
-          sessionId,
-          toolUseId: tool.id,
-          result: result.content,
-          isError: result.is_error,
-        });
-        continue;
-      }
-
-      if (RUNNER_TOOLS.has(tool.name)) {
-        publishToolCallStart({
-          sessionId,
-          toolUseId: tool.id,
-          toolName: tool.name,
-          input: tool.input,
-        });
-        try {
-          const result = await sendCommand(
-            tool.name,
-            tool.input,
-            config.toolTimeoutMs,
-            alert?.runnerId,
-          );
-          toolResults.push({
-            tool_use_id: tool.id,
-            content: JSON.stringify(result),
-          });
-          publishToolCallEnd({ sessionId, toolUseId: tool.id, result });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          log.warn({ tool: tool.name, err }, "runner tool failed");
-          toolResults.push({
-            tool_use_id: tool.id,
-            content: `Error executing ${tool.name}: ${msg}`,
-            is_error: true,
-          });
-          publishToolCallEnd({
-            sessionId,
-            toolUseId: tool.id,
-            result: msg,
-            isError: true,
-          });
-        }
-        continue;
-      }
-
-      log.warn({ tool: tool.name }, "LLM requested unknown tool");
+      // access === "read": execute immediately
+      publishToolCallStart({
+        sessionId,
+        toolUseId: tool.id,
+        toolName: tool.name,
+        input: tool.input,
+      });
+      const result = await entry.execute(tool.input, execCtx);
       toolResults.push({
         tool_use_id: tool.id,
-        content: `Unknown tool "${tool.name}". Platform configuration error. Do not retry.`,
-        is_error: true,
+        content: result.content,
+        is_error: result.is_error,
+      });
+      publishToolCallEnd({
+        sessionId,
+        toolUseId: tool.id,
+        result: result.content,
+        isError: result.is_error,
       });
     }
 
-    if (gatedTool !== null) {
+    if (gatedTool !== null && gatedEntry !== null) {
       // Durably suspend: persist the assistant turn + interrupt row in ONE
       // transaction (D3). The run then exits and frees its dispatcher slot.
       // Suspended sessions never receive injections: the inbox is NOT drained
       // here; any inbox alerts become new sessions via the dispatcher's finally.
-      const isClarificationGate = gatedTool.name === "request_clarification";
+      const isAskGate = gatedEntry.access === "ask";
       const interrupt: PendingHumanInput = {
         sessionId,
         toolUseId: gatedTool.id,
-        kind: isClarificationGate ? "clarification" : "approval",
+        kind: isAskGate ? "clarification" : "approval",
         toolName: gatedTool.name,
         toolInput: gatedTool.input,
         completedResults: toolResults,
@@ -322,7 +289,7 @@ export async function runInvestigation(
         interrupt,
       );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
-      const clarInput = isClarificationGate
+      const clarInput = isAskGate
         ? (gatedTool.input as {
             question: string;
             options: Array<{ label: string; description: string }>;
@@ -334,7 +301,7 @@ export async function runInvestigation(
         toolUseId: gatedTool.id,
         toolName: gatedTool.name,
         input: gatedTool.input,
-        kind: isClarificationGate ? "clarification" : "approval",
+        kind: isAskGate ? "clarification" : "approval",
         ...(clarInput !== null && {
           question: clarInput.question,
           options: clarInput.options,
