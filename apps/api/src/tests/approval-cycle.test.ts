@@ -105,7 +105,9 @@ describe("durable approval interrupts", () => {
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["web-01"],
+        services: [
+          { provider: "docker", project: "web-01", service: "web-01" },
+        ],
         prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
@@ -118,7 +120,7 @@ describe("durable approval interrupts", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -139,7 +141,11 @@ describe("durable approval interrupts", () => {
             id: "tu-sus-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -213,7 +219,11 @@ describe("durable approval interrupts", () => {
             id: "tu-apr-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -277,7 +287,11 @@ describe("durable approval interrupts", () => {
 
     // Runner executed restart exactly once
     expect(restartCommands).toHaveLength(1);
-    expect(restartCommands[0]["containerName"]).toBe("web-01");
+    expect(restartCommands[0]["service"]).toEqual({
+      provider: "docker",
+      project: "web-01",
+      service: "web-01",
+    });
 
     // Interrupt row is gone from DB after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
@@ -294,7 +308,11 @@ describe("durable approval interrupts", () => {
             id: "tu-rej-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -371,7 +389,11 @@ describe("durable approval interrupts", () => {
             id: "tu-ctx-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -444,7 +466,11 @@ describe("durable approval interrupts", () => {
             id: "tu-409-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -521,7 +547,11 @@ describe("durable approval interrupts", () => {
             id: "tu-h4-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "concurrent",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -604,7 +634,11 @@ describe("durable approval interrupts", () => {
             id: "tu-busy-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -678,7 +712,11 @@ describe("durable approval interrupts", () => {
             id: "tu-val-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "validation",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -752,7 +790,11 @@ describe("durable approval interrupts", () => {
             id: "tu-rr-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -834,7 +876,11 @@ describe("durable approval interrupts", () => {
             id: "tu-mix-gate",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -909,7 +955,11 @@ describe("durable approval interrupts", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
       runnerId: TEST_RUNNER_ID,
-      targetIdentifier: "web-01",
+      targetIdentifier: {
+        provider: "docker",
+        project: "web-01",
+        service: "web-01",
+      },
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),
@@ -924,7 +974,11 @@ describe("durable approval interrupts", () => {
             id: `tu-crit-${randomUUID()}`,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "critical",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -996,7 +1050,11 @@ describe("durable approval interrupts", () => {
             id: "tu-notmo-1",
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,

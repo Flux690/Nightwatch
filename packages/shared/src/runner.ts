@@ -1,10 +1,12 @@
+import type { ServiceIdentity } from "./service-identity.js";
+
 export interface CapabilityManifest {
   runnerId: string;
   hostname: string;
   runnerVersion: string;
   capabilities: {
     docker: boolean;
-    containers: string[];
+    services: ServiceIdentity[];
     prometheus: { available: boolean; endpoint?: string };
     postgres: { available: boolean; via?: string };
     redis: { available: boolean; via?: string };

@@ -23,7 +23,11 @@ function makeAlert(
   return {
     sourceAlertId,
     runnerId,
-    targetIdentifier: "web-01",
+    targetIdentifier: {
+      provider: "docker",
+      project: "web-01",
+      service: "web-01",
+    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),

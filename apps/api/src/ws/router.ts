@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type {
-  CapabilityManifest,
-  RunnerCommandMessage,
-  RunnerResultMessage,
+import {
+  serviceIdentityKey,
+  type CapabilityManifest,
+  type RunnerCommandMessage,
+  type RunnerResultMessage,
+  type ServiceIdentity,
 } from "@nightwatch/shared";
 
 interface PendingCommand {
@@ -112,9 +114,9 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
-export function getRunnerIdentity(tokenId: string):
-  | { runnerId: string; hostname: string | null }
-  | undefined {
+export function getRunnerIdentity(
+  tokenId: string,
+): { runnerId: string; hostname: string | null } | undefined {
   const conn = connectionsByTokenId.get(tokenId);
   if (!conn?.runnerId) return undefined;
   return { runnerId: conn.runnerId, hostname: conn.hostname };
@@ -132,10 +134,26 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   }
 }
 
+// A tool call's `service` field arrives as unknown JSON (from the LLM, or
+// replayed from a persisted approval); narrow it before trusting its shape.
+function isServiceIdentity(value: unknown): value is ServiceIdentity {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v["provider"] === "docker") {
+    return typeof v["project"] === "string" && typeof v["service"] === "string";
+  }
+  if (v["provider"] === "kubernetes") {
+    return (
+      typeof v["namespace"] === "string" && typeof v["workload"] === "string"
+    );
+  }
+  return false;
+}
+
 // Route across the whole flat fleet. Single-runner deployments use the
-// any-runner fallback. Multi-runner deployments route by containerName
-// (manifest lookup) or hostname; ambiguous host-level commands error with
-// the known set so the model can retry with a hostname parameter.
+// any-runner fallback. Multi-runner deployments route by durable service
+// identity (manifest lookup) or hostname; ambiguous host-level commands error
+// with the known set so the model can retry with a hostname parameter.
 function resolveRunner(
   commandInput: Record<string, unknown>,
   runnerIdHint?: string,
@@ -152,26 +170,31 @@ function resolveRunner(
     return registry.values().next().value as RunnerConnection;
   }
 
-  const containerName =
-    typeof commandInput["containerName"] === "string"
-      ? commandInput["containerName"]
-      : null;
+  const service = isServiceIdentity(commandInput["service"])
+    ? commandInput["service"]
+    : null;
   const hostname =
     typeof commandInput["hostname"] === "string"
       ? commandInput["hostname"]
       : null;
 
-  if (containerName !== null) {
+  if (service !== null) {
+    const key = serviceIdentityKey(service);
     for (const conn of registry.values()) {
-      if (conn.manifest?.capabilities.containers.includes(containerName)) {
+      if (
+        conn.manifest?.capabilities.services.some(
+          (s) => serviceIdentityKey(s) === key,
+        )
+      ) {
         return conn;
       }
     }
     const known = [...registry.values()]
-      .flatMap((c) => c.manifest?.capabilities.containers ?? [])
+      .flatMap((c) => c.manifest?.capabilities.services ?? [])
+      .map((s) => serviceIdentityKey(s))
       .join(", ");
     throw new Error(
-      `No runner has container '${containerName}'. Known containers: ${known || "none"}`,
+      `No runner has service '${key}'. Known services: ${known || "none"}`,
     );
   }
 

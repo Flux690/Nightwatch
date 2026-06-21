@@ -110,7 +110,9 @@ describe("clarification interrupts", () => {
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["web-01"],
+        services: [
+          { provider: "docker", project: "web-01", service: "web-01" },
+        ],
         prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
@@ -123,7 +125,7 @@ describe("clarification interrupts", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -522,7 +524,11 @@ describe("clarification interrupts", () => {
             id: restart1Id,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -537,7 +543,11 @@ describe("clarification interrupts", () => {
             id: restart2Id,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "confirmed",
               risk: "low",
               estimatedDowntimeSeconds: 2,

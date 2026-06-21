@@ -360,7 +360,7 @@ function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
     alerts
       .map(
         (a) =>
-          `- [${a.alertType}] ${a.targetIdentifier} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
+          `- [${a.alertType}] ${JSON.stringify(a.targetIdentifier)} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
       )
       .join("\n")
   );

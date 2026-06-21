@@ -47,7 +47,11 @@ function msg(
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
   runnerId: "runner-A",
-  targetIdentifier: "web-01",
+  targetIdentifier: {
+    provider: "docker",
+    project: "web-01",
+    service: "web-01",
+  },
   alertType: "ContainerDown",
   severity: "critical",
   firedAt: "2026-06-13T00:00:00.000Z",

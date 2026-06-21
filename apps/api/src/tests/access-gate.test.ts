@@ -58,7 +58,10 @@ function waitForConnected(ws: WebSocket): Promise<void> {
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
-  { label: "Deploy regression", description: "Recent deploy introduced the issue" },
+  {
+    label: "Deploy regression",
+    description: "Recent deploy introduced the issue",
+  },
 ];
 
 describe("access-gate: gating is driven by tool access level", () => {
@@ -84,7 +87,8 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result: commandName === "restart_container" ? { restarted: true } : [],
+          result:
+            commandName === "restart_container" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -95,7 +99,9 @@ describe("access-gate: gating is driven by tool access level", () => {
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["svc-01"],
+        services: [
+          { provider: "docker", project: "svc-01", service: "svc-01" },
+        ],
         prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
@@ -108,7 +114,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -188,7 +194,11 @@ describe("access-gate: gating is driven by tool access level", () => {
             id: "tu-write-1",
             name: "restart_container",
             input: {
-              containerName: "svc-01",
+              service: {
+                provider: "docker",
+                project: "svc-01",
+                service: "svc-01",
+              },
               rationale: "service wedged",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -293,7 +303,9 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
 
     expect(interrupt.payload["kind"]).toBe("clarification");
-    expect(interrupt.payload["question"]).toBe("What is the most likely root cause?");
+    expect(interrupt.payload["question"]).toBe(
+      "What is the most likely root cause?",
+    );
     expect(interrupt.payload["options"]).toEqual(CLARIFICATION_OPTIONS);
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
@@ -345,7 +357,11 @@ describe("access-gate: gating is driven by tool access level", () => {
             id: "tu-c-write",
             name: "restart_container",
             input: {
-              containerName: "svc-01",
+              service: {
+                provider: "docker",
+                project: "svc-01",
+                service: "svc-01",
+              },
               rationale: "confirmed by operator",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -404,7 +420,10 @@ describe("access-gate: gating is driven by tool access level", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ text: "Yes, recurring daily", resolvedBy: "operator" }),
+        body: JSON.stringify({
+          text: "Yes, recurring daily",
+          resolvedBy: "operator",
+        }),
       },
     );
     expect(answerRes.status).toBe(200);
@@ -438,7 +457,9 @@ describe("access-gate: gating is driven by tool access level", () => {
 
     // Runner executes restart exactly once, run completes
     await waitFor(() => executedCommands.includes("restart_container"));
-    expect(executedCommands.filter((c) => c === "restart_container")).toHaveLength(1);
+    expect(
+      executedCommands.filter((c) => c === "restart_container"),
+    ).toHaveLength(1);
 
     await waitFor(() => !hasPendingHumanInput(sessionId));
     expect(hasPendingHumanInput(sessionId)).toBe(false);

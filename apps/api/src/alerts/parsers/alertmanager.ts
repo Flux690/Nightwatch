@@ -1,4 +1,7 @@
-import type { NormalizedAlert } from "@nightwatch/shared";
+import {
+  deriveDockerServiceIdentity,
+  type NormalizedAlert,
+} from "@nightwatch/shared";
 
 interface AlertmanagerWebhook {
   alerts: Array<{
@@ -20,23 +23,27 @@ export function parseAlertmanager(
     throw new Error("Invalid Alertmanager payload: missing alerts array");
   }
 
-  return payload.alerts.map((alert) => ({
-    sourceAlertId: alert.fingerprint,
-    runnerId,
-    ...(hostname !== undefined && { hostname }),
+  return payload.alerts.map((alert) => {
     // `name` is what cAdvisor sets and what our shipped rules.yml alerts carry
     // ({{ $labels.name }}); the rest are fallbacks for other alert sources.
-    targetIdentifier:
+    const liveName =
       alert.labels["name"] ??
       alert.labels["container"] ??
       alert.labels["service"] ??
       alert.labels["job"] ??
-      "unknown",
-    alertType: alert.labels["alertname"] ?? "unknown",
-    severity: normalizeSeverity(alert.labels["severity"]),
-    firedAt: alert.startsAt,
-    rawPayload: alert,
-  }));
+      "unknown";
+
+    return {
+      sourceAlertId: alert.fingerprint,
+      runnerId,
+      ...(hostname !== undefined && { hostname }),
+      targetIdentifier: deriveDockerServiceIdentity(alert.labels, liveName),
+      alertType: alert.labels["alertname"] ?? "unknown",
+      severity: normalizeSeverity(alert.labels["severity"]),
+      firedAt: alert.startsAt,
+      rawPayload: alert,
+    };
+  });
 }
 
 function normalizeSeverity(s: string | undefined): NormalizedAlert["severity"] {

@@ -1,6 +1,15 @@
 export type { AlertSeverity, NormalizedAlert } from "./alerts.js";
 export type { AuthStatusResponse } from "./auth.js";
 export type {
+  DockerServiceIdentity,
+  KubernetesServiceIdentity,
+  ServiceIdentity,
+} from "./service-identity.js";
+export {
+  deriveDockerServiceIdentity,
+  serviceIdentityKey,
+} from "./service-identity.js";
+export type {
   GetContainerListInput,
   ContainerInfo,
   GetContainerLogsInput,

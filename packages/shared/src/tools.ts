@@ -1,5 +1,7 @@
 // LLM tool input/output types — matched to Anthropic TOOL_SCHEMAS in apps/api
 
+import type { ServiceIdentity } from "./service-identity.js";
+
 export interface GetContainerListInput {
   environment: "docker" | "kubernetes";
   namespace?: string;
@@ -7,6 +9,7 @@ export interface GetContainerListInput {
 export interface ContainerInfo {
   name: string;
   id: string;
+  service: ServiceIdentity;
   image: string;
   imageTag: string;
   status: string;
@@ -17,7 +20,7 @@ export interface ContainerInfo {
 }
 
 export interface GetContainerLogsInput {
-  containerName: string;
+  service: ServiceIdentity;
   tailLines?: number;
   sinceTimestamp?: string;
   stderrOnly?: boolean;
@@ -30,7 +33,7 @@ export interface ContainerLogsResult {
 }
 
 export interface GetContainerInspectInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerInspectResult {
   name: string;
@@ -51,7 +54,7 @@ export interface ContainerInspectResult {
 }
 
 export interface GetContainerStatsInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerStatsResult {
   cpuPercent: number;
@@ -66,7 +69,7 @@ export interface ContainerStatsResult {
 }
 
 export interface GetContainerEventsInput {
-  containerName: string;
+  service: ServiceIdentity;
   sinceMinutes?: number;
 }
 export interface ContainerEvent {
@@ -86,7 +89,7 @@ export interface ContainerEvent {
 }
 
 export interface GetContainerProcessesInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerProcess {
   pid: number;
@@ -164,7 +167,7 @@ export interface PrometheusResult {
 }
 
 export interface GetAlertHistoryInput {
-  containerName?: string;
+  service?: ServiceIdentity;
   limitDays?: number;
 }
 
@@ -186,7 +189,7 @@ export interface CommitInfo {
 }
 
 export interface GetRecentDeploysInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface DeployInfo {
   currentImageDigest: string;
@@ -197,7 +200,7 @@ export interface DeployInfo {
 }
 
 export interface GetEnvVariableNamesInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ReadFileInput {
   path: string;
@@ -218,7 +221,7 @@ export interface RequestClarificationInput {
 export type RiskLevel = "low" | "medium" | "high";
 
 export interface RestartContainerInput {
-  containerName: string;
+  service: ServiceIdentity;
   delaySeconds?: number;
   rationale: string;
   risk: RiskLevel;
@@ -232,7 +235,7 @@ export interface RestartContainerResult {
 }
 
 export interface RollbackDeployInput {
-  containerName: string;
+  service: ServiceIdentity;
   targetImageDigest: string;
   rationale: string;
   risk: RiskLevel;
@@ -246,7 +249,7 @@ export interface RollbackDeployResult {
 }
 
 export interface ExecCommandInput {
-  containerName: string;
+  service: ServiceIdentity;
   command: string[];
   reason: string;
   risk: RiskLevel;

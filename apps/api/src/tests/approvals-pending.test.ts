@@ -89,7 +89,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-qa-${randomUUID()}`,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: { provider: "docker", project: "web-01", service: "web-01" },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -162,7 +162,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-sc-${randomUUID()}`,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: { provider: "docker", project: "web-01", service: "web-01" },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -237,7 +237,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-emp-${randomUUID()}`,
             name: "restart_container",
             input: {
-              containerName: "web-01",
+              service: { provider: "docker", project: "web-01", service: "web-01" },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,

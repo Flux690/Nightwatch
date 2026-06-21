@@ -95,7 +95,11 @@ function alert(tokenId: string, sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
     runnerId: tokenId,
-    targetIdentifier: "web-01",
+    targetIdentifier: {
+      provider: "docker",
+      project: "web-01",
+      service: "web-01",
+    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),
@@ -190,7 +194,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate",
               name: "restart_container",
               input: {
-                containerName: "web-01",
+                service: { provider: "docker", project: "web-01", service: "web-01" },
                 rationale: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
@@ -311,7 +315,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate-resume",
               name: "restart_container",
               input: {
-                containerName: "web-01",
+                service: { provider: "docker", project: "web-01", service: "web-01" },
                 rationale: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,

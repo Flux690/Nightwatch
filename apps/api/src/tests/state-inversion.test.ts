@@ -61,7 +61,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -226,7 +226,11 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
       runnerId: "runner-history",
-      targetIdentifier: "web-01",
+      targetIdentifier: {
+        provider: "docker",
+        project: "web-01",
+        service: "web-01",
+      },
       alertType: "HighMemory",
       severity: "warning",
       firedAt: new Date().toISOString(),

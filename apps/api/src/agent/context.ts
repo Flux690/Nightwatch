@@ -39,8 +39,11 @@ Begin your investigation. Start with the most targeted read tool given the alert
 }
 
 function formatAlert(alert: NormalizedAlert): string {
+  // JSON, not a rendered string: the model echoes this object verbatim into
+  // the `service` parameter of any tool call against this target (PRD
+  // "Further Notes" - the agent echoes the identity, it never reconstructs one).
   return `Alert ID:     ${alert.sourceAlertId}
-Target:       ${alert.targetIdentifier}
+Target:       ${JSON.stringify(alert.targetIdentifier)}
 Alert type:   ${alert.alertType}
 Severity:     ${alert.severity}
 Fired at:     ${alert.firedAt}`;

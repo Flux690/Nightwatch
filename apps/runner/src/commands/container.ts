@@ -1,19 +1,25 @@
-import type {
-  ContainerEvent,
-  ContainerInfo,
-  ContainerInspectResult,
-  ContainerLogsResult,
-  ContainerProcess,
-  ContainerStatsResult,
-  GetContainerEventsInput,
-  GetContainerInspectInput,
-  GetContainerListInput,
-  GetContainerLogsInput,
-  GetContainerProcessesInput,
-  GetContainerStatsInput,
-  GetEnvVariableNamesInput,
+import {
+  deriveDockerServiceIdentity,
+  type ContainerEvent,
+  type ContainerInfo,
+  type ContainerInspectResult,
+  type ContainerLogsResult,
+  type ContainerProcess,
+  type ContainerStatsResult,
+  type GetContainerEventsInput,
+  type GetContainerInspectInput,
+  type GetContainerListInput,
+  type GetContainerLogsInput,
+  type GetContainerProcessesInput,
+  type GetContainerStatsInput,
+  type GetEnvVariableNamesInput,
 } from "@nightwatch/shared";
 import { getDocker, parseDockerMux } from "../docker-client.js";
+import {
+  notRunningResult,
+  resolveService,
+  type NoRunningInstanceResult,
+} from "../docker/resolve-service.js";
 
 export async function getContainerList(
   _input: GetContainerListInput,
@@ -23,9 +29,13 @@ export async function getContainerList(
   const containers = raw.map((c) => {
     const status = c.Status;
     const image = c.Image;
+    const name = (c.Names[0] ?? "").replace(/^\//, "");
     return {
-      name: (c.Names[0] ?? "").replace(/^\//, ""),
+      name,
       id: c.Id.slice(0, 12),
+      // So the agent can echo a usable identity back into other tools for any
+      // container it discovers here, not only the one named in the alert.
+      service: deriveDockerServiceIdentity(c.Labels, name),
       image,
       imageTag: image.includes(":")
         ? (image.split(":")[1] ?? "latest")
@@ -45,9 +55,12 @@ export async function getContainerList(
 
 export async function getContainerLogs(
   input: GetContainerLogsInput,
-): Promise<ContainerLogsResult> {
+): Promise<ContainerLogsResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  const container = docker.getContainer(input.containerName);
+  // Logs survive container exit (ADR-0001), so a stopped fallback is fine here.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved) return notRunningResult(input.service);
+  const container = resolved.container;
 
   const since = input.sinceTimestamp
     ? Math.floor(new Date(input.sinceTimestamp).getTime() / 1000)
@@ -92,9 +105,12 @@ export async function getContainerLogs(
 
 export async function getContainerInspect(
   input: GetContainerInspectInput,
-): Promise<ContainerInspectResult> {
+): Promise<ContainerInspectResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  const raw = await docker.getContainer(input.containerName).inspect();
+  // Inspect works on a stopped container (ADR-0001), so a stopped fallback is fine here.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved) return notRunningResult(input.service);
+  const raw = await resolved.container.inspect();
 
   const envVarNames = (raw.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
 
@@ -119,11 +135,12 @@ export async function getContainerInspect(
 
 export async function getContainerStats(
   input: GetContainerStatsInput,
-): Promise<ContainerStatsResult> {
+): Promise<ContainerStatsResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  const raw = await docker
-    .getContainer(input.containerName)
-    .stats({ stream: false });
+  // Stats require a live process; a stopped instance has nothing to report.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const raw = await resolved.container.stats({ stream: false });
 
   const cpuDelta =
     raw.cpu_stats.cpu_usage.total_usage -
@@ -178,15 +195,20 @@ export async function getContainerStats(
 
 export async function getContainerEvents(
   input: GetContainerEventsInput,
-): Promise<{ events: ContainerEvent[] }> {
+): Promise<{ events: ContainerEvent[] } | NoRunningInstanceResult> {
   const docker = getDocker();
+  // The events log is keyed by name regardless of current state, so a stopped
+  // fallback is fine - it just needs a name to filter on.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved) return notRunningResult(input.service);
+
   const now = Math.floor(Date.now() / 1000);
   const since = now - (input.sinceMinutes ?? 60) * 60;
 
   const stream = await docker.getEvents({
     since,
     until: now,
-    filters: JSON.stringify({ name: [input.containerName] }),
+    filters: JSON.stringify({ name: [resolved.name] }),
   });
 
   const chunks: Buffer[] = [];
@@ -218,9 +240,12 @@ export async function getContainerEvents(
 
 export async function getContainerProcesses(
   input: GetContainerProcessesInput,
-): Promise<{ processes: ContainerProcess[] }> {
+): Promise<{ processes: ContainerProcess[] } | NoRunningInstanceResult> {
   const docker = getDocker();
-  const top = (await docker.getContainer(input.containerName).top()) as {
+  // `top` requires a live process; a stopped instance has nothing to report.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const top = (await resolved.container.top()) as {
     Titles: string[];
     Processes: string[][];
   };
@@ -246,9 +271,12 @@ export async function getContainerProcesses(
 
 export async function getEnvVariableNames(
   input: GetEnvVariableNamesInput,
-): Promise<{ names: string[] }> {
+): Promise<{ names: string[] } | NoRunningInstanceResult> {
   const docker = getDocker();
-  const info = await docker.getContainer(input.containerName).inspect();
+  // Inspect-derived, so a stopped fallback is fine here.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved) return notRunningResult(input.service);
+  const info = await resolved.container.inspect();
   const names = (info.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
   return { names };
 }

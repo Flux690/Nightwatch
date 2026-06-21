@@ -8,6 +8,23 @@ vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import { execCommand } from "../commands/remediation.js";
 
+const SERVICE = {
+  provider: "docker" as const,
+  project: "myapp",
+  service: "web-01",
+};
+
+const LIVE_CONTAINER = {
+  Id: "live-1",
+  Names: ["/web-01"],
+  State: "running",
+  Created: 100,
+  Labels: {
+    "com.docker.compose.project": "myapp",
+    "com.docker.compose.service": "web-01",
+  },
+};
+
 // Build a Docker multiplexed-stream frame (8-byte header + payload).
 function muxFrame(streamType: 1 | 2, text: string): Buffer {
   const payload = Buffer.from(text);
@@ -28,6 +45,7 @@ function makeExecStream(stdout: string, stderr = ""): PassThrough {
 function setupDockerMock(exitCode: number, stdout = "", stderr = ""): void {
   MockDocker.mockImplementation(function () {
     return {
+      listContainers: vi.fn().mockResolvedValue([LIVE_CONTAINER]),
       getContainer: vi.fn().mockReturnValue({
         exec: vi.fn().mockResolvedValue({
           start: vi.fn().mockResolvedValue(makeExecStream(stdout, stderr)),
@@ -56,41 +74,66 @@ describe("execCommand handler", () => {
     setupDockerMock(0, "ok\n");
 
     const result = await execCommand({
-      containerName: "web-01",
+      service: SERVICE,
       command: ["echo", "ok"],
       reason: "test",
       risk: "low",
     });
 
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("ok");
+    expect(result).toMatchObject({ exitCode: 0 });
+    expect((result as { stdout: string }).stdout).toContain("ok");
   });
 
   it("returns the real non-zero exit code when the command exits non-zero", async () => {
     setupDockerMock(1, "", "command not found\n");
 
     const result = await execCommand({
-      containerName: "web-01",
+      service: SERVICE,
       command: ["bad-cmd"],
       reason: "test",
       risk: "low",
     });
 
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("command not found");
+    expect(result).toMatchObject({ exitCode: 1 });
+    expect((result as { stderr: string }).stderr).toContain(
+      "command not found",
+    );
   });
 
   it("returns exit code 2 for commands that exit with code 2", async () => {
     setupDockerMock(2, "partial output\n", "error detail\n");
 
     const result = await execCommand({
-      containerName: "app",
+      service: SERVICE,
       command: ["grep", "pattern", "/nonexistent"],
       reason: "test",
       risk: "low",
     });
 
-    expect(result.exitCode).toBe(2);
+    expect(result).toMatchObject({ exitCode: 2 });
+  });
+
+  it("returns a not-running finding and never calls exec when there is no live instance", async () => {
+    const exec = vi.fn();
+    MockDocker.mockImplementation(function () {
+      return {
+        listContainers: vi.fn().mockResolvedValue([]),
+        getContainer: vi.fn().mockReturnValue({ exec }),
+      };
+    });
+
+    const result = await execCommand({
+      service: SERVICE,
+      command: ["echo", "ok"],
+      reason: "test",
+      risk: "low",
+    });
+
+    expect(result).toEqual({
+      found: false,
+      reason: "No running instance found for myapp/web-01",
+    });
+    expect(exec).not.toHaveBeenCalled();
   });
 
   it("propagates the raw engine error when the Docker API call fails", async () => {
@@ -99,6 +142,7 @@ describe("execCommand handler", () => {
     );
     MockDocker.mockImplementation(function () {
       return {
+        listContainers: vi.fn().mockResolvedValue([LIVE_CONTAINER]),
         getContainer: vi.fn().mockReturnValue({
           exec: vi.fn().mockRejectedValue(engineError),
         }),
@@ -107,7 +151,7 @@ describe("execCommand handler", () => {
 
     await expect(
       execCommand({
-        containerName: "web-01",
+        service: SERVICE,
         command: ["ls"],
         reason: "test",
         risk: "low",

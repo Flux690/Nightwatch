@@ -1,5 +1,10 @@
 import type { DeployInfo, GetRecentDeploysInput } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
+import {
+  notRunningResult,
+  resolveService,
+  type NoRunningInstanceResult,
+} from "../docker/resolve-service.js";
 
 interface ImageLayer {
   Id: string;
@@ -8,11 +13,13 @@ interface ImageLayer {
 
 export async function getRecentDeploys(
   input: GetRecentDeploysInput,
-): Promise<DeployInfo> {
-  const { containerName } = input;
+): Promise<DeployInfo | NoRunningInstanceResult> {
   const docker = getDocker();
+  // Image-history is inspect-derived, so a stopped fallback is fine here.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved) return notRunningResult(input.service);
 
-  const inspect = await docker.getContainer(containerName).inspect();
+  const inspect = await resolved.container.inspect();
   const currentImageDigest = inspect.Image;
   const createdAt = inspect.Created;
 

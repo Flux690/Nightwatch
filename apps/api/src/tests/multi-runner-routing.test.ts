@@ -59,6 +59,15 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
+// Anonymous-container convention (no Compose labels): project === service === name.
+function svc(name: string): {
+  provider: "docker";
+  project: string;
+  service: string;
+} {
+  return { provider: "docker", project: name, service: name };
+}
+
 function makeManifest(
   hostname: string,
   containers: string[],
@@ -69,7 +78,7 @@ function makeManifest(
     runnerVersion: "2.0.0",
     capabilities: {
       docker: true,
-      containers,
+      services: containers.map(svc),
       prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },
@@ -152,7 +161,7 @@ describe("multi-runner routing", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -190,7 +199,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-1",
             name: "get_container_logs",
-            input: { containerName: "postgres" },
+            input: { service: svc("postgres") },
           },
         ],
       },
@@ -212,7 +221,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-2",
             name: "get_container_stats",
-            input: { containerName: "nginx" },
+            input: { service: svc("nginx") },
           },
         ],
       },
@@ -234,7 +243,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-3",
             name: "get_container_logs",
-            input: { containerName: "ghost-svc" },
+            input: { service: svc("ghost-svc") },
           },
         ],
       },
@@ -312,7 +321,7 @@ describe("multi-runner routing", () => {
             id: "tu-restart",
             name: "restart_container",
             input: {
-              containerName: "postgres",
+              service: svc("postgres"),
               rationale: "OOM killed",
               risk: "low",
               estimatedDowntimeSeconds: 5,
@@ -362,7 +371,7 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
 
     // Approve — the approve route calls sendCommand with the persisted toolInput
-    // (which has containerName: "postgres"), routing it to runner-b.
+    // (which has service: docker/postgres/postgres), routing it to runner-b.
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
@@ -382,17 +391,17 @@ describe("multi-runner routing", () => {
     );
     expect(
       commandsB.find((c) => c.commandName === "restart_container")
-        ?.commandInput["containerName"],
-    ).toBe("postgres");
+        ?.commandInput["service"],
+    ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 
     ws.close();
   });
 
-  it("cross-token: routes to a runner connected under a different token by container name", async () => {
+  it("cross-token: routes to a runner connected under a different token by service identity", async () => {
     // runner-c is registered under tokenId2, not tokenId. The session dispatches
     // with tokenId. With the flat registry, sendCommand routes globally by
-    // container name, so "redis" (only on runner-c) must still be reached.
+    // service identity, so "redis" (only on runner-c) must still be reached.
     setScript([
       {
         text: "Checking redis.",
@@ -400,7 +409,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-cross",
             name: "get_container_logs",
-            input: { containerName: "redis" },
+            input: { service: svc("redis") },
           },
         ],
       },

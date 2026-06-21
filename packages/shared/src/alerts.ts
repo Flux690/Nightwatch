@@ -1,3 +1,5 @@
+import type { ServiceIdentity } from "./service-identity.js";
+
 export type AlertSeverity = "critical" | "warning" | "info";
 
 export interface NormalizedAlert {
@@ -7,7 +9,7 @@ export interface NormalizedAlert {
   // live runner registry. Preserved on the session row so history survives token
   // deletion (CONTEXT.md runner token lifecycle).
   hostname?: string;
-  targetIdentifier: string;
+  targetIdentifier: ServiceIdentity;
   alertType: string;
   severity: AlertSeverity;
   firedAt: string;

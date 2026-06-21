@@ -13,17 +13,18 @@ import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../ws/server.js";
 import { registerRunnerRoutes } from "../runners/routes.js";
 
-function manifest(
-  hostname: string,
-  containers: string[],
-): CapabilityManifest {
+function manifest(hostname: string, containers: string[]): CapabilityManifest {
   return {
     runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
       docker: true,
-      containers,
+      services: containers.map((name) => ({
+        provider: "docker" as const,
+        project: name,
+        service: name,
+      })),
       prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },
@@ -129,8 +130,13 @@ describe("flat runner registry", () => {
 
     expect(ra?.hostname).toBe("web-01");
     expect(rb?.hostname).toBe("db-02");
-    expect(ra?.manifest?.capabilities.containers).toEqual(["nginx", "api"]);
-    expect(rb?.manifest?.capabilities.containers).toEqual(["postgres"]);
+    expect(ra?.manifest?.capabilities.services).toEqual([
+      { provider: "docker", project: "nginx", service: "nginx" },
+      { provider: "docker", project: "api", service: "api" },
+    ]);
+    expect(rb?.manifest?.capabilities.services).toEqual([
+      { provider: "docker", project: "postgres", service: "postgres" },
+    ]);
     expect(ra?.manifest).not.toHaveProperty("token");
     expect(rb?.manifest).not.toHaveProperty("token");
 
@@ -144,11 +150,7 @@ describe("flat runner registry", () => {
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
     const { plaintext: tokenA, id: tokenAId } = generateToken("close-one-a");
     const { plaintext: tokenB, id: tokenBId } = generateToken("close-one-b");
-    const a = await connectRunner(
-      port,
-      tokenA,
-      manifest("web-01", ["nginx"]),
-    );
+    const a = await connectRunner(port, tokenA, manifest("web-01", ["nginx"]));
     const b = await connectRunner(
       port,
       tokenB,
@@ -157,8 +159,7 @@ describe("flat runner registry", () => {
     await waitFor(async () => {
       const live = (await getRunners()).filter(
         (r) =>
-          (r.token === tokenAId || r.token === tokenBId) &&
-          r.manifest !== null,
+          (r.token === tokenAId || r.token === tokenBId) && r.manifest !== null,
       );
       return live.length === 2 ? true : undefined;
     });
@@ -180,11 +181,7 @@ describe("flat runner registry", () => {
     const { plaintext: tokenA, id: tokenAId } = generateToken("cross-a");
     const { plaintext: tokenB, id: tokenBId } = generateToken("cross-b");
 
-    const a = await connectRunner(
-      port,
-      tokenA,
-      manifest("host-a", ["nginx"]),
-    );
+    const a = await connectRunner(port, tokenA, manifest("host-a", ["nginx"]));
     const b = await connectRunner(
       port,
       tokenB,
@@ -211,4 +208,3 @@ describe("flat runner registry", () => {
     b.close();
   });
 });
-

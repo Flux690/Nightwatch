@@ -1,5 +1,10 @@
 import { hostname } from "node:os";
-import type { CapabilityManifest } from "@nightwatch/shared";
+import {
+  deriveDockerServiceIdentity,
+  serviceIdentityKey,
+  type CapabilityManifest,
+  type ServiceIdentity,
+} from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
 import { getRunnerId } from "./identity.js";
 
@@ -20,7 +25,7 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     runnerVersion: RUNNER_VERSION,
     capabilities: {
       docker: docker.available,
-      containers: docker.containers,
+      services: docker.services,
       prometheus: prometheusAvailable
         ? { available: true, endpoint: prometheusEndpoint }
         : { available: false },
@@ -39,15 +44,23 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
 
 async function detectDocker(): Promise<{
   available: boolean;
-  containers: string[];
+  services: ServiceIdentity[];
 }> {
   try {
     const docker = getDocker();
-    const list = await docker.listContainers({ all: false });
-    const containers = list.map((c) => (c.Names[0] ?? "").replace(/^\//, ""));
-    return { available: true, containers };
+    // `all: true` so a service whose only container is currently stopped is
+    // still advertised - otherwise routing would reject the call before the
+    // runner ever gets to JIT-resolve it and report a clean finding.
+    const list = await docker.listContainers({ all: true });
+    const byKey = new Map<string, ServiceIdentity>();
+    for (const c of list) {
+      const name = (c.Names[0] ?? "").replace(/^\//, "");
+      const identity = deriveDockerServiceIdentity(c.Labels, name);
+      byKey.set(serviceIdentityKey(identity), identity);
+    }
+    return { available: true, services: [...byKey.values()] };
   } catch {
-    return { available: false, containers: [] };
+    return { available: false, services: [] };
   }
 }
 

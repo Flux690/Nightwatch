@@ -203,7 +203,7 @@ describe("TranscriptItemRenderer", () => {
       kind: "approval_card",
       toolUseId: "tu-gate",
       toolName: "restart_container",
-      input: { containerName: "web-01" },
+      input: { service: { provider: "docker", project: "web-01", service: "web-01" } },
       result: null,
       risk: "high",
     };

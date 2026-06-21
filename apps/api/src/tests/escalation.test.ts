@@ -82,7 +82,9 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["web-01"],
+        services: [
+          { provider: "docker", project: "web-01", service: "web-01" },
+        ],
         prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
@@ -95,7 +97,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -217,7 +219,13 @@ describe("termination paths: every run ends in model text, no escalation", () =>
           {
             id: toolUseId,
             name: "restart_container",
-            input: { containerName: "web-01" },
+            input: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+            },
           },
         ],
         text: "Need to restart.",
@@ -237,7 +245,11 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
       runnerId: TEST_RUNNER_ID,
-      targetIdentifier: "web-01",
+      targetIdentifier: {
+        provider: "docker",
+        project: "web-01",
+        service: "web-01",
+      },
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),

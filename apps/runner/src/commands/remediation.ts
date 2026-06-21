@@ -9,6 +9,11 @@ import type {
   RollbackDeployResult,
 } from "@nightwatch/shared";
 import { getDocker, parseDockerMux } from "../docker-client.js";
+import {
+  notRunningResult,
+  resolveService,
+  type NoRunningInstanceResult,
+} from "../docker/resolve-service.js";
 
 const RULES_PATH =
   process.env["NIGHTWATCH_RULES_PATH"] ?? "/etc/nightwatch/rules.yml";
@@ -43,10 +48,14 @@ export async function updateAlertRules(input: {
 
 export async function restartContainer(
   input: RestartContainerInput,
-): Promise<RestartContainerResult> {
+): Promise<RestartContainerResult | NoRunningInstanceResult> {
   const startedAt = new Date().toISOString();
   const docker = getDocker();
-  const container = docker.getContainer(input.containerName);
+  // Restart is a write action on a live target (CONTEXT.md); a stopped
+  // instance is "nothing to act on", not a target to restart.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const container = resolved.container;
 
   const before = await container.inspect();
   const previousExitCode = before.State.ExitCode ?? 0;
@@ -78,7 +87,7 @@ export async function rollbackDeploy(
 
 export async function execCommand(
   input: ExecCommandInput,
-): Promise<ExecCommandResult> {
+): Promise<ExecCommandResult | NoRunningInstanceResult> {
   if (process.env["REMEDIATION_ENABLED"] !== "true") {
     throw new Error(
       "exec_command is disabled. Set REMEDIATION_ENABLED=true on the runner to enable.",
@@ -90,7 +99,11 @@ export async function execCommand(
   if (!cmd) throw new Error("command array must not be empty");
 
   const docker = getDocker();
-  const container = docker.getContainer(input.containerName);
+  // Exec is a write action on a live target (CONTEXT.md); a stopped instance
+  // is "nothing to act on", not a degraded-but-usable target like logs/inspect.
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const container = resolved.container;
 
   const exec = await container.exec({
     Cmd: [cmd, ...args],

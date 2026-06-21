@@ -25,13 +25,39 @@ export interface Tool {
 
 const BOTH: ("docker" | "kubernetes")[] = ["docker", "kubernetes"];
 
+// Docker-only shape for now (issue scoped to Docker; ADR-0001 reserves the
+// `namespace`/`workload` arm for Kubernetes). Echo the identity exactly as
+// given in the alert or a prior get_container_list result - do not guess.
+const SERVICE_IDENTITY_SCHEMA = {
+  type: "object",
+  properties: {
+    provider: { type: "string", enum: ["docker"] },
+    project: {
+      type: "string",
+      description:
+        "Compose project name (or the container's own name if it has no Compose labels).",
+    },
+    service: {
+      type: "string",
+      description:
+        "Compose service name (or the container's own name if it has no Compose labels).",
+    },
+  },
+  required: ["provider", "project", "service"],
+} as const;
+
 async function runnerExecute(
   toolName: string,
   input: Record<string, unknown>,
   ctx: ToolExecuteContext,
 ): Promise<ToolExecuteResult> {
   try {
-    const result = await sendCommand(toolName, input, ctx.toolTimeoutMs, ctx.runnerId);
+    const result = await sendCommand(
+      toolName,
+      input,
+      ctx.toolTimeoutMs,
+      ctx.runnerId,
+    );
     return { content: result };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -97,7 +123,8 @@ export const TOOL_REGISTRY: Tool[] = [
           },
           namespace: {
             type: "string",
-            description: "Kubernetes namespace (optional, docker ignores this).",
+            description:
+              "Kubernetes namespace (optional, docker ignores this).",
           },
           hostname: {
             type: "string",
@@ -120,10 +147,11 @@ export const TOOL_REGISTRY: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          containerName: { type: "string" },
+          service: SERVICE_IDENTITY_SCHEMA,
           tailLines: {
             type: "number",
-            description: "Max raw lines to fetch before filtering (default 200).",
+            description:
+              "Max raw lines to fetch before filtering (default 200).",
           },
           sinceTimestamp: {
             type: "string",
@@ -132,7 +160,7 @@ export const TOOL_REGISTRY: Tool[] = [
           },
           stderrOnly: { type: "boolean" },
         },
-        required: ["containerName"],
+        required: ["service"],
       },
     },
     access: "read",
@@ -146,8 +174,8 @@ export const TOOL_REGISTRY: Tool[] = [
         "Get container configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
-        properties: { containerName: { type: "string" } },
-        required: ["containerName"],
+        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        required: ["service"],
       },
     },
     access: "read",
@@ -161,8 +189,8 @@ export const TOOL_REGISTRY: Tool[] = [
         "Get real-time CPU%, memory usage/limit/%, network I/O, block I/O, and PID count for a container.",
       input_schema: {
         type: "object",
-        properties: { containerName: { type: "string" } },
-        required: ["containerName"],
+        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        required: ["service"],
       },
     },
     access: "read",
@@ -177,13 +205,13 @@ export const TOOL_REGISTRY: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          containerName: { type: "string" },
+          service: SERVICE_IDENTITY_SCHEMA,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
           },
         },
-        required: ["containerName"],
+        required: ["service"],
       },
     },
     access: "read",
@@ -193,16 +221,18 @@ export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
       name: "get_container_processes",
-      description: "List processes running inside a container (like docker top).",
+      description:
+        "List processes running inside a container (like docker top).",
       input_schema: {
         type: "object",
-        properties: { containerName: { type: "string" } },
-        required: ["containerName"],
+        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        required: ["service"],
       },
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_processes", input, ctx),
+    execute: (input, ctx) =>
+      runnerExecute("get_container_processes", input, ctx),
   },
   {
     schema: {
@@ -323,7 +353,10 @@ export const TOOL_REGISTRY: Tool[] = [
         properties: {
           repoOwner: { type: "string" },
           repoName: { type: "string" },
-          branch: { type: "string", description: "Branch name (default: main)." },
+          branch: {
+            type: "string",
+            description: "Branch name (default: main).",
+          },
           limit: {
             type: "number",
             description: "Number of commits to return (default 10).",
@@ -353,8 +386,8 @@ export const TOOL_REGISTRY: Tool[] = [
         "Get the current and previous Docker image digest for a container to detect recent deployments.",
       input_schema: {
         type: "object",
-        properties: { containerName: { type: "string" } },
-        required: ["containerName"],
+        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        required: ["service"],
       },
     },
     access: "read",
@@ -368,13 +401,14 @@ export const TOOL_REGISTRY: Tool[] = [
         "List environment variable names (not values) for a container to check for missing config.",
       input_schema: {
         type: "object",
-        properties: { containerName: { type: "string" } },
-        required: ["containerName"],
+        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        required: ["service"],
       },
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_env_variable_names", input, ctx),
+    execute: (input, ctx) =>
+      runnerExecute("get_env_variable_names", input, ctx),
   },
   {
     schema: {
@@ -454,7 +488,7 @@ export const TOOL_REGISTRY: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          containerName: { type: "string" },
+          service: SERVICE_IDENTITY_SCHEMA,
           delaySeconds: {
             type: "number",
             description: "Delay before restart (default 0).",
@@ -469,12 +503,7 @@ export const TOOL_REGISTRY: Tool[] = [
           },
           estimatedDowntimeSeconds: { type: "number" },
         },
-        required: [
-          "containerName",
-          "rationale",
-          "risk",
-          "estimatedDowntimeSeconds",
-        ],
+        required: ["service", "rationale", "risk", "estimatedDowntimeSeconds"],
       },
     },
     access: "write",
@@ -489,14 +518,14 @@ export const TOOL_REGISTRY: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          containerName: { type: "string" },
+          service: SERVICE_IDENTITY_SCHEMA,
           targetImageDigest: { type: "string" },
           rationale: { type: "string" },
           risk: { type: "string", enum: ["low", "medium", "high"] },
           estimatedDowntimeSeconds: { type: "number" },
         },
         required: [
-          "containerName",
+          "service",
           "targetImageDigest",
           "rationale",
           "risk",
@@ -516,7 +545,7 @@ export const TOOL_REGISTRY: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          containerName: { type: "string" },
+          service: SERVICE_IDENTITY_SCHEMA,
           command: {
             type: "array",
             items: { type: "string" },
@@ -525,7 +554,7 @@ export const TOOL_REGISTRY: Tool[] = [
           reason: { type: "string" },
           risk: { type: "string", enum: ["low", "medium", "high"] },
         },
-        required: ["containerName", "command", "reason", "risk"],
+        required: ["service", "command", "reason", "risk"],
       },
     },
     access: "write",
