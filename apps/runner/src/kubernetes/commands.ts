@@ -1,7 +1,10 @@
 import { PassThrough } from "node:stream";
+import { ApiException, setHeaderOptions } from "@kubernetes/client-node";
 import type {
   ContainerInfo,
   ContainerProcess,
+  ExecCommandInput,
+  ExecCommandResult,
   GetContainerEventsInput,
   GetContainerInspectInput,
   GetContainerListInput,
@@ -9,6 +12,9 @@ import type {
   GetContainerProcessesInput,
   GetContainerStatsInput,
   GetEnvVariableNamesInput,
+  GetK8sRolloutStatusInput,
+  RestartContainerInput,
+  RestartServiceK8sResult,
 } from "@nightwatch/shared";
 import {
   getCoreV1Api,
@@ -22,6 +28,22 @@ import {
   notRunningResult,
   type NoRunningInstanceResult,
 } from "./resolve-service.js";
+
+// kubectl rollout restart sends this Content-Type so the server merges the
+// annotation into spec.template.metadata.annotations instead of interpreting
+// the body as a JSON Patch operation array (the client's default for PATCH).
+const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
+  "Content-Type",
+  "application/strategic-merge-patch+json",
+);
+
+// Distinguishes "this workload is not a Deployment, try StatefulSet next"
+// from a genuine failure (permissions, network) that must propagate as-is
+// (ADR-0002, user story 9) rather than being masked by the next attempt's
+// unrelated 404.
+function isNotFoundError(err: unknown): boolean {
+  return err instanceof ApiException && err.code === 404;
+}
 
 export async function getContainerList(
   input: GetContainerListInput,
@@ -225,6 +247,192 @@ export async function getEnvVariableNames(
   );
 
   return { names };
+}
+
+// Rollout restart (kubectl rollout restart equivalent): patches the
+// restartedAt annotation on the pod template so the controller rolls new
+// pods, instead of deleting pods directly and bypassing rollout machinery.
+export async function restartService(
+  input: RestartContainerInput,
+): Promise<RestartServiceK8sResult | NoRunningInstanceResult> {
+  const service = requireK8sIdentity(input.service);
+  const coreApi = getCoreV1Api();
+  const appsApi = getAppsV1Api();
+
+  // Restart is a write action on a live target (CONTEXT.md); a stopped
+  // instance is "nothing to act on", not a target to restart.
+  const resolved = await resolveWorkload(
+    coreApi,
+    appsApi,
+    service.namespace,
+    service.workload,
+  );
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+
+  const startedAt = new Date().toISOString();
+  const patchBody = {
+    spec: {
+      template: {
+        metadata: {
+          annotations: {
+            "kubectl.kubernetes.io/restartedAt": startedAt,
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    await appsApi.patchNamespacedDeployment(
+      {
+        name: service.workload,
+        namespace: service.namespace,
+        body: patchBody,
+      },
+      STRATEGIC_MERGE_PATCH_OPTIONS,
+    );
+    return { success: true, startedAt, resourceKind: "Deployment" };
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    // Not a Deployment; try StatefulSet.
+  }
+
+  await appsApi.patchNamespacedStatefulSet(
+    {
+      name: service.workload,
+      namespace: service.namespace,
+      body: patchBody,
+    },
+    STRATEGIC_MERGE_PATCH_OPTIONS,
+  );
+  return { success: true, startedAt, resourceKind: "StatefulSet" };
+}
+
+export async function execCommand(
+  input: ExecCommandInput,
+): Promise<ExecCommandResult | NoRunningInstanceResult> {
+  if (process.env["REMEDIATION_ENABLED"] !== "true") {
+    throw new Error(
+      "exec_command is disabled. Set REMEDIATION_ENABLED=true on the runner to enable.",
+    );
+  }
+
+  const service = requireK8sIdentity(input.service);
+  const coreApi = getCoreV1Api();
+  const appsApi = getAppsV1Api();
+
+  // Exec is a write action on a live target (CONTEXT.md); a stopped instance
+  // is "nothing to act on", not a degraded-but-usable target like logs/inspect.
+  const resolved = await resolveWorkload(
+    coreApi,
+    appsApi,
+    service.namespace,
+    service.workload,
+  );
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+
+  const [cmd, ...args] = input.command;
+  if (!cmd) throw new Error("command array must not be empty");
+
+  const executedAt = new Date().toISOString();
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  stdout.on("data", (d: Buffer) => stdoutChunks.push(d));
+  stderr.on("data", (d: Buffer) => stderrChunks.push(d));
+
+  let exitCode = 0;
+  await new Promise<void>((resolve, reject) => {
+    getExec()
+      .exec(
+        resolved.namespace,
+        resolved.podName,
+        resolved.containerName ?? "",
+        [cmd, ...args],
+        stdout,
+        stderr,
+        null,
+        false,
+        (status) => {
+          if (status.status === "Success") {
+            exitCode = 0;
+          } else if (status.reason === "NonZeroExitCode") {
+            // Non-zero exit is a normal result, not a protocol failure; the
+            // exit code travels in details.causes (ADR-0002: surface raw
+            // outcome rather than treating it as an error).
+            const cause = status.details?.causes?.find(
+              (c) => c.reason === "ExitCode",
+            );
+            const parsed = cause?.message ? parseInt(cause.message, 10) : NaN;
+            exitCode = Number.isNaN(parsed) ? 1 : parsed;
+          } else {
+            stdout.end();
+            stderr.end();
+            reject(new Error(status.message ?? "exec failed"));
+            return;
+          }
+          stdout.end();
+          stderr.end();
+          resolve();
+        },
+      )
+      .catch(reject);
+  });
+
+  return {
+    exitCode,
+    stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+    stderr: Buffer.concat(stderrChunks).toString("utf8"),
+    executedAt,
+  };
+}
+
+// Provider-specific (Kubernetes-only) read tool proving the providers hook
+// (ADR-0002): rollout state has no Docker equivalent, so it is never offered
+// to Docker-only fleets.
+export async function getRolloutStatus(
+  input: GetK8sRolloutStatusInput,
+): Promise<unknown | NoRunningInstanceResult> {
+  const service = requireK8sIdentity(input.service);
+  const appsApi = getAppsV1Api();
+
+  try {
+    const deploy = await appsApi.readNamespacedDeployment({
+      name: service.workload,
+      namespace: service.namespace,
+    });
+    return {
+      kind: "Deployment" as const,
+      name: deploy.metadata?.name,
+      replicas: deploy.spec?.replicas ?? 0,
+      readyReplicas: deploy.status?.readyReplicas ?? 0,
+      updatedReplicas: deploy.status?.updatedReplicas ?? 0,
+      availableReplicas: deploy.status?.availableReplicas ?? 0,
+      conditions: deploy.status?.conditions ?? [],
+    };
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    // Not a Deployment; try StatefulSet.
+  }
+
+  try {
+    const sts = await appsApi.readNamespacedStatefulSet({
+      name: service.workload,
+      namespace: service.namespace,
+    });
+    return {
+      kind: "StatefulSet" as const,
+      name: sts.metadata?.name,
+      replicas: sts.spec?.replicas ?? 0,
+      readyReplicas: sts.status?.readyReplicas ?? 0,
+      updatedReplicas: sts.status?.updatedReplicas ?? 0,
+      conditions: sts.status?.conditions ?? [],
+    };
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    return notRunningResult(input.service);
+  }
 }
 
 async function execInPod(

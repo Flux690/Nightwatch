@@ -42,10 +42,12 @@ export type {
   RiskLevel,
   RestartContainerInput,
   RestartContainerResult,
+  RestartServiceK8sResult,
   RollbackDeployInput,
   RollbackDeployResult,
   ExecCommandInput,
   ExecCommandResult,
+  GetK8sRolloutStatusInput,
 } from "./tools.js";
 export type {
   MessageDirection,

@@ -3,6 +3,8 @@ import { logger } from "../logger.js";
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolSchema } from "../llm/types.js";
 
+export type Provider = "docker" | "kubernetes";
+
 export interface ToolExecuteResult {
   content: unknown;
   is_error?: boolean;
@@ -16,14 +18,15 @@ export interface ToolExecuteContext {
 export interface Tool {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
-  providers: ("docker" | "kubernetes")[];
+  providers: Provider[];
   execute(
     input: Record<string, unknown>,
     ctx: ToolExecuteContext,
   ): Promise<ToolExecuteResult>;
 }
 
-const BOTH: ("docker" | "kubernetes")[] = ["docker", "kubernetes"];
+const BOTH: Provider[] = ["docker", "kubernetes"];
+const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
 
 // Accepts both Docker and Kubernetes service identities. Echo the identity
 // exactly as given in the alert or a prior get_container_list result - do not
@@ -432,6 +435,39 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
+      name: "get_k8s_rollout_status",
+      description:
+        "KUBERNETES ONLY: get the rollout status of a Deployment or StatefulSet - desired/ready/updated replica counts and conditions. Has no Docker equivalent; do not call with a docker service identity.",
+      input_schema: {
+        type: "object",
+        properties: {
+          service: {
+            type: "object",
+            properties: {
+              provider: { type: "string", enum: ["kubernetes"] },
+              namespace: {
+                type: "string",
+                description: "Kubernetes namespace the workload runs in.",
+              },
+              workload: {
+                type: "string",
+                description:
+                  "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
+              },
+            },
+            required: ["provider", "namespace", "workload"],
+          },
+        },
+        required: ["service"],
+      },
+    },
+    access: "read",
+    providers: KUBERNETES_ONLY,
+    execute: (input, ctx) =>
+      runnerExecute("get_k8s_rollout_status", input, ctx),
+  },
+  {
+    schema: {
       name: "read_file",
       description:
         "Read a file from the host filesystem (allowlisted paths only). Secrets are automatically redacted.",
@@ -583,6 +619,14 @@ export const TOOL_REGISTRY: Tool[] = [
   },
 ];
 
-export function getToolSchemas(): ToolSchema[] {
-  return TOOL_REGISTRY.map((t) => t.schema);
+// Provider-specific tools are offered only to fleets that include a matching
+// provider; agnostic tools (BOTH) pass for any fleet. Omitting the filter
+// shows every tool, regardless of fleet.
+export function getToolSchemas(
+  fleetProviders?: ReadonlySet<Provider>,
+): ToolSchema[] {
+  if (!fleetProviders) return TOOL_REGISTRY.map((t) => t.schema);
+  return TOOL_REGISTRY.filter((t) =>
+    t.providers.some((p) => fleetProviders.has(p)),
+  ).map((t) => t.schema);
 }

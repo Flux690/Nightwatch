@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 
 // Mock @kubernetes/client-node at the system boundary. vi.mock is hoisted, so
 // all factories reference only vi.hoisted() values.
@@ -14,13 +14,30 @@ vi.mock("@kubernetes/client-node", () => ({
   AppsV1Api: class AppsV1Api {},
   Metrics: MockMetrics,
   Exec: MockExec,
+  // setHeaderOptions is used by restartService to pass strategic-merge-patch
+  // Content-Type. The mock just returns its third arg (or {}) since patchNamespacedDeployment
+  // is itself mocked and never inspects the options.
+  setHeaderOptions: vi.fn().mockReturnValue({}),
+  // Real class (not a vi.fn) so `instanceof ApiException` works in
+  // restartService/getRolloutStatus's 404-vs-genuine-error distinction.
+  ApiException: class ApiException extends Error {
+    code: number;
+    constructor(code: number, message: string) {
+      super(message);
+      this.code = code;
+    }
+  },
 }));
 
+import { ApiException } from "@kubernetes/client-node";
 import {
   getContainerLogs,
   getContainerList,
   getContainerStats,
   getEnvVariableNames,
+  restartService,
+  execCommand as k8sExecCommand,
+  getRolloutStatus,
 } from "../kubernetes/commands.js";
 
 const K8S_SERVICE = {
@@ -67,6 +84,8 @@ describe("Kubernetes runner command handlers", () => {
   let mockAppsApi: {
     readNamespacedDeployment: ReturnType<typeof vi.fn>;
     readNamespacedStatefulSet: ReturnType<typeof vi.fn>;
+    patchNamespacedDeployment: ReturnType<typeof vi.fn>;
+    patchNamespacedStatefulSet: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -83,6 +102,8 @@ describe("Kubernetes runner command handlers", () => {
     mockAppsApi = {
       readNamespacedDeployment: vi.fn(),
       readNamespacedStatefulSet: vi.fn(),
+      patchNamespacedDeployment: vi.fn(),
+      patchNamespacedStatefulSet: vi.fn(),
     };
 
     MockKubeConfig.mockImplementation(function () {
@@ -282,6 +303,320 @@ describe("Kubernetes runner command handlers", () => {
         found: false,
         reason: expect.stringContaining("api-server"),
       });
+    });
+  });
+
+  describe("restartService (K8s rollout restart)", () => {
+    it("patches Deployment with restartedAt annotation when a live pod exists", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      mockAppsApi.patchNamespacedDeployment.mockResolvedValue({});
+
+      const result = await restartService({
+        service: K8S_SERVICE,
+        rationale: "service wedged",
+        risk: "low",
+        estimatedDowntimeSeconds: 5,
+      });
+
+      expect(mockAppsApi.patchNamespacedDeployment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: K8S_SERVICE.workload,
+          namespace: K8S_SERVICE.namespace,
+          body: expect.objectContaining({
+            spec: expect.objectContaining({
+              template: expect.objectContaining({
+                metadata: expect.objectContaining({
+                  annotations: expect.objectContaining({
+                    "kubectl.kubernetes.io/restartedAt": expect.any(String),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(result).toMatchObject({ success: true, resourceKind: "Deployment" });
+    });
+
+    it("patches StatefulSet when no Deployment exists for the workload", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
+        new ApiException(404, "deployments.apps not found", undefined, {}),
+      );
+      mockAppsApi.patchNamespacedStatefulSet.mockResolvedValue({});
+
+      const result = await restartService({
+        service: K8S_SERVICE,
+        rationale: "service wedged",
+        risk: "low",
+        estimatedDowntimeSeconds: 5,
+      });
+
+      expect(mockAppsApi.patchNamespacedStatefulSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: K8S_SERVICE.workload,
+          namespace: K8S_SERVICE.namespace,
+        }),
+        expect.anything(),
+      );
+      expect(result).toMatchObject({ success: true, resourceKind: "StatefulSet" });
+    });
+
+    it("returns not-running finding when no live pod exists", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [TERMINATED_POD] });
+
+      const result = await restartService({
+        service: K8S_SERVICE,
+        rationale: "service wedged",
+        risk: "low",
+        estimatedDowntimeSeconds: 5,
+      });
+
+      expect(result).toEqual({
+        found: false,
+        reason: expect.stringContaining("api-server"),
+      });
+      expect(mockAppsApi.patchNamespacedDeployment).not.toHaveBeenCalled();
+    });
+
+    it("propagates a genuine StatefulSet error when neither resource patches cleanly", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
+        new ApiException(404, "deployments.apps not found", undefined, {}),
+      );
+      mockAppsApi.patchNamespacedStatefulSet.mockRejectedValue(
+        new Error("forbidden: patch access denied"),
+      );
+
+      await expect(
+        restartService({
+          service: K8S_SERVICE,
+          rationale: "test",
+          risk: "low",
+          estimatedDowntimeSeconds: 0,
+        }),
+      ).rejects.toThrow("forbidden: patch access denied");
+    });
+
+    it("propagates a genuine Deployment error immediately, without masking it by trying StatefulSet", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      // The workload IS a Deployment, but the patch fails for a real reason
+      // (not 404). Falling through to StatefulSet here would surface a
+      // misleading "statefulsets.apps not found" instead of this error.
+      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
+        new Error("forbidden: patch access denied"),
+      );
+
+      await expect(
+        restartService({
+          service: K8S_SERVICE,
+          rationale: "test",
+          risk: "low",
+          estimatedDowntimeSeconds: 0,
+        }),
+      ).rejects.toThrow("forbidden: patch access denied");
+      expect(mockAppsApi.patchNamespacedStatefulSet).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("execCommand (K8s pod exec)", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("returns stdout, stderr, and exitCode 0 for a successful command", async () => {
+      vi.stubEnv("REMEDIATION_ENABLED", "true");
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+
+      MockExec.mockImplementation(function () {
+        return {
+          exec: vi.fn().mockImplementation(
+            (
+              _ns: string,
+              _pod: string,
+              _container: string,
+              _cmd: string[],
+              stdout: NodeJS.WritableStream,
+              stderr: NodeJS.WritableStream,
+              _stdin: null,
+              _tty: boolean,
+              statusCallback: (s: { status: string }) => void,
+            ) => {
+              stdout.write("hello world\n");
+              stderr.write("");
+              statusCallback({ status: "Success" });
+              return Promise.resolve({} as WebSocket);
+            },
+          ),
+        };
+      });
+
+      const result = await k8sExecCommand({
+        service: K8S_SERVICE,
+        command: ["echo", "hello world"],
+        reason: "test",
+        risk: "low",
+      });
+
+      expect(result).toMatchObject({ exitCode: 0, stdout: "hello world\n" });
+    });
+
+    it("returns non-zero exit code for a failed command", async () => {
+      vi.stubEnv("REMEDIATION_ENABLED", "true");
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+
+      MockExec.mockImplementation(function () {
+        return {
+          exec: vi.fn().mockImplementation(
+            (
+              _ns: string,
+              _pod: string,
+              _container: string,
+              _cmd: string[],
+              _stdout: NodeJS.WritableStream,
+              _stderr: NodeJS.WritableStream,
+              _stdin: null,
+              _tty: boolean,
+              statusCallback: (s: {
+                status: string;
+                reason?: string;
+                details?: { causes?: Array<{ reason?: string; message?: string }> };
+              }) => void,
+            ) => {
+              statusCallback({
+                status: "Failure",
+                reason: "NonZeroExitCode",
+                details: { causes: [{ reason: "ExitCode", message: "2" }] },
+              });
+              return Promise.resolve({} as WebSocket);
+            },
+          ),
+        };
+      });
+
+      const result = await k8sExecCommand({
+        service: K8S_SERVICE,
+        command: ["grep", "nonexistent", "/dev/null"],
+        reason: "test",
+        risk: "low",
+      });
+
+      expect(result).toMatchObject({ exitCode: 2 });
+    });
+
+    it("returns not-running finding when no live pod exists", async () => {
+      vi.stubEnv("REMEDIATION_ENABLED", "true");
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [TERMINATED_POD] });
+
+      const result = await k8sExecCommand({
+        service: K8S_SERVICE,
+        command: ["ls"],
+        reason: "test",
+        risk: "low",
+      });
+
+      expect(result).toEqual({
+        found: false,
+        reason: expect.stringContaining("api-server"),
+      });
+    });
+
+    it("throws when REMEDIATION_ENABLED is not set to true", async () => {
+      vi.stubEnv("REMEDIATION_ENABLED", "false");
+
+      await expect(
+        k8sExecCommand({
+          service: K8S_SERVICE,
+          command: ["ls"],
+          reason: "test",
+          risk: "low",
+        }),
+      ).rejects.toThrow("exec_command is disabled");
+    });
+  });
+
+  describe("getRolloutStatus (K8s-only)", () => {
+    it("returns Deployment rollout status when the workload is a Deployment", async () => {
+      mockAppsApi.readNamespacedDeployment.mockResolvedValue({
+        metadata: { name: K8S_SERVICE.workload },
+        spec: { replicas: 2 },
+        status: {
+          readyReplicas: 2,
+          updatedReplicas: 2,
+          availableReplicas: 2,
+          conditions: [],
+        },
+      });
+
+      const result = await getRolloutStatus({ service: K8S_SERVICE });
+
+      expect(result).toMatchObject({
+        kind: "Deployment",
+        replicas: 2,
+        readyReplicas: 2,
+      });
+      expect(mockAppsApi.readNamespacedDeployment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: K8S_SERVICE.workload,
+          namespace: K8S_SERVICE.namespace,
+        }),
+      );
+    });
+
+    it("falls back to StatefulSet when no Deployment exists", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
+        new ApiException(404, "not found", undefined, {}),
+      );
+      mockAppsApi.readNamespacedStatefulSet.mockResolvedValue({
+        metadata: { name: K8S_SERVICE.workload },
+        spec: { replicas: 3 },
+        status: { readyReplicas: 3, updatedReplicas: 3 },
+      });
+
+      const result = await getRolloutStatus({ service: K8S_SERVICE });
+
+      expect(result).toMatchObject({ kind: "StatefulSet", replicas: 3 });
+    });
+
+    it("returns not-running finding when neither Deployment nor StatefulSet exists", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
+        new ApiException(404, "not found", undefined, {}),
+      );
+      mockAppsApi.readNamespacedStatefulSet.mockRejectedValue(
+        new ApiException(404, "not found", undefined, {}),
+      );
+
+      const result = await getRolloutStatus({ service: K8S_SERVICE });
+
+      expect(result).toEqual({
+        found: false,
+        reason: expect.stringContaining("api-server"),
+      });
+    });
+
+    it("propagates a genuine Deployment error immediately, without masking it by trying StatefulSet", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
+        new Error("connection refused to kubernetes API server"),
+      );
+
+      await expect(getRolloutStatus({ service: K8S_SERVICE })).rejects.toThrow(
+        "connection refused to kubernetes API server",
+      );
+      expect(mockAppsApi.readNamespacedStatefulSet).not.toHaveBeenCalled();
+    });
+
+    it("propagates a genuine StatefulSet error when neither resource reads cleanly", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
+        new ApiException(404, "not found", undefined, {}),
+      );
+      mockAppsApi.readNamespacedStatefulSet.mockRejectedValue(
+        new Error("forbidden: get access denied"),
+      );
+
+      await expect(getRolloutStatus({ service: K8S_SERVICE })).rejects.toThrow(
+        "forbidden: get access denied",
+      );
     });
   });
 });

@@ -1,6 +1,6 @@
 import { buildInitialContext, buildChatContext } from "./context.js";
 import { TOOL_REGISTRY, getToolSchemas } from "./tools.js";
-import type { Tool, ToolExecuteContext } from "./tools.js";
+import type { Provider, Tool, ToolExecuteContext } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import {
@@ -18,7 +18,7 @@ import {
   publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
-import { getRunnerManifestForAlert } from "../ws/router.js";
+import { getRunnerManifestForAlert, listRunners } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
@@ -62,6 +62,37 @@ function persistNewTurns(
   }
   for (const message of newMessages) publishRunFinished(sessionId, message);
   return snap.length;
+}
+
+// The providers filter (ADR-0002) is keyed on the whole connected fleet, not
+// just the alerting runner - a mixed-fleet investigation (user story 7) may
+// still call agnostic tools against a sibling runner of either provider.
+// Returns undefined (no filter, every tool shown) when no runner has reported
+// a manifest yet, so a quiet fleet never hides tools the agent could need.
+function currentFleetProviders(): ReadonlySet<Provider> | undefined {
+  const providers = new Set<Provider>();
+  for (const runner of listRunners()) {
+    if (!runner.manifest) continue;
+    if (runner.manifest.capabilities.docker) providers.add("docker");
+    if (runner.manifest.capabilities.kubernetes) providers.add("kubernetes");
+  }
+  return providers.size > 0 ? providers : undefined;
+}
+
+// Returns the service's provider string if it does not match the tool's
+// declared providers (e.g. a Kubernetes-only tool called with a docker
+// identity), so the model gets a corrective error instead of acting on the
+// wrong provider (ADR-0002, user story 19). Tools with no `service` input,
+// or a provider value the tool does support, are never mismatched.
+function mismatchedServiceProvider(
+  input: Record<string, unknown>,
+  entry: Tool,
+): string | null {
+  const service = input["service"];
+  if (typeof service !== "object" || service === null) return null;
+  const provider = (service as Record<string, unknown>)["provider"]; // typeof guard above confirms object shape
+  if (typeof provider !== "string") return null;
+  return entry.providers.some((p) => p === provider) ? null : provider;
 }
 
 export interface RunInvestigationInput {
@@ -160,6 +191,7 @@ export async function runInvestigation(
   let toolCallCount = 0;
   let turn = 0;
   const deadline = Date.now() + config.hardTimeoutMs;
+  const fleetProviders = currentFleetProviders();
 
   while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
     turn++;
@@ -167,7 +199,7 @@ export async function runInvestigation(
     let response: ChatResponse;
     try {
       response = await provider.chat(
-        getToolSchemas(),
+        getToolSchemas(fleetProviders),
         (d) => publishTextMessageContent(sessionId, d),
         signal,
       );
@@ -230,6 +262,20 @@ export async function runInvestigation(
         toolResults.push({
           tool_use_id: tool.id,
           content: `Unknown tool "${tool.name}". Platform configuration error. Do not retry.`,
+          is_error: true,
+        });
+        continue;
+      }
+
+      const mismatchedProvider = mismatchedServiceProvider(tool.input, entry);
+      if (mismatchedProvider) {
+        log.warn(
+          { tool: tool.name, provider: mismatchedProvider },
+          "provider-specific tool called with mismatched service identity",
+        );
+        toolResults.push({
+          tool_use_id: tool.id,
+          content: `Provider mismatch: "${tool.name}" only supports [${entry.providers.join(", ")}], but was called with a "${mismatchedProvider}" service identity. Echo the service identity as received; use an agnostic tool, or a tool matching that provider, instead. Do not retry this call as-is.`,
           is_error: true,
         });
         continue;

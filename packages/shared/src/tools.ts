@@ -234,6 +234,14 @@ export interface RestartContainerResult {
   newStatus: string;
 }
 
+// Kubernetes restart is a rollout restart (annotation patch), not a container
+// restart, so it has no exit code or container status to report.
+export interface RestartServiceK8sResult {
+  success: boolean;
+  startedAt: string;
+  resourceKind: "Deployment" | "StatefulSet";
+}
+
 export interface RollbackDeployInput {
   service: ServiceIdentity;
   targetImageDigest: string;
@@ -259,4 +267,10 @@ export interface ExecCommandResult {
   stdout: string;
   stderr: string;
   executedAt: string;
+}
+
+// Kubernetes-only: provider-specific tool (ADR-0002 providers hook). Not
+// offered to Docker-only fleets.
+export interface GetK8sRolloutStatusInput {
+  service: ServiceIdentity;
 }

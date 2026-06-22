@@ -15,6 +15,9 @@ import {
   getContainerEvents as k8sGetContainerEvents,
   getContainerProcesses as k8sGetContainerProcesses,
   getEnvVariableNames as k8sGetEnvVariableNames,
+  restartService as k8sRestartService,
+  execCommand as k8sExecCommand,
+  getRolloutStatus as k8sGetRolloutStatus,
 } from "../kubernetes/commands.js";
 import {
   getHostMemory,
@@ -39,6 +42,9 @@ import type {
   GetContainerEventsInput,
   GetContainerProcessesInput,
   GetEnvVariableNamesInput,
+  ExecCommandInput,
+  GetK8sRolloutStatusInput,
+  RestartContainerInput,
 } from "@nightwatch/shared";
 
 type Handler = (input: unknown) => Promise<unknown>;
@@ -122,7 +128,10 @@ export function createDispatchRegistry(): Map<string, Handler> {
     ],
     [
       "restart_container",
-      (i) => restartContainer(i as Parameters<typeof restartContainer>[0]),
+      (i) =>
+        serviceProvider(i) === "kubernetes"
+          ? k8sRestartService(i as RestartContainerInput)
+          : restartContainer(i as RestartContainerInput),
     ],
     [
       "rollback_deploy",
@@ -130,7 +139,14 @@ export function createDispatchRegistry(): Map<string, Handler> {
     ],
     [
       "exec_command",
-      (i) => execCommand(i as Parameters<typeof execCommand>[0]),
+      (i) =>
+        serviceProvider(i) === "kubernetes"
+          ? k8sExecCommand(i as ExecCommandInput)
+          : execCommand(i as ExecCommandInput),
+    ],
+    [
+      "get_k8s_rollout_status",
+      (i) => k8sGetRolloutStatus(i as GetK8sRolloutStatusInput),
     ],
     ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
   ]);
