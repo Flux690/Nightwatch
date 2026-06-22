@@ -1,12 +1,21 @@
 import {
-  getContainerList,
-  getContainerLogs,
-  getContainerInspect,
-  getContainerStats,
-  getContainerEvents,
-  getContainerProcesses,
-  getEnvVariableNames,
+  getContainerList as dockerGetContainerList,
+  getContainerLogs as dockerGetContainerLogs,
+  getContainerInspect as dockerGetContainerInspect,
+  getContainerStats as dockerGetContainerStats,
+  getContainerEvents as dockerGetContainerEvents,
+  getContainerProcesses as dockerGetContainerProcesses,
+  getEnvVariableNames as dockerGetEnvVariableNames,
 } from "./container.js";
+import {
+  getContainerList as k8sGetContainerList,
+  getContainerLogs as k8sGetContainerLogs,
+  getContainerInspect as k8sGetContainerInspect,
+  getContainerStats as k8sGetContainerStats,
+  getContainerEvents as k8sGetContainerEvents,
+  getContainerProcesses as k8sGetContainerProcesses,
+  getEnvVariableNames as k8sGetEnvVariableNames,
+} from "../kubernetes/commands.js";
 import {
   getHostMemory,
   getHostCpu,
@@ -22,41 +31,77 @@ import {
   execCommand,
   updateAlertRules,
 } from "./remediation.js";
+import type {
+  GetContainerListInput,
+  GetContainerLogsInput,
+  GetContainerInspectInput,
+  GetContainerStatsInput,
+  GetContainerEventsInput,
+  GetContainerProcessesInput,
+  GetEnvVariableNamesInput,
+} from "@nightwatch/shared";
 
 type Handler = (input: unknown) => Promise<unknown>;
+
+function serviceProvider(input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const svc = (input as Record<string, unknown>)["service"];
+  if (typeof svc !== "object" || svc === null) return undefined;
+  return (svc as Record<string, unknown>)["provider"] as string | undefined;
+}
 
 export function createDispatchRegistry(): Map<string, Handler> {
   return new Map<string, Handler>([
     [
       "get_container_list",
-      (i) => getContainerList(i as Parameters<typeof getContainerList>[0]),
+      (i) => {
+        const input = i as GetContainerListInput;
+        return input.environment === "kubernetes"
+          ? k8sGetContainerList(input)
+          : dockerGetContainerList(input);
+      },
     ],
     [
       "get_container_logs",
-      (i) => getContainerLogs(i as Parameters<typeof getContainerLogs>[0]),
+      (i) =>
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetContainerLogs(i as GetContainerLogsInput)
+          : dockerGetContainerLogs(i as GetContainerLogsInput),
     ],
     [
       "get_container_inspect",
       (i) =>
-        getContainerInspect(i as Parameters<typeof getContainerInspect>[0]),
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetContainerInspect(i as GetContainerInspectInput)
+          : dockerGetContainerInspect(i as GetContainerInspectInput),
     ],
     [
       "get_container_stats",
-      (i) => getContainerStats(i as Parameters<typeof getContainerStats>[0]),
+      (i) =>
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetContainerStats(i as GetContainerStatsInput)
+          : dockerGetContainerStats(i as GetContainerStatsInput),
     ],
     [
       "get_container_events",
-      (i) => getContainerEvents(i as Parameters<typeof getContainerEvents>[0]),
+      (i) =>
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetContainerEvents(i as GetContainerEventsInput)
+          : dockerGetContainerEvents(i as GetContainerEventsInput),
     ],
     [
       "get_container_processes",
       (i) =>
-        getContainerProcesses(i as Parameters<typeof getContainerProcesses>[0]),
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetContainerProcesses(i as GetContainerProcessesInput)
+          : dockerGetContainerProcesses(i as GetContainerProcessesInput),
     ],
     [
       "get_env_variable_names",
       (i) =>
-        getEnvVariableNames(i as Parameters<typeof getEnvVariableNames>[0]),
+        serviceProvider(i) === "kubernetes"
+          ? k8sGetEnvVariableNames(i as GetEnvVariableNamesInput)
+          : dockerGetEnvVariableNames(i as GetEnvVariableNamesInput),
     ],
     ["get_host_memory", () => getHostMemory()],
     ["get_host_cpu", () => getHostCpu()],

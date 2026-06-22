@@ -99,6 +99,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
+        kubernetes: false,
         services: [
           { provider: "docker", project: "svc-01", service: "svc-01" },
         ],

@@ -25,25 +25,45 @@ export interface Tool {
 
 const BOTH: ("docker" | "kubernetes")[] = ["docker", "kubernetes"];
 
-// Docker-only shape for now (issue scoped to Docker; ADR-0001 reserves the
-// `namespace`/`workload` arm for Kubernetes). Echo the identity exactly as
-// given in the alert or a prior get_container_list result - do not guess.
+// Accepts both Docker and Kubernetes service identities. Echo the identity
+// exactly as given in the alert or a prior get_container_list result - do not
+// guess. Provider is an opaque part of the handle (ADR-0001, ADR-0002).
 const SERVICE_IDENTITY_SCHEMA = {
-  type: "object",
-  properties: {
-    provider: { type: "string", enum: ["docker"] },
-    project: {
-      type: "string",
-      description:
-        "Compose project name (or the container's own name if it has no Compose labels).",
+  oneOf: [
+    {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["docker"] },
+        project: {
+          type: "string",
+          description:
+            "Compose project name (or the container's own name if it has no Compose labels).",
+        },
+        service: {
+          type: "string",
+          description:
+            "Compose service name (or the container's own name if it has no Compose labels).",
+        },
+      },
+      required: ["provider", "project", "service"],
     },
-    service: {
-      type: "string",
-      description:
-        "Compose service name (or the container's own name if it has no Compose labels).",
+    {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["kubernetes"] },
+        namespace: {
+          type: "string",
+          description: "Kubernetes namespace the workload runs in.",
+        },
+        workload: {
+          type: "string",
+          description:
+            "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
+        },
+      },
+      required: ["provider", "namespace", "workload"],
     },
-  },
-  required: ["provider", "project", "service"],
+  ],
 } as const;
 
 async function runnerExecute(

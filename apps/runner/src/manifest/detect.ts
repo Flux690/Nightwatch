@@ -6,13 +6,15 @@ import {
   type ServiceIdentity,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
+import { getCoreV1Api } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
 
 const RUNNER_VERSION = "0.2.0";
 
 export async function detectCapabilities(): Promise<CapabilityManifest> {
-  const [docker, prometheusAvailable] = await Promise.all([
+  const [docker, kubernetes, prometheusAvailable] = await Promise.all([
     detectDocker(),
+    detectKubernetes(),
     detectPrometheus(),
   ]);
 
@@ -25,7 +27,8 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     runnerVersion: RUNNER_VERSION,
     capabilities: {
       docker: docker.available,
-      services: docker.services,
+      kubernetes: kubernetes.available,
+      services: [...docker.services, ...kubernetes.services],
       prometheus: prometheusAvailable
         ? { available: true, endpoint: prometheusEndpoint }
         : { available: false },
@@ -57,6 +60,36 @@ async function detectDocker(): Promise<{
       const name = (c.Names[0] ?? "").replace(/^\//, "");
       const identity = deriveDockerServiceIdentity(c.Labels, name);
       byKey.set(serviceIdentityKey(identity), identity);
+    }
+    return { available: true, services: [...byKey.values()] };
+  } catch {
+    return { available: false, services: [] };
+  }
+}
+
+async function detectKubernetes(): Promise<{
+  available: boolean;
+  services: ServiceIdentity[];
+}> {
+  try {
+    const coreApi = getCoreV1Api();
+    // List all pods across all namespaces to discover services.
+    const podList = await coreApi.listNamespacedPod({ namespace: "default" });
+    const byKey = new Map<string, ServiceIdentity>();
+    for (const pod of podList.items) {
+      const ns = pod.metadata?.namespace ?? "default";
+      const workload =
+        pod.metadata?.labels?.["app.kubernetes.io/name"] ??
+        pod.metadata?.labels?.["app"] ??
+        pod.metadata?.name ??
+        "";
+      if (!workload) continue;
+      const identity: ServiceIdentity = {
+        provider: "kubernetes",
+        namespace: ns,
+        workload,
+      };
+      byKey.set(`${ns}/${workload}`, identity);
     }
     return { available: true, services: [...byKey.values()] };
   } catch {

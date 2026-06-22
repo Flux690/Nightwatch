@@ -82,6 +82,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
+        kubernetes: false,
         services: [
           { provider: "docker", project: "web-01", service: "web-01" },
         ],

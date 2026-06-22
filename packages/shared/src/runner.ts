@@ -6,6 +6,7 @@ export interface CapabilityManifest {
   runnerVersion: string;
   capabilities: {
     docker: boolean;
+    kubernetes: boolean;
     services: ServiceIdentity[];
     prometheus: { available: boolean; endpoint?: string };
     postgres: { available: boolean; via?: string };
