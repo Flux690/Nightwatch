@@ -16,7 +16,12 @@ vi.mock("@kubernetes/client-node", () => ({
   Exec: MockExec,
 }));
 
-import { getContainerLogs, getContainerList } from "../kubernetes/commands.js";
+import {
+  getContainerLogs,
+  getContainerList,
+  getContainerStats,
+  getEnvVariableNames,
+} from "../kubernetes/commands.js";
 
 const K8S_SERVICE = {
   provider: "kubernetes" as const,
@@ -204,6 +209,79 @@ describe("Kubernetes runner command handlers", () => {
           namespace: "production",
         }),
       );
+    });
+  });
+
+  describe("getContainerStats", () => {
+    it("returns a not-running finding for a terminated pod", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [TERMINATED_POD],
+      });
+
+      const result = await getContainerStats({ service: K8S_SERVICE });
+
+      expect(result).toEqual({
+        found: false,
+        reason: expect.stringContaining("api-server"),
+      });
+    });
+
+    it("returns metrics from the metrics-server for a live pod", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [RUNNING_POD],
+      });
+      const mockPodMetric = {
+        metadata: { name: RUNNING_POD.metadata.name },
+        containers: [{ name: "api-server", usage: { cpu: "50m", memory: "128Mi" } }],
+      };
+      MockMetrics.mockImplementation(function () {
+        return {
+          getPodMetrics: vi
+            .fn()
+            .mockResolvedValue({ items: [mockPodMetric] }),
+        };
+      });
+
+      const result = await getContainerStats({ service: K8S_SERVICE });
+
+      expect(result).toMatchObject({
+        podName: RUNNING_POD.metadata.name,
+        podMetric: expect.objectContaining({ metadata: { name: RUNNING_POD.metadata.name } }),
+      });
+    });
+  });
+
+  describe("getEnvVariableNames", () => {
+    it("returns env variable names from the pod spec without values", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [RUNNING_POD],
+      });
+      mockCoreApi.readNamespacedPod.mockResolvedValue({
+        metadata: { name: RUNNING_POD.metadata.name, namespace: "production" },
+        spec: {
+          containers: [
+            {
+              name: "api-server",
+              env: [{ name: "PORT" }, { name: "NODE_ENV" }, { name: "DB_URL" }],
+            },
+          ],
+        },
+      });
+
+      const result = await getEnvVariableNames({ service: K8S_SERVICE });
+
+      expect(result).toEqual({ names: ["PORT", "NODE_ENV", "DB_URL"] });
+    });
+
+    it("returns a not-running finding when no pods exist", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [] });
+
+      const result = await getEnvVariableNames({ service: K8S_SERVICE });
+
+      expect(result).toEqual({
+        found: false,
+        reason: expect.stringContaining("api-server"),
+      });
     });
   });
 });

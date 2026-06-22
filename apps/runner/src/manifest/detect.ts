@@ -73,8 +73,7 @@ async function detectKubernetes(): Promise<{
 }> {
   try {
     const coreApi = getCoreV1Api();
-    // List all pods across all namespaces to discover services.
-    const podList = await coreApi.listNamespacedPod({ namespace: "default" });
+    const podList = await coreApi.listPodForAllNamespaces();
     const byKey = new Map<string, ServiceIdentity>();
     for (const pod of podList.items) {
       const ns = pod.metadata?.namespace ?? "default";

@@ -45,9 +45,10 @@ type Handler = (input: unknown) => Promise<unknown>;
 
 function serviceProvider(input: unknown): string | undefined {
   if (typeof input !== "object" || input === null) return undefined;
-  const svc = (input as Record<string, unknown>)["service"];
+  const svc = (input as Record<string, unknown>)["service"]; // typeof guard above confirms object shape
   if (typeof svc !== "object" || svc === null) return undefined;
-  return (svc as Record<string, unknown>)["provider"] as string | undefined;
+  const provider = (svc as Record<string, unknown>)["provider"]; // same reason
+  return typeof provider === "string" ? provider : undefined;
 }
 
 export function createDispatchRegistry(): Map<string, Handler> {

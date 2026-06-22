@@ -57,8 +57,11 @@ export async function resolveWorkload(
   const chosen =
     livePods.length > 0 ? newestPod(livePods) : newestPod(podList.items);
 
+  const podName = chosen.metadata?.name ?? "";
+  if (!podName) return null;
+
   return {
-    podName: chosen.metadata?.name ?? "",
+    podName,
     namespace,
     containerName: chosen.spec?.containers?.[0]?.name,
     live: chosen.status?.phase === "Running",
@@ -75,8 +78,7 @@ async function getWorkloadSelector(
       name: workload,
       namespace,
     });
-    const labels = deployment.spec?.selector?.matchLabels ?? {};
-    const sel = labelSelectorString(labels);
+    const sel = labelSelectorString(deployment.spec?.selector ?? {});
     if (sel) return sel;
   } catch {
     // Not a Deployment; try StatefulSet.
@@ -87,8 +89,7 @@ async function getWorkloadSelector(
       name: workload,
       namespace,
     });
-    const labels = sts.spec?.selector?.matchLabels ?? {};
-    const sel = labelSelectorString(labels);
+    const sel = labelSelectorString(sts.spec?.selector ?? {});
     if (sel) return sel;
   } catch {
     // Not a StatefulSet either.
@@ -97,10 +98,31 @@ async function getWorkloadSelector(
   return `app=${workload}`;
 }
 
-function labelSelectorString(labels: Record<string, string>): string {
-  return Object.entries(labels)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(",");
+function labelSelectorString(selector: k8s.V1LabelSelector): string {
+  const parts: string[] = [];
+
+  for (const [k, v] of Object.entries(selector.matchLabels ?? {})) {
+    parts.push(`${k}=${v}`);
+  }
+
+  for (const expr of selector.matchExpressions ?? []) {
+    switch (expr.operator) {
+      case "In":
+        parts.push(`${expr.key} in (${(expr.values ?? []).join(",")})`);
+        break;
+      case "NotIn":
+        parts.push(`${expr.key} notin (${(expr.values ?? []).join(",")})`);
+        break;
+      case "Exists":
+        parts.push(expr.key);
+        break;
+      case "DoesNotExist":
+        parts.push(`!${expr.key}`);
+        break;
+    }
+  }
+
+  return parts.join(",");
 }
 
 function newestPod(pods: k8s.V1Pod[]): k8s.V1Pod {

@@ -206,7 +206,7 @@ export const TOOL_REGISTRY: Tool[] = [
     schema: {
       name: "get_container_stats",
       description:
-        "Get real-time CPU%, memory usage/limit/%, network I/O, block I/O, and PID count for a container.",
+        "Get real-time resource usage for a container: CPU, memory, network I/O, and block I/O. Docker returns percentages; Kubernetes returns raw quantified values (e.g. 100m cores, 128Mi).",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -221,7 +221,7 @@ export const TOOL_REGISTRY: Tool[] = [
     schema: {
       name: "get_container_events",
       description:
-        "Get Docker events (start, stop, restart, oom, die, health_status) for a container over the last N minutes.",
+        "Get lifecycle events for a container. Docker returns daemon events (start, stop, oom, die). Kubernetes returns cluster events (Pulled, BackOff, OOMKilling, etc.).",
       input_schema: {
         type: "object",
         properties: {

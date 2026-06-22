@@ -51,7 +51,11 @@ export async function getContainerList(
       imageTag: parseImageTag(pod.spec?.containers?.[0]?.image ?? ""),
       status: pod.status?.phase ?? "Unknown",
       restartCount: sumRestartCounts(pod),
-      uptimeSeconds: 0,
+      uptimeSeconds: pod.status?.startTime
+        ? Math.floor(
+            (Date.now() - new Date(pod.status.startTime).getTime()) / 1000,
+          )
+        : 0,
       healthStatus: pod.status?.phase === "Running" ? "healthy" : "unknown",
     };
   });
@@ -79,12 +83,15 @@ export async function getContainerLogs(
     namespace: resolved.namespace,
     container: resolved.containerName,
     tailLines: input.tailLines ?? 200,
+    // K8s merges stdout and stderr; stderrOnly is not supported by the API.
     ...(input.sinceTimestamp !== undefined && {
-      sinceSeconds: Math.floor(
-        (Date.now() - new Date(input.sinceTimestamp).getTime()) / 1000,
+      sinceSeconds: Math.max(
+        1,
+        Math.floor(
+          (Date.now() - new Date(input.sinceTimestamp).getTime()) / 1000,
+        ),
       ),
     }),
-    ...(input.stderrOnly === true && { timestamps: false }),
   });
 
   const lines = log.split("\n").filter(Boolean);
@@ -213,8 +220,8 @@ export async function getEnvVariableNames(
     namespace: resolved.namespace,
   });
 
-  const names = (pod.spec?.containers ?? []).flatMap(
-    (c) => (c.env ?? []).map((e) => e.name).filter(Boolean) as string[],
+  const names = (pod.spec?.containers ?? []).flatMap((c) =>
+    (c.env ?? []).flatMap((e) => (e.name ? [e.name] : [])),
   );
 
   return { names };
