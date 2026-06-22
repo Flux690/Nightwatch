@@ -6,7 +6,7 @@ import {
   type ServiceIdentity,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
-import { getCoreV1Api } from "../kubernetes-client.js";
+import { getAppsV1Api } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
 
 const RUNNER_VERSION = "0.2.0";
@@ -72,23 +72,18 @@ async function detectKubernetes(): Promise<{
   services: ServiceIdentity[];
 }> {
   try {
-    const coreApi = getCoreV1Api();
-    const podList = await coreApi.listPodForAllNamespaces();
+    const appsApi = getAppsV1Api();
+    const [deployments, statefulSets] = await Promise.all([
+      appsApi.listDeploymentForAllNamespaces(),
+      appsApi.listStatefulSetForAllNamespaces(),
+    ]);
+
     const byKey = new Map<string, ServiceIdentity>();
-    for (const pod of podList.items) {
-      const ns = pod.metadata?.namespace ?? "default";
-      const workload =
-        pod.metadata?.labels?.["app.kubernetes.io/name"] ??
-        pod.metadata?.labels?.["app"] ??
-        pod.metadata?.name ??
-        "";
+    for (const item of [...deployments.items, ...statefulSets.items]) {
+      const ns = item.metadata?.namespace ?? "default";
+      const workload = item.metadata?.name ?? "";
       if (!workload) continue;
-      const identity: ServiceIdentity = {
-        provider: "kubernetes",
-        namespace: ns,
-        workload,
-      };
-      byKey.set(`${ns}/${workload}`, identity);
+      byKey.set(`${ns}/${workload}`, { provider: "kubernetes", namespace: ns, workload });
     }
     return { available: true, services: [...byKey.values()] };
   } catch {

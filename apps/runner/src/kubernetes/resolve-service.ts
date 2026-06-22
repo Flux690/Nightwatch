@@ -49,6 +49,7 @@ export async function resolveWorkload(
   workload: string,
 ): Promise<ResolvedK8sPod | null> {
   const labelSelector = await getWorkloadSelector(appsApi, namespace, workload);
+  if (labelSelector === null) return null;
   const podList = await coreApi.listNamespacedPod({ namespace, labelSelector });
 
   if (podList.items.length === 0) return null;
@@ -72,7 +73,7 @@ async function getWorkloadSelector(
   appsApi: k8s.AppsV1Api,
   namespace: string,
   workload: string,
-): Promise<string> {
+): Promise<string | null> {
   try {
     const deployment = await appsApi.readNamespacedDeployment({
       name: workload,
@@ -95,7 +96,9 @@ async function getWorkloadSelector(
     // Not a StatefulSet either.
   }
 
-  return `app=${workload}`;
+  // The workload is neither a Deployment nor a StatefulSet; caller returns null
+  // which surfaces as a not-running finding rather than a guessed selector.
+  return null;
 }
 
 function labelSelectorString(selector: k8s.V1LabelSelector): string {
