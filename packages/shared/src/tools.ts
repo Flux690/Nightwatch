@@ -242,20 +242,6 @@ export interface RestartServiceK8sResult {
   resourceKind: "Deployment" | "StatefulSet";
 }
 
-export interface RollbackDeployInput {
-  service: ServiceIdentity;
-  targetImageDigest: string;
-  rationale: string;
-  risk: RiskLevel;
-  estimatedDowntimeSeconds: number;
-}
-export interface RollbackDeployResult {
-  success: boolean;
-  previousImage: string;
-  newImage: string;
-  restartedAt: string;
-}
-
 export interface ExecCommandInput {
   service: ServiceIdentity;
   command: string[];

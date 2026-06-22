@@ -30,7 +30,6 @@ import { getRecentDeploys } from "./deploy.js";
 import { readFileCommand } from "./files.js";
 import {
   restartContainer,
-  rollbackDeploy,
   execCommand,
   updateAlertRules,
 } from "./remediation.js";
@@ -132,10 +131,6 @@ export function createDispatchRegistry(): Map<string, Handler> {
         serviceProvider(i) === "kubernetes"
           ? k8sRestartService(i as RestartContainerInput)
           : restartContainer(i as RestartContainerInput),
-    ],
-    [
-      "rollback_deploy",
-      (i) => rollbackDeploy(i as Parameters<typeof rollbackDeploy>[0]),
     ],
     [
       "exec_command",

@@ -43,8 +43,6 @@ export type {
   RestartContainerInput,
   RestartContainerResult,
   RestartServiceK8sResult,
-  RollbackDeployInput,
-  RollbackDeployResult,
   ExecCommandInput,
   ExecCommandResult,
   GetK8sRolloutStatusInput,

@@ -568,33 +568,6 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "rollback_deploy",
-      description:
-        "WRITE: Roll back a container to its previous image digest. Requires human approval.",
-      input_schema: {
-        type: "object",
-        properties: {
-          service: SERVICE_IDENTITY_SCHEMA,
-          targetImageDigest: { type: "string" },
-          rationale: { type: "string" },
-          risk: { type: "string", enum: ["low", "medium", "high"] },
-          estimatedDowntimeSeconds: { type: "number" },
-        },
-        required: [
-          "service",
-          "targetImageDigest",
-          "rationale",
-          "risk",
-          "estimatedDowntimeSeconds",
-        ],
-      },
-    },
-    access: "write",
-    providers: BOTH,
-    execute: (input, ctx) => runnerExecute("rollback_deploy", input, ctx),
-  },
-  {
-    schema: {
       name: "exec_command",
       description:
         "WRITE: Execute a shell command inside a container. Requires human approval and REMEDIATION_ENABLED=true.",

@@ -5,8 +5,6 @@ import type {
   ExecCommandResult,
   RestartContainerInput,
   RestartContainerResult,
-  RollbackDeployInput,
-  RollbackDeployResult,
 } from "@nightwatch/shared";
 import { getDocker, parseDockerMux } from "../docker-client.js";
 import {
@@ -75,14 +73,6 @@ export async function restartContainer(
     previousExitCode,
     newStatus,
   };
-}
-
-export async function rollbackDeploy(
-  _input: RollbackDeployInput,
-): Promise<RollbackDeployResult> {
-  throw new Error(
-    "rollback_deploy is not yet implemented. Requires docker-compose file path and compose context.",
-  );
 }
 
 export async function execCommand(
