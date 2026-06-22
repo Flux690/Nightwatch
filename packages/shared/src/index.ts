@@ -78,6 +78,7 @@ export type {
   CapabilityManifest,
   MetricSnapshot,
   RunnerRecord,
+  ServiceManifestEntry,
 } from "./runner.js";
 export type { SessionRole, SessionMeta, SessionMessage } from "./sessions.js";
 export type {

@@ -3,7 +3,7 @@ import {
   deriveDockerServiceIdentity,
   serviceIdentityKey,
   type CapabilityManifest,
-  type ServiceIdentity,
+  type ServiceManifestEntry,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
 import { getAppsV1Api } from "../kubernetes-client.js";
@@ -47,7 +47,7 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
 
 async function detectDocker(): Promise<{
   available: boolean;
-  services: ServiceIdentity[];
+  services: ServiceManifestEntry[];
 }> {
   try {
     const docker = getDocker();
@@ -55,11 +55,18 @@ async function detectDocker(): Promise<{
     // still advertised - otherwise routing would reject the call before the
     // runner ever gets to JIT-resolve it and report a clean finding.
     const list = await docker.listContainers({ all: true });
-    const byKey = new Map<string, ServiceIdentity>();
+    const byKey = new Map<string, ServiceManifestEntry>();
     for (const c of list) {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
       const identity = deriveDockerServiceIdentity(c.Labels, name);
-      byKey.set(serviceIdentityKey(identity), identity);
+      const key = serviceIdentityKey(identity);
+      const existing = byKey.get(key);
+      // Prefer "running" over any stopped state when multiple containers share
+      // an identity (e.g. scaled Compose replicas or a restarted container
+      // that left a stopped predecessor in the list).
+      if (!existing || existing.status !== "running") {
+        byKey.set(key, { identity, status: c.State });
+      }
     }
     return { available: true, services: [...byKey.values()] };
   } catch {
@@ -69,7 +76,7 @@ async function detectDocker(): Promise<{
 
 async function detectKubernetes(): Promise<{
   available: boolean;
-  services: ServiceIdentity[];
+  services: ServiceManifestEntry[];
 }> {
   try {
     const appsApi = getAppsV1Api();
@@ -78,12 +85,15 @@ async function detectKubernetes(): Promise<{
       appsApi.listStatefulSetForAllNamespaces(),
     ]);
 
-    const byKey = new Map<string, ServiceIdentity>();
+    const byKey = new Map<string, ServiceManifestEntry>();
     for (const item of [...deployments.items, ...statefulSets.items]) {
       const ns = item.metadata?.namespace ?? "default";
       const workload = item.metadata?.name ?? "";
       if (!workload) continue;
-      byKey.set(`${ns}/${workload}`, { provider: "kubernetes", namespace: ns, workload });
+      byKey.set(`${ns}/${workload}`, {
+        identity: { provider: "kubernetes", namespace: ns, workload },
+        status: "running",
+      });
     }
     return { available: true, services: [...byKey.values()] };
   } catch {

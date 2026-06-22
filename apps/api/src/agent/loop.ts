@@ -18,6 +18,7 @@ import {
   publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
+import { getRunnerManifestForAlert } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
@@ -106,8 +107,14 @@ export async function runInvestigation(
     ...(input.alert ? [input.alert] : []),
     ...(input.additionalAlerts ?? []),
   ];
+  const serviceSnapshot =
+    alert != null
+      ? getRunnerManifestForAlert(alert.runnerId)?.capabilities.services
+      : undefined;
   const { systemPrompt, firstUserMessage } =
-    allAlerts.length > 0 ? buildInitialContext(allAlerts) : buildChatContext();
+    allAlerts.length > 0
+      ? buildInitialContext(allAlerts, serviceSnapshot)
+      : buildChatContext();
   const provider = createProvider(systemPrompt, config, apiKey);
 
   const sessionMeta: SessionMeta = {

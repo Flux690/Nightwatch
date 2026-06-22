@@ -52,15 +52,38 @@ export function startWebSocketClient(
     socket.send(JSON.stringify(msg));
   }
 
+  async function sendHeartbeat(socket: WebSocket): Promise<void> {
+    if (socket.readyState !== WebSocket.OPEN) return;
+    try {
+      const manifest = await detectCapabilities();
+      if (socket.readyState === WebSocket.OPEN) {
+        const manifestMsg: RunnerManifestMessage = {
+          messageId: randomUUID(),
+          type: "manifest",
+          payload: manifest,
+        };
+        socket.send(JSON.stringify(manifestMsg));
+      }
+    } catch (err: unknown) {
+      // Manifest refresh failed (e.g. Docker daemon temporarily unreachable).
+      // Log and continue so the heartbeat still goes out and the API does not
+      // mark this runner offline.
+      logger.warn({ err }, "heartbeat manifest refresh failed");
+    }
+    if (socket.readyState !== WebSocket.OPEN) return;
+    const heartbeatMsg: RunnerHeartbeatMessage = {
+      messageId: randomUUID(),
+      type: "heartbeat",
+      payload: { timestamp: new Date().toISOString() },
+    };
+    socket.send(JSON.stringify(heartbeatMsg));
+  }
+
   function startHeartbeat(socket: WebSocket): void {
     heartbeatTimer = setInterval(() => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      const msg: RunnerHeartbeatMessage = {
-        messageId: randomUUID(),
-        type: "heartbeat",
-        payload: { timestamp: new Date().toISOString() },
-      };
-      socket.send(JSON.stringify(msg));
+      sendHeartbeat(socket).catch((err: unknown) =>
+        logger.error({ err }, "heartbeat failed"),
+      );
     }, 30_000);
   }
 

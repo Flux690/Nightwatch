@@ -1,4 +1,8 @@
-import type { NormalizedAlert } from "@nightwatch/shared";
+import {
+  serviceIdentityKey,
+  type NormalizedAlert,
+  type ServiceManifestEntry,
+} from "@nightwatch/shared";
 
 export interface InitialContext {
   systemPrompt: string;
@@ -20,7 +24,10 @@ export function buildChatContext(): InitialContext {
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
 }
 
-export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
+export function buildInitialContext(
+  alerts: NormalizedAlert[],
+  serviceSnapshot?: ServiceManifestEntry[],
+): InitialContext {
   if (!alerts[0]) return buildChatContext();
 
   const alertsSection =
@@ -29,10 +36,22 @@ export function buildInitialContext(alerts: NormalizedAlert[]): InitialContext {
       : `BATCHED ALERTS — ${alerts.length} correlated alerts\n\n` +
         alerts.map((a, i) => `Alert ${i + 1}:\n${formatAlert(a)}`).join("\n\n");
 
+  const snapshotSection =
+    serviceSnapshot && serviceSnapshot.length > 0
+      ? `\nSERVICE SNAPSHOT (same runner)\n` +
+        `------------------------------\n` +
+        serviceSnapshot
+          .map(
+            (e) => `  ${serviceIdentityKey(e.identity).padEnd(40)} ${e.status}`,
+          )
+          .join("\n") +
+        "\n"
+      : "";
+
   const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
 --------------
 ${alertsSection}
-
+${snapshotSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return { systemPrompt: SYSTEM_PROMPT, firstUserMessage };

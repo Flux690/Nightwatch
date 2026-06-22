@@ -122,6 +122,20 @@ export function getRunnerIdentity(
   return { runnerId: conn.runnerId, hostname: conn.hostname };
 }
 
+// Returns the current manifest for a runner given the runnerId stamped on an
+// alert. The runnerId is the manifest's runnerId when the manifest has been
+// received; it falls back to the tokenId at ingest if the manifest hadn't
+// arrived yet, so we try both maps.
+export function getRunnerManifestForAlert(
+  runnerId: string,
+): CapabilityManifest | null {
+  return (
+    registry.get(runnerId)?.manifest ??
+    connectionsByTokenId.get(runnerId)?.manifest ??
+    null
+  );
+}
+
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   const entry = pending.get(payload.correlationId);
   if (!entry) return;
@@ -183,7 +197,7 @@ function resolveRunner(
     for (const conn of registry.values()) {
       if (
         conn.manifest?.capabilities.services.some(
-          (s) => serviceIdentityKey(s) === key,
+          (s) => serviceIdentityKey(s.identity) === key,
         )
       ) {
         return conn;
@@ -191,7 +205,7 @@ function resolveRunner(
     }
     const known = [...registry.values()]
       .flatMap((c) => c.manifest?.capabilities.services ?? [])
-      .map((s) => serviceIdentityKey(s))
+      .map((s) => serviceIdentityKey(s.identity))
       .join(", ");
     throw new Error(
       `No runner has service '${key}'. Known services: ${known || "none"}`,

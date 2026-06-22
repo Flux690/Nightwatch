@@ -101,7 +101,14 @@ describe("access-gate: gating is driven by tool access level", () => {
         docker: true,
         kubernetes: false,
         services: [
-          { provider: "docker", project: "svc-01", service: "svc-01" },
+          {
+            identity: {
+              provider: "docker",
+              project: "svc-01",
+              service: "svc-01",
+            },
+            status: "running",
+          },
         ],
         prometheus: { available: false },
         postgres: { available: false },

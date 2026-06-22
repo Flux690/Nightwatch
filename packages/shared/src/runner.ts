@@ -1,5 +1,10 @@
 import type { ServiceIdentity } from "./service-identity.js";
 
+export interface ServiceManifestEntry {
+  identity: ServiceIdentity;
+  status: string;
+}
+
 export interface CapabilityManifest {
   runnerId: string;
   hostname: string;
@@ -7,7 +12,7 @@ export interface CapabilityManifest {
   capabilities: {
     docker: boolean;
     kubernetes: boolean;
-    services: ServiceIdentity[];
+    services: ServiceManifestEntry[];
     prometheus: { available: boolean; endpoint?: string };
     postgres: { available: boolean; via?: string };
     redis: { available: boolean; via?: string };

@@ -22,9 +22,8 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
       docker: true,
       kubernetes: false,
       services: containers.map((name) => ({
-        provider: "docker" as const,
-        project: name,
-        service: name,
+        identity: { provider: "docker" as const, project: name, service: name },
+        status: "running",
       })),
       prometheus: { available: false },
       postgres: { available: false },
@@ -132,11 +131,24 @@ describe("flat runner registry", () => {
     expect(ra?.hostname).toBe("web-01");
     expect(rb?.hostname).toBe("db-02");
     expect(ra?.manifest?.capabilities.services).toEqual([
-      { provider: "docker", project: "nginx", service: "nginx" },
-      { provider: "docker", project: "api", service: "api" },
+      {
+        identity: { provider: "docker", project: "nginx", service: "nginx" },
+        status: "running",
+      },
+      {
+        identity: { provider: "docker", project: "api", service: "api" },
+        status: "running",
+      },
     ]);
     expect(rb?.manifest?.capabilities.services).toEqual([
-      { provider: "docker", project: "postgres", service: "postgres" },
+      {
+        identity: {
+          provider: "docker",
+          project: "postgres",
+          service: "postgres",
+        },
+        status: "running",
+      },
     ]);
     expect(ra?.manifest).not.toHaveProperty("token");
     expect(rb?.manifest).not.toHaveProperty("token");

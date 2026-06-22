@@ -86,7 +86,10 @@ function makeManifest(
     capabilities: {
       docker: true,
       kubernetes: false,
-      services: containers.map(svc),
+      services: containers.map((name) => ({
+        identity: svc(name),
+        status: "running",
+      })),
       prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },
@@ -108,9 +111,10 @@ function makeK8sManifest(
     capabilities: {
       docker: false,
       kubernetes: true,
-      services: workloads.map(({ workload, namespace }) =>
-        k8sSvc(workload, namespace),
-      ),
+      services: workloads.map(({ workload, namespace }) => ({
+        identity: k8sSvc(workload, namespace),
+        status: "running",
+      })),
       prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },

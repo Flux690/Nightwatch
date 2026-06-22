@@ -112,7 +112,14 @@ describe("clarification interrupts", () => {
         docker: true,
         kubernetes: false,
         services: [
-          { provider: "docker", project: "web-01", service: "web-01" },
+          {
+            identity: {
+              provider: "docker",
+              project: "web-01",
+              service: "web-01",
+            },
+            status: "running",
+          },
         ],
         prometheus: { available: false },
         postgres: { available: false },
