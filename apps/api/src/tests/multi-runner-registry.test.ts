@@ -20,6 +20,7 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
     runnerVersion: "2.0.0",
     capabilities: {
       docker: true,
+      kubernetes: false,
       services: containers.map((name) => ({
         provider: "docker" as const,
         project: name,

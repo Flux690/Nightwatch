@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kubernetes/client-node": "^1.4.0",
     "@nightwatch/shared": "workspace:*",
     "dockerode": "^5.0.0",
     "dotenv": "17.4.2",

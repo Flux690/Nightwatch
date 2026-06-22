@@ -68,6 +68,13 @@ function svc(name: string): {
   return { provider: "docker", project: name, service: name };
 }
 
+function k8sSvc(
+  workload: string,
+  namespace = "default",
+): { provider: "kubernetes"; namespace: string; workload: string } {
+  return { provider: "kubernetes", namespace, workload };
+}
+
 function makeManifest(
   hostname: string,
   containers: string[],
@@ -78,6 +85,7 @@ function makeManifest(
     runnerVersion: "2.0.0",
     capabilities: {
       docker: true,
+      kubernetes: false,
       services: containers.map(svc),
       prometheus: { available: false },
       postgres: { available: false },
@@ -85,6 +93,30 @@ function makeManifest(
       hostMetrics: true,
       fileRead: true,
       remediationEnabled: true,
+    },
+  };
+}
+
+function makeK8sManifest(
+  hostname: string,
+  workloads: Array<{ workload: string; namespace: string }>,
+): CapabilityManifest {
+  return {
+    runnerId: `runner-${hostname}`,
+    hostname,
+    runnerVersion: "2.0.0",
+    capabilities: {
+      docker: false,
+      kubernetes: true,
+      services: workloads.map(({ workload, namespace }) =>
+        k8sSvc(workload, namespace),
+      ),
+      prometheus: { available: false },
+      postgres: { available: false },
+      redis: { available: false },
+      hostMetrics: true,
+      fileRead: true,
+      remediationEnabled: false,
     },
   };
 }
@@ -125,6 +157,12 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
+  // runner-k8s hosts Kubernetes workloads.
+  let tokenIdK: string;
+  const commandsK: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
 
   function makeSend(
     log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
@@ -158,6 +196,15 @@ describe("multi-runner routing", () => {
     registerRunner(tokenId2, makeSend(commandsC), () => {});
     setRunnerManifest(tokenId2, makeManifest("cache-01", ["redis"]));
 
+    tokenIdK = generateToken("routing-k8s").id;
+    registerRunner(tokenIdK, makeSend(commandsK), () => {});
+    setRunnerManifest(
+      tokenIdK,
+      makeK8sManifest("k8s-cluster-01", [
+        { workload: "api-server", namespace: "production" },
+      ]),
+    );
+
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
@@ -170,6 +217,7 @@ describe("multi-runner routing", () => {
     unregisterRunner(tokenIdA);
     unregisterRunner(tokenIdB);
     unregisterRunner(tokenId2);
+    unregisterRunner(tokenIdK);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -179,6 +227,7 @@ describe("multi-runner routing", () => {
     commandsA.length = 0;
     commandsB.length = 0;
     commandsC.length = 0;
+    commandsK.length = 0;
   });
 
   async function runSession(): Promise<string> {
@@ -422,5 +471,29 @@ describe("multi-runner routing", () => {
     expect(commandsC[0].commandName).toBe("get_container_logs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
+  });
+
+  it("kubernetes service identity routes to the Kubernetes runner", async () => {
+    setScript([
+      {
+        text: "Checking Kubernetes api-server.",
+        toolUses: [
+          {
+            id: "tu-k8s",
+            name: "get_container_logs",
+            input: { service: k8sSvc("api-server", "production") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runSession();
+
+    expect(commandsK).toHaveLength(1);
+    expect(commandsK[0].commandName).toBe("get_container_logs");
+    expect(commandsA).toHaveLength(0);
+    expect(commandsB).toHaveLength(0);
+    expect(commandsC).toHaveLength(0);
   });
 });

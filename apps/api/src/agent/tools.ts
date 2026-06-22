@@ -25,25 +25,45 @@ export interface Tool {
 
 const BOTH: ("docker" | "kubernetes")[] = ["docker", "kubernetes"];
 
-// Docker-only shape for now (issue scoped to Docker; ADR-0001 reserves the
-// `namespace`/`workload` arm for Kubernetes). Echo the identity exactly as
-// given in the alert or a prior get_container_list result - do not guess.
+// Accepts both Docker and Kubernetes service identities. Echo the identity
+// exactly as given in the alert or a prior get_container_list result - do not
+// guess. Provider is an opaque part of the handle (ADR-0001, ADR-0002).
 const SERVICE_IDENTITY_SCHEMA = {
-  type: "object",
-  properties: {
-    provider: { type: "string", enum: ["docker"] },
-    project: {
-      type: "string",
-      description:
-        "Compose project name (or the container's own name if it has no Compose labels).",
+  oneOf: [
+    {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["docker"] },
+        project: {
+          type: "string",
+          description:
+            "Compose project name (or the container's own name if it has no Compose labels).",
+        },
+        service: {
+          type: "string",
+          description:
+            "Compose service name (or the container's own name if it has no Compose labels).",
+        },
+      },
+      required: ["provider", "project", "service"],
     },
-    service: {
-      type: "string",
-      description:
-        "Compose service name (or the container's own name if it has no Compose labels).",
+    {
+      type: "object",
+      properties: {
+        provider: { type: "string", enum: ["kubernetes"] },
+        namespace: {
+          type: "string",
+          description: "Kubernetes namespace the workload runs in.",
+        },
+        workload: {
+          type: "string",
+          description:
+            "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
+        },
+      },
+      required: ["provider", "namespace", "workload"],
     },
-  },
-  required: ["provider", "project", "service"],
+  ],
 } as const;
 
 async function runnerExecute(
@@ -186,7 +206,7 @@ export const TOOL_REGISTRY: Tool[] = [
     schema: {
       name: "get_container_stats",
       description:
-        "Get real-time CPU%, memory usage/limit/%, network I/O, block I/O, and PID count for a container.",
+        "Get real-time resource usage for a container: CPU, memory, network I/O, and block I/O. Docker returns percentages; Kubernetes returns raw quantified values (e.g. 100m cores, 128Mi).",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -201,7 +221,7 @@ export const TOOL_REGISTRY: Tool[] = [
     schema: {
       name: "get_container_events",
       description:
-        "Get Docker events (start, stop, restart, oom, die, health_status) for a container over the last N minutes.",
+        "Get lifecycle events for a container. Docker returns daemon events (start, stop, oom, die). Kubernetes returns cluster events (Pulled, BackOff, OOMKilling, etc.).",
       input_schema: {
         type: "object",
         properties: {

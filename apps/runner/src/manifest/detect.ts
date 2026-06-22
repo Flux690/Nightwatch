@@ -6,13 +6,15 @@ import {
   type ServiceIdentity,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
+import { getAppsV1Api } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
 
 const RUNNER_VERSION = "0.2.0";
 
 export async function detectCapabilities(): Promise<CapabilityManifest> {
-  const [docker, prometheusAvailable] = await Promise.all([
+  const [docker, kubernetes, prometheusAvailable] = await Promise.all([
     detectDocker(),
+    detectKubernetes(),
     detectPrometheus(),
   ]);
 
@@ -25,7 +27,8 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     runnerVersion: RUNNER_VERSION,
     capabilities: {
       docker: docker.available,
-      services: docker.services,
+      kubernetes: kubernetes.available,
+      services: [...docker.services, ...kubernetes.services],
       prometheus: prometheusAvailable
         ? { available: true, endpoint: prometheusEndpoint }
         : { available: false },
@@ -57,6 +60,30 @@ async function detectDocker(): Promise<{
       const name = (c.Names[0] ?? "").replace(/^\//, "");
       const identity = deriveDockerServiceIdentity(c.Labels, name);
       byKey.set(serviceIdentityKey(identity), identity);
+    }
+    return { available: true, services: [...byKey.values()] };
+  } catch {
+    return { available: false, services: [] };
+  }
+}
+
+async function detectKubernetes(): Promise<{
+  available: boolean;
+  services: ServiceIdentity[];
+}> {
+  try {
+    const appsApi = getAppsV1Api();
+    const [deployments, statefulSets] = await Promise.all([
+      appsApi.listDeploymentForAllNamespaces(),
+      appsApi.listStatefulSetForAllNamespaces(),
+    ]);
+
+    const byKey = new Map<string, ServiceIdentity>();
+    for (const item of [...deployments.items, ...statefulSets.items]) {
+      const ns = item.metadata?.namespace ?? "default";
+      const workload = item.metadata?.name ?? "";
+      if (!workload) continue;
+      byKey.set(`${ns}/${workload}`, { provider: "kubernetes", namespace: ns, workload });
     }
     return { available: true, services: [...byKey.values()] };
   } catch {
