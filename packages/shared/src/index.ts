@@ -80,6 +80,10 @@ export type {
 } from "./runner.js";
 export type { SessionRole, SessionMeta, SessionMessage } from "./sessions.js";
 export type {
+  RemediationStatus,
+  RemediationActionRecord,
+} from "./remediation.js";
+export type {
   LLMProviderName,
   ThinkingMode,
   ReasoningEffort,

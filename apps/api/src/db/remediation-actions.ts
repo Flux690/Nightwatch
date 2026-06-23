@@ -1,11 +1,9 @@
-import { serviceIdentityKey, type ServiceIdentity } from "@nightwatch/shared";
+import {
+  serviceIdentityKey,
+  type RemediationStatus,
+  type ServiceIdentity,
+} from "@nightwatch/shared";
 import { getDb } from "./client.js";
-
-export type RemediationStatus =
-  | "executing"
-  | "executed"
-  | "failed"
-  | "rejected";
 
 export interface RemediationAction {
   id: number;
@@ -14,6 +12,7 @@ export interface RemediationAction {
   toolName: string;
   serviceIdentityKey: string | null;
   status: RemediationStatus;
+  resolvedBy: string | null;
   input: string;
   result: string | null;
   createdAt: string;
@@ -47,20 +46,22 @@ export function insertExecutingRemediationAction(params: {
   sessionId: string;
   toolName: string;
   input: Record<string, unknown>;
+  resolvedBy: string;
 }): boolean {
   try {
     getDb()
       .prepare(
         `INSERT INTO remediation_actions
-           (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at)
+           (tool_use_id, session_id, tool_name, service_identity_key, status, resolved_by, input, created_at)
          VALUES
-           (@toolUseId, @sessionId, @toolName, @identityKey, 'executing', @input, @createdAt)`,
+           (@toolUseId, @sessionId, @toolName, @identityKey, 'executing', @resolvedBy, @input, @createdAt)`,
       )
       .run({
         toolUseId: params.toolUseId,
         sessionId: params.sessionId,
         toolName: params.toolName,
         identityKey: serviceIdentityKeyFromInput(params.input),
+        resolvedBy: params.resolvedBy,
         input: JSON.stringify(params.input),
         createdAt: new Date().toISOString(),
       });
@@ -104,46 +105,62 @@ export function insertRejectedRemediationAction(params: {
   sessionId: string;
   toolName: string;
   input: Record<string, unknown>;
+  resolvedBy: string;
 }): void {
   const now = new Date().toISOString();
   getDb()
     .prepare(
       `INSERT INTO remediation_actions
-         (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at, resolved_at)
+         (tool_use_id, session_id, tool_name, service_identity_key, status, resolved_by, input, created_at, resolved_at)
        VALUES
-         (@toolUseId, @sessionId, @toolName, @identityKey, 'rejected', @input, @createdAt, @resolvedAt)`,
+         (@toolUseId, @sessionId, @toolName, @identityKey, 'rejected', @resolvedBy, @input, @createdAt, @resolvedAt)`,
     )
     .run({
       toolUseId: params.toolUseId,
       sessionId: params.sessionId,
       toolName: params.toolName,
       identityKey: serviceIdentityKeyFromInput(params.input),
+      resolvedBy: params.resolvedBy,
       input: JSON.stringify(params.input),
       createdAt: now,
       resolvedAt: now,
     });
 }
 
+// Column list shared by every reader so the row shape can't drift between
+// a single lookup and the audit list.
+const SELECT_COLUMNS = `
+  id,
+  tool_use_id           AS toolUseId,
+  session_id            AS sessionId,
+  tool_name             AS toolName,
+  service_identity_key  AS serviceIdentityKey,
+  status,
+  resolved_by           AS resolvedBy,
+  input,
+  result,
+  created_at            AS createdAt,
+  resolved_at           AS resolvedAt
+`;
+
 export function findRemediationAction(
   toolUseId: string,
 ): RemediationAction | undefined {
   return getDb()
     .prepare(
-      `SELECT
-         id,
-         tool_use_id      AS toolUseId,
-         session_id       AS sessionId,
-         tool_name        AS toolName,
-         service_identity_key AS serviceIdentityKey,
-         status,
-         input,
-         result,
-         created_at       AS createdAt,
-         resolved_at      AS resolvedAt
-       FROM remediation_actions
-       WHERE tool_use_id = ?`,
+      `SELECT ${SELECT_COLUMNS} FROM remediation_actions WHERE tool_use_id = ?`,
     )
     .get(toolUseId) as RemediationAction | undefined;
+}
+
+// Newest first, capped like listAllSessions: the audit view reads top-to-bottom
+// as "most recent activity", not a full unbounded export.
+export function listRemediationActions(): RemediationAction[] {
+  return getDb()
+    .prepare(
+      `SELECT ${SELECT_COLUMNS} FROM remediation_actions ORDER BY created_at DESC LIMIT 100`,
+    )
+    .all() as RemediationAction[];
 }
 
 // Counts writes to the same service identity and action that actually reached

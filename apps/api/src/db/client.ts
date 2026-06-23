@@ -81,6 +81,7 @@ const SCHEMA = `
     tool_name            TEXT NOT NULL,
     service_identity_key TEXT,
     status               TEXT NOT NULL,
+    resolved_by          TEXT,
     input                TEXT NOT NULL,
     result               TEXT,
     created_at           TEXT NOT NULL,

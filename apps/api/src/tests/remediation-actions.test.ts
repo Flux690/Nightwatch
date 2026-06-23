@@ -210,6 +210,7 @@ describe("remediation action record", () => {
     expect(row!.toolName).toBe("restart_container");
     expect(row!.sessionId).toBe(sessionId);
     expect(row!.serviceIdentityKey).toBe("docker/svc-01/api");
+    expect(row!.resolvedBy).toBe("operator");
     expect(row!.resolvedAt).toBeTruthy();
 
     ws.close();
@@ -298,6 +299,7 @@ describe("remediation action record", () => {
     expect(row!.status).toBe("rejected");
     expect(row!.sessionId).toBe(sessionId);
     expect(row!.serviceIdentityKey).toBe("docker/svc-01/api");
+    expect(row!.resolvedBy).toBe("operator");
 
     ws.close();
   });

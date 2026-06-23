@@ -9,6 +9,7 @@ import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { RunnersPage } from "./pages/Runners.js";
 import { SettingsPage } from "./pages/Settings.js";
+import { AuditLogPage } from "./pages/AuditLog.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -59,6 +60,12 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const auditRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/audit",
+  component: AuditLogPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -66,6 +73,7 @@ const routeTree = rootRoute.addChildren([
     sessionIdRoute,
     runnersRoute,
     settingsRoute,
+    auditRoute,
   ]),
 ]);
 

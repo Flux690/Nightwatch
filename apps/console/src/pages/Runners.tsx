@@ -11,6 +11,7 @@ import {
 } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
+import { StatusBadge } from "../components/StatusBadge.js";
 import { timeAgo } from "../utils/time.js";
 
 type RunnerStatus = "awaiting connection" | "online" | "offline";
@@ -26,22 +27,6 @@ const STATUS_COLOR: Record<RunnerStatus, string> = {
   online: "var(--nw-status-streaming)",
   offline: "var(--nw-status-offline)",
 };
-
-function StatusBadge({ status }: { status: RunnerStatus }): React.JSX.Element {
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        fontFamily: "var(--nw-mono)",
-        color: STATUS_COLOR[status],
-        textTransform: "uppercase",
-        letterSpacing: "0.05em",
-      }}
-    >
-      {status}
-    </span>
-  );
-}
 
 export function RunnersPage(): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -178,7 +163,7 @@ export function RunnersPage(): React.JSX.Element {
                   <Text size="xs" c="dimmed" ff="monospace">
                     {shortId}…
                   </Text>
-                  <StatusBadge status={status} />
+                  <StatusBadge label={status} color={STATUS_COLOR[status]} />
                   {runner.lastSeen !== null && (
                     <Text size="xs" c="dimmed" ff="monospace">
                       {timeAgo(runner.lastSeen)}

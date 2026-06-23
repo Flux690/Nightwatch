@@ -12,6 +12,7 @@ import { registerConfigRoutes } from "./config/routes.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerConnectRoutes } from "./runners/connect.js";
+import { registerRemediationRoutes } from "./remediation/routes.js";
 
 // D16: explicit SECRET_KEY env var wins; otherwise a key file beside the
 // SQLite database is reused or generated on first boot.
@@ -37,6 +38,7 @@ await registerConfigRoutes(fastify);
 await registerSessionRoutes(fastify);
 await registerRunnerRoutes(fastify);
 await registerConnectRoutes(fastify);
+await registerRemediationRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 

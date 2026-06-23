@@ -14,7 +14,10 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage } from "@nightwatch/shared";
+import type {
+  RunnerCommandMessage,
+  RemediationStatus,
+} from "@nightwatch/shared";
 
 const { mockCreateProvider } = vi.hoisted(() => ({
   mockCreateProvider: vi.fn(),
@@ -40,7 +43,6 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { updateConfig } from "../config/store.js";
-import type { RemediationStatus } from "../db/remediation-actions.js";
 import {
   registerRunner,
   setRunnerManifest,

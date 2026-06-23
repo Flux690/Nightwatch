@@ -140,6 +140,7 @@ export async function respondToPendingHumanInput(
       sessionId,
       toolName: pending.toolName,
       input: pending.toolInput,
+      resolvedBy,
     });
 
     let gatedResult: ToolResult;
@@ -205,6 +206,7 @@ export async function respondToPendingHumanInput(
       sessionId,
       toolName: pending.toolName,
       input: pending.toolInput,
+      resolvedBy,
     });
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
     return unpause(
