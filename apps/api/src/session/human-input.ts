@@ -4,15 +4,17 @@ import {
   deletePendingHumanInput,
   getPendingHumanInputWithSessionBySessionId,
 } from "../db/interrupts.js";
+import {
+  insertExecutingRemediationAction,
+  insertRejectedRemediationAction,
+  settleRemediationAction,
+} from "../db/remediation-actions.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
-import {
-  publishInterruptResolved,
-  publishToolCallEnd,
-} from "./stream.js";
+import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
 import { buildSeed } from "./seed.js";
-import { sendCommand } from "../ws/router.js";
+import { executeRunnerTool } from "../agent/executor.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 
 export class HumanInputError extends Error {
@@ -130,26 +132,51 @@ export async function respondToPendingHumanInput(
   if (decision === "approve") {
     claimOrThrow(sessionId);
     const config = loadConfig();
+
+    // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict
+    // means this tool_use_id already ran (crash-recovery path) — do not re-execute.
+    const inserted = insertExecutingRemediationAction({
+      toolUseId: pending.toolUseId,
+      sessionId,
+      toolName: pending.toolName,
+      input: pending.toolInput,
+    });
+
     let gatedResult: ToolResult;
-    try {
-      const result = await sendCommand(
-        pending.toolName,
-        pending.toolInput,
-        config.toolTimeoutMs,
-        pending.originatingAlert?.runnerId,
+
+    if (!inserted) {
+      // Previously attempted — outcome unknown. Surface to the model so the
+      // operator can decide whether to retry with a fresh tool call.
+      logger.warn(
+        { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
+        "duplicate approve: action previously attempted, skipping execution",
       );
       gatedResult = {
         tool_use_id: pending.toolUseId,
-        content: JSON.stringify(result),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      gatedResult = {
-        tool_use_id: pending.toolUseId,
-        content: `Error executing ${pending.toolName}: ${message}`,
+        content: `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
         is_error: true,
       };
+    } else {
+      const execResult = await executeRunnerTool(
+        pending.toolName,
+        pending.toolInput,
+        {
+          runnerId: pending.originatingAlert?.runnerId,
+          toolTimeoutMs: config.toolTimeoutMs,
+        },
+      );
+      const settled = execResult.is_error ? "failed" : "executed";
+      settleRemediationAction(pending.toolUseId, settled, execResult.content);
+      gatedResult = {
+        tool_use_id: pending.toolUseId,
+        content:
+          typeof execResult.content === "string"
+            ? execResult.content
+            : JSON.stringify(execResult.content),
+        is_error: execResult.is_error,
+      };
     }
+
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
     return unpause(
       sessionId,
@@ -173,6 +200,12 @@ export async function respondToPendingHumanInput(
       is_error: true,
     };
     claimOrThrow(sessionId);
+    insertRejectedRemediationAction({
+      toolUseId: pending.toolUseId,
+      sessionId,
+      toolName: pending.toolName,
+      input: pending.toolInput,
+    });
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
     return unpause(
       sessionId,

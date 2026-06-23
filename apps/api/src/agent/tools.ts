@@ -1,5 +1,4 @@
-import { sendCommand } from "../ws/router.js";
-import { logger } from "../logger.js";
+import { executeRunnerTool } from "./executor.js";
 import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolSchema } from "../llm/types.js";
 
@@ -68,26 +67,6 @@ const SERVICE_IDENTITY_SCHEMA = {
     },
   ],
 } as const;
-
-async function runnerExecute(
-  toolName: string,
-  input: Record<string, unknown>,
-  ctx: ToolExecuteContext,
-): Promise<ToolExecuteResult> {
-  try {
-    const result = await sendCommand(
-      toolName,
-      input,
-      ctx.toolTimeoutMs,
-      ctx.runnerId,
-    );
-    return { content: result };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ tool: toolName, err }, "runner tool failed");
-    return { content: `Error executing ${toolName}: ${msg}`, is_error: true };
-  }
-}
 
 async function fetchGitHubCommits(
   input: GetRecentCommitsInput,
@@ -160,7 +139,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_list", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_container_list", input, ctx),
   },
   {
     schema: {
@@ -188,7 +167,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_logs", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_container_logs", input, ctx),
   },
   {
     schema: {
@@ -203,7 +182,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_inspect", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_container_inspect", input, ctx),
   },
   {
     schema: {
@@ -218,7 +197,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_stats", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_container_stats", input, ctx),
   },
   {
     schema: {
@@ -239,7 +218,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_container_events", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_container_events", input, ctx),
   },
   {
     schema: {
@@ -255,7 +234,7 @@ export const TOOL_REGISTRY: Tool[] = [
     access: "read",
     providers: BOTH,
     execute: (input, ctx) =>
-      runnerExecute("get_container_processes", input, ctx),
+      executeRunnerTool("get_container_processes", input, ctx),
   },
   {
     schema: {
@@ -275,7 +254,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_host_memory", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_host_memory", input, ctx),
   },
   {
     schema: {
@@ -295,7 +274,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_host_cpu", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_host_cpu", input, ctx),
   },
   {
     schema: {
@@ -315,7 +294,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_host_disk", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_host_disk", input, ctx),
   },
   {
     schema: {
@@ -335,7 +314,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_host_network", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_host_network", input, ctx),
   },
   {
     schema: {
@@ -364,7 +343,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_host_dmesg", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_host_dmesg", input, ctx),
   },
   {
     schema: {
@@ -415,7 +394,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("get_recent_deploys", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("get_recent_deploys", input, ctx),
   },
   {
     schema: {
@@ -431,7 +410,7 @@ export const TOOL_REGISTRY: Tool[] = [
     access: "read",
     providers: BOTH,
     execute: (input, ctx) =>
-      runnerExecute("get_env_variable_names", input, ctx),
+      executeRunnerTool("get_env_variable_names", input, ctx),
   },
   {
     schema: {
@@ -464,7 +443,7 @@ export const TOOL_REGISTRY: Tool[] = [
     access: "read",
     providers: KUBERNETES_ONLY,
     execute: (input, ctx) =>
-      runnerExecute("get_k8s_rollout_status", input, ctx),
+      executeRunnerTool("get_k8s_rollout_status", input, ctx),
   },
   {
     schema: {
@@ -490,7 +469,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("read_file", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("read_file", input, ctx),
   },
   {
     schema: {
@@ -564,7 +543,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "write",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("restart_container", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("restart_container", input, ctx),
   },
   {
     schema: {
@@ -588,7 +567,7 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "write",
     providers: BOTH,
-    execute: (input, ctx) => runnerExecute("exec_command", input, ctx),
+    execute: (input, ctx) => executeRunnerTool("exec_command", input, ctx),
   },
 ];
 
