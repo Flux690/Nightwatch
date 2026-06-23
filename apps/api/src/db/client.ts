@@ -29,6 +29,8 @@ const SCHEMA = `
     max_tool_calls     INTEGER NOT NULL DEFAULT 24,
     hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
     tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
+    remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
+    remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
     base_url           TEXT,
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,

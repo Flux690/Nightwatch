@@ -16,6 +16,8 @@ const ConfigPatchSchema = z.object({
   maxToolCalls: z.number().int().positive().optional(),
   hardTimeoutMs: z.number().int().positive().optional(),
   toolTimeoutMs: z.number().int().positive().optional(),
+  remediationBreakerLimit: z.number().int().positive().optional(),
+  remediationBreakerWindowMs: z.number().int().positive().optional(),
   baseUrl: z.string().url().nullable().optional(),
   promptCaching: z.boolean().optional(),
   reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),

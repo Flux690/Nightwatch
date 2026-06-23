@@ -30,6 +30,8 @@ const BASE_CONFIG: AgentConfig = {
   maxToolCalls: 24,
   hardTimeoutMs: 300_000,
   toolTimeoutMs: 15_000,
+  remediationBreakerLimit: 5,
+  remediationBreakerWindowMs: 600_000,
 };
 
 const READ_TOOL = {

@@ -10,3 +10,8 @@ export const MAX_RETRIES = 2;
 export const DEFAULT_MAX_TOOL_CALLS = 24;
 export const DEFAULT_HARD_TIMEOUT_MS = 5 * 60_000;
 export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
+
+// Circuit breaker default: 5 executed/failed writes to the same service+action
+// within 10 minutes before further writes are refused.
+export const DEFAULT_REMEDIATION_BREAKER_LIMIT = 5;
+export const DEFAULT_REMEDIATION_BREAKER_WINDOW_MS = 10 * 60_000;

@@ -20,7 +20,12 @@ import {
 import { dispatcher } from "../dispatcher.js";
 import { getRunnerManifestForAlert, listRunners } from "../ws/router.js";
 import { logger } from "../logger.js";
+import {
+  countExecutedRemediations,
+  serviceIdentityKeyFromInput,
+} from "../db/remediation-actions.js";
 import type {
+  AgentConfig,
   NormalizedAlert,
   SessionMessage,
   SessionMeta,
@@ -93,6 +98,36 @@ function mismatchedServiceProvider(
   const provider = (service as Record<string, unknown>)["provider"]; // typeof guard above confirms object shape
   if (typeof provider !== "string") return null;
   return entry.providers.some((p) => p === provider) ? null : provider;
+}
+
+// Circuit breaker: before a write suspends for approval, refuse it outright when
+// too many writes to the same (service identity, action) have already landed in
+// the window, so a crash-loop "fix" cannot become a restart storm and the
+// operator is never asked to approve one. Returns a corrective tool_result (the
+// same self-correction pattern as a provider mismatch) when tripped, or null to
+// let the write proceed to the approval card. A write with no service identity
+// cannot be keyed and is never breaker-refused.
+function circuitBreakerRejection(
+  tool: ToolUse,
+  config: AgentConfig,
+): ToolResult | null {
+  const key = serviceIdentityKeyFromInput(tool.input);
+  if (key === null) return null;
+  const since = new Date(
+    Date.now() - config.remediationBreakerWindowMs,
+  ).toISOString();
+  const count = countExecutedRemediations({
+    serviceIdentityKey: key,
+    toolName: tool.name,
+    since,
+  });
+  if (count < config.remediationBreakerLimit) return null;
+  const windowMinutes = Math.round(config.remediationBreakerWindowMs / 60_000);
+  return {
+    tool_use_id: tool.id,
+    content: `Circuit breaker: "${tool.name}" has already executed ${count} times on this service in the last ${windowMinutes} minutes (limit ${config.remediationBreakerLimit}). Repeating it is not resolving the problem - do not retry this action. Investigate the root cause or escalate to the operator.`,
+    is_error: true,
+  };
 }
 
 export interface RunInvestigationInput {
@@ -282,19 +317,32 @@ export async function runInvestigation(
       }
 
       if (entry.access === "write" || entry.access === "ask") {
-        if (gatedTool === null) {
+        if (gatedTool !== null) {
           // Only one gate per turn; reject subsequent gated tools so every
           // tool_use in this assistant message still gets a tool_result (D10).
-          gatedTool = tool;
-          gatedEntry = entry;
-        } else {
           toolResults.push({
             tool_use_id: tool.id,
             content:
               "Another gated action is pending. Retry after it resolves.",
             is_error: true,
           });
+          continue;
         }
+
+        if (entry.access === "write") {
+          const breakerRejection = circuitBreakerRejection(tool, config);
+          if (breakerRejection) {
+            log.warn(
+              { tool: tool.name },
+              "circuit breaker tripped: write refused without approval",
+            );
+            toolResults.push(breakerRejection);
+            continue;
+          }
+        }
+
+        gatedTool = tool;
+        gatedEntry = entry;
         continue;
       }
 

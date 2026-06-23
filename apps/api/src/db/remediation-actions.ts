@@ -20,7 +20,13 @@ export interface RemediationAction {
   resolvedAt: string | null;
 }
 
-function extractIdentityKey(input: Record<string, unknown>): string | null {
+// Derives the canonical identity key from a tool input's `service` block, or
+// null when the tool carries no service identity. The single place a tool input
+// is turned into an identity key, shared by the record write and the breaker
+// count so both key on exactly the same shape.
+export function serviceIdentityKeyFromInput(
+  input: Record<string, unknown>,
+): string | null {
   const service = input["service"];
   if (
     typeof service !== "object" ||
@@ -29,6 +35,7 @@ function extractIdentityKey(input: Record<string, unknown>): string | null {
   ) {
     return null;
   }
+  // The runner validates the live identity; here we only need its canonical key.
   return serviceIdentityKey(service as ServiceIdentity);
 }
 
@@ -53,7 +60,7 @@ export function insertExecutingRemediationAction(params: {
         toolUseId: params.toolUseId,
         sessionId: params.sessionId,
         toolName: params.toolName,
-        identityKey: extractIdentityKey(params.input),
+        identityKey: serviceIdentityKeyFromInput(params.input),
         input: JSON.stringify(params.input),
         createdAt: new Date().toISOString(),
       });
@@ -110,7 +117,7 @@ export function insertRejectedRemediationAction(params: {
       toolUseId: params.toolUseId,
       sessionId: params.sessionId,
       toolName: params.toolName,
-      identityKey: extractIdentityKey(params.input),
+      identityKey: serviceIdentityKeyFromInput(params.input),
       input: JSON.stringify(params.input),
       createdAt: now,
       resolvedAt: now,
@@ -137,4 +144,27 @@ export function findRemediationAction(
        WHERE tool_use_id = ?`,
     )
     .get(toolUseId) as RemediationAction | undefined;
+}
+
+// Counts writes to the same service identity and action that actually reached
+// the infrastructure (executed or failed) since `since`. Drives the circuit
+// breaker: a 'rejected' or still-'executing' row is not a landed write and does
+// not count. Keyed on the canonical identity key, so a server-scoped identity
+// refines the count for free.
+export function countExecutedRemediations(params: {
+  serviceIdentityKey: string;
+  toolName: string;
+  since: string;
+}): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM remediation_actions
+       WHERE service_identity_key = @serviceIdentityKey
+         AND tool_name = @toolName
+         AND status IN ('executed', 'failed')
+         AND created_at >= @since`,
+    )
+    .get(params) as { count: number };
+  return row.count;
 }

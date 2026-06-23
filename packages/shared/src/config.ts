@@ -17,6 +17,11 @@ export interface AgentConfig {
   maxToolCalls: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
+  // Remediation circuit breaker: at proposal time the loop refuses a write once
+  // this many executed/failed writes to the same (service identity, action) have
+  // landed within the window, so a crash-loop fix cannot become a restart storm.
+  remediationBreakerLimit: number;
+  remediationBreakerWindowMs: number;
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;
