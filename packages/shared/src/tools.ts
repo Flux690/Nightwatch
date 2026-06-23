@@ -188,17 +188,6 @@ export interface CommitInfo {
   deletions: number;
 }
 
-export interface GetRecentDeploysInput {
-  service: ServiceIdentity;
-}
-export interface DeployInfo {
-  currentImageDigest: string;
-  currentImageCreatedAt: string;
-  previousImageDigest?: string;
-  imageChangedAt?: string;
-  timeSinceChangeMinutes?: number;
-}
-
 export interface GetEnvVariableNamesInput {
   service: ServiceIdentity;
 }

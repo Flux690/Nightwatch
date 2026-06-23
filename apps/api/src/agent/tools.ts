@@ -17,15 +17,18 @@ export interface ToolExecuteContext {
 export interface Tool {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
-  providers: Provider[];
+  // Absent means provider-agnostic: supported on every provider. An annotation
+  // narrows the tool to the listed providers (ADR-0002). Only genuinely
+  // provider-specific tools carry it.
+  providers?: Provider[];
   execute(
     input: Record<string, unknown>,
     ctx: ToolExecuteContext,
   ): Promise<ToolExecuteResult>;
 }
 
-const BOTH: Provider[] = ["docker", "kubernetes"];
 const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
+const DOCKER_ONLY: Provider[] = ["docker"];
 
 // Accepts both Docker and Kubernetes service identities. Echo the identity
 // exactly as given in the alert or a prior get_container_list result - do not
@@ -138,8 +141,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_container_list", input, ctx),
+    execute: (input, ctx) =>
+      executeRunnerTool("get_container_list", input, ctx),
   },
   {
     schema: {
@@ -166,8 +169,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_container_logs", input, ctx),
+    execute: (input, ctx) =>
+      executeRunnerTool("get_container_logs", input, ctx),
   },
   {
     schema: {
@@ -181,8 +184,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_container_inspect", input, ctx),
+    execute: (input, ctx) =>
+      executeRunnerTool("get_container_inspect", input, ctx),
   },
   {
     schema: {
@@ -196,8 +199,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_container_stats", input, ctx),
+    execute: (input, ctx) =>
+      executeRunnerTool("get_container_stats", input, ctx),
   },
   {
     schema: {
@@ -217,8 +220,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_container_events", input, ctx),
+    execute: (input, ctx) =>
+      executeRunnerTool("get_container_events", input, ctx),
   },
   {
     schema: {
@@ -232,7 +235,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
     execute: (input, ctx) =>
       executeRunnerTool("get_container_processes", input, ctx),
   },
@@ -253,7 +255,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
+    providers: DOCKER_ONLY,
     execute: (input, ctx) => executeRunnerTool("get_host_memory", input, ctx),
   },
   {
@@ -273,7 +275,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
+    providers: DOCKER_ONLY,
     execute: (input, ctx) => executeRunnerTool("get_host_cpu", input, ctx),
   },
   {
@@ -293,7 +295,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
+    providers: DOCKER_ONLY,
     execute: (input, ctx) => executeRunnerTool("get_host_disk", input, ctx),
   },
   {
@@ -313,7 +315,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
+    providers: DOCKER_ONLY,
     execute: (input, ctx) => executeRunnerTool("get_host_network", input, ctx),
   },
   {
@@ -342,7 +344,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
+    providers: DOCKER_ONLY,
     execute: (input, ctx) => executeRunnerTool("get_host_dmesg", input, ctx),
   },
   {
@@ -368,7 +370,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
     execute: async (input) => {
       try {
         const commits = await fetchGitHubCommits(
@@ -383,21 +384,6 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_recent_deploys",
-      description:
-        "Get the current and previous Docker image digest for a container to detect recent deployments.",
-      input_schema: {
-        type: "object",
-        properties: { service: SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
-      },
-    },
-    access: "read",
-    providers: BOTH,
-    execute: (input, ctx) => executeRunnerTool("get_recent_deploys", input, ctx),
-  },
-  {
-    schema: {
       name: "get_env_variable_names",
       description:
         "List environment variable names (not values) for a container to check for missing config.",
@@ -408,7 +394,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
     execute: (input, ctx) =>
       executeRunnerTool("get_env_variable_names", input, ctx),
   },
@@ -447,6 +432,27 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
+      name: "get_k8s_node_status",
+      description:
+        "KUBERNETES ONLY: get per-node health - Ready plus MemoryPressure/DiskPressure/PIDPressure conditions and allocatable-vs-capacity resources. Use to tell whether the node, not the pod, is the cause of an unhealthy workload. Reports every node; no service identity needed.",
+      input_schema: {
+        type: "object",
+        properties: {
+          hostname: {
+            type: "string",
+            description:
+              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+          },
+        },
+      },
+    },
+    access: "read",
+    providers: KUBERNETES_ONLY,
+    execute: (input, ctx) =>
+      executeRunnerTool("get_k8s_node_status", input, ctx),
+  },
+  {
+    schema: {
       name: "read_file",
       description:
         "Read a file from the host filesystem (allowlisted paths only). Secrets are automatically redacted.",
@@ -468,7 +474,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    providers: BOTH,
     execute: (input, ctx) => executeRunnerTool("read_file", input, ctx),
   },
   {
@@ -508,7 +513,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "ask",
-    providers: BOTH,
     execute: async () => ({
       content:
         "request_clarification is an interrupt and cannot be executed directly.",
@@ -542,7 +546,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
-    providers: BOTH,
     execute: (input, ctx) => executeRunnerTool("restart_container", input, ctx),
   },
   {
@@ -566,19 +569,32 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
-    providers: BOTH,
     execute: (input, ctx) => executeRunnerTool("exec_command", input, ctx),
   },
 ];
 
+// A tool with no `providers` annotation is provider-agnostic and runs on every
+// provider; an annotation narrows it to the listed providers (ADR-0002). Single
+// home for the "absent means all" rule, shared by schema filtering and the
+// loop's provider-mismatch rejection so they can never diverge.
+export function toolSupportsProvider(tool: Tool, provider: string): boolean {
+  // provider is a plain string so the loop can pass an arbitrary model-supplied
+  // value; widening the annotation to string[] is always safe and lets an
+  // unrecognized provider read as unsupported (the mismatch we want to report).
+  return (
+    tool.providers === undefined ||
+    (tool.providers as readonly string[]).includes(provider)
+  );
+}
+
 // Provider-specific tools are offered only to fleets that include a matching
-// provider; agnostic tools (BOTH) pass for any fleet. Omitting the filter
-// shows every tool, regardless of fleet.
+// provider; agnostic tools pass for any fleet. Omitting the filter shows every
+// tool, regardless of fleet.
 export function getToolSchemas(
   fleetProviders?: ReadonlySet<Provider>,
 ): ToolSchema[] {
   if (!fleetProviders) return TOOL_REGISTRY.map((t) => t.schema);
   return TOOL_REGISTRY.filter((t) =>
-    t.providers.some((p) => fleetProviders.has(p)),
+    [...fleetProviders].some((p) => toolSupportsProvider(t, p)),
   ).map((t) => t.schema);
 }

@@ -38,6 +38,7 @@ import {
   restartService,
   execCommand as k8sExecCommand,
   getRolloutStatus,
+  getNodeStatus,
 } from "../kubernetes/commands.js";
 
 const K8S_SERVICE = {
@@ -80,6 +81,7 @@ describe("Kubernetes runner command handlers", () => {
     readNamespacedPodLog: ReturnType<typeof vi.fn>;
     listNamespacedEvent: ReturnType<typeof vi.fn>;
     readNamespacedPod: ReturnType<typeof vi.fn>;
+    listNode: ReturnType<typeof vi.fn>;
   };
   let mockAppsApi: {
     readNamespacedDeployment: ReturnType<typeof vi.fn>;
@@ -98,6 +100,7 @@ describe("Kubernetes runner command handlers", () => {
       readNamespacedPodLog: vi.fn(),
       listNamespacedEvent: vi.fn(),
       readNamespacedPod: vi.fn(),
+      listNode: vi.fn(),
     };
     mockAppsApi = {
       readNamespacedDeployment: vi.fn(),
@@ -169,6 +172,32 @@ describe("Kubernetes runner command handlers", () => {
       expect(result).not.toHaveProperty("found");
       const lines = (result as { lines: string[] }).lines;
       expect(lines).toContain("last logs before exit");
+    });
+
+    it("reads the previous (dead) container's logs when resolving to a terminated pod", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [TERMINATED_POD],
+      });
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue("why it crashed\n");
+
+      await getContainerLogs({ service: K8S_SERVICE });
+
+      expect(mockCoreApi.readNamespacedPodLog).toHaveBeenCalledWith(
+        expect.objectContaining({ previous: true }),
+      );
+    });
+
+    it("reads the current container's logs (not previous) for a live pod", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [RUNNING_POD],
+      });
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue("current\n");
+
+      await getContainerLogs({ service: K8S_SERVICE });
+
+      expect(mockCoreApi.readNamespacedPodLog).toHaveBeenCalledWith(
+        expect.objectContaining({ previous: false }),
+      );
     });
 
     it("prefers the newest live pod when multiple pods exist mid-rollout", async () => {
@@ -480,34 +509,32 @@ describe("Kubernetes runner command handlers", () => {
 
       MockExec.mockImplementation(function () {
         return {
-          exec: vi
-            .fn()
-            .mockImplementation(
-              (
-                _ns: string,
-                _pod: string,
-                _container: string,
-                _cmd: string[],
-                _stdout: NodeJS.WritableStream,
-                _stderr: NodeJS.WritableStream,
-                _stdin: null,
-                _tty: boolean,
-                statusCallback: (s: {
-                  status: string;
-                  reason?: string;
-                  details?: {
-                    causes?: Array<{ reason?: string; message?: string }>;
-                  };
-                }) => void,
-              ) => {
-                statusCallback({
-                  status: "Failure",
-                  reason: "NonZeroExitCode",
-                  details: { causes: [{ reason: "ExitCode", message: "2" }] },
-                });
-                return Promise.resolve({} as WebSocket);
-              },
-            ),
+          exec: vi.fn().mockImplementation(
+            (
+              _ns: string,
+              _pod: string,
+              _container: string,
+              _cmd: string[],
+              _stdout: NodeJS.WritableStream,
+              _stderr: NodeJS.WritableStream,
+              _stdin: null,
+              _tty: boolean,
+              statusCallback: (s: {
+                status: string;
+                reason?: string;
+                details?: {
+                  causes?: Array<{ reason?: string; message?: string }>;
+                };
+              }) => void,
+            ) => {
+              statusCallback({
+                status: "Failure",
+                reason: "NonZeroExitCode",
+                details: { causes: [{ reason: "ExitCode", message: "2" }] },
+              });
+              return Promise.resolve({} as WebSocket);
+            },
+          ),
         };
       });
 
@@ -677,6 +704,52 @@ describe("Kubernetes runner command handlers", () => {
       await expect(getRolloutStatus({ service: K8S_SERVICE })).rejects.toThrow(
         "forbidden: get access denied",
       );
+    });
+  });
+
+  describe("getNodeStatus (K8s-only)", () => {
+    it("returns per-node Ready, pressure conditions, and allocatable/capacity in native shape", async () => {
+      mockCoreApi.listNode.mockResolvedValue({
+        items: [
+          {
+            metadata: { name: "node-1" },
+            status: {
+              conditions: [
+                { type: "MemoryPressure", status: "False" },
+                { type: "DiskPressure", status: "False" },
+                { type: "PIDPressure", status: "False" },
+                { type: "Ready", status: "True" },
+              ],
+              allocatable: { cpu: "3800m", memory: "7Gi", pods: "110" },
+              capacity: { cpu: "4", memory: "8Gi", pods: "110" },
+            },
+          },
+        ],
+      });
+
+      const result = (await getNodeStatus()) as {
+        nodes: Array<{
+          name: string;
+          conditions: Array<{ type: string; status: string }>;
+          allocatable: Record<string, string>;
+          capacity: Record<string, string>;
+        }>;
+      };
+
+      expect(result.nodes).toHaveLength(1);
+      const node = result.nodes[0]!;
+      expect(node.name).toBe("node-1");
+      const conditionTypes = node.conditions.map((c) => c.type);
+      expect(conditionTypes).toEqual(
+        expect.arrayContaining([
+          "Ready",
+          "MemoryPressure",
+          "DiskPressure",
+          "PIDPressure",
+        ]),
+      );
+      expect(node.allocatable).toMatchObject({ cpu: "3800m" });
+      expect(node.capacity).toMatchObject({ cpu: "4" });
     });
   });
 });

@@ -1,5 +1,9 @@
 import { buildInitialContext, buildChatContext } from "./context.js";
-import { TOOL_REGISTRY, getToolSchemas } from "./tools.js";
+import {
+  TOOL_REGISTRY,
+  getToolSchemas,
+  toolSupportsProvider,
+} from "./tools.js";
 import type { Provider, Tool, ToolExecuteContext } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
@@ -97,7 +101,7 @@ function mismatchedServiceProvider(
   if (typeof service !== "object" || service === null) return null;
   const provider = (service as Record<string, unknown>)["provider"]; // typeof guard above confirms object shape
   if (typeof provider !== "string") return null;
-  return entry.providers.some((p) => p === provider) ? null : provider;
+  return toolSupportsProvider(entry, provider) ? null : provider;
 }
 
 // Circuit breaker: before a write suspends for approval, refuse it outright when
@@ -310,7 +314,7 @@ export async function runInvestigation(
         );
         toolResults.push({
           tool_use_id: tool.id,
-          content: `Provider mismatch: "${tool.name}" only supports [${entry.providers.join(", ")}], but was called with a "${mismatchedProvider}" service identity. Echo the service identity as received; use an agnostic tool, or a tool matching that provider, instead. Do not retry this call as-is.`,
+          content: `Provider mismatch: "${tool.name}" only supports [${(entry.providers ?? []).join(", ")}], but was called with a "${mismatchedProvider}" service identity. Echo the service identity as received; use an agnostic tool, or a tool matching that provider, instead. Do not retry this call as-is.`,
           is_error: true,
         });
         continue;

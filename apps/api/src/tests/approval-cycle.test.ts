@@ -1,7 +1,15 @@
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
@@ -36,6 +44,7 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import { getDb } from "../db/client.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -131,6 +140,14 @@ describe("durable approval interrupts", () => {
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
+  });
+
+  afterEach(() => {
+    // The circuit breaker counts executed writes per (service, action) across the
+    // shared temp DB; without this, one case's approved restarts of web-01
+    // accumulate and trip the breaker, so a later case's write is refused instead
+    // of suspending. Reset the ledger so each case is independent.
+    getDb().prepare("DELETE FROM remediation_actions").run();
   });
 
   afterAll(async () => {
