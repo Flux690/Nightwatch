@@ -71,6 +71,19 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
     ON pending_human_input(claimed_at);
+
+  CREATE TABLE IF NOT EXISTS remediation_actions (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_use_id          TEXT NOT NULL UNIQUE,
+    session_id           TEXT NOT NULL REFERENCES sessions(session_id),
+    tool_name            TEXT NOT NULL,
+    service_identity_key TEXT,
+    status               TEXT NOT NULL,
+    input                TEXT NOT NULL,
+    result               TEXT,
+    created_at           TEXT NOT NULL,
+    resolved_at          TEXT
+  );
 `;
 
 let _db: Database.Database | undefined;
