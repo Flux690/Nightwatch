@@ -106,6 +106,10 @@ export async function getContainerLogs(
     namespace: resolved.namespace,
     container: resolved.containerName,
     tailLines: input.tailLines ?? 200,
+    // When the resolved pod is not live we fell back to a terminated instance
+    // (a crash-loop's dead container); its useful output lives in the previous
+    // container, so request that rather than the empty current one (story 14).
+    previous: !resolved.live,
     // K8s merges stdout and stderr; stderrOnly is not supported by the API.
     ...(input.sinceTimestamp !== undefined && {
       sinceSeconds: Math.max(
@@ -434,6 +438,32 @@ export async function getRolloutStatus(
     if (!isNotFoundError(err)) throw err;
     return notRunningResult(input.service);
   }
+}
+
+// Kubernetes-only node-level read (user story 7): when a pod is unhealthy the
+// cause may be the node, not the pod. Returns each node's conditions natively -
+// Ready plus MemoryPressure/DiskPressure/PIDPressure - alongside allocatable vs
+// capacity, with no normalization (ADR-0002). No service identity: pressure is
+// a node fact, not a per-workload one.
+export async function getNodeStatus(): Promise<{
+  nodes: Array<{
+    name: string;
+    conditions: unknown;
+    allocatable: unknown;
+    capacity: unknown;
+  }>;
+}> {
+  const coreApi = getCoreV1Api();
+  const nodeList = await coreApi.listNode();
+
+  const nodes = nodeList.items.map((node) => ({
+    name: node.metadata?.name ?? "",
+    conditions: node.status?.conditions ?? [],
+    allocatable: node.status?.allocatable ?? {},
+    capacity: node.status?.capacity ?? {},
+  }));
+
+  return { nodes };
 }
 
 async function execInPod(

@@ -33,8 +33,6 @@ export type {
   GetAlertHistoryInput,
   GetRecentCommitsInput,
   CommitInfo,
-  GetRecentDeploysInput,
-  DeployInfo,
   GetEnvVariableNamesInput,
   ReadFileInput,
   ReadFileResult,

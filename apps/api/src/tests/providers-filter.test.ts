@@ -109,6 +109,61 @@ describe("providers filter and mismatch rejection", () => {
       expect(entry!.providers).toEqual(["kubernetes"]);
       expect(entry!.access).toBe("read");
     });
+
+    it("host tools are Docker-scoped: absent on a Kubernetes-only fleet, present on Docker", () => {
+      const hostTools = [
+        "get_host_memory",
+        "get_host_cpu",
+        "get_host_disk",
+        "get_host_network",
+        "get_host_dmesg",
+      ];
+
+      const k8sNames = getToolSchemas(new Set(["kubernetes"])).map(
+        (s) => s.name,
+      );
+      const dockerNames = getToolSchemas(new Set(["docker"])).map(
+        (s) => s.name,
+      );
+
+      for (const name of hostTools) {
+        expect(k8sNames).not.toContain(name);
+        expect(dockerNames).toContain(name);
+      }
+    });
+
+    it("get_k8s_node_status is Kubernetes-only: present on a K8s fleet, absent on Docker", () => {
+      const k8sNames = getToolSchemas(new Set(["kubernetes"])).map(
+        (s) => s.name,
+      );
+      const dockerNames = getToolSchemas(new Set(["docker"])).map(
+        (s) => s.name,
+      );
+      expect(k8sNames).toContain("get_k8s_node_status");
+      expect(dockerNames).not.toContain("get_k8s_node_status");
+
+      const entry = TOOL_REGISTRY.find(
+        (t) => t.schema.name === "get_k8s_node_status",
+      );
+      expect(entry!.providers).toEqual(["kubernetes"]);
+      expect(entry!.access).toBe("read");
+    });
+
+    it("agnostic tools carry no providers annotation (absent means all)", () => {
+      const agnostic = TOOL_REGISTRY.find(
+        (t) => t.schema.name === "get_container_logs",
+      );
+      expect(agnostic!.providers).toBeUndefined();
+    });
+
+    it("get_recent_deploys is not offered (deferred, like rollback_deploy)", () => {
+      expect(
+        TOOL_REGISTRY.find((t) => t.schema.name === "get_recent_deploys"),
+      ).toBeUndefined();
+      expect(getToolSchemas().map((s) => s.name)).not.toContain(
+        "get_recent_deploys",
+      );
+    });
   });
 
   describe("agentic loop seam: K8s writes and mismatch rejection", () => {

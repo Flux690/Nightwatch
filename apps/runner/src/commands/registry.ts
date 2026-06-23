@@ -18,6 +18,7 @@ import {
   restartService as k8sRestartService,
   execCommand as k8sExecCommand,
   getRolloutStatus as k8sGetRolloutStatus,
+  getNodeStatus as k8sGetNodeStatus,
 } from "../kubernetes/commands.js";
 import {
   getHostMemory,
@@ -26,7 +27,6 @@ import {
   getHostNetwork,
   getHostDmesg,
 } from "./host.js";
-import { getRecentDeploys } from "./deploy.js";
 import { readFileCommand } from "./files.js";
 import {
   restartContainer,
@@ -118,10 +118,6 @@ export function createDispatchRegistry(): Map<string, Handler> {
       (i) => getHostDmesg(i as Parameters<typeof getHostDmesg>[0]),
     ],
     [
-      "get_recent_deploys",
-      (i) => getRecentDeploys(i as Parameters<typeof getRecentDeploys>[0]),
-    ],
-    [
       "read_file",
       (i) => readFileCommand(i as Parameters<typeof readFileCommand>[0]),
     ],
@@ -143,6 +139,7 @@ export function createDispatchRegistry(): Map<string, Handler> {
       "get_k8s_rollout_status",
       (i) => k8sGetRolloutStatus(i as GetK8sRolloutStatusInput),
     ],
+    ["get_k8s_node_status", () => k8sGetNodeStatus()],
     ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
   ]);
 }
