@@ -253,13 +253,13 @@ describe("Kubernetes runner command handlers", () => {
       });
       const mockPodMetric = {
         metadata: { name: RUNNING_POD.metadata.name },
-        containers: [{ name: "api-server", usage: { cpu: "50m", memory: "128Mi" } }],
+        containers: [
+          { name: "api-server", usage: { cpu: "50m", memory: "128Mi" } },
+        ],
       };
       MockMetrics.mockImplementation(function () {
         return {
-          getPodMetrics: vi
-            .fn()
-            .mockResolvedValue({ items: [mockPodMetric] }),
+          getPodMetrics: vi.fn().mockResolvedValue({ items: [mockPodMetric] }),
         };
       });
 
@@ -267,7 +267,9 @@ describe("Kubernetes runner command handlers", () => {
 
       expect(result).toMatchObject({
         podName: RUNNING_POD.metadata.name,
-        podMetric: expect.objectContaining({ metadata: { name: RUNNING_POD.metadata.name } }),
+        podMetric: expect.objectContaining({
+          metadata: { name: RUNNING_POD.metadata.name },
+        }),
       });
     });
   });
@@ -336,7 +338,10 @@ describe("Kubernetes runner command handlers", () => {
         }),
         expect.anything(),
       );
-      expect(result).toMatchObject({ success: true, resourceKind: "Deployment" });
+      expect(result).toMatchObject({
+        success: true,
+        resourceKind: "Deployment",
+      });
     });
 
     it("patches StatefulSet when no Deployment exists for the workload", async () => {
@@ -360,11 +365,16 @@ describe("Kubernetes runner command handlers", () => {
         }),
         expect.anything(),
       );
-      expect(result).toMatchObject({ success: true, resourceKind: "StatefulSet" });
+      expect(result).toMatchObject({
+        success: true,
+        resourceKind: "StatefulSet",
+      });
     });
 
     it("returns not-running finding when no live pod exists", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [TERMINATED_POD] });
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [TERMINATED_POD],
+      });
 
       const result = await restartService({
         service: K8S_SERVICE,
@@ -431,24 +441,26 @@ describe("Kubernetes runner command handlers", () => {
 
       MockExec.mockImplementation(function () {
         return {
-          exec: vi.fn().mockImplementation(
-            (
-              _ns: string,
-              _pod: string,
-              _container: string,
-              _cmd: string[],
-              stdout: NodeJS.WritableStream,
-              stderr: NodeJS.WritableStream,
-              _stdin: null,
-              _tty: boolean,
-              statusCallback: (s: { status: string }) => void,
-            ) => {
-              stdout.write("hello world\n");
-              stderr.write("");
-              statusCallback({ status: "Success" });
-              return Promise.resolve({} as WebSocket);
-            },
-          ),
+          exec: vi
+            .fn()
+            .mockImplementation(
+              (
+                _ns: string,
+                _pod: string,
+                _container: string,
+                _cmd: string[],
+                stdout: NodeJS.WritableStream,
+                stderr: NodeJS.WritableStream,
+                _stdin: null,
+                _tty: boolean,
+                statusCallback: (s: { status: string }) => void,
+              ) => {
+                stdout.write("hello world\n");
+                stderr.write("");
+                statusCallback({ status: "Success" });
+                return Promise.resolve({} as WebSocket);
+              },
+            ),
         };
       });
 
@@ -468,30 +480,34 @@ describe("Kubernetes runner command handlers", () => {
 
       MockExec.mockImplementation(function () {
         return {
-          exec: vi.fn().mockImplementation(
-            (
-              _ns: string,
-              _pod: string,
-              _container: string,
-              _cmd: string[],
-              _stdout: NodeJS.WritableStream,
-              _stderr: NodeJS.WritableStream,
-              _stdin: null,
-              _tty: boolean,
-              statusCallback: (s: {
-                status: string;
-                reason?: string;
-                details?: { causes?: Array<{ reason?: string; message?: string }> };
-              }) => void,
-            ) => {
-              statusCallback({
-                status: "Failure",
-                reason: "NonZeroExitCode",
-                details: { causes: [{ reason: "ExitCode", message: "2" }] },
-              });
-              return Promise.resolve({} as WebSocket);
-            },
-          ),
+          exec: vi
+            .fn()
+            .mockImplementation(
+              (
+                _ns: string,
+                _pod: string,
+                _container: string,
+                _cmd: string[],
+                _stdout: NodeJS.WritableStream,
+                _stderr: NodeJS.WritableStream,
+                _stdin: null,
+                _tty: boolean,
+                statusCallback: (s: {
+                  status: string;
+                  reason?: string;
+                  details?: {
+                    causes?: Array<{ reason?: string; message?: string }>;
+                  };
+                }) => void,
+              ) => {
+                statusCallback({
+                  status: "Failure",
+                  reason: "NonZeroExitCode",
+                  details: { causes: [{ reason: "ExitCode", message: "2" }] },
+                });
+                return Promise.resolve({} as WebSocket);
+              },
+            ),
         };
       });
 
@@ -507,7 +523,9 @@ describe("Kubernetes runner command handlers", () => {
 
     it("returns not-running finding when no live pod exists", async () => {
       vi.stubEnv("REMEDIATION_ENABLED", "true");
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [TERMINATED_POD] });
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [TERMINATED_POD],
+      });
 
       const result = await k8sExecCommand({
         service: K8S_SERVICE,
@@ -533,6 +551,48 @@ describe("Kubernetes runner command handlers", () => {
           risk: "low",
         }),
       ).rejects.toThrow("exec_command is disabled");
+    });
+
+    it("redacts secrets from K8s exec stdout before returning", async () => {
+      vi.stubEnv("REMEDIATION_ENABLED", "true");
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+
+      MockExec.mockImplementation(function () {
+        return {
+          exec: vi
+            .fn()
+            .mockImplementation(
+              (
+                _ns: string,
+                _pod: string,
+                _container: string,
+                _cmd: string[],
+                stdout: NodeJS.WritableStream,
+                stderr: NodeJS.WritableStream,
+                _stdin: null,
+                _tty: boolean,
+                statusCallback: (s: { status: string }) => void,
+              ) => {
+                stdout.write("token=supersecretvalue123\nstatus=ok\n");
+                stderr.write("");
+                statusCallback({ status: "Success" });
+                return Promise.resolve({} as WebSocket);
+              },
+            ),
+        };
+      });
+
+      const result = await k8sExecCommand({
+        service: K8S_SERVICE,
+        command: ["env"],
+        reason: "test",
+        risk: "low",
+      });
+
+      const { stdout } = result as { stdout: string };
+      expect(stdout).not.toContain("supersecretvalue123");
+      expect(stdout).toContain("[REDACTED]");
+      expect(stdout).toContain("status=ok");
     });
   });
 

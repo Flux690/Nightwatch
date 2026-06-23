@@ -12,6 +12,7 @@ import {
   resolveService,
   type NoRunningInstanceResult,
 } from "../docker/resolve-service.js";
+import { sanitizeExecOutput } from "../safety/allowlist.js";
 
 const RULES_PATH =
   process.env["NIGHTWATCH_RULES_PATH"] ?? "/etc/nightwatch/rules.yml";
@@ -109,13 +110,13 @@ export async function execCommand(
     stream.on("error", reject);
   });
 
-  const { stdout, stderr } = parseDockerMux(Buffer.concat(chunks));
+  const raw = parseDockerMux(Buffer.concat(chunks));
   const info = await exec.inspect();
 
   return {
     exitCode: info.ExitCode ?? 0,
-    stdout,
-    stderr,
+    stdout: sanitizeExecOutput(raw.stdout),
+    stderr: sanitizeExecOutput(raw.stderr),
     executedAt,
   };
 }
