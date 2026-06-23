@@ -15,6 +15,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import {
   createScriptRunner,
+  type ContractFakeProvider,
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
 
@@ -359,6 +360,147 @@ describe("providers filter and mismatch rejection", () => {
       expect(hasPendingHumanInput(sessionId)).toBe(false);
 
       ws.close();
+    });
+  });
+
+  describe("remediation-mode filter", () => {
+    describe("getToolSchemas remediation filtering (unit)", () => {
+      it("omits write tools when remediationEnabled is false", () => {
+        const schemas = getToolSchemas(undefined, false);
+        const names = schemas.map((s) => s.name);
+        expect(names).not.toContain("restart_container");
+        expect(names).not.toContain("exec_command");
+        expect(names).toContain("get_container_logs");
+        expect(names).toContain("get_container_list");
+      });
+
+      it("includes write tools when remediationEnabled is true", () => {
+        const schemas = getToolSchemas(undefined, true);
+        const names = schemas.map((s) => s.name);
+        expect(names).toContain("restart_container");
+        expect(names).toContain("exec_command");
+      });
+
+      it("includes write tools when remediationEnabled is absent (backward compat)", () => {
+        const schemas = getToolSchemas();
+        const names = schemas.map((s) => s.name);
+        expect(names).toContain("restart_container");
+        expect(names).toContain("exec_command");
+      });
+
+      it("combines provider filter and remediation filter correctly", () => {
+        const schemas = getToolSchemas(new Set(["docker"]), false);
+        const names = schemas.map((s) => s.name);
+        expect(names).not.toContain("restart_container");
+        expect(names).not.toContain("exec_command");
+        expect(names).not.toContain("get_k8s_rollout_status");
+        expect(names).toContain("get_container_logs");
+      });
+    });
+
+    describe("agentic loop seam: read-only mode propagation", () => {
+      let server: FastifyInstance;
+      let port: number;
+      let cleanupDb: () => void;
+      let SESSION: string;
+      let RO_TOKEN: string;
+
+      const RO_SERVICE = {
+        provider: "docker" as const,
+        project: "ro-app",
+        service: "ro-svc",
+      };
+
+      beforeAll(async () => {
+        cleanupDb = useTempDb();
+        SESSION = await mintTestSession();
+        RO_TOKEN = generateToken("remediation-mode-ro-001").id;
+
+        registerRunner(
+          RO_TOKEN,
+          () => {},
+          () => {},
+        );
+        setRunnerManifest(RO_TOKEN, {
+          runnerId: "runner-remediation-mode-ro",
+          hostname: "ro-host",
+          runnerVersion: "2.0.0",
+          capabilities: {
+            docker: true,
+            kubernetes: false,
+            services: [{ identity: RO_SERVICE, status: "running" }],
+            prometheus: { available: false },
+            postgres: { available: false },
+            redis: { available: false },
+            hostMetrics: false,
+            fileRead: false,
+            remediationEnabled: false,
+          },
+        });
+
+        server = Fastify({ logger: false });
+        await server.register(FastifyWebSocket);
+        await registerConsoleWsRoutes(server);
+        await registerSessionRoutes(server);
+        await server.listen({ port: 0, host: "127.0.0.1" });
+        port = (server.server.address() as AddressInfo).port;
+      });
+
+      afterAll(async () => {
+        unregisterRunner(RO_TOKEN);
+        await server.close();
+        cleanupDb();
+        vi.unstubAllEnvs();
+      });
+
+      it("system prompt states read-only mode and write tools are absent from the offered schema", async () => {
+        let capturedProvider: ContractFakeProvider | null = null;
+        mockCreateProvider.mockImplementationOnce(() => {
+          const p = scriptRunner.create();
+          capturedProvider = p;
+          return p;
+        });
+
+        setScript([{ text: "Investigating in read-only mode.", toolUses: [] }]);
+
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+        });
+        const events: WsEvent[] = [];
+        ws.on("message", (raw) => {
+          events.push(JSON.parse(raw.toString()) as WsEvent);
+        });
+        await waitForConnected(ws);
+
+        const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `nw_auth=${SESSION}`,
+          },
+          body: JSON.stringify({ message: "What is going on?" }),
+        });
+        expect(res.status).toBe(202);
+
+        await waitFor(() => events.some((e) => e.type === "RUN_FINISHED"));
+
+        expect(mockCreateProvider).toHaveBeenCalled();
+        const systemPromptArg = mockCreateProvider.mock.lastCall?.[0] as string;
+        expect(systemPromptArg.toLowerCase()).toContain("read-only");
+        expect(systemPromptArg).toContain("REMEDIATION_ENABLED");
+
+        expect(capturedProvider).not.toBeNull();
+        const toolsPassedToChat = capturedProvider!.chat.mock.calls[0]?.[0] as
+          | Array<{ name: string }>
+          | undefined;
+        expect(toolsPassedToChat).toBeDefined();
+        const offeredNames = toolsPassedToChat!.map((s) => s.name);
+        expect(offeredNames).not.toContain("restart_container");
+        expect(offeredNames).not.toContain("exec_command");
+        expect(offeredNames).toContain("get_container_logs");
+
+        ws.close();
+      });
     });
   });
 });

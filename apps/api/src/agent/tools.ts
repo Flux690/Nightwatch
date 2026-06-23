@@ -589,12 +589,20 @@ export function toolSupportsProvider(tool: Tool, provider: string): boolean {
 
 // Provider-specific tools are offered only to fleets that include a matching
 // provider; agnostic tools pass for any fleet. Omitting the filter shows every
-// tool, regardless of fleet.
+// tool, regardless of fleet. remediationEnabled === false strips every
+// access: "write" tool from the offered set (REMEDIATION_ENABLED master
+// switch, ADR-0003); omitting it, or passing true, offers every tool as
+// before, so existing callers are unaffected.
 export function getToolSchemas(
   fleetProviders?: ReadonlySet<Provider>,
+  remediationEnabled?: boolean,
 ): ToolSchema[] {
-  if (!fleetProviders) return TOOL_REGISTRY.map((t) => t.schema);
-  return TOOL_REGISTRY.filter((t) =>
-    [...fleetProviders].some((p) => toolSupportsProvider(t, p)),
-  ).map((t) => t.schema);
+  const eligible =
+    remediationEnabled === false
+      ? TOOL_REGISTRY.filter((t) => t.access !== "write")
+      : TOOL_REGISTRY;
+  if (!fleetProviders) return eligible.map((t) => t.schema);
+  return eligible
+    .filter((t) => [...fleetProviders].some((p) => toolSupportsProvider(t, p)))
+    .map((t) => t.schema);
 }

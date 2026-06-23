@@ -88,6 +88,21 @@ function currentFleetProviders(): ReadonlySet<Provider> | undefined {
   return providers.size > 0 ? providers : undefined;
 }
 
+// Remediation mode is the master write switch (ADR-0003, REMEDIATION_ENABLED):
+// an investigation takes the mode of the runner it acts on. A known alerting
+// runner's manifest is authoritative. A chat session has no single target
+// runner yet, so - mirroring currentFleetProviders' permissive union - it is
+// enabled if any connected runner has remediation on; a quiet or all-read-only
+// fleet is the safe default (false) rather than silently hiding write tools
+// from the one runner that has them enabled.
+function currentRemediationEnabled(runnerId?: string): boolean {
+  if (runnerId) {
+    const manifest = getRunnerManifestForAlert(runnerId);
+    if (manifest) return manifest.capabilities.remediationEnabled;
+  }
+  return listRunners().some((r) => r.manifest?.capabilities.remediationEnabled);
+}
+
 // Returns the service's provider string if it does not match the tool's
 // declared providers (e.g. a Kubernetes-only tool called with a docker
 // identity), so the model gets a corrective error instead of acting on the
@@ -181,10 +196,13 @@ export async function runInvestigation(
     alert != null
       ? getRunnerManifestForAlert(alert.runnerId)?.capabilities.services
       : undefined;
+  const remediationEnabled = currentRemediationEnabled(
+    alert?.runnerId ?? undefined,
+  );
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(allAlerts, serviceSnapshot)
-      : buildChatContext();
+      ? buildInitialContext(allAlerts, serviceSnapshot, remediationEnabled)
+      : buildChatContext(remediationEnabled);
   const provider = createProvider(systemPrompt, config, apiKey);
 
   const sessionMeta: SessionMeta = {
@@ -238,7 +256,7 @@ export async function runInvestigation(
     let response: ChatResponse;
     try {
       response = await provider.chat(
-        getToolSchemas(fleetProviders),
+        getToolSchemas(fleetProviders, remediationEnabled),
         (d) => publishTextMessageContent(sessionId, d),
         signal,
       );

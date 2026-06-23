@@ -21,15 +21,33 @@ How you operate:
 
 Budget: at most 24 tool calls and 5 minutes of investigation time (human approval wait excluded).`;
 
-export function buildChatContext(): InitialContext {
-  return { systemPrompt: SYSTEM_PROMPT, firstUserMessage: "" };
+// Appended when the runner has remediation off (the default for a fresh
+// runner). Write tools are filtered out of the offered schema entirely
+// (getToolSchemas in agent/tools.ts) - this just tells the model why, so it
+// recommends instead of attempting a call that was never on the menu.
+const READ_ONLY_ADDENDUM = `
+
+You are in READ-ONLY mode: write tools (restart_container, exec_command) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. To enable remediation, set REMEDIATION_ENABLED=true on the runner and reconnect it.`;
+
+function systemPromptFor(remediationEnabled: boolean): string {
+  return remediationEnabled
+    ? SYSTEM_PROMPT
+    : SYSTEM_PROMPT + READ_ONLY_ADDENDUM;
+}
+
+export function buildChatContext(remediationEnabled = false): InitialContext {
+  return {
+    systemPrompt: systemPromptFor(remediationEnabled),
+    firstUserMessage: "",
+  };
 }
 
 export function buildInitialContext(
   alerts: NormalizedAlert[],
   serviceSnapshot?: ServiceManifestEntry[],
+  remediationEnabled = false,
 ): InitialContext {
-  if (!alerts[0]) return buildChatContext();
+  if (!alerts[0]) return buildChatContext(remediationEnabled);
 
   const alertsSection =
     alerts.length === 1
@@ -55,7 +73,10 @@ ${alertsSection}
 ${snapshotSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
-  return { systemPrompt: SYSTEM_PROMPT, firstUserMessage };
+  return {
+    systemPrompt: systemPromptFor(remediationEnabled),
+    firstUserMessage,
+  };
 }
 
 function formatAlert(alert: NormalizedAlert): string {
