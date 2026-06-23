@@ -136,6 +136,55 @@ describe("execCommand handler", () => {
     expect(exec).not.toHaveBeenCalled();
   });
 
+  it("redacts secrets from exec stdout before returning", async () => {
+    setupDockerMock(0, "password=s3cr3t-value\nstatus=ok\n");
+
+    const result = await execCommand({
+      service: SERVICE,
+      command: ["env"],
+      reason: "test",
+      risk: "low",
+    });
+
+    const { stdout } = result as { stdout: string };
+    expect(stdout).not.toContain("s3cr3t-value");
+    expect(stdout).toContain("[REDACTED]");
+    expect(stdout).toContain("status=ok");
+  });
+
+  it("redacts secrets from exec stderr before returning", async () => {
+    setupDockerMock(1, "", "token=mysecrettoken\nerror: connection refused\n");
+
+    const result = await execCommand({
+      service: SERVICE,
+      command: ["connect"],
+      reason: "test",
+      risk: "low",
+    });
+
+    const { stderr } = result as { stderr: string };
+    expect(stderr).not.toContain("mysecrettoken");
+    expect(stderr).toContain("[REDACTED]");
+    expect(stderr).toContain("connection refused");
+  });
+
+  it("caps exec stdout at 64 KB with an elision marker when output is very large", async () => {
+    const bigLine = "x".repeat(1000) + "\n";
+    const bigStdout = bigLine.repeat(100);
+    setupDockerMock(0, bigStdout);
+
+    const result = await execCommand({
+      service: SERVICE,
+      command: ["cat", "/big-file"],
+      reason: "test",
+      risk: "low",
+    });
+
+    const { stdout } = result as { stdout: string };
+    expect(stdout).toContain("bytes elided");
+    expect(Buffer.byteLength(stdout, "utf8")).toBeLessThan(bigStdout.length);
+  });
+
   it("propagates the raw engine error when the Docker API call fails", async () => {
     const engineError = new Error(
       "permission denied while trying to connect to the Docker daemon socket",

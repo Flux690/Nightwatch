@@ -28,6 +28,7 @@ import {
   notRunningResult,
   type NoRunningInstanceResult,
 } from "./resolve-service.js";
+import { sanitizeExecOutput } from "../safety/allowlist.js";
 
 // kubectl rollout restart sends this Content-Type so the server merges the
 // annotation into spec.template.metadata.annotations instead of interpreting
@@ -382,8 +383,8 @@ export async function execCommand(
 
   return {
     exitCode,
-    stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-    stderr: Buffer.concat(stderrChunks).toString("utf8"),
+    stdout: sanitizeExecOutput(Buffer.concat(stdoutChunks).toString("utf8")),
+    stderr: sanitizeExecOutput(Buffer.concat(stderrChunks).toString("utf8")),
     executedAt,
   };
 }
