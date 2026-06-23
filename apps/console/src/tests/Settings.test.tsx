@@ -33,6 +33,8 @@ const CONFIG: AgentConfig = {
   maxToolCalls: 24,
   hardTimeoutMs: 300000,
   toolTimeoutMs: 15000,
+  remediationBreakerLimit: 5,
+  remediationBreakerWindowMs: 600000,
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,

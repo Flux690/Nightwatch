@@ -2,6 +2,8 @@ import { getDb } from "../db/client.js";
 import {
   DEFAULT_HARD_TIMEOUT_MS,
   DEFAULT_MAX_TOOL_CALLS,
+  DEFAULT_REMEDIATION_BREAKER_LIMIT,
+  DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
@@ -30,6 +32,8 @@ type ConfigRow = {
   maxToolCalls: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
+  remediationBreakerLimit: number;
+  remediationBreakerWindowMs: number;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -44,6 +48,8 @@ const SELECT_ROW = `
          max_tool_calls     AS maxToolCalls,
          hard_timeout_ms    AS hardTimeoutMs,
          tool_timeout_ms    AS toolTimeoutMs,
+         remediation_breaker_limit     AS remediationBreakerLimit,
+         remediation_breaker_window_ms AS remediationBreakerWindowMs,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -77,6 +83,8 @@ function defaultConfigFromEnv(): AgentConfig {
     maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
     hardTimeoutMs: DEFAULT_HARD_TIMEOUT_MS,
     toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
+    remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
+    remediationBreakerWindowMs: DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -109,6 +117,8 @@ export function loadConfig(): AgentConfig {
     maxToolCalls: row.maxToolCalls,
     hardTimeoutMs: row.hardTimeoutMs,
     toolTimeoutMs: row.toolTimeoutMs,
+    remediationBreakerLimit: row.remediationBreakerLimit,
+    remediationBreakerWindowMs: row.remediationBreakerWindowMs,
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -131,10 +141,12 @@ const UPSERT_CONFIG = `
   INSERT INTO config (
     id, provider, model, thinking, max_output_tokens, max_retries,
     request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+    remediation_breaker_limit, remediation_breaker_window_ms,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @maxToolCalls, @hardTimeoutMs, @toolTimeoutMs,
+    @remediationBreakerLimit, @remediationBreakerWindowMs,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -147,6 +159,8 @@ const UPSERT_CONFIG = `
     max_tool_calls = excluded.max_tool_calls,
     hard_timeout_ms = excluded.hard_timeout_ms,
     tool_timeout_ms = excluded.tool_timeout_ms,
+    remediation_breaker_limit = excluded.remediation_breaker_limit,
+    remediation_breaker_window_ms = excluded.remediation_breaker_window_ms,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -170,6 +184,8 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       maxToolCalls: next.maxToolCalls,
       hardTimeoutMs: next.hardTimeoutMs,
       toolTimeoutMs: next.toolTimeoutMs,
+      remediationBreakerLimit: next.remediationBreakerLimit,
+      remediationBreakerWindowMs: next.remediationBreakerWindowMs,
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,
