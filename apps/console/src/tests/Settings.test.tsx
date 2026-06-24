@@ -505,4 +505,140 @@ describe("SettingsPage", () => {
       );
     });
   });
+
+  // --- Ingest credential ---
+
+  describe("Ingest credential", () => {
+    const INGEST_TOKEN = "nwi_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345";
+
+    function setupIngest(configured: boolean) {
+      const fetchMock = vi
+        .fn()
+        .mockImplementation((url: string, init?: RequestInit) => {
+          if (url.includes("/auth/status")) {
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
+            });
+          }
+          if (url.includes("/config/models")) {
+            return Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve(MODELS_RESPONSE),
+            });
+          }
+          if (url.includes("/ingest-credential") && init?.method === "POST") {
+            return Promise.resolve({
+              ok: true,
+              status: 201,
+              json: () => Promise.resolve({ token: INGEST_TOKEN }),
+            });
+          }
+          if (url.includes("/ingest-credential")) {
+            return Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve({ configured }),
+            });
+          }
+          if (url.includes("/config")) {
+            return Promise.resolve({
+              ok: true,
+              // apiKeyMasked is set here to avoid colliding with this
+              // section's own "Not configured" text for the ingest credential.
+              json: () =>
+                Promise.resolve({ ...CONFIG, apiKeyMasked: "sk-...test" }),
+            });
+          }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText: clipboardWrite },
+        configurable: true,
+      });
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      render(
+        <MantineProvider
+          theme={theme}
+          cssVariablesResolver={cssVariablesResolver}
+          defaultColorScheme="light"
+        >
+          <Notifications />
+          <QueryClientProvider client={qc}>
+            <AuthProvider>
+              <SettingsPage />
+            </AuthProvider>
+          </QueryClientProvider>
+        </MantineProvider>,
+      );
+
+      return { fetchMock, clipboardWrite };
+    }
+
+    it("fetches GET /api/ingest-credential on mount", async () => {
+      const { fetchMock } = setupIngest(false);
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/ingest-credential");
+      });
+    });
+
+    it("shows 'Not configured' and a Generate button when no credential exists", async () => {
+      setupIngest(false);
+      await waitFor(() => {
+        expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: /generate credential/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("shows 'Configured' and a Rotate button when a credential exists", async () => {
+      setupIngest(true);
+      await waitFor(() => {
+        expect(screen.getByText(/^configured$/i)).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: /rotate credential/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("POSTs /api/ingest-credential and shows the plaintext once on Generate", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setupIngest(false);
+
+      await user.click(
+        await screen.findByRole("button", { name: /generate credential/i }),
+      );
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/ingest-credential",
+          expect.objectContaining({ method: "POST" }),
+        );
+        expect(screen.getByText(INGEST_TOKEN)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/won't see this again/i)).toBeInTheDocument();
+    });
+
+    it("copies the credential to clipboard when copy button is clicked", async () => {
+      const user = userEvent.setup();
+      const { clipboardWrite } = setupIngest(false);
+
+      await user.click(
+        await screen.findByRole("button", { name: /generate credential/i }),
+      );
+      await waitFor(() => {
+        expect(screen.getByText(INGEST_TOKEN)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /copy/i }));
+      expect(clipboardWrite).toHaveBeenCalledWith(INGEST_TOKEN);
+    });
+  });
 });

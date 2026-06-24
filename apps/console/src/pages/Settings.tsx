@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import {
+  ActionIcon,
+  Alert,
   Autocomplete,
   Badge,
   Button,
   Checkbox,
+  Code,
   Group,
   NumberInput,
   Select,
@@ -64,12 +67,23 @@ export function SettingsPage(): React.JSX.Element {
 
   const availableModels = modelsData?.models ?? [];
 
+  const { data: ingestCredential } = useQuery<{ configured: boolean }>({
+    queryKey: ["ingest-credential"],
+    queryFn: () =>
+      fetch("/api/ingest-credential").then((r) => {
+        if (!r.ok) throw new Error(`ingest-credential ${r.status}`);
+        return r.json() as Promise<{ configured: boolean }>;
+      }),
+  });
+
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [generatingIngest, setGeneratingIngest] = useState(false);
+  const [ingestToken, setIngestToken] = useState<string | null>(null);
 
   useEffect(() => {
     if (config) setForm(config);
@@ -124,6 +138,23 @@ export function SettingsPage(): React.JSX.Element {
     } finally {
       setTesting(false);
     }
+  }
+
+  async function handleGenerateIngestCredential(): Promise<void> {
+    setGeneratingIngest(true);
+    try {
+      const res = await fetch("/api/ingest-credential", { method: "POST" });
+      if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
+      const { token } = (await res.json()) as { token: string };
+      setIngestToken(token);
+      await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
+    } finally {
+      setGeneratingIngest(false);
+    }
+  }
+
+  function copyIngestToken(): void {
+    if (ingestToken !== null) void navigator.clipboard.writeText(ingestToken);
   }
 
   function setField<K extends keyof AgentConfig>(
@@ -320,6 +351,64 @@ export function SettingsPage(): React.JSX.Element {
           </Button>
         </Stack>
       )}
+
+      <Stack gap="sm" mt="xl">
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+          Alerting
+        </Text>
+        <Group gap="xs" align="center">
+          <Text size="sm" fw={500}>
+            Ingest credential
+          </Text>
+          <Badge
+            color={ingestCredential?.configured ? "green" : "gray"}
+            variant="light"
+          >
+            {ingestCredential?.configured ? "Configured" : "Not configured"}
+          </Badge>
+        </Group>
+        <Button
+          size="xs"
+          variant="default"
+          style={{ alignSelf: "flex-start" }}
+          loading={generatingIngest}
+          onClick={() => void handleGenerateIngestCredential()}
+        >
+          {ingestCredential?.configured
+            ? "Rotate credential"
+            : "Generate credential"}
+        </Button>
+        {ingestToken !== null && (
+          <Alert
+            color="yellow"
+            title="You won't see this again — if lost, rotate to issue a new one"
+            withCloseButton
+            onClose={() => setIngestToken(null)}
+          >
+            <Group gap="xs" align="flex-start" wrap="nowrap">
+              <Code
+                block
+                style={{
+                  flex: 1,
+                  fontFamily: "var(--nw-mono)",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
+                {ingestToken}
+              </Code>
+              <ActionIcon
+                variant="default"
+                size="lg"
+                aria-label="Copy ingest credential"
+                onClick={copyIngestToken}
+              >
+                ⧉
+              </ActionIcon>
+            </Group>
+          </Alert>
+        )}
+      </Stack>
 
       <Stack gap="sm" mt="xl">
         <Text size="xs" c="dimmed" tt="uppercase" fw={600}>

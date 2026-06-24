@@ -5,9 +5,10 @@ import { isDuplicate } from "./dedup.js";
 import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatcher.js";
-import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
+import { findTokenByValue, hashToken, touchLastUsed } from "../db/tokens.js";
+import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { getRunnerIdentity } from "../ws/router.js";
+import { getRunnerIdentity, listRunners } from "../ws/router.js";
 import { logger } from "../logger.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
@@ -24,20 +25,18 @@ export async function registerAlertRoutes(
       });
     }
 
-    const tokenRecord = findTokenByValue(plaintext);
-    if (!tokenRecord) {
+    const resolved = plaintext.startsWith("nwi_")
+      ? resolveViaIngestCredential(plaintext)
+      : resolveViaRunnerToken(plaintext);
+
+    if (resolved === null) {
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
+    if (resolved.kind === "rejected") {
+      return reply.code(resolved.status).send({ error: resolved.error });
+    }
 
-    // Touch before any processing so lastUsedAt reflects authenticated use.
-    touchLastUsed(tokenRecord.id);
-
-    // Use the token's UUID as the internal identifier for all dispatch and
-    // session records — the plaintext never flows downstream.
-    const tokenId = tokenRecord.id;
-    const identity = getRunnerIdentity(tokenId);
-    const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
-    const hostname = identity?.hostname ?? undefined;
+    const { runnerId, hostname } = resolved;
 
     let alerts: NormalizedAlert[];
     try {
@@ -96,6 +95,64 @@ export async function registerAlertRoutes(
 
     return reply.code(200).send({ received: alerts.length, enqueued, skipped });
   });
+}
+
+type AuthResolution =
+  | { kind: "resolved"; runnerId: string; hostname: string | undefined }
+  | { kind: "rejected"; status: number; error: string };
+
+// nwr_ tokens carry a runner identity directly (per-server credential): the
+// token's own runnerId, or whichever runner connected with it, or the token's
+// id as a last resort before any manifest arrives.
+function resolveViaRunnerToken(plaintext: string): AuthResolution | null {
+  const tokenRecord = findTokenByValue(plaintext);
+  if (!tokenRecord) return null;
+
+  // Touch before any processing so lastUsedAt reflects authenticated use.
+  touchLastUsed(tokenRecord.id);
+
+  // Use the token's UUID as the internal identifier for all dispatch and
+  // session records — the plaintext never flows downstream.
+  const tokenId = tokenRecord.id;
+  const identity = getRunnerIdentity(tokenId);
+  return {
+    kind: "resolved",
+    runnerId: tokenRecord.runnerId ?? identity?.runnerId ?? tokenId,
+    hostname: identity?.hostname ?? undefined,
+  };
+}
+
+// nwi_ tokens carry no runner identity (fleet-wide credential): until alert
+// labels can be matched against the fleet (a later slice), a single connected
+// runner is the only deterministic target. Zero or multiple runners must
+// reject loudly rather than guess (ADR-0004).
+function resolveViaIngestCredential(plaintext: string): AuthResolution | null {
+  const ingestHash = getIngestTokenHash();
+  if (!ingestHash || hashToken(plaintext) !== ingestHash) return null;
+
+  const online = listRunners().filter((r) => r.online);
+  if (online.length === 0) {
+    return {
+      kind: "rejected",
+      status: 503,
+      error: "no runner connected to route this alert",
+    };
+  }
+  if (online.length > 1) {
+    return {
+      kind: "rejected",
+      status: 400,
+      error:
+        "label-based resolution required for multi-runner fleets, coming soon",
+    };
+  }
+
+  const only = online[0]!;
+  return {
+    kind: "resolved",
+    runnerId: only.runnerId ?? only.tokenId,
+    hostname: only.hostname ?? undefined,
+  };
 }
 
 function extractToken(

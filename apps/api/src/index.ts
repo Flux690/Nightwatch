@@ -5,6 +5,7 @@ import { resolveSecretKey } from "./config/secret-key.js";
 import { initDb } from "./db/client.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerTokenRoutes } from "./auth/token.js";
+import { registerIngestCredentialRoutes } from "./auth/ingest-credential.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
@@ -32,6 +33,7 @@ await fastify.register(FastifyWebSocket);
 
 await registerAuthRoutes(fastify);
 await registerTokenRoutes(fastify);
+await registerIngestCredentialRoutes(fastify);
 await registerWsRoutes(fastify);
 await registerConsoleWsRoutes(fastify);
 await registerAlertRoutes(fastify);
