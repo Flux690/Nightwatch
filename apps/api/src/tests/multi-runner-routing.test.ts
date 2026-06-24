@@ -251,7 +251,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-1",
-            name: "get_container_logs",
+            name: "get_service_logs",
             input: { service: svc("postgres") },
           },
         ],
@@ -273,7 +273,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-2",
-            name: "get_container_stats",
+            name: "get_service_stats",
             input: { service: svc("nginx") },
           },
         ],
@@ -295,7 +295,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-3",
-            name: "get_container_logs",
+            name: "get_service_logs",
             input: { service: svc("ghost-svc") },
           },
         ],
@@ -372,7 +372,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-restart",
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: svc("postgres"),
               rationale: "OOM killed",
@@ -411,7 +411,7 @@ describe("multi-runner routing", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Wait for the approval interrupt — restart_container is a gated tool.
+    // Wait for the approval interrupt — restart_service is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
         (e) =>
@@ -461,7 +461,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-cross",
-            name: "get_container_logs",
+            name: "get_service_logs",
             input: { service: svc("redis") },
           },
         ],
@@ -484,7 +484,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-k8s",
-            name: "get_container_logs",
+            name: "get_service_logs",
             input: { service: k8sSvc("api-server", "production") },
           },
         ],

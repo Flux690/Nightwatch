@@ -226,7 +226,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -334,7 +334,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: "tu-b1",
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],
@@ -344,7 +344,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: "tu-b2",
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],
@@ -354,7 +354,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: "tu-b3",
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],

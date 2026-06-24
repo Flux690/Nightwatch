@@ -139,7 +139,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -207,7 +207,7 @@ describe("remediation action record", () => {
     const row = findRemediationAction(toolUseId);
     expect(row).toBeDefined();
     expect(row!.status).toBe("executed");
-    expect(row!.toolName).toBe("restart_container");
+    expect(row!.toolName).toBe("restart_service");
     expect(row!.sessionId).toBe(sessionId);
     expect(row!.serviceIdentityKey).toBe("docker/svc-01/api");
     expect(row!.resolvedBy).toBe("operator");
@@ -225,7 +225,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -394,7 +394,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],

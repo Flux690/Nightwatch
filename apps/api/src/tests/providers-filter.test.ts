@@ -75,8 +75,8 @@ describe("providers filter and mismatch rejection", () => {
     it("includes all tools when no providers set is given", () => {
       const schemas = getToolSchemas();
       const names = schemas.map((s) => s.name);
-      expect(names).toContain("get_container_logs");
-      expect(names).toContain("restart_container");
+      expect(names).toContain("get_service_logs");
+      expect(names).toContain("restart_service");
       expect(names).toContain("get_k8s_rollout_status");
     });
 
@@ -84,22 +84,22 @@ describe("providers filter and mismatch rejection", () => {
       const schemas = getToolSchemas(new Set(["docker"]));
       const names = schemas.map((s) => s.name);
       expect(names).not.toContain("get_k8s_rollout_status");
-      expect(names).toContain("get_container_logs");
-      expect(names).toContain("restart_container");
+      expect(names).toContain("get_service_logs");
+      expect(names).toContain("restart_service");
     });
 
     it("includes K8s-only tools for a Kubernetes-only fleet", () => {
       const schemas = getToolSchemas(new Set(["kubernetes"]));
       const names = schemas.map((s) => s.name);
       expect(names).toContain("get_k8s_rollout_status");
-      expect(names).toContain("get_container_logs");
+      expect(names).toContain("get_service_logs");
     });
 
     it("includes K8s-only tools for a mixed fleet", () => {
       const schemas = getToolSchemas(new Set(["docker", "kubernetes"]));
       const names = schemas.map((s) => s.name);
       expect(names).toContain("get_k8s_rollout_status");
-      expect(names).toContain("get_container_logs");
+      expect(names).toContain("get_service_logs");
     });
 
     it("get_k8s_rollout_status is registered as kubernetes-only in the registry", () => {
@@ -152,7 +152,7 @@ describe("providers filter and mismatch rejection", () => {
 
     it("agnostic tools carry no providers annotation (absent means all)", () => {
       const agnostic = TOOL_REGISTRY.find(
-        (t) => t.schema.name === "get_container_logs",
+        (t) => t.schema.name === "get_service_logs",
       );
       expect(agnostic!.providers).toBeUndefined();
     });
@@ -231,7 +231,7 @@ describe("providers filter and mismatch rejection", () => {
       vi.unstubAllEnvs();
     });
 
-    it("K8s restart_container still suspends for approval (write gate holds on K8s fleet)", async () => {
+    it("K8s restart_service still suspends for approval (write gate holds on K8s fleet)", async () => {
       executedCommands.length = 0;
 
       setScript([
@@ -240,7 +240,7 @@ describe("providers filter and mismatch rejection", () => {
           toolUses: [
             {
               id: "tu-k8s-write-1",
-              name: "restart_container",
+              name: "restart_service",
               input: {
                 service: K8S_SERVICE,
                 rationale: "K8s workload wedged",
@@ -281,7 +281,7 @@ describe("providers filter and mismatch rejection", () => {
       );
 
       expect(interrupt.payload["kind"]).toBe("approval");
-      expect(interrupt.payload["toolName"]).toBe("restart_container");
+      expect(interrupt.payload["toolName"]).toBe("restart_service");
       expect(executedCommands).not.toContain("restart_container");
       expect(hasPendingHumanInput(sessionId)).toBe(true);
 
@@ -368,33 +368,33 @@ describe("providers filter and mismatch rejection", () => {
       it("omits write tools when remediationEnabled is false", () => {
         const schemas = getToolSchemas(undefined, false);
         const names = schemas.map((s) => s.name);
-        expect(names).not.toContain("restart_container");
+        expect(names).not.toContain("restart_service");
         expect(names).not.toContain("exec_command");
-        expect(names).toContain("get_container_logs");
-        expect(names).toContain("get_container_list");
+        expect(names).toContain("get_service_logs");
+        expect(names).toContain("list_services");
       });
 
       it("includes write tools when remediationEnabled is true", () => {
         const schemas = getToolSchemas(undefined, true);
         const names = schemas.map((s) => s.name);
-        expect(names).toContain("restart_container");
+        expect(names).toContain("restart_service");
         expect(names).toContain("exec_command");
       });
 
       it("includes write tools when remediationEnabled is absent (backward compat)", () => {
         const schemas = getToolSchemas();
         const names = schemas.map((s) => s.name);
-        expect(names).toContain("restart_container");
+        expect(names).toContain("restart_service");
         expect(names).toContain("exec_command");
       });
 
       it("combines provider filter and remediation filter correctly", () => {
         const schemas = getToolSchemas(new Set(["docker"]), false);
         const names = schemas.map((s) => s.name);
-        expect(names).not.toContain("restart_container");
+        expect(names).not.toContain("restart_service");
         expect(names).not.toContain("exec_command");
         expect(names).not.toContain("get_k8s_rollout_status");
-        expect(names).toContain("get_container_logs");
+        expect(names).toContain("get_service_logs");
       });
     });
 
@@ -495,9 +495,9 @@ describe("providers filter and mismatch rejection", () => {
           | undefined;
         expect(toolsPassedToChat).toBeDefined();
         const offeredNames = toolsPassedToChat!.map((s) => s.name);
-        expect(offeredNames).not.toContain("restart_container");
+        expect(offeredNames).not.toContain("restart_service");
         expect(offeredNames).not.toContain("exec_command");
-        expect(offeredNames).toContain("get_container_logs");
+        expect(offeredNames).toContain("get_service_logs");
 
         ws.close();
       });

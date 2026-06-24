@@ -39,7 +39,7 @@ const BASE_CONFIG: AgentConfig = {
 };
 
 const READ_TOOL = {
-  name: "get_container_list",
+  name: "list_services",
   description: "List containers.",
   input_schema: {
     type: "object" as const,
@@ -121,7 +121,7 @@ describe("OpenAIProvider", () => {
       response_format?: unknown;
     };
     expect((callArgs.tools ?? []).map((t) => t.function.name)).toEqual([
-      "get_container_list",
+      "list_services",
     ]);
     expect(callArgs.response_format).toBeUndefined();
   });
@@ -139,7 +139,7 @@ describe("OpenAIProvider", () => {
                 type: "function",
                 id: "call-123",
                 function: {
-                  name: "get_container_list",
+                  name: "list_services",
                   arguments: JSON.stringify({ environment: "docker" }),
                 },
               },
@@ -153,7 +153,7 @@ describe("OpenAIProvider", () => {
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("get_container_list");
+    expect(response.toolUses[0].name).toBe("list_services");
     expect(response.toolUses[0].id).toBe("call-123");
   });
 

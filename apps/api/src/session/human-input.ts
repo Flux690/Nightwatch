@@ -14,7 +14,7 @@ import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
 import { buildSeed } from "./seed.js";
-import { executeRunnerTool } from "../agent/executor.js";
+import { findTool } from "../agent/tools.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 
 export class HumanInputError extends Error {
@@ -158,24 +158,38 @@ export async function respondToPendingHumanInput(
         is_error: true,
       };
     } else {
-      const execResult = await executeRunnerTool(
-        pending.toolName,
-        pending.toolInput,
-        {
+      const toolEntry = findTool(pending.toolName);
+      if (!toolEntry) {
+        logger.error(
+          { sessionId, tool: pending.toolName },
+          "approved tool not found in registry",
+        );
+        gatedResult = {
+          tool_use_id: pending.toolUseId,
+          content: `Tool "${pending.toolName}" not found in registry. Platform configuration error.`,
+          is_error: true,
+        };
+        settleRemediationAction(
+          pending.toolUseId,
+          "failed",
+          gatedResult.content,
+        );
+      } else {
+        const execResult = await toolEntry.execute(pending.toolInput, {
           runnerId: pending.originatingAlert?.runnerId,
           toolTimeoutMs: config.toolTimeoutMs,
-        },
-      );
-      const settled = execResult.is_error ? "failed" : "executed";
-      settleRemediationAction(pending.toolUseId, settled, execResult.content);
-      gatedResult = {
-        tool_use_id: pending.toolUseId,
-        content:
-          typeof execResult.content === "string"
-            ? execResult.content
-            : JSON.stringify(execResult.content),
-        is_error: execResult.is_error,
-      };
+        });
+        const settled = execResult.is_error ? "failed" : "executed";
+        settleRemediationAction(pending.toolUseId, settled, execResult.content);
+        gatedResult = {
+          tool_use_id: pending.toolUseId,
+          content:
+            typeof execResult.content === "string"
+              ? execResult.content
+              : JSON.stringify(execResult.content),
+          is_error: execResult.is_error,
+        };
+      }
     }
 
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");

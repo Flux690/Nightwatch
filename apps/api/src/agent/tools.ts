@@ -31,7 +31,7 @@ const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
 const DOCKER_ONLY: Provider[] = ["docker"];
 
 // Accepts both Docker and Kubernetes service identities. Echo the identity
-// exactly as given in the alert or a prior get_container_list result - do not
+// exactly as given in the alert or a prior list_services result - do not
 // guess. Provider is an opaque part of the handle (ADR-0001, ADR-0002).
 const SERVICE_IDENTITY_SCHEMA = {
   oneOf: [
@@ -115,9 +115,9 @@ async function fetchGitHubCommits(
 export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
-      name: "get_container_list",
+      name: "list_services",
       description:
-        "List all containers on the host (running and stopped) with status, image, uptime, and health.",
+        "List all services on the host (running and stopped) with status, image, uptime, and health.",
       input_schema: {
         type: "object",
         properties: {
@@ -146,9 +146,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_container_logs",
+      name: "get_service_logs",
       description:
-        "Fetch recent logs for a container, pre-filtered to error/warn lines and lines near the alert timestamp.",
+        "Fetch recent logs for a service, pre-filtered to error/warn lines and lines near the alert timestamp.",
       input_schema: {
         type: "object",
         properties: {
@@ -174,9 +174,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_container_inspect",
+      name: "get_service_config",
       description:
-        "Get container configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
+        "Get service configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -189,9 +189,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_container_stats",
+      name: "get_service_stats",
       description:
-        "Get real-time resource usage for a container: CPU, memory, network I/O, and block I/O. Docker returns percentages; Kubernetes returns raw quantified values (e.g. 100m cores, 128Mi).",
+        "Get real-time resource usage for a service: CPU, memory, network I/O, and block I/O. Docker returns percentages; Kubernetes returns raw quantified values (e.g. 100m cores, 128Mi).",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -204,9 +204,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_container_events",
+      name: "get_service_events",
       description:
-        "Get lifecycle events for a container. Docker returns daemon events (start, stop, oom, die). Kubernetes returns cluster events (Pulled, BackOff, OOMKilling, etc.).",
+        "Get lifecycle events for a service. Docker returns daemon events (start, stop, oom, die). Kubernetes returns cluster events (Pulled, BackOff, OOMKilling, etc.).",
       input_schema: {
         type: "object",
         properties: {
@@ -225,9 +225,8 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_container_processes",
-      description:
-        "List processes running inside a container (like docker top).",
+      name: "get_service_processes",
+      description: "List processes running inside a service (like docker top).",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -384,9 +383,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_env_variable_names",
+      name: "get_service_env_names",
       description:
-        "List environment variable names (not values) for a container to check for missing config.",
+        "List environment variable names (not values) for a service to check for missing config.",
       input_schema: {
         type: "object",
         properties: { service: SERVICE_IDENTITY_SCHEMA },
@@ -521,9 +520,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "restart_container",
+      name: "restart_service",
       description:
-        "WRITE: Restart a container. Requires human approval. Causes brief downtime.",
+        "WRITE: Restart a service. Requires human approval. Causes brief downtime.",
       input_schema: {
         type: "object",
         properties: {
@@ -585,6 +584,31 @@ export function toolSupportsProvider(tool: Tool, provider: string): boolean {
     tool.providers === undefined ||
     (tool.providers as readonly string[]).includes(provider)
   );
+}
+
+// Maps pre-rename LLM-facing tool names to their current schema.name. Used by
+// the resolver to execute interrupt records written before the rename deployed.
+// The breaker window (10 min) ensures no old-named records remain in
+// remediation_actions by the time this mapping could be removed.
+const LEGACY_TOOL_NAMES: Record<string, string> = {
+  get_container_list: "list_services",
+  get_container_logs: "get_service_logs",
+  get_container_inspect: "get_service_config",
+  get_container_stats: "get_service_stats",
+  get_container_events: "get_service_events",
+  get_container_processes: "get_service_processes",
+  get_env_variable_names: "get_service_env_names",
+  restart_container: "restart_service",
+};
+
+// Look up a tool by its current schema.name, falling back to the legacy name
+// map for interrupt records written before the tool rename deployed.
+export function findTool(toolName: string): Tool | undefined {
+  const direct = TOOL_REGISTRY.find((t) => t.schema.name === toolName);
+  if (direct) return direct;
+  const newName = LEGACY_TOOL_NAMES[toolName];
+  if (newName) return TOOL_REGISTRY.find((t) => t.schema.name === newName);
+  return undefined;
 }
 
 // Provider-specific tools are offered only to fleets that include a matching

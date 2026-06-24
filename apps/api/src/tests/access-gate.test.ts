@@ -141,7 +141,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-read-1",
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],
@@ -200,7 +200,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-write-1",
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -245,7 +245,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
 
     expect(interrupt.payload["kind"]).toBe("approval");
-    expect(interrupt.payload["toolName"]).toBe("restart_container");
+    expect(interrupt.payload["toolName"]).toBe("restart_service");
 
     // Runner must NOT have executed the write yet
     expect(executedCommands).not.toContain("restart_container");
@@ -340,7 +340,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-read",
-            name: "get_container_list",
+            name: "list_services",
             input: { environment: "docker" },
           },
         ],
@@ -363,7 +363,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-write",
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -446,7 +446,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(approvalInterrupt.payload["kind"]).toBe("approval");
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_container");
+    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
     expect(executedCommands).not.toContain("restart_container");
 
     // Approve

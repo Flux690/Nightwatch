@@ -165,7 +165,7 @@ describe("API-local session store", () => {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
       kind: "approval",
-      toolName: "restart_container",
+      toolName: "restart_service",
       toolInput: {},
       completedResults: [],
       claimedAt: null,

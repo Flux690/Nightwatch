@@ -530,7 +530,7 @@ describe("clarification interrupts", () => {
           },
           {
             id: restart1Id,
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -549,7 +549,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: restart2Id,
-            name: "restart_container",
+            name: "restart_service",
             input: {
               service: {
                 provider: "docker",
@@ -619,7 +619,7 @@ describe("clarification interrupts", () => {
           e.payload["kind"] === "approval",
       ),
     );
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_container");
+    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(

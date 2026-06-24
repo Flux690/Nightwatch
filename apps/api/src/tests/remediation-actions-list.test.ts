@@ -70,7 +70,7 @@ describe("GET /remediation-actions", () => {
     seedRemediationAction({
       toolUseId: "tu-list-older",
       sessionId: "sess-list-1",
-      toolName: "restart_container",
+      toolName: "restart_service",
       serviceIdentityKey: "docker/proj/web",
       status: "executed",
       resolvedBy: "operator",

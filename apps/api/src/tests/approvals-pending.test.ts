@@ -55,7 +55,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -87,9 +87,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-qa-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              service: { provider: "docker", project: "web-01", service: "web-01" },
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -125,7 +129,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
     const found = body[0];
-    expect(found.toolName).toBe("restart_container");
+    expect(found.toolName).toBe("restart_service");
     expect(found.status).toBe("pending");
     expect(found.sessionId).toBeTruthy();
 
@@ -160,9 +164,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-sc-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              service: { provider: "docker", project: "web-01", service: "web-01" },
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -235,9 +243,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-emp-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              service: { provider: "docker", project: "web-01", service: "web-01" },
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
