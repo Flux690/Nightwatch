@@ -25,3 +25,9 @@ export function getMetrics(): k8s.Metrics {
 export function getExec(): k8s.Exec {
   return new k8s.Exec(makeConfig());
 }
+
+export function getClusterName(): string | undefined {
+  const kc = makeConfig();
+  const ctx = kc.getCurrentContext();
+  return ctx || undefined;
+}

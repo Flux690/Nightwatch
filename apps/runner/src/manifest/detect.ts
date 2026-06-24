@@ -6,7 +6,7 @@ import {
   type ServiceManifestEntry,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
-import { getAppsV1Api } from "../kubernetes-client.js";
+import { getAppsV1Api, getClusterName } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
 
 const RUNNER_VERSION = "0.2.0";
@@ -55,10 +55,12 @@ async function detectDocker(): Promise<{
     // still advertised - otherwise routing would reject the call before the
     // runner ever gets to JIT-resolve it and report a clean finding.
     const list = await docker.listContainers({ all: true });
+    const server = hostname();
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const c of list) {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
-      const identity = deriveDockerServiceIdentity(c.Labels, name);
+      const base = deriveDockerServiceIdentity(c.Labels, name);
+      const identity = { ...base, server };
       const key = serviceIdentityKey(identity);
       const existing = byKey.get(key);
       // Prefer "running" over any stopped state when multiple containers share
@@ -85,13 +87,14 @@ async function detectKubernetes(): Promise<{
       appsApi.listStatefulSetForAllNamespaces(),
     ]);
 
+    const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"] ?? getClusterName();
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const item of [...deployments.items, ...statefulSets.items]) {
       const ns = item.metadata?.namespace ?? "default";
       const workload = item.metadata?.name ?? "";
       if (!workload) continue;
       byKey.set(`${ns}/${workload}`, {
-        identity: { provider: "kubernetes", namespace: ns, workload },
+        identity: { provider: "kubernetes", namespace: ns, workload, cluster },
         status: "running",
       });
     }

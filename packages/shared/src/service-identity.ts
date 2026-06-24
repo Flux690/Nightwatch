@@ -2,12 +2,14 @@ export interface DockerServiceIdentity {
   provider: "docker";
   project: string;
   service: string;
+  server?: string;
 }
 
 export interface KubernetesServiceIdentity {
   provider: "kubernetes";
   namespace: string;
   workload: string;
+  cluster?: string;
 }
 
 export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
@@ -30,9 +32,16 @@ export function deriveDockerServiceIdentity(
 
 // Canonical string form for equality/dedup/lookup and for rendering "known
 // services" in error messages. Provider-prefixed so a Docker and a Kubernetes
-// identity can never collide.
+// identity can never collide. When the server/cluster dimension is present it
+// is inserted after the provider segment so scoped and unscoped keys can never
+// collide (a scoped key always has one more path segment than an unscoped one).
 export function serviceIdentityKey(id: ServiceIdentity): string {
-  return id.provider === "docker"
-    ? `docker/${id.project}/${id.service}`
+  if (id.provider === "docker") {
+    return id.server
+      ? `docker/${id.server}/${id.project}/${id.service}`
+      : `docker/${id.project}/${id.service}`;
+  }
+  return id.cluster
+    ? `kubernetes/${id.cluster}/${id.namespace}/${id.workload}`
     : `kubernetes/${id.namespace}/${id.workload}`;
 }
