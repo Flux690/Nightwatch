@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getLoginVersion } from "../config/store.js";
+import { getLoginVersion } from "../db/user.js";
 
 const AUTH_COOKIE = "nw_auth";
 const SESSION_LIFETIME_S = 7 * 24 * 60 * 60;

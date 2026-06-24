@@ -35,10 +35,16 @@ const SCHEMA = `
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,
     reasoning_effort   TEXT,
-    owner_email        TEXT,
-    owner_hash         TEXT,
-    login_version      INTEGER NOT NULL DEFAULT 0,
     updated_at         TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user (
+    id                TEXT PRIMARY KEY,
+    email             TEXT,
+    hash              TEXT,
+    login_version     INTEGER NOT NULL DEFAULT 0,
+    ingest_token_hash TEXT,
+    updated_at        TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -89,6 +95,70 @@ const SCHEMA = `
   );
 `;
 
+// Migrates databases created before the config/user schema split. Detects the
+// old owner columns in config, copies the data into user, then recreates config
+// without them. Safe to call on fresh DBs (no-op when owner_email is absent).
+function applyMigrations(db: Database.Database): void {
+  const configCols = (
+    db.prepare("PRAGMA table_info(config)").all() as Array<{ name: string }>
+  ).map((c) => c.name);
+
+  if (!configCols.includes("owner_email")) return;
+
+  db.transaction(() => {
+    const { c } = db.prepare("SELECT COUNT(*) AS c FROM user").get() as {
+      c: number;
+    };
+
+    if (c === 0) {
+      db.prepare(
+        `INSERT OR IGNORE INTO user (id, email, hash, login_version, updated_at)
+         SELECT 'global', owner_email, owner_hash,
+                COALESCE(login_version, 0),
+                COALESCE(updated_at, datetime('now'))
+         FROM config
+         WHERE id = 'global' AND owner_email IS NOT NULL`,
+      ).run();
+    }
+
+    db.prepare("DROP TABLE IF EXISTS config_v2").run();
+
+    db.prepare(
+      `CREATE TABLE config_v2 (
+        id                 TEXT PRIMARY KEY,
+        provider           TEXT NOT NULL DEFAULT 'anthropic',
+        model              TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+        thinking           TEXT NOT NULL DEFAULT 'adaptive',
+        max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
+        max_retries        INTEGER NOT NULL DEFAULT 2,
+        request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
+        max_tool_calls     INTEGER NOT NULL DEFAULT 24,
+        hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
+        tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
+        remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
+        remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
+        base_url           TEXT,
+        api_key_encrypted  TEXT,
+        prompt_caching     INTEGER NOT NULL DEFAULT 1,
+        reasoning_effort   TEXT,
+        updated_at         TEXT NOT NULL
+      )`,
+    ).run();
+
+    db.prepare(
+      `INSERT INTO config_v2
+       SELECT id, provider, model, thinking, max_output_tokens, max_retries,
+              request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+              remediation_breaker_limit, remediation_breaker_window_ms,
+              base_url, api_key_encrypted, prompt_caching, reasoning_effort, updated_at
+       FROM config`,
+    ).run();
+
+    db.prepare("DROP TABLE config").run();
+    db.prepare("ALTER TABLE config_v2 RENAME TO config").run();
+  })();
+}
+
 let _db: Database.Database | undefined;
 
 export function getDb(): Database.Database {
@@ -98,6 +168,7 @@ export function getDb(): Database.Database {
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
     db.exec(SCHEMA);
+    applyMigrations(db);
     _db = db;
   }
   return _db;
