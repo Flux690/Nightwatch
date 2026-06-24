@@ -5,7 +5,11 @@ import WebSocket from "ws";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type { CapabilityManifest, RunnerRecord } from "@nightwatch/shared";
+import type {
+  CapabilityManifest,
+  FleetRunner,
+  RunnerRecord,
+} from "@nightwatch/shared";
 import { generateToken } from "../db/tokens.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
@@ -96,6 +100,16 @@ describe("flat runner registry", () => {
     });
     expect(res.statusCode).toBe(200);
     return JSON.parse(res.body) as RunnerRecord[];
+  }
+
+  async function getFleet(): Promise<FleetRunner[]> {
+    const res = await server.inject({
+      method: "GET",
+      url: "/fleet",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return JSON.parse(res.body) as FleetRunner[];
   }
 
   it("lists two runners each on their own token with correct manifests", async () => {
@@ -216,6 +230,57 @@ describe("flat runner registry", () => {
     expect(byToken.get(tokenBId)?.hostname).toBe("host-b");
     expect(byToken.get(tokenAId)?.online).toBe(true);
     expect(byToken.get(tokenBId)?.online).toBe(true);
+
+    a.close();
+    b.close();
+  });
+
+  it("GET /fleet returns connected runners with their service identities, with no token-management fields", async () => {
+    const { plaintext: tokenA } = generateToken("fleet-a");
+    const { plaintext: tokenB } = generateToken("fleet-b");
+
+    const a = await connectRunner(
+      port,
+      tokenA,
+      manifest("web-01", ["nginx", "api"]),
+    );
+    const b = await connectRunner(
+      port,
+      tokenB,
+      manifest("db-02", ["postgres"]),
+    );
+
+    const fleet = await waitFor(async () => {
+      const list = await getFleet();
+      const mine = list.filter(
+        (r) => r.hostname === "web-01" || r.hostname === "db-02",
+      );
+      return mine.length === 2 ? mine : undefined;
+    });
+
+    const byHostname = new Map(fleet.map((r) => [r.hostname, r]));
+    expect(byHostname.get("web-01")?.services).toEqual([
+      {
+        identity: { provider: "docker", project: "nginx", service: "nginx" },
+        status: "running",
+      },
+      {
+        identity: { provider: "docker", project: "api", service: "api" },
+        status: "running",
+      },
+    ]);
+    expect(byHostname.get("db-02")?.services).toEqual([
+      {
+        identity: {
+          provider: "docker",
+          project: "postgres",
+          service: "postgres",
+        },
+        status: "running",
+      },
+    ]);
+    expect(byHostname.get("web-01")?.online).toBe(true);
+    expect(byHostname.get("web-01")).not.toHaveProperty("token");
 
     a.close();
     b.close();

@@ -48,3 +48,15 @@ export interface RunnerRecord {
   lastSeen: string | null;
   manifest: CapabilityManifest | null;
 }
+
+// The live picture of one connected runner for fleet-wide reasoning (CONTEXT.md
+// "Fleet view"): just enough to match an alert or an agent's target identity
+// against what the fleet actually advertises. Unlike RunnerRecord, this carries
+// no DB-only fields (token, createdAt) - it is derived entirely from WS state.
+export interface FleetRunner {
+  runnerId: string;
+  hostname: string;
+  online: boolean;
+  lastSeen: number;
+  services: ServiceManifestEntry[];
+}

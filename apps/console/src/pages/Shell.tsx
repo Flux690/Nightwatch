@@ -16,6 +16,7 @@ import {
   ChevronRight,
   ChevronDown,
   ScrollText,
+  Network,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
@@ -287,6 +288,12 @@ export function Shell(): React.JSX.Element {
             to="/runners"
             icon={<Server {...ICON_PROPS} />}
             label="Runners"
+            compact={!expanded}
+          />
+          <NavLink
+            to="/fleet"
+            icon={<Network {...ICON_PROPS} />}
+            label="Fleet"
             compact={!expanded}
           />
           <NavLink

@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 import {
   serviceIdentityKey,
   type CapabilityManifest,
+  type FleetRunner,
   type RunnerCommandMessage,
   type RunnerResultMessage,
   type ServiceIdentity,
 } from "@nightwatch/shared";
+import { logger } from "../logger.js";
 
 interface PendingCommand {
   resolve: (result: unknown) => void;
@@ -114,6 +116,26 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
+// The live, read-only picture of the fleet (CONTEXT.md "Fleet view"): every
+// runner whose manifest has arrived, with the server-scoped service identities
+// it advertises. Used by the agent for cross-server reasoning, by the ingest
+// handler for resolve-or-reject matching, and by the console fleet page.
+export function getFleetView(): FleetRunner[] {
+  const now = Date.now();
+  const views: FleetRunner[] = [];
+  for (const conn of registry.values()) {
+    if (!conn.manifest) continue;
+    views.push({
+      runnerId: conn.manifest.runnerId,
+      hostname: conn.manifest.hostname,
+      online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+      lastSeen: conn.lastSeen,
+      services: conn.manifest.capabilities.services,
+    });
+  }
+  return views;
+}
+
 export function getRunnerIdentity(
   tokenId: string,
 ): { runnerId: string; hostname: string | null } | undefined {
@@ -164,45 +186,40 @@ function isServiceIdentity(value: unknown): value is ServiceIdentity {
   return false;
 }
 
-// Route across the whole flat fleet. Single-runner deployments use the
-// any-runner fallback. Multi-runner deployments route by durable service
-// identity (manifest lookup) or hostname; ambiguous host-level commands error
-// with the known set so the model can retry with a hostname parameter.
+// Route across the whole flat fleet. A command naming a service identity is
+// validated strictly against the fleet view: it must match exactly one
+// runner's manifest, or the command fails loud (ADR-0004 validate-and-route).
+// A command with no service identity falls back to the legacy chain (hint,
+// single-runner, hostname) for backward compat; each fallback step logs a
+// deprecation warning since it bypasses identity validation entirely.
 function resolveRunner(
   commandInput: Record<string, unknown>,
   runnerIdHint?: string,
 ): RunnerConnection {
   if (registry.size === 0) throw new RunnerOfflineError();
 
-  if (runnerIdHint) {
-    const hinted = registry.get(runnerIdHint);
-    if (hinted) return hinted;
-  }
-
-  if (registry.size === 1) {
-    // size is confirmed 1 above; the iterator value is guaranteed to be defined
-    return registry.values().next().value as RunnerConnection;
-  }
-
   const service = isServiceIdentity(commandInput["service"])
     ? commandInput["service"]
     : null;
-  const hostname =
-    typeof commandInput["hostname"] === "string"
-      ? commandInput["hostname"]
-      : null;
 
   if (service !== null) {
     const key = serviceIdentityKey(service);
-    for (const conn of registry.values()) {
-      if (
-        conn.manifest?.capabilities.services.some(
-          (s) => serviceIdentityKey(s.identity) === key,
-        )
-      ) {
-        return conn;
-      }
+    const owners = [...registry.values()].filter((conn) =>
+      conn.manifest?.capabilities.services.some(
+        (s) => serviceIdentityKey(s.identity) === key,
+      ),
+    );
+
+    const [owner] = owners;
+    if (owners.length === 1 && owner) return owner;
+
+    if (owners.length > 1) {
+      const hostnames = owners.map((c) => c.hostname).filter(Boolean);
+      throw new Error(
+        `Ambiguous service '${key}': advertised by more than one runner (${hostnames.join(", ")}). Add a server/cluster dimension to disambiguate.`,
+      );
     }
+
     const known = [...registry.values()]
       .flatMap((c) => c.manifest?.capabilities.services ?? [])
       .map((s) => serviceIdentityKey(s.identity))
@@ -212,9 +229,39 @@ function resolveRunner(
     );
   }
 
+  if (runnerIdHint) {
+    const hinted = registry.get(runnerIdHint);
+    if (hinted) {
+      logger.warn(
+        { runnerId: runnerIdHint },
+        "resolveRunner used the deprecated runnerId hint fallback; route by service identity instead",
+      );
+      return hinted;
+    }
+  }
+
+  if (registry.size === 1) {
+    logger.warn(
+      "resolveRunner used the deprecated single-runner fallback; route by service identity instead",
+    );
+    // size is confirmed 1 above; the iterator value is guaranteed to be defined
+    return registry.values().next().value as RunnerConnection;
+  }
+
+  const hostname =
+    typeof commandInput["hostname"] === "string"
+      ? commandInput["hostname"]
+      : null;
+
   if (hostname !== null) {
     for (const conn of registry.values()) {
-      if (conn.hostname === hostname) return conn;
+      if (conn.hostname === hostname) {
+        logger.warn(
+          { hostname },
+          "resolveRunner used the deprecated hostname fallback; route by service identity instead",
+        );
+        return conn;
+      }
     }
     const available = [...registry.values()]
       .map((c) => c.hostname)

@@ -74,6 +74,7 @@ export type {
 } from "./approvals.js";
 export type {
   CapabilityManifest,
+  FleetRunner,
   MetricSnapshot,
   RunnerRecord,
   ServiceManifestEntry,

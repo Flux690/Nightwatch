@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { RunnersPage } from "./pages/Runners.js";
 import { SettingsPage } from "./pages/Settings.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
+import { FleetPage } from "./pages/Fleet.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -66,12 +67,19 @@ const auditRoute = createRoute({
   component: AuditLogPage,
 });
 
+const fleetRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/fleet",
+  component: FleetPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
     indexRoute,
     sessionIdRoute,
     runnersRoute,
+    fleetRoute,
     settingsRoute,
     auditRoute,
   ]),

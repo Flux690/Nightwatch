@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { findTokenById, listTokensMeta } from "../db/tokens.js";
-import { sendCommand, listRunners } from "../ws/router.js";
+import { sendCommand, listRunners, getFleetView } from "../ws/router.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { RunnerRecord } from "@nightwatch/shared";
+import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
 
 const RULES_TIMEOUT_MS = 10_000;
 
@@ -51,6 +51,13 @@ export async function registerRunnerRoutes(
     }
     return records;
   });
+
+  // The fleet view (CONTEXT.md "Fleet view"): every connected runner and the
+  // server-scoped service identities it advertises. Read-only, no token
+  // management fields - the console fleet page's single pane of glass.
+  fastify.get("/fleet", { preHandler: requireSession }, (): FleetRunner[] =>
+    getFleetView(),
+  );
 
   // Push updated Prometheus alert rules to the runner (settings, not gated).
   // The URL param is the token's UUID.
