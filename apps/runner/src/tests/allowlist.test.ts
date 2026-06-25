@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { redactSecrets, capOutput } from "../safety/allowlist.js";
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  redactSecrets,
+  capOutput,
+  isPathAllowed,
+} from "../safety/allowlist.js";
 
 describe("redactSecrets", () => {
   describe("key-value patterns (JSON, YAML, env)", () => {
@@ -240,5 +247,61 @@ describe("capOutput", () => {
     const capped = capOutput(text, 40);
     expect(capped).toContain("bytes elided");
     expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(text.length);
+  });
+});
+
+describe("isPathAllowed", () => {
+  afterEach(() => {
+    delete process.env["FILE_ALLOWLIST"];
+  });
+
+  it("allows a path within an allowlisted root", () => {
+    expect(isPathAllowed("/var/log/nginx/access.log")).toBe(true);
+  });
+
+  it("allows the exact allowlisted root", () => {
+    expect(isPathAllowed("/var/log")).toBe(true);
+  });
+
+  it("rejects .. traversal out of an allowed root", () => {
+    expect(isPathAllowed("/var/log/../../etc/shadow")).toBe(false);
+  });
+
+  it("rejects a sibling-prefix path", () => {
+    // /etc/app is allowlisted but /etc/app-secrets must not be
+    expect(isPathAllowed("/etc/app-secrets")).toBe(false);
+  });
+
+  it("rejects a symlink inside an allowed directory that points outside it", () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "nw-allowlist-"));
+    const allowed = path.join(outer, "allowed");
+    fs.mkdirSync(allowed);
+    const target = path.join(outer, "secret.txt");
+    fs.writeFileSync(target, "secret");
+    const link = path.join(allowed, "escape");
+    fs.symlinkSync(target, link);
+    process.env["FILE_ALLOWLIST"] = allowed;
+    try {
+      expect(isPathAllowed(link)).toBe(false);
+    } finally {
+      fs.unlinkSync(link);
+      fs.unlinkSync(target);
+      fs.rmdirSync(allowed);
+      fs.rmdirSync(outer);
+    }
+  });
+
+  it("allows a legitimate read via the env var extension", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-allowlist-"));
+    process.env["FILE_ALLOWLIST"] = tmpDir;
+    try {
+      expect(isPathAllowed(path.join(tmpDir, "app.log"))).toBe(true);
+    } finally {
+      fs.rmdirSync(tmpDir);
+    }
+  });
+
+  it("rejects a path outside all allowlisted roots", () => {
+    expect(isPathAllowed("/home/user/passwords.txt")).toBe(false);
   });
 });

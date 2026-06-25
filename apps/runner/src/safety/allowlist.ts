@@ -1,3 +1,6 @@
+import path from "node:path";
+import fs from "node:fs";
+
 const DEFAULT_ALLOWLIST = [
   "/etc/nginx",
   "/etc/app",
@@ -71,7 +74,36 @@ const MAX_OUTPUT_BYTES = 64 * 1024;
 
 export function isPathAllowed(filePath: string): boolean {
   const allowlist = buildAllowlist();
-  return allowlist.some((allowed) => filePath.startsWith(allowed));
+  const normalized = path.resolve(filePath);
+
+  let resolved: string;
+  let pathExists: boolean;
+  try {
+    resolved = fs.realpathSync(normalized);
+    pathExists = true;
+  } catch {
+    resolved = normalized;
+    pathExists = false;
+  }
+
+  return allowlist.some((allowed) => {
+    const normalizedAllowed = path.resolve(allowed);
+    let effectiveAllowed = normalizedAllowed;
+    if (pathExists) {
+      // allowlist entry may itself be a symlink (e.g. /var/log on macOS); resolve
+      // both sides into the same namespace so the comparison is correct.
+      try {
+        effectiveAllowed = fs.realpathSync(normalizedAllowed);
+      } catch {
+        effectiveAllowed = normalizedAllowed;
+      }
+    }
+    // "+" prevents /etc/app-secrets from matching the /etc/app allowlist entry.
+    return (
+      resolved === effectiveAllowed ||
+      resolved.startsWith(effectiveAllowed + "/")
+    );
+  });
 }
 
 function buildAllowlist(): string[] {
