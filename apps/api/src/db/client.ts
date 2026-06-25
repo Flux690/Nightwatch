@@ -43,8 +43,9 @@ const SCHEMA = `
     email             TEXT,
     hash              TEXT,
     login_version     INTEGER NOT NULL DEFAULT 0,
-    ingest_token_hash TEXT,
-    updated_at        TEXT NOT NULL
+    ingest_token_hash      TEXT,
+    ingest_token_encrypted TEXT,
+    updated_at             TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -102,6 +103,13 @@ function applyMigrations(db: Database.Database): void {
   const configCols = (
     db.prepare("PRAGMA table_info(config)").all() as Array<{ name: string }>
   ).map((c) => c.name);
+
+  const userCols = (
+    db.prepare("PRAGMA table_info(user)").all() as Array<{ name: string }>
+  ).map((c) => c.name);
+  if (!userCols.includes("ingest_token_encrypted")) {
+    db.prepare("ALTER TABLE user ADD COLUMN ingest_token_encrypted TEXT").run();
+  }
 
   if (!configCols.includes("owner_email")) return;
 

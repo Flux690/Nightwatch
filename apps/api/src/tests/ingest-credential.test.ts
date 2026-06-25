@@ -103,22 +103,30 @@ describe("Fleet-wide ingest credential", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ configured: false });
+      expect(JSON.parse(res.body)).toEqual({ configured: false, token: null });
     });
 
-    it("reports configured: true after a credential is generated, without leaking the plaintext", async () => {
-      await server.inject({
+    it("reveals the plaintext of an existing credential for the wizard", async () => {
+      const postRes = await server.inject({
         method: "POST",
         url: "/ingest-credential",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
+      const { token: generated } = JSON.parse(postRes.body) as {
+        token: string;
+      };
+
       const res = await server.inject({
         method: "GET",
         url: "/ingest-credential",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
-      expect(JSON.parse(res.body)).toEqual({ configured: true });
-      expect(res.body).not.toContain("nwi_");
+      const body = JSON.parse(res.body) as {
+        configured: boolean;
+        token: string | null;
+      };
+      expect(body.configured).toBe(true);
+      expect(body.token).toBe(generated);
     });
 
     it("requires a session", async () => {

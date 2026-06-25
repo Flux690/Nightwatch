@@ -101,6 +101,33 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
             }),
         });
       }
+      if (url === "/api/alerts/validate" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              alerts: [
+                {
+                  sourceAlertId: "sample",
+                  identity: {
+                    provider: "docker",
+                    project: "sample-service",
+                    service: "sample-service",
+                  },
+                  identityKey: "docker/sample-service/sample-service",
+                  alertType: "TestAlert",
+                  severity: "warning",
+                  resolution: {
+                    status: "resolved",
+                    runnerId: "runner-web-01",
+                    hostname: "web-01",
+                  },
+                },
+              ],
+            }),
+        });
+      }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
   vi.stubGlobal("fetch", fetchMock);
@@ -266,6 +293,117 @@ describe("AddServerWizard", () => {
     expect(screen.getByText(/alerts\/ingest/)).toBeInTheDocument();
   });
 
+  it("tests the webhook with the ingest credential and shows the resolved result", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToMonitoringStep(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: /generate credential/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /test webhook/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/alerts/validate",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: "Bearer nwi_generatedtoken123",
+          }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/resolved/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/web-01/)).toBeInTheDocument();
+  });
+
+  it("shows the rejection reason when the test webhook payload doesn't match the fleet", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url === "/api/runners") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([CONNECTED_RUNNER]),
+          });
+        }
+        if (url === "/api/tokens" && init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve(GENERATED_TOKEN),
+          });
+        }
+        if (url === "/api/connect.sh") {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve(CONNECT_SCRIPT),
+          });
+        }
+        if (url === "/api/ingest-credential" && init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve({ token: "nwi_generatedtoken123" }),
+          });
+        }
+        if (url === "/api/ingest-credential") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ configured: false }),
+          });
+        }
+        if (url === "/api/alerts/validate") {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                alerts: [
+                  {
+                    sourceAlertId: "sample",
+                    identity: {
+                      provider: "docker",
+                      project: "sample-service",
+                      service: "sample-service",
+                    },
+                    identityKey: "docker/sample-service/sample-service",
+                    alertType: "TestAlert",
+                    severity: "warning",
+                    resolution: {
+                      status: "rejected",
+                      reason:
+                        "No runner advertises service 'docker/sample-service/sample-service'.",
+                    },
+                  },
+                ],
+              }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }),
+    );
+
+    await advanceToMonitoringStep(user);
+    await user.click(
+      await screen.findByRole("button", { name: /generate credential/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /test webhook/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/no runner advertises/i)).toBeInTheDocument();
+    });
+  });
+
   async function advanceToVerifyStep(
     user: ReturnType<typeof userEvent.setup>,
   ): Promise<void> {
@@ -288,9 +426,7 @@ describe("AddServerWizard", () => {
     const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
     await advanceToVerifyStep(user);
 
-    await user.click(
-      screen.getByRole("button", { name: /send test alert/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /send test alert/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -350,9 +486,7 @@ describe("AddServerWizard", () => {
     );
 
     await advanceToVerifyStep(user);
-    await user.click(
-      screen.getByRole("button", { name: /send test alert/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /send test alert/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/runner not connected/i)).toBeInTheDocument();

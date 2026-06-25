@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./client.js";
 import { hashToken } from "./tokens.js";
+import { encrypt, decrypt } from "../config/crypto.js";
 
 const USER_ID = "global";
 
@@ -51,23 +52,34 @@ export function getIngestTokenHash(): string | null {
   return row?.ingest_token_hash ?? null;
 }
 
-function saveIngestTokenHash(hash: string): void {
+function saveIngestToken(hash: string, encrypted: string): void {
   getDb()
     .prepare(
-      `INSERT INTO user (id, ingest_token_hash, updated_at)
-       VALUES (@id, @hash, @updatedAt)
+      `INSERT INTO user (id, ingest_token_hash, ingest_token_encrypted, updated_at)
+       VALUES (@id, @hash, @encrypted, @updatedAt)
        ON CONFLICT(id) DO UPDATE SET
          ingest_token_hash = excluded.ingest_token_hash,
+         ingest_token_encrypted = excluded.ingest_token_encrypted,
          updated_at = excluded.updated_at`,
     )
-    .run({ id: USER_ID, hash, updatedAt: new Date().toISOString() });
+    .run({
+      id: USER_ID,
+      hash,
+      encrypted,
+      updatedAt: new Date().toISOString(),
+    });
 }
 
-// Generate the fleet-wide ingest credential. Returns the plaintext exactly
-// once; the DB stores only its SHA-256 hash. Calling this again rotates the
-// credential - the previous plaintext stops working immediately.
+export function getIngestTokenPlaintext(): string | null {
+  const row = getDb()
+    .prepare("SELECT ingest_token_encrypted FROM user WHERE id = ?")
+    .get(USER_ID) as { ingest_token_encrypted: string | null } | undefined;
+  if (!row?.ingest_token_encrypted) return null;
+  return decrypt(row.ingest_token_encrypted);
+}
+
 export function generateIngestToken(): string {
   const plaintext = "nwi_" + randomBytes(32).toString("base64url");
-  saveIngestTokenHash(hashToken(plaintext));
+  saveIngestToken(hashToken(plaintext), encrypt(plaintext));
   return plaintext;
 }

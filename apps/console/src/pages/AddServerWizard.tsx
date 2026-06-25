@@ -23,7 +23,46 @@ interface MintedToken {
   token: string;
 }
 
+interface ValidateAlertResult {
+  sourceAlertId: string;
+  identityKey: string;
+  resolution:
+    | { status: "resolved"; runnerId: string; hostname: string }
+    | { status: "rejected"; reason: string };
+}
+
 const RUNNER_POLL_MS = 3000;
+
+// A synthetic alert sent through /alerts/validate to confirm the credential
+// and the basic webhook shape work end-to-end before the operator wires up
+// their real monitoring labels.
+function sampleWebhookPayload(provider: Provider): unknown {
+  const labels =
+    provider === "docker"
+      ? {
+          alertname: "TestAlert",
+          severity: "warning",
+          container: "sample-service",
+        }
+      : {
+          alertname: "TestAlert",
+          severity: "warning",
+          namespace: "default",
+          deployment: "sample-service",
+        };
+  return {
+    alerts: [
+      {
+        status: "firing",
+        labels,
+        annotations: { summary: "Sample alert from the add-server wizard" },
+        startsAt: new Date().toISOString(),
+        endsAt: "0001-01-01T00:00:00Z",
+        fingerprint: "wizard-test-webhook",
+      },
+    ],
+  };
+}
 
 export function AddServerWizard({
   opened,
@@ -40,17 +79,29 @@ export function AddServerWizard({
   const [installError, setInstallError] = useState<string | null>(null);
   const [generatingIngest, setGeneratingIngest] = useState(false);
   const [ingestToken, setIngestToken] = useState<string | null>(null);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<
+    | { ok: true; results: ValidateAlertResult[] }
+    | { ok: false; error: string }
+    | null
+  >(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<
     { ok: true; hostname: string } | { ok: false; error: string } | null
   >(null);
 
-  const { data: ingestCredential } = useQuery<{ configured: boolean }>({
+  const { data: ingestCredential } = useQuery<{
+    configured: boolean;
+    token: string | null;
+  }>({
     queryKey: ["wizard-ingest-credential"],
     queryFn: () =>
       fetch("/api/ingest-credential").then((r) => {
         if (!r.ok) throw new Error(`ingest-credential ${r.status}`);
-        return r.json() as Promise<{ configured: boolean }>;
+        return r.json() as Promise<{
+          configured: boolean;
+          token: string | null;
+        }>;
       }),
     enabled: step === 2,
   });
@@ -81,6 +132,7 @@ export function AddServerWizard({
     setInstallText(null);
     setInstallError(null);
     setIngestToken(null);
+    setWebhookTestResult(null);
     setVerifyResult(null);
     onClose();
   }
@@ -130,6 +182,41 @@ export function AddServerWizard({
 
   function copyIngestToken(): void {
     if (ingestToken !== null) void navigator.clipboard.writeText(ingestToken);
+  }
+
+  async function handleTestWebhook(): Promise<void> {
+    const token = ingestToken ?? ingestCredential?.token;
+    if (!token || !provider) return;
+    setTestingWebhook(true);
+    setWebhookTestResult(null);
+    try {
+      const res = await fetch("/api/alerts/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(sampleWebhookPayload(provider)),
+      });
+      const body = (await res.json()) as
+        | { alerts: ValidateAlertResult[] }
+        | { error: string };
+      if (!res.ok || !("alerts" in body)) {
+        setWebhookTestResult({
+          ok: false,
+          error: "error" in body ? body.error : `alerts/validate ${res.status}`,
+        });
+        return;
+      }
+      setWebhookTestResult({ ok: true, results: body.alerts });
+    } catch (err) {
+      setWebhookTestResult({
+        ok: false,
+        error: err instanceof Error ? err.message : "Failed to test webhook",
+      });
+    } finally {
+      setTestingWebhook(false);
+    }
   }
 
   async function handleSendTestAlert(): Promise<void> {
@@ -274,71 +361,144 @@ export function AddServerWizard({
               </Badge>
             </Group>
 
-            <Button
-              size="xs"
-              variant="default"
-              style={{ alignSelf: "flex-start" }}
-              loading={generatingIngest}
-              onClick={() => void handleGenerateIngestCredential()}
-            >
-              {ingestCredential?.configured
-                ? "Rotate credential"
-                : "Generate credential"}
-            </Button>
-
-            {ingestToken !== null && (
-              <Alert
-                color="yellow"
-                title="You won't see this again - if lost, rotate to issue a new one"
+            {!ingestCredential?.configured && (
+              <Button
+                size="xs"
+                variant="default"
+                style={{ alignSelf: "flex-start" }}
+                loading={generatingIngest}
+                onClick={() => void handleGenerateIngestCredential()}
               >
-                <Stack gap="sm">
-                  <Group gap="xs" align="flex-start" wrap="nowrap">
+                Generate credential
+              </Button>
+            )}
+
+            {ingestCredential?.configured && (
+              <Button
+                size="xs"
+                variant="default"
+                style={{ alignSelf: "flex-start" }}
+                loading={generatingIngest}
+                onClick={() => void handleGenerateIngestCredential()}
+              >
+                Rotate credential
+              </Button>
+            )}
+
+            {(() => {
+              const displayToken =
+                ingestToken ?? ingestCredential?.token ?? null;
+              if (displayToken === null) return null;
+              return (
+                <Alert
+                  color={ingestToken !== null ? "yellow" : "blue"}
+                  title={
+                    ingestToken !== null
+                      ? "New credential generated"
+                      : "Existing fleet credential"
+                  }
+                >
+                  <Stack gap="sm">
+                    <Group gap="xs" align="flex-start" wrap="nowrap">
+                      <Code
+                        block
+                        style={{
+                          flex: 1,
+                          fontFamily: "var(--nw-mono)",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-all",
+                        }}
+                      >
+                        {displayToken}
+                      </Code>
+                      <ActionIcon
+                        variant="default"
+                        size="lg"
+                        aria-label="Copy ingest credential"
+                        onClick={() =>
+                          void navigator.clipboard.writeText(displayToken)
+                        }
+                      >
+                        ⧉
+                      </ActionIcon>
+                    </Group>
+
+                    <Text size="sm">
+                      Point your Alertmanager (bundled or your own) at this
+                      fleet-wide webhook:
+                    </Text>
                     <Code
                       block
                       style={{
-                        flex: 1,
-                        fontFamily: "var(--nw-mono)",
                         whiteSpace: "pre-wrap",
-                        wordBreak: "break-all",
+                        fontFamily: "var(--nw-mono)",
                       }}
                     >
-                      {ingestToken}
+                      {[
+                        "receivers:",
+                        "  - name: nightwatch",
+                        "    webhook_configs:",
+                        `      - url: '${window.location.origin}/alerts/ingest'`,
+                        "        http_config:",
+                        "          authorization:",
+                        "            type: Bearer",
+                        `            credentials: '${displayToken}'`,
+                      ].join("\n")}
                     </Code>
-                    <ActionIcon
-                      variant="default"
-                      size="lg"
-                      aria-label="Copy ingest credential"
-                      onClick={copyIngestToken}
-                    >
-                      ⧉
-                    </ActionIcon>
-                  </Group>
+                  </Stack>
+                </Alert>
+              );
+            })()}
 
-                  <Text size="sm">
-                    Point your Alertmanager (bundled or your own) at this
-                    fleet-wide webhook:
-                  </Text>
-                  <Code
-                    block
-                    style={{
-                      whiteSpace: "pre-wrap",
-                      fontFamily: "var(--nw-mono)",
-                    }}
+            {(() => {
+              const displayToken =
+                ingestToken ?? ingestCredential?.token ?? null;
+              if (displayToken === null) return null;
+              return (
+                <Stack gap="xs">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    style={{ alignSelf: "flex-start" }}
+                    loading={testingWebhook}
+                    onClick={() => void handleTestWebhook()}
                   >
-                    {[
-                      "receivers:",
-                      "  - name: nightwatch",
-                      "    webhook_configs:",
-                      `      - url: '${window.location.origin}/alerts/ingest'`,
-                      "        http_config:",
-                      "          authorization:",
-                      "            type: Bearer",
-                      `            credentials: '${ingestToken}'`,
-                    ].join("\n")}
-                  </Code>
+                    Test webhook
+                  </Button>
+
+                  {webhookTestResult?.ok === true &&
+                    webhookTestResult.results.map((result) => (
+                      <Alert
+                        key={result.sourceAlertId}
+                        color={
+                          result.resolution.status === "resolved"
+                            ? "green"
+                            : "red"
+                        }
+                        title={
+                          result.resolution.status === "resolved"
+                            ? "Resolved"
+                            : "Rejected"
+                        }
+                      >
+                        <Text size="sm">{result.identityKey}</Text>
+                        {result.resolution.status === "resolved" ? (
+                          <Text size="sm">
+                            Would route to {result.resolution.hostname}.
+                          </Text>
+                        ) : (
+                          <Text size="sm">{result.resolution.reason}</Text>
+                        )}
+                      </Alert>
+                    ))}
+                  {webhookTestResult?.ok === false && (
+                    <Alert color="red" title="Test webhook failed">
+                      {webhookTestResult.error}
+                    </Alert>
+                  )}
                 </Stack>
-              </Alert>
-            )}
+              );
+            })()}
 
             <Group justify="flex-end">
               <Button onClick={() => setStep(3)}>Continue</Button>

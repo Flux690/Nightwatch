@@ -1,14 +1,14 @@
 import type { FastifyInstance } from "fastify";
-import { generateIngestToken, getIngestTokenHash } from "../db/user.js";
+import {
+  generateIngestToken,
+  getIngestTokenHash,
+  getIngestTokenPlaintext,
+} from "../db/user.js";
 import { requireSession } from "./session.js";
 
 export async function registerIngestCredentialRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // Generate (or rotate) the fleet-wide nwi_ credential. The plaintext is
-  // returned exactly once here and never stored - the DB holds only the
-  // SHA-256 hash. Calling this again replaces the hash, so the previous
-  // credential stops working immediately.
   fastify.post(
     "/ingest-credential",
     { preHandler: requireSession },
@@ -18,10 +18,13 @@ export async function registerIngestCredentialRoutes(
     },
   );
 
-  // No plaintext is ever returned - just whether a credential exists.
   fastify.get(
     "/ingest-credential",
     { preHandler: requireSession },
-    async () => ({ configured: getIngestTokenHash() !== null }),
+    async () => {
+      const configured = getIngestTokenHash() !== null;
+      const token = configured ? getIngestTokenPlaintext() : null;
+      return { configured, token };
+    },
   );
 }
