@@ -1,7 +1,9 @@
-import { Group, Stack, Text, Title } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Button, Group, Stack, Text, Title } from "@mantine/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceIdentityKey, type FleetRunner } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { AddServerWizard } from "./AddServerWizard.js";
 
 const STATUS_COLOR = {
   online: "var(--nw-status-streaming)",
@@ -9,6 +11,9 @@ const STATUS_COLOR = {
 } as const;
 
 export function FleetPage(): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const { data: fleet } = useQuery<FleetRunner[]>({
     queryKey: ["fleet"],
     queryFn: () =>
@@ -19,11 +24,21 @@ export function FleetPage(): React.JSX.Element {
     refetchInterval: 30_000,
   });
 
+  function handleWizardClose(): void {
+    setWizardOpen(false);
+    void queryClient.invalidateQueries({ queryKey: ["fleet"] });
+  }
+
   return (
     <div className="nw-page" style={{ padding: "var(--mantine-spacing-md)" }}>
-      <Title order={2} size="h4" mb="md">
-        Fleet
-      </Title>
+      <Group justify="space-between" align="center" mb="md">
+        <Title order={2} size="h4">
+          Fleet
+        </Title>
+        <Button size="xs" onClick={() => setWizardOpen(true)}>
+          Add a server
+        </Button>
+      </Group>
 
       {fleet !== undefined && fleet.length === 0 && (
         <Text size="sm" c="dimmed">
@@ -64,6 +79,8 @@ export function FleetPage(): React.JSX.Element {
           </li>
         ))}
       </ul>
+
+      <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />
     </div>
   );
 }

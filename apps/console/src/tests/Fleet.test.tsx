@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
@@ -107,6 +108,17 @@ describe("FleetPage", () => {
     setup([]);
     await waitFor(() => {
       expect(screen.getByText(/no runners connected/i)).toBeInTheDocument();
+    });
+  });
+
+  it("opens the add-server wizard from its Add a server button", async () => {
+    const user = userEvent.setup();
+    setup([]);
+    await user.click(screen.getByRole("button", { name: /add a server/i }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radio", { name: /docker/i }),
+      ).toBeInTheDocument();
     });
   });
 });

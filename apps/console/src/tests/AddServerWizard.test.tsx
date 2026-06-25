@@ -1,0 +1,361 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MantineProvider } from "@mantine/core";
+import type { RunnerRecord } from "@nightwatch/shared";
+
+import { AddServerWizard } from "../pages/AddServerWizard.js";
+import { theme, cssVariablesResolver } from "../theme.js";
+
+const GENERATED_TOKEN = {
+  id: "new-token-uuid",
+  token: "nwr_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345",
+  label: null,
+  createdAt: new Date().toISOString(),
+};
+
+const CONNECT_SCRIPT = "#!/bin/sh\necho install-docker";
+const MANIFEST_YAML = "kind: Deployment\nname: nightwatch-runner";
+
+const AWAITING_RUNNER: RunnerRecord = {
+  id: "new-token-uuid",
+  token: "new-token-uuid",
+  hostname: null,
+  createdAt: "2024-01-01T00:00:00Z",
+  online: false,
+  lastSeen: null,
+  manifest: null,
+};
+
+const CONNECTED_RUNNER: RunnerRecord = {
+  id: "runner-web-01",
+  token: "new-token-uuid",
+  hostname: "web-01",
+  createdAt: "2024-01-01T00:00:00Z",
+  online: true,
+  lastSeen: new Date().toISOString(),
+  manifest: null,
+};
+
+function setup(opts: { runners?: RunnerRecord[] } = {}) {
+  const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText: clipboardWrite },
+    configurable: true,
+  });
+
+  const runners = opts.runners ?? [AWAITING_RUNNER];
+
+  const fetchMock = vi
+    .fn()
+    .mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/runners") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(runners),
+        });
+      }
+      if (url === "/api/tokens" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          json: () => Promise.resolve(GENERATED_TOKEN),
+        });
+      }
+      if (url === "/api/connect.sh") {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(CONNECT_SCRIPT),
+        });
+      }
+      if (url === "/api/manifest.yaml") {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(MANIFEST_YAML),
+        });
+      }
+      if (url === "/api/ingest-credential" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 201,
+          json: () => Promise.resolve({ token: "nwi_generatedtoken123" }),
+        });
+      }
+      if (url === "/api/ingest-credential") {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ configured: false }),
+        });
+      }
+      if (url === "/api/alerts/test" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              status: "enqueued",
+              runnerId: "runner-web-01",
+              hostname: "web-01",
+            }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+
+  const onClose = vi.fn();
+
+  const view = render(
+    <MantineProvider
+      theme={theme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="light"
+    >
+      <QueryClientProvider client={qc}>
+        <AddServerWizard opened onClose={onClose} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+
+  return { fetchMock, onClose, ...view };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("AddServerWizard", () => {
+  it("renders nothing when not opened", () => {
+    const qc = new QueryClient();
+    render(
+      <MantineProvider
+        theme={theme}
+        cssVariablesResolver={cssVariablesResolver}
+        defaultColorScheme="light"
+      >
+        <QueryClientProvider client={qc}>
+          <AddServerWizard opened={false} onClose={() => {}} />
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+    expect(screen.queryByText(/add a server/i)).not.toBeInTheDocument();
+  });
+
+  it("shows provider selection as the first step", () => {
+    setup();
+    expect(screen.getByRole("radio", { name: /docker/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /kubernetes/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("disables Continue until a provider is chosen", () => {
+    setup();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it("mints a runner token and shows the docker run script after choosing Docker", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup();
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/tokens",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/install-docker/)).toBeInTheDocument();
+    });
+  });
+
+  it("mints a runner token and shows the Kubernetes manifest after choosing Kubernetes", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole("radio", { name: /kubernetes/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/nightwatch-runner/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows an awaiting-connection state while the runner has not connected", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [AWAITING_RUNNER] });
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/waiting for/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it("enables Continue once the runner connects", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/connected/i)).toBeInTheDocument();
+    });
+    const continueButtons = screen.getAllByRole("button", {
+      name: /continue/i,
+    });
+    expect(continueButtons[continueButtons.length - 1]).toBeEnabled();
+  });
+
+  async function advanceToMonitoringStep(
+    user: ReturnType<typeof userEvent.setup>,
+  ): Promise<void> {
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/connected/i)).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+  }
+
+  it("shows a Generate credential button when no ingest credential exists yet", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToMonitoringStep(user);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /generate credential/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("generates the ingest credential and shows it once with the webhook config", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToMonitoringStep(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: /generate credential/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/ingest-credential",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/nwi_generatedtoken123/).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(screen.getByText(/alerts\/ingest/)).toBeInTheDocument();
+  });
+
+  async function advanceToVerifyStep(
+    user: ReturnType<typeof userEvent.setup>,
+  ): Promise<void> {
+    await advanceToMonitoringStep(user);
+    await user.click(await screen.findByRole("button", { name: /continue/i }));
+  }
+
+  it("closes via the Verify step's Done button", async () => {
+    const user = userEvent.setup();
+    const { onClose } = setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToVerifyStep(user);
+
+    await user.click(screen.getByRole("button", { name: /done/i }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a test alert and reports success once the pipeline confirms", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToVerifyStep(user);
+
+    await user.click(
+      screen.getByRole("button", { name: /send test alert/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/alerts/test",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ runnerId: "runner-web-01" }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/pipeline verified/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/web-01/)).toBeInTheDocument();
+  });
+
+  it("shows an error when the test alert fails", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url === "/api/runners") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([CONNECTED_RUNNER]),
+          });
+        }
+        if (url === "/api/tokens" && init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve(GENERATED_TOKEN),
+          });
+        }
+        if (url === "/api/connect.sh") {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve(CONNECT_SCRIPT),
+          });
+        }
+        if (url === "/api/ingest-credential") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ configured: false }),
+          });
+        }
+        if (url === "/api/alerts/test") {
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: () => Promise.resolve({ error: "runner not connected" }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }),
+    );
+
+    await advanceToVerifyStep(user);
+    await user.click(
+      screen.getByRole("button", { name: /send test alert/i }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/runner not connected/i)).toBeInTheDocument();
+    });
+  });
+});

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { AppShell, Tooltip, UnstyledButton, Button, Text } from "@mantine/core";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Link,
   Outlet,
@@ -10,6 +11,7 @@ import {
 import {
   Plus,
   Server,
+  ServerCog,
   Settings,
   LogOut,
   ChevronLeft,
@@ -22,6 +24,7 @@ import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
+import { AddServerWizard } from "./AddServerWizard.js";
 
 const SIDEBAR_KEY = "nw:sidebar-expanded";
 const EXPANDED_WIDTH = 250;
@@ -106,15 +109,23 @@ function NavLink({
 export function Shell(): React.JSX.Element {
   const [expanded, toggleExpanded] = useSidebarExpanded();
   const [sessionsOpen, setSessionsOpen] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const params = useParams({ strict: false }) as { id?: string };
   const attentionCount = useAttentionCount();
   const { phase, logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
   const ownerEmail = phase.kind === "authenticated" ? phase.email : null;
+
+  function handleWizardClose(): void {
+    setWizardOpen(false);
+    void queryClient.invalidateQueries({ queryKey: ["runners"] });
+    void queryClient.invalidateQueries({ queryKey: ["fleet"] });
+  }
 
   return (
     <AppShell
@@ -198,6 +209,37 @@ export function Shell(): React.JSX.Element {
               }}
             >
               <Plus {...ICON_PROPS} />
+            </UnstyledButton>
+          </Tooltip>
+        )}
+
+        {expanded ? (
+          <Button
+            leftSection={<ServerCog {...ICON_PROPS} />}
+            variant="subtle"
+            size="sm"
+            fullWidth
+            onClick={() => setWizardOpen(true)}
+          >
+            Add a server
+          </Button>
+        ) : (
+          <Tooltip label="Add a server" position="right" withArrow>
+            <UnstyledButton
+              aria-label="Add a server"
+              onClick={() => setWizardOpen(true)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 36,
+                borderRadius: "var(--mantine-radius-sm)",
+                color: "var(--nw-text-muted)",
+                alignSelf: "center",
+              }}
+            >
+              <ServerCog {...ICON_PROPS} />
             </UnstyledButton>
           </Tooltip>
         )}
@@ -374,6 +416,8 @@ export function Shell(): React.JSX.Element {
           <Outlet />
         )}
       </AppShell.Main>
+
+      <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />
     </AppShell>
   );
 }
