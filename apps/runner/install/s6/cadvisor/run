@@ -4,4 +4,5 @@ exec /opt/cadvisor/cadvisor \
   --port=8080 \
   --docker_only=true \
   --housekeeping_interval=5s \
-  --store_container_labels=false
+  --store_container_labels=true \
+  --allowlist_container_labels=com.docker.compose.project,com.docker.compose.service

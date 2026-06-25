@@ -11,6 +11,8 @@ services:
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=5s"
+      - "--store_container_labels=true"
+      - "--allowlist_container_labels=com.docker.compose.project,com.docker.compose.service"
 
   prometheus:
     image: prom/prometheus:v2.53.0

@@ -1,6 +1,8 @@
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
+  external_labels:
+    instance: "dev-host"
 
 rule_files:
   - /etc/prometheus/rules.yml
@@ -16,3 +18,12 @@ scrape_configs:
     static_configs:
       - targets:
           - "nightwatch-cadvisor:8080"
+    metric_relabel_configs:
+      - source_labels: [container_label_com_docker_compose_project]
+        regex: ".+"
+        target_label: compose_project
+      - source_labels: [container_label_com_docker_compose_service]
+        regex: ".+"
+        target_label: compose_service
+      - regex: "container_label_.*"
+        action: labeldrop

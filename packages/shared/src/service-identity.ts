@@ -18,16 +18,38 @@ export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
 // redeploy even though the container name/ID does not (docs/adr/0001).
 // Anonymous `docker run` containers carry neither label; the only durable-ish
 // handle available for them is their own live name, used for both fields.
+//
+// Label sources (in preference order):
+//   1. "com.docker.compose.project" / "com.docker.compose.service": canonical
+//      Docker Compose labels, usable by BYO monitoring that can attach
+//      arbitrary key names.
+//   2. "compose_project" / "compose_service": Prometheus-safe names produced
+//      by the bundled metric_relabel_configs (dots are not valid Prometheus
+//      label identifiers; cAdvisor exposes Docker labels as
+//      container_label_com_docker_compose_project, which the relabel rule
+//      renames to compose_project).
+//
+// "instance" (from Prometheus external_labels, set to the runner's hostname)
+// populates the optional server scope so the identity is globally unique
+// across the fleet and fleet-matching at ingest can distinguish servers.
 export function deriveDockerServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
   liveName: string,
 ): DockerServiceIdentity {
-  const project = labels?.["com.docker.compose.project"];
-  const service = labels?.["com.docker.compose.service"];
+  const project =
+    labels?.["com.docker.compose.project"] ?? labels?.["compose_project"];
+  const service =
+    labels?.["com.docker.compose.service"] ?? labels?.["compose_service"];
+  const server = labels?.["instance"] || undefined;
+
   if (project && service) {
-    return { provider: "docker", project, service };
+    return server
+      ? { provider: "docker", project, service, server }
+      : { provider: "docker", project, service };
   }
-  return { provider: "docker", project: liveName, service: liveName };
+  return server
+    ? { provider: "docker", project: liveName, service: liveName, server }
+    : { provider: "docker", project: liveName, service: liveName };
 }
 
 // Parses an inbound alert's labels into a candidate ServiceIdentity (ADR-0004

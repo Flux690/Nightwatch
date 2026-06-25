@@ -1,6 +1,10 @@
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
+  # Stamped on every alert sent to Alertmanager so deriveDockerServiceIdentity
+  # can populate the server scope for fleet-wide identity matching (ADR-0004).
+  external_labels:
+    instance: "${RUNNER_HOSTNAME}"
 
 rule_files:
   - /etc/nightwatch/rules.yml
@@ -17,6 +21,21 @@ scrape_configs:
       - targets:
           - "localhost:8080"
     metric_relabel_configs:
+      # Keep only the container metrics Nightwatch alert rules use.
       - source_labels: [__name__]
         regex: "container_(cpu_usage_seconds_total|memory_usage_bytes|spec_memory_limit_bytes|last_seen|restart_count|fs_usage_bytes|fs_limit_bytes|network_.*|start_time_seconds)"
         action: keep
+      # Rename cAdvisor's container_label_* copies of Docker Compose labels to
+      # Prometheus-safe names (dots are not valid in label identifiers).
+      # These become compose_project/compose_service on every metric so alert
+      # rules inherit them automatically and the alert parser can recover the
+      # durable service identity without further label mapping.
+      - source_labels: [container_label_com_docker_compose_project]
+        regex: ".+"
+        target_label: compose_project
+      - source_labels: [container_label_com_docker_compose_service]
+        regex: ".+"
+        target_label: compose_service
+      # Drop the raw container_label_* copies to avoid cardinality bloat.
+      - regex: "container_label_.*"
+        action: labeldrop
