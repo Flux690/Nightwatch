@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { parseAlertmanager } from "./parsers/alertmanager.js";
+import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
+import { resolveAlerts } from "./resolve-identity.js";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";
@@ -8,9 +8,8 @@ import { dispatcher } from "../dispatcher.js";
 import { findTokenByValue, hashToken, touchLastUsed } from "../db/tokens.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { getRunnerIdentity, listRunners } from "../ws/router.js";
+import { getFleetView } from "../ws/router.js";
 import { logger } from "../logger.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
@@ -25,26 +24,26 @@ export async function registerAlertRoutes(
       });
     }
 
-    const resolved = plaintext.startsWith("nwi_")
-      ? resolveViaIngestCredential(plaintext)
-      : resolveViaRunnerToken(plaintext);
-
-    if (resolved === null) {
+    if (!authenticate(plaintext)) {
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
-    if (resolved.kind === "rejected") {
-      return reply.code(resolved.status).send({ error: resolved.error });
-    }
 
-    const { runnerId, hostname } = resolved;
-
-    let alerts: NormalizedAlert[];
+    let parsed: ParsedAlert[];
     try {
-      alerts = parseSource(userAgent, request.body, runnerId, hostname);
+      parsed = parseSource(userAgent, request.body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: msg });
     }
+
+    // The token authenticates the request; the alert's labels - matched
+    // against the fleet's advertised services - are the sole source of
+    // routing (ADR-0004 resolve-or-reject, never a token-derived guess).
+    const resolution = resolveAlerts(parsed, getFleetView());
+    if (resolution.kind === "rejected") {
+      return reply.code(resolution.status).send({ error: resolution.error });
+    }
+    const alerts = resolution.alerts;
 
     let enqueued = 0;
     let skipped = 0;
@@ -56,7 +55,7 @@ export async function registerAlertRoutes(
         continue;
       }
 
-      // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
+      // 2. Intra-window dedup: same runnerId+sourceAlertId already queued in
       //    the batch window. True duplicate — the model would see it twice.
       if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) {
         skipped++;
@@ -97,62 +96,21 @@ export async function registerAlertRoutes(
   });
 }
 
-type AuthResolution =
-  | { kind: "resolved"; runnerId: string; hostname: string | undefined }
-  | { kind: "rejected"; status: number; error: string };
+// Authenticates the request only - grants no routing information. `nwi_`
+// (fleet-wide) and `nwr_` (per-runner, backward compat) both just prove the
+// request may submit alerts; which runner receives it is decided later, by
+// matching the alert's labels against the fleet (ADR-0004).
+function authenticate(plaintext: string): boolean {
+  if (plaintext.startsWith("nwi_")) {
+    const ingestHash = getIngestTokenHash();
+    return ingestHash !== null && hashToken(plaintext) === ingestHash;
+  }
 
-// nwr_ tokens carry a runner identity directly (per-server credential): the
-// token's own runnerId, or whichever runner connected with it, or the token's
-// id as a last resort before any manifest arrives.
-function resolveViaRunnerToken(plaintext: string): AuthResolution | null {
   const tokenRecord = findTokenByValue(plaintext);
-  if (!tokenRecord) return null;
-
+  if (!tokenRecord) return false;
   // Touch before any processing so lastUsedAt reflects authenticated use.
   touchLastUsed(tokenRecord.id);
-
-  // Use the token's UUID as the internal identifier for all dispatch and
-  // session records — the plaintext never flows downstream.
-  const tokenId = tokenRecord.id;
-  const identity = getRunnerIdentity(tokenId);
-  return {
-    kind: "resolved",
-    runnerId: tokenRecord.runnerId ?? identity?.runnerId ?? tokenId,
-    hostname: identity?.hostname ?? undefined,
-  };
-}
-
-// nwi_ tokens carry no runner identity (fleet-wide credential): until alert
-// labels can be matched against the fleet (a later slice), a single connected
-// runner is the only deterministic target. Zero or multiple runners must
-// reject loudly rather than guess (ADR-0004).
-function resolveViaIngestCredential(plaintext: string): AuthResolution | null {
-  const ingestHash = getIngestTokenHash();
-  if (!ingestHash || hashToken(plaintext) !== ingestHash) return null;
-
-  const online = listRunners().filter((r) => r.online);
-  if (online.length === 0) {
-    return {
-      kind: "rejected",
-      status: 503,
-      error: "no runner connected to route this alert",
-    };
-  }
-  if (online.length > 1) {
-    return {
-      kind: "rejected",
-      status: 400,
-      error:
-        "label-based resolution required for multi-runner fleets, coming soon",
-    };
-  }
-
-  const only = online[0]!;
-  return {
-    kind: "resolved",
-    runnerId: only.runnerId ?? only.tokenId,
-    hostname: only.hostname ?? undefined,
-  };
+  return true;
 }
 
 function extractToken(
@@ -163,17 +121,12 @@ function extractToken(
   return extractBearerToken(headers["authorization"]);
 }
 
-function parseSource(
-  userAgent: string,
-  body: unknown,
-  runnerId: string,
-  hostname: string | undefined,
-): NormalizedAlert[] {
+function parseSource(userAgent: string, body: unknown): ParsedAlert[] {
   if (
     userAgent.toLowerCase().includes("alertmanager") ||
     isAlertmanagerShape(body)
   ) {
-    return parseAlertmanager(body, runnerId, hostname);
+    return parseAlertmanager(body);
   }
   logger.warn(
     { preview: JSON.stringify(body).slice(0, 200) },

@@ -34,8 +34,18 @@ import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
   resolveCommand,
+  setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import { dockerService, manifest } from "./manifest-helper.js";
+
+// Matches the `container: "web-01"` label every alertmanagerBody() carries,
+// and uses the connection's own tokenId as runnerId so the real ingest
+// route's fleet-matched runnerId lines up with the hand-built alert() helper
+// below (both must agree for the dedup/injection assertions to mean anything).
+function webOneManifest(runnerId: string) {
+  return manifest(runnerId, "host-inject-resume", [dockerService("web-01")]);
+}
 
 // Shared FIFO gate: every chat() parks until released, so an alert can be
 // injected (or state asserted) while a run is parked mid-turn.
@@ -308,6 +318,7 @@ describe("mid-run alert injection (loop seam)", () => {
       },
       () => {},
     );
+    setRunnerManifest(tokenId, webOneManifest(tokenId));
 
     // R1: gated tool → run suspends. R2 (resume): free-form finish.
     queueRuns(

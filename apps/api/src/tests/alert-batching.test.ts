@@ -25,6 +25,19 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
+import {
+  registerRunner,
+  setRunnerManifest,
+  unregisterRunner,
+} from "../ws/router.js";
+import { dockerService, manifest } from "./manifest-helper.js";
+
+// Every alertBody() below carries the `container: "web-01"` label (anonymous
+// Docker fallback), so one connected runner advertising that exact identity
+// is enough for every alert in this file to resolve (ADR-0004).
+const WEB_01_MANIFEST = manifest("runner-web-01", "host-web-01", [
+  dockerService("web-01"),
+]);
 
 // A free-form finish: no tool call ends the run successfully and immediately.
 const FINISH: ScriptedTurn[] = [
@@ -60,6 +73,12 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    registerRunner(
+      "batching-runner-token",
+      () => {},
+      () => {},
+    );
+    setRunnerManifest("batching-runner-token", WEB_01_MANIFEST);
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
     await server.ready();
@@ -67,6 +86,7 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   afterAll(async () => {
     await server.close();
+    unregisterRunner("batching-runner-token");
     cleanupDb();
     vi.unstubAllEnvs();
   });

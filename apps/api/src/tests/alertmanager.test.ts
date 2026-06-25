@@ -23,7 +23,6 @@ describe("parseAlertmanager", () => {
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
       }),
-      "runner-1",
     );
 
     expect(alert?.targetIdentifier).toEqual({
@@ -36,13 +35,30 @@ describe("parseAlertmanager", () => {
   it("falls back to the live name when Compose labels are absent (anonymous docker run)", () => {
     const [alert] = parseAlertmanager(
       webhookWith({ alertname: "ContainerDown", name: "redis-cache" }),
-      "runner-1",
     );
 
     expect(alert?.targetIdentifier).toEqual({
       provider: "docker",
       project: "redis-cache",
       service: "redis-cache",
+    });
+  });
+
+  it("builds a Kubernetes identity from namespace + workload labels (ADR-0004)", () => {
+    const [alert] = parseAlertmanager(
+      webhookWith({
+        alertname: "CrashLoopBackOff",
+        namespace: "production",
+        deployment: "api-server",
+        cluster: "cluster-prod",
+      }),
+    );
+
+    expect(alert?.targetIdentifier).toEqual({
+      provider: "kubernetes",
+      namespace: "production",
+      workload: "api-server",
+      cluster: "cluster-prod",
     });
   });
 });

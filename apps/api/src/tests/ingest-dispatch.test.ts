@@ -26,6 +26,13 @@ import { generateToken } from "../db/tokens.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
+import {
+  recordHeartbeat,
+  registerRunner,
+  setRunnerManifest,
+  unregisterRunner,
+} from "../ws/router.js";
+import { dockerService, manifest } from "./manifest-helper.js";
 
 // A free-form finish: no tool call ends the run successfully.
 const FINISH: ScriptedTurn[] = [
@@ -49,13 +56,19 @@ function useImmediateProvider(): void {
 }
 
 // One firing Alertmanager alert with a caller-chosen fingerprint (-> sourceAlertId)
-// and severity, so dedup and rate-limit can be driven precisely.
-function alertBody(fingerprint: string, severity = "warning") {
+// and severity, so dedup and rate-limit can be driven precisely. `container`
+// defaults to "web-01" but each test picks its own so they resolve to distinct
+// runnerIds and never share the rate-limiter's per-runner counter.
+function alertBody(
+  fingerprint: string,
+  severity = "warning",
+  container = "web-01",
+) {
   return {
     alerts: [
       {
         status: "firing",
-        labels: { alertname: "HighCPU", severity, container: "web-01" },
+        labels: { alertname: "HighCPU", severity, container },
         annotations: { summary: "CPU high" },
         startsAt: new Date().toISOString(),
         endsAt: "0001-01-01T00:00:00Z",
@@ -77,8 +90,32 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
 
+  // Rate-limit and dedup are keyed by runnerId, so the two tests below need
+  // their alerts resolving to *different* runners - otherwise they'd share
+  // the rate-limiter's per-runner counter (ADR-0004 resolve-or-reject routes
+  // by label match: two different container labels on two different runners
+  // give two different runnerIds, the same isolation two different tokens
+  // used to give for free under the old token-implies-runner model).
   beforeAll(async () => {
     cleanupDb = useTempDb();
+    registerRunner(
+      "dispatch-runner-a-token",
+      () => {},
+      () => {},
+    );
+    setRunnerManifest(
+      "dispatch-runner-a-token",
+      manifest("runner-web-01", "host-web-01", [dockerService("web-01")]),
+    );
+    registerRunner(
+      "dispatch-runner-b-token",
+      () => {},
+      () => {},
+    );
+    setRunnerManifest(
+      "dispatch-runner-b-token",
+      manifest("runner-web-02", "host-web-02", [dockerService("web-02")]),
+    );
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
     await server.ready();
@@ -86,6 +123,8 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   afterAll(async () => {
     await server.close();
+    unregisterRunner("dispatch-runner-a-token");
+    unregisterRunner("dispatch-runner-b-token");
     cleanupDb();
     vi.unstubAllEnvs();
   });
@@ -114,8 +153,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   }
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
-    // A fresh token isolates this test's rate-limit counter from the others.
-    const { plaintext: token, id: tokenId } = generateToken("dedup");
+    // This test's alerts target web-01 -> resolve to runner-web-01; dedup is
+    // keyed by that runnerId now, not by the authenticating token (ADR-0004).
+    const { plaintext: token } = generateToken("dedup");
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -128,7 +168,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // run starts and parks. advanceTimersByTimeAsync flushes the microtask queue
     // at each step, which is required since waitFor itself uses setTimeout.
     await vi.advanceTimersByTimeAsync(90_001);
-    expect(dispatcher.isInvestigating(tokenId, "dup-1")).toBe(true);
+    expect(dispatcher.isInvestigating("runner-web-01", "dup-1")).toBe(true);
 
     // Same token + sourceAlertId while the first run is still active -> dropped.
     const dupe = await ingest(token, alertBody("dup-1"));
@@ -137,7 +177,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // End the active run; flush the async chain so the dedup key clears.
     gate.releaseAll();
     await vi.advanceTimersByTimeAsync(50);
-    expect(dispatcher.isInvestigating(tokenId, "dup-1")).toBe(false);
+    expect(dispatcher.isInvestigating("runner-web-01", "dup-1")).toBe(false);
 
     // The same alert now starts a fresh investigation - no 24h suppression.
     const refire = await ingest(token, alertBody("dup-1"));
@@ -156,27 +196,35 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
     // 10 distinct alerts all admitted.
     for (let i = 0; i < 10; i++) {
-      const r = await ingest(token, alertBody(`rl-${i}`));
+      const r = await ingest(token, alertBody(`rl-${i}`, "warning", "web-02"));
       expect(r).toMatchObject({ enqueued: 1, skipped: 0 });
     }
 
     // The 11th non-critical alert is rate-limited.
-    expect(await ingest(token, alertBody("rl-over"))).toMatchObject({
+    expect(
+      await ingest(token, alertBody("rl-over", "warning", "web-02")),
+    ).toMatchObject({
       enqueued: 0,
       skipped: 1,
     });
 
     // A critical alert bypasses the limit even while it is exhausted.
-    expect(await ingest(token, alertBody("rl-crit", "critical"))).toMatchObject(
-      {
-        enqueued: 1,
-        skipped: 0,
-      },
-    );
+    expect(
+      await ingest(token, alertBody("rl-crit", "critical", "web-02")),
+    ).toMatchObject({
+      enqueued: 1,
+      skipped: 0,
+    });
 
     // After the hourly window the counter resets and non-critical flows again.
+    // Jumping the fake clock forward also pushes the runner's heartbeat past
+    // its TTL, so refresh it - a real runner would have kept heartbeating
+    // throughout the skipped hour.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
-    expect(await ingest(token, alertBody("rl-after"))).toMatchObject({
+    recordHeartbeat("dispatch-runner-b-token");
+    expect(
+      await ingest(token, alertBody("rl-after", "warning", "web-02")),
+    ).toMatchObject({
       enqueued: 1,
       skipped: 0,
     });

@@ -7,6 +7,7 @@ export type {
 } from "./service-identity.js";
 export {
   deriveDockerServiceIdentity,
+  deriveServiceIdentity,
   serviceIdentityKey,
 } from "./service-identity.js";
 export type {
