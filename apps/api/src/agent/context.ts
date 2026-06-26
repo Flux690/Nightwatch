@@ -1,5 +1,6 @@
 import {
   serviceIdentityKey,
+  type FleetRunner,
   type NormalizedAlert,
   type ServiceManifestEntry,
 } from "@nightwatch/shared";
@@ -46,6 +47,7 @@ export function buildInitialContext(
   alerts: NormalizedAlert[],
   serviceSnapshot?: ServiceManifestEntry[],
   remediationEnabled = false,
+  fleetView?: FleetRunner[],
 ): InitialContext {
   if (!alerts[0]) return buildChatContext(remediationEnabled);
 
@@ -67,16 +69,32 @@ export function buildInitialContext(
         "\n"
       : "";
 
+  const fleetSection = buildFleetSummary(fleetView);
+
   const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
 --------------
 ${alertsSection}
-${snapshotSection}
+${snapshotSection}${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
     systemPrompt: systemPromptFor(remediationEnabled),
     firstUserMessage,
   };
+}
+
+function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
+  if (!fleetView || fleetView.length <= 1) return "";
+  const lines = fleetView
+    .filter((r) => r.services.length > 0)
+    .map((r) => {
+      const identities = r.services
+        .map((s) => serviceIdentityKey(s.identity))
+        .join(", ");
+      return `  ${r.hostname}: ${identities}`;
+    });
+  if (lines.length === 0) return "";
+  return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }
 
 function formatAlert(alert: NormalizedAlert): string {

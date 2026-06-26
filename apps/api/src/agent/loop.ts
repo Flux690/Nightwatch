@@ -22,7 +22,11 @@ import {
   publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
-import { getRunnerManifestForAlert, listRunners } from "../ws/router.js";
+import {
+  getFleetView,
+  getRunnerManifestForAlert,
+  listRunners,
+} from "../ws/router.js";
 import { logger } from "../logger.js";
 import {
   countExecutedRemediations,
@@ -199,9 +203,15 @@ export async function runInvestigation(
   const remediationEnabled = currentRemediationEnabled(
     alert?.runnerId ?? undefined,
   );
+  const fleetView = getFleetView();
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(allAlerts, serviceSnapshot, remediationEnabled)
+      ? buildInitialContext(
+          allAlerts,
+          serviceSnapshot,
+          remediationEnabled,
+          fleetView,
+        )
       : buildChatContext(remediationEnabled);
   const provider = createProvider(systemPrompt, config, apiKey);
 
