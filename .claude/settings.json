@@ -18,10 +18,10 @@
       "Bash(npx prettier *)",
       "Bash(docker compose *)",
       "Bash(node *)",
-      "Bash(tsx *)"
+      "Bash(tsx *)",
+      "Bash(git commit *)"
     ],
     "ask": [
-      "Bash(git commit *)",
       "Bash(git push *)"
     ]
   },

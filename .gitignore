@@ -39,3 +39,5 @@ issues
 
 # Per-feature PRDs — local working docs, not published
 .claude/*-prd.md
+docs
+CONTEXT.md
