@@ -79,6 +79,7 @@ export function insertExecutingRemediationAction(params: {
 
 // Called after the runner responds: transition 'executing' → 'executed'|'failed'.
 export function settleRemediationAction(
+  sessionId: string,
   toolUseId: string,
   status: "executed" | "failed",
   result: unknown,
@@ -89,9 +90,10 @@ export function settleRemediationAction(
     .prepare(
       `UPDATE remediation_actions
        SET status = @status, result = @result, resolved_at = @resolvedAt
-       WHERE tool_use_id = @toolUseId`,
+       WHERE session_id = @sessionId AND tool_use_id = @toolUseId`,
     )
     .run({
+      sessionId,
       toolUseId,
       status,
       result: serialised,
@@ -99,18 +101,21 @@ export function settleRemediationAction(
     });
 }
 
-// One-shot insert for a rejection — no executing→executed cycle needed.
+// One-shot insert for a rejection — idempotent: a re-opened interrupt re-rejected
+// after a crash is silently ignored rather than throwing a constraint violation.
+// Returns true when the row was written, false when OR IGNORE fired (conflict with
+// an existing row — the caller logs a warning for the executing-row zombie case).
 export function insertRejectedRemediationAction(params: {
   toolUseId: string;
   sessionId: string;
   toolName: string;
   input: Record<string, unknown>;
   resolvedBy: string;
-}): void {
+}): boolean {
   const now = new Date().toISOString();
-  getDb()
+  const result = getDb()
     .prepare(
-      `INSERT INTO remediation_actions
+      `INSERT OR IGNORE INTO remediation_actions
          (tool_use_id, session_id, tool_name, service_identity_key, status, resolved_by, input, created_at, resolved_at)
        VALUES
          (@toolUseId, @sessionId, @toolName, @identityKey, 'rejected', @resolvedBy, @input, @createdAt, @resolvedAt)`,
@@ -125,6 +130,7 @@ export function insertRejectedRemediationAction(params: {
       createdAt: now,
       resolvedAt: now,
     });
+  return result.changes > 0;
 }
 
 // Column list shared by every reader so the row shape can't drift between
@@ -144,13 +150,14 @@ const SELECT_COLUMNS = `
 `;
 
 export function findRemediationAction(
+  sessionId: string,
   toolUseId: string,
 ): RemediationAction | undefined {
   return getDb()
     .prepare(
-      `SELECT ${SELECT_COLUMNS} FROM remediation_actions WHERE tool_use_id = ?`,
+      `SELECT ${SELECT_COLUMNS} FROM remediation_actions WHERE session_id = ? AND tool_use_id = ?`,
     )
-    .get(toolUseId) as RemediationAction | undefined;
+    .get(sessionId, toolUseId) as RemediationAction | undefined;
 }
 
 // Newest first, capped like listAllSessions: the audit view reads top-to-bottom

@@ -101,6 +101,7 @@ describe("GET /remediation-actions", () => {
     expect(ours[1].toolUseId).toBe("tu-list-older");
 
     expect(ours[0]).toEqual({
+      sessionId: "sess-list-1",
       toolUseId: "tu-list-newer",
       serviceIdentityKey: "kubernetes/ns/api",
       toolName: "exec_command",

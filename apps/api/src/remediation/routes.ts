@@ -11,6 +11,7 @@ function toRemediationActionRecord(
   action: RemediationAction,
 ): RemediationActionRecord {
   return {
+    sessionId: action.sessionId,
     toolUseId: action.toolUseId,
     serviceIdentityKey: action.serviceIdentityKey,
     toolName: action.toolName,

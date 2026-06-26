@@ -37,7 +37,7 @@ export function AuditLogPage(): React.JSX.Element {
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {(actions ?? []).map((action) => (
           <li
-            key={action.toolUseId}
+            key={`${action.sessionId}/${action.toolUseId}`}
             style={{
               borderTop: "1px solid var(--nw-border)",
               padding: "var(--mantine-spacing-sm) 0",
@@ -56,8 +56,10 @@ export function AuditLogPage(): React.JSX.Element {
               />
               <Text size="xs" c="dimmed">
                 {action.resolvedBy ?? "unknown"} · decided{" "}
-                {timeAgo(action.createdAt)} · resolved{" "}
-                {timeAgo(action.resolvedAt)}
+                {timeAgo(action.createdAt)} ·{" "}
+                {action.status === "executing"
+                  ? "in progress"
+                  : `resolved ${timeAgo(action.resolvedAt)}`}
               </Text>
             </Stack>
           </li>

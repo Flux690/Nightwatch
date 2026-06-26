@@ -170,6 +170,7 @@ export async function respondToPendingHumanInput(
           is_error: true,
         };
         settleRemediationAction(
+          sessionId,
           pending.toolUseId,
           "failed",
           gatedResult.content,
@@ -180,7 +181,12 @@ export async function respondToPendingHumanInput(
           toolTimeoutMs: config.toolTimeoutMs,
         });
         const settled = execResult.is_error ? "failed" : "executed";
-        settleRemediationAction(pending.toolUseId, settled, execResult.content);
+        settleRemediationAction(
+          sessionId,
+          pending.toolUseId,
+          settled,
+          execResult.content,
+        );
         gatedResult = {
           tool_use_id: pending.toolUseId,
           content:
@@ -215,13 +221,19 @@ export async function respondToPendingHumanInput(
       is_error: true,
     };
     claimOrThrow(sessionId);
-    insertRejectedRemediationAction({
+    const wrote = insertRejectedRemediationAction({
       toolUseId: pending.toolUseId,
       sessionId,
       toolName: pending.toolName,
       input: pending.toolInput,
       resolvedBy,
     });
+    if (!wrote) {
+      logger.warn(
+        { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
+        "reject record skipped: existing row holds the slot — action may have run before crash",
+      );
+    }
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
     return unpause(
       sessionId,

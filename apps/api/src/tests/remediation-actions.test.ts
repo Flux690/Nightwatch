@@ -36,7 +36,10 @@ import {
   resolveCommand,
 } from "../ws/router.js";
 import { insertPendingHumanInput } from "../db/interrupts.js";
-import { findRemediationAction } from "../db/remediation-actions.js";
+import {
+  findRemediationAction,
+  insertRejectedRemediationAction,
+} from "../db/remediation-actions.js";
 import { getDb } from "../db/client.js";
 
 interface WsEvent {
@@ -204,7 +207,7 @@ describe("remediation action record", () => {
       ),
     );
 
-    const row = findRemediationAction(toolUseId);
+    const row = findRemediationAction(sessionId, toolUseId);
     expect(row).toBeDefined();
     expect(row!.status).toBe("executed");
     expect(row!.toolName).toBe("restart_service");
@@ -294,7 +297,7 @@ describe("remediation action record", () => {
       ),
     );
 
-    const row = findRemediationAction(toolUseId);
+    const row = findRemediationAction(sessionId, toolUseId);
     expect(row).toBeDefined();
     expect(row!.status).toBe("rejected");
     expect(row!.sessionId).toBe(sessionId);
@@ -379,10 +382,89 @@ describe("remediation action record", () => {
     expect(restartCommands).toHaveLength(0);
 
     // The remediation_actions row still has 'executing' (crash outcome unknown)
-    const row = findRemediationAction(toolUseId);
+    const row = findRemediationAction(sessionId, toolUseId);
     expect(row!.status).toBe("executing");
 
     ws.close();
+  });
+
+  it("reject: re-rejecting an already-recorded action is idempotent", () => {
+    const toolUseId = "tu-ra-reject-idem-1";
+    const sessionId = randomUUID();
+
+    getDb()
+      .prepare(
+        `INSERT INTO sessions (session_id, title, created_at) VALUES (?, 'test', ?)`,
+      )
+      .run(sessionId, new Date().toISOString());
+
+    const params = {
+      toolUseId,
+      sessionId,
+      toolName: "restart_container",
+      input: {
+        service: { provider: "docker", project: "svc-01", service: "api" },
+        rationale: "crash",
+        risk: "low",
+        estimatedDowntimeSeconds: 2,
+      },
+      resolvedBy: "operator",
+    };
+
+    expect(insertRejectedRemediationAction(params)).toBe(true);
+    // Second call: idempotent — no throw, no double-insert
+    expect(insertRejectedRemediationAction(params)).toBe(false);
+
+    // Only one row for this (sessionId, toolUseId)
+    const count = getDb()
+      .prepare(
+        `SELECT COUNT(*) AS c FROM remediation_actions WHERE session_id = ? AND tool_use_id = ?`,
+      )
+      .get(sessionId, toolUseId) as { c: number };
+    expect(count.c).toBe(1);
+  });
+
+  it("composite key: same tool_use_id in different sessions does not conflict", () => {
+    const toolUseId = "tu-ra-cross-session-1";
+    const sessionId1 = randomUUID();
+    const sessionId2 = randomUUID();
+
+    getDb()
+      .prepare(
+        `INSERT INTO sessions (session_id, title, created_at) VALUES (?, 'test', ?)`,
+      )
+      .run(sessionId1, new Date().toISOString());
+    getDb()
+      .prepare(
+        `INSERT INTO sessions (session_id, title, created_at) VALUES (?, 'test', ?)`,
+      )
+      .run(sessionId2, new Date().toISOString());
+
+    const baseParams = {
+      toolUseId,
+      toolName: "restart_container",
+      input: {
+        service: { provider: "docker", project: "svc-01", service: "api" },
+        rationale: "cross-session test",
+        risk: "low",
+        estimatedDowntimeSeconds: 2,
+      },
+      resolvedBy: "operator",
+    };
+
+    expect(() =>
+      insertRejectedRemediationAction({ ...baseParams, sessionId: sessionId1 }),
+    ).not.toThrow();
+    expect(() =>
+      insertRejectedRemediationAction({ ...baseParams, sessionId: sessionId2 }),
+    ).not.toThrow();
+
+    expect(findRemediationAction(sessionId1, toolUseId)?.status).toBe(
+      "rejected",
+    );
+    expect(findRemediationAction(sessionId2, toolUseId)?.status).toBe(
+      "rejected",
+    );
   });
 
   it("reads are not recorded in remediation_actions", async () => {
@@ -430,7 +512,7 @@ describe("remediation action record", () => {
     );
 
     // No record in remediation_actions for this tool_use_id
-    expect(findRemediationAction(toolUseId)).toBeUndefined();
+    expect(findRemediationAction(sessionId, toolUseId)).toBeUndefined();
 
     ws.close();
   });

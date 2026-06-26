@@ -68,7 +68,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS pending_human_input (
     session_id        TEXT NOT NULL REFERENCES sessions(session_id),
-    tool_use_id       TEXT NOT NULL UNIQUE,
+    tool_use_id       TEXT NOT NULL,
     kind              TEXT NOT NULL DEFAULT 'approval',
     tool_name         TEXT NOT NULL,
     tool_input        TEXT NOT NULL,
@@ -83,7 +83,7 @@ const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS remediation_actions (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-    tool_use_id          TEXT NOT NULL UNIQUE,
+    tool_use_id          TEXT NOT NULL,
     session_id           TEXT NOT NULL REFERENCES sessions(session_id),
     tool_name            TEXT NOT NULL,
     service_identity_key TEXT,
@@ -92,9 +92,46 @@ const SCHEMA = `
     input                TEXT NOT NULL,
     result               TEXT,
     created_at           TEXT NOT NULL,
-    resolved_at          TEXT
+    resolved_at          TEXT,
+    UNIQUE (session_id, tool_use_id)
   );
 `;
+
+// Rebuilds a table with a standalone tool_use_id UNIQUE constraint to the
+// composite (session_id, tool_use_id) form. Detects via pragma — safe on fresh
+// DBs where the new schema already applies.
+function migrateCompositeUniqueKey(
+  db: Database.Database,
+  tableName: string,
+  newDdl: string,
+  extraStatements: string[],
+): void {
+  // better-sqlite3 types .all() as unknown[]; PRAGMA column shapes are stable
+  // across the SQLite version bundled with Node.
+  const indexList = db
+    .prepare(`PRAGMA index_list('${tableName}')`)
+    .all() as Array<{ name: string; unique: number }>;
+  const hasOldConstraint = indexList.some((idx) => {
+    if (!idx.unique) return false;
+    // same reason as above — narrowing the per-column PRAGMA result
+    const cols = db.prepare(`PRAGMA index_info('${idx.name}')`).all() as Array<{
+      name: string;
+    }>;
+    return cols.length === 1 && cols[0]?.name === "tool_use_id";
+  });
+  if (!hasOldConstraint) return;
+
+  db.transaction(() => {
+    db.prepare(`DROP TABLE IF EXISTS ${tableName}_new`).run();
+    db.prepare(newDdl).run();
+    db.prepare(`INSERT INTO ${tableName}_new SELECT * FROM ${tableName}`).run();
+    db.prepare(`DROP TABLE ${tableName}`).run();
+    db.prepare(`ALTER TABLE ${tableName}_new RENAME TO ${tableName}`).run();
+    for (const stmt of extraStatements) {
+      db.prepare(stmt).run();
+    }
+  })();
+}
 
 // Migrates databases created before the config/user schema split. Detects the
 // old owner columns in config, copies the data into user, then recreates config
@@ -110,6 +147,46 @@ function applyMigrations(db: Database.Database): void {
   if (!userCols.includes("ingest_token_encrypted")) {
     db.prepare("ALTER TABLE user ADD COLUMN ingest_token_encrypted TEXT").run();
   }
+
+  migrateCompositeUniqueKey(
+    db,
+    "remediation_actions",
+    `CREATE TABLE remediation_actions_new (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      tool_use_id          TEXT NOT NULL,
+      session_id           TEXT NOT NULL REFERENCES sessions(session_id),
+      tool_name            TEXT NOT NULL,
+      service_identity_key TEXT,
+      status               TEXT NOT NULL,
+      resolved_by          TEXT,
+      input                TEXT NOT NULL,
+      result               TEXT,
+      created_at           TEXT NOT NULL,
+      resolved_at          TEXT,
+      UNIQUE (session_id, tool_use_id)
+    )`,
+    [],
+  );
+
+  migrateCompositeUniqueKey(
+    db,
+    "pending_human_input",
+    `CREATE TABLE pending_human_input_new (
+      session_id        TEXT NOT NULL REFERENCES sessions(session_id),
+      tool_use_id       TEXT NOT NULL,
+      kind              TEXT NOT NULL DEFAULT 'approval',
+      tool_name         TEXT NOT NULL,
+      tool_input        TEXT NOT NULL,
+      completed_results TEXT NOT NULL DEFAULT '[]',
+      claimed_at        TEXT,
+      created_at        TEXT NOT NULL,
+      PRIMARY KEY (session_id)
+    )`,
+    [
+      `CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
+       ON pending_human_input(claimed_at)`,
+    ],
+  );
 
   if (!configCols.includes("owner_email")) return;
 

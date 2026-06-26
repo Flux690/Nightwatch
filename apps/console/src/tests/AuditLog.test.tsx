@@ -8,6 +8,7 @@ import { AuditLogPage } from "../pages/AuditLog.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 const EXECUTED_DOCKER: RemediationActionRecord = {
+  sessionId: "sess-audit-1",
   toolUseId: "tu-1",
   serviceIdentityKey: "docker/svc-01/api",
   toolName: "restart_container",
@@ -18,6 +19,7 @@ const EXECUTED_DOCKER: RemediationActionRecord = {
 };
 
 const REJECTED_K8S: RemediationActionRecord = {
+  sessionId: "sess-audit-2",
   toolUseId: "tu-2",
   serviceIdentityKey: "kubernetes/prod/checkout",
   toolName: "exec_command",
@@ -28,6 +30,7 @@ const REJECTED_K8S: RemediationActionRecord = {
 };
 
 const STILL_EXECUTING: RemediationActionRecord = {
+  sessionId: "sess-audit-3",
   toolUseId: "tu-3",
   serviceIdentityKey: "docker/svc-01/api",
   toolName: "restart_container",
@@ -118,11 +121,12 @@ describe("AuditLogPage", () => {
     });
   });
 
-  it("shows the action never resolved, for a crash-interrupted write stuck in executing", async () => {
+  it("shows in progress for a crash-interrupted action stuck in executing", async () => {
     setup([STILL_EXECUTING]);
     await waitFor(() => {
       expect(screen.getByText(/^executing$/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/resolved never/i)).toBeInTheDocument();
+    expect(screen.getByText(/in progress/i)).toBeInTheDocument();
+    expect(screen.queryByText(/resolved never/i)).not.toBeInTheDocument();
   });
 });
