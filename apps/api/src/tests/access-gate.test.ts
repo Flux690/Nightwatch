@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -76,7 +76,7 @@ describe("access-gate: gating is driven by tool access level", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("access-gate-001").id;
+    TEST_TOKEN = generateRunnerToken("access-gate-001").id;
 
     registerRunner(
       TEST_TOKEN,

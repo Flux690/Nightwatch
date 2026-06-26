@@ -1,11 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import {
-  findTokenByValue,
-  setTokenRunnerId,
-  touchLastUsed,
-} from "../db/tokens.js";
+import { findRunnerByToken, setRunnerId, touchLastUsed } from "../db/runner.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
@@ -33,7 +29,7 @@ export async function registerWsRoutes(
         return;
       }
 
-      const tokenRecord = findTokenByValue(plaintext);
+      const tokenRecord = findRunnerByToken(plaintext);
       if (!tokenRecord) {
         socket.close(4003, "Invalid or revoked token");
         return;
@@ -65,7 +61,7 @@ export async function registerWsRoutes(
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
           setRunnerManifest(tokenId, msg.payload);
-          setTokenRunnerId(tokenId, msg.payload.runnerId);
+          setRunnerId(tokenId, msg.payload.runnerId);
           fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;

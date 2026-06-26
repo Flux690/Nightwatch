@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { findTokenByValue } from "../db/tokens.js";
+import { findRunnerByToken } from "../db/runner.js";
 
 const TEMPLATE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
@@ -44,7 +44,7 @@ export async function registerConnectRoutes(
         });
       }
 
-      const record = findTokenByValue(token);
+      const record = findRunnerByToken(token);
       if (!record) {
         return reply.code(404).send({ error: "token not found" });
       }

@@ -19,7 +19,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -65,7 +65,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("test-esc-runner").id;
+    TEST_TOKEN = generateRunnerToken("test-esc-runner").id;
 
     registerRunner(
       TEST_TOKEN,

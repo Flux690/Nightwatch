@@ -26,7 +26,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -56,7 +56,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("state-inversion").id;
+    TEST_TOKEN = generateRunnerToken("state-inversion").id;
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);

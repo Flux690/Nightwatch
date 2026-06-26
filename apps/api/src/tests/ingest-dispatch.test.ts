@@ -22,7 +22,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
@@ -155,7 +155,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     // This test's alerts target web-01 -> resolve to runner-web-01; dedup is
     // keyed by that runnerId now, not by the authenticating token (ADR-0004).
-    const { plaintext: token } = generateToken("dedup");
+    const { plaintext: token } = generateRunnerToken("dedup");
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -188,7 +188,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("rate-limits past 10 non-critical alerts per runner per hour; critical bypasses; resets after the window", async () => {
-    const { plaintext: token } = generateToken("ratelimit");
+    const { plaintext: token } = generateRunnerToken("ratelimit");
     useImmediateProvider(); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.
@@ -231,7 +231,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("dispatches the matched alert and reports the unmatched one in rejected, neither suppressing the other", async () => {
-    const { plaintext: token } = generateToken("mixed-batch");
+    const { plaintext: token } = generateRunnerToken("mixed-batch");
     useImmediateProvider();
 
     const res = await server.inject({

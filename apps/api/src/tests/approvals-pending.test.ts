@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -67,7 +67,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns pending interrupt rows with session cookie", async () => {
-    const tokA = generateToken("qa").id;
+    const tokA = generateRunnerToken("qa").id;
     registerRunner(
       tokA,
       (raw: string) => {
@@ -156,7 +156,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns interrupts from all runner tokens (operator-wide)", async () => {
-    const tokC = generateToken("scope-c").id;
+    const tokC = generateRunnerToken("scope-c").id;
 
     setScript([
       {
@@ -235,7 +235,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns empty list after interrupt is resolved", async () => {
-    const tokE = generateToken("empty-after").id;
+    const tokE = generateRunnerToken("empty-after").id;
 
     setScript([
       {

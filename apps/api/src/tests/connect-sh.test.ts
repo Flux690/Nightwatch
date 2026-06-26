@@ -4,7 +4,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { registerConnectRoutes } from "../runners/connect.js";
 
 describe("GET /connect.sh", () => {
@@ -16,7 +16,7 @@ describe("GET /connect.sh", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TOKEN = generateToken("test-server").plaintext;
+    TOKEN = generateRunnerToken("test-server").plaintext;
     server = Fastify({ logger: false, trustProxy: true });
     await registerConnectRoutes(server);
     await server.ready();

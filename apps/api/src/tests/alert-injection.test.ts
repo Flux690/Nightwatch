@@ -24,7 +24,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import Fastify from "fastify";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
@@ -140,7 +140,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
-    const tokenId = generateToken("inject-midrun").id;
+    const tokenId = generateRunnerToken("inject-midrun").id;
     registerRunner(
       tokenId,
       (raw: string) => {
@@ -192,7 +192,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
-    const tokenId = generateToken("inject-sus").id;
+    const tokenId = generateRunnerToken("inject-sus").id;
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -257,7 +257,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
-    const tokenId = generateToken("inject-leftover").id;
+    const tokenId = generateRunnerToken("inject-leftover").id;
 
     // R1: free-form finish immediately (loop exits before any appendToolResults,
     // so the inbox is never drained by the loop). R2: leftover's new session.
@@ -305,7 +305,7 @@ describe("mid-run alert injection (loop seam)", () => {
   // no longer deduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const { id: tokenId, plaintext: tokenPlaintext } =
-      generateToken("inject-resume");
+      generateRunnerToken("inject-resume");
     registerRunner(
       tokenId,
       (raw: string) => {

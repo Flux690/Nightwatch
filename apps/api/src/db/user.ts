@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getDb } from "./client.js";
-import { hashToken } from "./tokens.js";
+import { hashToken } from "./runner.js";
 import { encrypt, decrypt } from "../config/crypto.js";
 
 const USER_ID = "global";

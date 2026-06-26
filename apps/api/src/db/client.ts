@@ -9,7 +9,7 @@ export function dbPath(): string {
 }
 
 const SCHEMA = `
-  CREATE TABLE IF NOT EXISTS tokens (
+  CREATE TABLE IF NOT EXISTS runner (
     id           TEXT PRIMARY KEY,
     token        TEXT NOT NULL UNIQUE,
     runner_id    TEXT,
@@ -96,6 +96,20 @@ const SCHEMA = `
     UNIQUE (session_id, tool_use_id)
   );
 `;
+
+// Renames the legacy `tokens` table to `runner` if it still exists under the
+// old name. Runs before the main schema so `CREATE TABLE IF NOT EXISTS runner`
+// becomes a no-op once the rename completes. Safe on fresh DBs (no-op).
+function renameTokensToRunner(db: Database.Database): void {
+  const tables = (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all() as Array<{ name: string }>
+  ).map((t) => t.name);
+  if (tables.includes("tokens") && !tables.includes("runner")) {
+    db.prepare("ALTER TABLE tokens RENAME TO runner").run();
+  }
+}
 
 // Rebuilds a table with a standalone tool_use_id UNIQUE constraint to the
 // composite (session_id, tool_use_id) form. Detects via pragma — safe on fresh
@@ -252,6 +266,7 @@ export function getDb(): Database.Database {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
+    renameTokensToRunner(db);
     db.exec(SCHEMA);
     applyMigrations(db);
     _db = db;

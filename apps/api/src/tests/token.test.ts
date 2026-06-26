@@ -12,7 +12,7 @@ import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
 
 function sha256hex(s: string): string {
@@ -68,7 +68,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         id: string;
       };
       const row = getDb()
-        .prepare("SELECT token FROM tokens WHERE id = ?")
+        .prepare("SELECT token FROM runner WHERE id = ?")
         .get(id) as { token: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.token).toBe(sha256hex(token));
@@ -345,7 +345,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
-      const { id: tokenId } = generateToken("history-test");
+      const { id: tokenId } = generateRunnerToken("history-test");
       createSession(
         {
           sessionId: "sess-history-1",

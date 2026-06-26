@@ -4,7 +4,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { buildManifest, registerManifestRoutes } from "../runners/manifest.js";
 
 describe("buildManifest", () => {
@@ -146,7 +146,7 @@ describe("GET /manifest.yaml", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TOKEN = generateToken("k8s-server").plaintext;
+    TOKEN = generateRunnerToken("k8s-server").plaintext;
     server = Fastify({ logger: false, trustProxy: true });
     await registerManifestRoutes(server);
     await server.ready();

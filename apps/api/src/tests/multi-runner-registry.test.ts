@@ -10,7 +10,7 @@ import type {
   FleetRunner,
   RunnerRecord,
 } from "@nightwatch/shared";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
@@ -113,8 +113,8 @@ describe("flat runner registry", () => {
   }
 
   it("lists two runners each on their own token with correct manifests", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateToken("one-up-a");
-    const { plaintext: tokenB, id: tokenBId } = generateToken("one-up-b");
+    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken("one-up-a");
+    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken("one-up-b");
     const a = await connectRunner(
       port,
       tokenA,
@@ -175,8 +175,10 @@ describe("flat runner registry", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateToken("close-one-a");
-    const { plaintext: tokenB, id: tokenBId } = generateToken("close-one-b");
+    const { plaintext: tokenA, id: tokenAId } =
+      generateRunnerToken("close-one-a");
+    const { plaintext: tokenB, id: tokenBId } =
+      generateRunnerToken("close-one-b");
     const a = await connectRunner(port, tokenA, manifest("web-01", ["nginx"]));
     const b = await connectRunner(
       port,
@@ -205,8 +207,8 @@ describe("flat runner registry", () => {
   });
 
   it("two runners on different tokens both appear in the fleet", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateToken("cross-a");
-    const { plaintext: tokenB, id: tokenBId } = generateToken("cross-b");
+    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken("cross-a");
+    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken("cross-b");
 
     const a = await connectRunner(port, tokenA, manifest("host-a", ["nginx"]));
     const b = await connectRunner(
@@ -236,8 +238,8 @@ describe("flat runner registry", () => {
   });
 
   it("GET /fleet returns connected runners with their service identities, with no token-management fields", async () => {
-    const { plaintext: tokenA } = generateToken("fleet-a");
-    const { plaintext: tokenB } = generateToken("fleet-b");
+    const { plaintext: tokenA } = generateRunnerToken("fleet-a");
+    const { plaintext: tokenB } = generateRunnerToken("fleet-b");
 
     const a = await connectRunner(
       port,

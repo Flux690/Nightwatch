@@ -69,7 +69,7 @@ vi.mock("../llm/factory.js", () => ({
   createProvider: mockCreateProvider,
 }));
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -110,7 +110,7 @@ describe("console WS pipeline", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("test-runner").id;
+    TEST_TOKEN = generateRunnerToken("test-runner").id;
 
     // Persistence is local now; the provider calls no runner tool here, so the
     // runner receives nothing. Resolve defensively for any stray command.

@@ -37,7 +37,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -187,8 +187,8 @@ describe("multi-runner routing", () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    tokenIdA = generateToken("routing-a").id;
-    tokenIdB = generateToken("routing-b").id;
+    tokenIdA = generateRunnerToken("routing-a").id;
+    tokenIdB = generateRunnerToken("routing-b").id;
 
     registerRunner(tokenIdA, makeSend(commandsA), () => {});
     setRunnerManifest(tokenIdA, makeManifest("web-01", ["nginx", "api"]));
@@ -196,11 +196,11 @@ describe("multi-runner routing", () => {
     registerRunner(tokenIdB, makeSend(commandsB), () => {});
     setRunnerManifest(tokenIdB, makeManifest("db-02", ["postgres"]));
 
-    tokenId2 = generateToken("routing-cross").id;
+    tokenId2 = generateRunnerToken("routing-cross").id;
     registerRunner(tokenId2, makeSend(commandsC), () => {});
     setRunnerManifest(tokenId2, makeManifest("cache-01", ["redis"]));
 
-    tokenIdK = generateToken("routing-k8s").id;
+    tokenIdK = generateRunnerToken("routing-k8s").id;
     registerRunner(tokenIdK, makeSend(commandsK), () => {});
     setRunnerManifest(
       tokenIdK,

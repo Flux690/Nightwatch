@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { findTokenByValue } from "../db/tokens.js";
+import { findRunnerByToken } from "../db/runner.js";
 
 const TEMPLATE = `\
 apiVersion: v1
@@ -124,7 +124,7 @@ export async function registerManifestRoutes(
         });
       }
 
-      const record = findTokenByValue(token);
+      const record = findRunnerByToken(token);
       if (!record) {
         return reply.code(404).send({ error: "token not found" });
       }

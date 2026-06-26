@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -178,7 +178,7 @@ describe("providers filter and mismatch rejection", () => {
     beforeAll(async () => {
       cleanupDb = useTempDb();
       SESSION = await mintTestSession();
-      K8S_TOKEN = generateToken("providers-filter-k8s-001").id;
+      K8S_TOKEN = generateRunnerToken("providers-filter-k8s-001").id;
 
       registerRunner(
         K8S_TOKEN,
@@ -414,7 +414,7 @@ describe("providers filter and mismatch rejection", () => {
       beforeAll(async () => {
         cleanupDb = useTempDb();
         SESSION = await mintTestSession();
-        RO_TOKEN = generateToken("remediation-mode-ro-001").id;
+        RO_TOKEN = generateRunnerToken("remediation-mode-ro-001").id;
 
         registerRunner(
           RO_TOKEN,

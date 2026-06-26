@@ -3,7 +3,7 @@ import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { resolveAlerts } from "./resolve-identity.js";
 import { routeAlert } from "./route-alert.js";
-import { findTokenByValue, hashToken, touchLastUsed } from "../db/tokens.js";
+import { findRunnerByToken, hashToken, touchLastUsed } from "../db/runner.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/router.js";
@@ -152,7 +152,7 @@ function authenticate(plaintext: string): boolean {
     return ingestHash !== null && hashToken(plaintext) === ingestHash;
   }
 
-  const tokenRecord = findTokenByValue(plaintext);
+  const tokenRecord = findRunnerByToken(plaintext);
   if (!tokenRecord) return false;
   // Touch before any processing so lastUsedAt reflects authenticated use.
   touchLastUsed(tokenRecord.id);

@@ -11,7 +11,7 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { generateIngestToken } from "../db/user.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
@@ -58,7 +58,7 @@ describe("POST /alerts/ingest auth", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    VALID_TOKEN = generateToken("test-ingest-runner").plaintext;
+    VALID_TOKEN = generateRunnerToken("test-ingest-runner").plaintext;
 
     // Resolution now matches the alert's labels against the fleet (ADR-0004),
     // so a runner advertising the matching service must be connected for the
@@ -333,7 +333,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("nwr_ tokens resolve by fleet match too - the token authenticates, labels route", async () => {
-    const runnerToken = generateToken("nwr-still-works").plaintext;
+    const runnerToken = generateRunnerToken("nwr-still-works").plaintext;
     // The nwr_ token is never registered as a WS connection; a separate
     // runner advertises the matching service. Under the old token-implies-
     // runner model this would have nothing to fall back to and would fail -
