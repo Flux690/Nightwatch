@@ -43,15 +43,17 @@ describe("resolveAlerts", () => {
 
     const result = resolveAlerts([parsedAlert()], fleet);
 
-    expect(result.kind).toBe("resolved");
-    if (result.kind !== "resolved") return;
-    expect(result.alerts).toEqual([
-      {
-        ...parsedAlert(),
-        runnerId: "runner-a",
-        hostname: "host-a",
-      },
-    ]);
+    expect(result.kind).toBe("verdicts");
+    if (result.kind !== "verdicts") return;
+    expect(result.verdicts).toHaveLength(1);
+    const verdict = result.verdicts[0]!;
+    expect(verdict.kind).toBe("resolved");
+    if (verdict.kind !== "resolved") return;
+    expect(verdict.alert).toEqual({
+      ...parsedAlert(),
+      runnerId: "runner-a",
+      hostname: "host-a",
+    });
   });
 
   it("rejects with a diagnostic message when no fleet service matches", () => {
@@ -81,15 +83,21 @@ describe("resolveAlerts", () => {
       fleet,
     );
 
-    expect(result.kind).toBe("rejected");
-    if (result.kind !== "rejected") return;
-    expect(result.status).toBe(400);
-    expect(result.error).toMatch(/docker\/myapp\/api/);
-    expect(result.error).toMatch(/docker\/other\/web/);
+    expect(result.kind).toBe("verdicts");
+    if (result.kind !== "verdicts") return;
+    const verdict = result.verdicts[0]!;
+    expect(verdict.kind).toBe("rejected");
+    if (verdict.kind !== "rejected") return;
+    expect(verdict.reason).toMatch(/docker\/myapp\/api/);
+    expect(verdict.reason).toMatch(/docker\/other\/web/);
   });
 
   it("rejects with HTTP 400 listing the ambiguous runners when the same service is advertised twice", () => {
-    const identity = { provider: "docker" as const, project: "myapp", service: "api" };
+    const identity = {
+      provider: "docker" as const,
+      project: "myapp",
+      service: "api",
+    };
     const fleet = [
       fleetRunner({
         runnerId: "runner-a",
@@ -108,25 +116,28 @@ describe("resolveAlerts", () => {
       fleet,
     );
 
-    expect(result.kind).toBe("rejected");
-    if (result.kind !== "rejected") return;
-    expect(result.status).toBe(400);
-    expect(result.error).toMatch(/ambiguous/i);
-    expect(result.error).toMatch(/host-a/);
-    expect(result.error).toMatch(/host-b/);
+    expect(result.kind).toBe("verdicts");
+    if (result.kind !== "verdicts") return;
+    const verdict = result.verdicts[0]!;
+    expect(verdict.kind).toBe("rejected");
+    if (verdict.kind !== "rejected") return;
+    expect(verdict.reason).toMatch(/ambiguous/i);
+    expect(verdict.reason).toMatch(/host-a/);
+    expect(verdict.reason).toMatch(/host-b/);
   });
 
-  it("rejects with HTTP 503 when no runner is online at all, distinct from a label mismatch", () => {
+  it("returns no-runners when no runner is online at all, distinct from a label mismatch", () => {
     const result = resolveAlerts([parsedAlert()], []);
 
-    expect(result.kind).toBe("rejected");
-    if (result.kind !== "rejected") return;
-    expect(result.status).toBe(503);
-    expect(result.error).toMatch(/runner/i);
+    expect(result.kind).toBe("no-runners");
   });
 
-  it("rejects an offline-only match as a 400 label mismatch, not a 503 fleet-empty error, when other runners are online", () => {
-    const identity = { provider: "docker" as const, project: "myapp", service: "api" };
+  it("rejects an offline-only match as a 400 label mismatch, not a no-runners result, when other runners are online", () => {
+    const identity = {
+      provider: "docker" as const,
+      project: "myapp",
+      service: "api",
+    };
     const fleet = [
       fleetRunner({
         runnerId: "runner-offline",
@@ -142,8 +153,58 @@ describe("resolveAlerts", () => {
       fleet,
     );
 
-    expect(result.kind).toBe("rejected");
-    if (result.kind !== "rejected") return;
-    expect(result.status).toBe(400);
+    expect(result.kind).toBe("verdicts");
+    if (result.kind !== "verdicts") return;
+    const verdict = result.verdicts[0]!;
+    expect(verdict.kind).toBe("rejected");
+  });
+
+  it("resolves matched alerts and reports rejected alerts in the same batch without suppressing either", () => {
+    const fleet = [
+      fleetRunner({
+        runnerId: "runner-a",
+        hostname: "host-a",
+        services: [
+          {
+            identity: { provider: "docker", project: "myapp", service: "api" },
+            status: "running",
+          },
+        ],
+      }),
+    ];
+
+    const matched = parsedAlert({
+      sourceAlertId: "fp-match",
+      targetIdentifier: {
+        provider: "docker",
+        project: "myapp",
+        service: "api",
+      },
+    });
+    const unmatched = parsedAlert({
+      sourceAlertId: "fp-no-match",
+      targetIdentifier: {
+        provider: "docker",
+        project: "ghost",
+        service: "ghost",
+      },
+    });
+
+    const result = resolveAlerts([matched, unmatched], fleet);
+
+    expect(result.kind).toBe("verdicts");
+    if (result.kind !== "verdicts") return;
+    expect(result.verdicts).toHaveLength(2);
+
+    const first = result.verdicts[0]!;
+    expect(first.kind).toBe("resolved");
+    if (first.kind !== "resolved") return;
+    expect(first.alert.runnerId).toBe("runner-a");
+
+    const second = result.verdicts[1]!;
+    expect(second.kind).toBe("rejected");
+    if (second.kind !== "rejected") return;
+    expect(second.sourceAlertId).toBe("fp-no-match");
+    expect(second.reason).toMatch(/ghost\/ghost/);
   });
 });

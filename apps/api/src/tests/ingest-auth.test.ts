@@ -262,7 +262,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.enqueued).toBe(1);
   });
 
-  it("rejects an alert matching no fleet service with HTTP 400, never guessing", async () => {
+  it("reports an unmatched alert in the rejected array, returning 200 so neighbouring alerts are not suppressed", async () => {
     registerRunner(
       "runner-a-token",
       () => {},
@@ -276,12 +276,15 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       headers: { "x-nightwatch-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-no-match"),
     });
-    expect(res.statusCode).toBe(400);
-    const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/no runner advertises/i);
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as {
+      rejected: Array<{ sourceAlertId: string; reason: string }>;
+    };
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0]!.reason).toMatch(/no runner advertises/i);
   });
 
-  it("rejects an alert matching the same service on two runners with HTTP 400, listing the ambiguous runners", async () => {
+  it("reports an ambiguous alert in the rejected array without a 400, listing the conflicting runners", async () => {
     registerRunner(
       "runner-a-token",
       () => {},
@@ -307,11 +310,26 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       headers: { "x-nightwatch-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-ambiguous"),
     });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as {
+      rejected: Array<{ sourceAlertId: string; reason: string }>;
+    };
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0]!.reason).toMatch(/ambiguous/i);
+    expect(body.rejected[0]!.reason).toMatch(/host-a/);
+    expect(body.rejected[0]!.reason).toMatch(/host-b/);
+  });
+
+  it("returns 400 for an unrecognized payload body so a misconfigured sender learns its body was not understood", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      payload: { notAlerts: true },
+    });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/ambiguous/i);
-    expect(body.error).toMatch(/host-a/);
-    expect(body.error).toMatch(/host-b/);
+    expect(body.error).toMatch(/unrecognized payload/i);
   });
 
   it("nwr_ tokens resolve by fleet match too - the token authenticates, labels route", async () => {

@@ -229,4 +229,65 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       skipped: 0,
     });
   });
+
+  it("dispatches the matched alert and reports the unmatched one in rejected, neither suppressing the other", async () => {
+    const { plaintext: token } = generateToken("mixed-batch");
+    useImmediateProvider();
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": token },
+      payload: {
+        alerts: [
+          {
+            status: "firing",
+            labels: {
+              alertname: "HighCPU",
+              severity: "warning",
+              container: "web-01",
+            },
+            annotations: { summary: "CPU high" },
+            startsAt: new Date().toISOString(),
+            endsAt: "0001-01-01T00:00:00Z",
+            fingerprint: "mixed-match",
+          },
+          {
+            status: "firing",
+            labels: {
+              alertname: "HighCPU",
+              severity: "warning",
+              container: "ghost-service",
+            },
+            annotations: { summary: "CPU high" },
+            startsAt: new Date().toISOString(),
+            endsAt: "0001-01-01T00:00:00Z",
+            fingerprint: "mixed-no-match",
+          },
+        ],
+        version: "4",
+        groupKey: "test",
+        receiver: "nightwatch",
+        status: "firing",
+        groupLabels: {},
+        commonLabels: {},
+        commonAnnotations: {},
+        externalURL: "http://localhost:9093",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as {
+      received: number;
+      enqueued: number;
+      skipped: number;
+      rejected: Array<{ sourceAlertId: string; reason: string }>;
+    };
+    expect(body.received).toBe(2);
+    expect(body.enqueued).toBe(1);
+    expect(body.skipped).toBe(0);
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0]!.sourceAlertId).toBe("mixed-no-match");
+    expect(body.rejected[0]!.reason).toMatch(/no runner advertises/i);
+  });
 });

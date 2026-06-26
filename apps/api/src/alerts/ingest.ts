@@ -7,7 +7,6 @@ import { findTokenByValue, hashToken, touchLastUsed } from "../db/tokens.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/router.js";
-import { logger } from "../logger.js";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
@@ -38,29 +37,37 @@ export async function registerAlertRoutes(
     // against the fleet's advertised services - are the sole source of
     // routing (ADR-0004 resolve-or-reject, never a token-derived guess).
     const resolution = resolveAlerts(parsed, getFleetView());
-    if (resolution.kind === "rejected") {
-      return reply.code(resolution.status).send({ error: resolution.error });
+    if (resolution.kind === "no-runners") {
+      return reply
+        .code(503)
+        .send({ error: "no runner connected to route this alert" });
     }
-    const alerts = resolution.alerts;
 
     let enqueued = 0;
     let skipped = 0;
+    const rejected: Array<{ sourceAlertId: string; reason: string }> = [];
 
-    for (const alert of alerts) {
-      if (routeAlert(alert) === "enqueued") enqueued++;
-      else skipped++;
+    for (const verdict of resolution.verdicts) {
+      if (verdict.kind === "resolved") {
+        if (routeAlert(verdict.alert) === "enqueued") enqueued++;
+        else skipped++;
+      } else {
+        rejected.push({
+          sourceAlertId: verdict.sourceAlertId,
+          reason: verdict.reason,
+        });
+      }
     }
 
-    return reply.code(200).send({ received: alerts.length, enqueued, skipped });
+    const received = enqueued + skipped + rejected.length;
+    return reply.code(200).send({ received, enqueued, skipped, rejected });
   });
 
   // Lets an operator test their BYO webhook config before going live: same
   // auth, same normalizer, same fleet match as /alerts/ingest, but never
   // calls routeAlert - nothing is dispatched. Each alert is resolved
-  // individually (rather than via the all-or-nothing resolveAlerts(parsed,...)
-  // used at real ingest) so a payload with several alerts reports which ones
-  // would route and which would be rejected, instead of one failure masking
-  // the rest.
+  // individually so a payload with several alerts reports which ones would
+  // route and which would be rejected, instead of one failure masking the rest.
   fastify.post<{ Body: unknown }>(
     "/alerts/validate",
     async (request, reply) => {
@@ -90,26 +97,43 @@ export async function registerAlertRoutes(
       }
 
       const fleet = getFleetView();
-      const alerts = parsed.map((alert) => {
-        const result = resolveAlerts([alert], fleet);
-        const resolution =
-          result.kind === "resolved"
-            ? {
-                status: "resolved" as const,
-                // resolveAlerts is called with exactly one alert above, so a
-                // "resolved" result always carries exactly that one match.
-                runnerId: result.alerts[0].runnerId,
-                hostname: result.alerts[0].hostname,
-              }
-            : { status: "rejected" as const, reason: result.error };
+      const resolution = resolveAlerts(parsed, fleet);
+
+      // verdicts are produced in 1:1 order with parsed (same loop in
+      // resolveAlerts), so index i is always valid when kind === "verdicts".
+      const alerts = parsed.map((p, i) => {
+        let res:
+          | {
+              status: "resolved";
+              runnerId: string;
+              hostname: string | undefined;
+            }
+          | { status: "rejected"; reason: string };
+
+        if (resolution.kind === "no-runners") {
+          res = {
+            status: "rejected",
+            reason: "no runner connected to route this alert",
+          };
+        } else {
+          const verdict = resolution.verdicts[i]!;
+          res =
+            verdict.kind === "resolved"
+              ? {
+                  status: "resolved",
+                  runnerId: verdict.alert.runnerId,
+                  hostname: verdict.alert.hostname,
+                }
+              : { status: "rejected", reason: verdict.reason };
+        }
 
         return {
-          sourceAlertId: alert.sourceAlertId,
-          identity: alert.targetIdentifier,
-          identityKey: serviceIdentityKey(alert.targetIdentifier),
-          alertType: alert.alertType,
-          severity: alert.severity,
-          resolution,
+          sourceAlertId: p.sourceAlertId,
+          identity: p.targetIdentifier,
+          identityKey: serviceIdentityKey(p.targetIdentifier),
+          alertType: p.alertType,
+          severity: p.severity,
+          resolution: res,
         };
       });
 
@@ -150,11 +174,9 @@ function parseSource(userAgent: string, body: unknown): ParsedAlert[] {
   ) {
     return parseAlertmanager(body);
   }
-  logger.warn(
-    { preview: JSON.stringify(body).slice(0, 200) },
-    "ingest: unknown alert source, ignoring",
+  throw new Error(
+    "unrecognized payload - expected an Alertmanager webhook body ({ alerts: [...] })",
   );
-  return [];
 }
 
 function isAlertmanagerShape(body: unknown): boolean {
