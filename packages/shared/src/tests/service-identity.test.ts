@@ -206,3 +206,53 @@ describe("deriveServiceIdentity", () => {
     });
   });
 });
+
+// The two sides of the fleet match (ADR-0004): the runner stamps the
+// assigned name onto its manifest entries; the alert carries the same name
+// in the `instance` label. Both paths must produce the same key so the
+// resolve-or-reject lookup succeeds deterministically.
+describe("assigned-name round-trip: manifest key === alert-derived key", () => {
+  it("Docker: manifest entry with server matches alert with instance label", () => {
+    const assignedName = "prod-server-01";
+
+    const manifestKey = serviceIdentityKey({
+      provider: "docker",
+      project: "myapp",
+      service: "api",
+      server: assignedName,
+    });
+
+    const alertKey = serviceIdentityKey(
+      deriveServiceIdentity({
+        alertname: "ContainerDown",
+        "com.docker.compose.project": "myapp",
+        "com.docker.compose.service": "api",
+        instance: assignedName,
+      }),
+    );
+
+    expect(alertKey).toBe(manifestKey);
+  });
+
+  it("Kubernetes: manifest entry with cluster matches alert with cluster label", () => {
+    const assignedName = "prod-cluster";
+
+    const manifestKey = serviceIdentityKey({
+      provider: "kubernetes",
+      namespace: "production",
+      workload: "api-server",
+      cluster: assignedName,
+    });
+
+    const alertKey = serviceIdentityKey(
+      deriveServiceIdentity({
+        alertname: "CrashLoopBackOff",
+        namespace: "production",
+        deployment: "api-server",
+        cluster: assignedName,
+      }),
+    );
+
+    expect(alertKey).toBe(manifestKey);
+  });
+});

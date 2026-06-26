@@ -18,8 +18,8 @@ vi.hoisted(() => {
 });
 
 // Mock system boundaries: Docker client, Kubernetes client, and Prometheus
-// network probe (global fetch). os.hostname() is not mocked — tests assert only
-// that a non-empty string is present, which is always true in any environment.
+// network probe (global fetch). NIGHTWATCH_SERVER_NAME env var controls the
+// Docker server dimension; tests stub it explicitly via vi.stubEnv.
 
 const { mockListContainers, mockListDeployments, mockListStatefulSets } =
   vi.hoisted(() => ({
@@ -82,7 +82,8 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
   });
 
   describe("Docker: server field", () => {
-    it("stamps server from os.hostname() on each Docker identity", async () => {
+    it("stamps server from NIGHTWATCH_SERVER_NAME env var when set", async () => {
+      vi.stubEnv("NIGHTWATCH_SERVER_NAME", "prod-server-01");
       mockListContainers.mockResolvedValue([
         makeContainer("c1", "myapp_api_1", "running", {
           "com.docker.compose.project": "myapp",
@@ -97,12 +98,12 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
       const service = manifest.capabilities.services[0];
       expect(service?.identity.provider).toBe("docker");
       if (service?.identity.provider === "docker") {
-        expect(typeof service.identity.server).toBe("string");
-        expect(service.identity.server!.length).toBeGreaterThan(0);
+        expect(service.identity.server).toBe("prod-server-01");
       }
     });
 
-    it("all Docker identities carry the same server value (this host)", async () => {
+    it("all Docker identities carry the same assigned server value", async () => {
+      vi.stubEnv("NIGHTWATCH_SERVER_NAME", "prod-server-01");
       mockListContainers.mockResolvedValue([
         makeContainer("c1", "myapp_api_1", "running", {
           "com.docker.compose.project": "myapp",
@@ -118,15 +119,31 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
 
       const manifest = await detectCapabilities();
 
-      const servers = manifest.capabilities.services
-        .filter((s) => s.identity.provider === "docker")
-        .map((s) => (s.identity as { server?: string }).server);
-      expect(servers.length).toBe(2);
-      // All must be the same non-empty string
-      expect(servers.every((s) => typeof s === "string" && s.length > 0)).toBe(
-        true,
+      const servers = manifest.capabilities.services.flatMap((s) =>
+        s.identity.provider === "docker" ? [s.identity.server] : [],
       );
-      expect(new Set(servers).size).toBe(1);
+      expect(servers.length).toBe(2);
+      expect(servers.every((s) => s === "prod-server-01")).toBe(true);
+    });
+
+    it("server dimension is absent when NIGHTWATCH_SERVER_NAME is not set", async () => {
+      delete process.env["NIGHTWATCH_SERVER_NAME"];
+      mockListContainers.mockResolvedValue([
+        makeContainer("c1", "myapp_api_1", "running", {
+          "com.docker.compose.project": "myapp",
+          "com.docker.compose.service": "api",
+        }),
+      ]);
+      mockListDeployments.mockRejectedValue(new Error("no k8s"));
+      mockListStatefulSets.mockRejectedValue(new Error("no k8s"));
+
+      const manifest = await detectCapabilities();
+
+      const service = manifest.capabilities.services[0];
+      expect(service?.identity.provider).toBe("docker");
+      if (service?.identity.provider === "docker") {
+        expect(service.identity.server).toBeUndefined();
+      }
     });
   });
 

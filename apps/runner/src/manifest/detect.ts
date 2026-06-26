@@ -55,12 +55,12 @@ async function detectDocker(): Promise<{
     // still advertised - otherwise routing would reject the call before the
     // runner ever gets to JIT-resolve it and report a clean finding.
     const list = await docker.listContainers({ all: true });
-    const server = hostname();
+    const server = process.env["NIGHTWATCH_SERVER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const c of list) {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
       const base = deriveDockerServiceIdentity(c.Labels, name);
-      const identity = { ...base, server };
+      const identity = server ? { ...base, server } : base;
       const key = serviceIdentityKey(identity);
       const existing = byKey.get(key);
       // Prefer "running" over any stopped state when multiple containers share

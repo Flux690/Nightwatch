@@ -75,6 +75,13 @@ function k8sSvc(
   return { provider: "kubernetes", namespace, workload };
 }
 
+function scopedSvc(
+  name: string,
+  server: string,
+): { provider: "docker"; project: string; service: string; server: string } {
+  return { provider: "docker", project: name, service: name, server };
+}
+
 function makeManifest(
   hostname: string,
   containers: string[],
@@ -125,6 +132,17 @@ function makeK8sManifest(
   };
 }
 
+function makeSend(
+  log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
+) {
+  return (raw: string) => {
+    const msg = JSON.parse(raw) as RunnerCommandMessage;
+    const { commandName, commandInput, correlationId } = msg.payload;
+    log.push({ commandName, commandInput });
+    resolveCommand({ correlationId, success: true, result: {} });
+  };
+}
+
 function waitForConnected(ws: WebSocket): Promise<void> {
   return new Promise<void>((resolve) => {
     const onMsg = (raw: WebSocket.RawData): void => {
@@ -167,21 +185,6 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
-
-  function makeSend(
-    log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
-  ) {
-    return (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-      log.push({ commandName, commandInput });
-      resolveCommand({
-        correlationId,
-        success: true,
-        result: { restarted: true },
-      });
-    };
-  }
 
   beforeAll(async () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
@@ -499,5 +502,155 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
     expect(commandsC).toHaveLength(0);
+  });
+});
+
+describe("assigned-name server-scoped routing", () => {
+  // Two runners whose manifests carry server-scoped Docker identities — the
+  // shape produced by the runner when NIGHTWATCH_SERVER_NAME is set. Routing
+  // must match exclusively on the full (server, project, service) key.
+  let cleanupDb2: () => void;
+  let tokenIdS1: string;
+  let tokenIdS2: string;
+
+  const commandsS1: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
+  const commandsS2: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
+
+  function makeScopedManifest(
+    server: string,
+    services: string[],
+  ): CapabilityManifest {
+    return {
+      runnerId: `runner-${server}`,
+      hostname: server,
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        kubernetes: false,
+        services: services.map((name) => ({
+          identity: scopedSvc(name, server),
+          status: "running",
+        })),
+        prometheus: { available: false },
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: false,
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-scoped-tests-32byte");
+    cleanupDb2 = useTempDb();
+    await mintTestSession();
+
+    tokenIdS1 = generateRunnerToken("scoped-runner-1").id;
+    registerRunner(tokenIdS1, makeSend(commandsS1), () => {});
+    setRunnerManifest(
+      tokenIdS1,
+      makeScopedManifest("prod-server-01", ["api", "worker"]),
+    );
+
+    tokenIdS2 = generateRunnerToken("scoped-runner-2").id;
+    registerRunner(tokenIdS2, makeSend(commandsS2), () => {});
+    setRunnerManifest(
+      tokenIdS2,
+      makeScopedManifest("prod-server-02", ["api", "db"]),
+    );
+  });
+
+  afterAll(() => {
+    unregisterRunner(tokenIdS1);
+    unregisterRunner(tokenIdS2);
+    cleanupDb2();
+    vi.unstubAllEnvs();
+  });
+
+  beforeEach(() => {
+    commandsS1.length = 0;
+    commandsS2.length = 0;
+  });
+
+  async function runScopedSession(): Promise<string> {
+    const sessionId = randomUUID();
+    dispatcher.dispatch({ sessionId, userMessage: "investigate" });
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    return sessionId;
+  }
+
+  it("routes to the runner whose assigned server name matches the target identity", async () => {
+    setScript([
+      {
+        text: "Checking api on prod-server-01.",
+        toolUses: [
+          {
+            id: "tu-scoped-1",
+            name: "get_service_logs",
+            input: { service: scopedSvc("api", "prod-server-01") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS1).toHaveLength(1);
+    expect(commandsS1[0].commandName).toBe("get_container_logs");
+    expect(commandsS2).toHaveLength(0);
+  });
+
+  it("routes to the other runner when the server name differs", async () => {
+    setScript([
+      {
+        text: "Checking db on prod-server-02.",
+        toolUses: [
+          {
+            id: "tu-scoped-2",
+            name: "get_service_logs",
+            input: { service: scopedSvc("db", "prod-server-02") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS2).toHaveLength(1);
+    expect(commandsS2[0].commandName).toBe("get_container_logs");
+    expect(commandsS1).toHaveLength(0);
+  });
+
+  it("same service name on different servers routes independently — server scope prevents ambiguity", async () => {
+    // Both runners advertise "api" — server scope is what disambiguates them.
+    // Targeting prod-server-02/api must not reach prod-server-01.
+    setScript([
+      {
+        text: "Checking api on prod-server-02.",
+        toolUses: [
+          {
+            id: "tu-scoped-3",
+            name: "get_service_logs",
+            input: { service: scopedSvc("api", "prod-server-02") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS2).toHaveLength(1);
+    expect(commandsS2[0].commandName).toBe("get_container_logs");
+    expect(commandsS1).toHaveLength(0);
   });
 });
