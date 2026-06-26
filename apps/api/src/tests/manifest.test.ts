@@ -99,6 +99,18 @@ describe("buildManifest", () => {
     expect(yaml).toContain("patch");
   });
 
+  it("write ClusterRole grants create on pods/exec", () => {
+    const yaml = buildManifest(
+      "wss://api.example.com/clients/connect",
+      "nwr_tok",
+    );
+    const writeStart = yaml.indexOf("name: nightwatch-runner-write");
+    const writeEnd = yaml.indexOf("---", writeStart);
+    const writeRole = yaml.slice(writeStart, writeEnd);
+    expect(writeRole).toContain("pods/exec");
+    expect(writeRole).toContain('"create"');
+  });
+
   it("uses the correct env var names that the runner reads", () => {
     const yaml = buildManifest(
       "wss://api.example.com/clients/connect",
