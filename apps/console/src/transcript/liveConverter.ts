@@ -4,6 +4,7 @@ import type {
   ThinkingItem,
   ApprovalCardItem,
   ClarificationCardItem,
+  ContinueCardItem,
 } from "./types.js";
 
 // Once a non-thinking event arrives, the most recent thinking burst (if still
@@ -97,6 +98,16 @@ export function applyLiveEvent(
       ];
     }
 
+    if (payload.kind === "continue") {
+      return [
+        ...items,
+        {
+          kind: "continue_card",
+          toolUseId: payload.toolUseId,
+        },
+      ];
+    }
+
     const riskValue = payload.input["risk"];
     return [
       ...items,
@@ -143,6 +154,18 @@ export function applyLiveEvent(
       ) {
         const approval: ClarificationCardItem["approval"] =
           status === "answered" ? "answered" : "pending";
+        return { ...item, approval, resolvedBy };
+      }
+      if (
+        item.kind === "continue_card" &&
+        item.toolUseId === payload.toolUseId
+      ) {
+        const approval: ContinueCardItem["approval"] =
+          status === "continued"
+            ? "continued"
+            : status === "rejected"
+              ? "rejected"
+              : "pending";
         return { ...item, approval, resolvedBy };
       }
       return item;

@@ -28,7 +28,6 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
-import { updateConfig } from "../config/store.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -324,93 +323,5 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
     const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
     expect(lastAssistant?.content).toContain("rejected");
-  });
-
-  it("budget exhaustion runs wrap-up turn: model text ends the run, no escalation", async () => {
-    updateConfig({ maxToolCalls: 3 });
-
-    const budgetScript: ScriptedTurn[] = [
-      {
-        toolUses: [
-          {
-            id: "tu-b1",
-            name: "list_services",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      {
-        toolUses: [
-          {
-            id: "tu-b2",
-            name: "list_services",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      {
-        toolUses: [
-          {
-            id: "tu-b3",
-            name: "list_services",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      { toolUses: [], text: "Budget reached. Here is what I found so far." },
-    ];
-    mockCreateProvider.mockImplementationOnce(() =>
-      createContractFakeProvider(budgetScript),
-    );
-
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "Investigate forever." }),
-    });
-    expect(res.status).toBe(202);
-    const { sessionId } = (await res.json()) as { sessionId: string };
-
-    await waitFor(
-      () =>
-        events.find(
-          (e) =>
-            e.type === "RUN_FINISHED" &&
-            e.payload["sessionId"] === sessionId &&
-            (
-              e.payload["message"] as
-                | { role?: string; content?: string }
-                | undefined
-            )?.content === "Budget reached. Here is what I found so far.",
-        ),
-      { timeout: 15_000 },
-    );
-    ws.close();
-
-    const messages = getSessionMessages(sessionId);
-    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-    expect(lastAssistant?.content).toBe(
-      "Budget reached. Here is what I found so far.",
-    );
-    expect(
-      messages.some((m) => m.content.startsWith("Escalated to human:")),
-    ).toBe(false);
-    expect(events.some((e) => e.type === "ESCALATED")).toBe(false);
   });
 });

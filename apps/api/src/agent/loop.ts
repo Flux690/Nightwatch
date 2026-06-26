@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import {
   TOOL_REGISTRY,
@@ -167,6 +168,9 @@ export interface RunInvestigationInput {
   resumeToolResults?: ToolResult[];
   // Aborts the LLM request in flight when the dispatcher stops this run.
   signal?: AbortSignal;
+  // When true: seed prior transcript and run exactly one wrap-up turn (no tools),
+  // then finish. Used when the operator declines a continue-request interrupt.
+  wrapUp?: boolean;
 }
 
 export async function runInvestigation(
@@ -228,6 +232,33 @@ export async function runInvestigation(
 
   let persistedCount = 0;
 
+  // Operator declined a continue-request interrupt: run one free-form wrap-up
+  // turn with no tools so the model can summarize, then finish.
+  if (input.wrapUp) {
+    if (input.seed && input.seed.length > 0) {
+      provider.seed(input.seed);
+      persistedCount = input.seed.length;
+    }
+    log.info("time budget ended: operator chose to end, running wrap-up turn");
+    try {
+      await provider.chat(
+        [],
+        (d) => publishTextMessageContent(sessionId, d),
+        signal,
+      );
+    } catch (err) {
+      if (!signal?.aborted) throw err;
+    }
+    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    if (signal?.aborted) {
+      publishRunStopped(sessionId);
+      log.info("run stopped by user during end wrap-up");
+      return;
+    }
+    log.info("investigation ended after operator declined to continue");
+    return;
+  }
+
   if (input.resumeToolResults && input.resumeToolResults.length > 0) {
     // Resume from a durable interrupt: seed the prior transcript, then append
     // the resolved tool_results turn so the next chat() sees a complete context.
@@ -255,12 +286,14 @@ export async function runInvestigation(
     persistedCount = persistNewTurns(provider, sessionId, persistedCount);
   };
 
-  let toolCallCount = 0;
   let turn = 0;
+  // Time is the only budget ceiling. The deadline is checked at each turn
+  // boundary; it does not tick during approval or clarification waits because
+  // the run exits while suspended and recomputes a fresh deadline on resume.
   const deadline = Date.now() + config.hardTimeoutMs;
   const fleetProviders = currentFleetProviders();
 
-  while (toolCallCount < config.maxToolCalls && Date.now() < deadline) {
+  while (Date.now() < deadline) {
     turn++;
     const startedAt = Date.now();
     let response: ChatResponse;
@@ -320,8 +353,6 @@ export async function runInvestigation(
     };
 
     for (const tool of response.toolUses) {
-      toolCallCount++;
-
       const entry = TOOL_REGISTRY.find((t) => t.schema.name === tool.name);
 
       if (!entry) {
@@ -463,23 +494,35 @@ export async function runInvestigation(
     persist();
   }
 
-  log.info({ turn, toolCallCount }, "budget exhausted, running wrap-up turn");
-  try {
-    await provider.chat(
-      [],
-      (d) => publishTextMessageContent(sessionId, d),
-      signal,
-    );
-  } catch (err) {
-    if (!signal?.aborted) throw err;
-  }
-  persist();
-  if (signal?.aborted) {
-    publishRunStopped(sessionId);
-    log.info("run stopped by user during wrap-up");
-    return;
-  }
-  log.info("investigation finished with budget wrap-up");
+  // Time budget reached. Suspend with a continue-request interrupt so the
+  // operator can resume (granting a fresh deadline) or end the investigation.
+  // The interrupt row is inserted atomically; all prior turns are already
+  // persisted so the messages list passed here is empty.
+  const continueId = randomUUID();
+  const continueInterrupt: PendingHumanInput = {
+    sessionId,
+    toolUseId: continueId,
+    kind: "continue",
+    toolName: "",
+    toolInput: {},
+    completedResults: [],
+    claimedAt: null,
+    createdAt: new Date().toISOString(),
+  };
+  persistedCount = persistNewTurns(
+    provider,
+    sessionId,
+    persistedCount,
+    continueInterrupt,
+  );
+  publishInterrupt({
+    sessionId,
+    toolUseId: continueId,
+    toolName: "",
+    input: {},
+    kind: "continue",
+  });
+  log.info({ turn }, "time budget reached: suspended with continue request");
 }
 
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {

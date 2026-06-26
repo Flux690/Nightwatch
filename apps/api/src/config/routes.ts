@@ -13,7 +13,6 @@ const ConfigPatchSchema = z.object({
   maxOutputTokens: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).optional(),
   requestTimeoutMs: z.number().int().positive().optional(),
-  maxToolCalls: z.number().int().positive().optional(),
   hardTimeoutMs: z.number().int().positive().optional(),
   toolTimeoutMs: z.number().int().positive().optional(),
   remediationBreakerLimit: z.number().int().positive().optional(),

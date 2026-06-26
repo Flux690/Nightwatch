@@ -5,7 +5,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 export interface PendingHumanInput {
   sessionId: string;
   toolUseId: string;
-  kind: "approval" | "clarification";
+  kind: "approval" | "clarification" | "continue";
   toolName: string;
   toolInput: Record<string, unknown>;
   completedResults: ToolResult[];
@@ -36,7 +36,8 @@ function parseRow(row: RawRow): PendingHumanInput {
   return {
     sessionId: row.sessionId,
     toolUseId: row.toolUseId,
-    kind: row.kind as "approval" | "clarification",
+    // All writes go through this module's typed INSERT, constraining kind to the union.
+    kind: row.kind as "approval" | "clarification" | "continue",
     toolName: row.toolName,
     toolInput: JSON.parse(row.toolInput) as Record<string, unknown>,
     completedResults: JSON.parse(row.completedResults) as ToolResult[],

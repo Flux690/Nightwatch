@@ -27,7 +27,6 @@ const BASE_CONFIG: AgentConfig = {
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  maxToolCalls: 24,
   hardTimeoutMs: 300_000,
   toolTimeoutMs: 15_000,
   remediationBreakerLimit: 5,

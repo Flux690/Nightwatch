@@ -22,6 +22,7 @@ function pendingApprovalToEnvelope(
   p: ApprovalRequest,
 ): ConsoleHumanInputRequired {
   const isClarification = p.kind === "clarification";
+  const isContinue = p.kind === "continue";
   // Clarification's question/options/multiSelect ride inside toolInput - the
   // API embeds them there at publish time (agent/loop.ts) because
   // they originate from the tool call's own input, not a separate column.
@@ -40,7 +41,7 @@ function pendingApprovalToEnvelope(
       toolUseId: p.toolUseId,
       toolName: p.toolName,
       input: p.toolInput,
-      kind: isClarification ? "clarification" : "approval",
+      kind: isClarification ? "clarification" : isContinue ? "continue" : "approval",
       ...(clarInput !== null && {
         question: clarInput.question,
         options: clarInput.options,
@@ -59,6 +60,9 @@ function pendingInterruptFromItems(
     }
     if (item.kind === "clarification_card" && !item.approval) {
       return { id: item.toolUseId, kind: "clarification" };
+    }
+    if (item.kind === "continue_card" && !item.approval) {
+      return { id: item.toolUseId, kind: "continue" };
     }
   }
   return undefined;
@@ -191,7 +195,8 @@ export function SessionView({
       const alreadySeeded = prev.some(
         (item) =>
           (item.kind === "approval_card" ||
-            item.kind === "clarification_card") &&
+            item.kind === "clarification_card" ||
+            item.kind === "continue_card") &&
           item.toolUseId === pendingForSession.toolUseId,
       );
       if (alreadySeeded) return prev;
@@ -256,7 +261,8 @@ export function SessionView({
     (toolUseId: string, action: "approve" | "reject") => {
       setLiveItems((prev) =>
         prev.map((item) =>
-          item.kind === "approval_card" && item.toolUseId === toolUseId
+          (item.kind === "approval_card" || item.kind === "continue_card") &&
+          item.toolUseId === toolUseId
             ? { ...item, approval: "pending" }
             : item,
         ),

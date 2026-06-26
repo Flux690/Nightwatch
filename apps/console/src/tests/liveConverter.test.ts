@@ -47,6 +47,79 @@ function interrupt(toolUseId: string): ConsoleEvent {
   };
 }
 
+function continueInterrupt(toolUseId: string): ConsoleEvent {
+  return {
+    messageId: "m1",
+    type: "HUMAN_INPUT_REQUIRED",
+    payload: {
+      sessionId: "s1",
+      kind: "continue",
+      toolUseId,
+      toolName: "",
+      input: {},
+    },
+  };
+}
+
+function interruptResolved(
+  toolUseId: string,
+  status: "approved" | "rejected" | "context_added" | "answered" | "continued",
+): ConsoleEvent {
+  return {
+    messageId: "m2",
+    type: "HUMAN_INPUT_RESOLVED",
+    payload: { sessionId: "s1", toolUseId, status, resolvedBy: "console" },
+  };
+}
+
+describe("applyLiveEvent — continue interrupt", () => {
+  it("produces a continue_card item on HUMAN_INPUT_REQUIRED kind=continue", () => {
+    const items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "continue_card", toolUseId: "ci-1" });
+  });
+
+  it("sets approval to 'continued' on HUMAN_INPUT_RESOLVED status=continued", () => {
+    let items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
+    items = applyLiveEvent(items, interruptResolved("ci-1", "continued"), "s1");
+
+    expect(items[0]).toMatchObject({
+      kind: "continue_card",
+      approval: "continued",
+      resolvedBy: "console",
+    });
+  });
+
+  it("sets approval to 'rejected' on HUMAN_INPUT_RESOLVED status=rejected", () => {
+    let items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
+    items = applyLiveEvent(items, interruptResolved("ci-1", "rejected"), "s1");
+
+    expect(items[0]).toMatchObject({
+      kind: "continue_card",
+      approval: "rejected",
+    });
+  });
+
+  it("finalizes a trailing thinking item before adding the continue card", () => {
+    let items: TranscriptItem[] = [];
+    items = applyLiveEvent(
+      items,
+      {
+        messageId: "m1",
+        type: "TEXT_MESSAGE_CONTENT",
+        payload: { sessionId: "s1", kind: "thinking", delta: "Hmm…" },
+      },
+      "s1",
+    );
+    items = applyLiveEvent(items, continueInterrupt("ci-2"), "s1");
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ kind: "thinking", streaming: false });
+    expect(items[1]).toMatchObject({ kind: "continue_card", toolUseId: "ci-2" });
+  });
+});
+
 describe("applyLiveEvent — thinking", () => {
   it("opens a streaming thinking item on the first delta", () => {
     const items = applyLiveEvent([], thinkingDelta("Let me check"), "s1");

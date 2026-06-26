@@ -1,7 +1,6 @@
 import { getDb } from "../db/client.js";
 import {
   DEFAULT_HARD_TIMEOUT_MS,
-  DEFAULT_MAX_TOOL_CALLS,
   DEFAULT_REMEDIATION_BREAKER_LIMIT,
   DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
   DEFAULT_TOOL_TIMEOUT_MS,
@@ -29,7 +28,6 @@ type ConfigRow = {
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
-  maxToolCalls: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
   remediationBreakerLimit: number;
@@ -45,7 +43,6 @@ const SELECT_ROW = `
          max_output_tokens  AS maxOutputTokens,
          max_retries        AS maxRetries,
          request_timeout_ms AS requestTimeoutMs,
-         max_tool_calls     AS maxToolCalls,
          hard_timeout_ms    AS hardTimeoutMs,
          tool_timeout_ms    AS toolTimeoutMs,
          remediation_breaker_limit     AS remediationBreakerLimit,
@@ -80,7 +77,6 @@ function defaultConfigFromEnv(): AgentConfig {
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     maxRetries: MAX_RETRIES,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
-    maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
     hardTimeoutMs: DEFAULT_HARD_TIMEOUT_MS,
     toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
     remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
@@ -114,7 +110,6 @@ export function loadConfig(): AgentConfig {
     maxOutputTokens: row.maxOutputTokens,
     maxRetries: row.maxRetries,
     requestTimeoutMs: row.requestTimeoutMs,
-    maxToolCalls: row.maxToolCalls,
     hardTimeoutMs: row.hardTimeoutMs,
     toolTimeoutMs: row.toolTimeoutMs,
     remediationBreakerLimit: row.remediationBreakerLimit,
@@ -140,12 +135,12 @@ export function loadApiKey(): string | undefined {
 const UPSERT_CONFIG = `
   INSERT INTO config (
     id, provider, model, thinking, max_output_tokens, max_retries,
-    request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+    request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
-    @requestTimeoutMs, @maxToolCalls, @hardTimeoutMs, @toolTimeoutMs,
+    @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
@@ -156,7 +151,6 @@ const UPSERT_CONFIG = `
     max_output_tokens = excluded.max_output_tokens,
     max_retries = excluded.max_retries,
     request_timeout_ms = excluded.request_timeout_ms,
-    max_tool_calls = excluded.max_tool_calls,
     hard_timeout_ms = excluded.hard_timeout_ms,
     tool_timeout_ms = excluded.tool_timeout_ms,
     remediation_breaker_limit = excluded.remediation_breaker_limit,
@@ -181,7 +175,6 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       maxOutputTokens: next.maxOutputTokens,
       maxRetries: next.maxRetries,
       requestTimeoutMs: next.requestTimeoutMs,
-      maxToolCalls: next.maxToolCalls,
       hardTimeoutMs: next.hardTimeoutMs,
       toolTimeoutMs: next.toolTimeoutMs,
       remediationBreakerLimit: next.remediationBreakerLimit,

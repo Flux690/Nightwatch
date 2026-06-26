@@ -11,7 +11,7 @@ const STOP_ICON_PROPS = {
 
 export interface PendingInterrupt {
   id: string;
-  kind: "approval" | "clarification";
+  kind: "approval" | "clarification" | "continue";
 }
 
 export interface ChatInputProps {
@@ -80,6 +80,7 @@ export function ChatInput({
     if (isRunning) return "Agent is running…";
     if (pendingInterrupt?.kind === "approval") return "Add context…";
     if (pendingInterrupt?.kind === "clarification") return "Type your answer…";
+    if (pendingInterrupt?.kind === "continue") return "Use the controls above to resume or end…";
     return "Type a message…";
   }
 
@@ -99,7 +100,7 @@ export function ChatInput({
         placeholder={placeholder()}
         value={text}
         onChange={(e) => setText(e.currentTarget.value)}
-        disabled={isRunning}
+        disabled={isRunning || pendingInterrupt?.kind === "continue"}
         autosize
         minRows={1}
         maxRows={6}

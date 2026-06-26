@@ -379,6 +379,71 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
+  describe("continue_card", () => {
+    const continueItem = {
+      kind: "continue_card" as const,
+      toolUseId: "continue-uuid-1",
+    };
+
+    it("renders Resume and End investigation buttons when unresolved", () => {
+      wrap(continueItem);
+
+      expect(screen.getByRole("button", { name: /resume/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /end investigation/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calls onResolve with 'approve' when Resume is clicked", async () => {
+      const user = userEvent.setup();
+      const onResolve = vi.fn();
+      wrap(continueItem, { onResolve });
+
+      await user.click(screen.getByRole("button", { name: /resume/i }));
+
+      expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "approve");
+    });
+
+    it("calls onResolve with 'reject' when End investigation is clicked", async () => {
+      const user = userEvent.setup();
+      const onResolve = vi.fn();
+      wrap(continueItem, { onResolve });
+
+      await user.click(screen.getByRole("button", { name: /end investigation/i }));
+
+      expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
+    });
+
+    it("shows Resumed and hides buttons when approval is 'continued'", () => {
+      wrap({ ...continueItem, approval: "continued", resolvedBy: "console" });
+
+      expect(screen.getByTestId("continue-resolution")).toHaveTextContent(
+        "Resumed by console",
+      );
+      expect(
+        screen.queryByRole("button", { name: /resume/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows Ended and hides buttons when approval is 'rejected'", () => {
+      wrap({ ...continueItem, approval: "rejected" });
+
+      expect(screen.getByTestId("continue-resolution")).toHaveTextContent("Ended");
+      expect(
+        screen.queryByRole("button", { name: /end investigation/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("disables buttons when approval is 'pending'", () => {
+      wrap({ ...continueItem, approval: "pending" });
+
+      expect(screen.getByRole("button", { name: /resume/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /end investigation/i }),
+      ).toBeDisabled();
+    });
+  });
+
   describe("transcript column layout", () => {
     it("transcript-column has centered max-width layout", () => {
       wrap({ kind: "user_turn", id: "u1", text: "Hi" });

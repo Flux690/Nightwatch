@@ -30,7 +30,6 @@ const CONFIG: AgentConfig = {
   maxOutputTokens: 32000,
   maxRetries: 2,
   requestTimeoutMs: 120000,
-  maxToolCalls: 24,
   hardTimeoutMs: 300000,
   toolTimeoutMs: 15000,
   remediationBreakerLimit: 5,
@@ -130,7 +129,6 @@ describe("SettingsPage", () => {
       expect(screen.getByLabelText(/max output tokens/i)).toHaveValue("32000");
     });
     expect(screen.getByLabelText(/max retries/i)).toHaveValue("2");
-    expect(screen.getByLabelText(/max tool calls/i)).toHaveValue("24");
   });
 
   it("PATCHes /config with only the changed field when Save is clicked", async () => {

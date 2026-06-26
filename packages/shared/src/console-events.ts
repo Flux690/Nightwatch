@@ -6,7 +6,12 @@ export interface ConsoleHumanInputResolved extends WsEnvelope {
   payload: {
     sessionId: string;
     toolUseId: string;
-    status: "approved" | "rejected" | "context_added" | "answered";
+    status:
+      | "approved"
+      | "rejected"
+      | "context_added"
+      | "answered"
+      | "continued";
     resolvedBy?: string;
     resolvedAt?: string;
   };
@@ -50,7 +55,7 @@ export interface ConsoleHumanInputRequired extends WsEnvelope {
     toolUseId: string;
     toolName: string;
     input: Record<string, unknown>;
-    kind: "approval" | "clarification";
+    kind: "approval" | "clarification" | "continue";
     question?: string;
     options?: Array<{ label: string; description: string }>;
     multiSelect?: boolean;

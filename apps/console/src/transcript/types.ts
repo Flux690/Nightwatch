@@ -4,7 +4,8 @@ export type TranscriptItem =
   | ThinkingItem
   | ToolCardItem
   | ApprovalCardItem
-  | ClarificationCardItem;
+  | ClarificationCardItem
+  | ContinueCardItem;
 
 export interface UserTurnItem {
   kind: "user_turn";
@@ -61,4 +62,11 @@ export interface ClarificationCardItem {
   // the recorded tool_result, shown the same way ApprovalCardPanel nests a
   // resolved ToolCardPanel.
   result?: unknown;
+}
+
+export interface ContinueCardItem {
+  kind: "continue_card";
+  toolUseId: string;
+  approval?: "pending" | "continued" | "rejected";
+  resolvedBy?: string;
 }

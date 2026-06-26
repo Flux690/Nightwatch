@@ -105,6 +105,60 @@ export async function respondToPendingHumanInput(
   const pending = requirePendingHumanInput(sessionId);
   const { decision, text } = request;
 
+  if (pending.kind === "continue") {
+    // No async work between resolve and dispatch, so ensureDeleted alone is
+    // the concurrency gate — SQLite's atomic DELETE returns 0 rows if a
+    // concurrent request won the race, which ensureDeleted converts to 409.
+    // claimOrThrow is intentionally omitted: its only purpose is to mark the
+    // row "in progress" during async tool execution; there is no such work here.
+    ensureDeleted(sessionId);
+    const resolvedAt = new Date().toISOString();
+    if (decision === "reject") {
+      publishInterruptResolved({
+        sessionId,
+        toolUseId: pending.toolUseId,
+        status: "rejected",
+        resolvedBy,
+        resolvedAt,
+      });
+      logger.info(
+        { sessionId, resolvedBy },
+        "continue request ended by operator",
+      );
+      dispatcher.dispatch({
+        sessionId,
+        seed: buildSeed(sessionId),
+        wrapUp: true,
+      });
+      return {
+        sessionId,
+        toolUseId: pending.toolUseId,
+        status: "rejected",
+        resolvedBy,
+        resolvedAt,
+      };
+    }
+    publishInterruptResolved({
+      sessionId,
+      toolUseId: pending.toolUseId,
+      status: "continued",
+      resolvedBy,
+      resolvedAt,
+    });
+    logger.info(
+      { sessionId, resolvedBy },
+      "continue request resumed by operator",
+    );
+    dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
+    return {
+      sessionId,
+      toolUseId: pending.toolUseId,
+      status: "continued",
+      resolvedBy,
+      resolvedAt,
+    };
+  }
+
   if (pending.kind === "clarification") {
     if (decision !== undefined) {
       throw new HumanInputError(

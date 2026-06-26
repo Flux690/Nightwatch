@@ -325,11 +325,6 @@ export function SettingsPage(): React.JSX.Element {
               onChange={(v) => setField("requestTimeoutMs", numberValue(v))}
             />
             <NumberInput
-              label="Max tool calls"
-              value={form.maxToolCalls}
-              onChange={(v) => setField("maxToolCalls", numberValue(v))}
-            />
-            <NumberInput
               label="Hard timeout (ms)"
               value={form.hardTimeoutMs}
               onChange={(v) => setField("hardTimeoutMs", numberValue(v))}

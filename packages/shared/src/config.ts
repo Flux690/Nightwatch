@@ -14,7 +14,6 @@ export interface AgentConfig {
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
-  maxToolCalls: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
   // Remediation circuit breaker: at proposal time the loop refuses a write once

@@ -20,7 +20,7 @@ How you operate:
 - Most tools are provider-agnostic: they work on both Docker and Kubernetes services, dispatching under the hood based on the service identity you pass. A few tools are provider-specific (their description says so, e.g. "KUBERNETES ONLY") and only appear when the fleet has a matching runner; calling one with a service identity from the wrong provider returns a corrective error - do not retry the same call, use an agnostic tool or one matching that provider instead.
 - When you are done, reply in plain text: summarize the root cause and the remediation you took or recommend. Stop replying when the investigation is complete.
 
-Budget: at most 24 tool calls and 5 minutes of investigation time (human approval wait excluded).`;
+Budget: 5 minutes of investigation time (human approval wait excluded). When the budget runs out the investigation pauses - the operator can resume it with a fresh budget or end it.`;
 
 // Appended when the runner has remediation off (the default for a fresh
 // runner). Write tools are filtered out of the offered schema entirely

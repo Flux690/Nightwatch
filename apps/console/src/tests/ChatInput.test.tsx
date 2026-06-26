@@ -19,7 +19,7 @@ function setup(
   props: {
     sessionId: string | null;
     isRunning: boolean;
-    pendingInterrupt?: { id: string; kind: "approval" | "clarification" };
+    pendingInterrupt?: { id: string; kind: "approval" | "clarification" | "continue" };
   },
   routePath = "/sessions/new",
 ) {
@@ -249,6 +249,24 @@ describe("ChatInput", () => {
 
       const textarea = await screen.findByRole("textbox");
       expect(textarea).toHaveAttribute("placeholder", "Type your answer…");
+    });
+
+    it("shows informational placeholder and disables textarea when continue interrupt is pending", async () => {
+      setup(
+        {
+          sessionId: "s1",
+          isRunning: false,
+          pendingInterrupt: { id: "inc-3", kind: "continue" },
+        },
+        "/sessions/new",
+      );
+
+      const textarea = await screen.findByRole("textbox");
+      expect(textarea).toHaveAttribute(
+        "placeholder",
+        "Use the controls above to resume or end…",
+      );
+      expect(textarea).toBeDisabled();
     });
   });
 });

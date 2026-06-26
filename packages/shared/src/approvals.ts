@@ -3,14 +3,15 @@ export type ApprovalStatus =
   | "approved"
   | "rejected"
   | "context_added"
-  | "answered";
+  | "answered"
+  | "continued";
 
 export interface ApprovalRequest {
   sessionId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   toolUseId: string; // Anthropic tool_use_id — correlation key
-  kind?: "approval" | "clarification";
+  kind?: "approval" | "clarification" | "continue";
   status: ApprovalStatus;
   createdAt: string;
   resolvedAt?: string;
