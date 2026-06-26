@@ -14,6 +14,7 @@ const SCHEMA = `
     token        TEXT NOT NULL UNIQUE,
     runner_id    TEXT,
     label        TEXT,
+    server_name  TEXT UNIQUE,
     created_at   TEXT NOT NULL,
     last_used_at TEXT
   );
@@ -164,6 +165,16 @@ function applyMigrations(db: Database.Database): void {
   const configCols = (
     db.prepare("PRAGMA table_info(config)").all() as Array<{ name: string }>
   ).map((c) => c.name);
+
+  const runnerCols = (
+    db.prepare("PRAGMA table_info(runner)").all() as Array<{ name: string }>
+  ).map((c) => c.name);
+  if (!runnerCols.includes("server_name")) {
+    db.prepare("ALTER TABLE runner ADD COLUMN server_name TEXT").run();
+    db.prepare(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_server_name ON runner(server_name) WHERE server_name IS NOT NULL",
+    ).run();
+  }
 
   const userCols = (
     db.prepare("PRAGMA table_info(user)").all() as Array<{ name: string }>

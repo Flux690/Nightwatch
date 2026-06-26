@@ -102,6 +102,54 @@ describe("Runner token lifecycle (issue 038)", () => {
       const tokenB = (JSON.parse(b.body) as { token: string }).token;
       expect(tokenA).not.toBe(tokenB);
     });
+
+    it("stores and returns serverName when provided", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-01" },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body) as { serverName: string };
+      expect(body.serverName).toBe("web-01");
+    });
+
+    it("returns 400 when serverName is empty", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("returns 400 when serverName contains a forward slash", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "prod/web-01" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("returns 409 when serverName is already used by another token", async () => {
+      await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "db-server-01" },
+      });
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "db-server-01" },
+      });
+      expect(res.statusCode).toBe(409);
+    });
   });
 
   describe("GET /tokens", () => {

@@ -188,11 +188,43 @@ describe("AddServerWizard", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
 
+  it("requires a server name — Continue stays disabled until both provider and name are filled", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "web-01",
+    );
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
+  });
+
+  it("shows a validation error when the server name contains a forward slash", async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "prod/web",
+    );
+
+    expect(screen.getByText(/must not contain/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
   it("mints a runner token and shows the docker run script after choosing Docker", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup();
 
     await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "web-01",
+    );
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
     await waitFor(() => {
@@ -206,11 +238,37 @@ describe("AddServerWizard", () => {
     });
   });
 
+  it("includes serverName in the token mint request", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup();
+
+    await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "prod-web-01",
+    );
+    await user.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/tokens",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"prod-web-01"'),
+        }),
+      );
+    });
+  });
+
   it("mints a runner token and shows the Kubernetes manifest after choosing Kubernetes", async () => {
     const user = userEvent.setup();
     setup();
 
     await user.click(screen.getByRole("radio", { name: /kubernetes/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "k8s-cluster",
+    );
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
     await waitFor(() => {
@@ -223,6 +281,10 @@ describe("AddServerWizard", () => {
     setup({ runners: [AWAITING_RUNNER] });
 
     await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "web-01",
+    );
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
     await waitFor(() => {
@@ -236,6 +298,10 @@ describe("AddServerWizard", () => {
     setup({ runners: [CONNECTED_RUNNER] });
 
     await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      "web-01",
+    );
     await user.click(screen.getByRole("button", { name: /continue/i }));
 
     await waitFor(() => {
@@ -249,14 +315,28 @@ describe("AddServerWizard", () => {
 
   async function advanceToMonitoringStep(
     user: ReturnType<typeof userEvent.setup>,
+    serverName = "test-server",
   ): Promise<void> {
     await user.click(screen.getByRole("radio", { name: /docker/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /server name/i }),
+      serverName,
+    );
     await user.click(screen.getByRole("button", { name: /continue/i }));
     await waitFor(() => {
       expect(screen.getByText(/connected/i)).toBeInTheDocument();
     });
     await user.click(screen.getByRole("button", { name: /continue/i }));
   }
+
+  it("monitoring step shows a BYO relabel snippet with the chosen server name", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+    await advanceToMonitoringStep(user, "prod-web-01");
+
+    expect(screen.getByText(/instance/i)).toBeInTheDocument();
+    expect(screen.getByText(/prod-web-01/)).toBeInTheDocument();
+  });
 
   it("shows a Generate credential button when no ingest credential exists yet", async () => {
     const user = userEvent.setup();

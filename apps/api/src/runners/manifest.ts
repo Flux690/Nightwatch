@@ -92,6 +92,8 @@ spec:
               value: "{{NIGHTWATCH_TOKEN}}"
             - name: WS_URL
               value: "{{WS_URL}}"
+            - name: NIGHTWATCH_SERVER_NAME
+              value: "{{NIGHTWATCH_SERVER_NAME}}"
             # Set to "true" to enable write actions (rollout restarts etc.).
             # Defaults to "false" — the runner is read-only until you opt in.
             # - name: REMEDIATION_ENABLED
@@ -103,11 +105,14 @@ function buildWsUrl(origin: string): string {
   return `${wsProto}://${origin.replace(/^https?:\/\//, "")}/clients/connect`;
 }
 
-export function buildManifest(wsUrl: string, token: string): string {
-  return TEMPLATE.replaceAll("{{NIGHTWATCH_TOKEN}}", token).replaceAll(
-    "{{WS_URL}}",
-    wsUrl,
-  );
+export function buildManifest(
+  wsUrl: string,
+  token: string,
+  serverName = "",
+): string {
+  return TEMPLATE.replaceAll("{{NIGHTWATCH_TOKEN}}", token)
+    .replaceAll("{{WS_URL}}", wsUrl)
+    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
 }
 
 export async function registerManifestRoutes(
@@ -130,7 +135,11 @@ export async function registerManifestRoutes(
       }
 
       const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
-      const yaml = buildManifest(buildWsUrl(origin), token);
+      const yaml = buildManifest(
+        buildWsUrl(origin),
+        token,
+        record.serverName ?? "",
+      );
 
       reply.header("Content-Type", "application/yaml; charset=utf-8");
       return reply.code(200).send(yaml);

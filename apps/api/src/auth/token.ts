@@ -7,12 +7,18 @@ import {
 import { closeTokenRunners } from "../ws/router.js";
 import { requireSession } from "./session.js";
 
+function validateServerName(name: string): string | null {
+  if (name.trim().length === 0) return "serverName must not be empty";
+  if (name.includes("/")) return "serverName must not contain '/'";
+  return null;
+}
+
 export async function registerTokenRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   // Generate a new runner token. The plaintext nwr_... value is returned
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
-  fastify.post<{ Body: { label?: string } }>(
+  fastify.post<{ Body: { label?: string; serverName?: string } }>(
     "/tokens",
     { preHandler: requireSession },
     async (request, reply) => {
@@ -20,13 +26,36 @@ export async function registerTokenRoutes(
         typeof request.body?.label === "string"
           ? request.body.label.trim() || undefined
           : undefined;
-      const generated = generateRunnerToken(label);
-      return reply.code(201).send({
-        id: generated.id,
-        token: generated.plaintext,
-        label: generated.label,
-        createdAt: generated.createdAt,
-      });
+
+      const rawServerName = request.body?.serverName;
+      let serverName: string | undefined;
+      if (rawServerName !== undefined) {
+        if (typeof rawServerName !== "string") {
+          return reply.code(400).send({ error: "serverName must be a string" });
+        }
+        const err = validateServerName(rawServerName);
+        if (err) return reply.code(400).send({ error: err });
+        serverName = rawServerName.trim();
+      }
+
+      try {
+        const generated = generateRunnerToken(label, serverName);
+        return reply.code(201).send({
+          id: generated.id,
+          token: generated.plaintext,
+          label: generated.label,
+          serverName: generated.serverName,
+          createdAt: generated.createdAt,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("UNIQUE constraint failed: runner.server_name")) {
+          return reply
+            .code(409)
+            .send({ error: "A runner with that server name already exists" });
+        }
+        throw err;
+      }
     },
   );
 

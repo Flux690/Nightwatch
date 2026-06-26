@@ -135,6 +135,26 @@ describe("buildManifest", () => {
     expect(yaml).toContain(wsUrl);
     expect(yaml).toContain(token);
   });
+
+  it("includes NIGHTWATCH_SERVER_NAME when a server name is provided", () => {
+    const yaml = buildManifest(
+      "wss://api.example.com/clients/connect",
+      "nwr_tok",
+      "prod-web-01",
+    );
+    expect(yaml).toContain("NIGHTWATCH_SERVER_NAME");
+    expect(yaml).toContain("prod-web-01");
+  });
+
+  it("still contains no unreplaced placeholders when a server name is provided", () => {
+    const yaml = buildManifest(
+      "wss://api.example.com/clients/connect",
+      "nwr_tok",
+      "web-01",
+    );
+    expect(yaml).not.toContain("{{");
+    expect(yaml).not.toContain("}}");
+  });
 });
 
 describe("GET /manifest.yaml", () => {
@@ -251,5 +271,23 @@ describe("GET /manifest.yaml", () => {
     });
     expect(res.body).not.toContain("{{");
     expect(res.body).not.toContain("}}");
+  });
+
+  it("manifest contains NIGHTWATCH_SERVER_NAME from the token's server name", async () => {
+    const namedToken = generateRunnerToken(
+      "named-k8s",
+      "prod-cluster",
+    ).plaintext;
+    const res = await server.inject({
+      method: "GET",
+      url: "/manifest.yaml",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${namedToken}`,
+        host: "control.example.com",
+      },
+    });
+    expect(res.body).toContain("NIGHTWATCH_SERVER_NAME");
+    expect(res.body).toContain("prod-cluster");
   });
 });

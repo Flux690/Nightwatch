@@ -8,6 +8,7 @@ export type RunnerRow = {
   tokenHash: string;
   runnerId: string | null;
   label: string | null;
+  serverName: string | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -17,6 +18,7 @@ export type RunnerMeta = {
   id: string;
   runnerId: string | null;
   label: string | null;
+  serverName: string | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -29,6 +31,7 @@ export function hashToken(plaintext: string): string {
 // stores only the SHA-256 hash. Format: nwr_ + 32 random bytes (base64url).
 export function generateRunnerToken(
   label?: string,
+  serverName?: string,
 ): { plaintext: string } & RunnerMeta {
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
@@ -36,13 +39,14 @@ export function generateRunnerToken(
 
   getDb()
     .prepare(
-      `INSERT INTO runner (id, token, label, created_at)
-       VALUES (@id, @tokenHash, @label, @createdAt)`,
+      `INSERT INTO runner (id, token, label, server_name, created_at)
+       VALUES (@id, @tokenHash, @label, @serverName, @createdAt)`,
     )
     .run({
       id,
       tokenHash: hashToken(plaintext),
       label: label ?? null,
+      serverName: serverName ?? null,
       createdAt,
     });
 
@@ -51,6 +55,7 @@ export function generateRunnerToken(
     id,
     runnerId: null,
     label: label ?? null,
+    serverName: serverName ?? null,
     createdAt,
     lastUsedAt: null,
   };
@@ -58,10 +63,11 @@ export function generateRunnerToken(
 
 const SELECT_ROW = `
   id,
-  token       AS tokenHash,
-  runner_id   AS runnerId,
+  token        AS tokenHash,
+  runner_id    AS runnerId,
   label,
-  created_at  AS createdAt,
+  server_name  AS serverName,
+  created_at   AS createdAt,
   last_used_at AS lastUsedAt
 `;
 
@@ -102,7 +108,7 @@ export function deleteRunner(id: string): boolean {
 export function listRunnersMeta(): RunnerMeta[] {
   return getDb()
     .prepare(
-      `SELECT id, label, created_at AS createdAt,
+      `SELECT id, label, server_name AS serverName, created_at AS createdAt,
               runner_id AS runnerId, last_used_at AS lastUsedAt
        FROM runner ORDER BY created_at DESC`,
     )

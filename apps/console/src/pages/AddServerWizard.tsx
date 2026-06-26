@@ -12,6 +12,7 @@ import {
   Stack,
   Stepper,
   Text,
+  TextInput,
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
@@ -32,6 +33,12 @@ interface ValidateAlertResult {
 }
 
 const RUNNER_POLL_MS = 3000;
+
+function validateServerName(name: string): string | null {
+  if (name.trim().length === 0) return "Server name is required";
+  if (name.includes("/")) return "Server name must not contain '/'";
+  return null;
+}
 
 // A synthetic alert sent through /alerts/validate to confirm the credential
 // and the basic webhook shape work end-to-end before the operator wires up
@@ -73,6 +80,8 @@ export function AddServerWizard({
 }): React.JSX.Element {
   const [step, setStep] = useState(0);
   const [provider, setProvider] = useState<Provider | null>(null);
+  const [serverName, setServerName] = useState("");
+  const [serverNameTouched, setServerNameTouched] = useState(false);
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
@@ -89,6 +98,14 @@ export function AddServerWizard({
   const [verifyResult, setVerifyResult] = useState<
     { ok: true; hostname: string } | { ok: false; error: string } | null
   >(null);
+
+  const serverNameError = serverName.includes("/")
+    ? "Server name must not contain '/'"
+    : serverNameTouched && serverName.trim().length === 0
+      ? "Server name is required"
+      : null;
+  const canContinueFromProvider =
+    provider !== null && validateServerName(serverName) === null;
 
   const { data: ingestCredential } = useQuery<{
     configured: boolean;
@@ -128,23 +145,43 @@ export function AddServerWizard({
   function handleClose(): void {
     setStep(0);
     setProvider(null);
+    setServerName("");
+    setServerNameTouched(false);
+    setMinting(false);
     setMintedToken(null);
     setInstallText(null);
     setInstallError(null);
+    setGeneratingIngest(false);
     setIngestToken(null);
+    setTestingWebhook(false);
     setWebhookTestResult(null);
+    setVerifying(false);
     setVerifyResult(null);
     onClose();
   }
 
   async function handleChooseProvider(): Promise<void> {
-    if (!provider) return;
+    if (!canContinueFromProvider) return;
     setStep(1);
     setMinting(true);
     setInstallError(null);
     try {
-      const tokenRes = await fetch("/api/tokens", { method: "POST" });
-      if (!tokenRes.ok) throw new Error(`tokens ${tokenRes.status}`);
+      const tokenRes = await fetch("/api/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serverName: serverName.trim() }),
+      });
+      if (!tokenRes.ok) {
+        if (tokenRes.status === 409) {
+          const body = (await tokenRes.json()) as { error?: string };
+          setInstallError(
+            body.error ?? "A runner with that server name already exists",
+          );
+          setStep(0);
+          return;
+        }
+        throw new Error(`tokens ${tokenRes.status}`);
+      }
       const minted = (await tokenRes.json()) as MintedToken;
       setMintedToken(minted);
 
@@ -250,6 +287,8 @@ export function AddServerWizard({
     }
   }
 
+  const trimmedServerName = serverName.trim();
+
   return (
     <Modal opened={opened} onClose={handleClose} title="Add a server" size="lg">
       <Stepper active={step} onStepClick={setStep} allowNextStepsSelect={false}>
@@ -265,9 +304,26 @@ export function AddServerWizard({
                 <Radio value="kubernetes" label="Kubernetes" />
               </Group>
             </Radio.Group>
+
+            <TextInput
+              label="Server name"
+              description="A unique name for this server in your fleet. Immutable once installed."
+              placeholder="e.g. prod-web-01"
+              value={serverName}
+              onChange={(e) => setServerName(e.currentTarget.value)}
+              onBlur={() => setServerNameTouched(true)}
+              error={serverNameError}
+            />
+
+            {installError !== null && step === 0 && (
+              <Text size="sm" c="red">
+                {installError}
+              </Text>
+            )}
+
             <Group justify="flex-end">
               <Button
-                disabled={provider === null}
+                disabled={!canContinueFromProvider}
                 onClick={() => void handleChooseProvider()}
               >
                 Continue
@@ -287,7 +343,7 @@ export function AddServerWizard({
               </Group>
             )}
 
-            {installError !== null && (
+            {installError !== null && step === 1 && (
               <Text size="sm" c="red">
                 {installError}
               </Text>
@@ -449,6 +505,31 @@ export function AddServerWizard({
                 </Alert>
               );
             })()}
+
+            {trimmedServerName && (
+              <Alert color="blue" title="Bring-your-own monitoring">
+                <Stack gap="xs">
+                  <Text size="sm">
+                    If you use your own Prometheus, add this to its global
+                    configuration so alerts carry the server label that routes
+                    them to this runner:
+                  </Text>
+                  <Code
+                    block
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      fontFamily: "var(--nw-mono)",
+                    }}
+                  >
+                    {[
+                      "global:",
+                      "  external_labels:",
+                      `    instance: "${trimmedServerName}"`,
+                    ].join("\n")}
+                  </Code>
+                </Stack>
+              </Alert>
+            )}
 
             {(() => {
               const displayToken =

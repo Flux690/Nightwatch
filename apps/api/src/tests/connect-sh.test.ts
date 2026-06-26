@@ -159,4 +159,38 @@ describe("GET /connect.sh", () => {
     expect(res.body).not.toContain("nightwatch.sh");
     expect(res.body).not.toContain("inst_");
   });
+
+  it("script contains NIGHTWATCH_SERVER_NAME baked in from the token's server name", async () => {
+    const namedToken = generateRunnerToken(
+      "named-server",
+      "prod-web-01",
+    ).plaintext;
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${namedToken}`,
+      },
+    });
+    expect(res.body).toContain('NIGHTWATCH_SERVER_NAME="prod-web-01"');
+  });
+
+  it("script passes NIGHTWATCH_SERVER_NAME env var to the Docker container", async () => {
+    const namedToken = generateRunnerToken(
+      "named-server-2",
+      "staging-api-01",
+    ).plaintext;
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${namedToken}`,
+      },
+    });
+    expect(res.body).toContain(
+      "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}",
+    );
+  });
 });

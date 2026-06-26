@@ -24,10 +24,12 @@ function buildScript(
   platformUrl: string,
   wsUrl: string,
   token: string,
+  serverName: string,
 ): string {
   return TEMPLATE.replaceAll("{{PLATFORM_URL}}", platformUrl)
     .replaceAll("{{WS_URL}}", wsUrl)
-    .replaceAll("{{NIGHTWATCH_TOKEN}}", token);
+    .replaceAll("{{NIGHTWATCH_TOKEN}}", token)
+    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
 }
 
 export async function registerConnectRoutes(
@@ -54,7 +56,7 @@ export async function registerConnectRoutes(
         request.headers.host ?? "localhost",
       );
       const wsUrl = buildWsUrl(origin);
-      const script = buildScript(origin, wsUrl, token);
+      const script = buildScript(origin, wsUrl, token, record.serverName ?? "");
 
       reply.header("Content-Type", "text/x-shellscript");
       return reply.code(200).send(script);
