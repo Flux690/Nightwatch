@@ -95,6 +95,16 @@ const SCHEMA = `
     resolved_at          TEXT,
     UNIQUE (session_id, tool_use_id)
   );
+
+  CREATE TABLE IF NOT EXISTS unresolved_alerts (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_alert_id  TEXT NOT NULL UNIQUE,
+    identity_key     TEXT NOT NULL,
+    alert_type       TEXT NOT NULL,
+    severity         TEXT NOT NULL,
+    rejection_reason TEXT NOT NULL,
+    created_at       TEXT NOT NULL
+  );
 `;
 
 // Renames the legacy `tokens` table to `runner` if it still exists under the

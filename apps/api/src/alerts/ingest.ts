@@ -7,6 +7,8 @@ import { findRunnerByToken, hashToken, touchLastUsed } from "../db/runner.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/router.js";
+import { insertUnresolvedAlert } from "../db/unresolved-alerts.js";
+import { logger } from "../logger.js";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
@@ -38,6 +40,15 @@ export async function registerAlertRoutes(
     // routing (ADR-0004 resolve-or-reject, never a token-derived guess).
     const resolution = resolveAlerts(parsed, getFleetView());
     if (resolution.kind === "no-runners") {
+      for (const p of parsed) {
+        tryRecordUnresolved(p.sourceAlertId, {
+          sourceAlertId: p.sourceAlertId,
+          identityKey: serviceIdentityKey(p.targetIdentifier),
+          alertType: p.alertType,
+          severity: p.severity,
+          rejectionReason: "no runner connected to route this alert",
+        });
+      }
       return reply
         .code(503)
         .send({ error: "no runner connected to route this alert" });
@@ -47,7 +58,10 @@ export async function registerAlertRoutes(
     let skipped = 0;
     const rejected: Array<{ sourceAlertId: string; reason: string }> = [];
 
-    for (const verdict of resolution.verdicts) {
+    // Verdicts are produced 1:1 in order with parsed (same loop in resolveAlerts),
+    // so index i is always the parsed alert that yielded verdicts[i].
+    for (let i = 0; i < resolution.verdicts.length; i++) {
+      const verdict = resolution.verdicts[i]!;
       if (verdict.kind === "resolved") {
         if (routeAlert(verdict.alert) === "enqueued") enqueued++;
         else skipped++;
@@ -55,6 +69,14 @@ export async function registerAlertRoutes(
         rejected.push({
           sourceAlertId: verdict.sourceAlertId,
           reason: verdict.reason,
+        });
+        const parsedAlert = parsed[i]!;
+        tryRecordUnresolved(verdict.sourceAlertId, {
+          sourceAlertId: verdict.sourceAlertId,
+          identityKey: serviceIdentityKey(parsedAlert.targetIdentifier),
+          alertType: parsedAlert.alertType,
+          severity: parsedAlert.severity,
+          rejectionReason: verdict.reason,
         });
       }
     }
@@ -186,4 +208,17 @@ function isAlertmanagerShape(body: unknown): boolean {
     "alerts" in body &&
     Array.isArray((body as Record<string, unknown>)["alerts"])
   );
+}
+
+// A DB error writing to the unresolved feed must never abort the ingest
+// response: routing of matched alerts must not be undone by a storage hiccup.
+function tryRecordUnresolved(
+  sourceAlertId: string,
+  params: Parameters<typeof insertUnresolvedAlert>[0],
+): void {
+  try {
+    insertUnresolvedAlert(params);
+  } catch (err) {
+    logger.warn({ err, sourceAlertId }, "failed to record unresolved alert");
+  }
 }

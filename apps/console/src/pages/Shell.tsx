@@ -9,6 +9,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import {
+  AlertCircle,
   Plus,
   Server,
   ServerCog,
@@ -342,6 +343,12 @@ export function Shell(): React.JSX.Element {
             to="/audit"
             icon={<ScrollText {...ICON_PROPS} />}
             label="Audit log"
+            compact={!expanded}
+          />
+          <NavLink
+            to="/unresolved-alerts"
+            icon={<AlertCircle {...ICON_PROPS} />}
+            label="Unresolved alerts"
             compact={!expanded}
           />
           <NavLink
