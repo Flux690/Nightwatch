@@ -6,7 +6,7 @@ import {
   type ServiceManifestEntry,
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
-import { getAppsV1Api, getClusterName } from "../kubernetes-client.js";
+import { getAppsV1Api } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
 import { isRemediationEnabled } from "../remediation-state.js";
 
@@ -88,15 +88,26 @@ async function detectKubernetes(): Promise<{
       appsApi.listStatefulSetForAllNamespaces(),
     ]);
 
-    const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"] ?? getClusterName();
+    // The cluster scope comes only from the operator-assigned env var, never the
+    // kubeconfig context name (which drifts and would not match the `cluster`
+    // label inbound alerts carry). Absent => an unscoped, single-cluster identity.
+    const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const item of [...deployments.items, ...statefulSets.items]) {
       const ns = item.metadata?.namespace ?? "default";
       const workload = item.metadata?.name ?? "";
       if (!workload) continue;
+      // A workload with no ready replicas is advertised as stopped, not running,
+      // so routing and the snapshot don't treat a scaled-to-0 service as up.
+      const ready = (item.status?.readyReplicas ?? 0) > 0;
       byKey.set(`${ns}/${workload}`, {
-        identity: { provider: "kubernetes", namespace: ns, workload, cluster },
-        status: "running",
+        identity: {
+          provider: "kubernetes",
+          namespace: ns,
+          workload,
+          ...(cluster && { cluster }),
+        },
+        status: ready ? "running" : "stopped",
       });
     }
     return { available: true, services: [...byKey.values()] };

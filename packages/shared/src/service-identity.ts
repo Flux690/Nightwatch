@@ -37,6 +37,11 @@ export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
 // "instance" (from Prometheus external_labels, set to the runner's hostname)
 // populates the optional server scope so the identity is globally unique
 // across the fleet and fleet-matching at ingest can distinguish servers.
+// Produces the unscoped {provider, project, service} only. The optional server
+// scope is NOT read from labels here: each caller adds it from its own
+// authoritative source - the manifest from the operator-assigned env var, an
+// alert from its `instance`/`hostname` label - so a stray container label can
+// never silently scope a manifest key.
 export function deriveDockerServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
   liveName: string,
@@ -45,15 +50,9 @@ export function deriveDockerServiceIdentity(
     labels?.["com.docker.compose.project"] ?? labels?.["compose_project"];
   const service =
     labels?.["com.docker.compose.service"] ?? labels?.["compose_service"];
-  const server = labels?.["instance"] || undefined;
 
-  if (project && service) {
-    return server
-      ? { provider: "docker", project, service, server }
-      : { provider: "docker", project, service };
-  }
-  return server
-    ? { provider: "docker", project: liveName, service: liveName, server }
+  return project && service
+    ? { provider: "docker", project, service }
     : { provider: "docker", project: liveName, service: liveName };
 }
 

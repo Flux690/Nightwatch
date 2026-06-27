@@ -15,6 +15,24 @@ type CommandHandler = (input: unknown) => Promise<unknown>;
 
 const BACKOFF_STEPS = [2, 4, 8, 16, 32, 60];
 
+// Bound on the manifest refresh so a hung Docker/k8s API cannot stall the
+// heartbeat (which would get the runner marked offline).
+const MANIFEST_REFRESH_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error(`timed out after ${ms}ms`)),
+        ms,
+      );
+      // Don't let the timeout keep the process alive on its own.
+      t.unref();
+    }),
+  ]);
+}
+
 export function startWebSocketClient(
   dispatch: Map<string, CommandHandler>,
 ): void {
@@ -45,7 +63,10 @@ export function startWebSocketClient(
   }
 
   async function sendManifest(socket: WebSocket): Promise<void> {
-    const manifest = await detectCapabilities();
+    const manifest = await withTimeout(
+      detectCapabilities(),
+      MANIFEST_REFRESH_TIMEOUT_MS,
+    );
     const msg: RunnerManifestMessage = {
       messageId: randomUUID(),
       type: "manifest",
@@ -56,8 +77,24 @@ export function startWebSocketClient(
 
   async function sendHeartbeat(socket: WebSocket): Promise<void> {
     if (socket.readyState !== WebSocket.OPEN) return;
+
+    // Liveness first: a bare timestamp nothing can block. Sending it before the
+    // manifest refresh means a hung Docker/k8s API can never delay the heartbeat
+    // and get this runner marked offline.
+    const heartbeatMsg: RunnerHeartbeatMessage = {
+      messageId: randomUUID(),
+      type: "heartbeat",
+      payload: { timestamp: new Date().toISOString() },
+    };
+    socket.send(JSON.stringify(heartbeatMsg));
+
+    // Manifest refresh is best-effort and time-bounded; a failure or timeout
+    // never affects the liveness ping already sent above.
     try {
-      const manifest = await detectCapabilities();
+      const manifest = await withTimeout(
+        detectCapabilities(),
+        MANIFEST_REFRESH_TIMEOUT_MS,
+      );
       if (socket.readyState === WebSocket.OPEN) {
         const manifestMsg: RunnerManifestMessage = {
           messageId: randomUUID(),
@@ -67,18 +104,8 @@ export function startWebSocketClient(
         socket.send(JSON.stringify(manifestMsg));
       }
     } catch (err: unknown) {
-      // Manifest refresh failed (e.g. Docker daemon temporarily unreachable).
-      // Log and continue so the heartbeat still goes out and the API does not
-      // mark this runner offline.
-      logger.warn({ err }, "heartbeat manifest refresh failed");
+      logger.warn({ err }, "heartbeat manifest refresh failed or timed out");
     }
-    if (socket.readyState !== WebSocket.OPEN) return;
-    const heartbeatMsg: RunnerHeartbeatMessage = {
-      messageId: randomUUID(),
-      type: "heartbeat",
-      payload: { timestamp: new Date().toISOString() },
-    };
-    socket.send(JSON.stringify(heartbeatMsg));
   }
 
   function startHeartbeat(socket: WebSocket): void {

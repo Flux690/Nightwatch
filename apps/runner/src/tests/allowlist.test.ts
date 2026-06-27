@@ -46,6 +46,20 @@ describe("redactSecrets", () => {
       expect(c1).not.toContain("mysecretcredential");
       expect(c2).not.toContain("MYACCESSKEYVALUE");
     });
+
+    it("redacts a quoted value with spaces in full (no leak after the first space)", () => {
+      const { content } = redactSecrets('password = "my secret pass phrase"');
+      expect(content).not.toContain("secret");
+      expect(content).not.toContain("phrase");
+      expect(content).toContain("password");
+      expect(content).toContain("[REDACTED]");
+    });
+
+    it("redacts a short value the old four-char minimum would have skipped", () => {
+      const { content } = redactSecrets("token=abc");
+      expect(content).not.toContain("abc");
+      expect(content).toContain("[REDACTED]");
+    });
   });
 
   describe("JWT tokens", () => {
@@ -247,6 +261,15 @@ describe("capOutput", () => {
     const capped = capOutput(text, 40);
     expect(capped).toContain("bytes elided");
     expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(text.length);
+  });
+
+  it("does not split a multibyte character into a replacement char at the cut", () => {
+    // Each emoji is 4 UTF-8 bytes, so an arbitrary byte cut lands mid-character;
+    // a naive byte slice would decode the split halves as U+FFFD.
+    const big = "😀".repeat(40_000);
+    const capped = capOutput(big);
+    expect(capped).toContain("bytes elided");
+    expect(capped).not.toContain("�");
   });
 });
 

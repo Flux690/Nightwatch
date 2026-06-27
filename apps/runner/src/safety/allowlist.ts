@@ -59,9 +59,14 @@ const RULES: RedactionRule[] = [
       /(postgresql|postgres|mysql|mongodb|redis|amqp|jdbc):\/\/[^\s"'`\n]+/gi,
   },
   {
+    // A quoted value captures everything up to the closing quote (spaces and
+    // all); an unquoted value runs to the next whitespace/delimiter. The old
+    // pattern stopped at the first space and required >=4 chars, so a quoted
+    // secret with spaces leaked everything after the first token and short
+    // values slipped through entirely.
     name: "key-value",
     pattern:
-      /"?(password|passwd|token|secret|api_key|apikey|private_key|auth|credential|access_key|auth_token|access_token|client_secret)"?\s*[=:]\s*"?[^\s"',\[\]\n]{4,}/gi,
+      /"?(password|passwd|token|secret|api_key|apikey|private_key|auth|credential|access_key|auth_token|access_token|client_secret)"?\s*[=:]\s*("[^"\n]*"|'[^'\n]*'|[^\s,\[\]\n]+)/gi,
     preserve: "key",
   },
 ];
@@ -127,14 +132,33 @@ function shannonEntropy(s: string): number {
 
 // Caps output to maxBytes using a head+tail strategy so both the beginning and
 // the end of the output are preserved (the most diagnostically useful parts).
+// The cut points are nudged to UTF-8 character boundaries so a multibyte
+// character straddling the boundary is not split into a U+FFFD replacement char.
 export function capOutput(text: string, maxBytes = MAX_OUTPUT_BYTES): string {
   const buf = Buffer.from(text, "utf8");
   if (buf.length <= maxBytes) return text;
   const half = Math.floor(maxBytes / 2);
-  const head = buf.subarray(0, half).toString("utf8");
-  const tail = buf.subarray(buf.length - half).toString("utf8");
+  const head = buf.subarray(0, utf8BoundaryBefore(buf, half)).toString("utf8");
+  const tail = buf
+    .subarray(utf8BoundaryAtOrAfter(buf, buf.length - half))
+    .toString("utf8");
   const elided = buf.length - maxBytes;
   return `${head}\n[... ${elided} bytes elided ...]\n${tail}`;
+}
+
+// UTF-8 continuation bytes are 0b10xxxxxx. Move an offset back to the start of
+// the character it lands in (so a head slice ends on a boundary)...
+function utf8BoundaryBefore(buf: Buffer, offset: number): number {
+  let o = offset;
+  while (o > 0 && o < buf.length && (buf[o]! & 0xc0) === 0x80) o--;
+  return o;
+}
+
+// ...and forward to the next character start (so a tail slice begins on one).
+function utf8BoundaryAtOrAfter(buf: Buffer, offset: number): number {
+  let o = offset;
+  while (o < buf.length && (buf[o]! & 0xc0) === 0x80) o++;
+  return o;
 }
 
 export function redactSecrets(content: string): {

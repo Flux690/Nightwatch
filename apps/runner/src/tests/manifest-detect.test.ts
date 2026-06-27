@@ -37,13 +37,9 @@ vi.mock("../kubernetes-client.js", () => ({
     listDeploymentForAllNamespaces: mockListDeployments,
     listStatefulSetForAllNamespaces: mockListStatefulSets,
   }),
-  getClusterName: vi.fn(),
 }));
 
 import { detectCapabilities } from "../manifest/detect.js";
-import { getClusterName } from "../kubernetes-client.js";
-
-const mockGetClusterName = vi.mocked(getClusterName);
 
 function makeContainer(
   id: string,
@@ -169,14 +165,14 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
       }
     });
 
-    it("stamps cluster from getClusterName() when env var is absent", async () => {
+    it("leaves the identity unscoped when the cluster env var is absent", async () => {
       delete process.env["NIGHTWATCH_CLUSTER_NAME"];
-      mockGetClusterName.mockReturnValue("my-kubeconfig-context");
       mockListContainers.mockRejectedValue(new Error("no docker"));
       mockListDeployments.mockResolvedValue({
         items: [
           {
             metadata: { namespace: "staging", name: "worker" },
+            status: { readyReplicas: 1 },
           },
         ],
       });
@@ -187,7 +183,8 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
       const service = manifest.capabilities.services[0];
       expect(service?.identity.provider).toBe("kubernetes");
       if (service?.identity.provider === "kubernetes") {
-        expect(service.identity.cluster).toBe("my-kubeconfig-context");
+        // No env-set cluster => unscoped; the kubeconfig context name is not used.
+        expect(service.identity.cluster).toBeUndefined();
       }
     });
   });

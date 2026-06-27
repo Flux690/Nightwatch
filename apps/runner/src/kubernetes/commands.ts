@@ -19,7 +19,6 @@ import type {
 import {
   getCoreV1Api,
   getAppsV1Api,
-  getClusterName,
   getMetrics,
   getExec,
 } from "../kubernetes-client.js";
@@ -51,7 +50,9 @@ export async function getContainerList(
 ): Promise<{ containers: ContainerInfo[] }> {
   const namespace = input.namespace ?? "default";
   const appsApi = getAppsV1Api();
-  const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"] ?? getClusterName();
+  // Env-only, identical to the manifest (detect.ts): the kubeconfig context name
+  // is not an authoritative cluster identity.
+  const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
 
   const [deployments, statefulSets] = await Promise.all([
     appsApi.listNamespacedDeployment({ namespace }),
