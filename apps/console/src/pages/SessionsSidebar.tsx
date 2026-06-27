@@ -1,8 +1,10 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Text, UnstyledButton } from "@mantine/core";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifications } from "@mantine/notifications";
 import { Trash2 } from "lucide-react";
 import type { SessionMeta } from "@nightwatch/shared";
+import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
 const ICON_PROPS = { size: 14, strokeWidth: 1.5, "aria-hidden": true } as const;
@@ -15,31 +17,31 @@ export function SessionsSidebar(): React.JSX.Element {
 
   const { data: sessions = [] } = useQuery<SessionMeta[]>({
     queryKey: ["sessions"],
-    queryFn: () =>
-      fetch("/api/sessions").then((r) => {
-        if (!r.ok) throw new Error(`sessions ${r.status}`);
-        return r.json() as Promise<SessionMeta[]>;
-      }),
+    queryFn: () => apiFetch<SessionMeta[]>("/api/sessions"),
   });
 
-  async function handleDelete(
-    e: React.MouseEvent,
-    sessionId: string,
-  ): Promise<void> {
+  const deleteSession = useMutation({
+    mutationFn: (sessionId: string) =>
+      apiFetch<void>(`/api/sessions/${sessionId}`, { method: "DELETE" }),
+    onSuccess: (_result, sessionId) => {
+      queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) =>
+        prev.filter((s) => s.sessionId !== sessionId),
+      );
+      if (activeSessionId === sessionId) void navigate({ to: "/" });
+    },
+    onError: (err) => {
+      notifications.show({
+        color: "red",
+        title: "Could not delete session",
+        message: err instanceof Error ? err.message : "Try again.",
+      });
+    },
+  });
+
+  function handleDelete(e: React.MouseEvent, sessionId: string): void {
     e.stopPropagation();
     if (!window.confirm("Delete this session?")) return;
-
-    const res = await fetch(`/api/sessions/${sessionId}`, {
-      method: "DELETE",
-    });
-    if (!res.ok) return;
-
-    queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) =>
-      prev.filter((s) => s.sessionId !== sessionId),
-    );
-    if (activeSessionId === sessionId) {
-      void navigate({ to: "/" });
-    }
+    deleteSession.mutate(sessionId);
   }
 
   return (
@@ -85,7 +87,11 @@ export function SessionsSidebar(): React.JSX.Element {
           </button>
           <UnstyledButton
             aria-label="Delete session"
-            onClick={(e) => void handleDelete(e, session.sessionId)}
+            onClick={(e) => handleDelete(e, session.sessionId)}
+            disabled={
+              deleteSession.isPending &&
+              deleteSession.variables === session.sessionId
+            }
             style={{
               padding: "var(--mantine-spacing-xs)",
               color: "var(--mantine-color-dimmed)",

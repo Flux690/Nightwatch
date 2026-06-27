@@ -1,5 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SessionMeta,
@@ -15,6 +16,7 @@ import { applyLiveEvent } from "../transcript/liveConverter.js";
 import { convertPersistedMessages } from "../transcript/persistedConverter.js";
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
+import { apiFetch } from "../api/client.js";
 
 // durable: operator may reload minutes or hours after the live HUMAN_INPUT_REQUIRED event fired.
 // Reconstruct the same envelope so it flows through the shared converter, not a second hand-rolled path.
@@ -41,7 +43,11 @@ function pendingApprovalToEnvelope(
       toolUseId: p.toolUseId,
       toolName: p.toolName,
       input: p.toolInput,
-      kind: isClarification ? "clarification" : isContinue ? "continue" : "approval",
+      kind: isClarification
+        ? "clarification"
+        : isContinue
+          ? "continue"
+          : "approval",
       ...(clarInput !== null && {
         question: clarInput.question,
         options: clarInput.options,
@@ -166,10 +172,7 @@ export function SessionView({
   const { data: messages = [] } = useQuery<SessionMessage[]>({
     queryKey: ["session", activeSessionId],
     queryFn: () =>
-      fetch(`/api/sessions/${activeSessionId}`).then((r) => {
-        if (!r.ok) throw new Error(`sessions/${activeSessionId} ${r.status}`);
-        return r.json() as Promise<SessionMessage[]>;
-      }),
+      apiFetch<SessionMessage[]>(`/api/sessions/${activeSessionId}`),
     enabled: !!activeSessionId,
   });
 
@@ -179,10 +182,7 @@ export function SessionView({
   const { data: pendingHumanInput = [] } = useQuery<ApprovalRequest[]>({
     queryKey: ["sessions-pending-human-input"],
     queryFn: () =>
-      fetch("/api/sessions/pending-human-input").then((r) => {
-        if (!r.ok) throw new Error(`pending-human-input ${r.status}`);
-        return r.json() as Promise<ApprovalRequest[]>;
-      }),
+      apiFetch<ApprovalRequest[]>("/api/sessions/pending-human-input"),
   });
   const pendingForSession = pendingHumanInput.find(
     (p) => p.sessionId === activeSessionId,
@@ -257,6 +257,35 @@ export function SessionView({
     [queryClient],
   );
 
+  // The card is optimistically flipped to "pending" before the POST. If the POST
+  // fails the interrupt is still open server-side, so clear "pending" to re-enable
+  // the controls and tell the operator, rather than leaving a card wedged forever.
+  const respond = useMutation({
+    mutationFn: (vars: { toolUseId: string; body: Record<string, unknown> }) =>
+      apiFetch<void>(`/api/sessions/${activeSessionId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vars.body),
+      }),
+    onError: (err, vars) => {
+      setLiveItems((prev) =>
+        prev.map((item) =>
+          (item.kind === "approval_card" ||
+            item.kind === "clarification_card" ||
+            item.kind === "continue_card") &&
+          item.toolUseId === vars.toolUseId
+            ? { ...item, approval: undefined }
+            : item,
+        ),
+      );
+      notifications.show({
+        color: "red",
+        title: "Response not sent",
+        message: err instanceof Error ? err.message : "Try again.",
+      });
+    },
+  });
+
   const handleResolve = useCallback(
     (toolUseId: string, action: "approve" | "reject") => {
       setLiveItems((prev) =>
@@ -267,13 +296,12 @@ export function SessionView({
             : item,
         ),
       );
-      void fetch(`/api/sessions/${activeSessionId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: action, resolvedBy: "console" }),
+      respond.mutate({
+        toolUseId,
+        body: { decision: action, resolvedBy: "console" },
       });
     },
-    [activeSessionId],
+    [respond],
   );
 
   const handleAnswer = useCallback(
@@ -286,13 +314,9 @@ export function SessionView({
         ),
       );
       const text = Array.isArray(answer) ? answer.join(", ") : answer;
-      void fetch(`/api/sessions/${activeSessionId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, resolvedBy: "console" }),
-      });
+      respond.mutate({ toolUseId, body: { text, resolvedBy: "console" } });
     },
-    [activeSessionId],
+    [respond],
   );
 
   useConsoleWs(handleEnvelope);

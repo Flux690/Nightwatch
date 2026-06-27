@@ -92,7 +92,7 @@ function setupWithSessionsError() {
   );
 }
 
-function setup(sessions: object[] = [SESSION_1]) {
+function setup(sessions: object[] = [SESSION_1], deleteOk = true) {
   vi.stubGlobal(
     "WebSocket",
     class {
@@ -109,11 +109,19 @@ function setup(sessions: object[] = [SESSION_1]) {
   );
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation((url: string) => {
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes("/runners")) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([RUNNER]),
+        });
+      }
+      if (url.includes("/sessions/") && init?.method === "DELETE") {
+        return Promise.resolve({
+          ok: deleteOk,
+          status: deleteOk ? 200 : 500,
+          json: () =>
+            Promise.resolve(deleteOk ? {} : { error: "delete failed" }),
         });
       }
       if (url.includes("/sessions")) {
@@ -238,6 +246,28 @@ describe("SessionsSidebar", () => {
           screen.queryByText("CPU spike on web-01"),
         ).not.toBeInTheDocument();
       });
+    });
+
+    it("keeps the session in the list when the delete request fails", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      setup([SESSION_1], false);
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /delete session/i }));
+
+      // The delete is not optimistic: a failed request leaves the row in place
+      // (and surfaces an error) rather than dropping it as if it succeeded.
+      await waitFor(() => {
+        expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+          "/api/sessions/s1",
+          expect.objectContaining({ method: "DELETE" }),
+        );
+      });
+      expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
     });
 
     it("does not delete when the confirmation is dismissed", async () => {
