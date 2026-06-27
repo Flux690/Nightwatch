@@ -44,7 +44,7 @@ When an alert fires, Alertmanager posts it to the API's ingest endpoint. The API
 
 ## Features
 
-- **Human-in-the-loop by default.** Write actions like `restart_container`, `rollback_deploy`, and `exec_command` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
+- **Human-in-the-loop by default.** Write actions like `restart_service` and `exec_command` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits.
 - **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
 - **Bring your own key.** Use Anthropic, OpenAI, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama). Inference goes straight to your provider and your key never leaves your network.
@@ -134,7 +134,7 @@ The ingest endpoint speaks the Alertmanager webhook format and identifies the so
 |---|---|---|
 | `NIGHTWATCH_TOKEN` | yes | Runner credential minted from the console |
 | `WS_URL` | yes | API WebSocket endpoint, e.g. `wss://your-api/clients/connect` |
-| `REMEDIATION_ENABLED` | no | Set to `true` to allow `exec_command` (disabled by default) |
+| `REMEDIATION_ENABLED` | no | Install-time default for remediation mode; `true` makes write actions (`restart_service`, `exec_command`) available, still behind approval. Disabled by default; toggled live per runner from the console afterwards |
 | `HOST_PROC` | no | `/proc` mount path when running inside a container (default: `/proc`) |
 
 ## Development
