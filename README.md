@@ -172,11 +172,11 @@ apps/
       alerts/           Alertmanager ingest, dedup, batching
       auth/             owner password, runner token minting
       config/           settings routes and LLM config
-      db/               SQLite client and table modules
+      db/               SQLite schema and table modules (FKs on, no migrations)
       llm/              provider factory (Anthropic / OpenAI)
       runners/          runner registry, connect.sh handler
-      session/          session routes, human-input suspend/resume
-      ws/               runner WebSocket router and console event bus
+      session/          session routes, interrupt coordinator + approval executor
+      ws/               runner registry/routing, command transport, console bus
       dispatcher.ts     single entry point for every investigation
   runner/               Stateless executor: the hands
     src/
@@ -187,10 +187,11 @@ apps/
       websocket/        outbound WSS client to the API
   console/              React operator UI
     src/
+      api/              one typed fetch boundary (apiFetch)
       auth/             login and owner-password setup
-      hooks/            console WebSocket, attention counter
+      hooks/            shared console WebSocket provider, attention counter
       pages/            shell, session view, sidebar, runners, settings
-      transcript/       live and persisted transcript rendering
+      transcript/       transcript dispatcher + per-card panels
       utils/            shared client helpers
 packages/
   shared/               Shared TypeScript types: the contract
