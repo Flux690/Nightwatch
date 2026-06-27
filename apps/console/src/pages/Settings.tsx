@@ -18,6 +18,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
+import { apiFetch } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.js";
 
 type TestResult =
@@ -48,20 +49,17 @@ export function SettingsPage(): React.JSX.Element {
   const { logoutAll } = useAuth();
   const { data: config } = useQuery<AgentConfig>({
     queryKey: ["config"],
-    queryFn: () =>
-      fetch("/api/config").then((r) => {
-        if (!r.ok) throw new Error(`config ${r.status}`);
-        return r.json() as Promise<AgentConfig>;
-      }),
+    queryFn: () => apiFetch<AgentConfig>("/api/config"),
   });
 
   const { data: modelsData } = useQuery<{ models: string[] }>({
     queryKey: ["config/models"],
+    // Best-effort: the model list is a convenience, so fall back to empty rather
+    // than surfacing an error if it can't be fetched.
     queryFn: () =>
-      fetch("/api/config/models").then((r) => {
-        if (!r.ok) return { models: [] };
-        return r.json() as Promise<{ models: string[] }>;
-      }),
+      apiFetch<{ models: string[] }>("/api/config/models").catch(() => ({
+        models: [],
+      })),
     staleTime: 30_000,
   });
 
@@ -69,11 +67,7 @@ export function SettingsPage(): React.JSX.Element {
 
   const { data: ingestCredential } = useQuery<{ configured: boolean }>({
     queryKey: ["ingest-credential"],
-    queryFn: () =>
-      fetch("/api/ingest-credential").then((r) => {
-        if (!r.ok) throw new Error(`ingest-credential ${r.status}`);
-        return r.json() as Promise<{ configured: boolean }>;
-      }),
+    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
   });
 
   const queryClient = useQueryClient();

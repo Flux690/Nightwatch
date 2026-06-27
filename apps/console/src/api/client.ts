@@ -14,7 +14,9 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  // Call with a single arg for plain reads so the request is fetch(url), not
+  // fetch(url, undefined) - identical behaviour, but it keeps call sites simple.
+  const res = init === undefined ? await fetch(url) : await fetch(url, init);
 
   if (!res.ok) {
     let message = `${init?.method ?? "GET"} ${url} failed (${res.status})`;

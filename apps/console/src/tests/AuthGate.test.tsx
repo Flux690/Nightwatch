@@ -136,7 +136,7 @@ describe("AuthGate", () => {
     expect(screen.getByText("LOGIN")).toBeInTheDocument();
   });
 
-  it("renders nothing while the status fetch is pending so there is no flash", () => {
+  it("shows a loader (not the shell or login) while the status fetch is pending", async () => {
     vi.stubGlobal("WebSocket", MockWs);
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
 
@@ -159,6 +159,10 @@ describe("AuthGate", () => {
       </MantineProvider>,
     );
 
+    // A spinner during the check, but never the protected shell or a login flash.
+    expect(
+      await screen.findByRole("status", { name: /checking sign-in/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("LOGIN")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /fleet/i }),

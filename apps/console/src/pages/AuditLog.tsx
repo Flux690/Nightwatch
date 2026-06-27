@@ -2,6 +2,7 @@ import { Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { RemediationActionRecord } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
 const OUTCOME_COLOR: Record<RemediationActionRecord["status"], string> = {
@@ -15,10 +16,7 @@ export function AuditLogPage(): React.JSX.Element {
   const { data: actions } = useQuery<RemediationActionRecord[]>({
     queryKey: ["remediation-actions"],
     queryFn: () =>
-      fetch("/api/remediation-actions").then((r) => {
-        if (!r.ok) throw new Error(`remediation-actions ${r.status}`);
-        return r.json() as Promise<RemediationActionRecord[]>;
-      }),
+      apiFetch<RemediationActionRecord[]>("/api/remediation-actions"),
     refetchInterval: 30_000,
   });
 

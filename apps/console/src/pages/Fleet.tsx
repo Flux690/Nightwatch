@@ -3,6 +3,7 @@ import { Button, Group, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 import { AddServerWizard } from "./AddServerWizard.js";
 
@@ -28,11 +29,7 @@ export function FleetPage(): React.JSX.Element {
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["runners"],
-    queryFn: () =>
-      fetch("/api/runners").then((r) => {
-        if (!r.ok) throw new Error(`runners ${r.status}`);
-        return r.json() as Promise<RunnerRecord[]>;
-      }),
+    queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
     refetchInterval: 30_000,
   });
 

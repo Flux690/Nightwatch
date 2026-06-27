@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
+import { apiFetch } from "../api/client.js";
 
 export type Provider = "docker" | "kubernetes";
 
@@ -112,21 +113,13 @@ export function AddServerWizard({
 
   const { data: ingestCredential } = useQuery<{ configured: boolean }>({
     queryKey: ["wizard-ingest-credential"],
-    queryFn: () =>
-      fetch("/api/ingest-credential").then((r) => {
-        if (!r.ok) throw new Error(`ingest-credential ${r.status}`);
-        return r.json() as Promise<{ configured: boolean }>;
-      }),
+    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
     enabled: step === 2,
   });
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
-    queryFn: () =>
-      fetch("/api/runners").then((r) => {
-        if (!r.ok) throw new Error(`runners ${r.status}`);
-        return r.json() as Promise<RunnerRecord[]>;
-      }),
+    queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
     enabled: step === 1 && mintedToken !== null,
     refetchInterval: step === 1 ? RUNNER_POLL_MS : false,
   });
