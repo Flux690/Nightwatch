@@ -13,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
 import { apiFetch } from "../api/client.js";
 import { IngestCredentialSection } from "./IngestCredentialSection.js";
@@ -67,62 +67,65 @@ export function SettingsPage(): React.JSX.Element {
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
-  const [testing, setTesting] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (config) setForm(config);
   }, [config]);
 
-  async function handleSave(): Promise<void> {
-    if (!form || !config) return;
-    const delta = buildDelta(form, config);
-    if (Object.keys(delta).length === 0) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/config", {
+  const saveConfig = useMutation({
+    mutationFn: (delta: Partial<AgentConfig>) =>
+      apiFetch<AgentConfig>("/api/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(delta),
-      });
-      if (!res.ok) throw new Error(`config patch ${res.status}`);
-      const updated = (await res.json()) as AgentConfig;
+      }),
+    onSuccess: (updated) => {
       queryClient.setQueryData(["config"], updated);
       notifications.show({
         color: "green",
         title: "Settings saved",
         message: "Your changes have been saved.",
       });
-    } catch (err) {
+    },
+    onError: (err) => {
       notifications.show({
         color: "red",
         title: "Save failed",
         message: err instanceof Error ? err.message : "Unknown error",
       });
-    } finally {
-      setSaving(false);
-    }
+    },
+  });
+
+  function handleSave(): void {
+    if (!form || !config) return;
+    const delta = buildDelta(form, config);
+    if (Object.keys(delta).length === 0) return;
+    saveConfig.mutate(delta);
   }
 
-  async function handleTestConnection(): Promise<void> {
-    if (!newApiKey.trim()) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const res = await fetch("/api/config/test", {
+  const testConnection = useMutation({
+    mutationFn: (vars: { apiKey: string; model: string | undefined }) =>
+      apiFetch<TestResult>("/api/config/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: newApiKey, model: form?.model }),
-      });
-      const data = (await res.json()) as TestResult;
+        body: JSON.stringify(vars),
+      }),
+    onSuccess: async (data) => {
       setTestResult(data);
       if (data.ok) {
         await queryClient.invalidateQueries({ queryKey: ["config"] });
         setNewApiKey("");
       }
-    } finally {
-      setTesting(false);
-    }
+    },
+    // The endpoint returns { ok: false } for a bad key on a 2xx; a thrown error
+    // here is the request itself failing, which is an unreachable endpoint.
+    onError: () => setTestResult({ ok: false, error: "unreachable" }),
+  });
+
+  function handleTestConnection(): void {
+    if (!newApiKey.trim()) return;
+    setTestResult(null);
+    testConnection.mutate({ apiKey: newApiKey, model: form?.model });
   }
 
   function setField<K extends keyof AgentConfig>(
@@ -202,8 +205,8 @@ export function SettingsPage(): React.JSX.Element {
                 <Button
                   size="xs"
                   variant="default"
-                  loading={testing}
-                  onClick={() => void handleTestConnection()}
+                  loading={testConnection.isPending}
+                  onClick={() => handleTestConnection()}
                 >
                   Test connection
                 </Button>
@@ -305,9 +308,9 @@ export function SettingsPage(): React.JSX.Element {
           </Stack>
 
           <Button
-            onClick={() => void handleSave()}
-            disabled={!hasChanges || saving}
-            loading={saving}
+            onClick={() => handleSave()}
+            disabled={!hasChanges || saveConfig.isPending}
+            loading={saveConfig.isPending}
             style={{ alignSelf: "flex-start" }}
           >
             Save

@@ -14,9 +14,9 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { apiFetch } from "../api/client.js";
+import { ApiError, apiFetch } from "../api/client.js";
 import { WizardMonitoringStep } from "./WizardMonitoringStep.js";
 
 export type Provider = "docker" | "kubernetes";
@@ -49,7 +49,6 @@ export function AddServerWizard({
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<
     { ok: true; hostname: string } | { ok: false; error: string } | null
   >(null);
@@ -86,7 +85,6 @@ export function AddServerWizard({
     setMintedToken(null);
     setInstallText(null);
     setInstallError(null);
-    setVerifying(false);
     setVerifyResult(null);
     onClose();
   }
@@ -97,25 +95,14 @@ export function AddServerWizard({
     setMinting(true);
     setInstallError(null);
     try {
-      const tokenRes = await fetch("/api/tokens", {
+      const minted = await apiFetch<MintedToken>("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serverName: serverName.trim() }),
       });
-      if (!tokenRes.ok) {
-        if (tokenRes.status === 409) {
-          const body = (await tokenRes.json()) as { error?: string };
-          setInstallError(
-            body.error ?? "A runner with that server name already exists",
-          );
-          setStep(0);
-          return;
-        }
-        throw new Error(`tokens ${tokenRes.status}`);
-      }
-      const minted = (await tokenRes.json()) as MintedToken;
       setMintedToken(minted);
 
+      // The install script is plain text, not JSON, so it stays a raw fetch.
       const installUrl =
         provider === "docker" ? "/api/connect.sh" : "/api/manifest.yaml";
       const installRes = await fetch(installUrl, {
@@ -124,6 +111,12 @@ export function AddServerWizard({
       if (!installRes.ok) throw new Error(`${installUrl} ${installRes.status}`);
       setInstallText(await installRes.text());
     } catch (err) {
+      // A duplicate server name is a 409: send the operator back to fix it.
+      if (err instanceof ApiError && err.status === 409) {
+        setInstallError(err.message);
+        setStep(0);
+        return;
+      }
       setInstallError(
         err instanceof Error ? err.message : "Failed to prepare install",
       );
@@ -136,36 +129,28 @@ export function AddServerWizard({
     if (installText !== null) void navigator.clipboard.writeText(installText);
   }
 
-  async function handleSendTestAlert(): Promise<void> {
-    if (!connectedRunner) return;
-    setVerifying(true);
-    setVerifyResult(null);
-    try {
-      const res = await fetch("/api/alerts/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runnerId: connectedRunner.id }),
-      });
-      const body = (await res.json()) as
-        | { ok: true; hostname: string }
-        | { error: string };
-      if (!res.ok || !("ok" in body)) {
-        setVerifyResult({
-          ok: false,
-          error: "error" in body ? body.error : `alerts/test ${res.status}`,
-        });
-        return;
-      }
-      setVerifyResult({ ok: true, hostname: body.hostname });
-    } catch (err) {
+  const sendTestAlert = useMutation({
+    mutationFn: async (runnerId: string): Promise<string> => {
+      const body = await apiFetch<{ hostname?: string; error?: string }>(
+        "/api/alerts/test",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runnerId }),
+        },
+      );
+      if (!body.hostname)
+        throw new Error(body.error ?? "Failed to send test alert");
+      return body.hostname;
+    },
+    onMutate: () => setVerifyResult(null),
+    onSuccess: (hostname) => setVerifyResult({ ok: true, hostname }),
+    onError: (err) =>
       setVerifyResult({
         ok: false,
         error: err instanceof Error ? err.message : "Failed to send test alert",
-      });
-    } finally {
-      setVerifying(false);
-    }
-  }
+      }),
+  });
 
   const trimmedServerName = serverName.trim();
 
@@ -302,9 +287,11 @@ export function AddServerWizard({
 
             <Button
               style={{ alignSelf: "flex-start" }}
-              loading={verifying}
+              loading={sendTestAlert.isPending}
               disabled={!connectedRunner}
-              onClick={() => void handleSendTestAlert()}
+              onClick={() =>
+                connectedRunner && sendTestAlert.mutate(connectedRunner.id)
+              }
             >
               Send test alert
             </Button>

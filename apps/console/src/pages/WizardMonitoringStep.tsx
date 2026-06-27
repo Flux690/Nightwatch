@@ -9,7 +9,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/client.js";
 import type { Provider } from "./AddServerWizard.js";
 
@@ -69,91 +69,70 @@ export function WizardMonitoringStep({
     queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
   });
 
-  const [generatingIngest, setGeneratingIngest] = useState(false);
-  const [revealingIngest, setRevealingIngest] = useState(false);
   const [ingestToken, setIngestToken] = useState<string | null>(null);
   // True when the shown token was just minted (old one now invalid) vs revealed.
   const [ingestTokenFresh, setIngestTokenFresh] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
     | { ok: false; error: string }
     | null
   >(null);
 
-  async function handleGenerateIngestCredential(): Promise<void> {
-    setGeneratingIngest(true);
-    setGenerateError(null);
-    try {
-      const res = await fetch("/api/ingest-credential", { method: "POST" });
-      if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
-      const { token } = (await res.json()) as { token: string };
+  const generateCredential = useMutation({
+    mutationFn: () =>
+      apiFetch<{ token: string }>("/api/ingest-credential", { method: "POST" }),
+    onMutate: () => setGenerateError(null),
+    onSuccess: ({ token }) => {
       setIngestToken(token);
       setIngestTokenFresh(true);
-    } catch (err) {
+    },
+    onError: (err) =>
       setGenerateError(
         err instanceof Error ? err.message : "Failed to generate credential",
-      );
-    } finally {
-      setGeneratingIngest(false);
-    }
-  }
+      ),
+  });
 
-  async function handleRevealIngestCredential(): Promise<void> {
-    setRevealingIngest(true);
-    setGenerateError(null);
-    try {
-      const res = await fetch("/api/ingest-credential/reveal", {
+  const revealCredential = useMutation({
+    mutationFn: () =>
+      apiFetch<{ token: string }>("/api/ingest-credential/reveal", {
         method: "POST",
-      });
-      if (!res.ok) throw new Error(`reveal ${res.status}`);
-      const { token } = (await res.json()) as { token: string };
+      }),
+    onMutate: () => setGenerateError(null),
+    onSuccess: ({ token }) => {
       setIngestToken(token);
       setIngestTokenFresh(false);
-    } catch (err) {
+    },
+    onError: (err) =>
       setGenerateError(
         err instanceof Error ? err.message : "Failed to reveal credential",
-      );
-    } finally {
-      setRevealingIngest(false);
-    }
-  }
+      ),
+  });
 
-  async function handleTestWebhook(): Promise<void> {
-    const token = ingestToken;
-    if (!token) return;
-    setTestingWebhook(true);
-    setWebhookTestResult(null);
-    try {
-      const res = await fetch("/api/alerts/validate", {
+  const testWebhook = useMutation({
+    mutationFn: async (): Promise<ValidateAlertResult[]> => {
+      const body = await apiFetch<{
+        alerts?: ValidateAlertResult[];
+        error?: string;
+      }>("/api/alerts/validate", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${ingestToken ?? ""}`,
         },
         body: JSON.stringify(sampleWebhookPayload(provider)),
       });
-      const body = (await res.json()) as
-        | { alerts: ValidateAlertResult[] }
-        | { error: string };
-      if (!res.ok || !("alerts" in body)) {
-        setWebhookTestResult({
-          ok: false,
-          error: "error" in body ? body.error : `alerts/validate ${res.status}`,
-        });
-        return;
-      }
-      setWebhookTestResult({ ok: true, results: body.alerts });
-    } catch (err) {
+      // A 2xx with no alerts still means the test didn't resolve; surface it.
+      if (!body.alerts) throw new Error(body.error ?? "Test webhook failed");
+      return body.alerts;
+    },
+    onSuccess: (results) => setWebhookTestResult({ ok: true, results }),
+    onError: (err) =>
       setWebhookTestResult({
         ok: false,
         error: err instanceof Error ? err.message : "Failed to test webhook",
-      });
-    } finally {
-      setTestingWebhook(false);
-    }
-  }
+      }),
+  });
 
   return (
     <Stack gap="md" mt="md">
@@ -174,8 +153,8 @@ export function WizardMonitoringStep({
           <Button
             size="xs"
             variant="default"
-            loading={generatingIngest}
-            onClick={() => void handleGenerateIngestCredential()}
+            loading={generateCredential.isPending}
+            onClick={() => generateCredential.mutate()}
           >
             Generate credential
           </Button>
@@ -184,8 +163,8 @@ export function WizardMonitoringStep({
             <Button
               size="xs"
               variant="default"
-              loading={revealingIngest}
-              onClick={() => void handleRevealIngestCredential()}
+              loading={revealCredential.isPending}
+              onClick={() => revealCredential.mutate()}
             >
               Reveal credential
             </Button>
@@ -288,8 +267,8 @@ export function WizardMonitoringStep({
             size="xs"
             variant="default"
             style={{ alignSelf: "flex-start" }}
-            loading={testingWebhook}
-            onClick={() => void handleTestWebhook()}
+            loading={testWebhook.isPending}
+            onClick={() => testWebhook.mutate()}
           >
             Test webhook
           </Button>
