@@ -38,6 +38,21 @@ export function serviceIdentityKeyFromInput(
   return serviceIdentityKey(service as ServiceIdentity);
 }
 
+// Audit-log retention ceiling. The breaker only reads a recent time window and
+// the list view only shows the newest 100, but this table is the durable record
+// of what was changed, so the ceiling is high - a real audit trail - and eviction
+// only ever drops rows far older than any breaker window.
+const MAX_REMEDIATION_ACTIONS = 10000;
+
+function pruneRemediationActions(): void {
+  getDb()
+    .prepare(
+      `DELETE FROM remediation_actions
+       WHERE id < (SELECT MIN(id) FROM (SELECT id FROM remediation_actions ORDER BY id DESC LIMIT @cap))`,
+    )
+    .run({ cap: MAX_REMEDIATION_ACTIONS });
+}
+
 // Write-ahead insert for an approved action. Returns false when the UNIQUE
 // constraint fires — meaning the action was already attempted (crash-recovery
 // scenario) and must not run again.
@@ -65,6 +80,7 @@ export function insertExecutingRemediationAction(params: {
         input: JSON.stringify(params.input),
         createdAt: new Date().toISOString(),
       });
+    pruneRemediationActions();
     return true;
   } catch (err: unknown) {
     if (
@@ -130,6 +146,7 @@ export function insertRejectedRemediationAction(params: {
       createdAt: now,
       resolvedAt: now,
     });
+  if (result.changes > 0) pruneRemediationActions();
   return result.changes > 0;
 }
 

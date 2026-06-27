@@ -8,7 +8,10 @@ import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
-import { listUnresolvedAlerts } from "../db/unresolved-alerts.js";
+import {
+  listUnresolvedAlerts,
+  insertUnresolvedAlert,
+} from "../db/unresolved-alerts.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { registerRemediationRoutes } from "../remediation/routes.js";
 import { generateRunnerToken } from "../db/runner.js";
@@ -288,6 +291,40 @@ describe("unresolved alerts feed", () => {
       expect(orderItems).toHaveLength(2);
       expect(orderItems[0]!.sourceAlertId).toBe("fp-order-newer");
       expect(orderItems[1]!.sourceAlertId).toBe("fp-order-older");
+    });
+
+    it("bounds the stored table, evicting the oldest beyond the retention cap", () => {
+      // The read is capped at 100, but the table itself must stay bounded so a
+      // sender flooding distinct fingerprints can't grow storage without limit.
+      // Insert past the 500-row cap through the seam where eviction lives.
+      const total = 520;
+      for (let i = 0; i < total; i++) {
+        insertUnresolvedAlert({
+          sourceAlertId: `fp-retain-${i}`,
+          identityKey: "docker/svc/svc",
+          alertType: "Alert",
+          severity: "warning",
+          rejectionReason: "reason",
+        });
+      }
+
+      const count = (
+        getDb()
+          .prepare(`SELECT COUNT(*) AS c FROM unresolved_alerts`)
+          .get() as { c: number }
+      ).c;
+      expect(count).toBe(500);
+      // Oldest evicted, newest retained.
+      expect(
+        getDb()
+          .prepare(`SELECT 1 FROM unresolved_alerts WHERE source_alert_id = ?`)
+          .get("fp-retain-0"),
+      ).toBeUndefined();
+      expect(
+        getDb()
+          .prepare(`SELECT 1 FROM unresolved_alerts WHERE source_alert_id = ?`)
+          .get(`fp-retain-${total - 1}`),
+      ).toBeDefined();
     });
 
     it("returns at most 100 records even when more are stored", async () => {

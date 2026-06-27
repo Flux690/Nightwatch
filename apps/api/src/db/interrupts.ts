@@ -32,15 +32,39 @@ interface RawRowWithSession extends RawRow {
   originatingAlert: string | null;
 }
 
+function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
+  return kind === "approval" || kind === "clarification" || kind === "continue";
+}
+
+// The row comes from our own typed INSERT, but it is still untrusted bytes on
+// read: a partial write, a hand-edited DB, or a schema drift could yield an
+// unknown kind or malformed JSON. Fail loudly here rather than letting a bad cast
+// or a thrown JSON.parse surface deep in the resume path as an opaque crash.
 function parseRow(row: RawRow): PendingHumanInput {
+  if (!isHumanInputKind(row.kind)) {
+    throw new Error(
+      `pending_human_input(${row.sessionId}) has unknown kind "${row.kind}"`,
+    );
+  }
+  let toolInput: Record<string, unknown>;
+  let completedResults: ToolResult[];
+  try {
+    toolInput = JSON.parse(row.toolInput) as Record<string, unknown>;
+    completedResults = JSON.parse(row.completedResults) as ToolResult[];
+  } catch (err) {
+    throw new Error(
+      `pending_human_input(${row.sessionId}) has corrupt JSON: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
   return {
     sessionId: row.sessionId,
     toolUseId: row.toolUseId,
-    // All writes go through this module's typed INSERT, constraining kind to the union.
-    kind: row.kind as "approval" | "clarification" | "continue",
+    kind: row.kind,
     toolName: row.toolName,
-    toolInput: JSON.parse(row.toolInput) as Record<string, unknown>,
-    completedResults: JSON.parse(row.completedResults) as ToolResult[],
+    toolInput,
+    completedResults,
     claimedAt: row.claimedAt,
     createdAt: row.createdAt,
   };

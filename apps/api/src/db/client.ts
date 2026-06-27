@@ -8,6 +8,9 @@ export function dbPath(): string {
   return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
 }
 
+// The schema is the single source of truth - the final desired shape, created
+// directly. There are no upgrade migrations: this is a pre-production project, so
+// a schema change is applied by recreating the database, not by migrating data.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runner (
     id                TEXT PRIMARY KEY,
@@ -56,9 +59,11 @@ const SCHEMA = `
     created_at        TEXT NOT NULL
   );
 
+  -- A session's transcript and any pending approval ARE part of the session, so
+  -- they cascade-delete with it (foreign_keys is enabled below).
   CREATE TABLE IF NOT EXISTS session_messages (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id       TEXT NOT NULL REFERENCES sessions(session_id),
+    session_id       TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
     seq              INTEGER NOT NULL,
     role             TEXT NOT NULL,
     content          TEXT NOT NULL,
@@ -68,7 +73,7 @@ const SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS pending_human_input (
-    session_id        TEXT NOT NULL REFERENCES sessions(session_id),
+    session_id        TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
     tool_use_id       TEXT NOT NULL,
     kind              TEXT NOT NULL DEFAULT 'approval',
     tool_name         TEXT NOT NULL,
@@ -82,10 +87,13 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
     ON pending_human_input(claimed_at);
 
+  -- The remediation audit log is intentionally NOT a child of sessions: it is the
+  -- durable record of what was changed and must outlive a deleted session, so
+  -- session_id is a plain historical reference, not a cascading foreign key.
   CREATE TABLE IF NOT EXISTS remediation_actions (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     tool_use_id          TEXT NOT NULL,
-    session_id           TEXT NOT NULL REFERENCES sessions(session_id),
+    session_id           TEXT NOT NULL,
     tool_name            TEXT NOT NULL,
     service_identity_key TEXT,
     status               TEXT NOT NULL,
@@ -113,179 +121,6 @@ const SCHEMA = `
   );
 `;
 
-// Renames the legacy `tokens` table to `runner` if it still exists under the
-// old name. Runs before the main schema so `CREATE TABLE IF NOT EXISTS runner`
-// becomes a no-op once the rename completes. Safe on fresh DBs (no-op).
-function renameTokensToRunner(db: Database.Database): void {
-  const tables = (
-    db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all() as Array<{ name: string }>
-  ).map((t) => t.name);
-  if (tables.includes("tokens") && !tables.includes("runner")) {
-    db.prepare("ALTER TABLE tokens RENAME TO runner").run();
-  }
-}
-
-// Rebuilds a table with a standalone tool_use_id UNIQUE constraint to the
-// composite (session_id, tool_use_id) form. Detects via pragma — safe on fresh
-// DBs where the new schema already applies.
-function migrateCompositeUniqueKey(
-  db: Database.Database,
-  tableName: string,
-  newDdl: string,
-  extraStatements: string[],
-): void {
-  // better-sqlite3 types .all() as unknown[]; PRAGMA column shapes are stable
-  // across the SQLite version bundled with Node.
-  const indexList = db
-    .prepare(`PRAGMA index_list('${tableName}')`)
-    .all() as Array<{ name: string; unique: number }>;
-  const hasOldConstraint = indexList.some((idx) => {
-    if (!idx.unique) return false;
-    // same reason as above — narrowing the per-column PRAGMA result
-    const cols = db.prepare(`PRAGMA index_info('${idx.name}')`).all() as Array<{
-      name: string;
-    }>;
-    return cols.length === 1 && cols[0]?.name === "tool_use_id";
-  });
-  if (!hasOldConstraint) return;
-
-  db.transaction(() => {
-    db.prepare(`DROP TABLE IF EXISTS ${tableName}_new`).run();
-    db.prepare(newDdl).run();
-    db.prepare(`INSERT INTO ${tableName}_new SELECT * FROM ${tableName}`).run();
-    db.prepare(`DROP TABLE ${tableName}`).run();
-    db.prepare(`ALTER TABLE ${tableName}_new RENAME TO ${tableName}`).run();
-    for (const stmt of extraStatements) {
-      db.prepare(stmt).run();
-    }
-  })();
-}
-
-// Migrates databases created before the config/user schema split. Detects the
-// old owner columns in config, copies the data into user, then recreates config
-// without them. Safe to call on fresh DBs (no-op when owner_email is absent).
-function applyMigrations(db: Database.Database): void {
-  const configCols = (
-    db.prepare("PRAGMA table_info(config)").all() as Array<{ name: string }>
-  ).map((c) => c.name);
-
-  const runnerCols = (
-    db.prepare("PRAGMA table_info(runner)").all() as Array<{ name: string }>
-  ).map((c) => c.name);
-  if (!runnerCols.includes("server_name")) {
-    db.prepare("ALTER TABLE runner ADD COLUMN server_name TEXT").run();
-    db.prepare(
-      "CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_server_name ON runner(server_name) WHERE server_name IS NOT NULL",
-    ).run();
-  }
-  if (!runnerCols.includes("remediation_mode")) {
-    db.prepare("ALTER TABLE runner ADD COLUMN remediation_mode INTEGER").run();
-  }
-
-  const userCols = (
-    db.prepare("PRAGMA table_info(user)").all() as Array<{ name: string }>
-  ).map((c) => c.name);
-  if (!userCols.includes("ingest_token_encrypted")) {
-    db.prepare("ALTER TABLE user ADD COLUMN ingest_token_encrypted TEXT").run();
-  }
-
-  migrateCompositeUniqueKey(
-    db,
-    "remediation_actions",
-    `CREATE TABLE remediation_actions_new (
-      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-      tool_use_id          TEXT NOT NULL,
-      session_id           TEXT NOT NULL REFERENCES sessions(session_id),
-      tool_name            TEXT NOT NULL,
-      service_identity_key TEXT,
-      status               TEXT NOT NULL,
-      resolved_by          TEXT,
-      input                TEXT NOT NULL,
-      result               TEXT,
-      created_at           TEXT NOT NULL,
-      resolved_at          TEXT,
-      UNIQUE (session_id, tool_use_id)
-    )`,
-    [],
-  );
-
-  migrateCompositeUniqueKey(
-    db,
-    "pending_human_input",
-    `CREATE TABLE pending_human_input_new (
-      session_id        TEXT NOT NULL REFERENCES sessions(session_id),
-      tool_use_id       TEXT NOT NULL,
-      kind              TEXT NOT NULL DEFAULT 'approval',
-      tool_name         TEXT NOT NULL,
-      tool_input        TEXT NOT NULL,
-      completed_results TEXT NOT NULL DEFAULT '[]',
-      claimed_at        TEXT,
-      created_at        TEXT NOT NULL,
-      PRIMARY KEY (session_id)
-    )`,
-    [
-      `CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
-       ON pending_human_input(claimed_at)`,
-    ],
-  );
-
-  if (!configCols.includes("owner_email")) return;
-
-  db.transaction(() => {
-    const { c } = db.prepare("SELECT COUNT(*) AS c FROM user").get() as {
-      c: number;
-    };
-
-    if (c === 0) {
-      db.prepare(
-        `INSERT OR IGNORE INTO user (id, email, hash, login_version, updated_at)
-         SELECT 'global', owner_email, owner_hash,
-                COALESCE(login_version, 0),
-                COALESCE(updated_at, datetime('now'))
-         FROM config
-         WHERE id = 'global' AND owner_email IS NOT NULL`,
-      ).run();
-    }
-
-    db.prepare("DROP TABLE IF EXISTS config_v2").run();
-
-    db.prepare(
-      `CREATE TABLE config_v2 (
-        id                 TEXT PRIMARY KEY,
-        provider           TEXT NOT NULL DEFAULT 'anthropic',
-        model              TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
-        thinking           TEXT NOT NULL DEFAULT 'adaptive',
-        max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
-        max_retries        INTEGER NOT NULL DEFAULT 2,
-        request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
-        hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
-        tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
-        remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
-        remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
-        base_url           TEXT,
-        api_key_encrypted  TEXT,
-        prompt_caching     INTEGER NOT NULL DEFAULT 1,
-        reasoning_effort   TEXT,
-        updated_at         TEXT NOT NULL
-      )`,
-    ).run();
-
-    db.prepare(
-      `INSERT INTO config_v2
-       SELECT id, provider, model, thinking, max_output_tokens, max_retries,
-              request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
-              remediation_breaker_limit, remediation_breaker_window_ms,
-              base_url, api_key_encrypted, prompt_caching, reasoning_effort, updated_at
-       FROM config`,
-    ).run();
-
-    db.prepare("DROP TABLE config").run();
-    db.prepare("ALTER TABLE config_v2 RENAME TO config").run();
-  })();
-}
-
 let _db: Database.Database | undefined;
 
 export function getDb(): Database.Database {
@@ -294,9 +129,10 @@ export function getDb(): Database.Database {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
-    renameTokensToRunner(db);
+    // Enforce the declared foreign keys (off by default in SQLite); this is what
+    // makes ON DELETE CASCADE fire and forbids orphan rows.
+    db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
-    applyMigrations(db);
     _db = db;
   }
   return _db;

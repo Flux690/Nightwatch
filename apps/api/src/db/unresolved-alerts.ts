@@ -21,9 +21,15 @@ const SELECT_COLUMNS = `
   created_at       AS createdAt
 `;
 
+// Hard cap on stored rows. The feed only ever shows the newest 100; this bounds
+// the table itself so a sender that floods distinct fingerprints cannot grow
+// storage without limit. Generous headroom above the read window.
+const MAX_UNRESOLVED_ALERTS = 500;
+
 // INSERT OR REPLACE: the UNIQUE(source_alert_id) constraint means re-fires of
 // the same fingerprint update the existing row rather than accumulating duplicates.
-// The feed always shows the most recent rejection for each distinct alert.
+// The feed always shows the most recent rejection for each distinct alert. After
+// the write, evict everything older than the newest MAX_UNRESOLVED_ALERTS rows.
 export function insertUnresolvedAlert(params: {
   sourceAlertId: string;
   identityKey: string;
@@ -39,6 +45,12 @@ export function insertUnresolvedAlert(params: {
          (@sourceAlertId, @identityKey, @alertType, @severity, @rejectionReason, @createdAt)`,
     )
     .run({ ...params, createdAt: new Date().toISOString() });
+  getDb()
+    .prepare(
+      `DELETE FROM unresolved_alerts
+       WHERE id < (SELECT MIN(id) FROM (SELECT id FROM unresolved_alerts ORDER BY id DESC LIMIT @cap))`,
+    )
+    .run({ cap: MAX_UNRESOLVED_ALERTS });
 }
 
 // Newest first, capped at 100 so a misconfigured sender cannot grow the result

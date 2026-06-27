@@ -104,19 +104,12 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Cascades manually: no FK has ON DELETE CASCADE (architecture invariant), so
-// children are deleted before the parent row, all inside one transaction.
+// Deletes the session and, via ON DELETE CASCADE (foreign_keys is ON), its
+// transcript and any pending approval. The remediation audit log is intentionally
+// NOT a child of sessions, so it survives - the record of what was changed outlives
+// the conversation that changed it.
 export function deleteSession(sessionId: string): void {
-  const txn = getDb().transaction(() => {
-    getDb()
-      .prepare(`DELETE FROM pending_human_input WHERE session_id = ?`)
-      .run(sessionId);
-    getDb()
-      .prepare(`DELETE FROM session_messages WHERE session_id = ?`)
-      .run(sessionId);
-    getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
-  });
-  txn();
+  getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
 
 export function listAllSessions(): SessionMeta[] {
