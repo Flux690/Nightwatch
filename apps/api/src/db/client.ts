@@ -28,7 +28,6 @@ const SCHEMA = `
     max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
     max_retries        INTEGER NOT NULL DEFAULT 2,
     request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
-    max_tool_calls     INTEGER NOT NULL DEFAULT 24,
     hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
     tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
     remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
@@ -97,6 +96,11 @@ const SCHEMA = `
     resolved_at          TEXT,
     UNIQUE (session_id, tool_use_id)
   );
+
+  -- Covers the circuit-breaker count, which filters on exactly these columns on
+  -- every write-approval; without it that check full-scans the audit history.
+  CREATE INDEX IF NOT EXISTS idx_remediation_breaker
+    ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
   CREATE TABLE IF NOT EXISTS unresolved_alerts (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -256,7 +260,6 @@ function applyMigrations(db: Database.Database): void {
         max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
         max_retries        INTEGER NOT NULL DEFAULT 2,
         request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
-        max_tool_calls     INTEGER NOT NULL DEFAULT 24,
         hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
         tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
         remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
@@ -272,7 +275,7 @@ function applyMigrations(db: Database.Database): void {
     db.prepare(
       `INSERT INTO config_v2
        SELECT id, provider, model, thinking, max_output_tokens, max_retries,
-              request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+              request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
               remediation_breaker_limit, remediation_breaker_window_ms,
               base_url, api_key_encrypted, prompt_caching, reasoning_effort, updated_at
        FROM config`,

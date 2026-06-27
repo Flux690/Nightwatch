@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
@@ -170,7 +171,10 @@ export async function registerAlertRoutes(
 function authenticate(plaintext: string): boolean {
   if (plaintext.startsWith("nwi_")) {
     const ingestHash = getIngestTokenHash();
-    return ingestHash !== null && hashToken(plaintext) === ingestHash;
+    return (
+      ingestHash !== null &&
+      timingSafeHexEqual(hashToken(plaintext), ingestHash)
+    );
   }
 
   const tokenRecord = findRunnerByToken(plaintext);
@@ -178,6 +182,14 @@ function authenticate(plaintext: string): boolean {
   // Touch before any processing so lastUsedAt reflects authenticated use.
   touchLastUsed(tokenRecord.id);
   return true;
+}
+
+// Constant-time compare of two hex digests so token validation leaks no timing
+// information, consistent with the rest of the token-handling posture.
+function timingSafeHexEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "hex");
+  const bb = Buffer.from(b, "hex");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 function extractToken(

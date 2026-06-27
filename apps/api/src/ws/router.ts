@@ -199,7 +199,16 @@ export function pushRemediationMode(tokenId: string, enabled: boolean): void {
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   const entry = pending.get(payload.correlationId);
-  if (!entry) return;
+  if (!entry) {
+    // The command already timed out (and rejected its caller) or never existed,
+    // so a late result has nowhere to go. Log it instead of dropping silently,
+    // so a consistently-slow runner is diagnosable.
+    logger.warn(
+      { correlationId: payload.correlationId },
+      "late or unknown runner result discarded",
+    );
+    return;
+  }
   clearTimeout(entry.timer);
   pending.delete(payload.correlationId);
   if (payload.success) {
