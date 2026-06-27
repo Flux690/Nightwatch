@@ -14,7 +14,6 @@ export async function registerAlertRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   fastify.post<{ Body: unknown }>("/alerts/ingest", async (request, reply) => {
-    const userAgent = request.headers["user-agent"] ?? "";
     const plaintext = extractToken(request.headers);
 
     if (!plaintext) {
@@ -29,7 +28,7 @@ export async function registerAlertRoutes(
 
     let parsed: ParsedAlert[];
     try {
-      parsed = parseSource(userAgent, request.body);
+      parsed = parseSource(request.body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: msg });
@@ -105,7 +104,7 @@ export async function registerAlertRoutes(
 
       let parsed: ParsedAlert[];
       try {
-        parsed = parseSource(request.headers["user-agent"] ?? "", request.body);
+        parsed = parseSource(request.body);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return reply.code(400).send({ error: msg });
@@ -189,11 +188,11 @@ function extractToken(
   return extractBearerToken(headers["authorization"]);
 }
 
-function parseSource(userAgent: string, body: unknown): ParsedAlert[] {
-  if (
-    userAgent.toLowerCase().includes("alertmanager") ||
-    isAlertmanagerShape(body)
-  ) {
+// Source is decided by the body's structure alone - the only authoritative
+// signal. A User-Agent is client-controlled and spoofable, and the shape check
+// is sufficient, so it is not consulted.
+function parseSource(body: unknown): ParsedAlert[] {
+  if (isAlertmanagerShape(body)) {
     return parseAlertmanager(body);
   }
   throw new Error(

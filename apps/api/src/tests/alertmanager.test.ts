@@ -1,135 +1,119 @@
 import { describe, expect, it } from "vitest";
 import { parseAlertmanager } from "../alerts/parsers/alertmanager.js";
 
-function webhookWith(labels: Record<string, string>): unknown {
+// These tests cover the PARSER's own responsibilities: projecting Alertmanager
+// fields, normalizing severity, isolating malformed alerts in a batch, handling
+// resolved notifications, and synthesizing a stable id. Identity derivation
+// itself is exercised exhaustively in service-identity.test.ts; here we only
+// confirm the parser wires labels through to it.
+
+function alert(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
   return {
-    alerts: [
-      {
-        labels,
-        annotations: {},
-        startsAt: "2026-06-21T10:00:00Z",
-        fingerprint: "fp-1",
-      },
-    ],
+    status: "firing",
+    labels: { alertname: "HighCPU", severity: "warning", container: "web-01" },
+    annotations: {},
+    startsAt: "2026-06-21T10:00:00Z",
+    fingerprint: "fp-1",
+    ...overrides,
   };
 }
 
 describe("parseAlertmanager", () => {
-  it("prefers Compose project/service labels for the durable identity", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "ContainerDown",
-        name: "myapp_postgres_1",
-        "com.docker.compose.project": "myapp",
-        "com.docker.compose.service": "postgres",
-      }),
-    );
+  it("projects an alert's fields into the normalized shape", () => {
+    const [parsed] = parseAlertmanager({ alerts: [alert()] });
+    expect(parsed).toMatchObject({
+      sourceAlertId: "fp-1",
+      alertType: "HighCPU",
+      severity: "warning",
+      firedAt: "2026-06-21T10:00:00Z",
+    });
+    // labels were wired through to the identity deriver.
+    expect(parsed?.targetIdentifier).toMatchObject({ provider: "docker" });
+  });
 
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "myapp",
-      service: "postgres",
+  it("normalizes severity aliases and defaults unknown to info", () => {
+    const sev = (s: string | undefined) =>
+      parseAlertmanager({
+        alerts: [alert({ labels: { alertname: "X", severity: s } })],
+      })[0]?.severity;
+    expect(sev("error")).toBe("critical");
+    expect(sev("critical")).toBe("critical");
+    expect(sev("warn")).toBe("warning");
+    expect(sev("page")).toBe("info");
+    expect(sev(undefined)).toBe("info");
+  });
+
+  it("throws only when the envelope itself is not an alerts array", () => {
+    expect(() => parseAlertmanager({})).toThrow(/missing alerts array/);
+    expect(() => parseAlertmanager({ alerts: "nope" })).toThrow(
+      /missing alerts array/,
+    );
+  });
+
+  describe("batch independence", () => {
+    it("a malformed alert is skipped without aborting routable siblings", () => {
+      const parsed = parseAlertmanager({
+        alerts: [
+          alert({ fingerprint: "good-1" }),
+          // labels:null used to throw on labels["alertname"] and lose the batch
+          { status: "firing", labels: null, fingerprint: "bad-1" },
+          "not-an-object",
+          alert({ fingerprint: "good-2" }),
+        ],
+      });
+      const ids = parsed.map((p) => p.sourceAlertId);
+      expect(ids).toContain("good-1");
+      expect(ids).toContain("good-2");
+      // the null-labels alert still parses (defensively) into an unknown identity
+      // rather than throwing; the non-object element is dropped.
+      expect(parsed.length).toBe(3);
     });
   });
 
-  it("falls back to the live name when Compose labels are absent (anonymous docker run)", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({ alertname: "ContainerDown", name: "redis-cache" }),
-    );
-
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "redis-cache",
-      service: "redis-cache",
+  describe("resolved notifications", () => {
+    it("skips status:resolved alerts so a cleared condition opens no investigation", () => {
+      const parsed = parseAlertmanager({
+        alerts: [
+          alert({ status: "resolved", fingerprint: "cleared" }),
+          alert({ status: "firing", fingerprint: "firing-1" }),
+        ],
+      });
+      expect(parsed.map((p) => p.sourceAlertId)).toEqual(["firing-1"]);
     });
   });
 
-  it("builds a Kubernetes identity from namespace + workload labels (ADR-0004)", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "CrashLoopBackOff",
-        namespace: "production",
-        deployment: "api-server",
-        cluster: "cluster-prod",
-      }),
-    );
+  describe("fingerprint synthesis", () => {
+    it("synthesizes a stable id from labels when fingerprint is absent", () => {
+      const labels = { alertname: "HighCPU", container: "web-01" };
+      const [a] = parseAlertmanager({
+        alerts: [{ status: "firing", labels, fingerprint: undefined }],
+      });
+      const [b] = parseAlertmanager({
+        alerts: [{ status: "firing", labels, fingerprint: undefined }],
+      });
+      // same labels -> same id (dedup holds), and never an undefined id.
+      expect(a?.sourceAlertId).toBeTruthy();
+      expect(a?.sourceAlertId).toBe(b?.sourceAlertId);
+    });
 
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "kubernetes",
-      namespace: "production",
-      workload: "api-server",
-      cluster: "cluster-prod",
+    it("two distinct fingerprint-less alerts do not collide", () => {
+      const parsed = parseAlertmanager({
+        alerts: [
+          { status: "firing", labels: { alertname: "A", container: "x" } },
+          { status: "firing", labels: { alertname: "B", container: "y" } },
+        ],
+      });
+      expect(parsed[0]?.sourceAlertId).not.toBe(parsed[1]?.sourceAlertId);
     });
   });
 
-  it("accepts bundled-monitoring labels (compose_project/compose_service) from Prometheus relabeling", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "ContainerHighMemory",
-        name: "myapp_api_1",
-        compose_project: "myapp",
-        compose_service: "api",
-        instance: "prod-host-1",
-        severity: "warning",
-      }),
-    );
-
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "myapp",
-      service: "api",
-      server: "prod-host-1",
+  it("defaults firedAt to now when startsAt is missing", () => {
+    const [parsed] = parseAlertmanager({
+      alerts: [alert({ startsAt: undefined })],
     });
-  });
-
-  it("stamps server scope from instance label when canonical Compose labels are present", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "ContainerDown",
-        name: "myapp_postgres_1",
-        "com.docker.compose.project": "myapp",
-        "com.docker.compose.service": "postgres",
-        instance: "prod-host-2",
-      }),
-    );
-
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "myapp",
-      service: "postgres",
-      server: "prod-host-2",
-    });
-  });
-
-  it("stamps server scope from instance label even when falling back to live name", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "ContainerDown",
-        name: "redis-cache",
-        instance: "prod-host-3",
-      }),
-    );
-
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "redis-cache",
-      service: "redis-cache",
-      server: "prod-host-3",
-    });
-  });
-
-  it("produces identity without server when instance label is absent (host-level alert)", () => {
-    const [alert] = parseAlertmanager(
-      webhookWith({
-        alertname: "HostDiskCritical",
-        severity: "critical",
-      }),
-    );
-
-    expect(alert?.targetIdentifier).toEqual({
-      provider: "docker",
-      project: "unknown",
-      service: "unknown",
-    });
+    expect(parsed?.firedAt).toBeTruthy();
+    expect(() => new Date(parsed!.firedAt).toISOString()).not.toThrow();
   });
 });
