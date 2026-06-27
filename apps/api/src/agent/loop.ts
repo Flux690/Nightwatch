@@ -114,12 +114,9 @@ export async function runInvestigation(
   const config = loadConfig();
   const apiKey = loadApiKey();
 
-  // Operator declined a continue-request: replay the prior transcript and run one
-  // free-form wrap-up turn (no tools) so the model can summarize, then finish.
-  // The seed already carries the whole investigation, so none of the alert/fleet
-  // context build below is needed - short-circuit before that work. The system
-  // prompt is identical to the investigation's (systemPromptFor is the same for
-  // chat and alert contexts).
+  // Operator declined a continue-request: replay the transcript and run one free-form
+  // wrap-up turn (no tools), then finish. The seed already carries the investigation, so
+  // skip the alert/fleet context build below.
   if (input.wrapUp) {
     const remediationEnabled = currentRemediationEnabled(
       alert?.runnerId ?? undefined,
@@ -223,11 +220,9 @@ export async function runInvestigation(
   const deadline = Date.now() + config.hardTimeoutMs;
   const fleetProviders = currentFleetProviders();
 
-  // Resolve the effective tool set ONCE per run invocation from the run-level
-  // remediation mode and fleet providers. The same set backs both the schemas
-  // offered to the model and the names the turn executor resolves against, so the
-  // system prompt (built from the same remediationEnabled) and the tool menu can
-  // never disagree within a run, and a resume recomputes it fresh.
+  // Resolve the effective tool set ONCE per run from remediation mode + fleet providers.
+  // It backs both the offered schemas and the names the turn executor resolves, so prompt
+  // and menu can't disagree; a resume recomputes it fresh.
   const toolset = effectiveToolset(fleetProviders, remediationEnabled);
   const toolSchemas = toolset.map((t) => t.schema);
 
@@ -292,10 +287,9 @@ export async function runInvestigation(
     });
 
     if (gated !== null) {
-      // Durably suspend: persist the assistant turn + interrupt row in ONE
-      // transaction (D3). The run then exits and frees its dispatcher slot.
-      // Suspended sessions never receive injections: the inbox is NOT drained
-      // here; any inbox alerts become new sessions via the dispatcher's finally.
+      // Durably suspend: persist the assistant turn + interrupt row in one transaction; the run
+      // then exits and frees its slot. Suspended sessions take no injections - the inbox isn't
+      // drained here.
       const isAskGate = gated.entry.access === "ask";
       const interrupt: PendingHumanInput = {
         sessionId,
@@ -340,10 +334,9 @@ export async function runInvestigation(
       return;
     }
 
-    // Drain mid-run injected alerts at the tool boundary. They ride in the same
-    // user message as the tool results so the provider never sees two consecutive
-    // user turns (D10). The model is asked to judge each as a downstream effect
-    // or an independent incident.
+    // Drain mid-run injected alerts at the tool boundary, riding the same user message as the
+    // tool results so the provider never sees two consecutive user turns (D10). The model
+    // judges each as downstream effect or independent incident.
     const injected = dispatcher.drainInbox(sessionId);
     const injectionText =
       injected.length > 0 ? formatInjectedAlerts(injected) : undefined;
@@ -352,13 +345,9 @@ export async function runInvestigation(
     persist();
   }
 
-  // Time budget reached. Suspend with a continue-request interrupt so the
-  // operator can resume (granting a fresh deadline) or end the investigation.
-  // The interrupt row is inserted atomically; all prior turns are already
-  // persisted so the messages list passed here is empty. A continue request has
-  // no underlying tool call, so toolName/toolInput are empty and its synthetic
-  // toolUseId only keys the interrupt row - the resolver branches on kind, never
-  // looking it up in the transcript.
+  // Time budget reached: suspend with a continue-request so the operator can resume (fresh
+  // deadline) or end. A continue request has no underlying tool call, so its synthetic
+  // toolUseId only keys the interrupt row - the resolver branches on kind, not the transcript.
   const continueId = randomUUID();
   const continueInterrupt: PendingHumanInput = {
     sessionId,

@@ -13,11 +13,9 @@ export type AlertResolution =
   | { kind: "no-runners" }
   | { kind: "verdicts"; verdicts: AlertVerdict[] };
 
-// Matches each alert's candidate identity against the fleet's advertised
-// services (ADR-0004 resolve-or-reject). Each alert is resolved independently:
-// a matched alert resolves, an unmatched or ambiguous one is rejected on its
-// own without suppressing its neighbours. 503 is returned only when no runner
-// is connected at all (a transient fleet outage), not per-alert.
+// Match each alert's candidate identity against the fleet's advertised services (ADR-0004),
+// independently: an unmatched or ambiguous alert is rejected on its own. 503 only when no
+// runner is connected at all.
 export function resolveAlerts(
   parsed: ParsedAlert[],
   fleet: FleetRunner[],

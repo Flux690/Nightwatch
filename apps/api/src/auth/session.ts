@@ -41,9 +41,8 @@ function extractCookieValue(header: string | undefined): string | undefined {
   return undefined;
 }
 
-// Verifies the nw_auth cookie (signature, expiry, and loginVersion against the
-// stored value) without writing a reply. The returned loginVersion is read
-// exactly once per call so a concurrent epoch bump can't be validated against
+// Verifies the nw_auth cookie (signature, expiry, loginVersion) without replying.
+// loginVersion is read once per call so a concurrent epoch bump can't be validated against
 // one value and reissued under another.
 async function verifySessionCookie(
   cookieHeaderValue: string | undefined,

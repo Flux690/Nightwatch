@@ -85,11 +85,9 @@ export async function registerAlertRoutes(
     return reply.code(200).send({ received, enqueued, skipped, rejected });
   });
 
-  // Lets an operator test their BYO webhook config before going live: same
-  // auth, same normalizer, same fleet match as /alerts/ingest, but never
-  // calls routeAlert - nothing is dispatched. Each alert is resolved
-  // individually so a payload with several alerts reports which ones would
-  // route and which would be rejected, instead of one failure masking the rest.
+  // Lets an operator dry-run a BYO webhook: same auth/normalizer/fleet-match as ingest but
+  // never routes. Each alert is resolved individually, so a multi-alert payload reports
+  // which would route and which would be rejected.
   fastify.post<{ Body: unknown }>(
     "/alerts/validate",
     async (request, reply) => {
@@ -164,10 +162,9 @@ export async function registerAlertRoutes(
   );
 }
 
-// Authenticates the request only - grants no routing information. `nwi_`
-// (fleet-wide) and `nwr_` (per-runner, backward compat) both just prove the
-// request may submit alerts; which runner receives it is decided later, by
-// matching the alert's labels against the fleet (ADR-0004).
+// Authenticates only - grants no routing. `nwi_` (fleet) and `nwr_` (per-runner) both just
+// prove the request may submit; which runner receives it is decided later by matching
+// labels against the fleet (ADR-0004).
 function authenticate(plaintext: string): boolean {
   if (plaintext.startsWith("nwi_")) {
     const ingestHash = getIngestTokenHash();

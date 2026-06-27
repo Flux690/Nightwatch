@@ -21,10 +21,9 @@ export interface Tool {
   // narrows the tool to the listed providers (ADR-0002). Only genuinely
   // provider-specific tools carry it.
   providers?: Provider[];
-  // Present only for tools that run inside the API (get_recent_commits) or are
-  // pure interrupts (request_clarification). A runner-delegated tool omits it;
-  // executeTool then dispatches to the runner using schema.name, which IS the
-  // wire command name - one vocabulary end to end, with no name-mapping table.
+  // Present only for tools that run in the API (get_recent_commits) or are pure interrupts
+  // (request_clarification); a runner-delegated tool omits it, and executeTool dispatches by
+  // schema.name - the wire command name, no mapping table.
   execute?(
     input: Record<string, unknown>,
     ctx: ToolExecuteContext,
@@ -121,10 +120,9 @@ async function fetchGitHubCommits(
   return { commits };
 }
 
-// A runner-delegated tool's schema.name is the wire command name the runner
-// dispatches on (one vocabulary end to end). Such tools omit `execute`;
-// executeTool routes them to the runner. Only get_recent_commits (runs in the
-// API) and request_clarification (a pure interrupt) carry their own `execute`.
+// A runner-delegated tool's schema.name IS the wire command; it omits `execute` and
+// executeTool routes it to the runner. Only get_recent_commits and request_clarification
+// carry their own `execute`.
 export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
@@ -559,10 +557,9 @@ export const TOOL_REGISTRY: Tool[] = [
   },
 ];
 
-// A tool with no `providers` annotation is provider-agnostic and runs on every
-// provider; an annotation narrows it to the listed providers (ADR-0002). Single
-// home for the "absent means all" rule, shared by schema filtering and the
-// loop's provider-mismatch rejection so they can never diverge.
+// No `providers` annotation means provider-agnostic (runs everywhere); an annotation
+// narrows it (ADR-0002). Single home for the "absent means all" rule, shared by schema
+// filtering and the mismatch check.
 export function toolSupportsProvider(tool: Tool, provider: string): boolean {
   // provider is a plain string so the loop can pass an arbitrary model-supplied
   // value; widening the annotation to string[] is always safe and lets an
@@ -573,10 +570,9 @@ export function toolSupportsProvider(tool: Tool, provider: string): boolean {
   );
 }
 
-// Single dispatch for every tool. A tool that carries its own `execute` (runs in
-// the API, or is a pure interrupt) uses it; every other tool is runner-delegated
-// and routed to the runner under its schema.name - which is the wire command
-// name, so there is no name-mapping table to keep in sync.
+// Single dispatch: a tool with its own `execute` (API-run or interrupt) uses it; every
+// other tool is runner-delegated and routed under schema.name, the wire command name, so
+// there is no mapping table.
 export function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
@@ -593,15 +589,9 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-// The effective tool set for a run: the SINGLE source of truth for both the
-// schemas offered to the model and the names the loop resolves and executes.
-// remediationEnabled === false removes every write tool (the REMEDIATION_ENABLED
-// master switch, ADR-0003); the fleet-providers filter drops provider-specific
-// tools no connected runner can serve (ADR-0002). Because the loop resolves a
-// tool call against THIS set - not the full registry - a tool stripped here is
-// genuinely absent: a model that names it gets "unknown tool", never an
-// approvable card. Hiding a write and gating a write are the same operation, so
-// the master switch cannot be bypassed by a hallucinated tool name.
+// The effective tool set: the single source of truth for both the offered schemas and the
+// names the loop resolves. remediationEnabled false removes write tools (ADR-0003), the
+// fleet filter drops tools no runner serves - so hiding a write and gating it are one op.
 export function effectiveToolset(
   fleetProviders: ReadonlySet<Provider> | undefined,
   remediationEnabled: boolean,
@@ -615,10 +605,9 @@ export function effectiveToolset(
   );
 }
 
-// Schemas only, for callers that just need the wire shape (e.g. tests). The loop
-// uses effectiveToolset directly so it resolves calls against the same set. An
-// undefined remediationEnabled means "no master-switch filter" (offer every
-// tool), preserving the prior default for existing callers.
+// Schemas only, for callers that just need the wire shape (e.g. tests); the loop uses
+// effectiveToolset directly. undefined remediationEnabled means no master-switch filter
+// (offer every tool).
 export function getToolSchemas(
   fleetProviders?: ReadonlySet<Provider>,
   remediationEnabled?: boolean,

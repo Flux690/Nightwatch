@@ -1,10 +1,8 @@
 import type { ServiceIdentity } from "@nightwatch/shared";
 
-// A service identity resolved to nothing actionable: no matching workload, no
-// running instance when one is required, or an ambiguous container selection.
-// Returned by both the Docker and Kubernetes resolvers and propagated verbatim
-// by the command handlers, so a "not running" is a clean finding rather than an
-// exception (ADR-0002).
+// A service identity resolved to nothing actionable (no workload, no running instance,
+// ambiguous container). Shared by both resolvers and propagated verbatim, so
+// "not running" is a finding, not an exception (ADR-0002).
 export interface NoRunningInstanceResult {
   found: false;
   reason: string;

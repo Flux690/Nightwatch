@@ -1,11 +1,8 @@
 import { EventEmitter } from "node:events";
 
-// Live console events ride an in-process event bus, not Redis pub/sub (CONTEXT.md
-// D2): one Node process serves the console, so cross-process fan-out solves a
-// problem we do not have. Every published envelope is emitted on one channel and
-// the console WS handler forwards all of them to its socket - the client routes
-// by type and sessionId, exactly as it did when it pattern-subscribed to every
-// Redis channel.
+// Live console events ride an in-process event bus, not Redis (D2): one Node process serves
+// the console, so cross-process fan-out solves a problem we don't have. The console WS
+// forwards every envelope and the client routes by type/sessionId.
 const CONSOLE_EVENT = "console-event";
 
 // One listener per open console socket; a single-admin deployment has very few.

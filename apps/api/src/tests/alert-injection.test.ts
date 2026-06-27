@@ -39,10 +39,9 @@ import {
 import { resolveCommand } from "../ws/command-transport.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
-// Matches the `container: "web-01"` label every alertmanagerBody() carries,
-// and uses the connection's own tokenId as runnerId so the real ingest
-// route's fleet-matched runnerId lines up with the hand-built alert() helper
-// below (both must agree for the dedup/injection assertions to mean anything).
+// Matches the container:"web-01" label alertmanagerBody() carries, and uses the connection's
+// tokenId as runnerId so the real route's fleet-matched runnerId lines up with the hand-built
+// alert() helper (both must agree for the assertions to mean anything).
 function webOneManifest(runnerId: string) {
   return manifest(runnerId, "host-inject-resume", [dockerService("web-01")]);
 }
@@ -300,12 +299,9 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
 
-  // Regression for H3: a resume dispatch (human-input/service.ts) carries no
-  // `alert` field, so the dispatcher must recover alert identity from the
-  // session itself - otherwise the post-approval phase looks alert-free and
-  // the real /alerts/ingest route misroutes correlated alerts into new
-  // sessions instead of injecting them, and re-fires of the same alert are
-  // no longer deduped.
+  // Regression for H3: a resume dispatch carries no `alert` field, so the dispatcher must
+  // recover alert identity from the session itself - else the post-approval phase looks
+  // alert-free, correlated alerts misroute into new sessions, and re-fires aren't deduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const { id: tokenId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");

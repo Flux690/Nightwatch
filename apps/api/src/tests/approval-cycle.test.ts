@@ -143,10 +143,9 @@ describe("durable approval interrupts", () => {
   });
 
   afterEach(() => {
-    // The circuit breaker counts executed writes per (service, action) across the
-    // shared temp DB; without this, one case's approved restarts of web-01
-    // accumulate and trip the breaker, so a later case's write is refused instead
-    // of suspending. Reset the ledger so each case is independent.
+    // Reset the breaker ledger so each case is independent: it counts executed writes per
+    // (service, action) across the shared temp DB, so without this one case's restarts trip it
+    // for a later case.
     getDb().prepare("DELETE FROM remediation_actions").run();
   });
 

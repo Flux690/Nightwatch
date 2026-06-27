@@ -11,11 +11,9 @@ import type {
   ToolUse,
 } from "./types.js";
 
-// Neutral content-block shape the console's persistedConverter already knows how
-// to read (mirrors Anthropic's native blocks). OpenAI's own message shape has no
-// field for reasoning, so a turn that thinks gets reassembled into this shape
-// before it is persisted - otherwise the reasoning is visible only while it
-// streams and is lost the moment the turn is written to the transcript.
+// Neutral content-block shape the console's persistedConverter already reads (mirrors
+// Anthropic's blocks). OpenAI has no field for reasoning, so a thinking turn is reassembled
+// into this before persisting - else the reasoning is lost the moment the turn is written.
 type ProviderBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }
@@ -35,10 +33,9 @@ export class OpenAIProvider implements LLMProvider {
   private readonly system: string;
   private readonly config: AgentConfig;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-  // Reasoning text accumulated per assistant turn, keyed by its index in
-  // `messages`. Captured from streamed `reasoning_details` chunks, which the
-  // OpenAI SDK's finalChatCompletion() accumulator drops (it's an
-  // OpenRouter-only extension), so it has to be tracked separately here.
+  // Reasoning text per assistant turn, keyed by message index. Captured from streamed
+  // reasoning_details (an OpenRouter extension) that finalChatCompletion() drops, so it's
+  // tracked separately here.
   private readonly thinkingByIndex = new Map<number, string>();
 
   constructor(system: string, config: AgentConfig, apiKey?: string) {
@@ -72,10 +69,9 @@ export class OpenAIProvider implements LLMProvider {
     let response: OpenAI.Chat.Completions.ChatCompletion;
     let thinking = "";
     try {
-      // Stream and accumulate via finalChatCompletion(): a large response (up
-      // to maxOutputTokens) can't trip the single-read request timeout. The
-      // accumulated completion has the same shape as a non-streamed one, so
-      // everything downstream is unchanged.
+      // Stream and accumulate via finalChatCompletion() so a large response can't trip the
+      // single-read request timeout; the accumulated completion has the same shape as a
+      // non-streamed one, so everything downstream is unchanged.
       const streamParams = {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
@@ -99,10 +95,9 @@ export class OpenAIProvider implements LLMProvider {
       const stream = this.client.chat.completions.stream(streamParams, {
         signal,
       });
-      // OpenRouter extends the delta with reasoning_details; the official SDK types omit it,
-      // so the cast goes through unknown first to satisfy the compiler. Listened
-      // for unconditionally (not just when onDelta is passed) so the
-      // accumulated text below survives even on the no-callback wrap-up turn.
+      // OpenRouter extends the delta with reasoning_details; the SDK types omit it, so the cast
+      // goes via unknown. Listened for unconditionally so the accumulated text survives even the
+      // no-callback wrap-up turn.
       stream.on("chunk", (chunk) => {
         const rawDelta = (
           chunk as unknown as {
@@ -183,19 +178,17 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   seed(history: ProviderMessage[]): void {
-    // The system prompt lives in the message array for OpenAI, so it is
-    // re-prepended here rather than restored from the transcript. Messages
-    // persisted without providerContent (predating its introduction) fall
-    // back to a plain role/content reconstruction, matching Anthropic.
+    // OpenAI keeps the system prompt in the message array, so it's re-prepended here, not
+    // restored from the transcript. Messages persisted without providerContent fall back to
+    // plain role/content, matching Anthropic.
     this.messages = [
       { role: "system", content: this.system },
       ...history.map((m) => this.toNativeMessage(m)),
     ];
   }
 
-  // A turn that thought is persisted as a ProviderBlock[] (see snapshot()),
-  // which OpenAI's API won't accept back as input - the reasoning isn't
-  // needed to replay context, so it's dropped and only text/tool_calls
+  // A turn that thought is persisted as ProviderBlock[] (see snapshot()) that OpenAI won't
+  // accept back; the reasoning isn't needed to replay context, so only text/tool_calls
   // round-trip into a native message.
   private toNativeMessage(
     m: ProviderMessage,
@@ -304,10 +297,9 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-// OpenAI returns tool-call arguments as a JSON string the model generated, so it
-// can be malformed. Parse defensively: a bad payload becomes an empty input,
-// which the runner's per-tool validation then rejects with a corrective error,
-// rather than throwing and crashing the entire investigation.
+// OpenAI returns tool-call arguments as a model-generated JSON string, so it can be
+// malformed. Parse defensively: a bad payload becomes empty input, which per-tool
+// validation rejects with a corrective error, rather than crashing the run.
 function parseToolArguments(
   raw: string,
   toolName: string,

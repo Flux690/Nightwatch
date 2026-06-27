@@ -8,11 +8,9 @@ import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools.js";
 
-// Executes an approved write tool and returns the result to feed back into the
-// run. Deliberately never throws: once the interrupt is claimed it can never be
-// re-approved, so the caller MUST be able to resolve it. Any fault - a duplicate
-// attempt, a missing registry entry, a DB-layer error - becomes an is_error
-// result so the run resumes with a failure instead of the approval card wedging.
+// Executes an approved write and returns its result to the run. Never throws: once claimed
+// the interrupt can't be re-approved, so any fault (duplicate, missing tool, DB error)
+// becomes an is_error result and the run resumes instead of the card wedging.
 export async function executeApprovedTool(
   pending: PendingHumanInputWithSession,
   resolvedBy: string,

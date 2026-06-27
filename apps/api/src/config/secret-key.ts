@@ -10,14 +10,9 @@ function keyFilePath(): string {
   return join(dirname(dbPath()), "secret.key");
 }
 
-// Resolves SECRET_KEY for this boot (D16): an explicit env var always wins;
-// otherwise a key file beside the SQLite database is reused or, on first
-// boot, generated (0600) and reused from then on. Losing the file is
-// equivalent to rotating SECRET_KEY: it invalidates every owner session and
-// makes the stored, AES-GCM-wrapped LLM key undecryptable (which then reads
-// back as unset) - the same consequence as rotating the env var by hand. The
-// path (never the key material) is logged so that consequence shows up at
-// boot instead of only in docs.
+// Resolves SECRET_KEY (D16): an env var wins, else a 0600 key file beside the DB is reused
+// or generated on first boot. Losing it equals rotating SECRET_KEY - sessions invalidate and
+// the wrapped LLM key becomes undecryptable. The path (never the key) is logged at boot.
 export function resolveSecretKey(): string {
   const envKey = process.env["SECRET_KEY"];
   if (envKey) return envKey;

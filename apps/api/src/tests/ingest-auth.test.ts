@@ -229,10 +229,9 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.received).toBe(1);
   });
 
-  // Replaces 014's single-runner fallback: a multi-runner fleet used to be
-  // rejected outright (label-based resolution wasn't built yet). Now the
-  // alert's labels are matched against the fleet, so the right runner among
-  // several is found deterministically.
+  // A multi-runner fleet used to be rejected outright (no label resolution yet); now the
+  // alert's labels are matched against the fleet, so the right runner among several is found
+  // deterministically.
   it("resolves correctly among multiple connected runners by matching the advertised service", async () => {
     registerRunner(
       "runner-a-token",
@@ -334,10 +333,9 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
   it("nwr_ tokens resolve by fleet match too - the token authenticates, labels route", async () => {
     const runnerToken = generateRunnerToken("nwr-still-works").plaintext;
-    // The nwr_ token is never registered as a WS connection; a separate
-    // runner advertises the matching service. Under the old token-implies-
-    // runner model this would have nothing to fall back to and would fail -
-    // succeeding here proves routing no longer reads the token at all.
+    // The nwr_ token is never a WS connection; a separate runner advertises the matching service.
+    // Under the old token-implies-runner model this would fail; succeeding proves routing no
+    // longer reads the token at all.
     registerRunner(
       "runner-a-token",
       () => {},

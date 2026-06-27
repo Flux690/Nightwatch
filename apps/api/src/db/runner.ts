@@ -116,14 +116,9 @@ export function findRunnerById(id: string): RunnerRow | undefined {
   return raw ? mapRow(raw) : undefined;
 }
 
-// Effective remediation mode for an alert's runner reference, read from the DB
-// (the system of record, ADR-0003). alert.runnerId may be either the runner
-// record id or the manifest runner_id - it is stamped at ingest before the
-// manifest arrives - so we match either column. Returns null when no row matches
-// or the mode has never been set, in which case the caller bootstraps from the
-// runner's live manifest self-report. Reading the DB here (not an in-memory
-// cache) is what lets a run resumed after an API restart see the correct mode
-// before the runner has reconnected.
+// Effective remediation mode for an alert's runner, from the DB (system of record, ADR-0003).
+// alert.runnerId may be the record id or the manifest runner_id, so match either column; null
+// means bootstrap from the manifest. Reading the DB lets a post-restart resume see it pre-reconnect.
 export function getRemediationModeByRunnerRef(ref: string): boolean | null {
   const raw = getDb()
     .prepare(

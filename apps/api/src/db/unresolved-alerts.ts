@@ -26,10 +26,9 @@ const SELECT_COLUMNS = `
 // storage without limit. Generous headroom above the read window.
 const MAX_UNRESOLVED_ALERTS = 500;
 
-// INSERT OR REPLACE: the UNIQUE(source_alert_id) constraint means re-fires of
-// the same fingerprint update the existing row rather than accumulating duplicates.
-// The feed always shows the most recent rejection for each distinct alert. After
-// the write, evict everything older than the newest MAX_UNRESOLVED_ALERTS rows.
+// INSERT OR REPLACE on UNIQUE(source_alert_id): re-fires update the existing row instead of
+// duplicating, so the feed shows the latest rejection per alert. Then evict everything past
+// the newest MAX_UNRESOLVED_ALERTS.
 export function insertUnresolvedAlert(params: {
   sourceAlertId: string;
   identityKey: string;

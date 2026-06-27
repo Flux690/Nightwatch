@@ -504,11 +504,9 @@ describe("providers filter and mismatch rejection", () => {
       });
 
       it("a write the model emits anyway is unavailable, not an approval card (gate cannot be bypassed)", async () => {
-        // Read-only mode strips restart_service from the offered schema. The model
-        // emits it regardless (LLMs hallucinate stripped tool names). Because the
-        // loop resolves calls against the same effective set, the tool is genuinely
-        // unavailable: no approval card is raised, so the master write switch
-        // cannot be bypassed by a hallucinated name.
+        // Read-only mode strips restart_service from the schema; the model emits it anyway (LLMs
+        // hallucinate stripped names). The loop resolves against the same effective set, so it's
+        // genuinely unavailable - no approval card - and the write switch can't be bypassed.
         const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
           headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
         });

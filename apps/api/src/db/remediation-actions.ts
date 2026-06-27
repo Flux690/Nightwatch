@@ -19,10 +19,9 @@ export interface RemediationAction {
   resolvedAt: string | null;
 }
 
-// Derives the canonical identity key from a tool input's `service` block, or
-// null when the tool carries no service identity. The single place a tool input
-// is turned into an identity key, shared by the record write and the breaker
-// count so both key on exactly the same shape.
+// Derives the canonical identity key from a tool input's `service`, or null when it carries
+// none. The single place input becomes a key, shared by the record write and the breaker
+// count so both key the same shape.
 export function serviceIdentityKeyFromInput(
   input: Record<string, unknown>,
 ): string | null {
@@ -38,10 +37,9 @@ export function serviceIdentityKeyFromInput(
   return serviceIdentityKey(service as ServiceIdentity);
 }
 
-// Audit-log retention ceiling. The breaker only reads a recent time window and
-// the list view only shows the newest 100, but this table is the durable record
-// of what was changed, so the ceiling is high - a real audit trail - and eviction
-// only ever drops rows far older than any breaker window.
+// Audit-log retention ceiling: the breaker reads only a recent window and the list shows
+// 100, but this is the durable record, so the ceiling is high and eviction only drops rows
+// far older than any breaker window.
 const MAX_REMEDIATION_ACTIONS = 10000;
 
 function pruneRemediationActions(): void {
@@ -117,10 +115,9 @@ export function settleRemediationAction(
     });
 }
 
-// One-shot insert for a rejection — idempotent: a re-opened interrupt re-rejected
-// after a crash is silently ignored rather than throwing a constraint violation.
-// Returns true when the row was written, false when OR IGNORE fired (conflict with
-// an existing row — the caller logs a warning for the executing-row zombie case).
+// One-shot, idempotent rejection insert: a re-rejected interrupt after a crash is ignored,
+// not a constraint error. Returns false when OR IGNORE fired (the caller warns on the
+// executing-row zombie case).
 export function insertRejectedRemediationAction(params: {
   toolUseId: string;
   sessionId: string;
@@ -187,13 +184,9 @@ export function listRemediationActions(): RemediationAction[] {
     .all() as RemediationAction[];
 }
 
-// Counts writes to the same service identity and action that SUCCEEDED
-// (status 'executed') since `since`. Drives the circuit breaker. A 'failed'
-// write does not count: a transient failure (runner blip, timeout, a fix that
-// never actually ran) must not burn the budget and lock the operator out of
-// retrying. 'rejected' and still-'executing' rows are likewise not successful
-// writes. Keyed on the canonical identity key, so a server-scoped identity
-// refines the count for free.
+// Counts SUCCEEDED writes (status 'executed') to the same (identity, action) since `since`,
+// for the breaker. A 'failed' write doesn't count - a transient failure must not burn the
+// budget; 'rejected'/'executing' aren't successes either.
 export function countExecutedRemediations(params: {
   serviceIdentityKey: string;
   toolName: string;

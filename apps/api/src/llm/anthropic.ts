@@ -43,10 +43,9 @@ export class AnthropicProvider implements LLMProvider {
   ): Promise<ChatResponse> {
     let response: Anthropic.Messages.Message;
     try {
-      // Stream and accumulate via finalMessage(): a large response (up to
-      // maxOutputTokens) can no longer trip the single-read request timeout.
-      // The returned Message is identical to a non-streamed one, so everything
-      // downstream (content blocks, usage, stop_reason) is unchanged.
+      // Stream and accumulate via finalMessage() so a large response can't trip the single-read
+      // request timeout. The returned Message is identical to a non-streamed one, so everything
+      // downstream is unchanged.
       const stream = this.client.messages.stream(
         {
           model: this.model,
@@ -126,12 +125,9 @@ export class AnthropicProvider implements LLMProvider {
     };
   }
 
-  // Place a rolling cache breakpoint on the tail of the conversation so the
-  // growing message history is cached incrementally across turns. History is
-  // append-only, so each turn's prefix matches the breakpoint written last
-  // turn. chat() is only ever called when the last message is the user turn
-  // (initial string, or tool_result blocks); we mark the final tool_result.
-  // The persisted history stays free of breakpoints to avoid accumulation.
+  // Rolling cache breakpoint on the conversation tail so the growing history caches
+  // incrementally; append-only means each turn's prefix matches last turn's breakpoint. chat()
+  // always has the last message a user turn, so we mark the final tool_result; persisted history stays clean.
   private messagesWithCacheBreakpoint(): Anthropic.Messages.MessageParam[] {
     const lastIdx = this.messages.length - 1;
     const last = this.messages[lastIdx];

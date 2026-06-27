@@ -15,10 +15,8 @@ export function useAttentionCount(): number {
 
   const handleEnvelope = useCallback(
     (envelope: ConsoleEvent) => {
-      // The pending list is the single source of truth. Refetch it when an
-      // interrupt is raised or resolved rather than tracking a parallel delta:
-      // a delta double-counts once the query independently refetches (focus,
-      // remount) since the refetched list already reflects the same event.
+      // The pending list is the source of truth: refetch on an interrupt event rather than
+      // keeping a parallel delta, which double-counts once the query independently refetches.
       if (
         envelope.type === "HUMAN_INPUT_REQUIRED" ||
         envelope.type === "HUMAN_INPUT_RESOLVED"

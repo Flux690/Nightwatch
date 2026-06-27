@@ -91,10 +91,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         activeSessionIds.delete(input.sessionId);
         controllers.delete(input.sessionId);
         if (alert != null) {
-          // Dispatch inbox leftovers as one new session (CONTEXT.md alert pipeline:
-          // "inbox leftovers at run end become new sessions"). Multiple leftovers
-          // batch together as additionalAlerts — identical to the batch-window
-          // path — so the at-most-one active alert session invariant holds.
+          // Dispatch inbox leftovers as one new session (leftovers at run end become new sessions).
+          // Multiple leftovers batch as additionalAlerts, so the at-most-one active alert session
+          // invariant holds.
           const leftovers = inbox.get(input.sessionId) ?? [];
           inbox.delete(input.sessionId);
           if (leftovers.length > 0) {

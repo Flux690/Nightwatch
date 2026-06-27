@@ -112,10 +112,9 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
-// The live, read-only picture of the fleet (CONTEXT.md "Fleet view"): every
-// runner whose manifest has arrived, with the server-scoped service identities
-// it advertises. Used by the agent for cross-server reasoning, by the ingest
-// handler for resolve-or-reject matching, and by the console fleet page.
+// The live read-only fleet picture (CONTEXT.md Fleet view): every runner whose manifest
+// arrived, with its advertised service identities. Used by the agent, the ingest resolver,
+// and the console fleet page.
 export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];
@@ -140,10 +139,9 @@ export function getRunnerIdentity(
   return { runnerId: conn.runnerId, hostname: conn.hostname };
 }
 
-// Returns the current manifest for a runner given the runnerId stamped on an
-// alert. The runnerId is the manifest's runnerId when the manifest has been
-// received; it falls back to the tokenId at ingest if the manifest hadn't
-// arrived yet, so we try both maps.
+// Current manifest for a runner given the runnerId stamped on an alert. That id is the
+// manifest's runnerId once received, but falls back to the tokenId at ingest, so we try
+// both maps.
 export function getRunnerManifestForAlert(
   runnerId: string,
 ): CapabilityManifest | null {
@@ -204,14 +202,9 @@ function isServiceIdentity(value: unknown): value is ServiceIdentity {
   return false;
 }
 
-// Route across the whole flat fleet. A command naming a service identity is
-// validated strictly against the fleet view: it must match exactly one
-// runner's manifest, or the command fails loud (ADR-0004 validate-and-route).
-// A command with no service identity falls back to the legacy chain (hint,
-// single-runner, hostname) for backward compat; each fallback step logs a
-// deprecation warning since it bypasses identity validation entirely.
-// Resolve a command to exactly one connected runner (ADR-0004 validate-and-route).
-// Exported for the command transport, which sends over the resolved connection.
+// Route across the flat fleet (ADR-0004 validate-and-route): a command naming a service
+// identity must match exactly one runner or fail loud; one with no identity falls back to
+// the legacy hint/single-runner/hostname chain (each logs a deprecation). Exported for the transport.
 export function resolveRunner(
   commandInput: Record<string, unknown>,
   runnerIdHint?: string,

@@ -40,11 +40,9 @@ const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
   "application/strategic-merge-patch+json",
 );
 
-// Lists the namespace's workloads (Deployments + StatefulSets) - not raw pods -
-// so the durable identity it returns (workload name + cluster) is byte-identical
-// to the capability manifest's. A pod-label-derived identity diverged from the
-// manifest, so a service the agent listed could not be resolved back for a
-// restart and the breaker counted it under a different key.
+// List workloads (Deployments+StatefulSets), not pods, so the identity matches the
+// manifest byte-for-byte; a pod-label identity diverged, so a listed service couldn't
+// be resolved back and the breaker mis-keyed it.
 export async function getContainerList(
   input: GetContainerListInput,
 ): Promise<{ containers: ContainerInfo[] }> {
@@ -264,11 +262,9 @@ export async function getEnvVariableNames(
   return { names };
 }
 
-// Rollout restart (kubectl rollout restart equivalent): patches the
-// restartedAt annotation on the pod template so the controller rolls new pods,
-// instead of deleting pods directly and bypassing rollout machinery. The exact
-// kind is resolved first so a Deployment and a StatefulSet that share a name can
-// never have the wrong one rolled.
+// Rollout restart via a restartedAt annotation so the controller rolls new pods (not
+// deleting pods directly); the exact kind is resolved first so a Deployment and a
+// StatefulSet sharing a name can't be confused.
 export async function restartService(
   input: RestartContainerInput,
 ): Promise<RestartServiceK8sResult | NoRunningInstanceResult> {
@@ -395,11 +391,9 @@ export async function getRolloutStatus(
   }
 }
 
-// Kubernetes-only node-level read (user story 7): when a pod is unhealthy the
-// cause may be the node, not the pod. Returns each node's conditions natively -
-// Ready plus MemoryPressure/DiskPressure/PIDPressure - alongside allocatable vs
-// capacity, with no normalization (ADR-0002). No service identity: pressure is
-// a node fact, not a per-workload one.
+// Node-level read: an unhealthy pod's cause may be the node. Returns each node's
+// conditions and allocatable vs capacity natively (ADR-0002); no service identity,
+// since pressure is a node fact, not a per-workload one.
 export async function getNodeStatus(): Promise<{
   nodes: Array<{
     name: string;
@@ -427,11 +421,9 @@ interface ExecResult {
   exitCode: number;
 }
 
-// One exec primitive for both read (processes) and write (exec_command) paths.
-// A non-zero exit is a normal result, not a protocol failure: the command ran
-// and returned a code, which travels in details.causes (ADR-0002). Only a real
-// protocol failure (no such container, connection error) rejects, so a `ps` that
-// exits non-zero no longer aborts the whole processes read.
+// One exec primitive for reads and exec_command: a non-zero exit is a normal result
+// carried in details.causes (ADR-0002), not a failure; only a real protocol error
+// (no such container, connection error) rejects.
 async function execInPod(
   namespace: string,
   podName: string,

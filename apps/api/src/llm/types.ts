@@ -39,10 +39,9 @@ export interface StreamDelta {
 
 export type OnDelta = (delta: StreamDelta) => void;
 
-// A single conversation turn in provider-neutral form. `content` is the human-
-// readable text for the transcript; `providerContent` is the native message
-// kept verbatim so a resumed run rebuilds a valid turn (the provider contract
-// requires thinking/tool_use/tool_result pairing that text alone can't restore).
+// One conversation turn, provider-neutral: `content` is the human-readable transcript text;
+// `providerContent` is the native message kept verbatim so a resumed run rebuilds a valid
+// turn (text alone can't restore tool/thinking pairing).
 export interface ProviderMessage {
   role: "user" | "assistant";
   content: string;

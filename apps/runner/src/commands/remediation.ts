@@ -76,10 +76,9 @@ export async function restartContainer(
   };
 }
 
-// Immediately after restart() the engine may still report "restarting" or
-// "created" for a moment; a single inspect there mislabels a healthy restart as
-// failed. Poll briefly until the container settles into a terminal-ish state
-// (running, or exited/dead if the restart genuinely failed) or a short deadline.
+// Just after restart() the engine may briefly report restarting/created; poll inspect
+// until the container settles (running, or exited/dead) or a short deadline, so a
+// healthy restart isn't mislabelled failed.
 async function waitForSettledStatus(
   container: Dockerode.Container,
 ): Promise<string> {

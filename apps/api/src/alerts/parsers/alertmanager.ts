@@ -6,16 +6,12 @@ import {
 } from "@nightwatch/shared";
 import { logger } from "../../logger.js";
 
-// An alert parsed from its source, carrying a candidate identity that has not
-// yet been matched against the fleet (ADR-0004 resolve-or-reject) - runnerId
-// and hostname are not yet known at parse time, so they are absent rather
-// than guessed.
+// A parsed alert carrying a candidate identity not yet matched against the fleet (ADR-0004);
+// runnerId/hostname aren't known at parse time, so they're absent rather than guessed.
 export type ParsedAlert = Omit<NormalizedAlert, "runnerId" | "hostname">;
 
-// Only the envelope is validated up front; each alert element is kept as unknown
-// and parsed defensively in the loop, so one malformed alert in a webhook batch
-// is skipped on its own instead of aborting the whole batch (ADR-0004: a bad
-// sibling never suppresses the routable alerts beside it).
+// Only the envelope is validated up front; each alert is parsed defensively in the loop, so
+// one malformed alert is skipped on its own instead of aborting the batch (ADR-0004).
 const alertmanagerWebhookSchema = z.object({
   alerts: z.array(z.unknown()),
 });
@@ -62,10 +58,9 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
   return parsed;
 }
 
-// Alertmanager normally supplies a stable `fingerprint`. When a BYO sender omits
-// it, derive a stable id from the alert's labels so the same alert dedups across
-// re-fires and two distinct alerts never collide on an undefined id (which would
-// drop one in dedup and overwrite the other in the unresolved feed's UNIQUE key).
+// Alertmanager usually supplies a stable `fingerprint`; when a BYO sender omits it, derive
+// a stable id from labels so re-fires dedup and two alerts never collide on an undefined id
+// (which would drop one and overwrite the other).
 function synthesizeFingerprint(labels: Record<string, string>): string {
   const canonical = Object.keys(labels)
     .sort()

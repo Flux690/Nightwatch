@@ -5,13 +5,9 @@ import {
 import type { AgentConfig } from "@nightwatch/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
-// Circuit breaker: before a write suspends for approval, refuse it outright when
-// too many writes to the same (service identity, action) have already landed in
-// the window, so a crash-loop "fix" cannot become a restart storm and the
-// operator is never asked to approve one. Returns a corrective tool_result (the
-// same self-correction pattern as a provider mismatch) when tripped, or null to
-// let the write proceed to the approval card. A write with no service identity
-// cannot be keyed and is never breaker-refused.
+// Circuit breaker: refuse a write before it suspends when too many writes to the same
+// (identity, action) already landed in the window, so a crash-loop fix can't become a
+// restart storm. Returns a corrective tool_result when tripped, null otherwise.
 export function circuitBreakerRejection(
   tool: ToolUse,
   config: AgentConfig,

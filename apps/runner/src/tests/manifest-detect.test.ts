@@ -9,10 +9,8 @@ import {
 } from "vitest";
 import type Dockerode from "dockerode";
 
-// Redirect /var/nightwatch to a writable temp path before identity.ts loads its
-// module-level constant (DB_PATH = process.env["NIGHTWATCH_DB_PATH"] ?? ...).
-// vi.hoisted runs before any import resolution so the constant picks up the env.
-// No imported values are allowed here — vi.hoisted executes before imports.
+// Redirect /var/nightwatch to a temp path before identity.ts reads its module-level
+// DB_PATH; vi.hoisted runs before imports, so no imported values may be used here.
 vi.hoisted(() => {
   process.env["NIGHTWATCH_DB_PATH"] = "/tmp/manifest-detect-test/history.db";
 });

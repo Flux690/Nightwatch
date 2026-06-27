@@ -59,11 +59,9 @@ const RULES: RedactionRule[] = [
       /(postgresql|postgres|mysql|mongodb|redis|amqp|jdbc):\/\/[^\s"'`\n]+/gi,
   },
   {
-    // A quoted value captures everything up to the closing quote (spaces and
-    // all); an unquoted value runs to the next whitespace/delimiter. The old
-    // pattern stopped at the first space and required >=4 chars, so a quoted
-    // secret with spaces leaked everything after the first token and short
-    // values slipped through entirely.
+    // Quoted values capture to the closing quote (spaces and all); unquoted run to the next
+    // delimiter. The old pattern stopped at the first space and required >=4 chars, leaking
+    // spaced secrets and missing short ones.
     name: "key-value",
     pattern:
       /"?(password|passwd|token|secret|api_key|apikey|private_key|auth|credential|access_key|auth_token|access_token|client_secret)"?\s*[=:]\s*("[^"\n]*"|'[^'\n]*'|[^\s,\[\]\n]+)/gi,
@@ -118,15 +116,9 @@ function buildAllowlist(): string[] {
     : DEFAULT_ALLOWLIST;
 }
 
-// Opens an allowlisted file for reading without a check-then-open TOCTOU gap.
-// isPathAllowed validates a *name*, but reading by that name afterwards
-// re-resolves symlinks at open time - a swap in the window between check and open
-// would read an unvalidated target. Instead: open the fd once (following
-// symlinks, so the fd is pinned to whatever inode the name resolved to), then
-// prove that exact inode is reachable via an allowlisted canonical path. Reads go
-// through the returned handle, never the name again, so the inode we validated is
-// the inode we read. O_NONBLOCK stops a FIFO or device planted in an allowed
-// directory from hanging the open.
+// Open-then-validate, closing the check/open TOCTOU: open the fd once (pinned to the
+// resolved inode), then prove that inode is reachable via an allowlisted canonical path.
+// Reads come from the handle, never the name; O_NONBLOCK stops a planted FIFO hanging open.
 export async function openAllowedFile(
   requestedPath: string,
 ): Promise<fs.promises.FileHandle> {
@@ -173,10 +165,8 @@ function shannonEntropy(s: string): number {
   return e;
 }
 
-// Caps output to maxBytes using a head+tail strategy so both the beginning and
-// the end of the output are preserved (the most diagnostically useful parts).
-// The cut points are nudged to UTF-8 character boundaries so a multibyte
-// character straddling the boundary is not split into a U+FFFD replacement char.
+// Cap to maxBytes head+tail so both ends survive (the useful parts); cut on UTF-8
+// character boundaries so a multibyte char isn't split into U+FFFD.
 export function capOutput(text: string, maxBytes = MAX_OUTPUT_BYTES): string {
   const buf = Buffer.from(text, "utf8");
   if (buf.length <= maxBytes) return text;

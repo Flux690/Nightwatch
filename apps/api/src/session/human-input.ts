@@ -101,11 +101,9 @@ export async function respondToPendingHumanInput(
   const { decision, text } = request;
 
   if (pending.kind === "continue") {
-    // No async work between resolve and dispatch, so ensureDeleted alone is
-    // the concurrency gate — SQLite's atomic DELETE returns 0 rows if a
-    // concurrent request won the race, which ensureDeleted converts to 409.
-    // claimOrThrow is intentionally omitted: its only purpose is to mark the
-    // row "in progress" during async tool execution; there is no such work here.
+    // No async work between resolve and dispatch, so ensureDeleted alone is the concurrency
+    // gate - SQLite's atomic DELETE returns 0 rows to the loser, which becomes a 409.
+    // claimOrThrow is skipped: it only marks in-progress during async tool execution, of which there is none here.
     ensureDeleted(sessionId);
     const resolvedAt = new Date().toISOString();
     if (decision === "reject") {
@@ -179,10 +177,9 @@ export async function respondToPendingHumanInput(
 
   // kind === "approval"
   if (decision === "approve") {
-    // Once claimed, this interrupt can never be re-approved or rejected, so the
-    // approve path MUST always reach unpause() below (which deletes the row).
-    // executeApprovedTool never throws - it converts every fault into an is_error
-    // result - so the run always resumes rather than wedging the card.
+    // Once claimed, the interrupt can never be re-approved, so the approve path must reach
+    // unpause() (which deletes the row); executeApprovedTool never throws - it turns every
+    // fault into an is_error result - so the run always resumes.
     claimOrThrow(sessionId);
     const gatedResult = await executeApprovedTool(pending, resolvedBy);
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");

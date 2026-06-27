@@ -71,11 +71,9 @@ export async function registerWsRoutes(
           setRunnerManifest(tokenId, msg.payload);
           setRunnerId(tokenId, msg.payload.runnerId);
           fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
-          // Reconcile remediation mode: re-read from DB each time since the
-          // operator may have toggled since connect. Bootstrap from the
-          // manifest on first arrival (null DB), then keep DB authoritative.
-          // Always sync the in-memory cache so currentRemediationEnabled()
-          // reads fresh state without DB round-trips.
+          // Reconcile remediation mode: re-read from DB each time (the operator may have toggled),
+          // bootstrap from the manifest on first arrival (null DB), then keep DB authoritative. Always
+          // sync the in-memory cache so reads need no DB round-trip.
           const currentRow = findRunnerById(tokenId);
           const dbMode = currentRow?.remediationMode ?? null;
           const manifestMode = msg.payload.capabilities.remediationEnabled;

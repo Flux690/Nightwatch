@@ -180,12 +180,9 @@ describe("deriveServiceIdentity", () => {
     });
 
     it("passes a pod-only label through verbatim as the workload (no suffix-guessing)", () => {
-      // Neither a deployment nor a statefulset label is present. We do not strip
-      // pod suffixes (a Deployment and a StatefulSet pod are indistinguishable by
-      // shape, so stripping can mangle a multi-word name into a different real
-      // workload). The verbatim pod name will not match any advertised workload
-      // key and is rejected loudly into the unresolved feed - the intended signal
-      // that the alert is under-labelled.
+      // Neither a deployment nor statefulset label is present. We don't strip pod suffixes
+      // (Deployment and StatefulSet pods look alike, so stripping can hit a different workload);
+      // the verbatim pod name matches nothing and is rejected into the unresolved feed.
       const identity = deriveServiceIdentity({
         alertname: "CrashLoopBackOff",
         namespace: "production",
@@ -200,10 +197,9 @@ describe("deriveServiceIdentity", () => {
   });
 });
 
-// The two sides of the fleet match (ADR-0004): the runner stamps the
-// assigned name onto its manifest entries; the alert carries the same name
-// in the `instance` label. Both paths must produce the same key so the
-// resolve-or-reject lookup succeeds deterministically.
+// Both sides of the fleet match (ADR-0004): the runner stamps the assigned name onto its
+// manifest, the alert carries it in the `instance` label, so resolve-or-reject produces
+// the same key deterministically.
 describe("assigned-name round-trip: manifest key === alert-derived key", () => {
   it("Docker: manifest entry with server matches alert with instance label", () => {
     const assignedName = "prod-server-01";

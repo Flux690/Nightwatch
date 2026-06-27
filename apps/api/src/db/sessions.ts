@@ -34,10 +34,8 @@ export function createSession(
     });
 }
 
-// Append one turn's worth of messages atomically. The UNIQUE(session_id, seq)
-// constraint makes a duplicate seq impossible; wrapping the batch in a
-// transaction makes the whole turn all-or-nothing so a partial turn can never be
-// persisted (the transcript is the checkpoint - it must never hold a hole).
+// Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
+// the transaction makes the turn all-or-nothing so the transcript checkpoint never holds a hole.
 export function appendSessionMessages(messages: SessionMessage[]): void {
   if (messages.length === 0) return;
   const insert = getDb().prepare(
@@ -104,10 +102,9 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Deletes the session and, via ON DELETE CASCADE (foreign_keys is ON), its
-// transcript and any pending approval. The remediation audit log is intentionally
-// NOT a child of sessions, so it survives - the record of what was changed outlives
-// the conversation that changed it.
+// Deletes the session and, via ON DELETE CASCADE, its transcript and pending approval. The
+// remediation audit log is NOT a child of sessions, so it survives - the record of what
+// changed outlives the conversation.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }

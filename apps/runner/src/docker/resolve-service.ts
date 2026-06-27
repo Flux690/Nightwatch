@@ -31,10 +31,9 @@ function requireDockerIdentity(
   return service;
 }
 
-// Resolves a durable service identity to the live container at the moment of
-// the call (docs/adr/0001). Falls back to the most recently created
-// stopped/terminated instance when nothing is live; callers that require a
-// live target reject a `live: false` result themselves.
+// Resolve a durable identity to the live container now (ADR-0001), falling back to the
+// most recently terminated instance when none is live; callers needing a live target
+// reject a `live:false` result themselves.
 export async function resolveService(
   docker: Dockerode,
   identity: ServiceIdentity,

@@ -13,10 +13,9 @@ import type {
   SessionMessage,
 } from "@nightwatch/shared";
 
-// Every envelope goes to the one console bus; the console WS forwards all of
-// them and the client routes by type and sessionId. Publishing is synchronous
-// and in-process now, so there is nothing to fail - but the serialized form
-// stays the wire-identical envelope the console already parses.
+// Every envelope goes to the one console bus; the console WS forwards all and the client
+// routes by type/sessionId. Publishing is synchronous in-process now, but the serialized
+// form stays the wire-identical envelope the console parses.
 function publishRaw(env: unknown): void {
   publishConsoleEvent(JSON.stringify(env));
 }

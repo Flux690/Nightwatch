@@ -9,10 +9,8 @@ type Subscribe = (fn: Subscriber) => () => void;
 
 const ConsoleWsContext = createContext<Subscribe | null>(null);
 
-// The wire frame is untyped JSON. We own both ends, so a frame is trusted once it
-// is an object carrying a string `type` discriminant - enough for callers to
-// switch on. Anything else (garbage, a truncated frame, a non-object) is dropped
-// here rather than cast straight to ConsoleEvent and handed downstream.
+// Untrusted wire JSON: we own both ends, so trust a frame once it is an object with a
+// string `type` to switch on; anything else (garbage, truncated) is dropped here.
 function isConsoleEvent(value: unknown): value is ConsoleEvent {
   return (
     typeof value === "object" &&
@@ -21,10 +19,8 @@ function isConsoleEvent(value: unknown): value is ConsoleEvent {
   );
 }
 
-// One shared console WebSocket for the whole authenticated app. Every consumer
-// subscribes through context instead of opening its own socket, so the attention
-// badge and the open session view share a single connection (one auth, one
-// stream) rather than racing two duplicate ones.
+// One shared socket for the whole app: every consumer subscribes through context instead
+// of opening its own, so the badge and session view don't race two duplicate connections.
 export function ConsoleWsProvider({
   children,
 }: {

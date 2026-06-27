@@ -89,10 +89,8 @@ export function convertPersistedMessages(
             });
           } else if (block.type === "tool_use") {
             if (block.name === "request_clarification") {
-              // The clarification card itself (not a generic tool_card) is the
-              // single rendering of this tool_use - while pending, the
-              // live/seeded card already covers it (see SessionView.tsx); once
-              // answered, rebuild it here so it survives a reload.
+              // Rebuild the clarification card here once answered so it survives a reload; while
+              // pending the live/seeded card already covers it (see SessionView).
               if (!toolResults.has(block.id)) continue;
               const input = block.input as {
                 question?: string;

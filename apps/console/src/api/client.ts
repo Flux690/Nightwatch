@@ -1,7 +1,5 @@
-// The console's single fetch boundary. Every call goes through here so status
-// handling lives in one place instead of a re-checked `res.ok` at each site, and
-// a failed request becomes a thrown ApiError that react-query surfaces - never a
-// silently swallowed `if (!res.ok) return`.
+// The console's single fetch boundary: one place for status handling, so a failure
+// throws an ApiError react-query surfaces instead of a swallowed `if (!res.ok) return`.
 
 export class ApiError extends Error {
   constructor(

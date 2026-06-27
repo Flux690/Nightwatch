@@ -55,10 +55,9 @@ function useImmediateProvider(): void {
   );
 }
 
-// One firing Alertmanager alert with a caller-chosen fingerprint (-> sourceAlertId)
-// and severity, so dedup and rate-limit can be driven precisely. `container`
-// defaults to "web-01" but each test picks its own so they resolve to distinct
-// runnerIds and never share the rate-limiter's per-runner counter.
+// One firing alert with a caller-chosen fingerprint (sourceAlertId) and severity, so dedup
+// and rate-limit drive precisely. container defaults to web-01 but each test picks its own
+// so they resolve to distinct runnerIds.
 function alertBody(
   fingerprint: string,
   severity = "warning",
@@ -90,12 +89,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
 
-  // Rate-limit and dedup are keyed by runnerId, so the two tests below need
-  // their alerts resolving to *different* runners - otherwise they'd share
-  // the rate-limiter's per-runner counter (ADR-0004 resolve-or-reject routes
-  // by label match: two different container labels on two different runners
-  // give two different runnerIds, the same isolation two different tokens
-  // used to give for free under the old token-implies-runner model).
+  // Rate-limit and dedup are keyed by runnerId, so these two tests need alerts resolving to
+  // different runners - else they share the per-runner counter. Two container labels on two
+  // runners give two runnerIds (ADR-0004), the isolation two tokens used to give for free.
   beforeAll(async () => {
     cleanupDb = useTempDb();
     registerRunner(
@@ -216,10 +212,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       skipped: 0,
     });
 
-    // After the hourly window the counter resets and non-critical flows again.
-    // Jumping the fake clock forward also pushes the runner's heartbeat past
-    // its TTL, so refresh it - a real runner would have kept heartbeating
-    // throughout the skipped hour.
+    // After the hourly window the counter resets and non-critical flows again. Jumping the fake
+    // clock also pushes the runner's heartbeat past its TTL, so refresh it - a real runner would
+    // have kept heartbeating.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
     recordHeartbeat("dispatch-runner-b-token");
     expect(

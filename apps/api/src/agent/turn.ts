@@ -21,11 +21,9 @@ export interface TurnOutcome {
   gated: GatedTool | null;
 }
 
-// Process one assistant turn's tool calls in two passes (D9, D10): execute every
-// non-gated read immediately and accumulate its result, and pick out the first
-// gated (write/ask) tool for the loop to suspend on. Reads resolve against the
-// effective tool set, so a tool stripped by remediation mode or fleet providers
-// is reported unavailable rather than executed.
+// Process a turn's tool calls in two passes (D9/D10): run every non-gated read now and
+// accumulate, and pick the first gated (write/ask) tool for the loop to suspend on. Reads
+// resolve against the effective set, so a stripped tool is reported unavailable.
 export async function processToolUses(params: {
   toolUses: ToolUse[];
   toolset: Tool[];
@@ -41,10 +39,9 @@ export async function processToolUses(params: {
   let gatedEntry: Tool | null = null;
 
   for (const tool of toolUses) {
-    // Resolve against the effective tool set, not the full registry: a tool
-    // stripped by remediation mode or fleet providers is genuinely unavailable,
-    // so a model that names it is told "unavailable" and never reaches the
-    // approval gate. This is what makes the master write switch unbypassable.
+    // Resolve against the effective set, not the full registry: a tool stripped by remediation
+    // mode or fleet providers is genuinely unavailable, so a model naming it never reaches the
+    // gate. This is what makes the master write switch unbypassable.
     const entry = toolset.find((t) => t.schema.name === tool.name);
 
     if (!entry) {

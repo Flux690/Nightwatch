@@ -12,10 +12,9 @@ import type {
 } from "@nightwatch/shared";
 
 const { mockCreateProvider } = vi.hoisted(() => {
-  // Each createProvider() call returns a fresh, stateful provider instance so
-  // that snapshot() reflects the messages accumulated via seed/start/chat/append.
-  // The fixed-array mock would return seed.length items on resume, causing
-  // persist() to skip all new messages (persistedCount == snap.length).
+  // Each createProvider() returns a fresh stateful instance so snapshot() reflects messages
+  // from seed/start/chat/append; a fixed-array mock would return seed.length on resume and
+  // persist() would skip all new messages.
   const makeProvider = () => {
     type ProvMsg = {
       role: "user" | "assistant";
@@ -82,10 +81,9 @@ import {
 } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
-// Wait for the console handler's `connected` ack, sent only after it subscribes
-// to the event bus. Dispatch is now in-process and synchronous, so a run can
-// publish before a subscriber that only waited for the socket `open` handshake;
-// pre-subscribe events are correctly dropped (the transcript is durable).
+// Wait for the `connected` ack, sent only after the handler subscribes: dispatch is
+// synchronous, so a run can publish before a subscriber that only waited for socket `open`;
+// pre-subscribe events are correctly dropped (transcript is durable).
 function waitForConnected(ws: WebSocket): Promise<void> {
   return new Promise<void>((resolve) => {
     const onMessage = (raw: WebSocket.RawData): void => {
@@ -172,10 +170,9 @@ describe("console WS pipeline", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
 
-    // The POST dispatched the run in-process; the mocked investigation publishes
-    // session_delta then session_message over the event bus to the console WS.
-    // The run resolves in microtasks - possibly before this captured sessionId -
-    // so buffer every event and poll for the match rather than racing arrival.
+    // The POST dispatches in-process; the mocked run publishes session_delta then session_message
+    // over the bus. It resolves in microtasks (maybe before this sessionId), so buffer every event
+    // and poll for the match rather than racing.
     await waitFor(() =>
       events.some(
         (e) =>

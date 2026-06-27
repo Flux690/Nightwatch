@@ -45,11 +45,9 @@ export interface ResolvedWorkloadKind {
   replicas: number;
 }
 
-// Resolves whether a workload is a Deployment or a StatefulSet (or neither) in
-// one set of reads, returning the kind and desired replicas, so the caller
-// patches the exact resource instead of blindly trying Deployment first and
-// falling back on a 404 - which rolls the wrong resource when both kinds share
-// a name.
+// Resolve Deployment vs StatefulSet (or neither) in one set of reads, returning
+// kind+replicas, so the caller patches the exact resource instead of trying Deployment
+// first and rolling the wrong one on a name clash.
 export async function resolveWorkloadKind(
   appsApi: k8s.AppsV1Api,
   namespace: string,
@@ -76,14 +74,9 @@ export async function resolveWorkloadKind(
   return null;
 }
 
-// Translates a durable workload identity to the live pod and target container at
-// execution time (ADR-0001). Deterministic and fail-fast: a read may fall back
-// to the most recent terminated pod (post-crash log reads), but a write/exec
-// (requireLive) requires a Running pod rather than execing into a corpse. The
-// container is chosen explicitly - a single-container pod is unambiguous; a
-// multi-container pod requires the caller's `container` to name one, otherwise
-// it returns a not-running result listing the choices rather than silently
-// targeting the first (which is often a sidecar).
+// Resolve a durable workload identity to the live pod and container at exec time
+// (ADR-0001), fail-fast: writes/exec require a Running pod; a multi-container pod needs
+// the caller's `container`, else a not-running result lists the choices, never guessing.
 export async function resolveWorkload(
   coreApi: k8s.CoreV1Api,
   appsApi: k8s.AppsV1Api,

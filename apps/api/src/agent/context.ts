@@ -22,10 +22,9 @@ How you operate:
 
 Budget: 5 minutes of investigation time (human approval wait excluded). When the budget runs out the investigation pauses - the operator can resume it with a fresh budget or end it.`;
 
-// Appended when the runner has remediation off (the default for a fresh
-// runner). Write tools are filtered out of the offered schema entirely
-// (getToolSchemas in agent/tools.ts) - this just tells the model why, so it
-// recommends instead of attempting a call that was never on the menu.
+// Appended when the runner has remediation off: write tools are already filtered out of
+// the offered schema (agent/tools.ts); this just tells the model why, so it recommends
+// instead of attempting a call that was never on the menu.
 const READ_ONLY_ADDENDUM = `
 
 You are in READ-ONLY mode: write tools (restart_service, exec_command) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. To enable remediation, set REMEDIATION_ENABLED=true on the runner and reconnect it.`;

@@ -1,7 +1,6 @@
-// A session is the agent's conversation thread (the durable parent); an incident
-// is an optional resulting artifact that references it. Sessions live in the
-// API's SQLite (state inversion); the API mints the id at trigger time and
-// appends per turn in a local transaction.
+// A session is the agent's conversation thread (the durable parent); an incident is an
+// optional artifact referencing it. Sessions live in the API's SQLite, id minted at
+// trigger time, appended per turn.
 
 export type SessionRole = "user" | "assistant";
 
@@ -17,10 +16,9 @@ export interface SessionMessage {
   role: SessionRole;
   // Human-readable rendering for the console transcript.
   content: string;
-  // Provider-native message structure (content blocks) kept verbatim so a
-  // resumed run can rebuild a valid turn - text alone can't reconstruct the
-  // thinking/tool_use/tool_result pairing the provider contract requires. Only
-  // the matching provider deserializes it, so it is opaque at this layer.
+  // Provider-native message kept verbatim so a resumed run rebuilds a valid turn - text
+  // alone can't restore the thinking/tool_use/tool_result pairing. Opaque here; only the
+  // matching provider deserializes it.
   providerContent?: unknown;
   createdAt: string;
 }
