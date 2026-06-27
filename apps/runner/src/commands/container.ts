@@ -208,7 +208,10 @@ export async function getContainerEvents(
   const stream = await docker.getEvents({
     since,
     until: now,
-    filters: JSON.stringify({ name: [resolved.name] }),
+    // Filter by the resolved container ID, not its name: the name filter matches
+    // partially, so a sibling like "payments-api" would leak into a query for
+    // "api". The full ID is exact and unique.
+    filters: JSON.stringify({ container: [resolved.id] }),
   });
 
   const chunks: Buffer[] = [];

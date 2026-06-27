@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type Dockerode from "dockerode";
 import type {
   ExecCommandInput,
   ExecCommandResult,
@@ -65,8 +66,7 @@ export async function restartContainer(
 
   await container.restart();
 
-  const after = await container.inspect();
-  const newStatus = after.State.Status ?? "unknown";
+  const newStatus = await waitForSettledStatus(container);
 
   return {
     success: newStatus === "running",
@@ -74,6 +74,29 @@ export async function restartContainer(
     previousExitCode,
     newStatus,
   };
+}
+
+// Immediately after restart() the engine may still report "restarting" or
+// "created" for a moment; a single inspect there mislabels a healthy restart as
+// failed. Poll briefly until the container settles into a terminal-ish state
+// (running, or exited/dead if the restart genuinely failed) or a short deadline.
+async function waitForSettledStatus(
+  container: Dockerode.Container,
+): Promise<string> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const info = await container.inspect();
+    const status = info.State.Status ?? "unknown";
+    if (
+      status === "running" ||
+      status === "exited" ||
+      status === "dead" ||
+      Date.now() >= deadline
+    ) {
+      return status;
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
 }
 
 export async function execCommand(

@@ -33,18 +33,6 @@ import {
   execCommand,
   updateAlertRules,
 } from "./remediation.js";
-import type {
-  GetContainerListInput,
-  GetContainerLogsInput,
-  GetContainerInspectInput,
-  GetContainerStatsInput,
-  GetContainerEventsInput,
-  GetContainerProcessesInput,
-  GetEnvVariableNamesInput,
-  ExecCommandInput,
-  GetK8sRolloutStatusInput,
-  RestartContainerInput,
-} from "@nightwatch/shared";
 
 type Handler = (input: unknown) => Promise<unknown>;
 
@@ -56,90 +44,105 @@ function serviceProvider(input: unknown): string | undefined {
   return typeof provider === "string" ? provider : undefined;
 }
 
+// A provider-agnostic command dispatches to the docker or kubernetes handler by
+// the service identity's provider. One helper replaces the per-command ternary
+// and localizes the unknown->typed cast at the single dispatch boundary.
+function byProvider<T>(handlers: {
+  docker: (input: T) => Promise<unknown>;
+  kubernetes: (input: T) => Promise<unknown>;
+}): Handler {
+  return (input) =>
+    (serviceProvider(input) === "kubernetes"
+      ? handlers.kubernetes
+      : handlers.docker)(input as T);
+}
+
+// list_services carries no service identity (it is the discovery call), so it
+// dispatches on its `environment` input instead of a service provider.
+function byEnvironment<T extends { environment?: string }>(handlers: {
+  docker: (input: T) => Promise<unknown>;
+  kubernetes: (input: T) => Promise<unknown>;
+}): Handler {
+  return (input) => {
+    const i = input as T;
+    return (
+      i.environment === "kubernetes" ? handlers.kubernetes : handlers.docker
+    )(i);
+  };
+}
+
+// A single-provider or provider-less command: cast once and call.
+function direct<T>(fn: (input: T) => Promise<unknown>): Handler {
+  return (input) => fn(input as T);
+}
+
 export function createDispatchRegistry(): Map<string, Handler> {
   return new Map<string, Handler>([
     [
       "list_services",
-      (i) => {
-        const input = i as GetContainerListInput;
-        return input.environment === "kubernetes"
-          ? k8sGetContainerList(input)
-          : dockerGetContainerList(input);
-      },
+      byEnvironment({
+        docker: dockerGetContainerList,
+        kubernetes: k8sGetContainerList,
+      }),
     ],
     [
       "get_service_logs",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetContainerLogs(i as GetContainerLogsInput)
-          : dockerGetContainerLogs(i as GetContainerLogsInput),
+      byProvider({
+        docker: dockerGetContainerLogs,
+        kubernetes: k8sGetContainerLogs,
+      }),
     ],
     [
       "get_service_config",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetContainerInspect(i as GetContainerInspectInput)
-          : dockerGetContainerInspect(i as GetContainerInspectInput),
+      byProvider({
+        docker: dockerGetContainerInspect,
+        kubernetes: k8sGetContainerInspect,
+      }),
     ],
     [
       "get_service_stats",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetContainerStats(i as GetContainerStatsInput)
-          : dockerGetContainerStats(i as GetContainerStatsInput),
+      byProvider({
+        docker: dockerGetContainerStats,
+        kubernetes: k8sGetContainerStats,
+      }),
     ],
     [
       "get_service_events",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetContainerEvents(i as GetContainerEventsInput)
-          : dockerGetContainerEvents(i as GetContainerEventsInput),
+      byProvider({
+        docker: dockerGetContainerEvents,
+        kubernetes: k8sGetContainerEvents,
+      }),
     ],
     [
       "get_service_processes",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetContainerProcesses(i as GetContainerProcessesInput)
-          : dockerGetContainerProcesses(i as GetContainerProcessesInput),
+      byProvider({
+        docker: dockerGetContainerProcesses,
+        kubernetes: k8sGetContainerProcesses,
+      }),
     ],
     [
       "get_service_env_names",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sGetEnvVariableNames(i as GetEnvVariableNamesInput)
-          : dockerGetEnvVariableNames(i as GetEnvVariableNamesInput),
+      byProvider({
+        docker: dockerGetEnvVariableNames,
+        kubernetes: k8sGetEnvVariableNames,
+      }),
     ],
     ["get_host_memory", () => getHostMemory()],
     ["get_host_cpu", () => getHostCpu()],
     ["get_host_disk", () => getHostDisk()],
     ["get_host_network", () => getHostNetwork()],
-    [
-      "get_host_dmesg",
-      (i) => getHostDmesg(i as Parameters<typeof getHostDmesg>[0]),
-    ],
-    [
-      "read_file",
-      (i) => readFileCommand(i as Parameters<typeof readFileCommand>[0]),
-    ],
+    ["get_host_dmesg", direct(getHostDmesg)],
+    ["read_file", direct(readFileCommand)],
     [
       "restart_service",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sRestartService(i as RestartContainerInput)
-          : restartContainer(i as RestartContainerInput),
+      byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
     ],
     [
       "exec_command",
-      (i) =>
-        serviceProvider(i) === "kubernetes"
-          ? k8sExecCommand(i as ExecCommandInput)
-          : execCommand(i as ExecCommandInput),
+      byProvider({ docker: execCommand, kubernetes: k8sExecCommand }),
     ],
-    [
-      "get_k8s_rollout_status",
-      (i) => k8sGetRolloutStatus(i as GetK8sRolloutStatusInput),
-    ],
+    ["get_k8s_rollout_status", direct(k8sGetRolloutStatus)],
     ["get_k8s_node_status", () => k8sGetNodeStatus()],
-    ["update_alert_rules", (i) => updateAlertRules(i as { rulesYaml: string })],
+    ["update_alert_rules", direct(updateAlertRules)],
   ]);
 }
