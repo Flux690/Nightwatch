@@ -672,7 +672,14 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-gated",
             toolName: "restart_service",
-            input: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
+            input: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+              risk: "high",
+            },
             incidentId: "inc-1",
           },
         });
@@ -832,7 +839,14 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-durable",
             toolName: "restart_service",
-            toolInput: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
+            toolInput: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+              risk: "high",
+            },
             kind: "approval",
             status: "pending",
             createdAt: "2024-01-01T00:05:00Z",
@@ -888,7 +902,14 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-durable",
             toolName: "restart_service",
-            toolInput: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
+            toolInput: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+              risk: "high",
+            },
             kind: "approval",
             status: "pending",
             createdAt: "2024-01-01T00:05:00Z",
@@ -1004,6 +1025,42 @@ describe("SessionView", () => {
               createdAt: new Date().toISOString(),
             },
           },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).not.toBeDisabled();
+        expect(
+          screen.getByRole("button", { name: /send/i }),
+        ).not.toBeDisabled();
+      });
+    });
+
+    it("re-enables the composer when RUN_FAILED arrives (run not left spinning)", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeDisabled();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "m-fail",
+          type: "RUN_FAILED",
+          payload: { sessionId: "s1", message: "runner disconnected" },
         });
       });
 
@@ -1222,7 +1279,14 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-ap",
             toolName: "restart_service",
-            input: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
+            input: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+              risk: "high",
+            },
             incidentId: "inc-ap",
             kind: "approval",
           },

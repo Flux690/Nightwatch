@@ -60,17 +60,25 @@ function setup(pendingCount = 0) {
 
   vi.stubGlobal("WebSocket", MockWs);
 
-  const pendingApprovals = Array.from({ length: pendingCount }, (_, i) => ({
-    id: `appr-${i}`,
-    incidentId: `inc-${i}`,
-    sessionId: `s-${i}`,
-    token: "tok-1",
-    toolName: "restart_service",
-    toolInput: {},
-    toolUseId: `tool-${i}`,
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  }));
+  const makePending = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `appr-${i}`,
+      incidentId: `inc-${i}`,
+      sessionId: `s-${i}`,
+      token: "tok-1",
+      toolName: "restart_service",
+      toolInput: {},
+      toolUseId: `tool-${i}`,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    }));
+
+  // Mutable so a test can change the server-side count before broadcasting a WS
+  // event; the count derives from this list (refetched on the event), not a delta.
+  let pendingApprovals = makePending(pendingCount);
+  const setPendingCount = (n: number): void => {
+    pendingApprovals = makePending(n);
+  };
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     if (url.includes("/auth/status")) {
@@ -163,7 +171,7 @@ function setup(pendingCount = 0) {
     </MantineProvider>,
   );
 
-  return { router, qc, fetchMock };
+  return { router, qc, fetchMock, setPendingCount };
 }
 
 afterEach(() => {
@@ -551,14 +559,17 @@ describe("Shell", () => {
       });
     });
 
-    it("increments count when INTERRUPT arrives", async () => {
-      setup(1);
+    it("refetches and grows the count when INTERRUPT arrives", async () => {
+      const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
           screen.getByRole("status", { name: /awaiting approval/i }),
         ).toHaveTextContent("1");
       });
 
+      // The interrupt is now durable server-side; the event triggers a refetch
+      // of the authoritative pending list rather than a local +1.
+      setPendingCount(2);
       act(() => {
         broadcast({
           messageId: "m-int",
@@ -580,14 +591,15 @@ describe("Shell", () => {
       });
     });
 
-    it("decrements count when INTERRUPT_RESOLVED arrives", async () => {
-      setup(1);
+    it("refetches and clears the count when INTERRUPT_RESOLVED arrives", async () => {
+      const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
           screen.getByRole("status", { name: /awaiting approval/i }),
         ).toHaveTextContent("1");
       });
 
+      setPendingCount(0);
       act(() => {
         broadcast({
           messageId: "m-res",
@@ -604,6 +616,49 @@ describe("Shell", () => {
         expect(
           screen.queryByRole("status", { name: /awaiting approval/i }),
         ).not.toBeInTheDocument();
+      });
+    });
+
+    it("does not double-count after an independent refetch (no stale delta)", async () => {
+      const { qc, setPendingCount } = setup(1);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("1");
+      });
+
+      // Server count grows to 2; the event refreshes the list to 2.
+      setPendingCount(2);
+      act(() => {
+        broadcast({
+          messageId: "m-int",
+          type: "HUMAN_INPUT_REQUIRED",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tool-99",
+            toolName: "restart_service",
+            input: {},
+            incidentId: "inc-99",
+          },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
+      });
+
+      // An unrelated refetch must not re-apply the event on top of the already
+      // up-to-date list; the count stays 2, not 3.
+      await act(async () => {
+        await qc.invalidateQueries({
+          queryKey: ["sessions-pending-human-input"],
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
       });
     });
 

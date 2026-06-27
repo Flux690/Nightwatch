@@ -248,6 +248,21 @@ export function SessionView({
         return;
       }
 
+      if (env.type === "RUN_FAILED") {
+        const { sessionId, message } = env.payload;
+        if (sessionId !== sid) return;
+        // A crashed investigation never persisted its turn; drop the live buffer
+        // and tell the operator instead of leaving the run spinning forever.
+        setIsRunning(false);
+        setLiveItems([]);
+        notifications.show({
+          color: "red",
+          title: "Investigation failed",
+          message,
+        });
+        return;
+      }
+
       if (env.type === "TEXT_MESSAGE_CONTENT") {
         if (env.payload.sessionId === sid) setIsRunning(true);
       }
