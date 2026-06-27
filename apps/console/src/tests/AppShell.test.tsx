@@ -12,6 +12,7 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { AuthProvider } from "../auth/AuthContext.js";
+import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
 import { Shell } from "../pages/Shell.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
@@ -165,7 +166,9 @@ function setup(pendingCount = 0) {
     >
       <QueryClientProvider client={qc}>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <ConsoleWsProvider>
+            <RouterProvider router={router} />
+          </ConsoleWsProvider>
         </AuthProvider>
       </QueryClientProvider>
     </MantineProvider>,

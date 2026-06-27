@@ -9,7 +9,7 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
-import { useConsoleWs } from "../hooks/useConsoleWs.js";
+import { useConsoleWs } from "../hooks/ConsoleWsProvider.js";
 import { ChatInput } from "./ChatInput.js";
 import type { PendingInterrupt } from "./ChatInput.js";
 import { applyLiveEvent } from "../transcript/liveConverter.js";

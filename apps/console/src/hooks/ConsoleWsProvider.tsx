@@ -1,7 +1,13 @@
-import { useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
 const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+
+type Subscriber = (envelope: ConsoleEvent) => void;
+type Subscribe = (fn: Subscriber) => () => void;
+
+const ConsoleWsContext = createContext<Subscribe | null>(null);
 
 // The wire frame is untyped JSON. We own both ends, so a frame is trusted once it
 // is an object carrying a string `type` discriminant - enough for callers to
@@ -15,11 +21,16 @@ function isConsoleEvent(value: unknown): value is ConsoleEvent {
   );
 }
 
-export function useConsoleWs(
-  onMessage: (envelope: ConsoleEvent) => void,
-): void {
-  const handlerRef = useRef(onMessage);
-  handlerRef.current = onMessage;
+// One shared console WebSocket for the whole authenticated app. Every consumer
+// subscribes through context instead of opening its own socket, so the attention
+// badge and the open session view share a single connection (one auth, one
+// stream) rather than racing two duplicate ones.
+export function ConsoleWsProvider({
+  children,
+}: {
+  children: ReactNode;
+}): React.JSX.Element {
+  const subscribers = useRef(new Set<Subscriber>());
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -43,7 +54,9 @@ export function useConsoleWs(
           // Includes a one-off "connected" ack that isn't a ConsoleEvent case;
           // it passes the guard (it has a string type) and callers no-op on it.
           const frame: unknown = JSON.parse(event.data as string);
-          if (isConsoleEvent(frame)) handlerRef.current(frame);
+          if (isConsoleEvent(frame)) {
+            for (const fn of subscribers.current) fn(frame);
+          }
         } catch {
           // Ignore malformed (non-JSON) frames.
         }
@@ -53,8 +66,8 @@ export function useConsoleWs(
 
       ws.onclose = () => {
         if (disposed) return;
-        // Without this, live updates stop after any network blip. Reconnect
-        // with capped backoff so a transient drop self-heals.
+        // Without this, live updates stop after any network blip. Reconnect with
+        // capped backoff so a transient drop self-heals.
         const delay =
           RECONNECT_BACKOFF_MS[
             Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)
@@ -76,4 +89,31 @@ export function useConsoleWs(
       }
     };
   }, []);
+
+  const subscribe = useRef<Subscribe>((fn) => {
+    subscribers.current.add(fn);
+    return () => {
+      subscribers.current.delete(fn);
+    };
+  }).current;
+
+  return (
+    <ConsoleWsContext.Provider value={subscribe}>
+      {children}
+    </ConsoleWsContext.Provider>
+  );
+}
+
+// Subscribe to the shared console event stream for the component's lifetime. A
+// no-op when no provider is mounted (e.g. before authentication), so callers need
+// no guard of their own.
+export function useConsoleWs(onMessage: Subscriber): void {
+  const subscribe = useContext(ConsoleWsContext);
+  const handlerRef = useRef(onMessage);
+  handlerRef.current = onMessage;
+
+  useEffect(() => {
+    if (!subscribe) return;
+    return subscribe((envelope) => handlerRef.current(envelope));
+  }, [subscribe]);
 }

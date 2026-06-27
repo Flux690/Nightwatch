@@ -11,6 +11,7 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
+import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
 import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
@@ -99,7 +100,9 @@ function setup(
       defaultColorScheme="light"
     >
       <QueryClientProvider client={qc}>
-        <RouterProvider router={router} />
+        <ConsoleWsProvider>
+          <RouterProvider router={router} />
+        </ConsoleWsProvider>
       </QueryClientProvider>
     </MantineProvider>,
   );

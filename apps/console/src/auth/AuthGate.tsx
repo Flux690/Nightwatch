@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Center, Loader } from "@mantine/core";
 
 import { useAuth } from "./AuthContext.js";
+import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
 import { Shell } from "../pages/Shell.js";
 
 export function AuthGate(): React.JSX.Element | null {
@@ -25,5 +26,11 @@ export function AuthGate(): React.JSX.Element | null {
     );
   }
   if (phase.kind !== "authenticated") return null;
-  return <Shell />;
+  // The shared console socket lives here so it opens only once authenticated and
+  // is the single connection every view inside the shell subscribes to.
+  return (
+    <ConsoleWsProvider>
+      <Shell />
+    </ConsoleWsProvider>
+  );
 }
