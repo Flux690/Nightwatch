@@ -69,6 +69,11 @@ const SERVICE_IDENTITY_SCHEMA = {
           description:
             "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
         },
+        container: {
+          type: "string",
+          description:
+            "Optional: the specific container to target in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; a tool call against such a pod without it returns the list of choices.",
+        },
       },
       required: ["provider", "namespace", "workload"],
     },

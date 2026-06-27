@@ -10,6 +10,11 @@ export interface KubernetesServiceIdentity {
   namespace: string;
   workload: string;
   cluster?: string;
+  // Optional execution sub-selector for a specific container in a multi-container
+  // pod (sidecars). NOT part of the durable identity - excluded from
+  // serviceIdentityKey - so two calls differing only by container key the same
+  // service. Set only by the agent in a tool call, never derived from an alert.
+  container?: string;
 }
 
 export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;

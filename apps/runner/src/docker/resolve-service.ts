@@ -3,6 +3,10 @@ import type {
   DockerServiceIdentity,
   ServiceIdentity,
 } from "@nightwatch/shared";
+import {
+  notRunningResult,
+  type NoRunningInstanceResult,
+} from "../resolve-result.js";
 
 export interface ResolvedContainer {
   container: Dockerode.Container;
@@ -11,10 +15,7 @@ export interface ResolvedContainer {
   live: boolean;
 }
 
-export interface NoRunningInstanceResult {
-  found: false;
-  reason: string;
-}
+export { notRunningResult, type NoRunningInstanceResult };
 
 // Tool inputs carry the cross-provider ServiceIdentity union; a Docker runner
 // can only ever resolve the Docker arm. A non-docker identity reaching here is
@@ -57,16 +58,6 @@ export async function resolveService(
     name: (chosen.Names[0] ?? "").replace(/^\//, ""),
     live: chosen.State === "running",
   };
-}
-
-export function notRunningResult(
-  service: ServiceIdentity,
-): NoRunningInstanceResult {
-  const label =
-    service.provider === "docker"
-      ? `${service.project}/${service.service}`
-      : `${service.namespace}/${service.workload}`;
-  return { found: false, reason: `No running instance found for ${label}` };
 }
 
 function matchesIdentity(

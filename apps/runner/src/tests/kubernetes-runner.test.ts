@@ -88,6 +88,8 @@ describe("Kubernetes runner command handlers", () => {
     readNamespacedStatefulSet: ReturnType<typeof vi.fn>;
     patchNamespacedDeployment: ReturnType<typeof vi.fn>;
     patchNamespacedStatefulSet: ReturnType<typeof vi.fn>;
+    listNamespacedDeployment: ReturnType<typeof vi.fn>;
+    listNamespacedStatefulSet: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -107,6 +109,8 @@ describe("Kubernetes runner command handlers", () => {
       readNamespacedStatefulSet: vi.fn(),
       patchNamespacedDeployment: vi.fn(),
       patchNamespacedStatefulSet: vi.fn(),
+      listNamespacedDeployment: vi.fn().mockResolvedValue({ items: [] }),
+      listNamespacedStatefulSet: vi.fn().mockResolvedValue({ items: [] }),
     };
 
     MockKubeConfig.mockImplementation(function () {
@@ -145,6 +149,51 @@ describe("Kubernetes runner command handlers", () => {
       expect(result).not.toHaveProperty("found");
       const lines = (result as { lines: string[] }).lines;
       expect(lines.some((l) => l.includes("ERROR"))).toBe(true);
+    });
+
+    it("fails fast naming the containers when a multi-container pod is ambiguous", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [
+          {
+            ...RUNNING_POD,
+            spec: {
+              containers: [{ name: "istio-proxy" }, { name: "api-server" }],
+            },
+          },
+        ],
+      });
+
+      // No `container` given for a 2-container pod: fail fast with the choices
+      // rather than silently reading the first (often the sidecar).
+      const result = await getContainerLogs({ service: K8S_SERVICE });
+
+      expect(result).toMatchObject({ found: false });
+      const reason = (result as { reason: string }).reason;
+      expect(reason).toContain("istio-proxy");
+      expect(reason).toContain("api-server");
+    });
+
+    it("targets the named container in a multi-container pod", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({
+        items: [
+          {
+            ...RUNNING_POD,
+            spec: {
+              containers: [{ name: "istio-proxy" }, { name: "api-server" }],
+            },
+          },
+        ],
+      });
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue("app log line\n");
+
+      const result = await getContainerLogs({
+        service: { ...K8S_SERVICE, container: "api-server" },
+      });
+
+      expect(result).toMatchObject({ lines: ["app log line"] });
+      expect(mockCoreApi.readNamespacedPodLog).toHaveBeenCalledWith(
+        expect.objectContaining({ container: "api-server" }),
+      );
     });
 
     it("returns a not-running finding when no pods exist for the workload", async () => {
@@ -240,9 +289,39 @@ describe("Kubernetes runner command handlers", () => {
   });
 
   describe("getContainerList", () => {
-    it("lists pods as container-info entries in native K8s shape", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({
-        items: [RUNNING_POD],
+    it("lists workloads with identities that match the capability manifest", async () => {
+      vi.stubEnv("NIGHTWATCH_CLUSTER_NAME", "test-cluster");
+      mockAppsApi.listNamespacedDeployment.mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "api-server",
+              namespace: "production",
+              uid: "uid-dep-1234567890ab",
+            },
+            spec: {
+              replicas: 2,
+              template: { spec: { containers: [{ image: "api:1.2.3" }] } },
+            },
+            status: { readyReplicas: 2 },
+          },
+        ],
+      });
+      mockAppsApi.listNamespacedStatefulSet.mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "db",
+              namespace: "production",
+              uid: "uid-sts-1234567890ab",
+            },
+            spec: {
+              replicas: 1,
+              template: { spec: { containers: [{ image: "pg:16" }] } },
+            },
+            status: { readyReplicas: 0 },
+          },
+        ],
       });
 
       const result = await getContainerList({
@@ -250,15 +329,20 @@ describe("Kubernetes runner command handlers", () => {
         namespace: "production",
       });
 
-      expect(result.containers).toHaveLength(1);
-      const c = result.containers[0]!;
-      expect(c.name).toBe(RUNNING_POD.metadata.name);
-      expect(c.service).toEqual(
-        expect.objectContaining({
-          provider: "kubernetes",
-          namespace: "production",
-        }),
-      );
+      expect(result.containers).toHaveLength(2);
+      const api = result.containers.find((c) => c.name === "api-server")!;
+      // workload name + cluster: byte-identical to the manifest's identity.
+      expect(api.service).toEqual({
+        provider: "kubernetes",
+        namespace: "production",
+        workload: "api-server",
+        cluster: "test-cluster",
+      });
+      expect(api.status).toBe("Running");
+      expect(api.healthStatus).toBe("healthy");
+      const db = result.containers.find((c) => c.name === "db")!;
+      expect(db.status).toBe("Stopped"); // 0 ready replicas
+      vi.unstubAllEnvs();
     });
   });
 
@@ -338,8 +422,10 @@ describe("Kubernetes runner command handlers", () => {
   });
 
   describe("restartService (K8s rollout restart)", () => {
-    it("patches Deployment with restartedAt annotation when a live pod exists", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+    it("patches the Deployment with a restartedAt annotation when it has replicas", async () => {
+      mockAppsApi.readNamespacedDeployment.mockResolvedValue({
+        spec: { replicas: 1 },
+      });
       mockAppsApi.patchNamespacedDeployment.mockResolvedValue({});
 
       const result = await restartService({
@@ -373,11 +459,13 @@ describe("Kubernetes runner command handlers", () => {
       });
     });
 
-    it("patches StatefulSet when no Deployment exists for the workload", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
-      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
+    it("patches the StatefulSet when no Deployment exists for the workload", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
         new ApiException(404, "deployments.apps not found", undefined, {}),
       );
+      mockAppsApi.readNamespacedStatefulSet.mockResolvedValue({
+        spec: { replicas: 1 },
+      });
       mockAppsApi.patchNamespacedStatefulSet.mockResolvedValue({});
 
       const result = await restartService({
@@ -419,11 +507,13 @@ describe("Kubernetes runner command handlers", () => {
       expect(mockAppsApi.patchNamespacedDeployment).not.toHaveBeenCalled();
     });
 
-    it("propagates a genuine StatefulSet error when neither resource patches cleanly", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
-      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
+    it("propagates a genuine error from the StatefulSet patch", async () => {
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
         new ApiException(404, "deployments.apps not found", undefined, {}),
       );
+      mockAppsApi.readNamespacedStatefulSet.mockResolvedValue({
+        spec: { replicas: 1 },
+      });
       mockAppsApi.patchNamespacedStatefulSet.mockRejectedValue(
         new Error("forbidden: patch access denied"),
       );
@@ -438,13 +528,12 @@ describe("Kubernetes runner command handlers", () => {
       ).rejects.toThrow("forbidden: patch access denied");
     });
 
-    it("propagates a genuine Deployment error immediately, without masking it by trying StatefulSet", async () => {
-      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
-      // The workload IS a Deployment, but the patch fails for a real reason
-      // (not 404). Falling through to StatefulSet here would surface a
-      // misleading "statefulsets.apps not found" instead of this error.
-      mockAppsApi.patchNamespacedDeployment.mockRejectedValue(
-        new Error("forbidden: patch access denied"),
+    it("propagates a genuine error from resolving the kind, without masking it by trying StatefulSet", async () => {
+      // A non-404 error resolving the workload kind must propagate as-is, not be
+      // swallowed and retried as a StatefulSet (which would surface a misleading
+      // "statefulsets.apps not found").
+      mockAppsApi.readNamespacedDeployment.mockRejectedValue(
+        new Error("forbidden: get access denied"),
       );
 
       await expect(
@@ -454,8 +543,9 @@ describe("Kubernetes runner command handlers", () => {
           risk: "low",
           estimatedDowntimeSeconds: 0,
         }),
-      ).rejects.toThrow("forbidden: patch access denied");
-      expect(mockAppsApi.patchNamespacedStatefulSet).not.toHaveBeenCalled();
+      ).rejects.toThrow("forbidden: get access denied");
+      expect(mockAppsApi.readNamespacedStatefulSet).not.toHaveBeenCalled();
+      expect(mockAppsApi.patchNamespacedDeployment).not.toHaveBeenCalled();
     });
   });
 

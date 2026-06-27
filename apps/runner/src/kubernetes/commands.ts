@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { ApiException, setHeaderOptions } from "@kubernetes/client-node";
+import { setHeaderOptions } from "@kubernetes/client-node";
 import type {
   ContainerInfo,
   ContainerProcess,
@@ -19,12 +19,15 @@ import type {
 import {
   getCoreV1Api,
   getAppsV1Api,
+  getClusterName,
   getMetrics,
   getExec,
 } from "../kubernetes-client.js";
 import {
   resolveWorkload,
+  resolveWorkloadKind,
   requireK8sIdentity,
+  isNotFoundError,
   notRunningResult,
   type NoRunningInstanceResult,
 } from "./resolve-service.js";
@@ -38,48 +41,48 @@ const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
   "application/strategic-merge-patch+json",
 );
 
-// Distinguishes "this workload is not a Deployment, try StatefulSet next"
-// from a genuine failure (permissions, network) that must propagate as-is
-// (ADR-0002, user story 9) rather than being masked by the next attempt's
-// unrelated 404.
-function isNotFoundError(err: unknown): boolean {
-  return err instanceof ApiException && err.code === 404;
-}
-
+// Lists the namespace's workloads (Deployments + StatefulSets) - not raw pods -
+// so the durable identity it returns (workload name + cluster) is byte-identical
+// to the capability manifest's. A pod-label-derived identity diverged from the
+// manifest, so a service the agent listed could not be resolved back for a
+// restart and the breaker counted it under a different key.
 export async function getContainerList(
   input: GetContainerListInput,
 ): Promise<{ containers: ContainerInfo[] }> {
   const namespace = input.namespace ?? "default";
-  const coreApi = getCoreV1Api();
-  const podList = await coreApi.listNamespacedPod({ namespace });
+  const appsApi = getAppsV1Api();
+  const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"] ?? getClusterName();
 
-  const containers: ContainerInfo[] = podList.items.map((pod) => {
-    const name = pod.metadata?.name ?? "";
-    const podNamespace = pod.metadata?.namespace ?? namespace;
-    // Prefer standard workload-identity labels; fall back to pod name.
-    const workload =
-      pod.metadata?.labels?.["app.kubernetes.io/name"] ??
-      pod.metadata?.labels?.["app"] ??
-      name;
+  const [deployments, statefulSets] = await Promise.all([
+    appsApi.listNamespacedDeployment({ namespace }),
+    appsApi.listNamespacedStatefulSet({ namespace }),
+  ]);
 
+  const containers: ContainerInfo[] = [
+    ...deployments.items,
+    ...statefulSets.items,
+  ].map((w) => {
+    const name = w.metadata?.name ?? "";
+    const image = w.spec?.template?.spec?.containers?.[0]?.image ?? "";
+    const desired = w.spec?.replicas ?? 0;
+    const ready = w.status?.readyReplicas ?? 0;
     return {
       name,
-      id: (pod.metadata?.uid ?? "").slice(0, 12),
+      id: (w.metadata?.uid ?? "").slice(0, 12),
       service: {
         provider: "kubernetes" as const,
-        namespace: podNamespace,
-        workload,
+        namespace: w.metadata?.namespace ?? namespace,
+        workload: name,
+        ...(cluster && { cluster }),
       },
-      image: pod.spec?.containers?.[0]?.image ?? "",
-      imageTag: parseImageTag(pod.spec?.containers?.[0]?.image ?? ""),
-      status: pod.status?.phase ?? "Unknown",
-      restartCount: sumRestartCounts(pod),
-      uptimeSeconds: pod.status?.startTime
-        ? Math.floor(
-            (Date.now() - new Date(pod.status.startTime).getTime()) / 1000,
-          )
-        : 0,
-      healthStatus: pod.status?.phase === "Running" ? "healthy" : "unknown",
+      image,
+      imageTag: parseImageTag(image),
+      status: ready > 0 ? "Running" : "Stopped",
+      // restartCount/uptime are pod-level; at workload granularity they are not
+      // meaningful, so they are reported as 0 rather than guessed.
+      restartCount: 0,
+      uptimeSeconds: 0,
+      healthStatus: desired > 0 && ready >= desired ? "healthy" : "unknown",
     };
   });
 
@@ -98,8 +101,9 @@ export async function getContainerLogs(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: false },
   );
-  if (!resolved) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   const log = await coreApi.readNamespacedPodLog({
     name: resolved.podName,
@@ -137,8 +141,9 @@ export async function getContainerInspect(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: false },
   );
-  if (!resolved) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   // Return native K8s pod object - no normalization (ADR-0002).
   return coreApi.readNamespacedPod({
@@ -159,8 +164,9 @@ export async function getContainerStats(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: true },
   );
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   // Metrics-server may not be installed; if not, the raw error propagates
   // (user story 9, ADR-0002) so the agent reports the real cause.
@@ -184,8 +190,9 @@ export async function getContainerEvents(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: false },
   );
-  if (!resolved) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   // Field selector filters events for this specific pod.
   const events = await coreApi.listNamespacedEvent({
@@ -208,10 +215,11 @@ export async function getContainerProcesses(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: true },
   );
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
-  const stdout = await execInPod(
+  const { stdout } = await execInPod(
     resolved.namespace,
     resolved.podName,
     resolved.containerName ?? "",
@@ -239,8 +247,9 @@ export async function getEnvVariableNames(
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: false },
   );
-  if (!resolved) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   const pod = await coreApi.readNamespacedPod({
     name: resolved.podName,
@@ -255,59 +264,49 @@ export async function getEnvVariableNames(
 }
 
 // Rollout restart (kubectl rollout restart equivalent): patches the
-// restartedAt annotation on the pod template so the controller rolls new
-// pods, instead of deleting pods directly and bypassing rollout machinery.
+// restartedAt annotation on the pod template so the controller rolls new pods,
+// instead of deleting pods directly and bypassing rollout machinery. The exact
+// kind is resolved first so a Deployment and a StatefulSet that share a name can
+// never have the wrong one rolled.
 export async function restartService(
   input: RestartContainerInput,
 ): Promise<RestartServiceK8sResult | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
-  const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
 
-  // Restart is a write action on a live target (CONTEXT.md); a stopped
-  // instance is "nothing to act on", not a target to restart.
-  const resolved = await resolveWorkload(
-    coreApi,
+  const workload = await resolveWorkloadKind(
     appsApi,
     service.namespace,
     service.workload,
   );
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  // Restart is a write on a live target (CONTEXT.md): a missing or scaled-to-0
+  // workload has nothing to roll. A running-but-unhealthy one (replicas > 0,
+  // none ready) is still restartable - that is the case you most want to fix.
+  if (workload === null || workload.replicas === 0) {
+    return notRunningResult(input.service);
+  }
 
   const startedAt = new Date().toISOString();
   const patchBody = {
     spec: {
       template: {
         metadata: {
-          annotations: {
-            "kubectl.kubernetes.io/restartedAt": startedAt,
-          },
+          annotations: { "kubectl.kubernetes.io/restartedAt": startedAt },
         },
       },
     },
   };
 
-  try {
+  if (workload.kind === "Deployment") {
     await appsApi.patchNamespacedDeployment(
-      {
-        name: service.workload,
-        namespace: service.namespace,
-        body: patchBody,
-      },
+      { name: service.workload, namespace: service.namespace, body: patchBody },
       STRATEGIC_MERGE_PATCH_OPTIONS,
     );
     return { success: true, startedAt, resourceKind: "Deployment" };
-  } catch (err) {
-    if (!isNotFoundError(err)) throw err;
-    // Not a Deployment; try StatefulSet.
   }
 
   await appsApi.patchNamespacedStatefulSet(
-    {
-      name: service.workload,
-      namespace: service.namespace,
-      body: patchBody,
-    },
+    { name: service.workload, namespace: service.namespace, body: patchBody },
     STRATEGIC_MERGE_PATCH_OPTIONS,
   );
   return { success: true, startedAt, resourceKind: "StatefulSet" };
@@ -320,69 +319,30 @@ export async function execCommand(
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
 
-  // Exec is a write action on a live target (CONTEXT.md); a stopped instance
-  // is "nothing to act on", not a degraded-but-usable target like logs/inspect.
   const resolved = await resolveWorkload(
     coreApi,
     appsApi,
     service.namespace,
     service.workload,
+    { container: service.container, requireLive: true },
   );
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if ("found" in resolved) return resolved;
 
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");
 
   const executedAt = new Date().toISOString();
-  const stdoutChunks: Buffer[] = [];
-  const stderrChunks: Buffer[] = [];
-  const stdout = new PassThrough();
-  const stderr = new PassThrough();
-  stdout.on("data", (d: Buffer) => stdoutChunks.push(d));
-  stderr.on("data", (d: Buffer) => stderrChunks.push(d));
-
-  let exitCode = 0;
-  await new Promise<void>((resolve, reject) => {
-    getExec()
-      .exec(
-        resolved.namespace,
-        resolved.podName,
-        resolved.containerName ?? "",
-        [cmd, ...args],
-        stdout,
-        stderr,
-        null,
-        false,
-        (status) => {
-          if (status.status === "Success") {
-            exitCode = 0;
-          } else if (status.reason === "NonZeroExitCode") {
-            // Non-zero exit is a normal result, not a protocol failure; the
-            // exit code travels in details.causes (ADR-0002: surface raw
-            // outcome rather than treating it as an error).
-            const cause = status.details?.causes?.find(
-              (c) => c.reason === "ExitCode",
-            );
-            const parsed = cause?.message ? parseInt(cause.message, 10) : NaN;
-            exitCode = Number.isNaN(parsed) ? 1 : parsed;
-          } else {
-            stdout.end();
-            stderr.end();
-            reject(new Error(status.message ?? "exec failed"));
-            return;
-          }
-          stdout.end();
-          stderr.end();
-          resolve();
-        },
-      )
-      .catch(reject);
-  });
+  const { stdout, stderr, exitCode } = await execInPod(
+    resolved.namespace,
+    resolved.podName,
+    resolved.containerName ?? "",
+    [cmd, ...args],
+  );
 
   return {
     exitCode,
-    stdout: sanitizeExecOutput(Buffer.concat(stdoutChunks).toString("utf8")),
-    stderr: sanitizeExecOutput(Buffer.concat(stderrChunks).toString("utf8")),
+    stdout: sanitizeExecOutput(stdout),
+    stderr: sanitizeExecOutput(stderr),
     executedAt,
   };
 }
@@ -460,17 +420,31 @@ export async function getNodeStatus(): Promise<{
   return { nodes };
 }
 
+interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+// One exec primitive for both read (processes) and write (exec_command) paths.
+// A non-zero exit is a normal result, not a protocol failure: the command ran
+// and returned a code, which travels in details.causes (ADR-0002). Only a real
+// protocol failure (no such container, connection error) rejects, so a `ps` that
+// exits non-zero no longer aborts the whole processes read.
 async function execInPod(
   namespace: string,
   podName: string,
   containerName: string,
   command: string[],
-): Promise<string> {
-  const chunks: Buffer[] = [];
+): Promise<ExecResult> {
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
   const stdout = new PassThrough();
-  stdout.on("data", (d: Buffer) => chunks.push(d));
+  const stderr = new PassThrough();
+  stdout.on("data", (d: Buffer) => stdoutChunks.push(d));
+  stderr.on("data", (d: Buffer) => stderrChunks.push(d));
 
-  return new Promise<string>((resolve, reject) => {
+  const exitCode = await new Promise<number>((resolve, reject) => {
     getExec()
       .exec(
         namespace,
@@ -478,33 +452,42 @@ async function execInPod(
         containerName,
         command,
         stdout,
-        null,
+        stderr,
         null,
         false,
         (status) => {
-          if (status.status === "Failure") {
-            reject(new Error(status.message ?? "exec failed"));
+          let code = 0;
+          if (status.status === "Success") {
+            code = 0;
+          } else if (status.reason === "NonZeroExitCode") {
+            const cause = status.details?.causes?.find(
+              (c) => c.reason === "ExitCode",
+            );
+            const parsed = cause?.message ? parseInt(cause.message, 10) : NaN;
+            code = Number.isNaN(parsed) ? 1 : parsed;
           } else {
             stdout.end();
-            resolve(Buffer.concat(chunks).toString("utf8"));
+            stderr.end();
+            reject(new Error(status.message ?? "exec failed"));
+            return;
           }
+          stdout.end();
+          stderr.end();
+          resolve(code);
         },
       )
       .catch(reject);
   });
+
+  return {
+    stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+    stderr: Buffer.concat(stderrChunks).toString("utf8"),
+    exitCode,
+  };
 }
 
 function parseImageTag(image: string): string {
   return image.includes(":") ? (image.split(":")[1] ?? "latest") : "latest";
-}
-
-function sumRestartCounts(pod: {
-  status?: { containerStatuses?: Array<{ restartCount?: number }> };
-}): number {
-  return (pod.status?.containerStatuses ?? []).reduce(
-    (sum, cs) => sum + (cs.restartCount ?? 0),
-    0,
-  );
 }
 
 function parsePsLine(line: string): ContainerProcess {
