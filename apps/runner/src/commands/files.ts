@@ -1,17 +1,19 @@
-import { readFile } from "node:fs/promises";
-import { isPathAllowed, redactSecrets } from "../safety/allowlist.js";
+import { openAllowedFile, redactSecrets } from "../safety/allowlist.js";
 import type { ReadFileInput, ReadFileResult } from "@nightwatch/shared";
 
 export async function readFileCommand(
   input: ReadFileInput,
 ): Promise<ReadFileResult> {
-  if (!isPathAllowed(input.path)) {
-    throw new Error(
-      `Path not in allowlist: ${input.path}. Add to FILE_ALLOWLIST env var to enable.`,
-    );
+  // Open-then-validate closes the check/open symlink race; reads come from the
+  // pinned handle, never re-resolving input.path.
+  const handle = await openAllowedFile(input.path);
+  let raw: string;
+  try {
+    raw = await handle.readFile("utf8");
+  } finally {
+    await handle.close();
   }
 
-  const raw = await readFile(input.path, "utf8");
   const maxLines = input.maxLines ?? 500;
   const allLines = raw.split("\n");
   const sliced = allLines.slice(0, maxLines).join("\n");

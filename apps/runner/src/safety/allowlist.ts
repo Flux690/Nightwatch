@@ -118,6 +118,49 @@ function buildAllowlist(): string[] {
     : DEFAULT_ALLOWLIST;
 }
 
+// Opens an allowlisted file for reading without a check-then-open TOCTOU gap.
+// isPathAllowed validates a *name*, but reading by that name afterwards
+// re-resolves symlinks at open time - a swap in the window between check and open
+// would read an unvalidated target. Instead: open the fd once (following
+// symlinks, so the fd is pinned to whatever inode the name resolved to), then
+// prove that exact inode is reachable via an allowlisted canonical path. Reads go
+// through the returned handle, never the name again, so the inode we validated is
+// the inode we read. O_NONBLOCK stops a FIFO or device planted in an allowed
+// directory from hanging the open.
+export async function openAllowedFile(
+  requestedPath: string,
+): Promise<fs.promises.FileHandle> {
+  const handle = await fs.promises.open(
+    requestedPath,
+    fs.constants.O_RDONLY | fs.constants.O_NONBLOCK,
+  );
+  try {
+    const fdStat = await handle.stat({ bigint: true });
+    if (!fdStat.isFile()) {
+      throw new Error(`Not a regular file: ${requestedPath}`);
+    }
+    const canonical = await fs.promises.realpath(requestedPath);
+    if (!isPathAllowed(canonical)) {
+      throw new Error(
+        `Path not in allowlist: ${requestedPath}. Add to FILE_ALLOWLIST env var to enable.`,
+      );
+    }
+    // Bind the allowlisted name to the opened inode: if a symlink was swapped
+    // between open and realpath, the canonical name now resolves to a different
+    // inode than the fd holds, so we refuse rather than read the wrong file.
+    const nameStat = await fs.promises.stat(canonical, { bigint: true });
+    if (nameStat.ino !== fdStat.ino || nameStat.dev !== fdStat.dev) {
+      throw new Error(
+        `Path changed during open (possible symlink swap): ${requestedPath}`,
+      );
+    }
+    return handle;
+  } catch (err) {
+    await handle.close();
+    throw err;
+  }
+}
+
 function shannonEntropy(s: string): number {
   const freq: Record<string, number> = {};
   for (const c of s) freq[c] = (freq[c] ?? 0) + 1;
