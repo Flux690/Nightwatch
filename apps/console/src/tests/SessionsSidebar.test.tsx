@@ -193,6 +193,14 @@ describe("SessionsSidebar", () => {
       });
     });
 
+    it("shows an empty-state message when there are no sessions", async () => {
+      setup([]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/no sessions yet/i)).toBeInTheDocument();
+      });
+    });
+
     it("shows a relative timestamp on each row", async () => {
       setup();
 

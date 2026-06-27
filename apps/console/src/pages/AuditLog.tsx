@@ -1,4 +1,4 @@
-import { Stack, Text, Title } from "@mantine/core";
+import { Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { RemediationActionRecord } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
@@ -13,7 +13,11 @@ const OUTCOME_COLOR: Record<RemediationActionRecord["status"], string> = {
 };
 
 export function AuditLogPage(): React.JSX.Element {
-  const { data: actions } = useQuery<RemediationActionRecord[]>({
+  const {
+    data: actions,
+    isLoading,
+    isError,
+  } = useQuery<RemediationActionRecord[]>({
     queryKey: ["remediation-actions"],
     queryFn: () =>
       apiFetch<RemediationActionRecord[]>("/api/remediation-actions"),
@@ -26,7 +30,15 @@ export function AuditLogPage(): React.JSX.Element {
         Audit log
       </Title>
 
-      {actions !== undefined && actions.length === 0 && (
+      {isLoading && <Loader size="sm" aria-label="Loading audit log" />}
+
+      {isError && (
+        <Text size="sm" c="red">
+          Couldn&apos;t load the audit log. Retrying…
+        </Text>
+      )}
+
+      {!isLoading && !isError && actions?.length === 0 && (
         <Text size="sm" c="dimmed">
           No remediation actions recorded yet.
         </Text>

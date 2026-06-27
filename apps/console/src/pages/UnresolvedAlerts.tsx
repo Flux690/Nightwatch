@@ -1,4 +1,4 @@
-import { Badge, Stack, Text, Title } from "@mantine/core";
+import { Badge, Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 import { apiFetch } from "../api/client.js";
@@ -11,7 +11,11 @@ const SEVERITY_COLOR: Record<UnresolvedAlertRecord["severity"], string> = {
 };
 
 export function UnresolvedAlertsPage(): React.JSX.Element {
-  const { data: alerts, isError } = useQuery<UnresolvedAlertRecord[]>({
+  const {
+    data: alerts,
+    isLoading,
+    isError,
+  } = useQuery<UnresolvedAlertRecord[]>({
     queryKey: ["unresolved-alerts"],
     queryFn: () => apiFetch<UnresolvedAlertRecord[]>("/api/unresolved-alerts"),
     refetchInterval: 30_000,
@@ -23,13 +27,15 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
         Unresolved alerts
       </Title>
 
+      {isLoading && <Loader size="sm" aria-label="Loading unresolved alerts" />}
+
       {isError && (
         <Text size="sm" c="red">
           Failed to load unresolved alerts.
         </Text>
       )}
 
-      {!isError && alerts !== undefined && alerts.length === 0 && (
+      {!isLoading && !isError && alerts?.length === 0 && (
         <Text size="sm" c="dimmed">
           No unresolved alerts.
         </Text>

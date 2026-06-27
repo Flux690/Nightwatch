@@ -15,7 +15,7 @@ export function SessionsSidebar(): React.JSX.Element {
   const params = useParams({ strict: false }) as { id?: string };
   const activeSessionId = params.id ?? null;
 
-  const { data: sessions = [] } = useQuery<SessionMeta[]>({
+  const { data: sessions = [], isLoading } = useQuery<SessionMeta[]>({
     queryKey: ["sessions"],
     queryFn: () => apiFetch<SessionMeta[]>("/api/sessions"),
   });
@@ -54,6 +54,11 @@ export function SessionsSidebar(): React.JSX.Element {
         overflowY: "auto",
       }}
     >
+      {!isLoading && sessions.length === 0 && (
+        <Text size="xs" c="dimmed" p="xs" component="li">
+          No sessions yet.
+        </Text>
+      )}
       {sessions.map((session) => (
         <li
           key={session.sessionId}

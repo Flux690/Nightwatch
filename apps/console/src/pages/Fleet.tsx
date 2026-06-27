@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Group, Stack, Text, Title } from "@mantine/core";
+import { Button, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
@@ -27,7 +27,11 @@ export function FleetPage(): React.JSX.Element {
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: runners } = useQuery<RunnerRecord[]>({
+  const {
+    data: runners,
+    isLoading,
+    isError,
+  } = useQuery<RunnerRecord[]>({
     queryKey: ["runners"],
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
     refetchInterval: 30_000,
@@ -42,8 +46,7 @@ export function FleetPage(): React.JSX.Element {
     setRemoving(token);
     setError(null);
     try {
-      const res = await fetch(`/api/tokens/${token}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`delete ${res.status}`);
+      await apiFetch<void>(`/api/tokens/${token}`, { method: "DELETE" });
       await queryClient.invalidateQueries({ queryKey: ["runners"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove server");
@@ -69,7 +72,15 @@ export function FleetPage(): React.JSX.Element {
         </Text>
       )}
 
-      {runners !== undefined && runners.length === 0 && (
+      {isLoading && <Loader size="sm" aria-label="Loading fleet" />}
+
+      {isError && (
+        <Text size="sm" c="red">
+          Couldn&apos;t load the fleet. Retrying…
+        </Text>
+      )}
+
+      {!isLoading && !isError && runners?.length === 0 && (
         <Text size="sm" c="dimmed">
           No runners connected.
         </Text>
