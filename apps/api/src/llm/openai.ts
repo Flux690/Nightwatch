@@ -153,8 +153,7 @@ export class OpenAIProvider implements LLMProvider {
       toolUses.push({
         id: call.id,
         name: call.function.name,
-        // OpenAI returns arguments as a JSON string; parse to the neutral input shape.
-        input: JSON.parse(call.function.arguments) as Record<string, unknown>,
+        input: parseToolArguments(call.function.arguments, call.function.name),
       });
     }
 
@@ -283,10 +282,10 @@ export class OpenAIProvider implements LLMProvider {
               type: "tool_use",
               id: call.id,
               name: call.function.name,
-              input: JSON.parse(call.function.arguments) as Record<
-                string,
-                unknown
-              >,
+              input: parseToolArguments(
+                call.function.arguments,
+                call.function.name,
+              ),
             });
           }
           return {
@@ -302,6 +301,34 @@ export class OpenAIProvider implements LLMProvider {
           providerContent: m,
         };
       });
+  }
+}
+
+// OpenAI returns tool-call arguments as a JSON string the model generated, so it
+// can be malformed. Parse defensively: a bad payload becomes an empty input,
+// which the runner's per-tool validation then rejects with a corrective error,
+// rather than throwing and crashing the entire investigation.
+function parseToolArguments(
+  raw: string,
+  toolName: string,
+): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      return parsed as Record<string, unknown>;
+    }
+    logger.warn(
+      { tool: toolName, raw },
+      "tool arguments were not a JSON object",
+    );
+    return {};
+  } catch {
+    logger.warn({ tool: toolName, raw }, "tool arguments were not valid JSON");
+    return {};
   }
 }
 

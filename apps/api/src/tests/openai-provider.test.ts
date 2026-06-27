@@ -156,6 +156,41 @@ describe("OpenAIProvider", () => {
     expect(response.toolUses[0].id).toBe("call-123");
   });
 
+  it("does not crash the run when tool-call arguments are malformed JSON", async () => {
+    mockFinalChatCompletion.mockResolvedValueOnce({
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                type: "function",
+                id: "call-bad",
+                function: {
+                  name: "list_services",
+                  // The model emitted invalid JSON; this must not throw out of
+                  // chat() and crash the whole investigation.
+                  arguments: "{ environment: docker",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const response = await provider.chat([READ_TOOL]);
+
+    // The call still surfaces, with an empty input the runner's per-tool
+    // validation rejects with a corrective error - not an uncaught exception.
+    expect(response.stopReason).toBe("tool_use");
+    expect(response.toolUses).toHaveLength(1);
+    expect(response.toolUses[0].name).toBe("list_services");
+    expect(response.toolUses[0].input).toEqual({});
+  });
+
   describe("seed", () => {
     it("reconstructs a well-formed message from role/content when providerContent is null", async () => {
       provider.seed([
