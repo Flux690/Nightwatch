@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  ActionIcon,
-  Alert,
   Autocomplete,
   Badge,
   Button,
   Checkbox,
-  Code,
   Group,
   NumberInput,
   Select,
@@ -19,6 +16,7 @@ import { notifications } from "@mantine/notifications";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
 import { apiFetch } from "../api/client.js";
+import { IngestCredentialSection } from "./IngestCredentialSection.js";
 import { useAuth } from "../auth/AuthContext.js";
 
 type TestResult =
@@ -65,22 +63,12 @@ export function SettingsPage(): React.JSX.Element {
 
   const availableModels = modelsData?.models ?? [];
 
-  const { data: ingestCredential } = useQuery<{ configured: boolean }>({
-    queryKey: ["ingest-credential"],
-    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
-  });
-
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [generatingIngest, setGeneratingIngest] = useState(false);
-  const [revealingIngest, setRevealingIngest] = useState(false);
-  const [ingestToken, setIngestToken] = useState<string | null>(null);
-  // True when the shown token was just minted (old one now invalid) vs revealed.
-  const [ingestTokenFresh, setIngestTokenFresh] = useState(false);
 
   useEffect(() => {
     if (config) setForm(config);
@@ -135,51 +123,6 @@ export function SettingsPage(): React.JSX.Element {
     } finally {
       setTesting(false);
     }
-  }
-
-  async function handleGenerateIngestCredential(): Promise<void> {
-    setGeneratingIngest(true);
-    try {
-      const res = await fetch("/api/ingest-credential", { method: "POST" });
-      if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
-      const { token } = (await res.json()) as { token: string };
-      setIngestToken(token);
-      setIngestTokenFresh(true);
-      await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
-    } catch (err) {
-      notifications.show({
-        color: "red",
-        title: "Could not generate credential",
-        message: err instanceof Error ? err.message : "Try again.",
-      });
-    } finally {
-      setGeneratingIngest(false);
-    }
-  }
-
-  async function handleRevealIngestCredential(): Promise<void> {
-    setRevealingIngest(true);
-    try {
-      const res = await fetch("/api/ingest-credential/reveal", {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error(`reveal ${res.status}`);
-      const { token } = (await res.json()) as { token: string };
-      setIngestToken(token);
-      setIngestTokenFresh(false);
-    } catch (err) {
-      notifications.show({
-        color: "red",
-        title: "Could not reveal credential",
-        message: err instanceof Error ? err.message : "Try again.",
-      });
-    } finally {
-      setRevealingIngest(false);
-    }
-  }
-
-  function copyIngestToken(): void {
-    if (ingestToken !== null) void navigator.clipboard.writeText(ingestToken);
   }
 
   function setField<K extends keyof AgentConfig>(
@@ -372,80 +315,7 @@ export function SettingsPage(): React.JSX.Element {
         </Stack>
       )}
 
-      <Stack gap="sm" mt="xl">
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-          Alerting
-        </Text>
-        <Group gap="xs" align="center">
-          <Text size="sm" fw={500}>
-            Ingest credential
-          </Text>
-          <Badge
-            color={ingestCredential?.configured ? "green" : "gray"}
-            variant="light"
-          >
-            {ingestCredential?.configured ? "Configured" : "Not configured"}
-          </Badge>
-        </Group>
-        <Group gap="xs">
-          <Button
-            size="xs"
-            variant="default"
-            loading={generatingIngest}
-            disabled={revealingIngest}
-            onClick={() => void handleGenerateIngestCredential()}
-          >
-            {ingestCredential?.configured
-              ? "Rotate credential"
-              : "Generate credential"}
-          </Button>
-          {ingestCredential?.configured && (
-            <Button
-              size="xs"
-              variant="subtle"
-              loading={revealingIngest}
-              disabled={generatingIngest}
-              onClick={() => void handleRevealIngestCredential()}
-            >
-              Reveal credential
-            </Button>
-          )}
-        </Group>
-        {ingestToken !== null && (
-          <Alert
-            color={ingestTokenFresh ? "yellow" : "blue"}
-            title={
-              ingestTokenFresh
-                ? "New credential issued — the previous one no longer works"
-                : "Ingest credential"
-            }
-            withCloseButton
-            onClose={() => setIngestToken(null)}
-          >
-            <Group gap="xs" align="flex-start" wrap="nowrap">
-              <Code
-                block
-                style={{
-                  flex: 1,
-                  fontFamily: "var(--nw-mono)",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-              >
-                {ingestToken}
-              </Code>
-              <ActionIcon
-                variant="default"
-                size="lg"
-                aria-label="Copy ingest credential"
-                onClick={copyIngestToken}
-              >
-                ⧉
-              </ActionIcon>
-            </Group>
-          </Alert>
-        )}
-      </Stack>
+      <IngestCredentialSection />
 
       <Stack gap="sm" mt="xl">
         <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
