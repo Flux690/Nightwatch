@@ -202,7 +202,7 @@ describe("TranscriptItemRenderer", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",
       toolUseId: "tu-gate",
-      toolName: "restart_container",
+      toolName: "restart_service",
       input: { service: { provider: "docker", project: "web-01", service: "web-01" } },
       result: null,
       risk: "high",
@@ -212,7 +212,7 @@ describe("TranscriptItemRenderer", () => {
       wrap(approvalItem);
 
       const card = screen.getByTestId("approval-card");
-      expect(within(card).getByText("restart_container")).toBeInTheDocument();
+      expect(within(card).getByText("restart_service")).toBeInTheDocument();
       expect(within(card).getByText(/high/i)).toBeInTheDocument();
       expect(
         within(card).getByRole("button", { name: /approve/i }),

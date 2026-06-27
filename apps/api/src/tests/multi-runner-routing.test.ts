@@ -265,7 +265,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsB).toHaveLength(1);
-    expect(commandsB[0].commandName).toBe("get_container_logs");
+    expect(commandsB[0].commandName).toBe("get_service_logs");
     expect(commandsA).toHaveLength(0);
   });
 
@@ -287,7 +287,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsA).toHaveLength(1);
-    expect(commandsA[0].commandName).toBe("get_container_stats");
+    expect(commandsA[0].commandName).toBe("get_service_stats");
     expect(commandsB).toHaveLength(0);
   });
 
@@ -443,10 +443,10 @@ describe("multi-runner routing", () => {
 
     // runner-b owns "postgres" and must receive the restart command.
     await waitFor(() =>
-      commandsB.some((c) => c.commandName === "restart_container"),
+      commandsB.some((c) => c.commandName === "restart_service"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "restart_container")
+      commandsB.find((c) => c.commandName === "restart_service")
         ?.commandInput["service"],
     ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
@@ -475,7 +475,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsC).toHaveLength(1);
-    expect(commandsC[0].commandName).toBe("get_container_logs");
+    expect(commandsC[0].commandName).toBe("get_service_logs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
   });
@@ -498,7 +498,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsK).toHaveLength(1);
-    expect(commandsK[0].commandName).toBe("get_container_logs");
+    expect(commandsK[0].commandName).toBe("get_service_logs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
     expect(commandsC).toHaveLength(0);
@@ -604,7 +604,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS1).toHaveLength(1);
-    expect(commandsS1[0].commandName).toBe("get_container_logs");
+    expect(commandsS1[0].commandName).toBe("get_service_logs");
     expect(commandsS2).toHaveLength(0);
   });
 
@@ -626,7 +626,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("get_container_logs");
+    expect(commandsS2[0].commandName).toBe("get_service_logs");
     expect(commandsS1).toHaveLength(0);
   });
 
@@ -650,7 +650,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("get_container_logs");
+    expect(commandsS2[0].commandName).toBe("get_service_logs");
     expect(commandsS1).toHaveLength(0);
   });
 });

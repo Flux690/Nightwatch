@@ -109,7 +109,7 @@ describe("router", () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
 
-    await sendCommand("get_container_logs", { service: svc("postgres") });
+    await sendCommand("get_service_logs", { service: svc("postgres") });
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
@@ -119,7 +119,7 @@ describe("router", () => {
     connect("web-01", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_container_logs", { service: svc("ghost") }),
+      sendCommand("get_service_logs", { service: svc("ghost") }),
     ).toThrow(/No runner has service/);
   });
 
@@ -128,7 +128,7 @@ describe("router", () => {
     connect("web-02", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_container_logs", { service: svc("nginx") }),
+      sendCommand("get_service_logs", { service: svc("nginx") }),
     ).toThrow(/Ambiguous service/);
   });
 

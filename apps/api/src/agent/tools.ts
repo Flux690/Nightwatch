@@ -21,7 +21,11 @@ export interface Tool {
   // narrows the tool to the listed providers (ADR-0002). Only genuinely
   // provider-specific tools carry it.
   providers?: Provider[];
-  execute(
+  // Present only for tools that run inside the API (get_recent_commits) or are
+  // pure interrupts (request_clarification). A runner-delegated tool omits it;
+  // executeTool then dispatches to the runner using schema.name, which IS the
+  // wire command name - one vocabulary end to end, with no name-mapping table.
+  execute?(
     input: Record<string, unknown>,
     ctx: ToolExecuteContext,
   ): Promise<ToolExecuteResult>;
@@ -112,6 +116,10 @@ async function fetchGitHubCommits(
   return { commits };
 }
 
+// A runner-delegated tool's schema.name is the wire command name the runner
+// dispatches on (one vocabulary end to end). Such tools omit `execute`;
+// executeTool routes them to the runner. Only get_recent_commits (runs in the
+// API) and request_clarification (a pure interrupt) carry their own `execute`.
 export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
@@ -141,8 +149,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_list", input, ctx),
   },
   {
     schema: {
@@ -169,8 +175,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_logs", input, ctx),
   },
   {
     schema: {
@@ -184,8 +188,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_inspect", input, ctx),
   },
   {
     schema: {
@@ -199,8 +201,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_stats", input, ctx),
   },
   {
     schema: {
@@ -220,8 +220,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_events", input, ctx),
   },
   {
     schema: {
@@ -234,8 +232,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_container_processes", input, ctx),
   },
   {
     schema: {
@@ -255,7 +251,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-    execute: (input, ctx) => executeRunnerTool("get_host_memory", input, ctx),
   },
   {
     schema: {
@@ -275,7 +270,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-    execute: (input, ctx) => executeRunnerTool("get_host_cpu", input, ctx),
   },
   {
     schema: {
@@ -295,7 +289,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-    execute: (input, ctx) => executeRunnerTool("get_host_disk", input, ctx),
   },
   {
     schema: {
@@ -315,7 +308,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-    execute: (input, ctx) => executeRunnerTool("get_host_network", input, ctx),
   },
   {
     schema: {
@@ -344,7 +336,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-    execute: (input, ctx) => executeRunnerTool("get_host_dmesg", input, ctx),
   },
   {
     schema: {
@@ -393,8 +384,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) =>
-      executeRunnerTool("get_env_variable_names", input, ctx),
   },
   {
     schema: {
@@ -426,8 +415,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: KUBERNETES_ONLY,
-    execute: (input, ctx) =>
-      executeRunnerTool("get_k8s_rollout_status", input, ctx),
   },
   {
     schema: {
@@ -447,8 +434,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: KUBERNETES_ONLY,
-    execute: (input, ctx) =>
-      executeRunnerTool("get_k8s_node_status", input, ctx),
   },
   {
     schema: {
@@ -473,7 +458,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
-    execute: (input, ctx) => executeRunnerTool("read_file", input, ctx),
   },
   {
     schema: {
@@ -545,7 +529,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
-    execute: (input, ctx) => executeRunnerTool("restart_container", input, ctx),
   },
   {
     schema: {
@@ -568,7 +551,6 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
-    execute: (input, ctx) => executeRunnerTool("exec_command", input, ctx),
   },
 ];
 
@@ -586,29 +568,24 @@ export function toolSupportsProvider(tool: Tool, provider: string): boolean {
   );
 }
 
-// Maps pre-rename LLM-facing tool names to their current schema.name. Used by
-// the resolver to execute interrupt records written before the rename deployed.
-// The breaker window (10 min) ensures no old-named records remain in
-// remediation_actions by the time this mapping could be removed.
-const LEGACY_TOOL_NAMES: Record<string, string> = {
-  get_container_list: "list_services",
-  get_container_logs: "get_service_logs",
-  get_container_inspect: "get_service_config",
-  get_container_stats: "get_service_stats",
-  get_container_events: "get_service_events",
-  get_container_processes: "get_service_processes",
-  get_env_variable_names: "get_service_env_names",
-  restart_container: "restart_service",
-};
+// Single dispatch for every tool. A tool that carries its own `execute` (runs in
+// the API, or is a pure interrupt) uses it; every other tool is runner-delegated
+// and routed to the runner under its schema.name - which is the wire command
+// name, so there is no name-mapping table to keep in sync.
+export function executeTool(
+  tool: Tool,
+  input: Record<string, unknown>,
+  ctx: ToolExecuteContext,
+): Promise<ToolExecuteResult> {
+  if (tool.execute) return tool.execute(input, ctx);
+  return executeRunnerTool(tool.schema.name, input, ctx);
+}
 
-// Look up a tool by its current schema.name, falling back to the legacy name
-// map for interrupt records written before the tool rename deployed.
+// Resolve a tool by its schema.name. The single resolver used by both the loop
+// (live tool calls) and human-input (resuming a stored interrupt); names are
+// stable, so there is no legacy fallback.
 export function findTool(toolName: string): Tool | undefined {
-  const direct = TOOL_REGISTRY.find((t) => t.schema.name === toolName);
-  if (direct) return direct;
-  const newName = LEGACY_TOOL_NAMES[toolName];
-  if (newName) return TOOL_REGISTRY.find((t) => t.schema.name === newName);
-  return undefined;
+  return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
 // Provider-specific tools are offered only to fleets that include a matching

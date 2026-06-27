@@ -283,7 +283,7 @@ describe("providers filter and mismatch rejection", () => {
 
       expect(interrupt.payload["kind"]).toBe("approval");
       expect(interrupt.payload["toolName"]).toBe("restart_service");
-      expect(executedCommands).not.toContain("restart_container");
+      expect(executedCommands).not.toContain("restart_service");
       expect(hasPendingHumanInput(sessionId)).toBe(true);
 
       ws.close();

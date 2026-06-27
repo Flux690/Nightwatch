@@ -4,6 +4,7 @@ import {
   TOOL_REGISTRY,
   getToolSchemas,
   toolSupportsProvider,
+  executeTool,
 } from "./tools.js";
 import type { Provider, Tool, ToolExecuteContext } from "./tools.js";
 import { createProvider } from "../llm/factory.js";
@@ -431,7 +432,7 @@ export async function runInvestigation(
         toolName: tool.name,
         input: tool.input,
       });
-      const result = await entry.execute(tool.input, execCtx);
+      const result = await executeTool(entry, tool.input, execCtx);
       toolResults.push({
         tool_use_id: tool.id,
         content:

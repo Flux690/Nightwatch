@@ -671,7 +671,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
-            toolName: "restart_container",
+            toolName: "restart_service",
             input: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
             incidentId: "inc-1",
           },
@@ -695,7 +695,7 @@ describe("SessionView", () => {
       });
 
       const card = screen.getByTestId("approval-card");
-      expect(within(card).getByText("restart_container")).toBeInTheDocument();
+      expect(within(card).getByText("restart_service")).toBeInTheDocument();
       expect(within(card).getByText(/high/i)).toBeInTheDocument();
       expect(
         within(card).getByRole("button", { name: /approve/i }),
@@ -794,7 +794,7 @@ describe("SessionView", () => {
 
       // The paired tool card now appears below the resolved approval card, OUT
       // still loading until the result (both cards label the tool name).
-      expect(screen.getAllByText("restart_container")).toHaveLength(2);
+      expect(screen.getAllByText("restart_service")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
       const toolCardOut = screen.getByTestId("tool-card-out-loading");
       expect(
@@ -831,7 +831,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_container",
+            toolName: "restart_service",
             toolInput: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
             kind: "approval",
             status: "pending",
@@ -842,7 +842,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText("restart_container")).toBeInTheDocument();
+        expect(within(card).getByText("restart_service")).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /approve/i }),
@@ -887,7 +887,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_container",
+            toolName: "restart_service",
             toolInput: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
             kind: "approval",
             status: "pending",
@@ -925,7 +925,7 @@ describe("SessionView", () => {
           {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "restart_container",
+            toolName: "restart_service",
             toolInput: { risk: "high" },
             kind: "approval",
             status: "pending",
@@ -1221,7 +1221,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tu-ap",
-            toolName: "restart_container",
+            toolName: "restart_service",
             input: { service: { provider: "docker", project: "web-01", service: "web-01" }, risk: "high" },
             incidentId: "inc-ap",
             kind: "approval",

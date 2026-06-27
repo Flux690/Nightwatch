@@ -14,7 +14,7 @@ import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
 import { buildSeed } from "./seed.js";
-import { findTool } from "../agent/tools.js";
+import { findTool, executeTool } from "../agent/tools.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 
 export class HumanInputError extends Error {
@@ -230,7 +230,7 @@ export async function respondToPendingHumanInput(
           gatedResult.content,
         );
       } else {
-        const execResult = await toolEntry.execute(pending.toolInput, {
+        const execResult = await executeTool(toolEntry, pending.toolInput, {
           runnerId: pending.originatingAlert?.runnerId,
           toolTimeoutMs: config.toolTimeoutMs,
         });

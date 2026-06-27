@@ -81,7 +81,7 @@ describe("remediation action record", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_container") {
+        if (commandName === "restart_service") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -323,7 +323,7 @@ describe("remediation action record", () => {
       sessionId,
       toolUseId,
       kind: "approval",
-      toolName: "restart_container",
+      toolName: "restart_service",
       toolInput: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "wedged",
@@ -340,7 +340,7 @@ describe("remediation action record", () => {
       .prepare(
         `INSERT INTO remediation_actions
            (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at)
-         VALUES (?, ?, 'restart_container', 'docker/svc-01/api', 'executing', '{}', ?)`,
+         VALUES (?, ?, 'restart_service', 'docker/svc-01/api', 'executing', '{}', ?)`,
       )
       .run(toolUseId, sessionId, new Date().toISOString());
 
@@ -401,7 +401,7 @@ describe("remediation action record", () => {
     const params = {
       toolUseId,
       sessionId,
-      toolName: "restart_container",
+      toolName: "restart_service",
       input: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "crash",
@@ -442,7 +442,7 @@ describe("remediation action record", () => {
 
     const baseParams = {
       toolUseId,
-      toolName: "restart_container",
+      toolName: "restart_service",
       input: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "cross-session test",

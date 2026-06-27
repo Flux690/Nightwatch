@@ -41,7 +41,7 @@ function interrupt(toolUseId: string): ConsoleEvent {
       sessionId: "s1",
       kind: "approval",
       toolUseId,
-      toolName: "restart_container",
+      toolName: "restart_service",
       input: { risk: "high" },
     },
   };

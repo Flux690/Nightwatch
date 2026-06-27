@@ -59,7 +59,7 @@ function serviceProvider(input: unknown): string | undefined {
 export function createDispatchRegistry(): Map<string, Handler> {
   return new Map<string, Handler>([
     [
-      "get_container_list",
+      "list_services",
       (i) => {
         const input = i as GetContainerListInput;
         return input.environment === "kubernetes"
@@ -68,42 +68,42 @@ export function createDispatchRegistry(): Map<string, Handler> {
       },
     ],
     [
-      "get_container_logs",
+      "get_service_logs",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetContainerLogs(i as GetContainerLogsInput)
           : dockerGetContainerLogs(i as GetContainerLogsInput),
     ],
     [
-      "get_container_inspect",
+      "get_service_config",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetContainerInspect(i as GetContainerInspectInput)
           : dockerGetContainerInspect(i as GetContainerInspectInput),
     ],
     [
-      "get_container_stats",
+      "get_service_stats",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetContainerStats(i as GetContainerStatsInput)
           : dockerGetContainerStats(i as GetContainerStatsInput),
     ],
     [
-      "get_container_events",
+      "get_service_events",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetContainerEvents(i as GetContainerEventsInput)
           : dockerGetContainerEvents(i as GetContainerEventsInput),
     ],
     [
-      "get_container_processes",
+      "get_service_processes",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetContainerProcesses(i as GetContainerProcessesInput)
           : dockerGetContainerProcesses(i as GetContainerProcessesInput),
     ],
     [
-      "get_env_variable_names",
+      "get_service_env_names",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sGetEnvVariableNames(i as GetEnvVariableNamesInput)
@@ -122,7 +122,7 @@ export function createDispatchRegistry(): Map<string, Handler> {
       (i) => readFileCommand(i as Parameters<typeof readFileCommand>[0]),
     ],
     [
-      "restart_container",
+      "restart_service",
       (i) =>
         serviceProvider(i) === "kubernetes"
           ? k8sRestartService(i as RestartContainerInput)

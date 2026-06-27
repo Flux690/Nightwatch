@@ -179,7 +179,13 @@ describe("deriveServiceIdentity", () => {
       });
     });
 
-    it("strips the replica suffix from a pod-only label to recover the workload", () => {
+    it("passes a pod-only label through verbatim as the workload (no suffix-guessing)", () => {
+      // Neither a deployment nor a statefulset label is present. We do not strip
+      // pod suffixes (a Deployment and a StatefulSet pod are indistinguishable by
+      // shape, so stripping can mangle a multi-word name into a different real
+      // workload). The verbatim pod name will not match any advertised workload
+      // key and is rejected loudly into the unresolved feed - the intended signal
+      // that the alert is under-labelled.
       const identity = deriveServiceIdentity({
         alertname: "CrashLoopBackOff",
         namespace: "production",
@@ -188,20 +194,7 @@ describe("deriveServiceIdentity", () => {
       expect(identity).toEqual({
         provider: "kubernetes",
         namespace: "production",
-        workload: "myapp",
-      });
-    });
-
-    it("strips a single ordinal suffix from a StatefulSet-style pod-only label", () => {
-      const identity = deriveServiceIdentity({
-        alertname: "CrashLoopBackOff",
-        namespace: "production",
-        pod: "myapp-0",
-      });
-      expect(identity).toEqual({
-        provider: "kubernetes",
-        namespace: "production",
-        workload: "myapp",
+        workload: "myapp-7f8b9c-x4k2",
       });
     });
   });

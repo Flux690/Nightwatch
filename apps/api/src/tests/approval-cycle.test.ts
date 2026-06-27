@@ -95,7 +95,7 @@ describe("durable approval interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_container") {
+        if (commandName === "restart_service") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,

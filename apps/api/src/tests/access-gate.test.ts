@@ -88,7 +88,7 @@ describe("access-gate: gating is driven by tool access level", () => {
           correlationId,
           success: true,
           result:
-            commandName === "restart_container" ? { restarted: true } : [],
+            commandName === "restart_service" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -248,7 +248,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(interrupt.payload["toolName"]).toBe("restart_service");
 
     // Runner must NOT have executed the write yet
-    expect(executedCommands).not.toContain("restart_container");
+    expect(executedCommands).not.toContain("restart_service");
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     ws.close();
@@ -417,7 +417,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(clarInterrupt.payload["kind"]).toBe("clarification");
-    expect(executedCommands).not.toContain("restart_container");
+    expect(executedCommands).not.toContain("restart_service");
 
     // Answer the clarification
     const answerRes = await fetch(
@@ -447,7 +447,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
     expect(approvalInterrupt.payload["kind"]).toBe("approval");
     expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
-    expect(executedCommands).not.toContain("restart_container");
+    expect(executedCommands).not.toContain("restart_service");
 
     // Approve
     const approveRes = await fetch(
@@ -464,9 +464,9 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(approveRes.status).toBe(200);
 
     // Runner executes restart exactly once, run completes
-    await waitFor(() => executedCommands.includes("restart_container"));
+    await waitFor(() => executedCommands.includes("restart_service"));
     expect(
-      executedCommands.filter((c) => c === "restart_container"),
+      executedCommands.filter((c) => c === "restart_service"),
     ).toHaveLength(1);
 
     await waitFor(() => !hasPendingHumanInput(sessionId));

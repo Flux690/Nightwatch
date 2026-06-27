@@ -176,7 +176,7 @@ describe("remediation circuit breaker", () => {
       ),
     ).toBe(false);
     expect(hasPendingHumanInput(sessionId)).toBe(false);
-    expect(executedCommands).not.toContain("restart_container");
+    expect(executedCommands).not.toContain("restart_service");
 
     const corrective = getSessionMessages(sessionId).find(
       (m) =>
@@ -202,7 +202,7 @@ describe("remediation circuit breaker", () => {
     );
     expect(interrupt.payload["kind"]).toBe("approval");
     expect(interrupt.payload["toolName"]).toBe("restart_service");
-    expect(executedCommands).not.toContain("restart_container");
+    expect(executedCommands).not.toContain("restart_service");
 
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",

@@ -11,7 +11,7 @@ const EXECUTED_DOCKER: RemediationActionRecord = {
   sessionId: "sess-audit-1",
   toolUseId: "tu-1",
   serviceIdentityKey: "docker/svc-01/api",
-  toolName: "restart_container",
+  toolName: "restart_service",
   status: "executed",
   resolvedBy: "operator",
   createdAt: "2024-01-01T00:00:00.000Z",
@@ -33,7 +33,7 @@ const STILL_EXECUTING: RemediationActionRecord = {
   sessionId: "sess-audit-3",
   toolUseId: "tu-3",
   serviceIdentityKey: "docker/svc-01/api",
-  toolName: "restart_container",
+  toolName: "restart_service",
   status: "executing",
   resolvedBy: "operator",
   createdAt: "2024-03-01T00:00:00.000Z",
@@ -89,7 +89,7 @@ describe("AuditLogPage", () => {
     await waitFor(() => {
       expect(screen.getByText("docker/svc-01/api")).toBeInTheDocument();
     });
-    expect(screen.getByText("restart_container")).toBeInTheDocument();
+    expect(screen.getByText("restart_service")).toBeInTheDocument();
     expect(screen.getByText(/^executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/operator/)).toBeInTheDocument();
   });

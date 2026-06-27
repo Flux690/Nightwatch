@@ -86,28 +86,21 @@ function deriveKubernetesAlertIdentity(
   labels: Record<string, string | undefined>,
   namespace: string,
 ): KubernetesServiceIdentity {
+  // The workload comes only from a controller label (deployment/statefulset) -
+  // the durable handle the manifest advertises. When an alert carries only a
+  // `pod` label we deliberately do NOT guess the workload from the pod name: a
+  // Deployment pod (<name>-<rs-hash>-<rand>) and a StatefulSet pod (<name>-<n>)
+  // are indistinguishable by shape, so stripping suffixes can mangle a multi-word
+  // name into a DIFFERENT real workload and act on the wrong service. We pass the
+  // pod name through verbatim instead; it will not match any advertised workload
+  // key, so the alert is rejected loudly into the unresolved feed (ADR-0004) -
+  // the correct signal that the alert is under-labelled.
   const workload =
-    labels["deployment"] ??
-    labels["statefulset"] ??
-    stripPodReplicaSuffix(labels["pod"] ?? "unknown");
+    labels["deployment"] ?? labels["statefulset"] ?? labels["pod"] ?? "unknown";
   const cluster = labels["cluster"];
   return cluster
     ? { provider: "kubernetes", namespace, workload, cluster }
     : { provider: "kubernetes", namespace, workload };
-}
-
-// Best-effort recovery of the workload name from a bare pod name, used only
-// when neither a `deployment` nor `statefulset` label is present. A
-// Deployment's pod carries two generated segments (replicaset hash + pod
-// suffix: myapp-7f8b9c-x4k2); a StatefulSet's pod carries one ordinal
-// (myapp-0). Without either label there is no way to tell which shape we
-// have, so this can misfire on a multi-word StatefulSet name - inherent to
-// guessing from a pod name alone (ADR-0004).
-function stripPodReplicaSuffix(pod: string): string {
-  const parts = pod.split("-");
-  if (parts.length >= 3) return parts.slice(0, -2).join("-");
-  if (parts.length === 2) return parts.slice(0, -1).join("-");
-  return pod;
 }
 
 // Canonical string form for equality/dedup/lookup and for rendering "known
