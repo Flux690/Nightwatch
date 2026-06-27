@@ -33,9 +33,9 @@ import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
   unregisterRunner,
-  resolveCommand,
   setRunnerRemediationMode,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import type { ApprovalRequest } from "@nightwatch/shared";
 
 // A free-form text finish: no tool call ends the run successfully.

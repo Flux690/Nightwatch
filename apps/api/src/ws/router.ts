@@ -3,26 +3,17 @@ import {
   serviceIdentityKey,
   type CapabilityManifest,
   type FleetRunner,
-  type RunnerCommandMessage,
-  type RunnerResultMessage,
   type ServiceIdentity,
   type SetRemediationModeMessage,
 } from "@nightwatch/shared";
 import { logger } from "../logger.js";
 
-interface PendingCommand {
-  resolve: (result: unknown) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
-const pending = new Map<string, PendingCommand>();
-
 const HEARTBEAT_TTL_MS = 120_000;
 
 // Flat registry keyed by tokenId. One token = one server in this deployment
 // model; the token authenticates the connection and is the stable per-server key.
-interface RunnerConnection {
+// Exported so the command transport can send over a resolved connection.
+export interface RunnerConnection {
   tokenId: string;
   runnerId: string | null;
   send: (msg: string) => void;
@@ -197,27 +188,6 @@ export function pushRemediationMode(tokenId: string, enabled: boolean): void {
   conn.send(JSON.stringify(msg));
 }
 
-export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
-  const entry = pending.get(payload.correlationId);
-  if (!entry) {
-    // The command already timed out (and rejected its caller) or never existed,
-    // so a late result has nowhere to go. Log it instead of dropping silently,
-    // so a consistently-slow runner is diagnosable.
-    logger.warn(
-      { correlationId: payload.correlationId },
-      "late or unknown runner result discarded",
-    );
-    return;
-  }
-  clearTimeout(entry.timer);
-  pending.delete(payload.correlationId);
-  if (payload.success) {
-    entry.resolve(payload.result);
-  } else {
-    entry.reject(new Error(payload.error ?? "Runner command failed"));
-  }
-}
-
 // A tool call's `service` field arrives as unknown JSON (from the LLM, or
 // replayed from a persisted approval); narrow it before trusting its shape.
 function isServiceIdentity(value: unknown): value is ServiceIdentity {
@@ -240,7 +210,9 @@ function isServiceIdentity(value: unknown): value is ServiceIdentity {
 // A command with no service identity falls back to the legacy chain (hint,
 // single-runner, hostname) for backward compat; each fallback step logs a
 // deprecation warning since it bypasses identity validation entirely.
-function resolveRunner(
+// Resolve a command to exactly one connected runner (ADR-0004 validate-and-route).
+// Exported for the command transport, which sends over the resolved connection.
+export function resolveRunner(
   commandInput: Record<string, unknown>,
   runnerIdHint?: string,
 ): RunnerConnection {
@@ -327,33 +299,4 @@ function resolveRunner(
   throw new Error(
     `Multiple runners registered. Specify a hostname parameter: ${hostnames}`,
   );
-}
-
-export function sendCommand(
-  commandName: string,
-  commandInput: Record<string, unknown>,
-  timeoutMs = 15_000,
-  runnerIdHint?: string,
-): Promise<unknown> {
-  const conn = resolveRunner(commandInput, runnerIdHint);
-  const { send } = conn;
-
-  const correlationId = randomUUID();
-  const msg: RunnerCommandMessage = {
-    messageId: randomUUID(),
-    type: "command",
-    payload: { commandName, commandInput, correlationId },
-  };
-
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(correlationId);
-      reject(
-        new Error(`Command ${commandName} timed out after ${timeoutMs}ms`),
-      );
-    }, timeoutMs);
-
-    pending.set(correlationId, { resolve, reject, timer });
-    send(JSON.stringify(msg));
-  });
 }

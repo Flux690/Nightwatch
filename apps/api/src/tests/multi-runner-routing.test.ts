@@ -45,8 +45,8 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";

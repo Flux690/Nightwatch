@@ -1,4 +1,4 @@
-import { sendCommand } from "../ws/router.js";
+import { sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
 import type { ToolExecuteContext, ToolExecuteResult } from "./tools.js";
 

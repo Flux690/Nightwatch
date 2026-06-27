@@ -33,10 +33,10 @@ import { respondToPendingHumanInput } from "../session/human-input.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
-  resolveCommand,
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
 // Matches the `container: "web-01"` label every alertmanagerBody() carries,

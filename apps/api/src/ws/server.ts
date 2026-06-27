@@ -11,13 +11,13 @@ import {
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
-  resolveCommand,
   unregisterRunner,
   setRunnerManifest,
   recordHeartbeat,
   pushRemediationMode,
   setRunnerRemediationMode,
 } from "./router.js";
+import { resolveCommand } from "./command-transport.js";
 import type {
   RunnerManifestMessage,
   RunnerResultMessage,

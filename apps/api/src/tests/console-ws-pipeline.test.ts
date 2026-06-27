@@ -79,8 +79,8 @@ import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
   unregisterRunner,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 
 // Wait for the console handler's `connected` ack, sent only after it subscribes
 // to the event bus. Dispatch is now in-process and synchronous, so a run can

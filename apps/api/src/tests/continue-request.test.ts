@@ -35,8 +35,8 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
 
 interface WsEvent {

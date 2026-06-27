@@ -5,11 +5,11 @@ import {
   setRemediationMode,
 } from "../db/runner.js";
 import {
-  sendCommand,
   listRunners,
   getFleetView,
   pushRemediationMode,
 } from "../ws/router.js";
+import { sendCommand } from "../ws/command-transport.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";

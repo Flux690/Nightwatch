@@ -9,10 +9,9 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-  resolveCommand,
-  sendCommand,
   getFleetView,
 } from "../ws/router.js";
+import { resolveCommand, sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
 
 function svc(name: string): {

@@ -37,8 +37,8 @@ import {
   setRunnerManifest,
   setRunnerRemediationMode,
   unregisterRunner,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools.js";
 
 interface WsEvent {
