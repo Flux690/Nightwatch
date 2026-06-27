@@ -621,7 +621,26 @@ describe("SettingsPage", () => {
         );
         expect(screen.getByText(INGEST_TOKEN)).toBeInTheDocument();
       });
-      expect(screen.getByText(/won't see this again/i)).toBeInTheDocument();
+      expect(screen.getByText(/no longer works/i)).toBeInTheDocument();
+    });
+
+    it("reveals the credential on demand via POST /reveal when configured", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setupIngest(true);
+
+      await user.click(
+        await screen.findByRole("button", { name: /reveal credential/i }),
+      );
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/ingest-credential/reveal",
+          expect.objectContaining({ method: "POST" }),
+        );
+        expect(screen.getByText(INGEST_TOKEN)).toBeInTheDocument();
+      });
+      // A revealed (not freshly minted) token does not claim the old one is dead.
+      expect(screen.queryByText(/no longer works/i)).not.toBeInTheDocument();
     });
 
     it("copies the credential to clipboard when copy button is clicked", async () => {

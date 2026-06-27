@@ -399,6 +399,68 @@ describe("AddServerWizard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("reveals an existing credential on demand via POST /reveal", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+
+    const fetchMock = vi
+      .fn()
+      .mockImplementation((url: string, init?: RequestInit) => {
+        if (url === "/api/runners") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([CONNECTED_RUNNER]),
+          });
+        }
+        if (url === "/api/tokens" && init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve(GENERATED_TOKEN),
+          });
+        }
+        if (url === "/api/connect.sh") {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve(CONNECT_SCRIPT),
+          });
+        }
+        if (
+          url === "/api/ingest-credential/reveal" &&
+          init?.method === "POST"
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ token: "nwi_revealedtoken456" }),
+          });
+        }
+        if (url === "/api/ingest-credential") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ configured: true }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await advanceToMonitoringStep(user);
+
+    await user.click(
+      await screen.findByRole("button", { name: /reveal credential/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/ingest-credential/reveal",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(
+        screen.getAllByText(/nwi_revealedtoken456/).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
   it("generates the ingest credential and shows it once with the webhook config", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });

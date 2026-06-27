@@ -83,7 +83,10 @@ export function SettingsPage(): React.JSX.Element {
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingIngest, setGeneratingIngest] = useState(false);
+  const [revealingIngest, setRevealingIngest] = useState(false);
   const [ingestToken, setIngestToken] = useState<string | null>(null);
+  // True when the shown token was just minted (old one now invalid) vs revealed.
+  const [ingestTokenFresh, setIngestTokenFresh] = useState(false);
 
   useEffect(() => {
     if (config) setForm(config);
@@ -147,9 +150,37 @@ export function SettingsPage(): React.JSX.Element {
       if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
       const { token } = (await res.json()) as { token: string };
       setIngestToken(token);
+      setIngestTokenFresh(true);
       await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Could not generate credential",
+        message: err instanceof Error ? err.message : "Try again.",
+      });
     } finally {
       setGeneratingIngest(false);
+    }
+  }
+
+  async function handleRevealIngestCredential(): Promise<void> {
+    setRevealingIngest(true);
+    try {
+      const res = await fetch("/api/ingest-credential/reveal", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(`reveal ${res.status}`);
+      const { token } = (await res.json()) as { token: string };
+      setIngestToken(token);
+      setIngestTokenFresh(false);
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Could not reveal credential",
+        message: err instanceof Error ? err.message : "Try again.",
+      });
+    } finally {
+      setRevealingIngest(false);
     }
   }
 
@@ -362,21 +393,38 @@ export function SettingsPage(): React.JSX.Element {
             {ingestCredential?.configured ? "Configured" : "Not configured"}
           </Badge>
         </Group>
-        <Button
-          size="xs"
-          variant="default"
-          style={{ alignSelf: "flex-start" }}
-          loading={generatingIngest}
-          onClick={() => void handleGenerateIngestCredential()}
-        >
-          {ingestCredential?.configured
-            ? "Rotate credential"
-            : "Generate credential"}
-        </Button>
+        <Group gap="xs">
+          <Button
+            size="xs"
+            variant="default"
+            loading={generatingIngest}
+            disabled={revealingIngest}
+            onClick={() => void handleGenerateIngestCredential()}
+          >
+            {ingestCredential?.configured
+              ? "Rotate credential"
+              : "Generate credential"}
+          </Button>
+          {ingestCredential?.configured && (
+            <Button
+              size="xs"
+              variant="subtle"
+              loading={revealingIngest}
+              disabled={generatingIngest}
+              onClick={() => void handleRevealIngestCredential()}
+            >
+              Reveal credential
+            </Button>
+          )}
+        </Group>
         {ingestToken !== null && (
           <Alert
-            color="yellow"
-            title="You won't see this again — if lost, rotate to issue a new one"
+            color={ingestTokenFresh ? "yellow" : "blue"}
+            title={
+              ingestTokenFresh
+                ? "New credential issued — the previous one no longer works"
+                : "Ingest credential"
+            }
             withCloseButton
             onClose={() => setIngestToken(null)}
           >

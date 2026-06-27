@@ -87,7 +87,10 @@ export function AddServerWizard({
   const [installText, setInstallText] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [generatingIngest, setGeneratingIngest] = useState(false);
+  const [revealingIngest, setRevealingIngest] = useState(false);
   const [ingestToken, setIngestToken] = useState<string | null>(null);
+  // True when the shown token was just minted (old one now invalid) vs revealed.
+  const [ingestTokenFresh, setIngestTokenFresh] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
@@ -107,18 +110,12 @@ export function AddServerWizard({
   const canContinueFromProvider =
     provider !== null && validateServerName(serverName) === null;
 
-  const { data: ingestCredential } = useQuery<{
-    configured: boolean;
-    token: string | null;
-  }>({
+  const { data: ingestCredential } = useQuery<{ configured: boolean }>({
     queryKey: ["wizard-ingest-credential"],
     queryFn: () =>
       fetch("/api/ingest-credential").then((r) => {
         if (!r.ok) throw new Error(`ingest-credential ${r.status}`);
-        return r.json() as Promise<{
-          configured: boolean;
-          token: string | null;
-        }>;
+        return r.json() as Promise<{ configured: boolean }>;
       }),
     enabled: step === 2,
   });
@@ -152,7 +149,9 @@ export function AddServerWizard({
     setInstallText(null);
     setInstallError(null);
     setGeneratingIngest(false);
+    setRevealingIngest(false);
     setIngestToken(null);
+    setIngestTokenFresh(false);
     setTestingWebhook(false);
     setWebhookTestResult(null);
     setVerifying(false);
@@ -215,6 +214,7 @@ export function AddServerWizard({
       if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
       const { token } = (await res.json()) as { token: string };
       setIngestToken(token);
+      setIngestTokenFresh(true);
     } catch (err) {
       setGenerateError(
         err instanceof Error ? err.message : "Failed to generate credential",
@@ -224,8 +224,28 @@ export function AddServerWizard({
     }
   }
 
+  async function handleRevealIngestCredential(): Promise<void> {
+    setRevealingIngest(true);
+    setGenerateError(null);
+    try {
+      const res = await fetch("/api/ingest-credential/reveal", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(`reveal ${res.status}`);
+      const { token } = (await res.json()) as { token: string };
+      setIngestToken(token);
+      setIngestTokenFresh(false);
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error ? err.message : "Failed to reveal credential",
+      );
+    } finally {
+      setRevealingIngest(false);
+    }
+  }
+
   async function handleTestWebhook(): Promise<void> {
-    const token = ingestToken ?? ingestCredential?.token;
+    const token = ingestToken;
     if (!token || !provider) return;
     setTestingWebhook(true);
     setWebhookTestResult(null);
@@ -420,17 +440,29 @@ export function AddServerWizard({
               </Badge>
             </Group>
 
-            {!ingestCredential?.configured && (
-              <Button
-                size="xs"
-                variant="default"
-                style={{ alignSelf: "flex-start" }}
-                loading={generatingIngest}
-                onClick={() => void handleGenerateIngestCredential()}
-              >
-                Generate credential
-              </Button>
-            )}
+            <Group gap="xs">
+              {!ingestCredential?.configured ? (
+                <Button
+                  size="xs"
+                  variant="default"
+                  loading={generatingIngest}
+                  onClick={() => void handleGenerateIngestCredential()}
+                >
+                  Generate credential
+                </Button>
+              ) : (
+                ingestToken === null && (
+                  <Button
+                    size="xs"
+                    variant="default"
+                    loading={revealingIngest}
+                    onClick={() => void handleRevealIngestCredential()}
+                  >
+                    Reveal credential
+                  </Button>
+                )
+              )}
+            </Group>
 
             {generateError !== null && (
               <Text size="sm" c="red">
@@ -439,16 +471,15 @@ export function AddServerWizard({
             )}
 
             {(() => {
-              const displayToken =
-                ingestToken ?? ingestCredential?.token ?? null;
+              const displayToken = ingestToken;
               if (displayToken === null) return null;
               return (
                 <Alert
-                  color={ingestToken !== null ? "yellow" : "blue"}
+                  color={ingestTokenFresh ? "yellow" : "blue"}
                   title={
-                    ingestToken !== null
+                    ingestTokenFresh
                       ? "New credential generated"
-                      : "Existing fleet credential"
+                      : "Fleet ingest credential"
                   }
                 >
                   <Stack gap="sm">
@@ -529,8 +560,7 @@ export function AddServerWizard({
             )}
 
             {(() => {
-              const displayToken =
-                ingestToken ?? ingestCredential?.token ?? null;
+              const displayToken = ingestToken;
               if (displayToken === null) return null;
               return (
                 <Stack gap="xs">

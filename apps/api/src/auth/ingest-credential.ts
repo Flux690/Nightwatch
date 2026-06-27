@@ -18,13 +18,29 @@ export async function registerIngestCredentialRoutes(
     },
   );
 
+  // Status only - the token is never handed out on this idempotent read, so it
+  // stays out of routine page-load traffic, logs, and query caches.
   fastify.get(
     "/ingest-credential",
     { preHandler: requireSession },
     async () => {
-      const configured = getIngestTokenHash() !== null;
-      const token = configured ? getIngestTokenPlaintext() : null;
-      return { configured, token };
+      return { configured: getIngestTokenHash() !== null };
+    },
+  );
+
+  // Reveal is a deliberate, non-idempotent action: the plaintext only crosses the
+  // wire when the operator explicitly asks for it.
+  fastify.post(
+    "/ingest-credential/reveal",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      const token = getIngestTokenPlaintext();
+      if (token === null) {
+        return reply
+          .code(404)
+          .send({ error: "No ingest credential configured" });
+      }
+      return { token };
     },
   );
 }

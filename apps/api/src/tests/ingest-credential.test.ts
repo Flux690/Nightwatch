@@ -103,10 +103,37 @@ describe("Fleet-wide ingest credential", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ configured: false, token: null });
+      expect(JSON.parse(res.body)).toEqual({ configured: false });
     });
 
-    it("reveals the plaintext of an existing credential for the wizard", async () => {
+    it("reports configured: true after a credential exists, without leaking the token", async () => {
+      await server.inject({
+        method: "POST",
+        url: "/ingest-credential",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      const res = await server.inject({
+        method: "GET",
+        url: "/ingest-credential",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as Record<string, unknown>;
+      expect(body).toEqual({ configured: true });
+      expect(body).not.toHaveProperty("token");
+    });
+
+    it("requires a session", async () => {
+      const res = await server.inject({
+        method: "GET",
+        url: "/ingest-credential",
+      });
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe("POST /ingest-credential/reveal", () => {
+    it("returns the plaintext of an existing credential on explicit reveal", async () => {
       const postRes = await server.inject({
         method: "POST",
         url: "/ingest-credential",
@@ -117,22 +144,29 @@ describe("Fleet-wide ingest credential", () => {
       };
 
       const res = await server.inject({
-        method: "GET",
-        url: "/ingest-credential",
+        method: "POST",
+        url: "/ingest-credential/reveal",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
-      const body = JSON.parse(res.body) as {
-        configured: boolean;
-        token: string | null;
-      };
-      expect(body.configured).toBe(true);
-      expect(body.token).toBe(generated);
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ token: generated });
+    });
+
+    it("returns 404 when no credential is configured", async () => {
+      cleanupDb();
+      cleanupDb = useTempDb();
+      const res = await server.inject({
+        method: "POST",
+        url: "/ingest-credential/reveal",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      expect(res.statusCode).toBe(404);
     });
 
     it("requires a session", async () => {
       const res = await server.inject({
-        method: "GET",
-        url: "/ingest-credential",
+        method: "POST",
+        url: "/ingest-credential/reveal",
       });
       expect(res.statusCode).toBe(401);
     });
