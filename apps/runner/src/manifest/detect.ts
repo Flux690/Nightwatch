@@ -8,6 +8,7 @@ import {
 import { getDocker } from "../docker-client.js";
 import { getAppsV1Api, getClusterName } from "../kubernetes-client.js";
 import { getRunnerId } from "./identity.js";
+import { isRemediationEnabled } from "../remediation-state.js";
 
 const RUNNER_VERSION = "0.2.0";
 
@@ -40,7 +41,7 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
         : { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: process.env["REMEDIATION_ENABLED"] === "true",
+      remediationEnabled: isRemediationEnabled(),
     },
   };
 }

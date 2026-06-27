@@ -6,6 +6,7 @@ import {
   type RunnerCommandMessage,
   type RunnerResultMessage,
   type ServiceIdentity,
+  type SetRemediationModeMessage,
 } from "@nightwatch/shared";
 import { logger } from "../logger.js";
 
@@ -29,6 +30,7 @@ interface RunnerConnection {
   manifest: CapabilityManifest | null;
   hostname: string | null;
   lastSeen: number;
+  remediationMode: boolean | null;
 }
 
 export interface RunnerView {
@@ -38,6 +40,7 @@ export interface RunnerView {
   manifest: CapabilityManifest | null;
   lastSeen: number;
   online: boolean;
+  remediationMode: boolean | null;
 }
 
 const connectionsByTokenId = new Map<string, RunnerConnection>();
@@ -63,6 +66,7 @@ export function registerRunner(
     manifest: null,
     hostname: null,
     lastSeen: Date.now(),
+    remediationMode: null,
   });
 }
 
@@ -111,6 +115,7 @@ export function listRunners(): RunnerView[] {
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
       online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+      remediationMode: conn.remediationMode,
     });
   }
   return views;
@@ -156,6 +161,40 @@ export function getRunnerManifestForAlert(
     connectionsByTokenId.get(runnerId)?.manifest ??
     null
   );
+}
+
+// Sync the in-memory remediation mode for a connected runner without pushing
+// to the runner (used by server.ts reconciliation for the bootstrap and
+// agree-in-place cases where no push is needed).
+export function setRunnerRemediationMode(tokenId: string, mode: boolean): void {
+  const conn = connectionsByTokenId.get(tokenId);
+  if (conn) conn.remediationMode = mode;
+}
+
+// Read the cached remediation mode by runnerId. Tries the post-manifest
+// registry first, then the pre-manifest connectionsByTokenId map (covers the
+// case where an alert's runnerId was stamped as the tokenId at ingest).
+export function getRunnerRemediationMode(runnerId: string): boolean | null {
+  return (
+    registry.get(runnerId)?.remediationMode ??
+    connectionsByTokenId.get(runnerId)?.remediationMode ??
+    null
+  );
+}
+
+// Fire-and-forget push of remediation mode to a connected runner. Also
+// updates the in-memory cache so the next reconciliation sees the new value
+// and doesn't push again unnecessarily.
+export function pushRemediationMode(tokenId: string, enabled: boolean): void {
+  const conn = connectionsByTokenId.get(tokenId);
+  if (!conn) return;
+  conn.remediationMode = enabled;
+  const msg: SetRemediationModeMessage = {
+    messageId: randomUUID(),
+    type: "set_remediation_mode",
+    payload: { enabled },
+  };
+  conn.send(JSON.stringify(msg));
 }
 
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {

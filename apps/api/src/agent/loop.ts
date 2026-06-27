@@ -26,6 +26,7 @@ import { dispatcher } from "../dispatcher.js";
 import {
   getFleetView,
   getRunnerManifestForAlert,
+  getRunnerRemediationMode,
   listRunners,
 } from "../ws/router.js";
 import { logger } from "../logger.js";
@@ -93,19 +94,30 @@ function currentFleetProviders(): ReadonlySet<Provider> | undefined {
   return providers.size > 0 ? providers : undefined;
 }
 
-// Remediation mode is the master write switch (ADR-0003, REMEDIATION_ENABLED):
-// an investigation takes the mode of the runner it acts on. A known alerting
-// runner's manifest is authoritative. A chat session has no single target
-// runner yet, so - mirroring currentFleetProviders' permissive union - it is
-// enabled if any connected runner has remediation on; a quiet or all-read-only
-// fleet is the safe default (false) rather than silently hiding write tools
-// from the one runner that has them enabled.
+// Remediation mode is the master write switch (ADR-0003). The in-memory
+// cache on each RunnerConnection is the hot-path source of truth, kept in
+// sync by ws/server.ts reconciliation on every manifest message. DB reads
+// happen only during reconciliation, not here. A null cache value (runner
+// connected but first manifest not yet processed) falls back to the manifest
+// self-report so a freshly connected runner is not silently read-only.
 function currentRemediationEnabled(runnerId?: string): boolean {
   if (runnerId) {
-    const manifest = getRunnerManifestForAlert(runnerId);
-    if (manifest) return manifest.capabilities.remediationEnabled;
+    const cached = getRunnerRemediationMode(runnerId);
+    if (cached !== null) return cached;
+    return (
+      getRunnerManifestForAlert(runnerId)?.capabilities.remediationEnabled ??
+      false
+    );
   }
-  return listRunners().some((r) => r.manifest?.capabilities.remediationEnabled);
+  for (const runner of listRunners()) {
+    if (runner.remediationMode === true) return true;
+    if (
+      runner.remediationMode === null &&
+      runner.manifest?.capabilities.remediationEnabled
+    )
+      return true;
+  }
+  return false;
 }
 
 // Returns the service's provider string if it does not match the tool's
@@ -299,7 +311,10 @@ export async function runInvestigation(
     let response: ChatResponse;
     try {
       response = await provider.chat(
-        getToolSchemas(fleetProviders, remediationEnabled),
+        getToolSchemas(
+          fleetProviders,
+          currentRemediationEnabled(alert?.runnerId ?? undefined),
+        ),
         (d) => publishTextMessageContent(sessionId, d),
         signal,
       );

@@ -62,12 +62,7 @@ function setupDockerMock(exitCode: number, stdout = "", stderr = ""): void {
 
 describe("execCommand handler", () => {
   beforeEach(() => {
-    vi.stubEnv("REMEDIATION_ENABLED", "true");
     MockDocker.mockReset();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
   });
 
   it("returns exitCode 0 when the command succeeds", async () => {

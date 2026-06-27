@@ -10,7 +10,7 @@ import type {
   FleetRunner,
   RunnerRecord,
 } from "@nightwatch/shared";
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken, findRunnerById } from "../db/runner.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
@@ -286,5 +286,245 @@ describe("flat runner registry", () => {
 
     a.close();
     b.close();
+  });
+});
+
+describe("remediation mode toggle", () => {
+  let server: FastifyInstance;
+  let port: number;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await server.register(FastifyWebSocket);
+    await registerWsRoutes(server);
+    await registerRunnerRoutes(server);
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  it("PATCH /runners/:tokenId/remediation-mode persists to DB and pushes set_remediation_mode to connected runner", async () => {
+    const { plaintext: token, id: tokenId } = generateRunnerToken(
+      "toggle-remediation-push",
+    );
+
+    const receivedMessages: Array<{ type: string; payload: unknown }> = [];
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.on("error", reject);
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type: string;
+          payload: unknown;
+        };
+        receivedMessages.push(msg);
+        if (msg.type === "connected") resolve();
+      });
+    });
+    ws.send(
+      JSON.stringify({
+        messageId: "m1",
+        type: "manifest",
+        payload: manifest("toggle-host", ["api"]),
+      }),
+    );
+
+    const res = await server.inject({
+      method: "PATCH",
+      url: `/runners/${tokenId}/remediation-mode`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: { enabled: true },
+    });
+    expect(res.statusCode).toBe(200);
+
+    // DB must reflect the new value
+    const row = findRunnerById(tokenId);
+    expect(row?.remediationMode).toBe(true);
+
+    // Runner must receive the push
+    await waitFor(() => {
+      const push = receivedMessages.find(
+        (m) => m.type === "set_remediation_mode",
+      );
+      return push ? true : undefined;
+    });
+    const push = receivedMessages.find(
+      (m) => m.type === "set_remediation_mode",
+    )!;
+    expect((push.payload as { enabled: boolean }).enabled).toBe(true);
+
+    ws.close();
+  });
+
+  it("PATCH /runners/:tokenId/remediation-mode returns 404 for unknown tokenId", async () => {
+    const res = await server.inject({
+      method: "PATCH",
+      url: `/runners/00000000-0000-0000-0000-000000000000/remediation-mode`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: { enabled: true },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("PATCH /runners/:tokenId/remediation-mode returns 400 when enabled field is missing", async () => {
+    const { id: tokenId } = generateRunnerToken("toggle-badreq");
+    const res = await server.inject({
+      method: "PATCH",
+      url: `/runners/${tokenId}/remediation-mode`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("remediation mode reconciliation on reconnect", () => {
+  let server: FastifyInstance;
+  let port: number;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await server.register(FastifyWebSocket);
+    await registerWsRoutes(server);
+    await registerRunnerRoutes(server);
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  it("when manifest disagrees with DB, API pushes the stored DB value to the runner", async () => {
+    const { plaintext: token, id: tokenId } = generateRunnerToken(
+      "reconcile-remediation",
+    );
+
+    // Set DB to false before connecting
+    const patchRes = await server.inject({
+      method: "PATCH",
+      url: `/runners/${tokenId}/remediation-mode`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: { enabled: false },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // Runner connects and reports remediationEnabled: true in its manifest
+    // (simulates env-var bootstrap mismatch after a toggle)
+    const receivedMessages: Array<{ type: string; payload: unknown }> = [];
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.on("error", reject);
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type: string;
+          payload: unknown;
+        };
+        receivedMessages.push(msg);
+        if (msg.type === "connected") resolve();
+      });
+    });
+
+    // Send manifest that disagrees with DB (remediationEnabled: true vs DB false)
+    ws.send(
+      JSON.stringify({
+        messageId: "m-reconcile",
+        type: "manifest",
+        payload: {
+          ...manifest("reconcile-host", ["svc"]),
+          capabilities: {
+            ...manifest("reconcile-host", ["svc"]).capabilities,
+            remediationEnabled: true,
+          },
+        },
+      }),
+    );
+
+    // The API should push the DB value (false) back to the runner
+    await waitFor(() => {
+      const push = receivedMessages.find(
+        (m) => m.type === "set_remediation_mode",
+      );
+      return push ? true : undefined;
+    });
+    const push = receivedMessages.find(
+      (m) => m.type === "set_remediation_mode",
+    )!;
+    expect((push.payload as { enabled: boolean }).enabled).toBe(false);
+
+    ws.close();
+  });
+
+  it("when manifest agrees with DB, no set_remediation_mode push is sent", async () => {
+    const { plaintext: token, id: tokenId } =
+      generateRunnerToken("reconcile-agree");
+
+    const patchRes = await server.inject({
+      method: "PATCH",
+      url: `/runners/${tokenId}/remediation-mode`,
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: { enabled: false },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    const receivedMessages: Array<{ type: string; payload: unknown }> = [];
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await new Promise<void>((resolve, reject) => {
+      ws.on("error", reject);
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type: string;
+          payload: unknown;
+        };
+        receivedMessages.push(msg);
+        if (msg.type === "connected") resolve();
+      });
+    });
+
+    // Manifest agrees with DB (remediationEnabled: false)
+    ws.send(
+      JSON.stringify({
+        messageId: "m-agree",
+        type: "manifest",
+        payload: {
+          ...manifest("agree-host", ["svc"]),
+          runnerId: `runner-agree-${tokenId.slice(0, 8)}`,
+          capabilities: {
+            ...manifest("agree-host", ["svc"]).capabilities,
+            remediationEnabled: false,
+          },
+        },
+      }),
+    );
+
+    // Brief wait - no push should arrive
+    await new Promise<void>((r) => setTimeout(r, 150));
+    const push = receivedMessages.find(
+      (m) => m.type === "set_remediation_mode",
+    );
+    expect(push).toBeUndefined();
+
+    ws.close();
   });
 });

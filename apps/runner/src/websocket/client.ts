@@ -2,11 +2,13 @@ import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
 import { logger } from "../logger.js";
+import { setRemediationEnabled } from "../remediation-state.js";
 import type {
   RunnerCommandMessage,
   RunnerHeartbeatMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
+  SetRemediationModeMessage,
 } from "@nightwatch/shared";
 
 type CommandHandler = (input: unknown) => Promise<unknown>;
@@ -159,6 +161,13 @@ export function startWebSocketClient(
       if (parsed["type"] === "command") {
         handleCommand(ws!, parsed as unknown as RunnerCommandMessage).catch(
           (err: unknown) => logger.error({ err }, "command handler error"),
+        );
+      } else if (parsed["type"] === "set_remediation_mode") {
+        const msg = parsed as unknown as SetRemediationModeMessage;
+        setRemediationEnabled(msg.payload.enabled);
+        logger.info(
+          { enabled: msg.payload.enabled },
+          "remediation mode updated",
         );
       }
     });

@@ -316,12 +316,6 @@ export async function restartService(
 export async function execCommand(
   input: ExecCommandInput,
 ): Promise<ExecCommandResult | NoRunningInstanceResult> {
-  if (process.env["REMEDIATION_ENABLED"] !== "true") {
-    throw new Error(
-      "exec_command is disabled. Set REMEDIATION_ENABLED=true on the runner to enable.",
-    );
-  }
-
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();

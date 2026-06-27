@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -35,6 +35,7 @@ import { getSessionMessages } from "../db/sessions.js";
 import {
   registerRunner,
   setRunnerManifest,
+  setRunnerRemediationMode,
   unregisterRunner,
   resolveCommand,
 } from "../ws/router.js";
@@ -500,6 +501,123 @@ describe("providers filter and mismatch rejection", () => {
         expect(offeredNames).toContain("get_service_logs");
 
         ws.close();
+      });
+    });
+
+    describe("agentic loop seam: DB stored value overrides manifest", () => {
+      let server: FastifyInstance;
+      let port: number;
+      let cleanupDb: () => void;
+      let SESSION: string;
+
+      const DB_SERVICE = {
+        provider: "docker" as const,
+        project: "db-mode-app",
+        service: "db-mode-svc",
+      };
+
+      beforeAll(async () => {
+        cleanupDb = useTempDb();
+        SESSION = await mintTestSession();
+      });
+
+      afterAll(async () => {
+        await server?.close();
+        cleanupDb();
+      });
+
+      async function runChatAndCaptureTools(
+        tokenId: string,
+        manifestRemediationEnabled: boolean,
+        dbRemediationEnabled: boolean,
+      ): Promise<string[]> {
+        setRemediationMode(tokenId, dbRemediationEnabled);
+
+        unregisterRunner(tokenId);
+        registerRunner(
+          tokenId,
+          () => {},
+          () => {},
+        );
+        setRunnerManifest(tokenId, {
+          runnerId: `runner-db-mode-${tokenId.slice(0, 8)}`,
+          hostname: "db-mode-host",
+          runnerVersion: "2.0.0",
+          capabilities: {
+            docker: true,
+            kubernetes: false,
+            services: [{ identity: DB_SERVICE, status: "running" }],
+            prometheus: { available: false },
+            postgres: { available: false },
+            redis: { available: false },
+            hostMetrics: false,
+            fileRead: false,
+            remediationEnabled: manifestRemediationEnabled,
+          },
+        });
+        // Simulate what ws/server.ts reconciliation does: sync the DB value
+        // into the in-memory cache so currentRemediationEnabled() reads it.
+        setRunnerRemediationMode(tokenId, dbRemediationEnabled);
+
+        let capturedProvider: ContractFakeProvider | null = null;
+        mockCreateProvider.mockImplementationOnce(() => {
+          const p = scriptRunner.create();
+          capturedProvider = p;
+          return p;
+        });
+        setScript([{ text: "Done.", toolUses: [] }]);
+
+        const s = Fastify({ logger: false });
+        await s.register(FastifyWebSocket);
+        await registerConsoleWsRoutes(s);
+        await registerSessionRoutes(s);
+        await s.listen({ port: 0, host: "127.0.0.1" });
+        const p = (s.server.address() as AddressInfo).port;
+        server = s;
+
+        const ws = new WebSocket(`ws://127.0.0.1:${p}/console/connect`, {
+          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+        });
+        const events: WsEvent[] = [];
+        ws.on("message", (raw) => {
+          events.push(JSON.parse(raw.toString()) as WsEvent);
+        });
+        await waitForConnected(ws);
+
+        await fetch(`http://127.0.0.1:${p}/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `nw_auth=${SESSION}`,
+          },
+          body: JSON.stringify({ message: "Check the service." }),
+        });
+
+        await waitFor(() => events.some((e) => e.type === "RUN_FINISHED"));
+        ws.close();
+        await s.close();
+
+        const toolsPassedToChat = capturedProvider!.chat.mock.calls[0]?.[0] as
+          | Array<{ name: string }>
+          | undefined;
+        return (toolsPassedToChat ?? []).map((s) => s.name);
+      }
+
+      it("DB mode false suppresses write tools even when manifest reports remediationEnabled:true", async () => {
+        const { id: tokenId } = generateRunnerToken("db-mode-false-001");
+        const offered = await runChatAndCaptureTools(tokenId, true, false);
+        expect(offered).not.toContain("restart_service");
+        expect(offered).not.toContain("exec_command");
+        expect(offered).toContain("get_service_logs");
+        unregisterRunner(tokenId);
+      });
+
+      it("DB mode true offers write tools even when manifest reports remediationEnabled:false", async () => {
+        const { id: tokenId } = generateRunnerToken("db-mode-true-001");
+        const offered = await runChatAndCaptureTools(tokenId, false, true);
+        expect(offered).toContain("restart_service");
+        expect(offered).toContain("exec_command");
+        unregisterRunner(tokenId);
       });
     });
   });

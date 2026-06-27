@@ -1,7 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import { findRunnerByToken, setRunnerId, touchLastUsed } from "../db/runner.js";
+import {
+  findRunnerByToken,
+  findRunnerById,
+  setRunnerId,
+  setRemediationMode,
+  touchLastUsed,
+} from "../db/runner.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
@@ -9,6 +15,8 @@ import {
   unregisterRunner,
   setRunnerManifest,
   recordHeartbeat,
+  pushRemediationMode,
+  setRunnerRemediationMode,
 } from "./router.js";
 import type {
   RunnerManifestMessage,
@@ -63,6 +71,22 @@ export async function registerWsRoutes(
           setRunnerManifest(tokenId, msg.payload);
           setRunnerId(tokenId, msg.payload.runnerId);
           fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
+          // Reconcile remediation mode: re-read from DB each time since the
+          // operator may have toggled since connect. Bootstrap from the
+          // manifest on first arrival (null DB), then keep DB authoritative.
+          // Always sync the in-memory cache so currentRemediationEnabled()
+          // reads fresh state without DB round-trips.
+          const currentRow = findRunnerById(tokenId);
+          const dbMode = currentRow?.remediationMode ?? null;
+          const manifestMode = msg.payload.capabilities.remediationEnabled;
+          if (dbMode === null) {
+            setRemediationMode(tokenId, manifestMode);
+            setRunnerRemediationMode(tokenId, manifestMode);
+          } else if (dbMode !== manifestMode) {
+            pushRemediationMode(tokenId, dbMode);
+          } else {
+            setRunnerRemediationMode(tokenId, dbMode);
+          }
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);

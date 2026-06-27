@@ -460,12 +460,7 @@ describe("Kubernetes runner command handlers", () => {
   });
 
   describe("execCommand (K8s pod exec)", () => {
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
     it("returns stdout, stderr, and exitCode 0 for a successful command", async () => {
-      vi.stubEnv("REMEDIATION_ENABLED", "true");
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
 
       MockExec.mockImplementation(function () {
@@ -504,7 +499,6 @@ describe("Kubernetes runner command handlers", () => {
     });
 
     it("returns non-zero exit code for a failed command", async () => {
-      vi.stubEnv("REMEDIATION_ENABLED", "true");
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
 
       MockExec.mockImplementation(function () {
@@ -549,7 +543,6 @@ describe("Kubernetes runner command handlers", () => {
     });
 
     it("returns not-running finding when no live pod exists", async () => {
-      vi.stubEnv("REMEDIATION_ENABLED", "true");
       mockCoreApi.listNamespacedPod.mockResolvedValue({
         items: [TERMINATED_POD],
       });
@@ -567,21 +560,7 @@ describe("Kubernetes runner command handlers", () => {
       });
     });
 
-    it("throws when REMEDIATION_ENABLED is not set to true", async () => {
-      vi.stubEnv("REMEDIATION_ENABLED", "false");
-
-      await expect(
-        k8sExecCommand({
-          service: K8S_SERVICE,
-          command: ["ls"],
-          reason: "test",
-          risk: "low",
-        }),
-      ).rejects.toThrow("exec_command is disabled");
-    });
-
     it("redacts secrets from K8s exec stdout before returning", async () => {
-      vi.stubEnv("REMEDIATION_ENABLED", "true");
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
 
       MockExec.mockImplementation(function () {

@@ -79,12 +79,6 @@ export async function restartContainer(
 export async function execCommand(
   input: ExecCommandInput,
 ): Promise<ExecCommandResult | NoRunningInstanceResult> {
-  if (process.env["REMEDIATION_ENABLED"] !== "true") {
-    throw new Error(
-      "exec_command is disabled. Set REMEDIATION_ENABLED=true on the runner to enable.",
-    );
-  }
-
   const executedAt = new Date().toISOString();
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");

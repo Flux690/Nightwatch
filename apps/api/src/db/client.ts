@@ -10,13 +10,14 @@ export function dbPath(): string {
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runner (
-    id           TEXT PRIMARY KEY,
-    token        TEXT NOT NULL UNIQUE,
-    runner_id    TEXT,
-    label        TEXT,
-    server_name  TEXT UNIQUE,
-    created_at   TEXT NOT NULL,
-    last_used_at TEXT
+    id                TEXT PRIMARY KEY,
+    token             TEXT NOT NULL UNIQUE,
+    runner_id         TEXT,
+    label             TEXT,
+    server_name       TEXT UNIQUE,
+    remediation_mode  INTEGER,
+    created_at        TEXT NOT NULL,
+    last_used_at      TEXT
   );
 
   CREATE TABLE IF NOT EXISTS config (
@@ -174,6 +175,9 @@ function applyMigrations(db: Database.Database): void {
     db.prepare(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_server_name ON runner(server_name) WHERE server_name IS NOT NULL",
     ).run();
+  }
+  if (!runnerCols.includes("remediation_mode")) {
+    db.prepare("ALTER TABLE runner ADD COLUMN remediation_mode INTEGER").run();
   }
 
   const userCols = (

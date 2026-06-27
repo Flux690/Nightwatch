@@ -51,6 +51,7 @@ export type {
   WsEnvelope,
   RunnerCommandMessage,
   UpdateAlertRulesCommand,
+  SetRemediationModeMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
   RunnerHeartbeatMessage,

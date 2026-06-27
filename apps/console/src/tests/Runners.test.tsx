@@ -18,6 +18,7 @@ const AWAITING_RUNNER: RunnerRecord = {
   online: false,
   lastSeen: null,
   manifest: null,
+  remediationMode: null,
 };
 
 const ONLINE_RUNNER: RunnerRecord = {
@@ -28,6 +29,7 @@ const ONLINE_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date(NOW - 30 * 1000).toISOString(),
   manifest: null,
+  remediationMode: false,
 };
 
 const OFFLINE_RUNNER: RunnerRecord = {
@@ -38,6 +40,7 @@ const OFFLINE_RUNNER: RunnerRecord = {
   online: false,
   lastSeen: new Date(NOW - 5 * 60 * 1000).toISOString(),
   manifest: null,
+  remediationMode: false,
 };
 
 const GENERATED_TOKEN = {
@@ -275,6 +278,7 @@ describe("RunnersPage", () => {
         online: false,
         lastSeen: null,
         manifest: null,
+        remediationMode: null,
       };
 
       vi.stubGlobal(

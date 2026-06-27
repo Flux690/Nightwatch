@@ -1,6 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { findRunnerById, listRunnersMeta } from "../db/runner.js";
-import { sendCommand, listRunners, getFleetView } from "../ws/router.js";
+import {
+  findRunnerById,
+  listRunnersMeta,
+  setRemediationMode,
+} from "../db/runner.js";
+import {
+  sendCommand,
+  listRunners,
+  getFleetView,
+  pushRemediationMode,
+} from "../ws/router.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
@@ -34,6 +43,7 @@ export async function registerRunnerRoutes(
           online: false,
           lastSeen: null,
           manifest: null,
+          remediationMode: t.remediationMode,
         });
         continue;
       }
@@ -46,6 +56,7 @@ export async function registerRunnerRoutes(
           online: r.online,
           lastSeen: new Date(r.lastSeen).toISOString(),
           manifest: r.manifest,
+          remediationMode: t.remediationMode,
         });
       }
     }
@@ -82,6 +93,31 @@ export async function registerRunnerRoutes(
         const msg = err instanceof Error ? err.message : String(err);
         return reply.code(502).send({ error: msg });
       }
+    },
+  );
+
+  // Toggle remediation mode for a runner. Persists to DB (system of record)
+  // and pushes to the connected runner over WS. A missed push self-heals on
+  // the next heartbeat via manifest reconciliation in ws/server.ts.
+  fastify.patch<{
+    Params: { tokenId: string };
+    Body: { enabled?: boolean };
+  }>(
+    "/runners/:tokenId/remediation-mode",
+    { preHandler: requireSession },
+    (request, reply) => {
+      const { tokenId } = request.params;
+      const { enabled } = request.body ?? {};
+      if (typeof enabled !== "boolean") {
+        return reply.code(400).send({ error: "enabled (boolean) is required" });
+      }
+      const row = findRunnerById(tokenId);
+      if (!row) {
+        return reply.code(404).send({ error: "runner not found" });
+      }
+      setRemediationMode(tokenId, enabled);
+      pushRemediationMode(tokenId, enabled);
+      return reply.code(200).send({ tokenId, remediationMode: enabled });
     },
   );
 

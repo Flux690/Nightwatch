@@ -9,6 +9,7 @@ export type RunnerRow = {
   runnerId: string | null;
   label: string | null;
   serverName: string | null;
+  remediationMode: boolean | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -19,6 +20,7 @@ export type RunnerMeta = {
   runnerId: string | null;
   label: string | null;
   serverName: string | null;
+  remediationMode: boolean | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -56,6 +58,7 @@ export function generateRunnerToken(
     runnerId: null,
     label: label ?? null,
     serverName: serverName ?? null,
+    remediationMode: null,
     createdAt,
     lastUsedAt: null,
   };
@@ -63,13 +66,33 @@ export function generateRunnerToken(
 
 const SELECT_ROW = `
   id,
-  token        AS tokenHash,
-  runner_id    AS runnerId,
+  token             AS tokenHash,
+  runner_id         AS runnerId,
   label,
-  server_name  AS serverName,
-  created_at   AS createdAt,
-  last_used_at AS lastUsedAt
+  server_name       AS serverName,
+  remediation_mode  AS remediationModeRaw,
+  created_at        AS createdAt,
+  last_used_at      AS lastUsedAt
 `;
+
+function toBoolean(raw: number | null): boolean | null {
+  return raw === null ? null : raw !== 0;
+}
+
+function mapRow(raw: Record<string, unknown>): RunnerRow {
+  return {
+    id: raw["id"] as string,
+    tokenHash: raw["tokenHash"] as string,
+    runnerId: (raw["runnerId"] as string | null) ?? null,
+    label: (raw["label"] as string | null) ?? null,
+    serverName: (raw["serverName"] as string | null) ?? null,
+    remediationMode: toBoolean(
+      (raw["remediationModeRaw"] as number | null) ?? null,
+    ),
+    createdAt: raw["createdAt"] as string,
+    lastUsedAt: (raw["lastUsedAt"] as string | null) ?? null,
+  };
+}
 
 export function setRunnerId(id: string, runnerId: string): void {
   getDb()
@@ -79,16 +102,24 @@ export function setRunnerId(id: string, runnerId: string): void {
 
 // Validate a plaintext token: hash it and look up.
 export function findRunnerByToken(plaintext: string): RunnerRow | undefined {
-  return getDb()
+  const raw = getDb()
     .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE token = ?`)
-    .get(hashToken(plaintext)) as RunnerRow | undefined;
+    .get(hashToken(plaintext)) as Record<string, unknown> | undefined;
+  return raw ? mapRow(raw) : undefined;
 }
 
 // Look up a runner record by its UUID (used by routes that receive the record id, not the plaintext).
 export function findRunnerById(id: string): RunnerRow | undefined {
-  return getDb()
+  const raw = getDb()
     .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE id = ?`)
-    .get(id) as RunnerRow | undefined;
+    .get(id) as Record<string, unknown> | undefined;
+  return raw ? mapRow(raw) : undefined;
+}
+
+export function setRemediationMode(id: string, enabled: boolean): void {
+  getDb()
+    .prepare(`UPDATE runner SET remediation_mode = ? WHERE id = ?`)
+    .run(enabled ? 1 : 0, id);
 }
 
 // Touch last_used_at on every authenticated use (WS connect, ingest, chat).
@@ -106,11 +137,11 @@ export function deleteRunner(id: string): boolean {
 
 // Public list: no hash, no plaintext, newest first.
 export function listRunnersMeta(): RunnerMeta[] {
-  return getDb()
-    .prepare(
-      `SELECT id, label, server_name AS serverName, created_at AS createdAt,
-              runner_id AS runnerId, last_used_at AS lastUsedAt
-       FROM runner ORDER BY created_at DESC`,
-    )
-    .all() as RunnerMeta[];
+  const rows = getDb()
+    .prepare(`SELECT ${SELECT_ROW} FROM runner ORDER BY created_at DESC`)
+    .all() as Array<Record<string, unknown>>;
+  return rows.map((r) => {
+    const { tokenHash: _tokenHash, ...meta } = mapRow(r);
+    return meta;
+  });
 }

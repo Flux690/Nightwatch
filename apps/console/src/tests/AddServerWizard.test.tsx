@@ -26,6 +26,7 @@ const AWAITING_RUNNER: RunnerRecord = {
   online: false,
   lastSeen: null,
   manifest: null,
+  remediationMode: null,
 };
 
 const CONNECTED_RUNNER: RunnerRecord = {
@@ -36,6 +37,7 @@ const CONNECTED_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date().toISOString(),
   manifest: null,
+  remediationMode: false,
 };
 
 function setup(opts: { runners?: RunnerRecord[] } = {}) {

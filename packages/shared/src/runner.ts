@@ -47,6 +47,7 @@ export interface RunnerRecord {
   online: boolean;
   lastSeen: string | null;
   manifest: CapabilityManifest | null;
+  remediationMode: boolean | null;
 }
 
 // The live picture of one connected runner for fleet-wide reasoning (CONTEXT.md

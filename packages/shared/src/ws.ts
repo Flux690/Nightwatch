@@ -28,6 +28,14 @@ export interface UpdateAlertRulesCommand {
   correlationId: string;
 }
 
+// API → Runner: update the in-memory remediation mode (fire-and-forget).
+// The runner applies it immediately and reports it in subsequent manifests.
+// Reconciliation: the API pushes this whenever a manifest disagrees with DB.
+export interface SetRemediationModeMessage extends WsEnvelope {
+  type: "set_remediation_mode";
+  payload: { enabled: boolean };
+}
+
 // Runner → API: capability manifest on connect
 export interface RunnerManifestMessage extends WsEnvelope {
   type: "manifest";
