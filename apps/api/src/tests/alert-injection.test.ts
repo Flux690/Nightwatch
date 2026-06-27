@@ -24,7 +24,7 @@ vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import Fastify from "fastify";
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
@@ -193,6 +193,9 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const tokenId = generateRunnerToken("inject-sus").id;
+    // Remediation on (DB is the source of truth for an alert's runner) so the
+    // write tool is offered and the run actually suspends for approval.
+    setRemediationMode(tokenId, true);
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -306,6 +309,7 @@ describe("mid-run alert injection (loop seam)", () => {
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const { id: tokenId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");
+    setRemediationMode(tokenId, true);
     registerRunner(
       tokenId,
       (raw: string) => {

@@ -81,6 +81,16 @@ export interface ConsoleRunStopped extends WsEnvelope {
   };
 }
 
+// An investigation threw an unexpected error and ended without finishing. Tells
+// the console to surface the failure instead of leaving the run looking idle.
+export interface ConsoleRunFailed extends WsEnvelope {
+  type: "RUN_FAILED";
+  payload: {
+    sessionId: string;
+    message: string;
+  };
+}
+
 // Discriminated union of all API→console WebSocket messages.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -90,4 +100,5 @@ export type ConsoleEvent =
   | ConsoleHumanInputRequired
   | ConsoleToolCallEnd
   | ConsoleHumanInputResolved
-  | ConsoleRunStopped;
+  | ConsoleRunStopped
+  | ConsoleRunFailed;

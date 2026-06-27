@@ -502,6 +502,68 @@ describe("providers filter and mismatch rejection", () => {
 
         ws.close();
       });
+
+      it("a write the model emits anyway is unavailable, not an approval card (gate cannot be bypassed)", async () => {
+        // Read-only mode strips restart_service from the offered schema. The model
+        // emits it regardless (LLMs hallucinate stripped tool names). Because the
+        // loop resolves calls against the same effective set, the tool is genuinely
+        // unavailable: no approval card is raised, so the master write switch
+        // cannot be bypassed by a hallucinated name.
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+        });
+        const events: WsEvent[] = [];
+        ws.on("message", (raw) => {
+          events.push(JSON.parse(raw.toString()) as WsEvent);
+        });
+        await waitForConnected(ws);
+
+        setScript([
+          {
+            text: "Restarting.",
+            toolUses: [
+              {
+                id: "tu-ro-bypass",
+                name: "restart_service",
+                input: {
+                  service: RO_SERVICE,
+                  rationale: "r",
+                  risk: "low",
+                  estimatedDowntimeSeconds: 1,
+                },
+              },
+            ],
+          },
+          { text: "Investigation complete.", toolUses: [] },
+        ]);
+
+        const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `nw_auth=${SESSION}`,
+          },
+          body: JSON.stringify({ message: "restart the service" }),
+        });
+        const { sessionId } = (await res.json()) as { sessionId: string };
+
+        await waitFor(() =>
+          events.some((e) => {
+            if (e.type !== "RUN_FINISHED") return false;
+            const message = e.payload["message"] as { content?: string };
+            return message.content === "Investigation complete.";
+          }),
+        );
+
+        // No approval card was raised for the stripped write, and nothing is
+        // pending: it resolved as an unavailable tool, not a gated action.
+        expect(events.some((e) => e.type === "HUMAN_INPUT_REQUIRED")).toBe(
+          false,
+        );
+        expect(hasPendingHumanInput(sessionId)).toBe(false);
+
+        ws.close();
+      });
     });
 
     describe("agentic loop seam: DB stored value overrides manifest", () => {

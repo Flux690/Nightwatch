@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import {
-  TOOL_REGISTRY,
-  getToolSchemas,
+  effectiveToolset,
   toolSupportsProvider,
   executeTool,
 } from "./tools.js";
@@ -27,9 +26,9 @@ import { dispatcher } from "../dispatcher.js";
 import {
   getFleetView,
   getRunnerManifestForAlert,
-  getRunnerRemediationMode,
   listRunners,
 } from "../ws/router.js";
+import { getRemediationModeByRunnerRef } from "../db/runner.js";
 import { logger } from "../logger.js";
 import {
   countExecutedRemediations,
@@ -95,16 +94,17 @@ function currentFleetProviders(): ReadonlySet<Provider> | undefined {
   return providers.size > 0 ? providers : undefined;
 }
 
-// Remediation mode is the master write switch (ADR-0003). The in-memory
-// cache on each RunnerConnection is the hot-path source of truth, kept in
-// sync by ws/server.ts reconciliation on every manifest message. DB reads
-// happen only during reconciliation, not here. A null cache value (runner
-// connected but first manifest not yet processed) falls back to the manifest
-// self-report so a freshly connected runner is not silently read-only.
+// Remediation mode is the master write switch (ADR-0003), and the API's DB is
+// its system of record. We read the DB directly - not an in-memory cache - so a
+// run resumed after an API restart sees the operator's setting even before the
+// runner has reconnected (a stale/empty cache would otherwise flip a remediating
+// run silently read-only). A null DB value (the runner has never been
+// reconciled) falls back to the runner's live manifest self-report so a freshly
+// added runner is not silently read-only.
 function currentRemediationEnabled(runnerId?: string): boolean {
   if (runnerId) {
-    const cached = getRunnerRemediationMode(runnerId);
-    if (cached !== null) return cached;
+    const dbMode = getRemediationModeByRunnerRef(runnerId);
+    if (dbMode !== null) return dbMode;
     return (
       getRunnerManifestForAlert(runnerId)?.capabilities.remediationEnabled ??
       false
@@ -306,16 +306,21 @@ export async function runInvestigation(
   const deadline = Date.now() + config.hardTimeoutMs;
   const fleetProviders = currentFleetProviders();
 
+  // Resolve the effective tool set ONCE per run invocation from the run-level
+  // remediation mode and fleet providers. The same set backs both the schemas
+  // offered to the model and the names the loop resolves below, so the system
+  // prompt (built from the same remediationEnabled) and the tool menu can never
+  // disagree within a run, and a resume recomputes it fresh.
+  const toolset = effectiveToolset(fleetProviders, remediationEnabled);
+  const toolSchemas = toolset.map((t) => t.schema);
+
   while (Date.now() < deadline) {
     turn++;
     const startedAt = Date.now();
     let response: ChatResponse;
     try {
       response = await provider.chat(
-        getToolSchemas(
-          fleetProviders,
-          currentRemediationEnabled(alert?.runnerId ?? undefined),
-        ),
+        toolSchemas,
         (d) => publishTextMessageContent(sessionId, d),
         signal,
       );
@@ -369,13 +374,17 @@ export async function runInvestigation(
     };
 
     for (const tool of response.toolUses) {
-      const entry = TOOL_REGISTRY.find((t) => t.schema.name === tool.name);
+      // Resolve against the effective tool set, not the full registry: a tool
+      // stripped by remediation mode or fleet providers is genuinely unavailable,
+      // so a model that names it is told "unknown tool" and never reaches the
+      // approval gate. This is what makes the master write switch unbypassable.
+      const entry = toolset.find((t) => t.schema.name === tool.name);
 
       if (!entry) {
-        log.warn({ tool: tool.name }, "LLM requested unknown tool");
+        log.warn({ tool: tool.name }, "LLM requested unavailable tool");
         toolResults.push({
           tool_use_id: tool.id,
-          content: `Unknown tool "${tool.name}". Platform configuration error. Do not retry.`,
+          content: `Tool "${tool.name}" is not available in this investigation. Do not retry.`,
           is_error: true,
         });
         continue;

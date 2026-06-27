@@ -34,6 +34,7 @@ import {
   registerRunner,
   unregisterRunner,
   resolveCommand,
+  setRunnerRemediationMode,
 } from "../ws/router.js";
 import type { ApprovalRequest } from "@nightwatch/shared";
 
@@ -80,6 +81,8 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    // Remediation on so the write tool is offered (chat reads the live fleet).
+    setRunnerRemediationMode(tokA, true);
 
     setScript([
       {
@@ -193,6 +196,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    setRunnerRemediationMode(tokC, true);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -272,6 +276,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    setRunnerRemediationMode(tokE, true);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

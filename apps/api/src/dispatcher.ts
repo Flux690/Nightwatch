@@ -3,6 +3,7 @@ import { runInvestigation } from "./agent/loop.js";
 import type { RunInvestigationInput } from "./agent/loop.js";
 import { getSession } from "./db/sessions.js";
 import { logger } from "./logger.js";
+import { publishRunFailed } from "./session/stream.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 // Architecture invariant: alert, chat, and resume all funnel through dispatch().
@@ -77,6 +78,13 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         logger.error(
           { err, sessionId: input.sessionId },
           "investigation failed",
+        );
+        // Surface the crash to the console so the run shows as failed instead of
+        // silently going idle; the dispatcher is the single chokepoint that sees
+        // every run's terminal rejection.
+        publishRunFailed(
+          input.sessionId,
+          err instanceof Error ? err.message : "Investigation failed.",
         );
       })
       .finally(() => {

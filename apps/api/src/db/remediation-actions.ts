@@ -170,10 +170,12 @@ export function listRemediationActions(): RemediationAction[] {
     .all() as RemediationAction[];
 }
 
-// Counts writes to the same service identity and action that actually reached
-// the infrastructure (executed or failed) since `since`. Drives the circuit
-// breaker: a 'rejected' or still-'executing' row is not a landed write and does
-// not count. Keyed on the canonical identity key, so a server-scoped identity
+// Counts writes to the same service identity and action that SUCCEEDED
+// (status 'executed') since `since`. Drives the circuit breaker. A 'failed'
+// write does not count: a transient failure (runner blip, timeout, a fix that
+// never actually ran) must not burn the budget and lock the operator out of
+// retrying. 'rejected' and still-'executing' rows are likewise not successful
+// writes. Keyed on the canonical identity key, so a server-scoped identity
 // refines the count for free.
 export function countExecutedRemediations(params: {
   serviceIdentityKey: string;
@@ -186,7 +188,7 @@ export function countExecutedRemediations(params: {
        FROM remediation_actions
        WHERE service_identity_key = @serviceIdentityKey
          AND tool_name = @toolName
-         AND status IN ('executed', 'failed')
+         AND status = 'executed'
          AND created_at >= @since`,
     )
     .get(params) as { count: number };

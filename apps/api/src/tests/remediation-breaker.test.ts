@@ -315,8 +315,11 @@ describe("remediation circuit breaker", () => {
     await expectApprovalThenReject(sessionId, events);
   });
 
-  it("counts failed writes toward the limit, not just successful ones", async () => {
+  it("does not count failed writes toward the limit (a transient failure must not lock out retries)", async () => {
     const service = { provider: "docker", project: "svc-01", service: "cache" };
+    // DEFAULT_LIMIT failed writes: none actually landed, so the breaker must not
+    // trip. A runner blip or timeout that fails a fix cannot burn the budget and
+    // block the operator from approving a retry of an action that never ran.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/cache",
       toolName: "restart_service",
@@ -327,7 +330,7 @@ describe("remediation circuit breaker", () => {
     setScript([restartWrite(service), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
-    await expectBreakerRefused(sessionId, events);
+    await expectApprovalThenReject(sessionId, events);
   });
 
   it("ignores rejected and still-executing rows when counting", async () => {

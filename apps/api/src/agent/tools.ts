@@ -588,22 +588,37 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-// Provider-specific tools are offered only to fleets that include a matching
-// provider; agnostic tools pass for any fleet. Omitting the filter shows every
-// tool, regardless of fleet. remediationEnabled === false strips every
-// access: "write" tool from the offered set (REMEDIATION_ENABLED master
-// switch, ADR-0003); omitting it, or passing true, offers every tool as
-// before, so existing callers are unaffected.
+// The effective tool set for a run: the SINGLE source of truth for both the
+// schemas offered to the model and the names the loop resolves and executes.
+// remediationEnabled === false removes every write tool (the REMEDIATION_ENABLED
+// master switch, ADR-0003); the fleet-providers filter drops provider-specific
+// tools no connected runner can serve (ADR-0002). Because the loop resolves a
+// tool call against THIS set - not the full registry - a tool stripped here is
+// genuinely absent: a model that names it gets "unknown tool", never an
+// approvable card. Hiding a write and gating a write are the same operation, so
+// the master switch cannot be bypassed by a hallucinated tool name.
+export function effectiveToolset(
+  fleetProviders: ReadonlySet<Provider> | undefined,
+  remediationEnabled: boolean,
+): Tool[] {
+  const eligible = remediationEnabled
+    ? TOOL_REGISTRY
+    : TOOL_REGISTRY.filter((t) => t.access !== "write");
+  if (!fleetProviders) return eligible;
+  return eligible.filter((t) =>
+    [...fleetProviders].some((p) => toolSupportsProvider(t, p)),
+  );
+}
+
+// Schemas only, for callers that just need the wire shape (e.g. tests). The loop
+// uses effectiveToolset directly so it resolves calls against the same set. An
+// undefined remediationEnabled means "no master-switch filter" (offer every
+// tool), preserving the prior default for existing callers.
 export function getToolSchemas(
   fleetProviders?: ReadonlySet<Provider>,
   remediationEnabled?: boolean,
 ): ToolSchema[] {
-  const eligible =
-    remediationEnabled === false
-      ? TOOL_REGISTRY.filter((t) => t.access !== "write")
-      : TOOL_REGISTRY;
-  if (!fleetProviders) return eligible.map((t) => t.schema);
-  return eligible
-    .filter((t) => [...fleetProviders].some((p) => toolSupportsProvider(t, p)))
-    .map((t) => t.schema);
+  return effectiveToolset(fleetProviders, remediationEnabled ?? true).map(
+    (t) => t.schema,
+  );
 }

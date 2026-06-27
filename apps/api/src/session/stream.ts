@@ -6,6 +6,7 @@ import type {
   ConsoleInterruptResolved,
   ConsoleRunFinished,
   ConsoleRunStopped,
+  ConsoleRunFailed,
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
@@ -80,6 +81,15 @@ export function publishRunStopped(sessionId: string): void {
     messageId: randomUUID(),
     type: "RUN_STOPPED",
     payload: { sessionId },
+  };
+  publishRaw(env);
+}
+
+export function publishRunFailed(sessionId: string, message: string): void {
+  const env: ConsoleRunFailed = {
+    messageId: randomUUID(),
+    type: "RUN_FAILED",
+    payload: { sessionId, message },
   };
   publishRaw(env);
 }

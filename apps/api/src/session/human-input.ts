@@ -187,69 +187,93 @@ export async function respondToPendingHumanInput(
     claimOrThrow(sessionId);
     const config = loadConfig();
 
-    // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict
-    // means this tool_use_id already ran (crash-recovery path) — do not re-execute.
-    const inserted = insertExecutingRemediationAction({
-      toolUseId: pending.toolUseId,
-      sessionId,
-      toolName: pending.toolName,
-      input: pending.toolInput,
-      resolvedBy,
-    });
-
+    // Once claimed, this interrupt can never be re-approved or rejected, so the
+    // approve path MUST always reach unpause() below (which deletes the row) - any
+    // throw that escaped here would leave the card wedged forever. executeRunnerTool
+    // already turns runner failures into is_error results, so a throw here is a
+    // DB-layer fault; we still resolve the interrupt and resume the run with a
+    // failure rather than wedge it.
     let gatedResult: ToolResult;
+    try {
+      // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict
+      // means this tool_use_id already ran (crash-recovery path) - do not re-execute.
+      const inserted = insertExecutingRemediationAction({
+        toolUseId: pending.toolUseId,
+        sessionId,
+        toolName: pending.toolName,
+        input: pending.toolInput,
+        resolvedBy,
+      });
 
-    if (!inserted) {
-      // Previously attempted — outcome unknown. Surface to the model so the
-      // operator can decide whether to retry with a fresh tool call.
-      logger.warn(
-        { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
-        "duplicate approve: action previously attempted, skipping execution",
-      );
-      gatedResult = {
-        tool_use_id: pending.toolUseId,
-        content: `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
-        is_error: true,
-      };
-    } else {
-      const toolEntry = findTool(pending.toolName);
-      if (!toolEntry) {
-        logger.error(
-          { sessionId, tool: pending.toolName },
-          "approved tool not found in registry",
+      if (!inserted) {
+        // Previously attempted - outcome unknown. Surface to the model so the
+        // operator can decide whether to retry with a fresh tool call.
+        logger.warn(
+          { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
+          "duplicate approve: action previously attempted, skipping execution",
         );
         gatedResult = {
           tool_use_id: pending.toolUseId,
-          content: `Tool "${pending.toolName}" not found in registry. Platform configuration error.`,
+          content: `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
           is_error: true,
         };
-        settleRemediationAction(
-          sessionId,
-          pending.toolUseId,
-          "failed",
-          gatedResult.content,
-        );
       } else {
-        const execResult = await executeTool(toolEntry, pending.toolInput, {
-          runnerId: pending.originatingAlert?.runnerId,
-          toolTimeoutMs: config.toolTimeoutMs,
-        });
-        const settled = execResult.is_error ? "failed" : "executed";
-        settleRemediationAction(
-          sessionId,
-          pending.toolUseId,
-          settled,
-          execResult.content,
-        );
-        gatedResult = {
-          tool_use_id: pending.toolUseId,
-          content:
-            typeof execResult.content === "string"
-              ? execResult.content
-              : JSON.stringify(execResult.content),
-          is_error: execResult.is_error,
-        };
+        const toolEntry = findTool(pending.toolName);
+        if (!toolEntry) {
+          logger.error(
+            { sessionId, tool: pending.toolName },
+            "approved tool not found in registry",
+          );
+          gatedResult = {
+            tool_use_id: pending.toolUseId,
+            content: `Tool "${pending.toolName}" not found in registry. Platform configuration error.`,
+            is_error: true,
+          };
+          settleRemediationAction(
+            sessionId,
+            pending.toolUseId,
+            "failed",
+            gatedResult.content,
+          );
+        } else {
+          const execResult = await executeTool(toolEntry, pending.toolInput, {
+            runnerId: pending.originatingAlert?.runnerId,
+            toolTimeoutMs: config.toolTimeoutMs,
+          });
+          const settled = execResult.is_error ? "failed" : "executed";
+          settleRemediationAction(
+            sessionId,
+            pending.toolUseId,
+            settled,
+            execResult.content,
+          );
+          gatedResult = {
+            tool_use_id: pending.toolUseId,
+            content:
+              typeof execResult.content === "string"
+                ? execResult.content
+                : JSON.stringify(execResult.content),
+            is_error: execResult.is_error,
+          };
+        }
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(
+        { sessionId, tool: pending.toolName, err },
+        "approve path failed after claim; resolving interrupt as failed",
+      );
+      try {
+        settleRemediationAction(sessionId, pending.toolUseId, "failed", msg);
+      } catch {
+        // The write-ahead row may not exist (the insert itself failed). Nothing
+        // to settle; the run still resumes with the failure result below.
+      }
+      gatedResult = {
+        tool_use_id: pending.toolUseId,
+        content: `Action failed to execute: ${msg}. No confirmed change was made. Reassess and decide whether to retry or escalate to the operator.`,
+        is_error: true,
+      };
     }
 
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
