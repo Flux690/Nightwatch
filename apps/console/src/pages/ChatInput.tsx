@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button, Textarea } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { Square } from "lucide-react";
 
 const STOP_ICON_PROPS = {
@@ -28,59 +29,87 @@ export function ChatInput({
   onSessionCreated,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   async function handleSubmit(): Promise<void> {
     const trimmed = text.trim();
-    if (!trimmed || isRunning) return;
+    if (!trimmed || isRunning || submitting) return;
 
-    if (pendingInterrupt) {
-      if (sessionId === null) return;
+    setSubmitting(true);
+    try {
+      if (pendingInterrupt) {
+        if (sessionId === null) return;
+        const res = await fetch(`/api/sessions/${sessionId}/respond`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: trimmed, resolvedBy: "console" }),
+        });
+        if (!res.ok) throw new Error(`respond failed (${res.status})`);
+        setText("");
+        return;
+      }
 
-      await fetch(`/api/sessions/${sessionId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: trimmed, resolvedBy: "console" }),
+      if (sessionId === null) {
+        const res = await fetch(`/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed }),
+        });
+        if (!res.ok) throw new Error(`chat failed (${res.status})`);
+        const data = (await res.json()) as { sessionId: string };
+        // Signal before navigation so callers can set up WS filtering immediately.
+        onSessionCreated?.(data.sessionId, trimmed);
+        setText("");
+        await navigate({
+          to: "/sessions/$id",
+          params: { id: data.sessionId },
+          replace: true,
+        });
+      } else {
+        const res = await fetch(`/api/sessions/${sessionId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed }),
+        });
+        if (!res.ok) throw new Error(`message failed (${res.status})`);
+        setText("");
+      }
+    } catch (err) {
+      // Keep the text so the operator can retry; a silent failure that cleared
+      // the box would look like the message was sent.
+      notifications.show({
+        color: "red",
+        title: "Message not sent",
+        message: err instanceof Error ? err.message : "Try again.",
       });
-      setText("");
-      return;
+    } finally {
+      setSubmitting(false);
     }
-
-    if (sessionId === null) {
-      const res = await fetch(`/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-      const data = (await res.json()) as { sessionId: string };
-      // Signal before navigation so callers can set up WS filtering immediately.
-      onSessionCreated?.(data.sessionId, trimmed);
-      await navigate({
-        to: "/sessions/$id",
-        params: { id: data.sessionId },
-        replace: true,
-      });
-    } else {
-      await fetch(`/api/sessions/${sessionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-    }
-
-    setText("");
   }
 
   async function handleStop(): Promise<void> {
     if (sessionId === null) return;
-    await fetch(`/api/sessions/${sessionId}/stop`, { method: "POST" });
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/stop`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(`stop failed (${res.status})`);
+    } catch (err) {
+      notifications.show({
+        color: "red",
+        title: "Could not stop the run",
+        message: err instanceof Error ? err.message : "Try again.",
+      });
+    }
   }
 
   function placeholder(): string {
     if (isRunning) return "Agent is running…";
     if (pendingInterrupt?.kind === "approval") return "Add context…";
     if (pendingInterrupt?.kind === "clarification") return "Type your answer…";
-    if (pendingInterrupt?.kind === "continue") return "Use the controls above to resume or end…";
+    if (pendingInterrupt?.kind === "continue")
+      return "Use the controls above to resume or end…";
     return "Type a message…";
   }
 
@@ -122,7 +151,12 @@ export function ChatInput({
           Stop
         </Button>
       ) : (
-        <Button onClick={() => void handleSubmit()} size="sm">
+        <Button
+          onClick={() => void handleSubmit()}
+          size="sm"
+          loading={submitting}
+          disabled={submitting}
+        >
           Send
         </Button>
       )}
