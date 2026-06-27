@@ -22,89 +22,15 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
+import { useSidebarExpanded } from "../hooks/useSidebarExpanded.js";
+import { NavLink } from "./NavLink.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
 import { AddServerWizard } from "./AddServerWizard.js";
 
-const SIDEBAR_KEY = "nw:sidebar-expanded";
 const EXPANDED_WIDTH = 250;
 const COLLAPSED_WIDTH = 60;
 const ICON_PROPS = { size: 18, strokeWidth: 1.5, "aria-hidden": true } as const;
-
-function useSidebarExpanded(): [boolean, () => void] {
-  const [expanded, setExpanded] = useState<boolean>(
-    () => localStorage.getItem(SIDEBAR_KEY) !== "false",
-  );
-
-  const toggle = useCallback(() => {
-    setExpanded((prev) => {
-      const next = !prev;
-      localStorage.setItem(SIDEBAR_KEY, String(next));
-      return next;
-    });
-  }, []);
-
-  return [expanded, toggle];
-}
-
-function NavLink({
-  to,
-  icon,
-  label,
-  compact,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-  compact: boolean;
-}): React.JSX.Element {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const active = pathname === to || pathname.startsWith(`${to}/`);
-
-  const linkStyle = {
-    display: "flex",
-    alignItems: "center",
-    borderRadius: "var(--mantine-radius-sm)",
-    color: active ? "var(--nw-accent)" : "var(--nw-text-muted)",
-    background: active ? "var(--nw-surface-raised)" : "transparent",
-    textDecoration: "none",
-  };
-
-  if (compact) {
-    return (
-      <Tooltip label={label} position="right" withArrow>
-        <Link
-          to={to}
-          aria-label={label}
-          style={{
-            ...linkStyle,
-            justifyContent: "center",
-            width: 40,
-            height: 36,
-          }}
-        >
-          {icon}
-        </Link>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <Link
-      to={to}
-      style={{
-        ...linkStyle,
-        gap: 8,
-        padding: "6px var(--mantine-spacing-xs)",
-        fontWeight: active ? 600 : 400,
-        fontSize: 13,
-      }}
-    >
-      {icon}
-      <span>{label}</span>
-    </Link>
-  );
-}
 
 export function Shell(): React.JSX.Element {
   const [expanded, toggleExpanded] = useSidebarExpanded();
