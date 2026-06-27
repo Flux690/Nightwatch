@@ -113,9 +113,7 @@ describe("AuthGate", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: /runners/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
     });
     expect(router.state.location.pathname).toBe("/");
   });
@@ -163,7 +161,7 @@ describe("AuthGate", () => {
 
     expect(screen.queryByText("LOGIN")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /runners/i }),
+      screen.queryByRole("link", { name: /fleet/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -220,9 +218,7 @@ describe("AuthGate", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: /runners/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
     });
 
     await fetch("/trigger-401");

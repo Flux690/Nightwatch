@@ -205,20 +205,23 @@ export function AddServerWizard({
     if (installText !== null) void navigator.clipboard.writeText(installText);
   }
 
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
   async function handleGenerateIngestCredential(): Promise<void> {
     setGeneratingIngest(true);
+    setGenerateError(null);
     try {
       const res = await fetch("/api/ingest-credential", { method: "POST" });
       if (!res.ok) throw new Error(`ingest-credential ${res.status}`);
       const { token } = (await res.json()) as { token: string };
       setIngestToken(token);
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error ? err.message : "Failed to generate credential",
+      );
     } finally {
       setGeneratingIngest(false);
     }
-  }
-
-  function copyIngestToken(): void {
-    if (ingestToken !== null) void navigator.clipboard.writeText(ingestToken);
   }
 
   async function handleTestWebhook(): Promise<void> {
@@ -429,16 +432,10 @@ export function AddServerWizard({
               </Button>
             )}
 
-            {ingestCredential?.configured && (
-              <Button
-                size="xs"
-                variant="default"
-                style={{ alignSelf: "flex-start" }}
-                loading={generatingIngest}
-                onClick={() => void handleGenerateIngestCredential()}
-              >
-                Rotate credential
-              </Button>
+            {generateError !== null && (
+              <Text size="sm" c="red">
+                {generateError}
+              </Text>
             )}
 
             {(() => {

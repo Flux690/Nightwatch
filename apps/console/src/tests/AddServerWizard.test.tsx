@@ -352,6 +352,53 @@ describe("AddServerWizard", () => {
     });
   });
 
+  it("does not offer a Rotate credential button in the monitoring step when a credential is already configured", async () => {
+    const user = userEvent.setup();
+    setup({ runners: [CONNECTED_RUNNER] });
+
+    // Override ingest-credential to return configured:true for this test.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url === "/api/runners") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([CONNECTED_RUNNER]),
+          });
+        }
+        if (url === "/api/tokens" && init?.method === "POST") {
+          return Promise.resolve({
+            ok: true,
+            status: 201,
+            json: () => Promise.resolve(GENERATED_TOKEN),
+          });
+        }
+        if (url === "/api/connect.sh") {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve(CONNECT_SCRIPT),
+          });
+        }
+        if (url === "/api/ingest-credential") {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ configured: true }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }),
+    );
+
+    await advanceToMonitoringStep(user);
+
+    await waitFor(() => {
+      expect(screen.getByText(/^configured$/i)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: /rotate credential/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("generates the ingest credential and shows it once with the webhook config", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });

@@ -7,7 +7,6 @@ import {
 import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { RunnersPage } from "./pages/Runners.js";
 import { SettingsPage } from "./pages/Settings.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { FleetPage } from "./pages/Fleet.js";
@@ -50,12 +49,6 @@ const sessionIdRoute = createRoute({
   component: () => null,
 });
 
-const runnersRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/runners",
-  component: RunnersPage,
-});
-
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
@@ -85,7 +78,6 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     sessionIdRoute,
-    runnersRoute,
     fleetRoute,
     settingsRoute,
     auditRoute,

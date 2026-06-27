@@ -128,10 +128,10 @@ function setup(pendingCount = 0) {
     path: "/sessions/$id",
     component: () => null,
   });
-  const runnersRoute = createRoute({
+  const fleetRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/runners",
-    component: () => <div>Runners Page</div>,
+    path: "/fleet",
+    component: () => <div>Fleet Page</div>,
   });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -143,7 +143,7 @@ function setup(pendingCount = 0) {
     routeTree: rootRoute.addChildren([
       indexRoute,
       sessionIdRoute,
-      runnersRoute,
+      fleetRoute,
       settingsRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -174,11 +174,11 @@ afterEach(() => {
 
 describe("Shell", () => {
   describe("nav + sidebar structure", () => {
-    it("renders nav links for Runners and Settings", async () => {
+    it("renders nav links for Fleet and Settings", async () => {
       setup();
       await waitFor(() => {
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("link", { name: /settings/i }),
@@ -211,7 +211,7 @@ describe("Shell", () => {
       // Wait for the sidebar to be fully mounted
       await waitFor(() =>
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument(),
       );
       // There should be no link whose accessible name is exactly "Sessions"
@@ -253,7 +253,7 @@ describe("Shell", () => {
 
       // Start expanded: text labels visible
       await waitFor(() => {
-        expect(screen.getByText("Runners")).toBeInTheDocument();
+        expect(screen.getByText("Fleet")).toBeInTheDocument();
         expect(screen.getByText("Settings")).toBeInTheDocument();
       });
 
@@ -264,11 +264,11 @@ describe("Shell", () => {
 
       await waitFor(() => {
         // Text labels gone
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
+        expect(screen.queryByText("Fleet")).not.toBeInTheDocument();
         expect(screen.queryByText("Settings")).not.toBeInTheDocument();
         // Links still accessible via aria-label
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("link", { name: /settings/i }),
@@ -292,14 +292,14 @@ describe("Shell", () => {
 
       // Verify collapsed
       await waitFor(() =>
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument(),
+        expect(screen.queryByText("Fleet")).not.toBeInTheDocument(),
       );
 
       // Expand again
       await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
 
       await waitFor(() => {
-        expect(screen.getByText("Runners")).toBeInTheDocument();
+        expect(screen.getByText("Fleet")).toBeInTheDocument();
         expect(screen.getByText("Settings")).toBeInTheDocument();
         expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
       });
@@ -349,11 +349,11 @@ describe("Shell", () => {
 
       await waitFor(() => {
         // In collapsed state labels are absent
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
+        expect(screen.queryByText("Fleet")).not.toBeInTheDocument();
         expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
         // But links are still accessible
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
       });
     });
@@ -362,11 +362,11 @@ describe("Shell", () => {
       const user = userEvent.setup();
       const { router } = setup();
 
-      // Navigate away to /runners first
-      await waitFor(() => screen.getByRole("link", { name: /runners/i }));
-      await user.click(screen.getByRole("link", { name: /runners/i }));
+      // Navigate away to /fleet first
+      await waitFor(() => screen.getByRole("link", { name: /fleet/i }));
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
       await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/runners"),
+        expect(router.state.location.pathname).toBe("/fleet"),
       );
 
       // Click New session
@@ -506,20 +506,20 @@ describe("Shell", () => {
   });
 
   describe("nav link routing", () => {
-    it("clicking Runners nav link shows runners content", async () => {
+    it("clicking Fleet nav link shows fleet content", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
       await waitFor(() => {
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /runners/i }));
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
 
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/runners");
+        expect(router.state.location.pathname).toBe("/fleet");
       });
     });
 
@@ -609,7 +609,7 @@ describe("Shell", () => {
 
     it("shows no indicator when count is zero", async () => {
       setup(0);
-      await screen.findByRole("link", { name: /runners/i });
+      await screen.findByRole("link", { name: /fleet/i });
       expect(
         screen.queryByRole("status", { name: /awaiting approval/i }),
       ).not.toBeInTheDocument();

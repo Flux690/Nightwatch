@@ -1,32 +1,58 @@
 import { useState } from "react";
 import { Button, Group, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { serviceIdentityKey, type FleetRunner } from "@nightwatch/shared";
+import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
 import { StatusBadge } from "../components/StatusBadge.js";
+import { timeAgo } from "../utils/time.js";
 import { AddServerWizard } from "./AddServerWizard.js";
 
-const STATUS_COLOR = {
+type RunnerStatus = "awaiting connection" | "online" | "offline";
+
+function runnerStatus(runner: RunnerRecord): RunnerStatus {
+  if (runner.hostname === null) return "awaiting connection";
+  if (runner.online) return "online";
+  return "offline";
+}
+
+const STATUS_COLOR: Record<RunnerStatus, string> = {
+  "awaiting connection": "var(--nw-status-awaiting)",
   online: "var(--nw-status-streaming)",
   offline: "var(--nw-status-offline)",
-} as const;
+};
 
 export function FleetPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: fleet } = useQuery<FleetRunner[]>({
-    queryKey: ["fleet"],
+  const { data: runners } = useQuery<RunnerRecord[]>({
+    queryKey: ["runners"],
     queryFn: () =>
-      fetch("/api/fleet").then((r) => {
-        if (!r.ok) throw new Error(`fleet ${r.status}`);
-        return r.json() as Promise<FleetRunner[]>;
+      fetch("/api/runners").then((r) => {
+        if (!r.ok) throw new Error(`runners ${r.status}`);
+        return r.json() as Promise<RunnerRecord[]>;
       }),
     refetchInterval: 30_000,
   });
 
   function handleWizardClose(): void {
     setWizardOpen(false);
-    void queryClient.invalidateQueries({ queryKey: ["fleet"] });
+    void queryClient.invalidateQueries({ queryKey: ["runners"] });
+  }
+
+  async function handleRemove(token: string): Promise<void> {
+    setRemoving(token);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tokens/${token}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`delete ${res.status}`);
+      await queryClient.invalidateQueries({ queryKey: ["runners"] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove server");
+    } finally {
+      setRemoving(null);
+    }
   }
 
   return (
@@ -40,44 +66,68 @@ export function FleetPage(): React.JSX.Element {
         </Button>
       </Group>
 
-      {fleet !== undefined && fleet.length === 0 && (
+      {error !== null && (
+        <Text size="sm" c="red" mb="sm">
+          {error}
+        </Text>
+      )}
+
+      {runners !== undefined && runners.length === 0 && (
         <Text size="sm" c="dimmed">
           No runners connected.
         </Text>
       )}
 
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {(fleet ?? []).map((runner) => (
-          <li
-            key={runner.runnerId}
-            style={{
-              borderTop: "1px solid var(--nw-border)",
-              padding: "var(--mantine-spacing-sm) 0",
-            }}
-          >
-            <Stack gap={2}>
-              <Group gap="xs" align="center">
-                <Text size="sm" ff="monospace">
-                  {runner.hostname}
-                </Text>
-                <StatusBadge
-                  label={runner.online ? "online" : "offline"}
-                  color={STATUS_COLOR[runner.online ? "online" : "offline"]}
-                />
-              </Group>
-              {runner.services.map((service) => (
-                <Text
-                  key={serviceIdentityKey(service.identity)}
+        {(runners ?? []).map((runner) => {
+          const status = runnerStatus(runner);
+          const services = runner.manifest?.capabilities.services ?? [];
+          return (
+            <li
+              key={runner.token}
+              style={{
+                borderTop: "1px solid var(--nw-border)",
+                padding: "var(--mantine-spacing-sm) 0",
+              }}
+            >
+              <Group justify="space-between" align="flex-start">
+                <Stack gap={2}>
+                  {runner.hostname !== null && (
+                    <Text size="sm" ff="monospace">
+                      {runner.hostname}
+                    </Text>
+                  )}
+                  <StatusBadge label={status} color={STATUS_COLOR[status]} />
+                  {runner.lastSeen !== null && (
+                    <Text size="xs" c="dimmed" ff="monospace">
+                      {timeAgo(runner.lastSeen)}
+                    </Text>
+                  )}
+                  {services.map((service) => (
+                    <Text
+                      key={serviceIdentityKey(service.identity)}
+                      size="xs"
+                      c="dimmed"
+                      ff="monospace"
+                    >
+                      {serviceIdentityKey(service.identity)}
+                    </Text>
+                  ))}
+                </Stack>
+                <Button
                   size="xs"
-                  c="dimmed"
-                  ff="monospace"
+                  color="red"
+                  variant="subtle"
+                  loading={removing === runner.token}
+                  aria-label={`Remove server ${runner.hostname ?? runner.id}`}
+                  onClick={() => void handleRemove(runner.token)}
                 >
-                  {serviceIdentityKey(service.identity)}
-                </Text>
-              ))}
-            </Stack>
-          </li>
-        ))}
+                  Remove
+                </Button>
+              </Group>
+            </li>
+          );
+        })}
       </ul>
 
       <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />

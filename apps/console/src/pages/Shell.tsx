@@ -11,7 +11,6 @@ import {
 import {
   AlertCircle,
   Plus,
-  Server,
   ServerCog,
   Settings,
   LogOut,
@@ -125,7 +124,6 @@ export function Shell(): React.JSX.Element {
   function handleWizardClose(): void {
     setWizardOpen(false);
     void queryClient.invalidateQueries({ queryKey: ["runners"] });
-    void queryClient.invalidateQueries({ queryKey: ["fleet"] });
   }
 
   return (
@@ -328,12 +326,6 @@ export function Shell(): React.JSX.Element {
           }}
         >
           <NavLink
-            to="/runners"
-            icon={<Server {...ICON_PROPS} />}
-            label="Runners"
-            compact={!expanded}
-          />
-          <NavLink
             to="/fleet"
             icon={<Network {...ICON_PROPS} />}
             label="Fleet"
@@ -413,7 +405,7 @@ export function Shell(): React.JSX.Element {
           flexDirection: "column",
           height: "100vh",
           // Session area manages its own internal scroll; other pages (Settings,
-          // Runners) need the main container to scroll normally.
+          // Fleet) need the main container to scroll normally.
           overflow: isSessionArea ? "hidden" : "auto",
         }}
       >
