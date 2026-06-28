@@ -62,7 +62,7 @@ function SetupForm(): React.JSX.Element {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" maw={440}>
+      <Stack gap="sm" style={{ width: "min(480px, 100%)" }}>
         <Title order={2} size="h4">
           Create your account
         </Title>
@@ -135,7 +135,7 @@ function LoginForm(): React.JSX.Element {
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" maw={440}>
+      <Stack gap="sm" style={{ width: "min(480px, 100%)" }}>
         <Title order={2} size="h4">
           Log in
         </Title>
@@ -177,7 +177,7 @@ export function LoginPage(): React.JSX.Element | null {
   if (phase.kind === "loading" || phase.kind === "authenticated") return null;
 
   return (
-    <Center mih="100vh">
+    <Center mih="100vh" p="md">
       {phase.kind === "needs-setup" ? <SetupForm /> : <LoginForm />}
     </Center>
   );

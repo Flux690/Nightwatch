@@ -1,8 +1,6 @@
-import { useState, useCallback } from "react";
-import { AppShell, Tooltip, UnstyledButton, Button, Text } from "@mantine/core";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { AppShell, Tooltip, UnstyledButton, Text } from "@mantine/core";
 import {
-  Link,
   Outlet,
   useNavigate,
   useParams,
@@ -11,10 +9,10 @@ import {
 import {
   AlertCircle,
   Plus,
-  ServerCog,
   Settings,
   LogOut,
-  ChevronLeft,
+  PanelRightClose,
+  PanelRightOpen,
   ChevronRight,
   ChevronDown,
   ScrollText,
@@ -23,39 +21,30 @@ import {
 import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
 import { useSidebarExpanded } from "../hooks/useSidebarExpanded.js";
-import { NavLink } from "./NavLink.js";
+import { SideRow, RAIL_WIDTH, EXPANDED_WIDTH, NAV_PAD } from "./SideRow.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
-import { AddServerWizard } from "./AddServerWizard.js";
 
-const EXPANDED_WIDTH = 250;
-const COLLAPSED_WIDTH = 60;
 const ICON_PROPS = { size: 18, strokeWidth: 1.5, "aria-hidden": true } as const;
+const TRANSITION = "200ms ease";
 
 export function Shell(): React.JSX.Element {
   const [expanded, toggleExpanded] = useSidebarExpanded();
   const [sessionsOpen, setSessionsOpen] = useState(true);
-  const [wizardOpen, setWizardOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const params = useParams({ strict: false }) as { id?: string };
   const attentionCount = useAttentionCount();
   const { phase, logout } = useAuth();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
   const ownerEmail = phase.kind === "authenticated" ? phase.email : null;
 
-  function handleWizardClose(): void {
-    setWizardOpen(false);
-    void queryClient.invalidateQueries({ queryKey: ["runners"] });
-  }
-
   return (
     <AppShell
       navbar={{
-        width: expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH,
+        width: expanded ? EXPANDED_WIDTH : RAIL_WIDTH,
         breakpoint: 0,
       }}
       padding={0}
@@ -67,16 +56,18 @@ export function Shell(): React.JSX.Element {
           borderRight: "1px solid var(--nw-border)",
           display: "flex",
           flexDirection: "column",
-          padding: "var(--mantine-spacing-sm)",
-          gap: 2,
+          padding: NAV_PAD,
+          gap: 4,
           overflow: "hidden",
+          transition: `width ${TRANSITION}`,
         }}
       >
         <div
           style={{
             display: "flex",
-            justifyContent: expanded ? "flex-end" : "center",
-            marginBottom: 2,
+            alignItems: "center",
+            height: 38,
+            flexShrink: 0,
           }}
         >
           <Tooltip
@@ -86,123 +77,61 @@ export function Shell(): React.JSX.Element {
             disabled={expanded}
           >
             <UnstyledButton
-              onClick={toggleExpanded}
+              className="nw-side-toggle"
               aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 28,
-                height: 28,
-                borderRadius: "var(--mantine-radius-sm)",
-                color: "var(--nw-text-muted)",
-              }}
+              onClick={toggleExpanded}
             >
               {expanded ? (
-                <ChevronLeft {...ICON_PROPS} />
+                <PanelRightClose {...ICON_PROPS} />
               ) : (
-                <ChevronRight {...ICON_PROPS} />
+                <PanelRightOpen {...ICON_PROPS} />
               )}
             </UnstyledButton>
           </Tooltip>
         </div>
 
-        {expanded ? (
-          <Button
-            leftSection={<Plus {...ICON_PROPS} />}
-            variant="light"
-            size="sm"
-            fullWidth
-            onClick={() => void navigate({ to: "/" })}
-          >
-            New session
-          </Button>
-        ) : (
-          <Tooltip label="New session" position="right" withArrow>
-            <UnstyledButton
-              aria-label="New session"
-              onClick={() => void navigate({ to: "/" })}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 36,
-                borderRadius: "var(--mantine-radius-sm)",
-                color: "var(--nw-text-muted)",
-                alignSelf: "center",
-              }}
-            >
-              <Plus {...ICON_PROPS} />
-            </UnstyledButton>
-          </Tooltip>
-        )}
-
-        {expanded ? (
-          <Button
-            leftSection={<ServerCog {...ICON_PROPS} />}
-            variant="subtle"
-            size="sm"
-            fullWidth
-            onClick={() => setWizardOpen(true)}
-          >
-            Add a server
-          </Button>
-        ) : (
-          <Tooltip label="Add a server" position="right" withArrow>
-            <UnstyledButton
-              aria-label="Add a server"
-              onClick={() => setWizardOpen(true)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 40,
-                height: 36,
-                borderRadius: "var(--mantine-radius-sm)",
-                color: "var(--nw-text-muted)",
-                alignSelf: "center",
-              }}
-            >
-              <ServerCog {...ICON_PROPS} />
-            </UnstyledButton>
-          </Tooltip>
-        )}
+        <SideRow
+          icon={<Plus {...ICON_PROPS} />}
+          label="New session"
+          expanded={expanded}
+          onClick={() => void navigate({ to: "/" })}
+          primary
+        />
 
         {attentionCount > 0 && (
           <div
             role="status"
             aria-label="awaiting approval"
             style={{
-              marginTop: "var(--mantine-spacing-xs)",
-              padding: expanded ? "4px var(--mantine-spacing-xs)" : "4px 6px",
+              display: "flex",
+              alignItems: "center",
+              height: 34,
               borderRadius: "var(--mantine-radius-sm)",
               background: "var(--nw-accent)",
               color: "var(--nw-bg)",
+              fontWeight: 700,
               fontSize: 12,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: expanded ? "flex-start" : "center",
-              gap: 6,
+              overflow: "hidden",
             }}
           >
-            <span>{attentionCount}</span>
-            {expanded && <span>awaiting approval</span>}
+            <span className="nw-side-row__icon">{attentionCount}</span>
+            {expanded && (
+              <span className="nw-side-row__label">awaiting approval</span>
+            )}
           </div>
         )}
 
-        {expanded && (
+        {expanded ? (
           <div
             style={{
-              borderTop: "1px solid var(--nw-border)",
-              marginTop: "var(--mantine-spacing-xs)",
-              paddingTop: "var(--mantine-spacing-xs)",
               flex: 1,
+              minHeight: 0,
+              marginTop: 4,
+              paddingTop: 4,
+              borderTop: "1px solid var(--nw-border)",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
-              minHeight: 0,
             }}
           >
             <UnstyledButton
@@ -239,89 +168,81 @@ export function Shell(): React.JSX.Element {
               </div>
             )}
           </div>
+        ) : (
+          <div style={{ flex: 1 }} />
         )}
 
         <div
           style={{
-            borderTop: expanded ? "1px solid var(--nw-border)" : undefined,
-            marginTop: expanded ? "var(--mantine-spacing-xs)" : "auto",
-            paddingTop: expanded ? "var(--mantine-spacing-xs)" : 0,
+            borderTop: "1px solid var(--nw-border)",
+            marginTop: 4,
+            paddingTop: 4,
             display: "flex",
             flexDirection: "column",
             gap: 2,
           }}
         >
-          <NavLink
-            to="/fleet"
+          <SideRow
             icon={<Network {...ICON_PROPS} />}
             label="Fleet"
-            compact={!expanded}
+            to="/fleet"
+            expanded={expanded}
           />
-          <NavLink
-            to="/audit"
+          <SideRow
             icon={<ScrollText {...ICON_PROPS} />}
             label="Audit log"
-            compact={!expanded}
+            to="/audit"
+            expanded={expanded}
           />
-          <NavLink
-            to="/unresolved-alerts"
+          <SideRow
             icon={<AlertCircle {...ICON_PROPS} />}
             label="Unresolved alerts"
-            compact={!expanded}
+            to="/unresolved-alerts"
+            expanded={expanded}
           />
-          <NavLink
-            to="/settings"
+          <SideRow
             icon={<Settings {...ICON_PROPS} />}
             label="Settings"
-            compact={!expanded}
+            to="/settings"
+            expanded={expanded}
           />
         </div>
 
         <div
           style={{
-            borderTop: "1px solid var(--nw-border)",
-            marginTop: "var(--mantine-spacing-xs)",
-            paddingTop: "var(--mantine-spacing-xs)",
+            marginTop: 4,
             display: "flex",
             flexDirection: "column",
-            gap: 4,
-            alignItems: expanded ? "flex-start" : "center",
+            gap: 2,
           }}
         >
-          {expanded && ownerEmail && (
-            <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>
-              {ownerEmail}
-            </Text>
-          )}
-          {expanded ? (
-            <Button
-              size="xs"
-              variant="subtle"
-              leftSection={<LogOut {...ICON_PROPS} />}
-              style={{ alignSelf: "flex-start" }}
-              onClick={() => void logout()}
-            >
-              Log out
-            </Button>
-          ) : (
-            <Tooltip label="Log out" position="right" withArrow>
-              <UnstyledButton
-                aria-label="Log out"
-                onClick={() => void logout()}
+          <div
+            style={{
+              minHeight: 16,
+              paddingInline: 4,
+              overflow: "hidden",
+            }}
+          >
+            {expanded && ownerEmail && (
+              <Text
+                size="xs"
+                c="dimmed"
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 40,
-                  height: 36,
-                  borderRadius: "var(--mantine-radius-sm)",
-                  color: "var(--nw-text-muted)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
-                <LogOut {...ICON_PROPS} />
-              </UnstyledButton>
-            </Tooltip>
-          )}
+                {ownerEmail}
+              </Text>
+            )}
+          </div>
+          <SideRow
+            icon={<LogOut {...ICON_PROPS} />}
+            label="Log out"
+            expanded={expanded}
+            onClick={() => void logout()}
+          />
         </div>
       </AppShell.Navbar>
 
@@ -330,6 +251,7 @@ export function Shell(): React.JSX.Element {
           display: "flex",
           flexDirection: "column",
           height: "100vh",
+          transition: `padding ${TRANSITION}`,
           // Session area manages its own internal scroll; other pages (Settings,
           // Fleet) need the main container to scroll normally.
           overflow: isSessionArea ? "hidden" : "auto",
@@ -341,8 +263,6 @@ export function Shell(): React.JSX.Element {
           <Outlet />
         )}
       </AppShell.Main>
-
-      <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />
     </AppShell>
   );
 }
