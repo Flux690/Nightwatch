@@ -88,7 +88,7 @@ describe("POST /alerts/test", () => {
     expect(body.error).toMatch(/runner/i);
   });
 
-  it("fires a synthetic alert through the real pipeline for a connected runner", async () => {
+  it("resolves a labeled alert through the real pipeline to the connected runner", async () => {
     registerRunner(
       "verify-runner-token",
       () => {},
@@ -96,7 +96,17 @@ describe("POST /alerts/test", () => {
     );
     setRunnerManifest(
       "verify-runner-token",
-      manifest("runner-verify", "host-verify"),
+      manifest("runner-verify", "host-verify", [
+        {
+          identity: {
+            provider: "docker",
+            project: "myapp",
+            service: "api",
+            server: "prod-01",
+          },
+          status: "running",
+        },
+      ]),
     );
 
     const res = await server.inject({
@@ -118,7 +128,7 @@ describe("POST /alerts/test", () => {
     expect(body.hostname).toBe("host-verify");
   });
 
-  it("uses the runner's first advertised service identity when present", async () => {
+  it("fails verification when the runner advertises no services to route-test", async () => {
     registerRunner(
       "verify-runner-token",
       () => {},
@@ -126,12 +136,7 @@ describe("POST /alerts/test", () => {
     );
     setRunnerManifest(
       "verify-runner-token",
-      manifest("runner-verify", "host-verify", [
-        {
-          identity: { provider: "docker", project: "myapp", service: "api" },
-          status: "running",
-        },
-      ]),
+      manifest("runner-verify", "host-verify"),
     );
 
     const res = await server.inject({
@@ -141,6 +146,9 @@ describe("POST /alerts/test", () => {
       payload: { runnerId: "runner-verify" },
     });
     expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { ok?: boolean; error?: string };
+    expect(body.ok).toBeUndefined();
+    expect(body.error).toMatch(/service/i);
   });
 
   it("returns 404 for an offline runner, never guessing reachability", async () => {

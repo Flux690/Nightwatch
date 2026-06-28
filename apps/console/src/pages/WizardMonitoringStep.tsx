@@ -23,13 +23,14 @@ interface ValidateAlertResult {
 // A synthetic alert sent through /alerts/validate to confirm the credential
 // and the basic webhook shape work end-to-end before the operator wires up
 // their real monitoring labels.
-function sampleWebhookPayload(provider: Provider): unknown {
+function sampleWebhookPayload(provider: Provider, serverName: string): unknown {
   const labels =
     provider === "docker"
       ? {
           alertname: "TestAlert",
           severity: "warning",
           container: "sample-service",
+          server: serverName,
         }
       : {
           alertname: "TestAlert",
@@ -51,36 +52,58 @@ function sampleWebhookPayload(provider: Provider): unknown {
   };
 }
 
-// Bring-your-own monitoring panel for the Install step. The fleet ingest
-// credential already exists (the install-script fetch establishes it), so this
-// only reveals it on demand; one credential is shared fleet-wide.
+function CopyableSnippet({
+  lines,
+  label,
+}: {
+  lines: string[];
+  label: string;
+}): React.JSX.Element {
+  const text = lines.join("\n");
+  return (
+    <Group gap="xs" align="flex-start" wrap="nowrap">
+      <Code
+        block
+        style={{
+          flex: 1,
+          fontFamily: "var(--nw-mono)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all",
+        }}
+      >
+        {text}
+      </Code>
+      <ActionIcon
+        variant="default"
+        size="lg"
+        aria-label={label}
+        onClick={() => void navigator.clipboard.writeText(text)}
+      >
+        ⧉
+      </ActionIcon>
+    </Group>
+  );
+}
+
+// Bring-your-own monitoring panel for the Install step. The fleet ingest credential
+// is fetched by the wizard and passed in, so the two config snippets - the Prometheus
+// server label and the Alertmanager webhook - are shown inline, no reveal step.
 export function WizardMonitoringStep({
   provider,
   trimmedServerName,
+  ingestToken,
+  ingestUrl,
 }: {
   provider: Provider;
   trimmedServerName: string;
+  ingestToken: string;
+  ingestUrl: string;
 }): React.JSX.Element {
-  const [ingestToken, setIngestToken] = useState<string | null>(null);
-  const [revealError, setRevealError] = useState<string | null>(null);
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
     | { ok: false; error: string }
     | null
   >(null);
-
-  const revealCredential = useMutation({
-    mutationFn: () =>
-      apiFetch<{ token: string }>("/api/ingest-credential/reveal", {
-        method: "POST",
-      }),
-    onMutate: () => setRevealError(null),
-    onSuccess: ({ token }) => setIngestToken(token),
-    onError: (err) =>
-      setRevealError(
-        err instanceof Error ? err.message : "Failed to reveal credential",
-      ),
-  });
 
   const testWebhook = useMutation({
     mutationFn: async (): Promise<ValidateAlertResult[]> => {
@@ -91,9 +114,9 @@ export function WizardMonitoringStep({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ingestToken ?? ""}`,
+          Authorization: `Bearer ${ingestToken}`,
         },
-        body: JSON.stringify(sampleWebhookPayload(provider)),
+        body: JSON.stringify(sampleWebhookPayload(provider, trimmedServerName)),
       });
       // A 2xx with no alerts still means the test didn't resolve; surface it.
       if (!body.alerts) throw new Error(body.error ?? "Test webhook failed");
@@ -111,133 +134,100 @@ export function WizardMonitoringStep({
     <Alert color="blue" title="Bring-your-own monitoring">
       <Stack gap="md">
         <Text size="sm">
-          Point your existing Alertmanager at Nightwatch&apos;s fleet-wide
-          webhook. Every server shares this one ingest credential; alerts route
-          by the server label.
+          Wire your own Prometheus and Alertmanager to Nightwatch. Every server
+          shares this one ingest credential; the server label tells Nightwatch
+          which server an alert is about.
         </Text>
 
-        {ingestToken === null ? (
+        {provider === "docker" && trimmedServerName && (
+          <Stack gap="xs">
+            <Text size="sm" fw={600}>
+              1. In your Prometheus &mdash; stamp the server label
+            </Text>
+            <CopyableSnippet
+              label="Copy Prometheus config"
+              lines={[
+                "global:",
+                "  external_labels:",
+                `    server: "${trimmedServerName}"`,
+              ]}
+            />
+          </Stack>
+        )}
+
+        <Stack gap="xs">
+          <Text size="sm" fw={600}>
+            2. In your Alertmanager &mdash; forward alerts to Nightwatch
+          </Text>
+
+          <Text size="xs" c="dimmed">
+            Webhook URL
+          </Text>
+          <CopyableSnippet label="Copy webhook URL" lines={[ingestUrl]} />
+
+          <Text size="xs" c="dimmed">
+            Auth (Bearer token)
+          </Text>
+          <CopyableSnippet label="Copy ingest token" lines={[ingestToken]} />
+
+          <Text size="xs" c="dimmed">
+            Or paste this receiver directly:
+          </Text>
+          <CopyableSnippet
+            label="Copy Alertmanager receiver"
+            lines={[
+              "receivers:",
+              "  - name: nightwatch",
+              "    webhook_configs:",
+              `      - url: '${ingestUrl}'`,
+              "        http_config:",
+              "          authorization:",
+              "            type: Bearer",
+              `            credentials: '${ingestToken}'`,
+            ]}
+          />
+        </Stack>
+
+        <Stack gap="xs">
           <Button
             size="xs"
             variant="default"
             style={{ alignSelf: "flex-start" }}
-            loading={revealCredential.isPending}
-            onClick={() => revealCredential.mutate()}
+            loading={testWebhook.isPending}
+            onClick={() => testWebhook.mutate()}
           >
-            Reveal ingest credential
+            Test webhook
           </Button>
-        ) : (
-          <Stack gap="sm">
-            <Group gap="xs" align="flex-start" wrap="nowrap">
-              <Code
-                block
-                style={{
-                  flex: 1,
-                  fontFamily: "var(--nw-mono)",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
+
+          {webhookTestResult?.ok === true &&
+            webhookTestResult.results.map((result) => (
+              <Alert
+                key={result.sourceAlertId}
+                color={
+                  result.resolution.status === "resolved" ? "green" : "red"
+                }
+                title={
+                  result.resolution.status === "resolved"
+                    ? "Resolved"
+                    : "Rejected"
+                }
               >
-                {ingestToken}
-              </Code>
-              <ActionIcon
-                variant="default"
-                size="lg"
-                aria-label="Copy ingest credential"
-                onClick={() => void navigator.clipboard.writeText(ingestToken)}
-              >
-                ⧉
-              </ActionIcon>
-            </Group>
-
-            <Text size="sm">
-              Add this receiver to your Alertmanager configuration:
-            </Text>
-            <Code
-              block
-              style={{ whiteSpace: "pre-wrap", fontFamily: "var(--nw-mono)" }}
-            >
-              {[
-                "receivers:",
-                "  - name: nightwatch",
-                "    webhook_configs:",
-                `      - url: '${window.location.origin}/alerts/ingest'`,
-                "        http_config:",
-                "          authorization:",
-                "            type: Bearer",
-                `            credentials: '${ingestToken}'`,
-              ].join("\n")}
-            </Code>
-          </Stack>
-        )}
-
-        {revealError !== null && (
-          <Text size="sm" c="red">
-            {revealError}
-          </Text>
-        )}
-
-        {trimmedServerName && (
-          <Stack gap="xs">
-            <Text size="sm">
-              Stamp the server label on your Prometheus so alerts route to this
-              runner:
-            </Text>
-            <Code
-              block
-              style={{ whiteSpace: "pre-wrap", fontFamily: "var(--nw-mono)" }}
-            >
-              {[
-                "global:",
-                "  external_labels:",
-                `    instance: "${trimmedServerName}"`,
-              ].join("\n")}
-            </Code>
-          </Stack>
-        )}
-
-        {ingestToken !== null && (
-          <Stack gap="xs">
-            <Button
-              size="xs"
-              variant="default"
-              style={{ alignSelf: "flex-start" }}
-              loading={testWebhook.isPending}
-              onClick={() => testWebhook.mutate()}
-            >
-              Test webhook
-            </Button>
-
-            {webhookTestResult?.ok === true &&
-              webhookTestResult.results.map((result) => (
-                <Alert
-                  key={result.sourceAlertId}
-                  color={
-                    result.resolution.status === "resolved" ? "green" : "red"
-                  }
-                  title={
-                    result.resolution.status === "resolved"
-                      ? "Resolved"
-                      : "Rejected"
-                  }
-                >
-                  <Text size="sm">{result.identityKey}</Text>
-                  {result.resolution.status === "resolved" ? (
-                    <Text size="sm">
-                      Would route to {result.resolution.hostname}.
-                    </Text>
-                  ) : (
-                    <Text size="sm">{result.resolution.reason}</Text>
-                  )}
-                </Alert>
-              ))}
-            {webhookTestResult?.ok === false && (
-              <Alert color="red" title="Test webhook failed">
-                {webhookTestResult.error}
+                <Text size="sm">{result.identityKey}</Text>
+                {result.resolution.status === "resolved" ? (
+                  <Text size="sm">
+                    Would route to {result.resolution.hostname}.
+                  </Text>
+                ) : (
+                  <Text size="sm">{result.resolution.reason}</Text>
+                )}
               </Alert>
-            )}
-          </Stack>
-        )}
+            ))}
+          {webhookTestResult?.ok === false && (
+            <Alert color="red" title="Test webhook failed">
+              {webhookTestResult.error}
+            </Alert>
+          )}
+        </Stack>
       </Stack>
     </Alert>
   );

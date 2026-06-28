@@ -9,10 +9,10 @@ import {
 } from "vitest";
 import type Dockerode from "dockerode";
 
-// Redirect /var/nightwatch to a temp path before identity.ts reads its module-level
-// DB_PATH; vi.hoisted runs before imports, so no imported values may be used here.
+// Redirect the runner data dir to a temp path before identity.ts reads its
+// module-level DATA_DIR; vi.hoisted runs before imports, so no imported values here.
 vi.hoisted(() => {
-  process.env["NIGHTWATCH_DB_PATH"] = "/tmp/manifest-detect-test/history.db";
+  process.env["NIGHTWATCH_DATA_DIR"] = "/tmp/manifest-detect-test";
 });
 
 // Mock system boundaries: Docker client, Kubernetes client, and Prometheus

@@ -106,12 +106,12 @@ describe("deriveServiceIdentity", () => {
       });
     });
 
-    it("takes the server dimension from the instance label", () => {
+    it("takes the server dimension from the server label", () => {
       const identity = deriveServiceIdentity({
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
-        instance: "server-a",
+        server: "server-a",
       });
       expect(identity).toEqual({
         provider: "docker",
@@ -121,18 +121,18 @@ describe("deriveServiceIdentity", () => {
       });
     });
 
-    it("falls back to the hostname label for the server dimension when instance is absent", () => {
+    it("ignores instance and hostname labels - only the server label scopes the identity", () => {
       const identity = deriveServiceIdentity({
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
-        hostname: "server-b",
+        instance: "localhost:8080",
+        hostname: "some-host",
       });
       expect(identity).toEqual({
         provider: "docker",
         project: "myapp",
         service: "postgres",
-        server: "server-b",
       });
     });
   });
@@ -198,10 +198,10 @@ describe("deriveServiceIdentity", () => {
 });
 
 // Both sides of the fleet match (ADR-0004): the runner stamps the assigned name onto its
-// manifest, the alert carries it in the `instance` label, so resolve-or-reject produces
+// manifest, the alert carries it in the `server` label, so resolve-or-reject produces
 // the same key deterministically.
 describe("assigned-name round-trip: manifest key === alert-derived key", () => {
-  it("Docker: manifest entry with server matches alert with instance label", () => {
+  it("Docker: manifest entry with server matches alert with server label", () => {
     const assignedName = "prod-server-01";
 
     const manifestKey = serviceIdentityKey({
@@ -216,7 +216,7 @@ describe("assigned-name round-trip: manifest key === alert-derived key", () => {
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "api",
-        instance: assignedName,
+        server: assignedName,
       }),
     );
 

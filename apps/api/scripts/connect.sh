@@ -80,7 +80,7 @@ DOCKER_ARGS=(
   -e "PLATFORM_URL=${PLATFORM_URL}"
   -e "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}"
   -e "HOST_PROC=/host/proc"
-  -e "NIGHTWATCH_DB_PATH=/var/nightwatch/history.db"
+  -e "NIGHTWATCH_DATA_DIR=/var/nightwatch"
   -e "REMEDIATION_ENABLED=${REMEDIATION_ENABLED:-false}"
 )
 

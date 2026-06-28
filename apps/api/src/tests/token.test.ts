@@ -12,7 +12,7 @@ import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
-import { generateRunnerToken } from "../db/runner.js";
+import { generateRunnerToken, setRunnerId } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
 
 function sha256hex(s: string): string {
@@ -135,18 +135,47 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it("returns 409 when serverName is already used by another token", async () => {
-      await server.inject({
+    it("reclaims a server name whose runner never connected (abandoned setup)", async () => {
+      const first = await server.inject({
         method: "POST",
         url: "/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "db-server-01" },
       });
-      const res = await server.inject({
+      const { id: firstId } = JSON.parse(first.body) as { id: string };
+
+      const second = await server.inject({
         method: "POST",
         url: "/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "db-server-01" },
+      });
+      expect(second.statusCode).toBe(201);
+
+      // The abandoned orphan is gone; only the fresh reservation holds the name.
+      const rows = getDb()
+        .prepare("SELECT id FROM runner WHERE server_name = 'db-server-01'")
+        .all() as Array<{ id: string }>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).not.toBe(firstId);
+    });
+
+    it("returns 409 when the server name belongs to a runner that has connected", async () => {
+      const first = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-prod-01" },
+      });
+      const { id } = JSON.parse(first.body) as { id: string };
+      // Simulate the runner connecting (manifest received sets runner_id).
+      setRunnerId(id, "runner-web-prod-01");
+
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-prod-01" },
       });
       expect(res.statusCode).toBe(409);
     });

@@ -17,7 +17,8 @@ const GENERATED_TOKEN = {
 
 const CONNECT_SCRIPT = "#!/bin/sh\necho install-docker";
 const MANIFEST_YAML = "kind: Deployment\nname: nightwatch-runner";
-const REVEALED_INGEST = "nwi_revealedtoken456";
+const INGEST_TOKEN = "nwi_fleettoken456";
+const INGEST_URL = "http://api.test/alerts/ingest";
 
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
@@ -86,8 +87,8 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
         return jsonOk({}, 204);
       if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
       if (url === "/api/manifest.yaml") return textOk(MANIFEST_YAML);
-      if (url === "/api/ingest-credential/reveal" && init?.method === "POST")
-        return jsonOk({ token: REVEALED_INGEST });
+      if (url === "/api/ingest-credential/ensure" && init?.method === "POST")
+        return jsonOk({ token: INGEST_TOKEN, ingestUrl: INGEST_URL });
       if (url === "/api/alerts/test" && init?.method === "POST")
         return jsonOk({
           ok: true,
@@ -319,60 +320,56 @@ describe("AddServerWizard", () => {
         expect(screen.getByText(/monitoring bundled/i)).toBeInTheDocument();
       });
       expect(
-        screen.queryByRole("button", { name: /reveal ingest credential/i }),
+        screen.queryByText(new RegExp(INGEST_TOKEN)),
       ).not.toBeInTheDocument();
     });
   });
 
   describe("bring-your-own monitoring", () => {
-    it("shows a relabel snippet with the chosen server name", async () => {
+    it("shows the fleet ingest credential and webhook config inline, no reveal step", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
+
+      await startInstall(user, { monitoring: "byo" });
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/ingest-credential/ensure",
+          expect.objectContaining({ method: "POST" }),
+        );
+      });
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
+        ).toBeGreaterThan(0);
+      });
+      // The server-provided webhook URL is shown plainly, not window.location.
+      expect(
+        screen.getAllByText(new RegExp(INGEST_URL.replace(/\//g, "\\/")))
+          .length,
+      ).toBeGreaterThan(0);
+      expect(
+        screen.queryByRole("button", { name: /reveal/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stamps the chosen server name into the Prometheus server-label snippet", async () => {
       const user = userEvent.setup();
       setup({ runners: [CONNECTED_RUNNER] });
 
       await startInstall(user, { name: "prod-web-01", monitoring: "byo" });
 
       await waitFor(() => {
-        expect(screen.getByText(/instance/i)).toBeInTheDocument();
+        expect(screen.getByText(/in your prometheus/i)).toBeInTheDocument();
       });
       expect(screen.getByText(/prod-web-01/)).toBeInTheDocument();
     });
 
-    it("reveals the fleet ingest credential and shows the webhook config", async () => {
+    it("tests the webhook with the inline credential and shows the resolved result", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
 
       await startInstall(user, { monitoring: "byo" });
-
-      await user.click(
-        await screen.findByRole("button", {
-          name: /reveal ingest credential/i,
-        }),
-      );
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/ingest-credential/reveal",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(/nwi_revealedtoken456/).length,
-        ).toBeGreaterThan(0);
-      });
-      expect(screen.getByText(/alerts\/ingest/)).toBeInTheDocument();
-    });
-
-    it("tests the webhook with the revealed credential and shows the resolved result", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { monitoring: "byo" });
-      await user.click(
-        await screen.findByRole("button", {
-          name: /reveal ingest credential/i,
-        }),
-      );
       await user.click(
         await screen.findByRole("button", { name: /test webhook/i }),
       );
@@ -383,7 +380,7 @@ describe("AddServerWizard", () => {
           expect.objectContaining({
             method: "POST",
             headers: expect.objectContaining({
-              Authorization: `Bearer ${REVEALED_INGEST}`,
+              Authorization: `Bearer ${INGEST_TOKEN}`,
             }),
           }),
         );
@@ -404,10 +401,10 @@ describe("AddServerWizard", () => {
             return jsonOk(GENERATED_TOKEN, 201);
           if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
           if (
-            url === "/api/ingest-credential/reveal" &&
+            url === "/api/ingest-credential/ensure" &&
             init?.method === "POST"
           )
-            return jsonOk({ token: REVEALED_INGEST });
+            return jsonOk({ token: INGEST_TOKEN, ingestUrl: INGEST_URL });
           if (url === "/api/alerts/validate")
             return jsonOk({
               alerts: [
@@ -427,11 +424,6 @@ describe("AddServerWizard", () => {
       );
 
       await startInstall(user, { monitoring: "byo" });
-      await user.click(
-        await screen.findByRole("button", {
-          name: /reveal ingest credential/i,
-        }),
-      );
       await user.click(
         await screen.findByRole("button", { name: /test webhook/i }),
       );
@@ -508,26 +500,13 @@ describe("AddServerWizard", () => {
   });
 
   describe("token hygiene on close", () => {
-    it("deletes the minted token when the install command never rendered", async () => {
+    it("deletes the minted token when closed before the runner connects", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });
-      // connect.sh fails: the token is minted but no usable command is shown.
-      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-        if (url === "/api/runners") return jsonOk([AWAITING_RUNNER]);
-        if (url === "/api/tokens" && init?.method === "POST")
-          return jsonOk(GENERATED_TOKEN, 201);
-        if (url.startsWith("/api/tokens/") && init?.method === "DELETE")
-          return jsonOk({}, 204);
-        if (url === "/api/connect.sh")
-          return Promise.resolve({ ok: false, status: 500 });
-        return jsonOk({});
-      });
 
       await startInstall(user, { name: "web-01" });
       await waitFor(() => {
-        expect(
-          fetchMock.mock.calls.some((c) => c[0] === "/api/connect.sh"),
-        ).toBe(true);
+        expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
       await user.keyboard("{Escape}");
@@ -540,13 +519,13 @@ describe("AddServerWizard", () => {
       });
     });
 
-    it("keeps the token when the install command was shown", async () => {
+    it("keeps the token once the runner has connected", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
       await waitFor(() => {
-        expect(screen.getByText(/install-docker/)).toBeInTheDocument();
+        expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
       });
 
       await user.keyboard("{Escape}");

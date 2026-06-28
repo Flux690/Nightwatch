@@ -2,7 +2,7 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
   external_labels:
-    instance: "dev-host"
+    server: "dev-host"
 
 rule_files:
   - /etc/prometheus/rules.yml

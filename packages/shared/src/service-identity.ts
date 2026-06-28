@@ -60,7 +60,10 @@ function deriveDockerAlertIdentity(
     labels["job"] ??
     "unknown";
   const base = deriveDockerServiceIdentity(labels, liveName);
-  const server = labels["instance"] ?? labels["hostname"];
+  // The server scope comes only from the explicit `server` label - the same name
+  // the runner advertises (NIGHTWATCH_SERVER_NAME). `instance` is Prometheus's
+  // built-in target address, never a fleet identity, so it is not consulted.
+  const server = labels["server"];
   return server ? { ...base, server } : base;
 }
 

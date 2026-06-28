@@ -1,10 +1,11 @@
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
-  # Stamped on every alert sent to Alertmanager so deriveDockerServiceIdentity
-  # can populate the server scope for fleet-wide identity matching (ADR-0004).
+  # Stamped on every alert as the server dimension, matching the name the runner
+  # advertises (NIGHTWATCH_SERVER_NAME) so alerts route for fleet-wide identity
+  # matching (ADR-0004). A dedicated label - `instance` is Prometheus's own.
   external_labels:
-    instance: "${RUNNER_HOSTNAME}"
+    server: "${NIGHTWATCH_SERVER_NAME}"
 
 rule_files:
   - /etc/nightwatch/rules.yml

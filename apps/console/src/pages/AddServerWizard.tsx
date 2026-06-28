@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -50,7 +50,12 @@ export function AddServerWizard({
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
+  const [ingestToken, setIngestToken] = useState<string | null>(null);
+  const [ingestUrl, setIngestUrl] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  // Latches once the runner first connects: closing before this rolls the token
+  // back; closing after keeps the now-real server.
+  const [committed, setCommitted] = useState(false);
   const [verifyResult, setVerifyResult] = useState<
     { ok: true; hostname: string } | { ok: false; error: string } | null
   >(null);
@@ -78,11 +83,15 @@ export function AddServerWizard({
     (r) => r.token === mintedToken?.id && r.online && r.hostname !== null,
   );
 
+  useEffect(() => {
+    if (connectedRunner) setCommitted(true);
+  }, [connectedRunner]);
+
   function handleClose(): void {
-    // Roll back a token that never produced a usable install command (e.g. the
-    // connect.sh fetch failed). A token whose command was shown is kept so the
-    // operator can still install later; it stays invisible in Fleet until connect.
-    if (mintedToken !== null && installText === null) {
+    // Closing before a runner ever connected means the server was abandoned: roll
+    // the token back so its name is freed and no dead credential lingers. Once a
+    // runner has connected the server is real and is kept.
+    if (mintedToken !== null && !committed) {
       void apiFetch<void>(`/api/tokens/${mintedToken.id}`, {
         method: "DELETE",
       }).catch(() => {});
@@ -95,7 +104,10 @@ export function AddServerWizard({
     setMinting(false);
     setMintedToken(null);
     setInstallText(null);
+    setIngestToken(null);
+    setIngestUrl(null);
     setInstallError(null);
+    setCommitted(false);
     setVerifyResult(null);
     onClose();
   }
@@ -113,14 +125,30 @@ export function AddServerWizard({
       });
       setMintedToken(minted);
 
-      // The install script is plain text, not JSON, so it stays a raw fetch.
+      // Fetch the install command and (for BYO) the fleet ingest credential
+      // together, so both are presented at once rather than one gating the other.
       const installUrl =
         provider === "docker" ? "/api/connect.sh" : "/api/manifest.yaml";
-      const installRes = await fetch(installUrl, {
-        headers: { Authorization: `Bearer ${minted.token}` },
-      });
-      if (!installRes.ok) throw new Error(`${installUrl} ${installRes.status}`);
-      setInstallText(await installRes.text());
+      const [scriptText, ingest] = await Promise.all([
+        // The install script is plain text, not JSON, so it stays a raw fetch.
+        fetch(installUrl, {
+          headers: { Authorization: `Bearer ${minted.token}` },
+        }).then(async (res) => {
+          if (!res.ok) throw new Error(`${installUrl} ${res.status}`);
+          return res.text();
+        }),
+        monitoring === "byo"
+          ? apiFetch<{ token: string; ingestUrl: string }>(
+              "/api/ingest-credential/ensure",
+              { method: "POST" },
+            )
+          : Promise.resolve(null),
+      ]);
+      setInstallText(scriptText);
+      if (ingest) {
+        setIngestToken(ingest.token);
+        setIngestUrl(ingest.ingestUrl);
+      }
     } catch (err) {
       // A duplicate server name is a 409: send the operator back to fix it.
       if (err instanceof ApiError && err.status === 409) {
@@ -279,12 +307,17 @@ export function AddServerWizard({
                   </Alert>
                 )}
 
-                {monitoring === "byo" && provider && (
-                  <WizardMonitoringStep
-                    provider={provider}
-                    trimmedServerName={trimmedServerName}
-                  />
-                )}
+                {monitoring === "byo" &&
+                  provider &&
+                  ingestToken !== null &&
+                  ingestUrl !== null && (
+                    <WizardMonitoringStep
+                      provider={provider}
+                      trimmedServerName={trimmedServerName}
+                      ingestToken={ingestToken}
+                      ingestUrl={ingestUrl}
+                    />
+                  )}
 
                 <Group gap="xs" align="center">
                   {connectedRunner ? (

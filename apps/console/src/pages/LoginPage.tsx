@@ -61,8 +61,11 @@ function SetupForm(): React.JSX.Element {
   }
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" style={{ width: "min(480px, 100%)" }}>
+    <form
+      onSubmit={(e) => void handleSubmit(e)}
+      style={{ width: "100%", maxWidth: 360 }}
+    >
+      <Stack gap="sm">
         <Title order={2} size="h4">
           Create your account
         </Title>
@@ -134,8 +137,11 @@ function LoginForm(): React.JSX.Element {
   }
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)}>
-      <Stack gap="sm" style={{ width: "min(480px, 100%)" }}>
+    <form
+      onSubmit={(e) => void handleSubmit(e)}
+      style={{ width: "100%", maxWidth: 360 }}
+    >
+      <Stack gap="sm">
         <Title order={2} size="h4">
           Log in
         </Title>

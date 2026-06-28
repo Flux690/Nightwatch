@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
-import { generateIngestToken, getIngestTokenPlaintext } from "../db/user.js";
+import { ensureIngestToken } from "../db/user.js";
 
 const TEMPLATE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
@@ -61,7 +61,7 @@ export async function registerConnectRoutes(
       const wsUrl = buildWsUrl(origin);
       // The first install establishes the fleet-wide ingest token; later installs
       // reuse it so every server's Alertmanager authenticates with one credential.
-      const ingestToken = getIngestTokenPlaintext() ?? generateIngestToken();
+      const ingestToken = ensureIngestToken();
       const script = buildScript(
         origin,
         wsUrl,

@@ -38,19 +38,29 @@ export function generateRunnerToken(
   const plaintext = "nwr_" + randomBytes(32).toString("base64url");
   const id = randomUUID();
   const createdAt = new Date().toISOString();
+  const db = getDb();
 
-  getDb()
-    .prepare(
+  const mint = db.transaction(() => {
+    // Reclaim an abandoned name: a row with this server_name that never connected
+    // (runner_id IS NULL) is an orphan from an aborted setup, so free it. A row that
+    // has connected is a real server, left untouched so the UNIQUE insert 409s.
+    if (serverName !== undefined) {
+      db.prepare(
+        `DELETE FROM runner WHERE server_name = ? AND runner_id IS NULL`,
+      ).run(serverName);
+    }
+    db.prepare(
       `INSERT INTO runner (id, token, label, server_name, created_at)
        VALUES (@id, @tokenHash, @label, @serverName, @createdAt)`,
-    )
-    .run({
+    ).run({
       id,
       tokenHash: hashToken(plaintext),
       label: label ?? null,
       serverName: serverName ?? null,
       createdAt,
     });
+  });
+  mint();
 
   return {
     plaintext,

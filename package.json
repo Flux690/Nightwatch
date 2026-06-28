@@ -12,7 +12,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev": "pnpm --filter './apps/**' --parallel dev",
-    "dev:infra": "docker compose -f docker-compose.dev.yaml up -d"
+    "dev:infra": "docker compose -f apps/runner/docker-compose.dev.yaml up -d"
   },
   "devDependencies": {
     "typescript": "6.0.3",

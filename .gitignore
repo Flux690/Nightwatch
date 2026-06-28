@@ -9,13 +9,9 @@ node_modules/
 # Build output
 dist/
 
-# SQLite database files (runner local storage)
-*.db
-*.db-shm
-*.db-wal
-
-# Runner stable identity (generated per host at first start)
-runner-id
+# Runtime data (API SQLite db; runner identity file)
+apps/api/data
+apps/runner/data
 
 # Claude Code — personal/generated only; settings.json, hooks/, rules/, agents/ are committed
 .claude/settings.local.json

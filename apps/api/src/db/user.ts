@@ -83,3 +83,10 @@ export function generateIngestToken(): string {
   saveIngestToken(hashToken(plaintext), encrypt(plaintext));
   return plaintext;
 }
+
+// Get-or-create: returns the existing fleet credential's plaintext, minting one on
+// first use. Idempotent, so the install script and the wizard can both obtain the
+// same token without depending on which ran first.
+export function ensureIngestToken(): string {
+  return getIngestTokenPlaintext() ?? generateIngestToken();
+}

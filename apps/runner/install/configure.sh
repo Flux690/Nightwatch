@@ -17,11 +17,10 @@ fi
 # configured (backward compat - the ingest endpoint accepts both token types).
 NIGHTWATCH_INGEST_TOKEN="${NIGHTWATCH_INGEST_TOKEN:-$NIGHTWATCH_TOKEN}"
 
-# Hostname stamped as the "instance" external_label in Prometheus so every
-# alert carries the server dimension for fleet-wide identity matching.
-RUNNER_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
-
-export ALERTMANAGER_TARGET PLATFORM_URL NIGHTWATCH_TOKEN NIGHTWATCH_INGEST_TOKEN RUNNER_HOSTNAME
+# NIGHTWATCH_SERVER_NAME is stamped as the `server` external_label in Prometheus so
+# every alert carries the same name the runner advertises (manifest/detect.ts) and
+# routes. Exported so envsubst can fill it into the template.
+export ALERTMANAGER_TARGET PLATFORM_URL NIGHTWATCH_TOKEN NIGHTWATCH_INGEST_TOKEN NIGHTWATCH_SERVER_NAME
 
 if [ -z "$PROMETHEUS_URL" ]; then
   envsubst < /etc/nightwatch/templates/prometheus.yml > /etc/nightwatch/prometheus.yml
