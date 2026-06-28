@@ -20,6 +20,7 @@ import { ApiError, apiFetch } from "../api/client.js";
 import { WizardMonitoringStep } from "./WizardMonitoringStep.js";
 
 export type Provider = "docker" | "kubernetes";
+type Monitoring = "bundled" | "byo";
 
 interface MintedToken {
   id: string;
@@ -45,6 +46,7 @@ export function AddServerWizard({
   const [provider, setProvider] = useState<Provider | null>(null);
   const [serverName, setServerName] = useState("");
   const [serverNameTouched, setServerNameTouched] = useState(false);
+  const [monitoring, setMonitoring] = useState<Monitoring | null>(null);
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
@@ -58,8 +60,10 @@ export function AddServerWizard({
     : serverNameTouched && serverName.trim().length === 0
       ? "Server name is required"
       : null;
-  const canContinueFromProvider =
-    provider !== null && validateServerName(serverName) === null;
+  const canContinueFromServer =
+    provider !== null &&
+    monitoring !== null &&
+    validateServerName(serverName) === null;
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
@@ -75,10 +79,19 @@ export function AddServerWizard({
   );
 
   function handleClose(): void {
+    // Roll back a token that never produced a usable install command (e.g. the
+    // connect.sh fetch failed). A token whose command was shown is kept so the
+    // operator can still install later; it stays invisible in Fleet until connect.
+    if (mintedToken !== null && installText === null) {
+      void apiFetch<void>(`/api/tokens/${mintedToken.id}`, {
+        method: "DELETE",
+      }).catch(() => {});
+    }
     setStep(0);
     setProvider(null);
     setServerName("");
     setServerNameTouched(false);
+    setMonitoring(null);
     setMinting(false);
     setMintedToken(null);
     setInstallText(null);
@@ -87,8 +100,8 @@ export function AddServerWizard({
     onClose();
   }
 
-  async function handleChooseProvider(): Promise<void> {
-    if (!canContinueFromProvider) return;
+  async function handleStartInstall(): Promise<void> {
+    if (!canContinueFromServer) return;
     setStep(1);
     setMinting(true);
     setInstallError(null);
@@ -155,7 +168,7 @@ export function AddServerWizard({
   return (
     <Modal opened={opened} onClose={handleClose} title="Add a server" size="lg">
       <Stepper active={step} onStepClick={setStep} allowNextStepsSelect={false}>
-        <Stepper.Step label="Provider">
+        <Stepper.Step label="Server">
           <Stack gap="md" mt="md">
             <Radio.Group
               label="Which substrate is this server running?"
@@ -178,6 +191,21 @@ export function AddServerWizard({
               error={serverNameError}
             />
 
+            <Radio.Group
+              label="Monitoring"
+              description="Nightwatch needs Prometheus and Alertmanager to receive alerts."
+              value={monitoring ?? ""}
+              onChange={(v) => setMonitoring(v as Monitoring)}
+            >
+              <Stack gap="xs" mt="xs">
+                <Radio
+                  value="bundled"
+                  label="Bundle Prometheus + Alertmanager for me"
+                />
+                <Radio value="byo" label="I already run my own monitoring" />
+              </Stack>
+            </Radio.Group>
+
             {installError !== null && step === 0 && (
               <Text size="sm" c="red">
                 {installError}
@@ -186,8 +214,8 @@ export function AddServerWizard({
 
             <Group justify="flex-end">
               <Button
-                disabled={!canContinueFromProvider}
-                onClick={() => void handleChooseProvider()}
+                disabled={!canContinueFromServer}
+                onClick={() => void handleStartInstall()}
               >
                 Continue
               </Button>
@@ -213,33 +241,50 @@ export function AddServerWizard({
             )}
 
             {installText !== null && (
-              <Stack gap="xs">
-                <Text size="sm">
-                  Run this on the target server to install the runner:
-                </Text>
-                <Group gap="xs" align="flex-start" wrap="nowrap">
-                  <Code
-                    block
-                    style={{
-                      flex: 1,
-                      fontFamily: "var(--nw-mono)",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-all",
-                      maxHeight: 240,
-                      overflow: "auto",
-                    }}
-                  >
-                    {installText}
-                  </Code>
-                  <ActionIcon
-                    variant="default"
-                    size="lg"
-                    aria-label="Copy install command"
-                    onClick={copyInstallText}
-                  >
-                    ⧉
-                  </ActionIcon>
-                </Group>
+              <Stack gap="md">
+                <Stack gap="xs">
+                  <Text size="sm">
+                    Run this on the target server to install the runner:
+                  </Text>
+                  <Group gap="xs" align="flex-start" wrap="nowrap">
+                    <Code
+                      block
+                      style={{
+                        flex: 1,
+                        fontFamily: "var(--nw-mono)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                        maxHeight: 240,
+                        overflow: "auto",
+                      }}
+                    >
+                      {installText}
+                    </Code>
+                    <ActionIcon
+                      variant="default"
+                      size="lg"
+                      aria-label="Copy install command"
+                      onClick={copyInstallText}
+                    >
+                      ⧉
+                    </ActionIcon>
+                  </Group>
+                </Stack>
+
+                {monitoring === "bundled" && (
+                  <Alert color="blue" title="Monitoring bundled">
+                    Prometheus, Alertmanager and cAdvisor ship inside the runner
+                    and are wired to Nightwatch automatically. Nothing else to
+                    configure.
+                  </Alert>
+                )}
+
+                {monitoring === "byo" && provider && (
+                  <WizardMonitoringStep
+                    provider={provider}
+                    trimmedServerName={trimmedServerName}
+                  />
+                )}
 
                 <Group gap="xs" align="center">
                   {connectedRunner ? (
@@ -264,16 +309,6 @@ export function AddServerWizard({
               </Button>
             </Group>
           </Stack>
-        </Stepper.Step>
-
-        <Stepper.Step label="Monitoring">
-          {provider && (
-            <WizardMonitoringStep
-              provider={provider}
-              trimmedServerName={trimmedServerName}
-              onContinue={() => setStep(3)}
-            />
-          )}
         </Stepper.Step>
 
         <Stepper.Step label="Verify">

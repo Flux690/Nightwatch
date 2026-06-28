@@ -2,14 +2,13 @@ import { useState } from "react";
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
   Code,
   Group,
   Stack,
   Text,
 } from "@mantine/core";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiFetch } from "../api/client.js";
 import type { Provider } from "./AddServerWizard.js";
 
@@ -52,59 +51,33 @@ function sampleWebhookPayload(provider: Provider): unknown {
   };
 }
 
-// The wizard's Monitoring step: mint or reveal the fleet ingest credential, show
-// the Alertmanager wiring, and dry-run a webhook. All of its state is local to
-// this step, so it owns it rather than threading it through the wizard.
+// Bring-your-own monitoring panel for the Install step. The fleet ingest
+// credential already exists (the install-script fetch establishes it), so this
+// only reveals it on demand; one credential is shared fleet-wide.
 export function WizardMonitoringStep({
   provider,
   trimmedServerName,
-  onContinue,
 }: {
   provider: Provider;
   trimmedServerName: string;
-  onContinue: () => void;
 }): React.JSX.Element {
-  const { data: ingestCredential } = useQuery<{ configured: boolean }>({
-    queryKey: ["wizard-ingest-credential"],
-    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
-  });
-
   const [ingestToken, setIngestToken] = useState<string | null>(null);
-  // True when the shown token was just minted (old one now invalid) vs revealed.
-  const [ingestTokenFresh, setIngestTokenFresh] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
     | { ok: false; error: string }
     | null
   >(null);
 
-  const generateCredential = useMutation({
-    mutationFn: () =>
-      apiFetch<{ token: string }>("/api/ingest-credential", { method: "POST" }),
-    onMutate: () => setGenerateError(null),
-    onSuccess: ({ token }) => {
-      setIngestToken(token);
-      setIngestTokenFresh(true);
-    },
-    onError: (err) =>
-      setGenerateError(
-        err instanceof Error ? err.message : "Failed to generate credential",
-      ),
-  });
-
   const revealCredential = useMutation({
     mutationFn: () =>
       apiFetch<{ token: string }>("/api/ingest-credential/reveal", {
         method: "POST",
       }),
-    onMutate: () => setGenerateError(null),
-    onSuccess: ({ token }) => {
-      setIngestToken(token);
-      setIngestTokenFresh(false);
-    },
+    onMutate: () => setRevealError(null),
+    onSuccess: ({ token }) => setIngestToken(token),
     onError: (err) =>
-      setGenerateError(
+      setRevealError(
         err instanceof Error ? err.message : "Failed to reveal credential",
       ),
   });
@@ -135,58 +108,25 @@ export function WizardMonitoringStep({
   });
 
   return (
-    <Stack gap="md" mt="md">
-      <Group gap="xs" align="center">
-        <Text size="sm" fw={500}>
-          Ingest credential
+    <Alert color="blue" title="Bring-your-own monitoring">
+      <Stack gap="md">
+        <Text size="sm">
+          Point your existing Alertmanager at Nightwatch&apos;s fleet-wide
+          webhook. Every server shares this one ingest credential; alerts route
+          by the server label.
         </Text>
-        <Badge
-          color={ingestCredential?.configured ? "green" : "gray"}
-          variant="light"
-        >
-          {ingestCredential?.configured ? "Configured" : "Not configured"}
-        </Badge>
-      </Group>
 
-      <Group gap="xs">
-        {!ingestCredential?.configured ? (
+        {ingestToken === null ? (
           <Button
             size="xs"
             variant="default"
-            loading={generateCredential.isPending}
-            onClick={() => generateCredential.mutate()}
+            style={{ alignSelf: "flex-start" }}
+            loading={revealCredential.isPending}
+            onClick={() => revealCredential.mutate()}
           >
-            Generate credential
+            Reveal ingest credential
           </Button>
         ) : (
-          ingestToken === null && (
-            <Button
-              size="xs"
-              variant="default"
-              loading={revealCredential.isPending}
-              onClick={() => revealCredential.mutate()}
-            >
-              Reveal credential
-            </Button>
-          )
-        )}
-      </Group>
-
-      {generateError !== null && (
-        <Text size="sm" c="red">
-          {generateError}
-        </Text>
-      )}
-
-      {ingestToken !== null && (
-        <Alert
-          color={ingestTokenFresh ? "yellow" : "blue"}
-          title={
-            ingestTokenFresh
-              ? "New credential generated"
-              : "Fleet ingest credential"
-          }
-        >
           <Stack gap="sm">
             <Group gap="xs" align="flex-start" wrap="nowrap">
               <Code
@@ -211,15 +151,11 @@ export function WizardMonitoringStep({
             </Group>
 
             <Text size="sm">
-              Point your Alertmanager (bundled or your own) at this fleet-wide
-              webhook:
+              Add this receiver to your Alertmanager configuration:
             </Text>
             <Code
               block
-              style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "var(--nw-mono)",
-              }}
+              style={{ whiteSpace: "pre-wrap", fontFamily: "var(--nw-mono)" }}
             >
               {[
                 "receivers:",
@@ -233,23 +169,23 @@ export function WizardMonitoringStep({
               ].join("\n")}
             </Code>
           </Stack>
-        </Alert>
-      )}
+        )}
 
-      {trimmedServerName && (
-        <Alert color="blue" title="Bring-your-own monitoring">
+        {revealError !== null && (
+          <Text size="sm" c="red">
+            {revealError}
+          </Text>
+        )}
+
+        {trimmedServerName && (
           <Stack gap="xs">
             <Text size="sm">
-              If you use your own Prometheus, add this to its global
-              configuration so alerts carry the server label that routes them to
-              this runner:
+              Stamp the server label on your Prometheus so alerts route to this
+              runner:
             </Text>
             <Code
               block
-              style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "var(--nw-mono)",
-              }}
+              style={{ whiteSpace: "pre-wrap", fontFamily: "var(--nw-mono)" }}
             >
               {[
                 "global:",
@@ -258,55 +194,51 @@ export function WizardMonitoringStep({
               ].join("\n")}
             </Code>
           </Stack>
-        </Alert>
-      )}
+        )}
 
-      {ingestToken !== null && (
-        <Stack gap="xs">
-          <Button
-            size="xs"
-            variant="default"
-            style={{ alignSelf: "flex-start" }}
-            loading={testWebhook.isPending}
-            onClick={() => testWebhook.mutate()}
-          >
-            Test webhook
-          </Button>
+        {ingestToken !== null && (
+          <Stack gap="xs">
+            <Button
+              size="xs"
+              variant="default"
+              style={{ alignSelf: "flex-start" }}
+              loading={testWebhook.isPending}
+              onClick={() => testWebhook.mutate()}
+            >
+              Test webhook
+            </Button>
 
-          {webhookTestResult?.ok === true &&
-            webhookTestResult.results.map((result) => (
-              <Alert
-                key={result.sourceAlertId}
-                color={
-                  result.resolution.status === "resolved" ? "green" : "red"
-                }
-                title={
-                  result.resolution.status === "resolved"
-                    ? "Resolved"
-                    : "Rejected"
-                }
-              >
-                <Text size="sm">{result.identityKey}</Text>
-                {result.resolution.status === "resolved" ? (
-                  <Text size="sm">
-                    Would route to {result.resolution.hostname}.
-                  </Text>
-                ) : (
-                  <Text size="sm">{result.resolution.reason}</Text>
-                )}
+            {webhookTestResult?.ok === true &&
+              webhookTestResult.results.map((result) => (
+                <Alert
+                  key={result.sourceAlertId}
+                  color={
+                    result.resolution.status === "resolved" ? "green" : "red"
+                  }
+                  title={
+                    result.resolution.status === "resolved"
+                      ? "Resolved"
+                      : "Rejected"
+                  }
+                >
+                  <Text size="sm">{result.identityKey}</Text>
+                  {result.resolution.status === "resolved" ? (
+                    <Text size="sm">
+                      Would route to {result.resolution.hostname}.
+                    </Text>
+                  ) : (
+                    <Text size="sm">{result.resolution.reason}</Text>
+                  )}
+                </Alert>
+              ))}
+            {webhookTestResult?.ok === false && (
+              <Alert color="red" title="Test webhook failed">
+                {webhookTestResult.error}
               </Alert>
-            ))}
-          {webhookTestResult?.ok === false && (
-            <Alert color="red" title="Test webhook failed">
-              {webhookTestResult.error}
-            </Alert>
-          )}
-        </Stack>
-      )}
-
-      <Group justify="flex-end">
-        <Button onClick={onContinue}>Continue</Button>
-      </Group>
-    </Stack>
+            )}
+          </Stack>
+        )}
+      </Stack>
+    </Alert>
   );
 }

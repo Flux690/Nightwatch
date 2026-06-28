@@ -146,11 +146,16 @@ describe("FleetPage", () => {
       });
     });
 
-    it("shows 'awaiting connection' for a runner with no hostname", async () => {
+    it("hides a runner that has never connected (no hostname)", async () => {
       setup([AWAITING_RUNNER]);
+      // A minted-but-never-connected token is a credential, not a fleet member,
+      // so it is filtered out and the page settles into the empty state.
       await waitFor(() => {
-        expect(screen.getByText(/awaiting connection/i)).toBeInTheDocument();
+        expect(screen.getByText(/no runners connected/i)).toBeInTheDocument();
       });
+      expect(
+        screen.queryByText(/awaiting connection/i),
+      ).not.toBeInTheDocument();
     });
 
     it("renders an online runner's hostname, status badge, services, and last-seen", async () => {

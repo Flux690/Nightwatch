@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
+import { generateIngestToken, getIngestTokenPlaintext } from "../db/user.js";
 
 const TEMPLATE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
@@ -25,11 +26,13 @@ function buildScript(
   wsUrl: string,
   token: string,
   serverName: string,
+  ingestToken: string,
 ): string {
   return TEMPLATE.replaceAll("{{PLATFORM_URL}}", platformUrl)
     .replaceAll("{{WS_URL}}", wsUrl)
     .replaceAll("{{NIGHTWATCH_TOKEN}}", token)
-    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
+    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName)
+    .replaceAll("{{NIGHTWATCH_INGEST_TOKEN}}", ingestToken);
 }
 
 export async function registerConnectRoutes(
@@ -56,7 +59,16 @@ export async function registerConnectRoutes(
         request.headers.host ?? "localhost",
       );
       const wsUrl = buildWsUrl(origin);
-      const script = buildScript(origin, wsUrl, token, record.serverName ?? "");
+      // The first install establishes the fleet-wide ingest token; later installs
+      // reuse it so every server's Alertmanager authenticates with one credential.
+      const ingestToken = getIngestTokenPlaintext() ?? generateIngestToken();
+      const script = buildScript(
+        origin,
+        wsUrl,
+        token,
+        record.serverName ?? "",
+        ingestToken,
+      );
 
       reply.header("Content-Type", "text/x-shellscript");
       return reply.code(200).send(script);

@@ -7,16 +7,13 @@ import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 import { AddServerWizard } from "./AddServerWizard.js";
 
-type RunnerStatus = "awaiting connection" | "online" | "offline";
+type RunnerStatus = "online" | "offline";
 
 function runnerStatus(runner: RunnerRecord): RunnerStatus {
-  if (runner.hostname === null) return "awaiting connection";
-  if (runner.online) return "online";
-  return "offline";
+  return runner.online ? "online" : "offline";
 }
 
 const STATUS_COLOR: Record<RunnerStatus, string> = {
-  "awaiting connection": "var(--nw-status-awaiting)",
   online: "var(--nw-status-streaming)",
   offline: "var(--nw-status-offline)",
 };
@@ -34,8 +31,14 @@ export function FleetPage(): React.JSX.Element {
   } = useQuery<RunnerRecord[]>({
     queryKey: ["runners"],
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-    refetchInterval: 30_000,
+    // Freeze polling while the wizard is open so a runner connecting mid-install
+    // doesn't surface behind the modal; the close handler refetches afterwards.
+    refetchInterval: wizardOpen ? false : 30_000,
   });
+
+  // A server appears only once its runner has connected. A minted-but-never-
+  // connected token is a credential, not a fleet member, so it stays hidden.
+  const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
   function handleWizardClose(): void {
     setWizardOpen(false);
@@ -80,14 +83,14 @@ export function FleetPage(): React.JSX.Element {
         </Text>
       )}
 
-      {!isLoading && !isError && runners?.length === 0 && (
+      {!isLoading && !isError && connectedRunners.length === 0 && (
         <Text size="sm" c="dimmed">
           No runners connected.
         </Text>
       )}
 
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {(runners ?? []).map((runner) => {
+        {connectedRunners.map((runner) => {
           const status = runnerStatus(runner);
           const services = runner.manifest?.capabilities.services ?? [];
           return (
