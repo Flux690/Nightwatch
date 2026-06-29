@@ -14,6 +14,7 @@ import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
 import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
+import { waitFor } from "./wait.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -168,7 +169,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         payload: { serverName: "web-prod-01" },
       });
       const { id } = JSON.parse(first.body) as { id: string };
-      // Simulate the runner connecting (WS connect sets last_used_at).
+      // Simulate the runner manifesting (manifest handler sets last_used_at).
       touchLastUsed(id);
 
       const res = await server.inject({
@@ -380,7 +381,7 @@ describe("Runner token lifecycle (issue 038)", () => {
   });
 
   describe("lastUsedAt", () => {
-    it("is set after a successful runner WS connect", async () => {
+    it("is set after the runner sends its manifest", async () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
@@ -400,8 +401,31 @@ describe("Runner token lifecycle (issue 038)", () => {
         ws.on("message", (raw) => {
           const msg = JSON.parse(String(raw)) as { type: string };
           if (msg.type === "connected") {
-            ws.close();
-            resolve();
+            ws.send(
+              JSON.stringify({
+                type: "manifest",
+                payload: {
+                  hostname: "test-host",
+                  runnerVersion: "2.0.0",
+                  capabilities: {
+                    docker: false,
+                    kubernetes: false,
+                    services: [],
+                    prometheus: { available: false },
+                    postgres: { available: false },
+                    redis: { available: false },
+                    hostMetrics: false,
+                    fileRead: false,
+                    remediationEnabled: false,
+                  },
+                },
+              }),
+            );
+            // Give the server one event-loop tick to process the manifest before closing.
+            setTimeout(() => {
+              ws.close();
+              resolve();
+            }, 20);
           }
         });
         ws.on("error", reject);

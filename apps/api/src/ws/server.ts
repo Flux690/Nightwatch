@@ -43,7 +43,6 @@ export async function registerWsRoutes(
       }
 
       const { id: tokenId } = tokenRecord;
-      touchLastUsed(tokenId);
 
       registerRunner(
         tokenId,
@@ -67,6 +66,7 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
+          touchLastUsed(tokenId);
           setRunnerManifest(tokenId, msg.payload);
           fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
           // Reconcile remediation mode: re-read from DB each time (the operator may have toggled),

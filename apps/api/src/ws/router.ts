@@ -118,14 +118,6 @@ export function getFleetView(): FleetRunner[] {
   return views;
 }
 
-export function getRunnerIdentity(
-  tokenId: string,
-): { runnerId: string; hostname: string | null } | undefined {
-  const conn = connectionsByTokenId.get(tokenId);
-  if (!conn) return undefined;
-  return { runnerId: conn.tokenId, hostname: conn.hostname };
-}
-
 // Current manifest for a runner given the tokenId stamped on an alert.
 export function getRunnerManifestForAlert(
   runnerId: string,
@@ -223,7 +215,7 @@ export function resolveRunner(
 
   if (runnerIdHint) {
     const hinted = connectionsByTokenId.get(runnerIdHint);
-    if (hinted) {
+    if (hinted && hinted.manifest !== null) {
       logger.warn(
         { runnerId: runnerIdHint },
         "resolveRunner used the deprecated runnerId hint fallback; route by service identity instead",
@@ -236,6 +228,7 @@ export function resolveRunner(
     logger.warn(
       "resolveRunner used the deprecated single-runner fallback; route by service identity instead",
     );
+    // TypeScript cannot narrow array index access after a .length check.
     return manifested[0] as RunnerConnection;
   }
 
