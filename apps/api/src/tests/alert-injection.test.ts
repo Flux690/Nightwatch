@@ -98,10 +98,10 @@ function alertmanagerBody(fingerprint: string, severity = "warning") {
   };
 }
 
-function alert(tokenId: string, sourceAlertId: string): NormalizedAlert {
+function alert(runnerId: string, sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
-    runnerId: tokenId,
+    runnerId,
     targetIdentifier: {
       provider: "docker",
       project: "web-01",
@@ -137,9 +137,9 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
-    const tokenId = generateRunnerToken("inject-midrun").id;
+    const runnerId = generateRunnerToken("inject-midrun").id;
     registerRunner(
-      tokenId,
+      runnerId,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -157,7 +157,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(tokenId, "primary-mr"),
+      alert: alert(runnerId, "primary-mr"),
     });
 
     // createProvider is called synchronously in start() before the first await.
@@ -166,7 +166,7 @@ describe("mid-run alert injection (loop seam)", () => {
     };
 
     // Inject while parked at turn 1's chat()
-    dispatcher.injectAlert(sessionId, alert(tokenId, "injected-mr"));
+    dispatcher.injectAlert(sessionId, alert(runnerId, "injected-mr"));
 
     // Release turn 1 → loop executes list_services, drains inbox,
     // then calls appendToolResults(results, injectionText)
@@ -185,14 +185,14 @@ describe("mid-run alert injection (loop seam)", () => {
     // Release turn 2 and let the run finish cleanly.
     gate.releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    unregisterRunner(tokenId);
+    unregisterRunner(runnerId);
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
-    const tokenId = generateRunnerToken("inject-sus").id;
+    const runnerId = generateRunnerToken("inject-sus").id;
     // Remediation on (DB is the source of truth for an alert's runner) so the
     // write tool is offered and the run actually suspends for approval.
-    setRemediationMode(tokenId, true);
+    setRemediationMode(runnerId, true);
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -223,7 +223,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(tokenId, "primary-sus"),
+      alert: alert(runnerId, "primary-sus"),
     });
 
     // Release turn 1 → restart_service is gated → run suspends
@@ -240,7 +240,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     dispatcher.dispatch({
       sessionId: newSessionId,
-      alert: alert(tokenId, "new-after-sus"),
+      alert: alert(runnerId, "new-after-sus"),
     });
 
     await waitFor(() => mockCreateProvider.mock.calls.length > callsBefore);
@@ -257,7 +257,7 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
-    const tokenId = generateRunnerToken("inject-leftover").id;
+    const runnerId = generateRunnerToken("inject-leftover").id;
 
     // R1: free-form finish immediately (loop exits before any appendToolResults,
     // so the inbox is never drained by the loop). R2: leftover's new session.
@@ -266,11 +266,11 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(tokenId, "primary-lo"),
+      alert: alert(runnerId, "primary-lo"),
     });
 
     // Inject before releasing — alert sits in inbox
-    dispatcher.injectAlert(sessionId, alert(tokenId, "leftover-lo"));
+    dispatcher.injectAlert(sessionId, alert(runnerId, "leftover-lo"));
 
     const callsBefore = mockCreateProvider.mock.calls.length;
 
@@ -301,11 +301,11 @@ describe("mid-run alert injection (loop seam)", () => {
   // recover alert identity from the session itself - else the post-approval phase looks
   // alert-free, correlated alerts misroute into new sessions, and re-fires aren't deduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
-    const { id: tokenId, plaintext: tokenPlaintext } =
+    const { id: runnerId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");
-    setRemediationMode(tokenId, true);
+    setRemediationMode(runnerId, true);
     registerRunner(
-      tokenId,
+      runnerId,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -316,7 +316,7 @@ describe("mid-run alert injection (loop seam)", () => {
       },
       () => {},
     );
-    setRunnerManifest(tokenId, webOneManifest());
+    setRunnerManifest(runnerId, webOneManifest());
 
     // R1: gated tool → run suspends. R2 (resume): free-form finish.
     queueRuns(
@@ -347,7 +347,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(tokenId, "primary-resume"),
+      alert: alert(runnerId, "primary-resume"),
     });
 
     gate.releaseNext();
@@ -395,6 +395,6 @@ describe("mid-run alert injection (loop seam)", () => {
     await server.close();
     gate.releaseNext(); // free-form finish for the resumed run
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    unregisterRunner(tokenId);
+    unregisterRunner(runnerId);
   });
 });

@@ -10,10 +10,9 @@ import { logger } from "../logger.js";
 
 const HEARTBEAT_TTL_MS = 120_000;
 
-// Single map keyed by tokenId. The tokenId is the stable runner identity from
-// the moment of first authentication - no manifest required.
+// Single map keyed by runnerId — the stable DB primary key assigned at onboarding.
 export interface RunnerConnection {
-  tokenId: string;
+  runnerId: string;
   send: (msg: string) => void;
   close: () => void;
   manifest: CapabilityManifest | null;
@@ -23,7 +22,7 @@ export interface RunnerConnection {
 }
 
 export interface RunnerView {
-  tokenId: string;
+  runnerId: string;
   hostname: string | null;
   manifest: CapabilityManifest | null;
   lastSeen: number;
@@ -31,7 +30,7 @@ export interface RunnerView {
   remediationMode: boolean | null;
 }
 
-const connectionsByTokenId = new Map<string, RunnerConnection>();
+const connectionsByRunnerId = new Map<string, RunnerConnection>();
 
 export class RunnerOfflineError extends Error {
   constructor() {
@@ -41,12 +40,12 @@ export class RunnerOfflineError extends Error {
 }
 
 export function registerRunner(
-  tokenId: string,
+  runnerId: string,
   send: (msg: string) => void,
   close: () => void,
 ): void {
-  connectionsByTokenId.set(tokenId, {
-    tokenId,
+  connectionsByRunnerId.set(runnerId, {
+    runnerId,
     send,
     close,
     manifest: null,
@@ -56,29 +55,29 @@ export function registerRunner(
   });
 }
 
-export function unregisterRunner(tokenId: string): void {
-  connectionsByTokenId.delete(tokenId);
+export function unregisterRunner(runnerId: string): void {
+  connectionsByRunnerId.delete(runnerId);
 }
 
-// Close every runner socket authenticated with this token. Called by the
+// Close every runner socket authenticated with this runner id. Called by the
 // revoke route so revocation cuts access immediately, not just on next auth.
-export function closeTokenRunners(tokenId: string): void {
-  connectionsByTokenId.get(tokenId)?.close();
+export function closeRunnerConnections(runnerId: string): void {
+  connectionsByRunnerId.get(runnerId)?.close();
 }
 
 export function setRunnerManifest(
-  tokenId: string,
+  runnerId: string,
   manifest: CapabilityManifest,
 ): void {
-  const conn = connectionsByTokenId.get(tokenId);
+  const conn = connectionsByRunnerId.get(runnerId);
   if (!conn) return;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
 }
 
-export function recordHeartbeat(tokenId: string): void {
-  const conn = connectionsByTokenId.get(tokenId);
+export function recordHeartbeat(runnerId: string): void {
+  const conn = connectionsByRunnerId.get(runnerId);
   if (!conn) return;
   conn.lastSeen = Date.now();
 }
@@ -86,9 +85,9 @@ export function recordHeartbeat(tokenId: string): void {
 export function listRunners(): RunnerView[] {
   const now = Date.now();
   const views: RunnerView[] = [];
-  for (const conn of connectionsByTokenId.values()) {
+  for (const conn of connectionsByRunnerId.values()) {
     views.push({
-      tokenId: conn.tokenId,
+      runnerId: conn.runnerId,
       hostname: conn.hostname,
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
@@ -105,10 +104,10 @@ export function listRunners(): RunnerView[] {
 export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];
-  for (const conn of connectionsByTokenId.values()) {
+  for (const conn of connectionsByRunnerId.values()) {
     if (!conn.manifest) continue;
     views.push({
-      runnerId: conn.tokenId,
+      runnerId: conn.runnerId,
       hostname: conn.manifest.hostname,
       online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
       lastSeen: conn.lastSeen,
@@ -118,31 +117,34 @@ export function getFleetView(): FleetRunner[] {
   return views;
 }
 
-// Current manifest for a runner given the tokenId stamped on an alert.
+// Current manifest for a runner given the runnerId stamped on an alert.
 export function getRunnerManifestForAlert(
   runnerId: string,
 ): CapabilityManifest | null {
-  return connectionsByTokenId.get(runnerId)?.manifest ?? null;
+  return connectionsByRunnerId.get(runnerId)?.manifest ?? null;
 }
 
 // Sync the in-memory remediation mode for a connected runner without pushing
 // to the runner (used by server.ts reconciliation for the bootstrap and
 // agree-in-place cases where no push is needed).
-export function setRunnerRemediationMode(tokenId: string, mode: boolean): void {
-  const conn = connectionsByTokenId.get(tokenId);
+export function setRunnerRemediationMode(
+  runnerId: string,
+  mode: boolean,
+): void {
+  const conn = connectionsByRunnerId.get(runnerId);
   if (conn) conn.remediationMode = mode;
 }
 
-// Read the cached remediation mode by tokenId (which is now also the runnerId).
+// Read the cached remediation mode by runnerId.
 export function getRunnerRemediationMode(runnerId: string): boolean | null {
-  return connectionsByTokenId.get(runnerId)?.remediationMode ?? null;
+  return connectionsByRunnerId.get(runnerId)?.remediationMode ?? null;
 }
 
 // Fire-and-forget push of remediation mode to a connected runner. Also
 // updates the in-memory cache so the next reconciliation sees the new value
 // and doesn't push again unnecessarily.
-export function pushRemediationMode(tokenId: string, enabled: boolean): void {
-  const conn = connectionsByTokenId.get(tokenId);
+export function pushRemediationMode(runnerId: string, enabled: boolean): void {
+  const conn = connectionsByRunnerId.get(runnerId);
   if (!conn) return;
   conn.remediationMode = enabled;
   const msg: SetRemediationModeMessage = {
@@ -177,7 +179,7 @@ export function resolveRunner(
   runnerIdHint?: string,
 ): RunnerConnection {
   // Only runners whose manifest has arrived are routable.
-  const manifested = [...connectionsByTokenId.values()].filter(
+  const manifested = [...connectionsByRunnerId.values()].filter(
     (c) => c.manifest !== null,
   );
   if (manifested.length === 0) throw new RunnerOfflineError();
@@ -214,7 +216,7 @@ export function resolveRunner(
   }
 
   if (runnerIdHint) {
-    const hinted = connectionsByTokenId.get(runnerIdHint);
+    const hinted = connectionsByRunnerId.get(runnerIdHint);
     if (hinted && hinted.manifest !== null) {
       logger.warn(
         { runnerId: runnerIdHint },

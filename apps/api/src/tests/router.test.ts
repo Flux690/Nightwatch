@@ -58,31 +58,31 @@ function makeSend(
 }
 
 describe("router", () => {
-  const tokenIds: string[] = [];
+  const runnerIds: string[] = [];
 
   function connect(
     hostname: string,
     containers: string[],
   ): {
-    tokenId: string;
+    runnerId: string;
     commands: Array<{
       commandName: string;
       commandInput: Record<string, unknown>;
     }>;
   } {
-    const tokenId = randomUUID();
-    tokenIds.push(tokenId);
+    const runnerId = randomUUID();
+    runnerIds.push(runnerId);
     const commands: Array<{
       commandName: string;
       commandInput: Record<string, unknown>;
     }> = [];
-    registerRunner(tokenId, makeSend(commands), () => {});
-    setRunnerManifest(tokenId, makeManifest(hostname, containers));
-    return { tokenId, commands };
+    registerRunner(runnerId, makeSend(commands), () => {});
+    setRunnerManifest(runnerId, makeManifest(hostname, containers));
+    return { runnerId, commands };
   }
 
   afterEach(() => {
-    for (const id of tokenIds.splice(0)) unregisterRunner(id);
+    for (const id of runnerIds.splice(0)) unregisterRunner(id);
     vi.restoreAllMocks();
   });
 

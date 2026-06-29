@@ -156,8 +156,8 @@ function waitForConnected(ws: WebSocket): Promise<void> {
 
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
-  let tokenIdA: string;
-  let tokenIdB: string;
+  let runnerIdA: string;
+  let runnerIdB: string;
   let SESSION: string;
   let server: FastifyInstance;
   let port: number;
@@ -171,14 +171,14 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
-  // runner-c is on a different token to test cross-token routing.
-  let tokenId2: string;
+  // runner-c is on a separate runner to test cross-runner routing.
+  let runnerId2: string;
   const commandsC: Array<{
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
   // runner-k8s hosts Kubernetes workloads.
-  let tokenIdK: string;
+  let runnerIdK: string;
   const commandsK: Array<{
     commandName: string;
     commandInput: Record<string, unknown>;
@@ -188,23 +188,23 @@ describe("multi-runner routing", () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    tokenIdA = generateRunnerToken("routing-a").id;
-    tokenIdB = generateRunnerToken("routing-b").id;
+    runnerIdA = generateRunnerToken("routing-a").id;
+    runnerIdB = generateRunnerToken("routing-b").id;
 
-    registerRunner(tokenIdA, makeSend(commandsA), () => {});
-    setRunnerManifest(tokenIdA, makeManifest("web-01", ["nginx", "api"]));
+    registerRunner(runnerIdA, makeSend(commandsA), () => {});
+    setRunnerManifest(runnerIdA, makeManifest("web-01", ["nginx", "api"]));
 
-    registerRunner(tokenIdB, makeSend(commandsB), () => {});
-    setRunnerManifest(tokenIdB, makeManifest("db-02", ["postgres"]));
+    registerRunner(runnerIdB, makeSend(commandsB), () => {});
+    setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
-    tokenId2 = generateRunnerToken("routing-cross").id;
-    registerRunner(tokenId2, makeSend(commandsC), () => {});
-    setRunnerManifest(tokenId2, makeManifest("cache-01", ["redis"]));
+    runnerId2 = generateRunnerToken("routing-cross").id;
+    registerRunner(runnerId2, makeSend(commandsC), () => {});
+    setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
 
-    tokenIdK = generateRunnerToken("routing-k8s").id;
-    registerRunner(tokenIdK, makeSend(commandsK), () => {});
+    runnerIdK = generateRunnerToken("routing-k8s").id;
+    registerRunner(runnerIdK, makeSend(commandsK), () => {});
     setRunnerManifest(
-      tokenIdK,
+      runnerIdK,
       makeK8sManifest("k8s-cluster-01", [
         { workload: "api-server", namespace: "production" },
       ]),
@@ -219,10 +219,10 @@ describe("multi-runner routing", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(tokenIdA);
-    unregisterRunner(tokenIdB);
-    unregisterRunner(tokenId2);
-    unregisterRunner(tokenIdK);
+    unregisterRunner(runnerIdA);
+    unregisterRunner(runnerIdB);
+    unregisterRunner(runnerId2);
+    unregisterRunner(runnerIdK);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -454,9 +454,9 @@ describe("multi-runner routing", () => {
   });
 
   it("cross-token: routes to a runner connected under a different token by service identity", async () => {
-    // runner-c is registered under tokenId2, not tokenId. The session dispatches
-    // with tokenId. With the flat registry, sendCommand routes globally by
-    // service identity, so "redis" (only on runner-c) must still be reached.
+    // runner-c is registered under runnerId2, separate from runnerIdA and runnerIdB. With
+    // the flat registry, sendCommand routes globally by service identity, so "redis"
+    // (only on runner-c) must still be reached.
     setScript([
       {
         text: "Checking redis.",
@@ -509,8 +509,8 @@ describe("assigned-name server-scoped routing", () => {
   // shape produced by the runner when NIGHTWATCH_SERVER_NAME is set. Routing
   // must match exclusively on the full (server, project, service) key.
   let cleanupDb2: () => void;
-  let tokenIdS1: string;
-  let tokenIdS2: string;
+  let runnerIdS1: string;
+  let runnerIdS2: string;
 
   const commandsS1: Array<{
     commandName: string;
@@ -550,24 +550,24 @@ describe("assigned-name server-scoped routing", () => {
     cleanupDb2 = useTempDb();
     await mintTestSession();
 
-    tokenIdS1 = generateRunnerToken("scoped-runner-1").id;
-    registerRunner(tokenIdS1, makeSend(commandsS1), () => {});
+    runnerIdS1 = generateRunnerToken("scoped-runner-1").id;
+    registerRunner(runnerIdS1, makeSend(commandsS1), () => {});
     setRunnerManifest(
-      tokenIdS1,
+      runnerIdS1,
       makeScopedManifest("prod-server-01", ["api", "worker"]),
     );
 
-    tokenIdS2 = generateRunnerToken("scoped-runner-2").id;
-    registerRunner(tokenIdS2, makeSend(commandsS2), () => {});
+    runnerIdS2 = generateRunnerToken("scoped-runner-2").id;
+    registerRunner(runnerIdS2, makeSend(commandsS2), () => {});
     setRunnerManifest(
-      tokenIdS2,
+      runnerIdS2,
       makeScopedManifest("prod-server-02", ["api", "db"]),
     );
   });
 
   afterAll(() => {
-    unregisterRunner(tokenIdS1);
-    unregisterRunner(tokenIdS2);
+    unregisterRunner(runnerIdS1);
+    unregisterRunner(runnerIdS2);
     cleanupDb2();
     vi.unstubAllEnvs();
   });

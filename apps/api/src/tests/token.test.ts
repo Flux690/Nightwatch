@@ -446,7 +446,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
-      const { id: tokenId } = generateRunnerToken("history-test");
+      const { id: runnerId } = generateRunnerToken("history-test");
       createSession(
         {
           sessionId: "sess-history-1",
@@ -458,7 +458,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       await server.inject({
         method: "DELETE",
-        url: `/tokens/${tokenId}`,
+        url: `/tokens/${runnerId}`,
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 

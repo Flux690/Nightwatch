@@ -20,20 +20,20 @@ export async function registerRunnerRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   // Fleet view per runner (CONTEXT.md multi-runner). Live runners come from the
-  // in-memory registry (keyed by tokenId); offline tokens show as single rows so
+  // in-memory registry (keyed by runnerId); offline tokens show as single rows so
   // their install command remains discoverable.
   fastify.get("/runners", { preHandler: requireSession }, () => {
     const live = listRunners();
-    const byToken = new Map<string, typeof live>();
+    const byRunner = new Map<string, typeof live>();
     for (const r of live) {
-      const list = byToken.get(r.tokenId);
+      const list = byRunner.get(r.runnerId);
       if (list) list.push(r);
-      else byToken.set(r.tokenId, [r]);
+      else byRunner.set(r.runnerId, [r]);
     }
 
     const records: RunnerRecord[] = [];
     for (const t of listRunnersMeta()) {
-      const runners = byToken.get(t.id);
+      const runners = byRunner.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({
           id: t.id,
@@ -71,9 +71,8 @@ export async function registerRunnerRoutes(
   );
 
   // Push updated Prometheus alert rules to the runner (settings, not gated).
-  // The URL param is the token's UUID.
-  fastify.patch<{ Params: { tokenId: string }; Body: { rulesYaml?: string } }>(
-    "/runners/:tokenId/rules",
+  fastify.patch<{ Params: { id: string }; Body: { rulesYaml?: string } }>(
+    "/runners/:id/rules",
     { preHandler: requireSession },
     async (request, reply) => {
       const rulesYaml = request.body?.rulesYaml;
@@ -85,7 +84,7 @@ export async function registerRunnerRoutes(
           "update_alert_rules",
           { rulesYaml },
           RULES_TIMEOUT_MS,
-          request.params.tokenId,
+          request.params.id,
         );
         return result;
       } catch (err) {
@@ -99,24 +98,24 @@ export async function registerRunnerRoutes(
   // and pushes to the connected runner over WS. A missed push self-heals on
   // the next heartbeat via manifest reconciliation in ws/server.ts.
   fastify.patch<{
-    Params: { tokenId: string };
+    Params: { id: string };
     Body: { enabled?: boolean };
   }>(
-    "/runners/:tokenId/remediation-mode",
+    "/runners/:id/remediation-mode",
     { preHandler: requireSession },
     (request, reply) => {
-      const { tokenId } = request.params;
+      const { id: runnerId } = request.params;
       const { enabled } = request.body ?? {};
       if (typeof enabled !== "boolean") {
         return reply.code(400).send({ error: "enabled (boolean) is required" });
       }
-      const row = findRunnerById(tokenId);
+      const row = findRunnerById(runnerId);
       if (!row) {
         return reply.code(404).send({ error: "runner not found" });
       }
-      setRemediationMode(tokenId, enabled);
-      pushRemediationMode(tokenId, enabled);
-      return reply.code(200).send({ tokenId, remediationMode: enabled });
+      setRemediationMode(runnerId, enabled);
+      pushRemediationMode(runnerId, enabled);
+      return reply.code(200).send({ runnerId, remediationMode: enabled });
     },
   );
 

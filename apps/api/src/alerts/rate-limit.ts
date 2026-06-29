@@ -1,7 +1,7 @@
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 // Per-server alert rate limit, in memory (CONTEXT.md D2 - no Redis). Keyed by
-// tokenId so each server has an independent budget. Critical severity always
+// runnerId so each server has an independent budget. Critical severity always
 // bypasses: a page at 3am must never be dropped.
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 10;

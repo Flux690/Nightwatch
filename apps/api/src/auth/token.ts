@@ -4,7 +4,7 @@ import {
   deleteRunner,
   listRunnersMeta,
 } from "../db/runner.js";
-import { closeTokenRunners } from "../ws/router.js";
+import { closeRunnerConnections } from "../ws/router.js";
 import { requireSession } from "./session.js";
 
 function validateServerName(name: string): string | null {
@@ -74,7 +74,7 @@ export async function registerTokenRoutes(
       if (!deleted) {
         return reply.code(404).send({ error: "token not found" });
       }
-      closeTokenRunners(request.params.id);
+      closeRunnerConnections(request.params.id);
       return reply.code(204).send();
     },
   );

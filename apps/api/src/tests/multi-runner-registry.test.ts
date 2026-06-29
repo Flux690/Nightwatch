@@ -311,8 +311,8 @@ describe("remediation mode toggle", () => {
     vi.unstubAllEnvs();
   });
 
-  it("PATCH /runners/:tokenId/remediation-mode persists to DB and pushes set_remediation_mode to connected runner", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken(
+  it("PATCH /runners/:id/remediation-mode persists to DB and pushes set_remediation_mode to connected runner", async () => {
+    const { plaintext: token, id: runnerId } = generateRunnerToken(
       "toggle-remediation-push",
     );
 
@@ -341,14 +341,14 @@ describe("remediation mode toggle", () => {
 
     const res = await server.inject({
       method: "PATCH",
-      url: `/runners/${tokenId}/remediation-mode`,
+      url: `/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: true },
     });
     expect(res.statusCode).toBe(200);
 
     // DB must reflect the new value
-    const row = findRunnerById(tokenId);
+    const row = findRunnerById(runnerId);
     expect(row?.remediationMode).toBe(true);
 
     // Runner must receive the push
@@ -366,7 +366,7 @@ describe("remediation mode toggle", () => {
     ws.close();
   });
 
-  it("PATCH /runners/:tokenId/remediation-mode returns 404 for unknown tokenId", async () => {
+  it("PATCH /runners/:id/remediation-mode returns 404 for unknown id", async () => {
     const res = await server.inject({
       method: "PATCH",
       url: `/runners/00000000-0000-0000-0000-000000000000/remediation-mode`,
@@ -376,11 +376,11 @@ describe("remediation mode toggle", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("PATCH /runners/:tokenId/remediation-mode returns 400 when enabled field is missing", async () => {
-    const { id: tokenId } = generateRunnerToken("toggle-badreq");
+  it("PATCH /runners/:id/remediation-mode returns 400 when enabled field is missing", async () => {
+    const { id: runnerId } = generateRunnerToken("toggle-badreq");
     const res = await server.inject({
       method: "PATCH",
-      url: `/runners/${tokenId}/remediation-mode`,
+      url: `/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {},
     });
@@ -412,14 +412,14 @@ describe("remediation mode reconciliation on reconnect", () => {
   });
 
   it("when manifest disagrees with DB, API pushes the stored DB value to the runner", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken(
+    const { plaintext: token, id: runnerId } = generateRunnerToken(
       "reconcile-remediation",
     );
 
     // Set DB to false before connecting
     const patchRes = await server.inject({
       method: "PATCH",
-      url: `/runners/${tokenId}/remediation-mode`,
+      url: `/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: false },
     });
@@ -474,12 +474,12 @@ describe("remediation mode reconciliation on reconnect", () => {
   });
 
   it("when manifest agrees with DB, no set_remediation_mode push is sent", async () => {
-    const { plaintext: token, id: tokenId } =
+    const { plaintext: token, id: runnerId } =
       generateRunnerToken("reconcile-agree");
 
     const patchRes = await server.inject({
       method: "PATCH",
-      url: `/runners/${tokenId}/remediation-mode`,
+      url: `/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: false },
     });

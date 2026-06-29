@@ -88,8 +88,8 @@ function captureStartMessage(): string | undefined {
 
 describe("fleet summary injection", () => {
   let cleanupDb: () => void;
-  let tokenIdA: string;
-  let tokenIdB: string;
+  let runnerIdA: string;
+  let runnerIdB: string;
 
   beforeAll(() => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-fleet-summary-tests-32b");
@@ -104,35 +104,35 @@ describe("fleet summary injection", () => {
   afterEach(() => {
     mockCreateProvider.mockClear();
     // Unregister all runners between tests so fleet state is clean.
-    unregisterRunner(tokenIdA);
-    if (tokenIdB) unregisterRunner(tokenIdB);
+    unregisterRunner(runnerIdA);
+    if (runnerIdB) unregisterRunner(runnerIdB);
   });
 
   describe("multi-runner fleet", () => {
     beforeAll(() => {
-      tokenIdA = generateRunnerToken("fleet-summary-a").id;
-      tokenIdB = generateRunnerToken("fleet-summary-b").id;
+      runnerIdA = generateRunnerToken("fleet-summary-a").id;
+      runnerIdB = generateRunnerToken("fleet-summary-b").id;
     });
 
     it("first user message lists every server and its advertised services", async () => {
       registerRunner(
-        tokenIdA,
+        runnerIdA,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx", "api"]));
+      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
       registerRunner(
-        tokenIdB,
+        runnerIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdB, dockerManifest("db-02", ["postgres"]));
+      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(tokenIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -150,23 +150,23 @@ describe("fleet summary injection", () => {
 
     it("a neighbouring server's service identity appears so the agent can reference it", async () => {
       registerRunner(
-        tokenIdA,
+        runnerIdA,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx"]));
+      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
       registerRunner(
-        tokenIdB,
+        runnerIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdB, dockerManifest("cache-01", ["redis"]));
+      setRunnerManifest(runnerIdB, dockerManifest("cache-01", ["redis"]));
 
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(tokenIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -180,23 +180,23 @@ describe("fleet summary injection", () => {
 
     it("does not send the raw capability manifest to the model", async () => {
       registerRunner(
-        tokenIdA,
+        runnerIdA,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx"]));
+      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
       registerRunner(
-        tokenIdB,
+        runnerIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdB, dockerManifest("db-02", ["postgres"]));
+      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(tokenIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -212,21 +212,21 @@ describe("fleet summary injection", () => {
 
   describe("graceful degradation", () => {
     beforeAll(() => {
-      tokenIdA = generateRunnerToken("fleet-summary-single").id;
+      runnerIdA = generateRunnerToken("fleet-summary-single").id;
     });
 
     it("single-runner fleet: no fleet summary section in first message", async () => {
       registerRunner(
-        tokenIdA,
+        runnerIdA,
         () => {},
         () => {},
       );
-      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx", "api"]));
+      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(tokenIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -238,7 +238,7 @@ describe("fleet summary injection", () => {
     });
 
     it("empty fleet (no connected runners): no fleet summary section", async () => {
-      // No runners registered — tokenIdA has been unregistered by afterEach.
+      // No runners registered — runnerIdA has been unregistered by afterEach.
       setScript([FINISH]);
 
       const sessionId = randomUUID();

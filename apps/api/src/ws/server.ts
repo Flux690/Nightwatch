@@ -42,17 +42,17 @@ export async function registerWsRoutes(
         return;
       }
 
-      const { id: tokenId } = tokenRecord;
+      const { id: runnerId } = tokenRecord;
 
       registerRunner(
-        tokenId,
+        runnerId,
         (msg) => {
           if (socket.readyState === socket.OPEN) socket.send(msg);
         },
         () => socket.close(4003, "Token revoked"),
       );
 
-      fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "runner connected");
+      fastify.log.info({ runnerId: runnerId.slice(0, 8) }, "runner connected");
 
       socket.on("message", (raw: Buffer | ArrayBuffer | Buffer[]) => {
         let parsed: Record<string, unknown>;
@@ -66,42 +66,45 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
-          touchLastUsed(tokenId);
-          setRunnerManifest(tokenId, msg.payload);
-          fastify.log.info({ tokenId: tokenId.slice(0, 8) }, "manifest stored");
+          touchLastUsed(runnerId);
+          setRunnerManifest(runnerId, msg.payload);
+          fastify.log.info(
+            { runnerId: runnerId.slice(0, 8) },
+            "manifest stored",
+          );
           // Reconcile remediation mode: re-read from DB each time (the operator may have toggled),
           // bootstrap from the manifest on first arrival (null DB), then keep DB authoritative. Always
           // sync the in-memory cache so reads need no DB round-trip.
-          const currentRow = findRunnerById(tokenId);
+          const currentRow = findRunnerById(runnerId);
           const dbMode = currentRow?.remediationMode ?? null;
           const manifestMode = msg.payload.capabilities.remediationEnabled;
           if (dbMode === null) {
-            setRemediationMode(tokenId, manifestMode);
-            setRunnerRemediationMode(tokenId, manifestMode);
+            setRemediationMode(runnerId, manifestMode);
+            setRunnerRemediationMode(runnerId, manifestMode);
           } else if (dbMode !== manifestMode) {
-            pushRemediationMode(tokenId, dbMode);
+            pushRemediationMode(runnerId, dbMode);
           } else {
-            setRunnerRemediationMode(tokenId, dbMode);
+            setRunnerRemediationMode(runnerId, dbMode);
           }
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);
         } else if (type === "heartbeat") {
-          recordHeartbeat(tokenId);
+          recordHeartbeat(runnerId);
         }
       });
 
       socket.on("close", () => {
-        unregisterRunner(tokenId);
+        unregisterRunner(runnerId);
         fastify.log.warn(
-          { tokenId: tokenId.slice(0, 8) },
+          { runnerId: runnerId.slice(0, 8) },
           "runner disconnected",
         );
       });
 
       socket.on("error", (err: Error) => {
         fastify.log.error(
-          { tokenId: tokenId.slice(0, 8), err },
+          { runnerId: runnerId.slice(0, 8), err },
           "runner ws error",
         );
       });

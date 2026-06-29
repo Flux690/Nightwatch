@@ -585,19 +585,19 @@ describe("providers filter and mismatch rejection", () => {
       });
 
       async function runChatAndCaptureTools(
-        tokenId: string,
+        runnerId: string,
         manifestRemediationEnabled: boolean,
         dbRemediationEnabled: boolean,
       ): Promise<string[]> {
-        setRemediationMode(tokenId, dbRemediationEnabled);
+        setRemediationMode(runnerId, dbRemediationEnabled);
 
-        unregisterRunner(tokenId);
+        unregisterRunner(runnerId);
         registerRunner(
-          tokenId,
+          runnerId,
           () => {},
           () => {},
         );
-        setRunnerManifest(tokenId, {
+        setRunnerManifest(runnerId, {
           hostname: "db-mode-host",
           runnerVersion: "2.0.0",
           capabilities: {
@@ -614,7 +614,7 @@ describe("providers filter and mismatch rejection", () => {
         });
         // Simulate what ws/server.ts reconciliation does: sync the DB value
         // into the in-memory cache so currentRemediationEnabled() reads it.
-        setRunnerRemediationMode(tokenId, dbRemediationEnabled);
+        setRunnerRemediationMode(runnerId, dbRemediationEnabled);
 
         let capturedProvider: ContractFakeProvider | null = null;
         mockCreateProvider.mockImplementationOnce(() => {
@@ -661,20 +661,20 @@ describe("providers filter and mismatch rejection", () => {
       }
 
       it("DB mode false suppresses write tools even when manifest reports remediationEnabled:true", async () => {
-        const { id: tokenId } = generateRunnerToken("db-mode-false-001");
-        const offered = await runChatAndCaptureTools(tokenId, true, false);
+        const { id: runnerId } = generateRunnerToken("db-mode-false-001");
+        const offered = await runChatAndCaptureTools(runnerId, true, false);
         expect(offered).not.toContain("restart_service");
         expect(offered).not.toContain("exec_command");
         expect(offered).toContain("get_service_logs");
-        unregisterRunner(tokenId);
+        unregisterRunner(runnerId);
       });
 
       it("DB mode true offers write tools even when manifest reports remediationEnabled:false", async () => {
-        const { id: tokenId } = generateRunnerToken("db-mode-true-001");
-        const offered = await runChatAndCaptureTools(tokenId, false, true);
+        const { id: runnerId } = generateRunnerToken("db-mode-true-001");
+        const offered = await runChatAndCaptureTools(runnerId, false, true);
         expect(offered).toContain("restart_service");
         expect(offered).toContain("exec_command");
-        unregisterRunner(tokenId);
+        unregisterRunner(runnerId);
       });
     });
   });
