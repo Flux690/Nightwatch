@@ -2,7 +2,7 @@ import { render, screen, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -12,7 +12,6 @@ import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
 import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 let latestWs: MockWs | null = null;
 
@@ -94,17 +93,13 @@ function setup(
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <ConsoleWsProvider>
           <RouterProvider router={router} />
         </ConsoleWsProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { qc };

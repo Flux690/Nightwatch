@@ -2,7 +2,7 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -14,7 +14,6 @@ import { RouterProvider } from "@tanstack/react-router";
 import { AuthProvider } from "../auth/AuthContext.js";
 import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
 import { Shell } from "../pages/Shell.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const OWNER_EMAIL = "admin@example.com";
 
@@ -159,11 +158,7 @@ function setup(pendingCount = 0) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <ConsoleWsProvider>
@@ -171,7 +166,7 @@ function setup(pendingCount = 0) {
           </ConsoleWsProvider>
         </AuthProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { router, qc, fetchMock, setPendingCount };

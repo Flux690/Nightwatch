@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -13,13 +13,15 @@ import { RouterProvider } from "@tanstack/react-router";
 import userEvent from "@testing-library/user-event";
 
 import { ChatInput } from "../pages/ChatInput.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 function setup(
   props: {
     sessionId: string | null;
     isRunning: boolean;
-    pendingInterrupt?: { id: string; kind: "approval" | "clarification" | "continue" };
+    pendingInterrupt?: {
+      id: string;
+      kind: "approval" | "clarification" | "continue";
+    };
   },
   routePath = "/sessions/new",
 ) {
@@ -59,15 +61,11 @@ function setup(
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock: vi.mocked(fetch) };

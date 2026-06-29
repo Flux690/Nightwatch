@@ -1,11 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import type { RemediationActionRecord } from "@nightwatch/shared";
 
 import { AuditLogPage } from "../pages/AuditLog.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const EXECUTED_DOCKER: RemediationActionRecord = {
   sessionId: "sess-audit-1",
@@ -57,15 +56,11 @@ function setup(actions: RemediationActionRecord[] = []) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <AuditLogPage />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock };

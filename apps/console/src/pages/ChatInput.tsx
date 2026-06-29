@@ -114,8 +114,8 @@ export function ChatInput({
   return (
     <div
       style={{
-        borderTop: "1px solid var(--nw-border)",
-        background: "var(--nw-surface)",
+        borderTop: "1px solid var(--color-line)",
+        background: "var(--color-surface)",
         padding: "var(--mantine-spacing-sm)",
         display: "flex",
         gap: "var(--mantine-spacing-xs)",

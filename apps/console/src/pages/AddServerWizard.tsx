@@ -278,7 +278,7 @@ export function AddServerWizard({
                       block
                       style={{
                         flex: 1,
-                        fontFamily: "var(--nw-mono)",
+                        fontFamily: "var(--font-mono)",
                         whiteSpace: "pre-wrap",
                         wordBreak: "break-all",
                         maxHeight: 240,

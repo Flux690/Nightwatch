@@ -1,0 +1,50 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.field__error {
+  font-size: 12px;
+  color: var(--color-status-failed);
+}
+
+.input {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.input::placeholder {
+  color: var(--color-ink-muted);
+}
+.input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+  border-color: var(--color-line-strong);
+}
+.input[aria-invalid="true"] {
+  border-color: var(--color-status-failed);
+}
+.input[aria-invalid="true"]:focus-visible {
+  outline-color: var(--color-status-failed);
+}
+.input[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input {
+    transition: none;
+  }
+}

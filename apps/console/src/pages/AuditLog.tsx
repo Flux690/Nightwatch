@@ -6,10 +6,10 @@ import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
 const OUTCOME_COLOR: Record<RemediationActionRecord["status"], string> = {
-  executing: "var(--nw-status-awaiting)",
-  executed: "var(--nw-status-streaming)",
-  failed: "var(--nw-status-escalated)",
-  rejected: "var(--nw-status-offline)",
+  executing: "var(--color-status-awaiting)",
+  executed: "var(--color-status-running)",
+  failed: "var(--color-status-failed)",
+  rejected: "var(--color-status-neutral)",
 };
 
 export function AuditLogPage(): React.JSX.Element {
@@ -25,7 +25,7 @@ export function AuditLogPage(): React.JSX.Element {
   });
 
   return (
-    <div className="nw-page" style={{ padding: "var(--mantine-spacing-md)" }}>
+    <div className="page" style={{ padding: "var(--mantine-spacing-md)" }}>
       <Title order={2} size="h4" mb="md">
         Audit log
       </Title>
@@ -49,7 +49,7 @@ export function AuditLogPage(): React.JSX.Element {
           <li
             key={`${action.sessionId}/${action.toolUseId}`}
             style={{
-              borderTop: "1px solid var(--nw-border)",
+              borderTop: "1px solid var(--color-line)",
               padding: "var(--mantine-spacing-sm) 0",
             }}
           >

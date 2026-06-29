@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -12,7 +12,6 @@ import {
 
 import { AuthProvider } from "../auth/AuthContext.js";
 import { LoginPage } from "../pages/LoginPage.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 function jsonResponse(status: number, body: object) {
   return {
@@ -43,15 +42,11 @@ function buildRouter() {
 function setupWithMock(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <AuthProvider>
         <RouterProvider router={buildRouter()} />
       </AuthProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
   return { fetchMock };
 }

@@ -11,7 +11,7 @@ export function StatusBadge({
     <span
       style={{
         fontSize: 10,
-        fontFamily: "var(--nw-mono)",
+        fontFamily: "var(--font-mono)",
         color,
         textTransform: "uppercase",
         letterSpacing: "0.05em",

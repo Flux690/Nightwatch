@@ -69,9 +69,9 @@ export function ClarificationCardPanel({
       <div
         data-testid="clarification-card"
         style={{
-          border: "1px solid var(--nw-status-awaiting)",
+          border: "1px solid var(--color-status-awaiting)",
           borderRadius: "var(--mantine-radius-sm)",
-          background: "var(--nw-surface)",
+          background: "var(--color-surface)",
           padding: "var(--mantine-spacing-xs)",
           marginBottom: "var(--mantine-spacing-xs)",
         }}

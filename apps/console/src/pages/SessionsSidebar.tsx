@@ -65,7 +65,7 @@ export function SessionsSidebar(): React.JSX.Element {
           style={{ display: "flex", alignItems: "center" }}
         >
           <button
-            className="nw-session-row"
+            className="session-row"
             onClick={() =>
               void navigate({
                 to: "/sessions/$id",
@@ -80,7 +80,7 @@ export function SessionsSidebar(): React.JSX.Element {
               padding: "var(--mantine-spacing-xs)",
               borderRadius: "var(--mantine-radius-sm)",
               textAlign: "left",
-              color: "var(--nw-text)",
+              color: "var(--color-ink)",
             }}
           >
             <Text size="sm" truncate>

@@ -2,11 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import type { RunnerRecord } from "@nightwatch/shared";
 
 import { AddServerWizard } from "../pages/AddServerWizard.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const GENERATED_TOKEN = {
   id: "new-token-uuid",
@@ -108,15 +107,11 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
   const onClose = vi.fn();
 
   const view = render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <AddServerWizard opened onClose={onClose} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock, onClose, ...view };
@@ -182,15 +177,11 @@ describe("AddServerWizard", () => {
   it("renders nothing when not opened", () => {
     const qc = new QueryClient();
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <QueryClientProvider client={qc}>
           <AddServerWizard opened={false} onClose={() => {}} />
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
     expect(screen.queryByText(/add a server/i)).not.toBeInTheDocument();
   });

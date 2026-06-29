@@ -1,11 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 function wrap(
   item: TranscriptItem,
@@ -15,11 +14,7 @@ function wrap(
   },
 ): void {
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <div
         data-testid="transcript-column"
         style={{ maxWidth: 860, margin: "0 auto", padding: "0 16px" }}
@@ -30,7 +25,7 @@ function wrap(
           onAnswer={opts?.onAnswer}
         />
       </div>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 }
 
@@ -203,7 +198,9 @@ describe("TranscriptItemRenderer", () => {
       kind: "approval_card",
       toolUseId: "tu-gate",
       toolName: "restart_service",
-      input: { service: { provider: "docker", project: "web-01", service: "web-01" } },
+      input: {
+        service: { provider: "docker", project: "web-01", service: "web-01" },
+      },
       result: null,
       risk: "high",
     };
@@ -388,7 +385,9 @@ describe("TranscriptItemRenderer", () => {
     it("renders Resume and End investigation buttons when unresolved", () => {
       wrap(continueItem);
 
-      expect(screen.getByRole("button", { name: /resume/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /resume/i }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /end investigation/i }),
       ).toBeInTheDocument();
@@ -409,7 +408,9 @@ describe("TranscriptItemRenderer", () => {
       const onResolve = vi.fn();
       wrap(continueItem, { onResolve });
 
-      await user.click(screen.getByRole("button", { name: /end investigation/i }));
+      await user.click(
+        screen.getByRole("button", { name: /end investigation/i }),
+      );
 
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
     });
@@ -428,7 +429,9 @@ describe("TranscriptItemRenderer", () => {
     it("shows Ended and hides buttons when approval is 'rejected'", () => {
       wrap({ ...continueItem, approval: "rejected" });
 
-      expect(screen.getByTestId("continue-resolution")).toHaveTextContent("Ended");
+      expect(screen.getByTestId("continue-resolution")).toHaveTextContent(
+        "Ended",
+      );
       expect(
         screen.queryByRole("button", { name: /end investigation/i }),
       ).not.toBeInTheDocument();

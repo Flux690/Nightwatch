@@ -15,9 +15,9 @@ export function ToolCardPanel({
       </Text>
       <div
         style={{
-          border: "1px solid var(--nw-border)",
+          border: "1px solid var(--color-line)",
           borderRadius: "var(--mantine-radius-sm)",
-          background: "var(--nw-surface)",
+          background: "var(--color-surface)",
           overflow: "hidden",
         }}
       >
@@ -28,7 +28,7 @@ export function ToolCardPanel({
           <pre
             style={{
               margin: 0,
-              fontFamily: "var(--nw-mono)",
+              fontFamily: "var(--font-mono)",
               fontSize: 12,
               whiteSpace: "pre-wrap",
               wordBreak: "break-all",
@@ -37,7 +37,7 @@ export function ToolCardPanel({
             {JSON.stringify(input, null, 2)}
           </pre>
         </div>
-        <div style={{ borderTop: "1px solid var(--nw-border)" }} />
+        <div style={{ borderTop: "1px solid var(--color-line)" }} />
         <div style={{ padding: "var(--mantine-spacing-xs)" }}>
           <Text size="xs" c="dimmed" ff="monospace" mb={4}>
             OUT
@@ -55,7 +55,7 @@ export function ToolCardPanel({
             <pre
               style={{
                 margin: 0,
-                fontFamily: "var(--nw-mono)",
+                fontFamily: "var(--font-mono)",
                 fontSize: 12,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-all",

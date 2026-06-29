@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -13,7 +13,6 @@ import {
 
 import { AuthProvider } from "../auth/AuthContext.js";
 import { AuthGate } from "../auth/AuthGate.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 class MockWs {
   static OPEN = 1;
@@ -82,17 +81,13 @@ function setup(statusResponse: object) {
   const router = makeRouter();
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <RouterProvider router={router} />
         </AuthProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { router, fetchMock };
@@ -146,17 +141,13 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     // A spinner during the check, but never the protected shell or a login flash.
@@ -208,17 +199,13 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     await waitFor(() => {

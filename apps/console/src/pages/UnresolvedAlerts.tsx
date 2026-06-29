@@ -22,7 +22,7 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
   });
 
   return (
-    <div className="nw-page" style={{ padding: "var(--mantine-spacing-md)" }}>
+    <div className="page" style={{ padding: "var(--mantine-spacing-md)" }}>
       <Title order={2} size="h4" mb="md">
         Unresolved alerts
       </Title>
@@ -46,7 +46,7 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
           <li
             key={`${alert.sourceAlertId}-${i}`}
             style={{
-              borderTop: "1px solid var(--nw-border)",
+              borderTop: "1px solid var(--color-line)",
               padding: "var(--mantine-spacing-sm) 0",
             }}
           >

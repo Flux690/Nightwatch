@@ -48,12 +48,12 @@ export function Shell(): React.JSX.Element {
         breakpoint: 0,
       }}
       padding={0}
-      styles={{ main: { background: "var(--nw-bg)" } }}
+      styles={{ main: { background: "var(--color-canvas)" } }}
     >
       <AppShell.Navbar
         style={{
-          background: "var(--nw-surface)",
-          borderRight: "1px solid var(--nw-border)",
+          background: "var(--color-surface)",
+          borderRight: "1px solid var(--color-line)",
           display: "flex",
           flexDirection: "column",
           padding: NAV_PAD,
@@ -77,7 +77,7 @@ export function Shell(): React.JSX.Element {
             disabled={expanded}
           >
             <UnstyledButton
-              className="nw-side-toggle"
+              className="side-toggle"
               aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
               onClick={toggleExpanded}
             >
@@ -107,16 +107,16 @@ export function Shell(): React.JSX.Element {
               alignItems: "center",
               height: 34,
               borderRadius: "var(--mantine-radius-sm)",
-              background: "var(--nw-accent)",
-              color: "var(--nw-bg)",
+              background: "var(--color-accent)",
+              color: "var(--color-canvas)",
               fontWeight: 700,
               fontSize: 12,
               overflow: "hidden",
             }}
           >
-            <span className="nw-side-row__icon">{attentionCount}</span>
+            <span className="side-row__icon">{attentionCount}</span>
             {expanded && (
-              <span className="nw-side-row__label">awaiting approval</span>
+              <span className="side-row__label">awaiting approval</span>
             )}
           </div>
         )}
@@ -128,7 +128,7 @@ export function Shell(): React.JSX.Element {
               minHeight: 0,
               marginTop: 4,
               paddingTop: 4,
-              borderTop: "1px solid var(--nw-border)",
+              borderTop: "1px solid var(--color-line)",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
@@ -174,7 +174,7 @@ export function Shell(): React.JSX.Element {
 
         <div
           style={{
-            borderTop: "1px solid var(--nw-border)",
+            borderTop: "1px solid var(--color-line)",
             marginTop: 4,
             paddingTop: 4,
             display: "flex",

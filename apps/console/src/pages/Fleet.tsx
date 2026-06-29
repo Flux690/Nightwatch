@@ -14,8 +14,8 @@ function runnerStatus(runner: RunnerRecord): RunnerStatus {
 }
 
 const STATUS_COLOR: Record<RunnerStatus, string> = {
-  online: "var(--nw-status-streaming)",
-  offline: "var(--nw-status-offline)",
+  online: "var(--color-status-running)",
+  offline: "var(--color-status-neutral)",
 };
 
 export function FleetPage(): React.JSX.Element {
@@ -59,7 +59,7 @@ export function FleetPage(): React.JSX.Element {
   }
 
   return (
-    <div className="nw-page" style={{ padding: "var(--mantine-spacing-md)" }}>
+    <div className="page" style={{ padding: "var(--mantine-spacing-md)" }}>
       <Group justify="space-between" align="center" mb="md">
         <Title order={2} size="h4">
           Fleet
@@ -97,7 +97,7 @@ export function FleetPage(): React.JSX.Element {
             <li
               key={runner.token}
               style={{
-                borderTop: "1px solid var(--nw-border)",
+                borderTop: "1px solid var(--color-line)",
                 padding: "var(--mantine-spacing-sm) 0",
               }}
             >

@@ -2,11 +2,10 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import type { RunnerRecord } from "@nightwatch/shared";
 
 import { FleetPage } from "../pages/Fleet.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const NOW = new Date("2024-01-01T12:00:00Z").getTime();
 
@@ -113,15 +112,11 @@ function setup(runners: RunnerRecord[] = []) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <FleetPage />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock, qc };
@@ -203,15 +198,11 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <MantineProvider
-          theme={theme}
-          cssVariablesResolver={cssVariablesResolver}
-          defaultColorScheme="light"
-        >
+        <HeadlessMantineProvider>
           <QueryClientProvider client={qc}>
             <FleetPage />
           </QueryClientProvider>
-        </MantineProvider>,
+        </HeadlessMantineProvider>,
       );
 
       await act(async () => {
@@ -300,15 +291,11 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <MantineProvider
-          theme={theme}
-          cssVariablesResolver={cssVariablesResolver}
-          defaultColorScheme="light"
-        >
+        <HeadlessMantineProvider>
           <QueryClientProvider client={qc}>
             <FleetPage />
           </QueryClientProvider>
-        </MantineProvider>,
+        </HeadlessMantineProvider>,
       );
 
       await waitFor(() => {

@@ -1,6 +1,46 @@
-@layer theme, base, mantine, components, utilities;
+@layer theme, base, components, utilities;
 @import "tailwindcss";
-@import "@mantine/core/styles.layer.css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", Menlo,
+    Consolas, monospace;
+
+  --color-canvas: #F5F2EE;
+  --color-surface: #EFECE8;
+  --color-surface-hover: #E6E1DB;
+  --color-card: #FDFCFB;
+
+  --color-ink: #0D0C0B;
+  --color-ink-muted: #504A45;
+  --color-ink-subtle: #56504A;
+
+  --color-line: #C9C1BA;
+  --color-line-strong: #918883;
+
+  --color-accent: #0D0C0B;
+  --color-accent-hover: #24211F;
+  --color-accent-press: #000000;
+
+  --color-status-running: #00552A;
+  --color-status-awaiting: #684000;
+  --color-status-failed: #7A0E0E;
+  --color-status-neutral: #504A45;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+
+  --shadow-overlay: 0 8px 24px rgba(13, 12, 11, 0.12),
+    0 2px 6px rgba(13, 12, 11, 0.08);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+}
 
 html,
 body,
@@ -10,115 +50,68 @@ body,
 
 body {
   margin: 0;
-  background-color: var(--nw-bg);
-  color: var(--nw-text);
-  font-family: var(--mantine-font-family);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
   color-scheme: light;
 }
 
 ::selection {
-  background: var(--nw-accent);
-  color: var(--nw-bg);
+  background: var(--color-accent);
+  color: var(--color-canvas);
 }
 
-.mantine-Button-root,
-.mantine-ActionIcon-root {
-  box-shadow: none;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.mantine-Button-root:focus-visible,
-.mantine-ActionIcon-root:focus-visible,
-.mantine-Input-input:focus-visible,
-.nw-session-row:focus-visible {
-  outline: 2px solid var(--nw-accent);
-  outline-offset: 2px;
-}
-
-.mantine-Input-input {
-  background: var(--nw-bg);
-  border-color: var(--nw-border-strong);
-  color: var(--nw-text);
-}
-
-.mantine-Input-input:focus,
-.mantine-Input-input:focus-within {
-  border-color: var(--nw-accent);
-}
-
-.mantine-InputWrapper-label {
-  color: var(--nw-text);
-  font-weight: 600;
-}
-
-.mantine-Combobox-dropdown,
-.mantine-Popover-dropdown {
-  background: var(--nw-bg);
-  border-color: var(--nw-border-strong);
-}
-
-.mantine-Combobox-option[data-combobox-selected],
-.mantine-Combobox-option:hover {
-  background: var(--nw-surface-raised);
-}
-
-.mantine-Code-root {
-  background: var(--nw-surface);
-  color: var(--nw-text);
-}
-
-.nw-session-row {
+.session-row {
   background: transparent;
 }
 
-.nw-session-row:hover {
-  background: var(--nw-surface-raised);
+.session-row:hover {
+  background: var(--color-surface-hover);
 }
 
-.nw-page {
+.page {
   min-height: 100%;
-  background: var(--nw-bg);
+  background: var(--color-canvas);
 }
 
 /* One row shape for rail and expanded sidebar. The icon slot width must equal
    RAIL_WIDTH - 2*NAV_PAD (56 - 16 = 40 in SideRow.tsx) so the icon never moves. */
-.nw-side-row {
+.side-row {
   display: flex;
   align-items: center;
   width: 100%;
   height: 38px;
-  border-radius: var(--mantine-radius-sm);
+  border-radius: var(--radius-sm);
   overflow: hidden;
   text-decoration: none;
-  color: var(--nw-text-muted);
+  color: var(--color-ink-muted);
   font-size: 13px;
   font-weight: 500;
   background: transparent;
 }
-.nw-side-row:hover {
-  background: var(--nw-surface-raised);
+.side-row:hover {
+  background: var(--color-surface-hover);
 }
-.nw-side-row[data-active] {
-  background: var(--nw-surface-raised);
-  color: var(--nw-accent);
+.side-row[data-active] {
+  background: var(--color-surface-hover);
+  color: var(--color-accent);
   font-weight: 600;
 }
-.nw-side-row[data-primary] {
-  color: var(--nw-accent);
+.side-row[data-primary] {
+  color: var(--color-accent);
   font-weight: 600;
-  background: color-mix(in srgb, var(--nw-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
-.nw-side-row[data-primary]:hover {
-  background: color-mix(in srgb, var(--nw-accent) 22%, transparent);
+.side-row[data-primary]:hover {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 }
-.nw-side-row__icon {
+.side-row__icon {
   flex: 0 0 40px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.nw-side-row__label {
+.side-row__label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -127,22 +120,22 @@ body {
 /* Collapse toggle. margin-left:auto right-aligns the 40px icon slot (= the rail
    icon column width) inside the animating navbar, so it slides from the sidebar's
    inner-right to the rail column as the width transitions, with no jump. */
-.nw-side-toggle {
+.side-toggle {
   flex: 0 0 40px;
   height: 38px;
   margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--mantine-radius-sm);
-  color: var(--nw-text-muted);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-muted);
   background: transparent;
 }
-.nw-side-toggle:hover {
-  background: var(--nw-surface-raised);
+.side-toggle:hover {
+  background: var(--color-surface-hover);
 }
 
-@keyframes nw-thinking-pulse {
+@keyframes thinking-pulse {
   0%,
   100% {
     opacity: 1;
@@ -152,6 +145,12 @@ body {
   }
 }
 
-.nw-thinking-pulse {
-  animation: nw-thinking-pulse 1.6s ease-in-out infinite;
+.thinking-pulse {
+  animation: thinking-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-pulse {
+    animation: none;
+  }
 }

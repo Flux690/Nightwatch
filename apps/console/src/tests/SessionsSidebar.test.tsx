@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -13,7 +13,6 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionsSidebar } from "../pages/SessionsSidebar.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const RUNNER = {
   id: "inst-1",
@@ -80,15 +79,11 @@ function setupWithSessionsError() {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 }
 
@@ -155,15 +150,11 @@ function setup(sessions: object[] = [SESSION_1], deleteOk = true) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { router };

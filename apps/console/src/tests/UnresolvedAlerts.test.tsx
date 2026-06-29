@@ -1,11 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 
 import { UnresolvedAlertsPage } from "../pages/UnresolvedAlerts.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const UNMATCHED: UnresolvedAlertRecord = {
   sourceAlertId: "fp-abc123",
@@ -44,15 +43,11 @@ function setup(alerts: UnresolvedAlertRecord[] = []) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <QueryClientProvider client={qc}>
         <UnresolvedAlertsPage />
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock };
@@ -119,15 +114,11 @@ describe("UnresolvedAlertsPage", () => {
     });
 
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <QueryClientProvider client={qc}>
           <UnresolvedAlertsPage />
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     await waitFor(() => {

@@ -8,13 +8,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { HeadlessMantineProvider } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
 import type { AgentConfig } from "@nightwatch/shared";
 
 import { AuthProvider } from "../auth/AuthContext.js";
 import { SettingsPage } from "../pages/Settings.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 const OWNER_EMAIL = "admin@example.com";
 const AUTH_STATUS_RESPONSE = {
@@ -97,18 +96,14 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <HeadlessMantineProvider>
       <Notifications />
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <SettingsPage />
         </AuthProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </HeadlessMantineProvider>,
   );
 
   return { fetchMock };
@@ -213,18 +208,14 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <Notifications />
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     const modelInput = await screen.findByLabelText(/^model$/i);
@@ -291,18 +282,14 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <Notifications />
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     const modelInput = await screen.findByLabelText(/^model$/i);
@@ -428,18 +415,14 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <HeadlessMantineProvider>
         <Notifications />
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </HeadlessMantineProvider>,
     );
 
     const keyInput = await screen.findByPlaceholderText(/paste api key/i);
@@ -562,18 +545,14 @@ describe("SettingsPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <MantineProvider
-          theme={theme}
-          cssVariablesResolver={cssVariablesResolver}
-          defaultColorScheme="light"
-        >
+        <HeadlessMantineProvider>
           <Notifications />
           <QueryClientProvider client={qc}>
             <AuthProvider>
               <SettingsPage />
             </AuthProvider>
           </QueryClientProvider>
-        </MantineProvider>,
+        </HeadlessMantineProvider>,
       );
 
       return { fetchMock, clipboardWrite };

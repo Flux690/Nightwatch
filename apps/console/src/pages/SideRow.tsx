@@ -1,7 +1,7 @@
 import { Tooltip, UnstyledButton } from "@mantine/core";
 import { Link, useRouterState } from "@tanstack/react-router";
 
-// Rail/sidebar geometry. The icon slot (.nw-side-row__icon in styles.css) is
+// Rail/sidebar geometry. The icon slot (.side-row__icon in styles.css) is
 // RAIL_WIDTH - 2*NAV_PAD wide, so the icon centre sits at the same x in both
 // states and never moves when the navbar width animates between them.
 export const RAIL_WIDTH = 56;
@@ -36,8 +36,8 @@ export function SideRow({
 
   const inner = (
     <>
-      <span className="nw-side-row__icon">{icon}</span>
-      {expanded && <span className="nw-side-row__label">{label}</span>}
+      <span className="side-row__icon">{icon}</span>
+      {expanded && <span className="side-row__label">{label}</span>}
     </>
   );
 
@@ -46,7 +46,7 @@ export function SideRow({
       <Link
         to={to}
         aria-label={label}
-        className="nw-side-row"
+        className="side-row"
         data-active={active || undefined}
       >
         {inner}
@@ -55,7 +55,7 @@ export function SideRow({
       <UnstyledButton
         aria-label={label}
         onClick={onClick}
-        className="nw-side-row"
+        className="side-row"
         data-primary={primary || undefined}
       >
         {inner}

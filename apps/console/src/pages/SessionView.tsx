@@ -371,7 +371,7 @@ export function SessionView({
 
   return (
     <div
-      className="nw-page"
+      className="page"
       style={{ display: "flex", flexDirection: "column", height: "100%" }}
     >
       <div

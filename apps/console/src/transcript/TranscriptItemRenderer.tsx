@@ -20,8 +20,8 @@ function UserBubble({ text }: { text: string }): React.JSX.Element {
       <div
         style={{
           maxWidth: "75%",
-          background: "var(--nw-surface-raised)",
-          border: "1px solid var(--nw-border)",
+          background: "var(--color-surface-hover)",
+          border: "1px solid var(--color-line)",
           borderRadius: "var(--mantine-radius-md)",
           padding: "var(--mantine-spacing-xs) var(--mantine-spacing-sm)",
         }}
@@ -62,7 +62,7 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
           size="xs"
           c="dimmed"
           fw={600}
-          className={item.streaming ? "nw-thinking-pulse" : undefined}
+          className={item.streaming ? "thinking-pulse" : undefined}
         >
           Thinking
         </Text>
