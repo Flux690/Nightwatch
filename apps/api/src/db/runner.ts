@@ -6,7 +6,6 @@ import { getDb } from "./client.js";
 export type RunnerRow = {
   id: string;
   tokenHash: string;
-  runnerId: string | null;
   label: string | null;
   serverName: string | null;
   remediationMode: boolean | null;
@@ -17,7 +16,6 @@ export type RunnerRow = {
 // Public view returned by the list endpoint: no hash, no plaintext.
 export type RunnerMeta = {
   id: string;
-  runnerId: string | null;
   label: string | null;
   serverName: string | null;
   remediationMode: boolean | null;
@@ -42,11 +40,11 @@ export function generateRunnerToken(
 
   const mint = db.transaction(() => {
     // Reclaim an abandoned name: a row with this server_name that never connected
-    // (runner_id IS NULL) is an orphan from an aborted setup, so free it. A row that
-    // has connected is a real server, left untouched so the UNIQUE insert 409s.
+    // (last_used_at IS NULL) is an orphan from an aborted setup, so free it. A row
+    // that has connected is a real server, left untouched so the UNIQUE insert 409s.
     if (serverName !== undefined) {
       db.prepare(
-        `DELETE FROM runner WHERE server_name = ? AND runner_id IS NULL`,
+        `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
       ).run(serverName);
     }
     db.prepare(
@@ -65,7 +63,6 @@ export function generateRunnerToken(
   return {
     plaintext,
     id,
-    runnerId: null,
     label: label ?? null,
     serverName: serverName ?? null,
     remediationMode: null,
@@ -77,7 +74,6 @@ export function generateRunnerToken(
 const SELECT_ROW = `
   id,
   token             AS tokenHash,
-  runner_id         AS runnerId,
   label,
   server_name       AS serverName,
   remediation_mode  AS remediationModeRaw,
@@ -93,7 +89,6 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
   return {
     id: raw["id"] as string,
     tokenHash: raw["tokenHash"] as string,
-    runnerId: (raw["runnerId"] as string | null) ?? null,
     label: (raw["label"] as string | null) ?? null,
     serverName: (raw["serverName"] as string | null) ?? null,
     remediationMode: toBoolean(
@@ -102,12 +97,6 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
     createdAt: raw["createdAt"] as string,
     lastUsedAt: (raw["lastUsedAt"] as string | null) ?? null,
   };
-}
-
-export function setRunnerId(id: string, runnerId: string): void {
-  getDb()
-    .prepare(`UPDATE runner SET runner_id = ? WHERE id = ?`)
-    .run(runnerId, id);
 }
 
 // Validate a plaintext token: hash it and look up.
@@ -127,14 +116,12 @@ export function findRunnerById(id: string): RunnerRow | undefined {
 }
 
 // Effective remediation mode for an alert's runner, from the DB (system of record, ADR-0003).
-// alert.runnerId may be the record id or the manifest runner_id, so match either column; null
-// means bootstrap from the manifest. Reading the DB lets a post-restart resume see it pre-reconnect.
+// alert.runnerId is the tokenId (the record id), so match on id only. null means bootstrap
+// from the manifest. Reading the DB lets a post-restart resume see it pre-reconnect.
 export function getRemediationModeByRunnerRef(ref: string): boolean | null {
   const raw = getDb()
-    .prepare(
-      `SELECT remediation_mode AS m FROM runner WHERE id = ? OR runner_id = ? LIMIT 1`,
-    )
-    .get(ref, ref) as { m: number | null } | undefined;
+    .prepare(`SELECT remediation_mode AS m FROM runner WHERE id = ? LIMIT 1`)
+    .get(ref) as { m: number | null } | undefined;
   return raw ? toBoolean(raw.m) : null;
 }
 

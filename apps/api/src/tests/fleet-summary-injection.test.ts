@@ -40,12 +40,10 @@ import type { CapabilityManifest, NormalizedAlert } from "@nightwatch/shared";
 const FINISH: ScriptedTurn = { toolUses: [], text: "Investigation complete." };
 
 function dockerManifest(
-  runnerId: string,
   hostname: string,
   serviceNames: string[],
 ): CapabilityManifest {
   return {
-    runnerId,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -122,20 +120,14 @@ describe("fleet summary injection", () => {
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdA,
-        dockerManifest(tokenIdA, "web-01", ["nginx", "api"]),
-      );
+      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx", "api"]));
 
       registerRunner(
         tokenIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdB,
-        dockerManifest(tokenIdB, "db-02", ["postgres"]),
-      );
+      setRunnerManifest(tokenIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
 
@@ -162,20 +154,14 @@ describe("fleet summary injection", () => {
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdA,
-        dockerManifest(tokenIdA, "web-01", ["nginx"]),
-      );
+      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx"]));
 
       registerRunner(
         tokenIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdB,
-        dockerManifest(tokenIdB, "cache-01", ["redis"]),
-      );
+      setRunnerManifest(tokenIdB, dockerManifest("cache-01", ["redis"]));
 
       setScript([FINISH]);
 
@@ -198,20 +184,14 @@ describe("fleet summary injection", () => {
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdA,
-        dockerManifest(tokenIdA, "web-01", ["nginx"]),
-      );
+      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx"]));
 
       registerRunner(
         tokenIdB,
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdB,
-        dockerManifest(tokenIdB, "db-02", ["postgres"]),
-      );
+      setRunnerManifest(tokenIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
 
@@ -241,10 +221,7 @@ describe("fleet summary injection", () => {
         () => {},
         () => {},
       );
-      setRunnerManifest(
-        tokenIdA,
-        dockerManifest(tokenIdA, "web-01", ["nginx", "api"]),
-      );
+      setRunnerManifest(tokenIdA, dockerManifest("web-01", ["nginx", "api"]));
 
       setScript([FINISH]);
 

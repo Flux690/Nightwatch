@@ -36,7 +36,7 @@ export async function registerRunnerRoutes(
       const runners = byToken.get(t.id);
       if (!runners || runners.length === 0) {
         records.push({
-          id: t.runnerId ?? t.id,
+          id: t.id,
           token: t.id,
           hostname: null,
           createdAt: t.createdAt,
@@ -49,7 +49,7 @@ export async function registerRunnerRoutes(
       }
       for (const r of runners) {
         records.push({
-          id: r.runnerId ?? t.runnerId ?? t.id,
+          id: t.id,
           token: t.id,
           hostname: r.hostname,
           createdAt: t.createdAt,
@@ -80,13 +80,12 @@ export async function registerRunnerRoutes(
       if (!rulesYaml) {
         return reply.code(400).send({ error: "rulesYaml is required" });
       }
-      const token = findRunnerById(request.params.tokenId);
       try {
         const result = await sendCommand(
           "update_alert_rules",
           { rulesYaml },
           RULES_TIMEOUT_MS,
-          token?.runnerId ?? undefined,
+          request.params.tokenId,
         );
         return result;
       } catch (err) {

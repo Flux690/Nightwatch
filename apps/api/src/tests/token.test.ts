@@ -12,7 +12,7 @@ import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
-import { generateRunnerToken, setRunnerId } from "../db/runner.js";
+import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
 
 function sha256hex(s: string): string {
@@ -168,8 +168,8 @@ describe("Runner token lifecycle (issue 038)", () => {
         payload: { serverName: "web-prod-01" },
       });
       const { id } = JSON.parse(first.body) as { id: string };
-      // Simulate the runner connecting (manifest received sets runner_id).
-      setRunnerId(id, "runner-web-prod-01");
+      // Simulate the runner connecting (WS connect sets last_used_at).
+      touchLastUsed(id);
 
       const res = await server.inject({
         method: "POST",

@@ -78,7 +78,6 @@ describe("clarification interrupts", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "runner-clarification-023";
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
@@ -105,7 +104,6 @@ describe("clarification interrupts", () => {
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "clarification-host",
       runnerVersion: "2.0.0",
       capabilities: {

@@ -13,12 +13,10 @@ import {
 } from "../ws/router.js";
 
 function manifest(
-  runnerId: string,
   hostname: string,
   services: CapabilityManifest["capabilities"]["services"] = [],
 ): CapabilityManifest {
   return {
-    runnerId,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -96,7 +94,7 @@ describe("POST /alerts/test", () => {
     );
     setRunnerManifest(
       "verify-runner-token",
-      manifest("runner-verify", "host-verify", [
+      manifest("host-verify", [
         {
           identity: {
             provider: "docker",
@@ -113,7 +111,7 @@ describe("POST /alerts/test", () => {
       method: "POST",
       url: "/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { runnerId: "runner-verify" },
+      payload: { runnerId: "verify-runner-token" },
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
@@ -124,7 +122,7 @@ describe("POST /alerts/test", () => {
     };
     expect(body.ok).toBe(true);
     expect(body.status).toBe("enqueued");
-    expect(body.runnerId).toBe("runner-verify");
+    expect(body.runnerId).toBe("verify-runner-token");
     expect(body.hostname).toBe("host-verify");
   });
 
@@ -134,16 +132,13 @@ describe("POST /alerts/test", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "verify-runner-token",
-      manifest("runner-verify", "host-verify"),
-    );
+    setRunnerManifest("verify-runner-token", manifest("host-verify"));
 
     const res = await server.inject({
       method: "POST",
       url: "/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { runnerId: "runner-verify" },
+      payload: { runnerId: "verify-runner-token" },
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { ok?: boolean; error?: string };
@@ -157,17 +152,14 @@ describe("POST /alerts/test", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "verify-runner-token",
-      manifest("runner-verify", "host-verify"),
-    );
+    setRunnerManifest("verify-runner-token", manifest("host-verify"));
     unregisterRunner("verify-runner-token");
 
     const res = await server.inject({
       method: "POST",
       url: "/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { runnerId: "runner-verify" },
+      payload: { runnerId: "verify-runner-token" },
     });
     expect(res.statusCode).toBe(404);
   });

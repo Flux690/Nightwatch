@@ -39,11 +39,9 @@ import {
 import { resolveCommand } from "../ws/command-transport.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
-// Matches the container:"web-01" label alertmanagerBody() carries, and uses the connection's
-// tokenId as runnerId so the real route's fleet-matched runnerId lines up with the hand-built
-// alert() helper (both must agree for the assertions to mean anything).
-function webOneManifest(runnerId: string) {
-  return manifest(runnerId, "host-inject-resume", [dockerService("web-01")]);
+// Matches the container:"web-01" label alertmanagerBody() carries.
+function webOneManifest() {
+  return manifest("host-inject-resume", [dockerService("web-01")]);
 }
 
 // Shared FIFO gate: every chat() parks until released, so an alert can be
@@ -318,7 +316,7 @@ describe("mid-run alert injection (loop seam)", () => {
       },
       () => {},
     );
-    setRunnerManifest(tokenId, webOneManifest(tokenId));
+    setRunnerManifest(tokenId, webOneManifest());
 
     // R1: gated tool → run suspends. R2 (resume): free-form finish.
     queueRuns(

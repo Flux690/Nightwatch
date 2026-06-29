@@ -196,7 +196,6 @@ describe("providers filter and mismatch rejection", () => {
         () => {},
       );
       setRunnerManifest(K8S_TOKEN, {
-        runnerId: "runner-providers-k8s",
         hostname: "k8s-host",
         runnerVersion: "2.0.0",
         capabilities: {
@@ -423,7 +422,6 @@ describe("providers filter and mismatch rejection", () => {
           () => {},
         );
         setRunnerManifest(RO_TOKEN, {
-          runnerId: "runner-remediation-mode-ro",
           hostname: "ro-host",
           runnerVersion: "2.0.0",
           capabilities: {
@@ -600,7 +598,6 @@ describe("providers filter and mismatch rejection", () => {
           () => {},
         );
         setRunnerManifest(tokenId, {
-          runnerId: `runner-db-mode-${tokenId.slice(0, 8)}`,
           hostname: "db-mode-host",
           runnerVersion: "2.0.0",
           capabilities: {

@@ -82,7 +82,6 @@ describe("durable approval interrupts", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "runner-approval-022";
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
@@ -109,7 +108,6 @@ describe("durable approval interrupts", () => {
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "approval-host",
       runnerVersion: "2.0.0",
       capabilities: {
@@ -978,7 +976,7 @@ describe("durable approval interrupts", () => {
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
-      runnerId: TEST_RUNNER_ID,
+      runnerId: TEST_TOKEN,
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

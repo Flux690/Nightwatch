@@ -75,7 +75,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-a-token",
-      manifest("runner-a", "host-a", [dockerService("web-01")]),
+      manifest("host-a", [dockerService("web-01")]),
     );
 
     const res = await server.inject({
@@ -106,7 +106,7 @@ describe("POST /alerts/validate", () => {
     expect(body.alerts[0]!.identityKey).toBe("docker/web-01/web-01");
     expect(body.alerts[0]!.resolution).toEqual({
       status: "resolved",
-      runnerId: "runner-a",
+      runnerId: "validate-runner-a-token",
       hostname: "host-a",
     });
   });
@@ -119,7 +119,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-a-token",
-      manifest("runner-a", "host-a", [
+      manifest("host-a", [
         {
           identity: {
             provider: "kubernetes",
@@ -161,7 +161,7 @@ describe("POST /alerts/validate", () => {
     );
     expect(body.alerts[0]!.resolution).toEqual({
       status: "resolved",
-      runnerId: "runner-a",
+      runnerId: "validate-runner-a-token",
       hostname: "host-a",
     });
   });
@@ -174,7 +174,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-a-token",
-      manifest("runner-a", "host-a", [dockerService("web-01")]),
+      manifest("host-a", [dockerService("web-01")]),
     );
 
     const res = await server.inject({
@@ -215,7 +215,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-a-token",
-      manifest("runner-a", "host-a", [{ identity, status: "running" }]),
+      manifest("host-a", [{ identity, status: "running" }]),
     );
     registerRunner(
       "validate-runner-b-token",
@@ -224,7 +224,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-b-token",
-      manifest("runner-b", "host-b", [{ identity, status: "running" }]),
+      manifest("host-b", [{ identity, status: "running" }]),
     );
 
     const res = await server.inject({
@@ -256,7 +256,7 @@ describe("POST /alerts/validate", () => {
     );
     setRunnerManifest(
       "validate-runner-a-token",
-      manifest("runner-a", "host-a", [dockerService("web-01")]),
+      manifest("host-a", [dockerService("web-01")]),
     );
 
     const res = await server.inject({

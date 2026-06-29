@@ -87,7 +87,6 @@ function makeManifest(
   containers: string[],
 ): CapabilityManifest {
   return {
-    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -112,7 +111,6 @@ function makeK8sManifest(
   workloads: Array<{ workload: string; namespace: string }>,
 ): CapabilityManifest {
   return {
-    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -446,8 +444,9 @@ describe("multi-runner routing", () => {
       commandsB.some((c) => c.commandName === "restart_service"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "restart_service")
-        ?.commandInput["service"],
+      commandsB.find((c) => c.commandName === "restart_service")?.commandInput[
+        "service"
+      ],
     ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 
@@ -527,7 +526,6 @@ describe("assigned-name server-scoped routing", () => {
     services: string[],
   ): CapabilityManifest {
     return {
-      runnerId: `runner-${server}`,
       hostname: server,
       runnerVersion: "2.0.0",
       capabilities: {

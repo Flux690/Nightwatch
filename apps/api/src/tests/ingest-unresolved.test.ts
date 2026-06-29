@@ -74,9 +74,7 @@ describe("unresolved alerts feed", () => {
     );
     setRunnerManifest(
       RUNNER_TOKEN_ID,
-      manifest("runner-unresolved-feed", "host-feed", [
-        dockerService("web-01"),
-      ]),
+      manifest("host-feed", [dockerService("web-01")]),
     );
 
     const { plaintext } = generateRunnerToken("unresolved-test");
@@ -215,9 +213,7 @@ describe("unresolved alerts feed", () => {
         );
         setRunnerManifest(
           RUNNER_TOKEN_ID,
-          manifest("runner-unresolved-feed", "host-feed", [
-            dockerService("web-01"),
-          ]),
+          manifest("host-feed", [dockerService("web-01")]),
         );
       }
     });

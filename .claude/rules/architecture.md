@@ -5,10 +5,10 @@ are descriptions, not commandments - revisit any of them on merits when there is
 real reason. The code is the source of truth: if a note here disagrees with the
 code, the code wins and the note is what is wrong.
 
-- The API's SQLite file is the system of record. The runner is stateless - its
-  only persistent state is its `runner-id` file; it executes commands and keeps no
-  durable state of its own. Giving the runner durable state is a real design
-  change, not a local tweak.
+- The API's SQLite file is the system of record. The runner is fully stateless -
+  it executes commands and keeps no durable state of its own. Its identity is the
+  `tokenId` the API assigns at token creation; no local id file exists. Giving the
+  runner durable state is a real design change, not a local tweak.
 - Tokens are validated against a stored SHA-256 hash, never appear in logs,
   identifiers, or URLs we control, and every surface that accepts a token (ingest,
   chat, runner WS, console WS) validates it. Runner tokens are hash-only: the

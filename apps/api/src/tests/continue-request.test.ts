@@ -68,7 +68,6 @@ describe("continue-request interrupts", () => {
   let port: number;
   let cleanupDb: () => void;
   let SESSION: string;
-  const TEST_RUNNER_ID = "runner-continue-032";
   let TEST_TOKEN: string;
 
   beforeAll(async () => {
@@ -90,7 +89,6 @@ describe("continue-request interrupts", () => {
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "continue-host",
       runnerVersion: "2.0.0",
       capabilities: {

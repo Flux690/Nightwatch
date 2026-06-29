@@ -68,7 +68,6 @@ describe("remediation action record", () => {
   let cleanupDb: () => void;
   let SESSION: string;
   let TEST_TOKEN: string;
-  const TEST_RUNNER_ID = "runner-remediation-007";
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
@@ -96,7 +95,6 @@ describe("remediation action record", () => {
     );
 
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "remediation-host",
       runnerVersion: "2.0.0",
       capabilities: {

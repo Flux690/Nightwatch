@@ -7,7 +7,6 @@ import {
 } from "@nightwatch/shared";
 import { getDocker } from "../docker-client.js";
 import { getAppsV1Api } from "../kubernetes-client.js";
-import { getRunnerId } from "./identity.js";
 import { isRemediationEnabled } from "../remediation-state.js";
 
 const RUNNER_VERSION = "0.2.0";
@@ -23,7 +22,6 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
     process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
   return {
-    runnerId: getRunnerId(),
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,
     capabilities: {

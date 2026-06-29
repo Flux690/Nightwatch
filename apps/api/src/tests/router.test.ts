@@ -27,7 +27,6 @@ function makeManifest(
   containers: string[],
 ): CapabilityManifest {
   return {
-    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {

@@ -6,7 +6,6 @@ export interface ServiceManifestEntry {
 }
 
 export interface CapabilityManifest {
-  runnerId: string;
   hostname: string;
   runnerVersion: string;
   capabilities: {

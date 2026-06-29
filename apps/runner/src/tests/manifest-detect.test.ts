@@ -9,12 +9,6 @@ import {
 } from "vitest";
 import type Dockerode from "dockerode";
 
-// Redirect the runner data dir to a temp path before identity.ts reads its
-// module-level DATA_DIR; vi.hoisted runs before imports, so no imported values here.
-vi.hoisted(() => {
-  process.env["NIGHTWATCH_DATA_DIR"] = "/tmp/manifest-detect-test";
-});
-
 // Mock system boundaries: Docker client, Kubernetes client, and Prometheus
 // network probe (global fetch). NIGHTWATCH_SERVER_NAME env var controls the
 // Docker server dimension; tests stub it explicitly via vi.stubEnv.

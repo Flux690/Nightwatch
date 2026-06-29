@@ -59,7 +59,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "test-runner-esc";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -76,7 +75,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "esc-host",
       runnerVersion: "2.0.0",
       capabilities: {
@@ -251,7 +249,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
-      runnerId: TEST_RUNNER_ID,
+      runnerId: TEST_TOKEN,
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

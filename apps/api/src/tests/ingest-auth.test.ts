@@ -70,7 +70,7 @@ describe("POST /alerts/ingest auth", () => {
     );
     setRunnerManifest(
       "auth-test-runner-token",
-      manifest("auth-test-runner", "host-auth-test", [WEB_01_SERVICE]),
+      manifest("host-auth-test", [WEB_01_SERVICE]),
     );
 
     server = Fastify({ logger: false });
@@ -213,10 +213,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "runner-a-token",
-      manifest("runner-a", "host-a", [WEB_01_SERVICE]),
-    );
+    setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
 
     const res = await server.inject({
       method: "POST",
@@ -238,16 +235,13 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest("runner-a-token", manifest("runner-a", "host-a"));
+    setRunnerManifest("runner-a-token", manifest("host-a"));
     registerRunner(
       "runner-b-token",
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "runner-b-token",
-      manifest("runner-b", "host-b", [WEB_01_SERVICE]),
-    );
+    setRunnerManifest("runner-b-token", manifest("host-b", [WEB_01_SERVICE]));
 
     const res = await server.inject({
       method: "POST",
@@ -267,7 +261,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest("runner-a-token", manifest("runner-a", "host-a"));
+    setRunnerManifest("runner-a-token", manifest("host-a"));
 
     const res = await server.inject({
       method: "POST",
@@ -289,19 +283,13 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "runner-a-token",
-      manifest("runner-a", "host-a", [WEB_01_SERVICE]),
-    );
+    setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
     registerRunner(
       "runner-b-token",
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "runner-b-token",
-      manifest("runner-b", "host-b", [WEB_01_SERVICE]),
-    );
+    setRunnerManifest("runner-b-token", manifest("host-b", [WEB_01_SERVICE]));
 
     const res = await server.inject({
       method: "POST",
@@ -341,10 +329,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       () => {},
       () => {},
     );
-    setRunnerManifest(
-      "runner-a-token",
-      manifest("runner-a", "host-a", [WEB_01_SERVICE]),
-    );
+    setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
 
     const res = await server.inject({
       method: "POST",

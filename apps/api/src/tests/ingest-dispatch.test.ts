@@ -101,7 +101,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     );
     setRunnerManifest(
       "dispatch-runner-a-token",
-      manifest("runner-web-01", "host-web-01", [dockerService("web-01")]),
+      manifest("host-web-01", [dockerService("web-01")]),
     );
     registerRunner(
       "dispatch-runner-b-token",
@@ -110,7 +110,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     );
     setRunnerManifest(
       "dispatch-runner-b-token",
-      manifest("runner-web-02", "host-web-02", [dockerService("web-02")]),
+      manifest("host-web-02", [dockerService("web-02")]),
     );
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
@@ -164,7 +164,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // run starts and parks. advanceTimersByTimeAsync flushes the microtask queue
     // at each step, which is required since waitFor itself uses setTimeout.
     await vi.advanceTimersByTimeAsync(90_001);
-    expect(dispatcher.isInvestigating("runner-web-01", "dup-1")).toBe(true);
+    expect(dispatcher.isInvestigating("dispatch-runner-a-token", "dup-1")).toBe(
+      true,
+    );
 
     // Same token + sourceAlertId while the first run is still active -> dropped.
     const dupe = await ingest(token, alertBody("dup-1"));
@@ -173,7 +175,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // End the active run; flush the async chain so the dedup key clears.
     gate.releaseAll();
     await vi.advanceTimersByTimeAsync(50);
-    expect(dispatcher.isInvestigating("runner-web-01", "dup-1")).toBe(false);
+    expect(dispatcher.isInvestigating("dispatch-runner-a-token", "dup-1")).toBe(
+      false,
+    );
 
     // The same alert now starts a fresh investigation - no 24h suppression.
     const refire = await ingest(token, alertBody("dup-1"));

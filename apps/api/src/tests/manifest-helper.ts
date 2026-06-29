@@ -4,12 +4,10 @@ import type {
 } from "@nightwatch/shared";
 
 export function manifest(
-  runnerId: string,
   hostname: string,
   services: ServiceManifestEntry[] = [],
 ): CapabilityManifest {
   return {
-    runnerId,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {

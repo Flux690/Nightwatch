@@ -32,7 +32,7 @@ const AWAITING_RUNNER: RunnerRecord = {
 };
 
 const CONNECTED_RUNNER: RunnerRecord = {
-  id: "runner-web-01",
+  id: "new-token-uuid",
   token: "new-token-uuid",
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
@@ -459,7 +459,7 @@ describe("AddServerWizard", () => {
           "/api/alerts/test",
           expect.objectContaining({
             method: "POST",
-            body: JSON.stringify({ runnerId: "runner-web-01" }),
+            body: JSON.stringify({ runnerId: "new-token-uuid" }),
           }),
         );
       });

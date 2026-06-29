@@ -19,7 +19,6 @@ import { registerRunnerRoutes } from "../runners/routes.js";
 
 function manifest(hostname: string, containers: string[]): CapabilityManifest {
   return {
-    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
@@ -509,7 +508,6 @@ describe("remediation mode reconciliation on reconnect", () => {
         type: "manifest",
         payload: {
           ...manifest("agree-host", ["svc"]),
-          runnerId: `runner-agree-${tokenId.slice(0, 8)}`,
           capabilities: {
             ...manifest("agree-host", ["svc"]).capabilities,
             remediationEnabled: false,

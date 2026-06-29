@@ -10,12 +10,10 @@ import { logger } from "../logger.js";
 
 const HEARTBEAT_TTL_MS = 120_000;
 
-// Flat registry keyed by tokenId. One token = one server in this deployment
-// model; the token authenticates the connection and is the stable per-server key.
-// Exported so the command transport can send over a resolved connection.
+// Single map keyed by tokenId. The tokenId is the stable runner identity from
+// the moment of first authentication - no manifest required.
 export interface RunnerConnection {
   tokenId: string;
-  runnerId: string | null;
   send: (msg: string) => void;
   close: () => void;
   manifest: CapabilityManifest | null;
@@ -25,7 +23,6 @@ export interface RunnerConnection {
 }
 
 export interface RunnerView {
-  runnerId: string | null;
   tokenId: string;
   hostname: string | null;
   manifest: CapabilityManifest | null;
@@ -35,7 +32,6 @@ export interface RunnerView {
 }
 
 const connectionsByTokenId = new Map<string, RunnerConnection>();
-const registry = new Map<string, RunnerConnection>();
 
 export class RunnerOfflineError extends Error {
   constructor() {
@@ -51,7 +47,6 @@ export function registerRunner(
 ): void {
   connectionsByTokenId.set(tokenId, {
     tokenId,
-    runnerId: null,
     send,
     close,
     manifest: null,
@@ -62,8 +57,6 @@ export function registerRunner(
 }
 
 export function unregisterRunner(tokenId: string): void {
-  const conn = connectionsByTokenId.get(tokenId);
-  if (conn?.runnerId) registry.delete(conn.runnerId);
   connectionsByTokenId.delete(tokenId);
 }
 
@@ -79,14 +72,9 @@ export function setRunnerManifest(
 ): void {
   const conn = connectionsByTokenId.get(tokenId);
   if (!conn) return;
-  if (conn.runnerId && conn.runnerId !== manifest.runnerId) {
-    registry.delete(conn.runnerId);
-  }
-  conn.runnerId = manifest.runnerId;
   conn.manifest = manifest;
   conn.hostname = manifest.hostname;
   conn.lastSeen = Date.now();
-  registry.set(manifest.runnerId, conn);
 }
 
 export function recordHeartbeat(tokenId: string): void {
@@ -100,7 +88,6 @@ export function listRunners(): RunnerView[] {
   const views: RunnerView[] = [];
   for (const conn of connectionsByTokenId.values()) {
     views.push({
-      runnerId: conn.runnerId,
       tokenId: conn.tokenId,
       hostname: conn.hostname,
       manifest: conn.manifest,
@@ -118,10 +105,10 @@ export function listRunners(): RunnerView[] {
 export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];
-  for (const conn of registry.values()) {
+  for (const conn of connectionsByTokenId.values()) {
     if (!conn.manifest) continue;
     views.push({
-      runnerId: conn.manifest.runnerId,
+      runnerId: conn.tokenId,
       hostname: conn.manifest.hostname,
       online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
       lastSeen: conn.lastSeen,
@@ -135,21 +122,15 @@ export function getRunnerIdentity(
   tokenId: string,
 ): { runnerId: string; hostname: string | null } | undefined {
   const conn = connectionsByTokenId.get(tokenId);
-  if (!conn?.runnerId) return undefined;
-  return { runnerId: conn.runnerId, hostname: conn.hostname };
+  if (!conn) return undefined;
+  return { runnerId: conn.tokenId, hostname: conn.hostname };
 }
 
-// Current manifest for a runner given the runnerId stamped on an alert. That id is the
-// manifest's runnerId once received, but falls back to the tokenId at ingest, so we try
-// both maps.
+// Current manifest for a runner given the tokenId stamped on an alert.
 export function getRunnerManifestForAlert(
   runnerId: string,
 ): CapabilityManifest | null {
-  return (
-    registry.get(runnerId)?.manifest ??
-    connectionsByTokenId.get(runnerId)?.manifest ??
-    null
-  );
+  return connectionsByTokenId.get(runnerId)?.manifest ?? null;
 }
 
 // Sync the in-memory remediation mode for a connected runner without pushing
@@ -160,15 +141,9 @@ export function setRunnerRemediationMode(tokenId: string, mode: boolean): void {
   if (conn) conn.remediationMode = mode;
 }
 
-// Read the cached remediation mode by runnerId. Tries the post-manifest
-// registry first, then the pre-manifest connectionsByTokenId map (covers the
-// case where an alert's runnerId was stamped as the tokenId at ingest).
+// Read the cached remediation mode by tokenId (which is now also the runnerId).
 export function getRunnerRemediationMode(runnerId: string): boolean | null {
-  return (
-    registry.get(runnerId)?.remediationMode ??
-    connectionsByTokenId.get(runnerId)?.remediationMode ??
-    null
-  );
+  return connectionsByTokenId.get(runnerId)?.remediationMode ?? null;
 }
 
 // Fire-and-forget push of remediation mode to a connected runner. Also
@@ -209,7 +184,11 @@ export function resolveRunner(
   commandInput: Record<string, unknown>,
   runnerIdHint?: string,
 ): RunnerConnection {
-  if (registry.size === 0) throw new RunnerOfflineError();
+  // Only runners whose manifest has arrived are routable.
+  const manifested = [...connectionsByTokenId.values()].filter(
+    (c) => c.manifest !== null,
+  );
+  if (manifested.length === 0) throw new RunnerOfflineError();
 
   const service = isServiceIdentity(commandInput["service"])
     ? commandInput["service"]
@@ -217,7 +196,7 @@ export function resolveRunner(
 
   if (service !== null) {
     const key = serviceIdentityKey(service);
-    const owners = [...registry.values()].filter((conn) =>
+    const owners = manifested.filter((conn) =>
       conn.manifest?.capabilities.services.some(
         (s) => serviceIdentityKey(s.identity) === key,
       ),
@@ -233,7 +212,7 @@ export function resolveRunner(
       );
     }
 
-    const known = [...registry.values()]
+    const known = manifested
       .flatMap((c) => c.manifest?.capabilities.services ?? [])
       .map((s) => serviceIdentityKey(s.identity))
       .join(", ");
@@ -243,7 +222,7 @@ export function resolveRunner(
   }
 
   if (runnerIdHint) {
-    const hinted = registry.get(runnerIdHint);
+    const hinted = connectionsByTokenId.get(runnerIdHint);
     if (hinted) {
       logger.warn(
         { runnerId: runnerIdHint },
@@ -253,12 +232,11 @@ export function resolveRunner(
     }
   }
 
-  if (registry.size === 1) {
+  if (manifested.length === 1) {
     logger.warn(
       "resolveRunner used the deprecated single-runner fallback; route by service identity instead",
     );
-    // size is confirmed 1 above; the iterator value is guaranteed to be defined
-    return registry.values().next().value as RunnerConnection;
+    return manifested[0] as RunnerConnection;
   }
 
   const hostname =
@@ -267,7 +245,7 @@ export function resolveRunner(
       : null;
 
   if (hostname !== null) {
-    for (const conn of registry.values()) {
+    for (const conn of manifested) {
       if (conn.hostname === hostname) {
         logger.warn(
           { hostname },
@@ -276,7 +254,7 @@ export function resolveRunner(
         return conn;
       }
     }
-    const available = [...registry.values()]
+    const available = manifested
       .map((c) => c.hostname)
       .filter(Boolean)
       .join(", ");
@@ -285,7 +263,7 @@ export function resolveRunner(
     );
   }
 
-  const hostnames = [...registry.values()]
+  const hostnames = manifested
     .map((c) => c.hostname)
     .filter(Boolean)
     .join(", ");

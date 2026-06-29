@@ -70,7 +70,6 @@ describe("access-gate: gating is driven by tool access level", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "runner-access-gate-001";
   const executedCommands: string[] = [];
 
   beforeAll(async () => {
@@ -87,14 +86,12 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result:
-            commandName === "restart_service" ? { restarted: true } : [],
+          result: commandName === "restart_service" ? { restarted: true } : [],
         });
       },
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "access-gate-host",
       runnerVersion: "2.0.0",
       capabilities: {

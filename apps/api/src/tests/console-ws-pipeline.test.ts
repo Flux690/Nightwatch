@@ -75,10 +75,7 @@ import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import {
-  registerRunner,
-  unregisterRunner,
-} from "../ws/router.js";
+import { registerRunner, unregisterRunner } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 // Wait for the `connected` ack, sent only after the handler subscribes: dispatch is
@@ -103,7 +100,6 @@ describe("console WS pipeline", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "test-runner-1";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -128,7 +124,7 @@ describe("console WS pipeline", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -235,17 +231,14 @@ describe("console WS pipeline", () => {
       ).length;
 
     // Start a new chat session (first run).
-    const startRes = await fetch(
-      `http://127.0.0.1:${port}/chat`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
-        },
-        body: JSON.stringify({ message: "Is the system healthy?" }),
+    const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
       },
-    );
+      body: JSON.stringify({ message: "Is the system healthy?" }),
+    });
     expect(startRes.status).toBe(202);
     const { sessionId } = (await startRes.json()) as { sessionId: string };
 
@@ -296,4 +289,3 @@ describe("console WS pipeline", () => {
     );
   });
 });
-

@@ -77,8 +77,7 @@ export function AddServerWizard({
     refetchInterval: step === 1 ? RUNNER_POLL_MS : false,
   });
 
-  // Require hostname: the manifest-derived id lands just after the socket, and the verify
-  // alert must target the real fleet runnerId, not the token's placeholder uuid.
+  // Require hostname: confirms the runner has connected and is genuinely online.
   const connectedRunner = runners?.find(
     (r) => r.token === mintedToken?.id && r.online && r.hostname !== null,
   );

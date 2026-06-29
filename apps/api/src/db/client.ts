@@ -15,7 +15,6 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runner (
     id                TEXT PRIMARY KEY,
     token             TEXT NOT NULL UNIQUE,
-    runner_id         TEXT,
     label             TEXT,
     server_name       TEXT UNIQUE,
     remediation_mode  INTEGER,

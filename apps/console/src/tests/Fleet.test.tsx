@@ -22,14 +22,13 @@ const AWAITING_RUNNER: RunnerRecord = {
 };
 
 const WEB_RUNNER: RunnerRecord = {
-  id: "runner-web-01",
+  id: "token-abc123",
   token: "token-abc123",
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
   online: true,
   lastSeen: new Date(NOW - 30 * 1000).toISOString(),
   manifest: {
-    runnerId: "runner-web-01",
     hostname: "web-01",
     runnerVersion: "0.1.0",
     capabilities: {
@@ -57,14 +56,13 @@ const WEB_RUNNER: RunnerRecord = {
 };
 
 const DB_RUNNER: RunnerRecord = {
-  id: "runner-db-02",
+  id: "token-def456",
   token: "token-def456",
   hostname: "db-02",
   createdAt: "2024-01-01T00:00:00Z",
   online: false,
   lastSeen: new Date(NOW - 5 * 60 * 1000).toISOString(),
   manifest: {
-    runnerId: "runner-db-02",
     hostname: "db-02",
     runnerVersion: "0.1.0",
     capabilities: {

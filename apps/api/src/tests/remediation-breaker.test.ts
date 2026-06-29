@@ -241,7 +241,6 @@ describe("remediation circuit breaker", () => {
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: "runner-breaker-008",
       hostname: "breaker-host",
       runnerVersion: "2.0.0",
       capabilities: {
