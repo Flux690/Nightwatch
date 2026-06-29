@@ -16,12 +16,7 @@ import type {
   RestartContainerInput,
   RestartServiceK8sResult,
 } from "@nightwatch/shared";
-import {
-  getCoreV1Api,
-  getAppsV1Api,
-  getMetrics,
-  getExec,
-} from "../kubernetes-client.js";
+import { getCoreV1Api, getAppsV1Api, getMetrics, getExec } from "./client.js";
 import {
   resolveWorkload,
   resolveWorkloadKind,

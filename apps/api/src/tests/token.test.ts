@@ -411,7 +411,6 @@ describe("Runner token lifecycle (issue 038)", () => {
                     docker: false,
                     kubernetes: false,
                     services: [],
-                    prometheus: { available: false },
                     postgres: { available: false },
                     redis: { available: false },
                     hostMetrics: false,

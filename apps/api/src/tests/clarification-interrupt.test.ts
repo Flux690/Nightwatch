@@ -119,7 +119,6 @@ describe("clarification interrupts", () => {
             status: "running",
           },
         ],
-        prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,

@@ -12,29 +12,11 @@ export interface CapabilityManifest {
     docker: boolean;
     kubernetes: boolean;
     services: ServiceManifestEntry[];
-    prometheus: { available: boolean; endpoint?: string };
     postgres: { available: boolean; via?: string };
     redis: { available: boolean; via?: string };
     hostMetrics: boolean;
     fileRead: boolean;
     remediationEnabled: boolean;
-  };
-}
-
-export interface MetricSnapshot {
-  token: string;
-  capturedAt: string;
-  metrics: Array<{
-    containerName: string;
-    memoryPercent: number;
-    cpuPercent: number;
-    restartCount: number;
-    status: string;
-  }>;
-  host: {
-    memoryPercent: number;
-    diskPercent: Record<string, number>;
-    loadAvg1m: number;
   };
 }
 

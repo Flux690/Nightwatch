@@ -120,14 +120,6 @@ describe("buildManifest", () => {
     expect(yaml).toContain("WS_URL");
   });
 
-  it("documents REMEDIATION_ENABLED as an optional env var", () => {
-    const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
-      "nwr_tok",
-    );
-    expect(yaml).toContain("REMEDIATION_ENABLED");
-  });
-
   it("substitutes different values correctly", () => {
     const wsUrl = "wss://nightwatch.internal:8443/clients/connect";
     const token = "nwr_verylongtoken_withspecialchars-123";

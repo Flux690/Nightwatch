@@ -28,7 +28,6 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
         identity: { provider: "docker" as const, project: name, service: name },
         status: "running",
       })),
-      prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },
       hostMetrics: true,

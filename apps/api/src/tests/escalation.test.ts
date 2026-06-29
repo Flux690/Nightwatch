@@ -90,7 +90,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
             status: "running",
           },
         ],
-        prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,

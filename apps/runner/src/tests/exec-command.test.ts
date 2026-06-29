@@ -6,7 +6,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 const { MockDocker } = vi.hoisted(() => ({ MockDocker: vi.fn() }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
 
-import { execCommand } from "../commands/remediation.js";
+import { execCommand } from "../docker/commands.js";
 
 const SERVICE = {
   provider: "docker" as const,

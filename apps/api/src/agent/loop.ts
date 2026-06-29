@@ -214,20 +214,18 @@ export async function runInvestigation(
   };
 
   let turn = 0;
-  // Time is the only budget ceiling. The deadline is checked at each turn
-  // boundary; it does not tick during approval or clarification waits because
-  // the run exits while suspended and recomputes a fresh deadline on resume.
   const deadline = Date.now() + config.hardTimeoutMs;
-  const fleetProviders = currentFleetProviders();
-
-  // Resolve the effective tool set ONCE per run from remediation mode + fleet providers.
-  // It backs both the offered schemas and the names the turn executor resolves, so prompt
-  // and menu can't disagree; a resume recomputes it fresh.
-  const toolset = effectiveToolset(fleetProviders, remediationEnabled);
-  const toolSchemas = toolset.map((t) => t.schema);
 
   while (Date.now() < deadline) {
     turn++;
+
+    const fleetProviders = currentFleetProviders();
+    const toolset = effectiveToolset(
+      fleetProviders,
+      currentRemediationEnabled(alert?.runnerId ?? undefined),
+    );
+    const toolSchemas = toolset.map((t) => t.schema);
+
     const startedAt = Date.now();
     let response: ChatResponse;
     try {

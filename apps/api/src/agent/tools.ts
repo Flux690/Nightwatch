@@ -537,7 +537,7 @@ export const TOOL_REGISTRY: Tool[] = [
     schema: {
       name: "exec_command",
       description:
-        "WRITE: Execute a shell command inside a container. Requires human approval and REMEDIATION_ENABLED=true.",
+        "WRITE: Execute a shell command inside a container. Requires human approval. Only available when remediation is enabled.",
       input_schema: {
         type: "object",
         properties: {

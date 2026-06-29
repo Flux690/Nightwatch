@@ -1,3 +1,4 @@
+import type Dockerode from "dockerode";
 import {
   deriveDockerServiceIdentity,
   type ContainerEvent,
@@ -6,6 +7,8 @@ import {
   type ContainerLogsResult,
   type ContainerProcess,
   type ContainerStatsResult,
+  type ExecCommandInput,
+  type ExecCommandResult,
   type GetContainerEventsInput,
   type GetContainerInspectInput,
   type GetContainerListInput,
@@ -13,13 +16,16 @@ import {
   type GetContainerProcessesInput,
   type GetContainerStatsInput,
   type GetEnvVariableNamesInput,
+  type RestartContainerInput,
+  type RestartContainerResult,
 } from "@nightwatch/shared";
-import { getDocker, parseDockerMux } from "../docker-client.js";
+import { getDocker, parseDockerMux } from "./client.js";
 import {
   notRunningResult,
   resolveService,
   type NoRunningInstanceResult,
-} from "../docker/resolve-service.js";
+} from "./resolve-service.js";
+import { sanitizeExecOutput } from "../safety/allowlist.js";
 
 export async function getContainerList(
   _input: GetContainerListInput,
@@ -33,8 +39,6 @@ export async function getContainerList(
     return {
       name,
       id: c.Id.slice(0, 12),
-      // So the agent can echo a usable identity back into other tools for any
-      // container it discovers here, not only the one named in the alert.
       service: deriveDockerServiceIdentity(c.Labels, name),
       image,
       imageTag: image.includes(":")
@@ -57,7 +61,6 @@ export async function getContainerLogs(
   input: GetContainerLogsInput,
 ): Promise<ContainerLogsResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  // Logs survive container exit (ADR-0001), so a stopped fallback is fine here.
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
   const container = resolved.container;
@@ -107,7 +110,6 @@ export async function getContainerInspect(
   input: GetContainerInspectInput,
 ): Promise<ContainerInspectResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  // Inspect works on a stopped container (ADR-0001), so a stopped fallback is fine here.
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
   const raw = await resolved.container.inspect();
@@ -137,7 +139,6 @@ export async function getContainerStats(
   input: GetContainerStatsInput,
 ): Promise<ContainerStatsResult | NoRunningInstanceResult> {
   const docker = getDocker();
-  // Stats require a live process; a stopped instance has nothing to report.
   const resolved = await resolveService(docker, input.service);
   if (!resolved || !resolved.live) return notRunningResult(input.service);
   const raw = await resolved.container.stats({ stream: false });
@@ -155,9 +156,6 @@ export async function getContainerStats(
   const cpuPercent =
     systemDelta > 0 ? Math.max(0, (cpuDelta / systemDelta) * numCPUs * 100) : 0;
 
-  // memory_stats.usage includes reclaimable page cache on cgroup v1. Docker's
-  // own CLI subtracts total_inactive_file (cgroup v1) or inactive_file (cgroup
-  // v2) to match what is actually in use by the workload.
   const statsObj = raw.memory_stats.stats as Record<string, number> | undefined;
   const inactiveFile =
     statsObj?.["total_inactive_file"] ?? statsObj?.["inactive_file"] ?? 0;
@@ -197,8 +195,6 @@ export async function getContainerEvents(
   input: GetContainerEventsInput,
 ): Promise<{ events: ContainerEvent[] } | NoRunningInstanceResult> {
   const docker = getDocker();
-  // The events log is keyed by name regardless of current state, so a stopped
-  // fallback is fine - it just needs a name to filter on.
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
 
@@ -208,9 +204,6 @@ export async function getContainerEvents(
   const stream = await docker.getEvents({
     since,
     until: now,
-    // Filter by the resolved container ID, not its name: the name filter matches
-    // partially, so a sibling like "payments-api" would leak into a query for
-    // "api". The full ID is exact and unique.
     filters: JSON.stringify({ container: [resolved.id] }),
   });
 
@@ -232,7 +225,7 @@ export async function getContainerEvents(
       const actor = data["Actor"] as Record<string, unknown> | undefined;
       return {
         timestamp: new Date(Number(data["time"]) * 1000).toISOString(),
-        eventType: normalizeEventType(action),
+        eventType: action,
         message: action,
         actor: String(actor?.["ID"] ?? "").slice(0, 12),
       };
@@ -245,7 +238,6 @@ export async function getContainerProcesses(
   input: GetContainerProcessesInput,
 ): Promise<{ processes: ContainerProcess[] } | NoRunningInstanceResult> {
   const docker = getDocker();
-  // `top` requires a live process; a stopped instance has nothing to report.
   const resolved = await resolveService(docker, input.service);
   if (!resolved || !resolved.live) return notRunningResult(input.service);
   const top = (await resolved.container.top()) as {
@@ -276,12 +268,95 @@ export async function getEnvVariableNames(
   input: GetEnvVariableNamesInput,
 ): Promise<{ names: string[] } | NoRunningInstanceResult> {
   const docker = getDocker();
-  // Inspect-derived, so a stopped fallback is fine here.
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
   const info = await resolved.container.inspect();
   const names = (info.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
   return { names };
+}
+
+export async function restartContainer(
+  input: RestartContainerInput,
+): Promise<RestartContainerResult | NoRunningInstanceResult> {
+  const startedAt = new Date().toISOString();
+  const docker = getDocker();
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const container = resolved.container;
+
+  const before = await container.inspect();
+  const previousExitCode = before.State.ExitCode ?? 0;
+
+  if (input.delaySeconds && input.delaySeconds > 0) {
+    await new Promise((r) => setTimeout(r, input.delaySeconds! * 1000));
+  }
+
+  await container.restart();
+
+  const newStatus = await waitForSettledStatus(container);
+
+  return {
+    success: newStatus === "running",
+    startedAt,
+    previousExitCode,
+    newStatus,
+  };
+}
+
+async function waitForSettledStatus(
+  container: Dockerode.Container,
+): Promise<string> {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const info = await container.inspect();
+    const status = info.State.Status ?? "unknown";
+    if (
+      status === "running" ||
+      status === "exited" ||
+      status === "dead" ||
+      Date.now() >= deadline
+    ) {
+      return status;
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+export async function execCommand(
+  input: ExecCommandInput,
+): Promise<ExecCommandResult | NoRunningInstanceResult> {
+  const executedAt = new Date().toISOString();
+  const [cmd, ...args] = input.command;
+  if (!cmd) throw new Error("command array must not be empty");
+
+  const docker = getDocker();
+  const resolved = await resolveService(docker, input.service);
+  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  const container = resolved.container;
+
+  const exec = await container.exec({
+    Cmd: [cmd, ...args],
+    AttachStdout: true,
+    AttachStderr: true,
+  });
+
+  const stream = await exec.start({});
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+    stream.on("end", resolve);
+    stream.on("error", reject);
+  });
+
+  const raw = parseDockerMux(Buffer.concat(chunks));
+  const info = await exec.inspect();
+
+  return {
+    exitCode: info.ExitCode ?? 0,
+    stdout: sanitizeExecOutput(raw.stdout),
+    stderr: sanitizeExecOutput(raw.stderr),
+    executedAt,
+  };
 }
 
 function parseUptime(status: string): number {
@@ -303,19 +378,4 @@ function extractLineTimestamp(line: string): number | null {
   const iso = line.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
   if (iso) return new Date(iso[0]).getTime();
   return null;
-}
-
-function normalizeEventType(action: string): ContainerEvent["eventType"] {
-  const map: Record<string, ContainerEvent["eventType"]> = {
-    start: "start",
-    stop: "stop",
-    restart: "restart",
-    oom: "oom",
-    die: "die",
-    health_status: "health_status",
-    pull: "pull",
-    create: "create",
-    destroy: "destroy",
-  };
-  return map[action] ?? "die";
 }

@@ -23,7 +23,6 @@ function manifest(
       docker: true,
       kubernetes: false,
       services,
-      prometheus: { available: false },
       postgres: { available: false },
       redis: { available: false },
       hostMetrics: false,

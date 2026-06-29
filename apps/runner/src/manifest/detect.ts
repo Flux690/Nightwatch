@@ -5,21 +5,17 @@ import {
   type CapabilityManifest,
   type ServiceManifestEntry,
 } from "@nightwatch/shared";
-import { getDocker } from "../docker-client.js";
-import { getAppsV1Api } from "../kubernetes-client.js";
+import { getDocker } from "../docker/client.js";
+import { getAppsV1Api } from "../kubernetes/client.js";
 import { isRemediationEnabled } from "../remediation-state.js";
 
 const RUNNER_VERSION = "0.2.0";
 
 export async function detectCapabilities(): Promise<CapabilityManifest> {
-  const [docker, kubernetes, prometheusAvailable] = await Promise.all([
+  const [docker, kubernetes] = await Promise.all([
     detectDocker(),
     detectKubernetes(),
-    detectPrometheus(),
   ]);
-
-  const prometheusEndpoint =
-    process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
 
   return {
     hostname: hostname(),
@@ -28,9 +24,6 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
       docker: docker.available,
       kubernetes: kubernetes.available,
       services: [...docker.services, ...kubernetes.services],
-      prometheus: prometheusAvailable
-        ? { available: true, endpoint: prometheusEndpoint }
-        : { available: false },
       postgres: process.env["POSTGRES_URL"]
         ? { available: true, via: "connection_string" }
         : { available: false },
@@ -111,17 +104,5 @@ async function detectKubernetes(): Promise<{
     return { available: true, services: [...byKey.values()] };
   } catch {
     return { available: false, services: [] };
-  }
-}
-
-async function detectPrometheus(): Promise<boolean> {
-  try {
-    const url = process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
-    const res = await fetch(`${url}/-/healthy`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return res.ok;
-  } catch {
-    return false;
   }
 }

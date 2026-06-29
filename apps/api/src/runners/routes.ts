@@ -9,12 +9,9 @@ import {
   getFleetView,
   pushRemediationMode,
 } from "../ws/router.js";
-import { sendCommand } from "../ws/command-transport.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
-
-const RULES_TIMEOUT_MS = 10_000;
 
 export async function registerRunnerRoutes(
   fastify: FastifyInstance,
@@ -68,30 +65,6 @@ export async function registerRunnerRoutes(
   // management fields - the console fleet page's single pane of glass.
   fastify.get("/fleet", { preHandler: requireSession }, (): FleetRunner[] =>
     getFleetView(),
-  );
-
-  // Push updated Prometheus alert rules to the runner (settings, not gated).
-  fastify.patch<{ Params: { id: string }; Body: { rulesYaml?: string } }>(
-    "/runners/:id/rules",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const rulesYaml = request.body?.rulesYaml;
-      if (!rulesYaml) {
-        return reply.code(400).send({ error: "rulesYaml is required" });
-      }
-      try {
-        const result = await sendCommand(
-          "update_alert_rules",
-          { rulesYaml },
-          RULES_TIMEOUT_MS,
-          request.params.id,
-        );
-        return result;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(502).send({ error: msg });
-      }
-    },
   );
 
   // Toggle remediation mode for a runner. Persists to DB (system of record)

@@ -20,11 +20,11 @@ const { mockListContainers, mockListDeployments, mockListStatefulSets } =
     mockListStatefulSets: vi.fn(),
   }));
 
-vi.mock("../docker-client.js", () => ({
+vi.mock("../docker/client.js", () => ({
   getDocker: () => ({ listContainers: mockListContainers }),
 }));
 
-vi.mock("../kubernetes-client.js", () => ({
+vi.mock("../kubernetes/client.js", () => ({
   getAppsV1Api: () => ({
     listDeploymentForAllNamespaces: mockListDeployments,
     listStatefulSetForAllNamespaces: mockListStatefulSets,

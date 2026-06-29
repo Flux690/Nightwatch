@@ -5,7 +5,7 @@ import type { Provider, Tool } from "./tools.js";
 
 // Run policy: which tools an investigation may use and on which providers. All
 // derived from the connected fleet (WS state) and the DB-stored remediation
-// mode; pure reads, recomputed once per run invocation by the loop.
+// mode; pure reads, recomputed each turn by the loop.
 
 // The providers filter (ADR-0002) is keyed on the whole fleet, not just the alerting
 // runner - a mixed-fleet run may call agnostic tools on a sibling. Returns undefined (no

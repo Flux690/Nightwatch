@@ -252,7 +252,6 @@ describe("remediation circuit breaker", () => {
             status: "running",
           },
         ],
-        prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,

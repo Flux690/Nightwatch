@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 const { MockDocker } = vi.hoisted(() => ({ MockDocker: vi.fn() }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
 
-import { getContainerLogs } from "../commands/container.js";
+import { getContainerLogs } from "../docker/commands.js";
 
 const SERVICE = {
   provider: "docker" as const,

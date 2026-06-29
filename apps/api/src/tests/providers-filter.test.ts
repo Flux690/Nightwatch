@@ -207,7 +207,6 @@ describe("providers filter and mismatch rejection", () => {
               status: "running",
             },
           ],
-          prometheus: { available: false },
           postgres: { available: false },
           redis: { available: false },
           hostMetrics: false,
@@ -428,7 +427,6 @@ describe("providers filter and mismatch rejection", () => {
             docker: true,
             kubernetes: false,
             services: [{ identity: RO_SERVICE, status: "running" }],
-            prometheus: { available: false },
             postgres: { available: false },
             redis: { available: false },
             hostMetrics: false,
@@ -486,7 +484,7 @@ describe("providers filter and mismatch rejection", () => {
         expect(mockCreateProvider).toHaveBeenCalled();
         const systemPromptArg = mockCreateProvider.mock.lastCall?.[0] as string;
         expect(systemPromptArg.toLowerCase()).toContain("read-only");
-        expect(systemPromptArg).toContain("REMEDIATION_ENABLED");
+        expect(systemPromptArg).toContain("remediation from the console");
 
         expect(capturedProvider).not.toBeNull();
         const toolsPassedToChat = capturedProvider!.chat.mock.calls[0]?.[0] as
@@ -604,7 +602,6 @@ describe("providers filter and mismatch rejection", () => {
             docker: true,
             kubernetes: false,
             services: [{ identity: DB_SERVICE, status: "running" }],
-            prometheus: { available: false },
             postgres: { available: false },
             redis: { available: false },
             hostMetrics: false,

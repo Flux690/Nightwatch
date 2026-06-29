@@ -1,6 +1,7 @@
-// In-memory remediation mode for this process: seeded from REMEDIATION_ENABLED, updated
-// live by set_remediation_mode pushes. Never persisted, so the runner stays stateless.
-let _enabled = process.env["REMEDIATION_ENABLED"] === "true";
+// In-memory remediation mode, updated live by set_remediation_mode pushes from
+// the API. Defaults to true; the API is the authority and pushes the DB value on
+// each manifest reconciliation. Never persisted, so the runner stays stateless.
+let _enabled = true;
 
 export function isRemediationEnabled(): boolean {
   return _enabled;

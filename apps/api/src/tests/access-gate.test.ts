@@ -107,7 +107,6 @@ describe("access-gate: gating is driven by tool access level", () => {
             status: "running",
           },
         ],
-        prometheus: { available: false },
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,

@@ -6,7 +6,9 @@ import {
   getContainerEvents as dockerGetContainerEvents,
   getContainerProcesses as dockerGetContainerProcesses,
   getEnvVariableNames as dockerGetEnvVariableNames,
-} from "./container.js";
+  restartContainer,
+  execCommand,
+} from "../docker/commands.js";
 import {
   getContainerList as k8sGetContainerList,
   getContainerLogs as k8sGetContainerLogs,
@@ -28,11 +30,6 @@ import {
   getHostDmesg,
 } from "./host.js";
 import { readFileCommand } from "./files.js";
-import {
-  restartContainer,
-  execCommand,
-  updateAlertRules,
-} from "./remediation.js";
 
 type Handler = (input: unknown) => Promise<unknown>;
 
@@ -143,6 +140,5 @@ export function createDispatchRegistry(): Map<string, Handler> {
     ],
     ["get_k8s_rollout_status", direct(k8sGetRolloutStatus)],
     ["get_k8s_node_status", () => k8sGetNodeStatus()],
-    ["update_alert_rules", direct(updateAlertRules)],
   ]);
 }

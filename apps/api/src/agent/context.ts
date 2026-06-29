@@ -27,7 +27,7 @@ Budget: 5 minutes of investigation time (human approval wait excluded). When the
 // instead of attempting a call that was never on the menu.
 const READ_ONLY_ADDENDUM = `
 
-You are in READ-ONLY mode: write tools (restart_service, exec_command) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. To enable remediation, set REMEDIATION_ENABLED=true on the runner and reconnect it.`;
+You are in READ-ONLY mode: write tools (restart_service, exec_command) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. The operator can enable remediation from the console.`;
 
 function systemPromptFor(remediationEnabled: boolean): string {
   return remediationEnabled

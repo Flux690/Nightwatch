@@ -94,10 +94,6 @@ spec:
               value: "{{WS_URL}}"
             - name: NIGHTWATCH_SERVER_NAME
               value: "{{NIGHTWATCH_SERVER_NAME}}"
-            # Set to "true" to enable write actions (rollout restarts etc.).
-            # Defaults to "false" — the runner is read-only until you opt in.
-            # - name: REMEDIATION_ENABLED
-            #   value: "false"
 `;
 
 function buildWsUrl(origin: string): string {

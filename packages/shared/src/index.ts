@@ -29,8 +29,6 @@ export type {
   GetHostNetworkResult,
   GetHostDmesgInput,
   GetHostDmesgResult,
-  QueryPrometheusInput,
-  PrometheusResult,
   GetAlertHistoryInput,
   GetRecentCommitsInput,
   CommitInfo,
@@ -50,7 +48,6 @@ export type {
   MessageDirection,
   WsEnvelope,
   RunnerCommandMessage,
-  UpdateAlertRulesCommand,
   SetRemediationModeMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
@@ -78,7 +75,6 @@ export type {
 export type {
   CapabilityManifest,
   FleetRunner,
-  MetricSnapshot,
   RunnerRecord,
   ServiceManifestEntry,
 } from "./runner.js";
