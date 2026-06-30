@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Text, UnstyledButton } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,21 @@ export function SessionsSidebar(): React.JSX.Element {
     queryKey: ["sessions"],
     queryFn: () => apiFetch<SessionMeta[]>("/api/sessions"),
   });
+
+  const [roveIndex, setRoveIndex] = useState(0);
+  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const activeRoveIndex = Math.min(roveIndex, Math.max(sessions.length - 1, 0));
+
+  function handleRowKeyDown(e: React.KeyboardEvent, index: number): void {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const nextIndex =
+      e.key === "ArrowDown"
+        ? Math.min(index + 1, sessions.length - 1)
+        : Math.max(index - 1, 0);
+    setRoveIndex(nextIndex);
+    rowRefs.current[nextIndex]?.focus();
+  }
 
   const deleteSession = useMutation({
     mutationFn: (sessionId: string) =>
@@ -56,16 +72,25 @@ export function SessionsSidebar(): React.JSX.Element {
     >
       {!isLoading && sessions.length === 0 && (
         <Text size="xs" c="dimmed" p="xs" component="li">
-          No sessions yet.
+          Your sessions will show up here.
         </Text>
       )}
-      {sessions.map((session) => (
+      {sessions.map((session, index) => (
         <li
           key={session.sessionId}
           style={{ display: "flex", alignItems: "center" }}
         >
           <button
+            ref={(el) => {
+              rowRefs.current[index] = el;
+            }}
             className="session-row"
+            data-active={
+              activeSessionId === session.sessionId ? "true" : undefined
+            }
+            tabIndex={index === activeRoveIndex ? 0 : -1}
+            onKeyDown={(e) => handleRowKeyDown(e, index)}
+            onFocus={() => setRoveIndex(index)}
             onClick={() =>
               void navigate({
                 to: "/sessions/$id",
@@ -83,7 +108,7 @@ export function SessionsSidebar(): React.JSX.Element {
               color: "var(--color-ink)",
             }}
           >
-            <Text size="sm" truncate>
+            <Text size="sm" truncate title={session.title}>
               {session.title}
             </Text>
             <Text size="xs" c="dimmed" ff="monospace">

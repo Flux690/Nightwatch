@@ -180,6 +180,13 @@ afterEach(() => {
 
 describe("Shell", () => {
   describe("nav + sidebar structure", () => {
+    it("renders the Nightwatch wordmark in the header", async () => {
+      setup();
+      await waitFor(() => {
+        expect(screen.getByText("Nightwatch")).toBeInTheDocument();
+      });
+    });
+
     it("renders nav links for Fleet and Settings", async () => {
       setup();
       await waitFor(() => {
@@ -190,6 +197,29 @@ describe("Shell", () => {
           screen.getByRole("link", { name: /settings/i }),
         ).toBeInTheDocument();
       });
+    });
+
+    it("footer nav is Fleet, Settings, Audit, Unresolved alerts in that order", async () => {
+      setup();
+      await waitFor(() =>
+        expect(
+          screen.getByRole("link", { name: /fleet/i }),
+        ).toBeInTheDocument(),
+      );
+
+      const footerLinkNames = [
+        "Fleet",
+        "Settings",
+        "Audit log",
+        "Unresolved alerts",
+      ];
+      const links = footerLinkNames.map((name) =>
+        screen.getByRole("link", { name }),
+      );
+      const positions = links.map((link) =>
+        Array.from(document.querySelectorAll<HTMLElement>("a")).indexOf(link),
+      );
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
     });
 
     it("renders the sessions sidebar with existing session rows", async () => {
@@ -666,6 +696,110 @@ describe("Shell", () => {
       expect(
         screen.queryByRole("status", { name: /awaiting approval/i }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("accessibility", () => {
+    it("renders a skip-to-content link pointing at the main content landmark", async () => {
+      setup();
+      await waitFor(() => {
+        expect(screen.getByText(/skip to content/i)).toBeInTheDocument();
+      });
+
+      const skipLink = screen.getByRole("link", { name: /skip to content/i });
+      expect(skipLink).toHaveAttribute("href", "#main-content");
+      expect(document.getElementById("main-content")).toBeInTheDocument();
+    });
+  });
+
+  describe("responsive drawer (below md)", () => {
+    function setupMobile(pendingCount = 0) {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn().mockImplementation((query: string) => ({
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+      return setup(pendingCount);
+    }
+
+    it("hides the persistent rail and shows a hamburger trigger instead", async () => {
+      setupMobile();
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /open menu/i }),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole("link", { name: /fleet/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("opens the drawer with the sidebar content when the hamburger is clicked", async () => {
+      const user = userEvent.setup();
+      setupMobile();
+      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
+      await user.click(screen.getByRole("button", { name: /open menu/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("link", { name: /fleet/i }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: /new session/i }),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it("closes on Escape and restores focus to the hamburger button", async () => {
+      const user = userEvent.setup();
+      setupMobile();
+      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
+      const hamburger = screen.getByRole("button", { name: /open menu/i });
+      await user.click(hamburger);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("link", { name: /fleet/i }),
+        ).toBeInTheDocument();
+      });
+
+      await user.keyboard("{Escape}");
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("link", { name: /fleet/i }),
+        ).not.toBeInTheDocument();
+      });
+      expect(hamburger).toHaveFocus();
+    });
+
+    it("closes the drawer after navigating via a footer nav link", async () => {
+      const user = userEvent.setup();
+      setupMobile();
+      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
+      await user.click(screen.getByRole("button", { name: /open menu/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("link", { name: /fleet/i }),
+        ).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Fleet Page")).toBeInTheDocument();
+        expect(
+          screen.queryByRole("link", { name: /fleet/i }),
+        ).not.toBeInTheDocument();
+      });
     });
   });
 

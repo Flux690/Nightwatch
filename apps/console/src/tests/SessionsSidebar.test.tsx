@@ -29,6 +29,13 @@ const SESSION_1 = {
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
 };
 
+const SESSION_2 = {
+  sessionId: "s2",
+  token: "tok-1",
+  title: "Disk full on db-02",
+  createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
+};
+
 function setupWithSessionsError() {
   vi.stubGlobal(
     "WebSocket",
@@ -87,7 +94,11 @@ function setupWithSessionsError() {
   );
 }
 
-function setup(sessions: object[] = [SESSION_1], deleteOk = true) {
+function setup(
+  sessions: object[] = [SESSION_1],
+  deleteOk = true,
+  initialPath = "/sessions",
+) {
   vi.stubGlobal(
     "WebSocket",
     class {
@@ -133,11 +144,21 @@ function setup(sessions: object[] = [SESSION_1], deleteOk = true) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const root = createRootRoute({ component: Outlet });
+  // Mirrors Shell.tsx: SessionsSidebar is mounted once at the layout level and
+  // stays up across /sessions <-> /sessions/$id, reading the active id via
+  // useParams({ strict: false }) rather than being the route's own component.
+  const root = createRootRoute({
+    component: () => (
+      <>
+        <SessionsSidebar />
+        <Outlet />
+      </>
+    ),
+  });
   const sessionsRoute = createRoute({
     getParentRoute: () => root,
     path: "/sessions",
-    component: SessionsSidebar,
+    component: () => null,
   });
   const sessionIdRoute = createRoute({
     getParentRoute: () => root,
@@ -146,7 +167,7 @@ function setup(sessions: object[] = [SESSION_1], deleteOk = true) {
   });
   const router = createRouter({
     routeTree: root.addChildren([sessionsRoute, sessionIdRoute]),
-    history: createMemoryHistory({ initialEntries: ["/sessions"] }),
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
 
   render(
@@ -188,7 +209,9 @@ describe("SessionsSidebar", () => {
       setup([]);
 
       await waitFor(() => {
-        expect(screen.getByText(/no sessions yet/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/your sessions will show up here/i),
+        ).toBeInTheDocument();
       });
     });
 
@@ -198,6 +221,19 @@ describe("SessionsSidebar", () => {
       await waitFor(() => {
         expect(screen.getByText(/ago/i)).toBeInTheDocument();
       });
+    });
+
+    it("gives each session row an accessible title attribute with the full title", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("CPU spike on web-01")).toHaveAttribute(
+        "title",
+        "CPU spike on web-01",
+      );
     });
 
     it("renders no status badge on session rows", async () => {
@@ -281,6 +317,75 @@ describe("SessionsSidebar", () => {
       await user.click(screen.getByRole("button", { name: /delete session/i }));
 
       expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+    });
+  });
+
+  describe("active session", () => {
+    it("marks the row for the currently open session as active", async () => {
+      setup([SESSION_1], true, "/sessions/s1");
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("button", { name: /CPU spike on web-01/i }),
+      ).toHaveAttribute("data-active", "true");
+    });
+
+    it("does not mark any row as active when no session is open", async () => {
+      setup([SESSION_1], true, "/sessions");
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("button", { name: /CPU spike on web-01/i }),
+      ).not.toHaveAttribute("data-active");
+    });
+  });
+
+  describe("keyboard navigation", () => {
+    it("only the first row is in the tab order; the rest are tabIndex -1", async () => {
+      setup([SESSION_1, SESSION_2]);
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      const firstRow = screen.getByRole("button", {
+        name: /CPU spike on web-01/i,
+      });
+      const secondRow = screen.getByRole("button", {
+        name: /Disk full on db-02/i,
+      });
+      expect(firstRow).toHaveAttribute("tabindex", "0");
+      expect(secondRow).toHaveAttribute("tabindex", "-1");
+    });
+
+    it("ArrowDown moves focus to the next row and ArrowUp moves back, updating the tab order", async () => {
+      const user = userEvent.setup();
+      setup([SESSION_1, SESSION_2]);
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+
+      const firstRow = screen.getByRole("button", {
+        name: /CPU spike on web-01/i,
+      });
+      const secondRow = screen.getByRole("button", {
+        name: /Disk full on db-02/i,
+      });
+
+      firstRow.focus();
+      await user.keyboard("{ArrowDown}");
+      expect(secondRow).toHaveFocus();
+      expect(secondRow).toHaveAttribute("tabindex", "0");
+      expect(firstRow).toHaveAttribute("tabindex", "-1");
+
+      await user.keyboard("{ArrowUp}");
+      expect(firstRow).toHaveFocus();
+      expect(firstRow).toHaveAttribute("tabindex", "0");
     });
   });
 

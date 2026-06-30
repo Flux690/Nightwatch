@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell, Tooltip, UnstyledButton, Text } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   Outlet,
   useNavigate,
@@ -11,6 +12,7 @@ import {
   Plus,
   Settings,
   LogOut,
+  Menu as MenuIcon,
   PanelRightClose,
   PanelRightOpen,
   ChevronRight,
@@ -21,6 +23,7 @@ import {
 import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
 import { useSidebarExpanded } from "../hooks/useSidebarExpanded.js";
+import { Drawer } from "../ui/Drawer.js";
 import { SideRow, RAIL_WIDTH, EXPANDED_WIDTH, NAV_PAD } from "./SideRow.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
@@ -31,37 +34,34 @@ const TRANSITION = "200ms ease";
 export function Shell(): React.JSX.Element {
   const [expanded, toggleExpanded] = useSidebarExpanded();
   const [sessionsOpen, setSessionsOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const params = useParams({ strict: false }) as { id?: string };
   const attentionCount = useAttentionCount();
   const { phase, logout } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery("(max-width: 767px)");
 
   const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
   const ownerEmail = phase.kind === "authenticated" ? phase.email : null;
 
-  return (
-    <AppShell
-      navbar={{
-        width: expanded ? EXPANDED_WIDTH : RAIL_WIDTH,
-        breakpoint: 0,
-      }}
-      padding={0}
-      styles={{ main: { background: "var(--color-canvas)" } }}
-    >
-      <AppShell.Navbar
-        style={{
-          background: "var(--color-surface)",
-          borderRight: "1px solid var(--color-line)",
-          display: "flex",
-          flexDirection: "column",
-          padding: NAV_PAD,
-          gap: 4,
-          overflow: "hidden",
-          transition: `width ${TRANSITION}`,
-        }}
-      >
+  // Closes the drawer on any navigation - links, New session, and session
+  // rows all change the route, so this one effect covers every case.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Shared between the persistent desktop rail and the mobile drawer body.
+  // navExpanded is forced true for the drawer, which has no rail/collapsed
+  // state of its own; showToggle hides the (meaningless, off-canvas) collapse
+  // button there.
+  function navContent(
+    navExpanded: boolean,
+    showToggle: boolean,
+  ): React.ReactNode {
+    return (
+      <>
         <div
           style={{
             display: "flex",
@@ -70,30 +70,42 @@ export function Shell(): React.JSX.Element {
             flexShrink: 0,
           }}
         >
-          <Tooltip
-            label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-            position="right"
-            withArrow
-            disabled={expanded}
-          >
-            <UnstyledButton
-              className="side-toggle"
-              aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-              onClick={toggleExpanded}
+          {navExpanded && (
+            <Text
+              size="sm"
+              fw={650}
+              className="side-nowrap"
+              style={{ paddingInlineStart: 4 }}
             >
-              {expanded ? (
-                <PanelRightClose {...ICON_PROPS} />
-              ) : (
-                <PanelRightOpen {...ICON_PROPS} />
-              )}
-            </UnstyledButton>
-          </Tooltip>
+              Nightwatch
+            </Text>
+          )}
+          {showToggle && (
+            <Tooltip
+              label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+              position="right"
+              withArrow
+              disabled={expanded}
+            >
+              <UnstyledButton
+                className="side-toggle"
+                aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+                onClick={toggleExpanded}
+              >
+                {expanded ? (
+                  <PanelRightClose {...ICON_PROPS} />
+                ) : (
+                  <PanelRightOpen {...ICON_PROPS} />
+                )}
+              </UnstyledButton>
+            </Tooltip>
+          )}
         </div>
 
         <SideRow
           icon={<Plus {...ICON_PROPS} />}
           label="New session"
-          expanded={expanded}
+          expanded={navExpanded}
           onClick={() => void navigate({ to: "/" })}
           primary
         />
@@ -114,14 +126,16 @@ export function Shell(): React.JSX.Element {
               overflow: "hidden",
             }}
           >
-            <span className="side-row__icon">{attentionCount}</span>
-            {expanded && (
+            <span className="side-row__icon">
+              {attentionCount > 99 ? "99+" : attentionCount}
+            </span>
+            {navExpanded && (
               <span className="side-row__label">awaiting approval</span>
             )}
           </div>
         )}
 
-        {expanded ? (
+        {navExpanded ? (
           <div
             style={{
               flex: 1,
@@ -152,6 +166,7 @@ export function Shell(): React.JSX.Element {
                 fw={700}
                 tt="uppercase"
                 c="dimmed"
+                className="side-nowrap"
                 style={{ letterSpacing: "0.06em" }}
               >
                 Recent sessions
@@ -186,25 +201,25 @@ export function Shell(): React.JSX.Element {
             icon={<Network {...ICON_PROPS} />}
             label="Fleet"
             to="/fleet"
-            expanded={expanded}
-          />
-          <SideRow
-            icon={<ScrollText {...ICON_PROPS} />}
-            label="Audit log"
-            to="/audit"
-            expanded={expanded}
-          />
-          <SideRow
-            icon={<AlertCircle {...ICON_PROPS} />}
-            label="Unresolved alerts"
-            to="/unresolved-alerts"
-            expanded={expanded}
+            expanded={navExpanded}
           />
           <SideRow
             icon={<Settings {...ICON_PROPS} />}
             label="Settings"
             to="/settings"
-            expanded={expanded}
+            expanded={navExpanded}
+          />
+          <SideRow
+            icon={<ScrollText {...ICON_PROPS} />}
+            label="Audit log"
+            to="/audit"
+            expanded={navExpanded}
+          />
+          <SideRow
+            icon={<AlertCircle {...ICON_PROPS} />}
+            label="Unresolved alerts"
+            to="/unresolved-alerts"
+            expanded={navExpanded}
           />
         </div>
 
@@ -223,16 +238,8 @@ export function Shell(): React.JSX.Element {
               overflow: "hidden",
             }}
           >
-            {expanded && ownerEmail && (
-              <Text
-                size="xs"
-                c="dimmed"
-                style={{
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
+            {navExpanded && ownerEmail && (
+              <Text size="xs" c="dimmed" className="side-nowrap">
                 {ownerEmail}
               </Text>
             )}
@@ -240,29 +247,93 @@ export function Shell(): React.JSX.Element {
           <SideRow
             icon={<LogOut {...ICON_PROPS} />}
             label="Log out"
-            expanded={expanded}
+            expanded={navExpanded}
             onClick={() => void logout()}
           />
         </div>
-      </AppShell.Navbar>
+      </>
+    );
+  }
 
-      <AppShell.Main
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100vh",
-          transition: `padding ${TRANSITION}`,
-          // Session area manages its own internal scroll; other pages (Settings,
-          // Fleet) need the main container to scroll normally.
-          overflow: isSessionArea ? "hidden" : "auto",
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
+
+      {isMobile && (
+        <div className="mobile-topbar">
+          <UnstyledButton
+            aria-label="Open menu"
+            onClick={() => setDrawerOpen(true)}
+            style={{ display: "flex" }}
+          >
+            <MenuIcon {...ICON_PROPS} />
+          </UnstyledButton>
+          <Text size="sm" fw={650}>
+            Nightwatch
+          </Text>
+        </div>
+      )}
+
+      <AppShell
+        navbar={{
+          width: isMobile ? 0 : expanded ? EXPANDED_WIDTH : RAIL_WIDTH,
+          breakpoint: 0,
         }}
+        padding={0}
+        styles={{ main: { background: "var(--color-canvas)" } }}
+        style={{ flex: 1, minHeight: 0 }}
       >
-        {isSessionArea ? (
-          <SessionView sessionId={params.id ?? null} />
-        ) : (
-          <Outlet />
+        {!isMobile && (
+          <AppShell.Navbar
+            style={{
+              background: "var(--color-surface)",
+              borderRight: "1px solid var(--color-line)",
+              display: "flex",
+              flexDirection: "column",
+              padding: NAV_PAD,
+              gap: 4,
+              overflow: "hidden",
+              transition: `width ${TRANSITION}`,
+            }}
+          >
+            {navContent(expanded, true)}
+          </AppShell.Navbar>
         )}
-      </AppShell.Main>
-    </AppShell>
+
+        <AppShell.Main
+          id="main-content"
+          tabIndex={-1}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100%",
+            transition: `padding ${TRANSITION}`,
+            // Session area manages its own internal scroll; other pages (Settings,
+            // Fleet) need the main container to scroll normally.
+            overflow: isSessionArea ? "hidden" : "auto",
+          }}
+        >
+          {isSessionArea ? (
+            <SessionView sessionId={params.id ?? null} />
+          ) : (
+            <Outlet />
+          )}
+        </AppShell.Main>
+      </AppShell>
+
+      {isMobile && (
+        <Drawer
+          opened={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          position="left"
+          size={EXPANDED_WIDTH}
+          withCloseButton={false}
+        >
+          {navContent(true, false)}
+        </Drawer>
+      )}
+    </div>
   );
 }
