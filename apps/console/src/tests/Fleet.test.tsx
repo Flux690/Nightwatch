@@ -2,7 +2,7 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
 import { FleetPage } from "../pages/Fleet.js";
@@ -112,11 +112,11 @@ function setup(runners: RunnerRecord[] = []) {
   });
 
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <FleetPage />
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { fetchMock, qc };
@@ -198,11 +198,11 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <HeadlessMantineProvider>
+        <TestProviders>
           <QueryClientProvider client={qc}>
             <FleetPage />
           </QueryClientProvider>
-        </HeadlessMantineProvider>,
+        </TestProviders>,
       );
 
       await act(async () => {
@@ -291,11 +291,11 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <HeadlessMantineProvider>
+        <TestProviders>
           <QueryClientProvider client={qc}>
             <FleetPage />
           </QueryClientProvider>
-        </HeadlessMantineProvider>,
+        </TestProviders>,
       );
 
       await waitFor(() => {

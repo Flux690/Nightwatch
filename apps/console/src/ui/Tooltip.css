@@ -1,0 +1,15 @@
+.tooltip {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--color-card);
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 300;
+}
+.tooltip__arrow {
+  background: var(--color-accent);
+}

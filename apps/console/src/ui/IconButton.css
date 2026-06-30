@@ -24,10 +24,6 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.icon-btn[data-variant="ghost"] {
-  background: transparent;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .icon-btn {
     transition: none;

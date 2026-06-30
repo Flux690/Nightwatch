@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -42,11 +42,11 @@ function buildRouter() {
 function setupWithMock(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <AuthProvider>
         <RouterProvider router={buildRouter()} />
       </AuthProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
   return { fetchMock };
 }

@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  Button,
-  Center,
-  PasswordInput,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 
+import { Alert } from "../ui/Alert.js";
+import { Button } from "../ui/Button.js";
+import { Center } from "../ui/Center.js";
+import { PasswordInput } from "../ui/PasswordInput.js";
+import { Stack } from "../ui/Stack.js";
+import { Text } from "../ui/Text.js";
+import { TextInput } from "../ui/TextInput.js";
+import { Title } from "../ui/Title.js";
 import { useAuth } from "../auth/AuthContext.js";
 
 const MIN_PASSWORD = 12;
@@ -25,8 +23,6 @@ function SetupForm(): React.JSX.Element {
   const [serverError, setServerError] = useState("");
 
   function validatePassword(value: string): boolean {
-    // An untouched empty field is not yet a violation of this rule - the
-    // required attribute handles blocking an empty submission.
     if (value === "") {
       setPasswordError("");
       return true;
@@ -65,12 +61,12 @@ function SetupForm(): React.JSX.Element {
       onSubmit={(e) => void handleSubmit(e)}
       style={{ width: "100%", maxWidth: 360 }}
     >
-      <Stack gap="sm">
-        <Title order={2} size="h4">
+      <Stack className="gap-3">
+        <Title order={2} className="text-lg">
           Create your account
         </Title>
         <Alert
-          color="red"
+          intent="error"
           style={{ visibility: serverError ? "visible" : "hidden" }}
         >
           {serverError || " "}
@@ -92,10 +88,11 @@ function SetupForm(): React.JSX.Element {
             onBlur={(e) => validatePassword(e.currentTarget.value)}
           />
           <Text
-            size="xs"
-            c="red"
-            mih={18}
-            style={{ visibility: passwordError ? "visible" : "hidden" }}
+            className="text-xs text-status-failed"
+            style={{
+              minHeight: 18,
+              visibility: passwordError ? "visible" : "hidden",
+            }}
           >
             {passwordError || " "}
           </Text>
@@ -110,10 +107,11 @@ function SetupForm(): React.JSX.Element {
             onBlur={(e) => validateConfirm(e.currentTarget.value, password)}
           />
           <Text
-            size="xs"
-            c="red"
-            mih={18}
-            style={{ visibility: confirmError ? "visible" : "hidden" }}
+            className="text-xs text-status-failed"
+            style={{
+              minHeight: 18,
+              visibility: confirmError ? "visible" : "hidden",
+            }}
           >
             {confirmError || " "}
           </Text>
@@ -141,12 +139,12 @@ function LoginForm(): React.JSX.Element {
       onSubmit={(e) => void handleSubmit(e)}
       style={{ width: "100%", maxWidth: 360 }}
     >
-      <Stack gap="sm">
-        <Title order={2} size="h4">
+      <Stack className="gap-3">
+        <Title order={2} className="text-lg">
           Log in
         </Title>
         <Alert
-          color="red"
+          intent="error"
           style={{ visibility: serverError ? "visible" : "hidden" }}
         >
           {serverError || " "}
@@ -175,15 +173,13 @@ export function LoginPage(): React.JSX.Element | null {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Reachable directly (bookmark, manual URL, refresh) even once already
-    // authenticated - send the operator home instead of re-showing a form.
     if (phase.kind === "authenticated") void navigate({ to: "/" });
   }, [phase.kind, navigate]);
 
   if (phase.kind === "loading" || phase.kind === "authenticated") return null;
 
   return (
-    <Center mih="100vh" p="md">
+    <Center className="min-h-screen p-4">
       {phase.kind === "needs-setup" ? <SetupForm /> : <LoginForm />}
     </Center>
   );

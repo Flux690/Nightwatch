@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
@@ -14,7 +14,7 @@ function wrap(
   },
 ): void {
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <div
         data-testid="transcript-column"
         style={{ maxWidth: 860, margin: "0 auto", padding: "0 16px" }}
@@ -25,7 +25,7 @@ function wrap(
           onAnswer={opts?.onAnswer}
         />
       </div>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 }
 

@@ -1,23 +1,28 @@
 import "./IconButton.css";
 
-import React from "react";
+import { ActionIcon as MantineActionIcon } from "@mantine/core";
 
-type IconButtonVariant = "default" | "ghost";
-
-type IconButtonProps = React.ComponentPropsWithoutRef<"button"> & {
-  variant?: IconButtonVariant;
+type IconButtonProps = {
   "aria-label": string;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
+  loading?: boolean;
+  className?: string;
+  children: React.ReactNode;
 };
 
-export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
-  function IconButton({ variant = "default", className, ...rest }, ref) {
-    return (
-      <button
-        ref={ref}
-        className={className ? `icon-btn ${className}` : "icon-btn"}
-        data-variant={variant}
-        {...rest}
-      />
-    );
-  },
-);
+export function IconButton({
+  className,
+  ...props
+}: IconButtonProps): React.JSX.Element {
+  return (
+    <MantineActionIcon
+      unstyled
+      classNames={{
+        root: className ? `icon-btn ${className}` : "icon-btn",
+        loader: "icon-btn__loader",
+      }}
+      {...props}
+    />
+  );
+}

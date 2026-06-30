@@ -1,8 +1,6 @@
-import { Text } from "@mantine/core";
+import { Text } from "../ui/Text.js";
 import type { ToolCardItem } from "./types.js";
 
-// The IN/OUT block shared by the standalone tool card and the resolved
-// approval/clarification cards; result === null renders the in-flight placeholder.
 export function ToolCardPanel({
   toolName,
   input,
@@ -10,19 +8,25 @@ export function ToolCardPanel({
 }: Pick<ToolCardItem, "toolName" | "input" | "result">): React.JSX.Element {
   return (
     <div>
-      <Text size="xs" ff="monospace" fw={600} mb={4}>
+      <Text
+        className="text-xs font-mono font-semibold"
+        style={{ marginBottom: 4 }}
+      >
         {toolName}
       </Text>
       <div
         style={{
           border: "1px solid var(--color-line)",
-          borderRadius: "var(--mantine-radius-sm)",
+          borderRadius: "var(--radius-sm)",
           background: "var(--color-surface)",
           overflow: "hidden",
         }}
       >
-        <div style={{ padding: "var(--mantine-spacing-xs)" }}>
-          <Text size="xs" c="dimmed" ff="monospace" mb={4}>
+        <div style={{ padding: 4 }}>
+          <Text
+            className="text-xs text-ink-muted font-mono"
+            style={{ marginBottom: 4 }}
+          >
             IN
           </Text>
           <pre
@@ -38,15 +42,16 @@ export function ToolCardPanel({
           </pre>
         </div>
         <div style={{ borderTop: "1px solid var(--color-line)" }} />
-        <div style={{ padding: "var(--mantine-spacing-xs)" }}>
-          <Text size="xs" c="dimmed" ff="monospace" mb={4}>
+        <div style={{ padding: 4 }}>
+          <Text
+            className="text-xs text-ink-muted font-mono"
+            style={{ marginBottom: 4 }}
+          >
             OUT
           </Text>
           {result === null ? (
             <Text
-              size="xs"
-              c="dimmed"
-              ff="monospace"
+              className="text-xs text-ink-muted font-mono"
               data-testid="tool-card-out-loading"
             >
               …

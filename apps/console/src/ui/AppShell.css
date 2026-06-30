@@ -1,0 +1,9 @@
+.app-shell {
+  display: flex;
+  height: 100%;
+}
+.app-shell__main {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-canvas);
+}

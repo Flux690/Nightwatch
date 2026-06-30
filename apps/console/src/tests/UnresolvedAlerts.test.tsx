@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 
 import { UnresolvedAlertsPage } from "../pages/UnresolvedAlerts.js";
@@ -43,11 +43,11 @@ function setup(alerts: UnresolvedAlertRecord[] = []) {
   });
 
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <UnresolvedAlertsPage />
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { fetchMock };
@@ -114,11 +114,11 @@ describe("UnresolvedAlertsPage", () => {
     });
 
     render(
-      <HeadlessMantineProvider>
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <UnresolvedAlertsPage />
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     await waitFor(() => {

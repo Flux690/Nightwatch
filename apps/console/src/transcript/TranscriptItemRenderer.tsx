@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Text, UnstyledButton } from "@mantine/core";
+import { Text } from "../ui/Text.js";
+import { UnstyledButton } from "../ui/UnstyledButton.js";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { TranscriptItem, ThinkingItem } from "./types.js";
@@ -22,11 +23,11 @@ function UserBubble({ text }: { text: string }): React.JSX.Element {
           maxWidth: "75%",
           background: "var(--color-surface-hover)",
           border: "1px solid var(--color-line)",
-          borderRadius: "var(--mantine-radius-md)",
-          padding: "var(--mantine-spacing-xs) var(--mantine-spacing-sm)",
+          borderRadius: "var(--radius-md)",
+          padding: "4px 8px",
         }}
       >
-        <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+        <Text className="text-sm" style={{ whiteSpace: "pre-wrap" }}>
           {text}
         </Text>
       </div>
@@ -38,7 +39,7 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
     <div
       style={{
-        fontSize: "var(--mantine-font-size-sm)",
+        fontSize: "0.875rem",
         lineHeight: 1.6,
       }}
     >
@@ -48,8 +49,6 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
 }
 
 function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
-  // Always starts collapsed, live or reloaded alike - the operator opens it
-  // explicitly; nothing auto-expands or forces it shut.
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -59,21 +58,17 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
         style={{ display: "flex", alignItems: "center", gap: 6 }}
       >
         <Text
-          size="xs"
-          c="dimmed"
-          fw={600}
-          className={item.streaming ? "thinking-pulse" : undefined}
+          className={`text-xs text-ink-muted font-semibold${item.streaming ? " thinking-pulse" : ""}`}
         >
           Thinking
         </Text>
-        <Text size="xs" c="dimmed" aria-hidden="true">
+        <Text className="text-xs text-ink-muted" aria-hidden="true">
           {expanded ? "▾" : "▸"}
         </Text>
       </UnstyledButton>
       <div style={{ display: expanded ? "block" : "none" }}>
         <Text
-          size="xs"
-          c="dimmed"
+          className="text-xs text-ink-muted"
           style={{ whiteSpace: "pre-wrap", paddingLeft: 16, paddingTop: 4 }}
         >
           {item.text}
@@ -83,8 +78,6 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
   );
 }
 
-// Dispatches a transcript item to its card/block; each card type lives in its own
-// file, this only routes by kind and threads the resolve/answer callbacks.
 export function TranscriptItemRenderer({
   item,
   onResolve,

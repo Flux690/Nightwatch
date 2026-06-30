@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { Button, Checkbox, Radio, Text, Textarea } from "@mantine/core";
+import { Button } from "../ui/Button.js";
+import { Checkbox } from "../ui/Checkbox.js";
+import { Radio, RadioGroup } from "../ui/Radio.js";
+import { Text } from "../ui/Text.js";
+import { Textarea } from "../ui/Textarea.js";
 import type { ClarificationCardItem } from "./types.js";
 import { ToolCardPanel } from "./ToolCardPanel.js";
 
@@ -16,9 +20,6 @@ export function ClarificationCardPanel({
   const resolved = item.approval === "answered";
   const disabled = item.approval === "pending";
 
-  // The request_clarification tool description tells the LLM the UI already
-  // offers a free-text Other answer, so it should never include one of its
-  // own in options.
   const options = item.options ?? [];
 
   function toggleOption(label: string): void {
@@ -70,17 +71,15 @@ export function ClarificationCardPanel({
         data-testid="clarification-card"
         style={{
           border: "1px solid var(--color-status-awaiting)",
-          borderRadius: "var(--mantine-radius-sm)",
+          borderRadius: "var(--radius-sm)",
           background: "var(--color-surface)",
-          padding: "var(--mantine-spacing-xs)",
-          marginBottom: "var(--mantine-spacing-xs)",
+          padding: 4,
+          marginBottom: 4,
         }}
       >
-        <Text size="xs" mb="xs">
-          {item.question}
-        </Text>
+        <Text className="text-xs mb-2">{item.question}</Text>
         {resolved ? (
-          <Text size="xs" data-testid="clarification-resolution">
+          <Text className="text-xs" data-testid="clarification-resolution">
             Answered{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
           </Text>
         ) : (
@@ -88,7 +87,7 @@ export function ClarificationCardPanel({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "var(--mantine-spacing-xs)",
+              gap: 4,
             }}
           >
             {item.multiSelect ? (
@@ -110,7 +109,7 @@ export function ClarificationCardPanel({
                 />
               </>
             ) : (
-              <Radio.Group
+              <RadioGroup
                 value={otherChecked ? "__other__" : (selected[0] ?? "")}
                 onChange={(value) => {
                   if (value === "__other__") {
@@ -124,7 +123,7 @@ export function ClarificationCardPanel({
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    gap: "var(--mantine-spacing-xs)",
+                    gap: 4,
                   }}
                 >
                   {options.map((opt) => (
@@ -137,11 +136,10 @@ export function ClarificationCardPanel({
                   ))}
                   <Radio value="__other__" label="Other" disabled={disabled} />
                 </div>
-              </Radio.Group>
+              </RadioGroup>
             )}
             {otherChecked && (
               <Textarea
-                size="xs"
                 placeholder="Type your answer…"
                 value={otherText}
                 onChange={(e) => setOtherText(e.currentTarget.value)}

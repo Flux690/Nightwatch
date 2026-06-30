@@ -2,7 +2,13 @@ import "./Toast.css";
 
 import { Notifications, notifications } from "@mantine/notifications";
 
-import type { NotificationData } from "@mantine/notifications";
+type ToastVariant = "info" | "success" | "error";
+
+type ShowProps = {
+  title?: string;
+  message: string;
+  variant?: ToastVariant;
+};
 
 export function ToastContainer(): React.JSX.Element {
   return (
@@ -12,16 +18,12 @@ export function ToastContainer(): React.JSX.Element {
   );
 }
 
-type ShowProps = Omit<NotificationData, "message"> & {
-  message: string;
-};
-
 export const toast = {
-  show(props: ShowProps): void {
+  show({ variant = "info", ...props }: ShowProps): void {
     notifications.show({
       ...props,
       classNames: {
-        root: "toast",
+        root: `toast toast--${variant}`,
         title: "toast__title",
         description: "toast__description",
         closeButton: "toast__close",
@@ -30,18 +32,14 @@ export const toast = {
   },
 
   success(message: string): void {
-    toast.show({
-      message,
-      color: "var(--color-status-running)",
-      title: "Success",
-    });
+    toast.show({ message, variant: "success", title: "Success" });
   },
 
   error(message: string): void {
-    toast.show({
-      message,
-      color: "var(--color-status-failed)",
-      title: "Error",
-    });
+    toast.show({ message, variant: "error", title: "Error" });
+  },
+
+  clean(): void {
+    notifications.clean();
   },
 } as const;

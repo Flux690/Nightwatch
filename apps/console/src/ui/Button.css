@@ -2,7 +2,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 650;
@@ -14,6 +13,16 @@
   cursor: pointer;
   transition: background-color var(--duration-fast) var(--ease-out);
 }
+.btn__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn__loader {
+  display: flex;
+  align-items: center;
+}
 .btn:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
@@ -23,6 +32,16 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.btn[data-size="sm"] {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+.btn[data-size="xs"] {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 .btn[data-variant="primary"] {
   background: var(--color-accent);
   color: var(--color-card);

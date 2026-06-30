@@ -1,14 +1,12 @@
 import { useState } from "react";
-import {
-  ActionIcon,
-  Alert,
-  Button,
-  Code,
-  Group,
-  Stack,
-  Text,
-} from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
+import { Alert } from "../ui/Alert.js";
+import { Button } from "../ui/Button.js";
+import { Code } from "../ui/Code.js";
+import { Group } from "../ui/Group.js";
+import { IconButton } from "../ui/IconButton.js";
+import { Stack } from "../ui/Stack.js";
+import { Text } from "../ui/Text.js";
 import { apiFetch } from "../api/client.js";
 import type { Provider } from "./AddServerWizard.js";
 
@@ -20,9 +18,6 @@ interface ValidateAlertResult {
     | { status: "rejected"; reason: string };
 }
 
-// A synthetic alert sent through /alerts/validate to confirm the credential
-// and the basic webhook shape work end-to-end before the operator wires up
-// their real monitoring labels.
 function sampleWebhookPayload(provider: Provider, serverName: string): unknown {
   const labels =
     provider === "docker"
@@ -61,33 +56,27 @@ function CopyableSnippet({
 }): React.JSX.Element {
   const text = lines.join("\n");
   return (
-    <Group gap="xs" align="flex-start" wrap="nowrap">
+    <Group className="gap-2 items-start flex-nowrap">
       <Code
         block
         style={{
           flex: 1,
-          fontFamily: "var(--font-mono)",
           whiteSpace: "pre-wrap",
           wordBreak: "break-all",
         }}
       >
         {text}
       </Code>
-      <ActionIcon
-        variant="default"
-        size="lg"
+      <IconButton
         aria-label={label}
         onClick={() => void navigator.clipboard.writeText(text)}
       >
         ⧉
-      </ActionIcon>
+      </IconButton>
     </Group>
   );
 }
 
-// Bring-your-own monitoring panel for the Install step. The fleet ingest credential
-// is fetched by the wizard and passed in, so the two config snippets - the Prometheus
-// server label and the Alertmanager webhook - are shown inline, no reveal step.
 export function WizardMonitoringStep({
   provider,
   trimmedServerName,
@@ -118,7 +107,6 @@ export function WizardMonitoringStep({
         },
         body: JSON.stringify(sampleWebhookPayload(provider, trimmedServerName)),
       });
-      // A 2xx with no alerts still means the test didn't resolve; surface it.
       if (!body.alerts) throw new Error(body.error ?? "Test webhook failed");
       return body.alerts;
     },
@@ -131,17 +119,17 @@ export function WizardMonitoringStep({
   });
 
   return (
-    <Alert color="blue" title="Bring-your-own monitoring">
-      <Stack gap="md">
-        <Text size="sm">
+    <Alert intent="info" title="Bring-your-own monitoring">
+      <Stack className="gap-4">
+        <Text className="text-sm">
           Wire your own Prometheus and Alertmanager to Nightwatch. Every server
           shares this one ingest credential; the server label tells Nightwatch
           which server an alert is about.
         </Text>
 
         {provider === "docker" && trimmedServerName && (
-          <Stack gap="xs">
-            <Text size="sm" fw={600}>
+          <Stack className="gap-2">
+            <Text className="text-sm font-semibold">
               1. In your Prometheus &mdash; stamp the server label
             </Text>
             <CopyableSnippet
@@ -155,22 +143,18 @@ export function WizardMonitoringStep({
           </Stack>
         )}
 
-        <Stack gap="xs">
-          <Text size="sm" fw={600}>
+        <Stack className="gap-2">
+          <Text className="text-sm font-semibold">
             2. In your Alertmanager &mdash; forward alerts to Nightwatch
           </Text>
 
-          <Text size="xs" c="dimmed">
-            Webhook URL
-          </Text>
+          <Text className="text-xs text-ink-muted">Webhook URL</Text>
           <CopyableSnippet label="Copy webhook URL" lines={[ingestUrl]} />
 
-          <Text size="xs" c="dimmed">
-            Auth (Bearer token)
-          </Text>
+          <Text className="text-xs text-ink-muted">Auth (Bearer token)</Text>
           <CopyableSnippet label="Copy ingest token" lines={[ingestToken]} />
 
-          <Text size="xs" c="dimmed">
+          <Text className="text-xs text-ink-muted">
             Or paste this receiver directly:
           </Text>
           <CopyableSnippet
@@ -188,10 +172,10 @@ export function WizardMonitoringStep({
           />
         </Stack>
 
-        <Stack gap="xs">
+        <Stack className="gap-2">
           <Button
             size="xs"
-            variant="default"
+            variant="secondary"
             style={{ alignSelf: "flex-start" }}
             loading={testWebhook.isPending}
             onClick={() => testWebhook.mutate()}
@@ -203,8 +187,8 @@ export function WizardMonitoringStep({
             webhookTestResult.results.map((result) => (
               <Alert
                 key={result.sourceAlertId}
-                color={
-                  result.resolution.status === "resolved" ? "green" : "red"
+                intent={
+                  result.resolution.status === "resolved" ? "success" : "error"
                 }
                 title={
                   result.resolution.status === "resolved"
@@ -212,18 +196,18 @@ export function WizardMonitoringStep({
                     : "Rejected"
                 }
               >
-                <Text size="sm">{result.identityKey}</Text>
+                <Text className="text-sm">{result.identityKey}</Text>
                 {result.resolution.status === "resolved" ? (
-                  <Text size="sm">
+                  <Text className="text-sm">
                     Would route to {result.resolution.hostname}.
                   </Text>
                 ) : (
-                  <Text size="sm">{result.resolution.reason}</Text>
+                  <Text className="text-sm">{result.resolution.reason}</Text>
                 )}
               </Alert>
             ))}
           {webhookTestResult?.ok === false && (
-            <Alert color="red" title="Test webhook failed">
+            <Alert intent="error" title="Test webhook failed">
               {webhookTestResult.error}
             </Alert>
           )}

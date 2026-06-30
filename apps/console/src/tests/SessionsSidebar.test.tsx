@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -86,11 +86,11 @@ function setupWithSessionsError() {
   });
 
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 }
 
@@ -171,11 +171,11 @@ function setup(
   });
 
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { router };

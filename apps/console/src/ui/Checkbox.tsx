@@ -1,18 +1,31 @@
 import "./Checkbox.css";
 
-import React from "react";
+import { Checkbox as MantineCheckbox } from "@mantine/core";
 
-type CheckboxProps = Omit<React.ComponentPropsWithoutRef<"input">, "type"> & {
-  label: string;
+type CheckboxProps = {
+  label?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  className?: string;
 };
 
-export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  function Checkbox({ label, className, ...rest }, ref) {
-    return (
-      <label className={className ? `checkbox ${className}` : "checkbox"}>
-        <input ref={ref} type="checkbox" {...rest} />
-        <span>{label}</span>
-      </label>
-    );
-  },
-);
+export function Checkbox({
+  className,
+  ...props
+}: CheckboxProps): React.JSX.Element {
+  return (
+    <MantineCheckbox
+      unstyled
+      classNames={{
+        root: className ? `checkbox ${className}` : "checkbox",
+        input: "checkbox__input",
+        icon: "checkbox__icon",
+        inner: "checkbox__inner",
+        body: "checkbox__body",
+        label: "checkbox__label",
+      }}
+      {...props}
+    />
+  );
+}

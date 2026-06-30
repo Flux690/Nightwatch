@@ -1,23 +1,43 @@
 .radio {
   display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--color-ink);
   cursor: pointer;
 }
-.radio input {
+.radio__body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.radio__inner {
+  position: relative;
+  display: flex;
+}
+.radio__input {
   accent-color: var(--color-accent);
   width: 16px;
   height: 16px;
   margin: 0;
   cursor: pointer;
 }
-.radio input:focus-visible {
+.radio__input:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
-.radio input:disabled {
+.radio__input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.radio__label {
+  font-size: 14px;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+.radio__input:disabled ~ .radio__label {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }

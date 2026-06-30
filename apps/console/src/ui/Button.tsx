@@ -1,28 +1,46 @@
 import "./Button.css";
 
-import React from "react";
+import {
+  Button as MantineButton,
+  type ButtonProps as MantineButtonProps,
+} from "@mantine/core";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+type ButtonSize = "default" | "sm" | "xs";
 
-type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
+type ButtonProps = Omit<React.ComponentPropsWithoutRef<"button">, "color"> & {
   variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
+  leftSection?: MantineButtonProps["leftSection"];
 };
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  function Button(
-    { variant = "primary", loading, className, disabled, ...rest },
-    ref,
-  ) {
-    return (
-      <button
-        ref={ref}
-        className={className ? `btn ${className}` : "btn"}
-        data-variant={variant}
-        aria-busy={loading ? "true" : undefined}
-        disabled={loading || disabled}
-        {...rest}
-      />
-    );
-  },
-);
+export function Button({
+  variant = "primary",
+  size = "default",
+  loading,
+  className,
+  disabled,
+  leftSection,
+  ...rest
+}: ButtonProps): React.JSX.Element {
+  return (
+    <MantineButton
+      unstyled
+      classNames={{
+        root: className ? `btn ${className}` : "btn",
+        inner: "btn__inner",
+        label: "btn__label",
+        section: "btn__section",
+        loader: "btn__loader",
+      }}
+      data-variant={variant}
+      data-size={size !== "default" ? size : undefined}
+      aria-busy={loading ? "true" : undefined}
+      disabled={loading || disabled}
+      loading={loading}
+      leftSection={leftSection}
+      {...rest}
+    />
+  );
+}

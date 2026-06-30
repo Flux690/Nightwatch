@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Text, UnstyledButton } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { notifications } from "@mantine/notifications";
 import { Trash2 } from "lucide-react";
 import type { SessionMeta } from "@nightwatch/shared";
+import { Text } from "../ui/Text.js";
+import { UnstyledButton } from "../ui/UnstyledButton.js";
+import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
@@ -46,10 +47,10 @@ export function SessionsSidebar(): React.JSX.Element {
       if (activeSessionId === sessionId) void navigate({ to: "/" });
     },
     onError: (err) => {
-      notifications.show({
-        color: "red",
+      toast.show({
         title: "Could not delete session",
         message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
       });
     },
   });
@@ -71,7 +72,7 @@ export function SessionsSidebar(): React.JSX.Element {
       }}
     >
       {!isLoading && sessions.length === 0 && (
-        <Text size="xs" c="dimmed" p="xs" component="li">
+        <Text component="li" className="text-xs text-ink-muted p-2">
           Your sessions will show up here.
         </Text>
       )}
@@ -102,16 +103,16 @@ export function SessionsSidebar(): React.JSX.Element {
               minWidth: 0,
               border: "none",
               cursor: "pointer",
-              padding: "var(--mantine-spacing-xs)",
-              borderRadius: "var(--mantine-radius-sm)",
+              padding: 4,
+              borderRadius: "var(--radius-sm)",
               textAlign: "left",
               color: "var(--color-ink)",
             }}
           >
-            <Text size="sm" truncate title={session.title}>
+            <Text className="text-sm truncate" title={session.title}>
               {session.title}
             </Text>
-            <Text size="xs" c="dimmed" ff="monospace">
+            <Text className="text-xs text-ink-muted font-mono">
               {timeAgo(session.createdAt)}
             </Text>
           </button>
@@ -123,8 +124,8 @@ export function SessionsSidebar(): React.JSX.Element {
               deleteSession.variables === session.sessionId
             }
             style={{
-              padding: "var(--mantine-spacing-xs)",
-              color: "var(--mantine-color-dimmed)",
+              padding: 4,
+              color: "var(--color-ink-muted)",
               display: "flex",
             }}
           >

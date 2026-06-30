@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Button, Textarea } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { Square } from "lucide-react";
+import { Button } from "../ui/Button.js";
+import { Textarea } from "../ui/Textarea.js";
+import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 
 const STOP_ICON_PROPS = {
@@ -33,8 +34,6 @@ export function ChatInput({
   const [text, setText] = useState("");
   const navigate = useNavigate();
 
-  // Returns the new session id when this submit created one (so onSuccess can
-  // navigate), or null for a respond/follow-up that stays on the current view.
   const submit = useMutation({
     mutationFn: async (trimmed: string): Promise<string | null> => {
       if (pendingInterrupt) {
@@ -52,7 +51,6 @@ export function ChatInput({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed }),
         });
-        // Signal before navigation so callers can set up WS filtering immediately.
         onSessionCreated?.(data.sessionId, trimmed);
         return data.sessionId;
       }
@@ -74,12 +72,10 @@ export function ChatInput({
       }
     },
     onError: (err) => {
-      // Keep the text so the operator can retry; a silent failure that cleared
-      // the box would look like the message was sent.
-      notifications.show({
-        color: "red",
+      toast.show({
         title: "Message not sent",
         message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
       });
     },
   });
@@ -94,10 +90,10 @@ export function ChatInput({
     mutationFn: () =>
       apiFetch<void>(`/api/sessions/${sessionId}/stop`, { method: "POST" }),
     onError: (err) => {
-      notifications.show({
-        color: "red",
+      toast.show({
         title: "Could not stop the run",
         message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
       });
     },
   });
@@ -116,9 +112,9 @@ export function ChatInput({
       style={{
         borderTop: "1px solid var(--color-line)",
         background: "var(--color-surface)",
-        padding: "var(--mantine-spacing-sm)",
+        padding: 8,
         display: "flex",
-        gap: "var(--mantine-spacing-xs)",
+        gap: 4,
         alignItems: "flex-end",
       }}
     >
@@ -140,19 +136,18 @@ export function ChatInput({
       />
       {isRunning ? (
         <Button
-          color="red"
-          variant="light"
+          variant="destructive"
+          size="sm"
           onClick={() => sessionId !== null && stop.mutate()}
           loading={stop.isPending}
-          size="sm"
           leftSection={<Square {...STOP_ICON_PROPS} />}
         >
           Stop
         </Button>
       ) : (
         <Button
-          onClick={() => handleSubmit()}
           size="sm"
+          onClick={() => handleSubmit()}
           loading={submit.isPending}
           disabled={submit.isPending}
         >

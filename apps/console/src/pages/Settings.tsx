@@ -1,20 +1,18 @@
 import { useEffect, useState } from "react";
-import {
-  Autocomplete,
-  Badge,
-  Button,
-  Checkbox,
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
+import { Autocomplete } from "../ui/Autocomplete.js";
+import { Badge } from "../ui/Badge.js";
+import { Button } from "../ui/Button.js";
+import { Checkbox } from "../ui/Checkbox.js";
+import { Group } from "../ui/Group.js";
+import { NumberInput } from "../ui/NumberInput.js";
+import { Select } from "../ui/Select.js";
+import { Stack } from "../ui/Stack.js";
+import { Text } from "../ui/Text.js";
+import { TextInput } from "../ui/TextInput.js";
+import { Title } from "../ui/Title.js";
+import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 import { IngestCredentialSection } from "./IngestCredentialSection.js";
 import { useAuth } from "../auth/AuthContext.js";
@@ -52,8 +50,6 @@ export function SettingsPage(): React.JSX.Element {
 
   const { data: modelsData } = useQuery<{ models: string[] }>({
     queryKey: ["config/models"],
-    // Best-effort: the model list is a convenience, so fall back to empty rather
-    // than surfacing an error if it can't be fetched.
     queryFn: () =>
       apiFetch<{ models: string[] }>("/api/config/models").catch(() => ({
         models: [],
@@ -81,17 +77,17 @@ export function SettingsPage(): React.JSX.Element {
       }),
     onSuccess: (updated) => {
       queryClient.setQueryData(["config"], updated);
-      notifications.show({
-        color: "green",
+      toast.show({
         title: "Settings saved",
         message: "Your changes have been saved.",
+        variant: "success",
       });
     },
     onError: (err) => {
-      notifications.show({
-        color: "red",
+      toast.show({
         title: "Save failed",
         message: err instanceof Error ? err.message : "Unknown error",
+        variant: "error",
       });
     },
   });
@@ -117,8 +113,6 @@ export function SettingsPage(): React.JSX.Element {
         setNewApiKey("");
       }
     },
-    // The endpoint returns { ok: false } for a bad key on a 2xx; a thrown error
-    // here is the request itself failing, which is an unreachable endpoint.
     onError: () => setTestResult({ ok: false, error: "unreachable" }),
   });
 
@@ -144,18 +138,15 @@ export function SettingsPage(): React.JSX.Element {
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
 
   return (
-    <div
-      className="page"
-      style={{ padding: "var(--mantine-spacing-md)", maxWidth: 520 }}
-    >
-      <Title order={2} size="h4" mb="md">
+    <div className="page" style={{ padding: 16, maxWidth: 520 }}>
+      <Title order={2} className="text-lg mb-4">
         Settings
       </Title>
 
       {form && (
-        <Stack gap="lg">
-          <Stack gap="sm">
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+        <Stack className="gap-6">
+          <Stack className="gap-3">
+            <Text className="text-xs text-ink-muted uppercase font-semibold">
               Model
             </Text>
 
@@ -185,11 +176,9 @@ export function SettingsPage(): React.JSX.Element {
               }
             />
 
-            <Stack gap={4}>
-              <Text size="sm" fw={500}>
-                API key
-              </Text>
-              <Text size="sm" c="dimmed">
+            <Stack className="gap-1">
+              <Text className="text-sm font-medium">API key</Text>
+              <Text className="text-sm text-ink-muted">
                 {form.apiKeyMasked ? form.apiKeyMasked : "Not configured"}
               </Text>
               <TextInput
@@ -201,22 +190,18 @@ export function SettingsPage(): React.JSX.Element {
                   setTestResult(null);
                 }}
               />
-              <Group gap="xs" align="center">
+              <Group className="gap-2 items-center">
                 <Button
                   size="xs"
-                  variant="default"
+                  variant="secondary"
                   loading={testConnection.isPending}
                   onClick={() => handleTestConnection()}
                 >
                   Test connection
                 </Button>
-                {testResult?.ok && (
-                  <Badge color="green" variant="light">
-                    Connected
-                  </Badge>
-                )}
+                {testResult?.ok && <Badge intent="success">Connected</Badge>}
                 {testResult && !testResult.ok && (
-                  <Badge color="red" variant="light">
+                  <Badge intent="error">
                     {ERROR_LABELS[testResult.error] ?? testResult.error}
                   </Badge>
                 )}
@@ -281,8 +266,8 @@ export function SettingsPage(): React.JSX.Element {
             )}
           </Stack>
 
-          <Stack gap="sm">
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+          <Stack className="gap-3">
+            <Text className="text-xs text-ink-muted uppercase font-semibold">
               Loop
             </Text>
             <NumberInput
@@ -320,13 +305,12 @@ export function SettingsPage(): React.JSX.Element {
 
       <IngestCredentialSection />
 
-      <Stack gap="sm" mt="xl">
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+      <Stack className="gap-3 mt-8">
+        <Text className="text-xs text-ink-muted uppercase font-semibold">
           Account
         </Text>
         <Button
-          color="red"
-          variant="subtle"
+          variant="ghost"
           style={{ alignSelf: "flex-start" }}
           onClick={() => void logoutAll()}
         >

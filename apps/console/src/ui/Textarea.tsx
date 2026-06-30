@@ -1,52 +1,40 @@
 import "./TextInput.css";
 import "./Textarea.css";
 
-import React from "react";
+import {
+  Textarea as MantineTextarea,
+  type TextareaProps as MantineTextareaProps,
+} from "@mantine/core";
 
-type TextareaProps = Omit<React.ComponentPropsWithoutRef<"textarea">, "id"> & {
-  label?: string;
-  error?: string;
-  id?: string;
-  autoGrow?: boolean;
+type TextareaProps = {
+  label?: MantineTextareaProps["label"];
+  error?: MantineTextareaProps["error"];
+  placeholder?: string;
+  value?: string;
+  onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLTextAreaElement>;
+  disabled?: boolean;
+  autosize?: boolean;
+  minRows?: number;
+  maxRows?: number;
+  style?: React.CSSProperties;
+  className?: string;
 };
 
-export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  function Textarea(
-    { label, error, id: externalId, autoGrow, className, style, ...rest },
-    ref,
-  ) {
-    const generatedId = React.useId();
-    const inputId = externalId ?? generatedId;
-    const errorId = error ? `${inputId}-error` : undefined;
-
-    const classes = ["input", "textarea"];
-    if (className) classes.push(className);
-
-    return (
-      <div className="field">
-        {label && <label htmlFor={inputId}>{label}</label>}
-        <textarea
-          ref={ref}
-          id={inputId}
-          className={classes.join(" ")}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={errorId}
-          style={
-            autoGrow
-              ? {
-                  fieldSizing: "content" as React.CSSProperties["fieldSizing"],
-                  ...style,
-                }
-              : style
-          }
-          {...rest}
-        />
-        {error && (
-          <span id={errorId} role="alert">
-            {error}
-          </span>
-        )}
-      </div>
-    );
-  },
-);
+export function Textarea({
+  className,
+  ...props
+}: TextareaProps): React.JSX.Element {
+  return (
+    <MantineTextarea
+      unstyled
+      classNames={{
+        root: "field",
+        label: "field__label",
+        input: className ? `input textarea ${className}` : "input textarea",
+        error: "field__error",
+      }}
+      {...props}
+    />
+  );
+}

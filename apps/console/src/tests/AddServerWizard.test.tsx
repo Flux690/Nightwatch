@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
 import { AddServerWizard } from "../pages/AddServerWizard.js";
@@ -107,11 +107,11 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
   const onClose = vi.fn();
 
   const view = render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <AddServerWizard opened onClose={onClose} />
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { fetchMock, onClose, ...view };
@@ -177,11 +177,11 @@ describe("AddServerWizard", () => {
   it("renders nothing when not opened", () => {
     const qc = new QueryClient();
     render(
-      <HeadlessMantineProvider>
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AddServerWizard opened={false} onClose={() => {}} />
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
     expect(screen.queryByText(/add a server/i)).not.toBeInTheDocument();
   });

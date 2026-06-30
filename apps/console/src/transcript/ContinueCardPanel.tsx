@@ -1,4 +1,5 @@
-import { Button, Text } from "@mantine/core";
+import { Button } from "../ui/Button.js";
+import { Text } from "../ui/Text.js";
 import type { ContinueCardItem } from "./types.js";
 
 export function ContinueCardPanel({
@@ -17,25 +18,24 @@ export function ContinueCardPanel({
       data-testid="continue-card"
       style={{
         border: "1px solid var(--color-status-awaiting)",
-        borderRadius: "var(--mantine-radius-sm)",
+        borderRadius: "var(--radius-sm)",
         background: "var(--color-surface)",
-        padding: "var(--mantine-spacing-xs)",
+        padding: 4,
       }}
     >
-      <Text size="xs" mb="xs">
+      <Text className="text-xs mb-2">
         Time budget reached. Resume with a fresh budget or end the
         investigation.
       </Text>
       {resolved ? (
-        <Text size="xs" data-testid="continue-resolution">
+        <Text className="text-xs" data-testid="continue-resolution">
           {item.approval === "continued" ? "Resumed" : "Ended"}
           {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
         </Text>
       ) : (
-        <div style={{ display: "flex", gap: "var(--mantine-spacing-xs)" }}>
+        <div style={{ display: "flex", gap: 4 }}>
           <Button
             size="xs"
-            color="streaming"
             disabled={disabled}
             onClick={() => onResolve?.("approve")}
           >
@@ -43,7 +43,7 @@ export function ContinueCardPanel({
           </Button>
           <Button
             size="xs"
-            variant="outline"
+            variant="secondary"
             disabled={disabled}
             onClick={() => onResolve?.("reject")}
           >

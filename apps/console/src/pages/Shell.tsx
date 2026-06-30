@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AppShell, Tooltip, UnstyledButton, Text } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import {
   Outlet,
@@ -20,10 +19,14 @@ import {
   ScrollText,
   Network,
 } from "lucide-react";
+import { AppShell, AppShellNavbar, AppShellMain } from "../ui/AppShell.js";
+import { Drawer } from "../ui/Drawer.js";
+import { Text } from "../ui/Text.js";
+import { Tooltip } from "../ui/Tooltip.js";
+import { UnstyledButton } from "../ui/UnstyledButton.js";
 import { useAuth } from "../auth/AuthContext.js";
 import { useAttentionCount } from "../hooks/useAttentionCount.js";
 import { useSidebarExpanded } from "../hooks/useSidebarExpanded.js";
-import { Drawer } from "../ui/Drawer.js";
 import { SideRow, RAIL_WIDTH, EXPANDED_WIDTH, NAV_PAD } from "./SideRow.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
@@ -46,16 +49,10 @@ export function Shell(): React.JSX.Element {
   const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
   const ownerEmail = phase.kind === "authenticated" ? phase.email : null;
 
-  // Closes the drawer on any navigation - links, New session, and session
-  // rows all change the route, so this one effect covers every case.
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
 
-  // Shared between the persistent desktop rail and the mobile drawer body.
-  // navExpanded is forced true for the drawer, which has no rail/collapsed
-  // state of its own; showToggle hides the (meaningless, off-canvas) collapse
-  // button there.
   function navContent(
     navExpanded: boolean,
     showToggle: boolean,
@@ -72,9 +69,7 @@ export function Shell(): React.JSX.Element {
         >
           {navExpanded && (
             <Text
-              size="sm"
-              fw={650}
-              className="side-nowrap"
+              className="side-nowrap text-sm font-semibold"
               style={{ paddingInlineStart: 4 }}
             >
               Nightwatch
@@ -118,7 +113,7 @@ export function Shell(): React.JSX.Element {
               display: "flex",
               alignItems: "center",
               height: 34,
-              borderRadius: "var(--mantine-radius-sm)",
+              borderRadius: "var(--radius-sm)",
               background: "var(--color-accent)",
               color: "var(--color-canvas)",
               fontWeight: 700,
@@ -155,18 +150,14 @@ export function Shell(): React.JSX.Element {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                padding: "2px var(--mantine-spacing-xs)",
-                borderRadius: "var(--mantine-radius-sm)",
+                padding: "2px 4px",
+                borderRadius: "var(--radius-sm)",
                 width: "100%",
                 flexShrink: 0,
               }}
             >
               <Text
-                size="xs"
-                fw={700}
-                tt="uppercase"
-                c="dimmed"
-                className="side-nowrap"
+                className="side-nowrap text-xs font-bold uppercase text-ink-muted"
                 style={{ letterSpacing: "0.06em" }}
               >
                 Recent sessions
@@ -239,7 +230,7 @@ export function Shell(): React.JSX.Element {
             }}
           >
             {navExpanded && ownerEmail && (
-              <Text size="xs" c="dimmed" className="side-nowrap">
+              <Text className="side-nowrap text-xs text-ink-muted">
                 {ownerEmail}
               </Text>
             )}
@@ -270,9 +261,7 @@ export function Shell(): React.JSX.Element {
           >
             <MenuIcon {...ICON_PROPS} />
           </UnstyledButton>
-          <Text size="sm" fw={650}>
-            Nightwatch
-          </Text>
+          <Text className="text-sm font-semibold">Nightwatch</Text>
         </div>
       )}
 
@@ -281,12 +270,10 @@ export function Shell(): React.JSX.Element {
           width: isMobile ? 0 : expanded ? EXPANDED_WIDTH : RAIL_WIDTH,
           breakpoint: 0,
         }}
-        padding={0}
-        styles={{ main: { background: "var(--color-canvas)" } }}
         style={{ flex: 1, minHeight: 0 }}
       >
         {!isMobile && (
-          <AppShell.Navbar
+          <AppShellNavbar
             style={{
               background: "var(--color-surface)",
               borderRight: "1px solid var(--color-line)",
@@ -299,10 +286,10 @@ export function Shell(): React.JSX.Element {
             }}
           >
             {navContent(expanded, true)}
-          </AppShell.Navbar>
+          </AppShellNavbar>
         )}
 
-        <AppShell.Main
+        <AppShellMain
           id="main-content"
           tabIndex={-1}
           style={{
@@ -310,8 +297,6 @@ export function Shell(): React.JSX.Element {
             flexDirection: "column",
             height: "100%",
             transition: `padding ${TRANSITION}`,
-            // Session area manages its own internal scroll; other pages (Settings,
-            // Fleet) need the main container to scroll normally.
             overflow: isSessionArea ? "hidden" : "auto",
           }}
         >
@@ -320,7 +305,7 @@ export function Shell(): React.JSX.Element {
           ) : (
             <Outlet />
           )}
-        </AppShell.Main>
+        </AppShellMain>
       </AppShell>
 
       {isMobile && (

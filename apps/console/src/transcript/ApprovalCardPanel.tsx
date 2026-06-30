@@ -1,4 +1,5 @@
-import { Button, Text } from "@mantine/core";
+import { Button } from "../ui/Button.js";
+import { Text } from "../ui/Text.js";
 import type { ApprovalCardItem } from "./types.js";
 import { ToolCardPanel } from "./ToolCardPanel.js";
 
@@ -17,28 +18,25 @@ export function ApprovalCardPanel({
         data-testid="approval-card"
         style={{
           border: "1px solid var(--color-status-awaiting)",
-          borderRadius: "var(--mantine-radius-sm)",
+          borderRadius: "var(--radius-sm)",
           background: "var(--color-surface)",
-          padding: "var(--mantine-spacing-xs)",
-          marginBottom: "var(--mantine-spacing-xs)",
+          padding: 4,
+          marginBottom: 4,
         }}
       >
-        <Text size="xs" ff="monospace" fw={600}>
-          {item.toolName}
-        </Text>
-        <Text size="xs" c="dimmed" mb="xs">
+        <Text className="text-xs font-mono font-semibold">{item.toolName}</Text>
+        <Text className="text-xs text-ink-muted mb-2">
           Risk: {item.risk ?? "unknown"}
         </Text>
         {resolved ? (
-          <Text size="xs" data-testid="approval-resolution">
+          <Text className="text-xs" data-testid="approval-resolution">
             {item.approval === "approved" ? "Approved" : "Rejected"}
             {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
           </Text>
         ) : (
-          <div style={{ display: "flex", gap: "var(--mantine-spacing-xs)" }}>
+          <div style={{ display: "flex", gap: 4 }}>
             <Button
               size="xs"
-              color="streaming"
               disabled={item.approval === "pending"}
               onClick={() => onResolve?.("approve")}
             >
@@ -46,8 +44,7 @@ export function ApprovalCardPanel({
             </Button>
             <Button
               size="xs"
-              color="escalated"
-              variant="outline"
+              variant="secondary"
               disabled={item.approval === "pending"}
               onClick={() => onResolve?.("reject")}
             >

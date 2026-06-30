@@ -1,0 +1,10 @@
+.loader {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  color: var(--color-ink-muted);
+}
+.loader svg {
+  width: 100%;
+  height: 100%;
+}

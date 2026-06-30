@@ -1,14 +1,21 @@
-import { Badge, Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
+import { Badge } from "../ui/Badge.js";
+import { Loader } from "../ui/Loader.js";
+import { Stack } from "../ui/Stack.js";
+import { Text } from "../ui/Text.js";
+import { Title } from "../ui/Title.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
-const SEVERITY_COLOR: Record<UnresolvedAlertRecord["severity"], string> = {
-  critical: "red",
-  warning: "orange",
-  info: "blue",
-};
+type AlertIntent = "error" | "warning" | "info";
+
+const SEVERITY_INTENT: Record<UnresolvedAlertRecord["severity"], AlertIntent> =
+  {
+    critical: "error",
+    warning: "warning",
+    info: "info",
+  };
 
 export function UnresolvedAlertsPage(): React.JSX.Element {
   const {
@@ -22,23 +29,21 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
   });
 
   return (
-    <div className="page" style={{ padding: "var(--mantine-spacing-md)" }}>
-      <Title order={2} size="h4" mb="md">
+    <div className="page" style={{ padding: 16 }}>
+      <Title order={2} className="text-lg mb-4">
         Unresolved alerts
       </Title>
 
-      {isLoading && <Loader size="sm" aria-label="Loading unresolved alerts" />}
+      {isLoading && <Loader aria-label="Loading unresolved alerts" />}
 
       {isError && (
-        <Text size="sm" c="red">
+        <Text className="text-sm text-status-failed">
           Failed to load unresolved alerts.
         </Text>
       )}
 
       {!isLoading && !isError && alerts?.length === 0 && (
-        <Text size="sm" c="dimmed">
-          No unresolved alerts.
-        </Text>
+        <Text className="text-sm text-ink-muted">No unresolved alerts.</Text>
       )}
 
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -47,27 +52,21 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
             key={`${alert.sourceAlertId}-${i}`}
             style={{
               borderTop: "1px solid var(--color-line)",
-              padding: "var(--mantine-spacing-sm) 0",
+              padding: "8px 0",
             }}
           >
-            <Stack gap={2}>
-              <Text size="sm" ff="monospace">
-                {alert.alertType}
-              </Text>
-              <Text size="xs" c="dimmed" ff="monospace">
+            <Stack className="gap-0.5">
+              <Text className="text-sm font-mono">{alert.alertType}</Text>
+              <Text className="text-xs text-ink-muted font-mono">
                 {alert.identityKey}
               </Text>
-              <Badge
-                size="sm"
-                variant="light"
-                color={SEVERITY_COLOR[alert.severity]}
-              >
+              <Badge intent={SEVERITY_INTENT[alert.severity]}>
                 {alert.severity}
               </Badge>
-              <Text size="xs" c="dimmed">
+              <Text className="text-xs text-ink-muted">
                 {alert.rejectionReason}
               </Text>
-              <Text size="xs" c="dimmed">
+              <Text className="text-xs text-ink-muted">
                 {timeAgo(alert.createdAt)}
               </Text>
             </Stack>

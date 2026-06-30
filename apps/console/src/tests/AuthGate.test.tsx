@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -81,13 +81,13 @@ function setup(statusResponse: object) {
   const router = makeRouter();
 
   render(
-    <HeadlessMantineProvider>
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <RouterProvider router={router} />
         </AuthProvider>
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { router, fetchMock };
@@ -141,13 +141,13 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <HeadlessMantineProvider>
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     // A spinner during the check, but never the protected shell or a login flash.
@@ -199,13 +199,13 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <HeadlessMantineProvider>
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     await waitFor(() => {

@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { Button, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { StatusBadge } from "../components/StatusBadge.js";
+import { Button } from "../ui/Button.js";
+import { Group } from "../ui/Group.js";
+import { Loader } from "../ui/Loader.js";
+import { Stack } from "../ui/Stack.js";
+import { StatusChip } from "../ui/StatusChip.js";
+import { Text } from "../ui/Text.js";
+import { Title } from "../ui/Title.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 import { AddServerWizard } from "./AddServerWizard.js";
@@ -12,11 +17,6 @@ type RunnerStatus = "online" | "offline";
 function runnerStatus(runner: RunnerRecord): RunnerStatus {
   return runner.online ? "online" : "offline";
 }
-
-const STATUS_COLOR: Record<RunnerStatus, string> = {
-  online: "var(--color-status-running)",
-  offline: "var(--color-status-neutral)",
-};
 
 export function FleetPage(): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -31,13 +31,9 @@ export function FleetPage(): React.JSX.Element {
   } = useQuery<RunnerRecord[]>({
     queryKey: ["runners"],
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-    // Freeze polling while the wizard is open so a runner connecting mid-install
-    // doesn't surface behind the modal; the close handler refetches afterwards.
     refetchInterval: wizardOpen ? false : 30_000,
   });
 
-  // A server appears only once its runner has connected. A minted-but-never-
-  // connected token is a credential, not a fleet member, so it stays hidden.
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
   function handleWizardClose(): void {
@@ -59,9 +55,9 @@ export function FleetPage(): React.JSX.Element {
   }
 
   return (
-    <div className="page" style={{ padding: "var(--mantine-spacing-md)" }}>
-      <Group justify="space-between" align="center" mb="md">
-        <Title order={2} size="h4">
+    <div className="page" style={{ padding: 16 }}>
+      <Group className="justify-between items-center mb-4">
+        <Title order={2} className="text-lg">
           Fleet
         </Title>
         <Button size="xs" onClick={() => setWizardOpen(true)}>
@@ -70,23 +66,19 @@ export function FleetPage(): React.JSX.Element {
       </Group>
 
       {error !== null && (
-        <Text size="sm" c="red" mb="sm">
-          {error}
-        </Text>
+        <Text className="text-sm text-status-failed mb-3">{error}</Text>
       )}
 
-      {isLoading && <Loader size="sm" aria-label="Loading fleet" />}
+      {isLoading && <Loader aria-label="Loading fleet" />}
 
       {isError && (
-        <Text size="sm" c="red">
+        <Text className="text-sm text-status-failed">
           Couldn&apos;t load the fleet. Retrying…
         </Text>
       )}
 
       {!isLoading && !isError && connectedRunners.length === 0 && (
-        <Text size="sm" c="dimmed">
-          No runners connected.
-        </Text>
+        <Text className="text-sm text-ink-muted">No runners connected.</Text>
       )}
 
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -98,37 +90,32 @@ export function FleetPage(): React.JSX.Element {
               key={runner.token}
               style={{
                 borderTop: "1px solid var(--color-line)",
-                padding: "var(--mantine-spacing-sm) 0",
+                padding: "8px 0",
               }}
             >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={2}>
+              <Group className="justify-between items-start">
+                <Stack className="gap-0.5">
                   {runner.hostname !== null && (
-                    <Text size="sm" ff="monospace">
-                      {runner.hostname}
-                    </Text>
+                    <Text className="text-sm font-mono">{runner.hostname}</Text>
                   )}
-                  <StatusBadge label={status} color={STATUS_COLOR[status]} />
+                  <StatusChip status={status} domain="runner" />
                   {runner.lastSeen !== null && (
-                    <Text size="xs" c="dimmed" ff="monospace">
+                    <Text className="text-xs text-ink-muted font-mono">
                       {timeAgo(runner.lastSeen)}
                     </Text>
                   )}
                   {services.map((service) => (
                     <Text
                       key={serviceIdentityKey(service.identity)}
-                      size="xs"
-                      c="dimmed"
-                      ff="monospace"
+                      className="text-xs text-ink-muted font-mono"
                     >
                       {serviceIdentityKey(service.identity)}
                     </Text>
                   ))}
                 </Stack>
                 <Button
+                  variant="ghost"
                   size="xs"
-                  color="red"
-                  variant="subtle"
                   loading={removing === runner.token}
                   aria-label={`Remove server ${runner.hostname ?? runner.id}`}
                   onClick={() => void handleRemove(runner.token)}

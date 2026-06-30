@@ -1,6 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Text } from "@mantine/core";
-import { notifications } from "@mantine/notifications";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   SessionMeta,
@@ -9,6 +7,8 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
+import { Text } from "../ui/Text.js";
+import { toast } from "../ui/Toast.js";
 import { useConsoleWs } from "../hooks/ConsoleWsProvider.js";
 import { ChatInput } from "./ChatInput.js";
 import type { PendingInterrupt } from "./ChatInput.js";
@@ -18,16 +18,11 @@ import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js"
 import type { TranscriptItem } from "../transcript/types.js";
 import { apiFetch } from "../api/client.js";
 
-// durable: operator may reload minutes or hours after the live HUMAN_INPUT_REQUIRED event fired.
-// Reconstruct the same envelope so it flows through the shared converter, not a second hand-rolled path.
 function pendingApprovalToEnvelope(
   p: ApprovalRequest,
 ): ConsoleHumanInputRequired {
   const isClarification = p.kind === "clarification";
   const isContinue = p.kind === "continue";
-  // Clarification's question/options/multiSelect ride inside toolInput - the
-  // API embeds them there at publish time (agent/loop.ts) because
-  // they originate from the tool call's own input, not a separate column.
   const clarInput = isClarification
     ? (p.toolInput as {
         question: string;
@@ -107,14 +102,11 @@ function TranscriptColumn({
       style={{
         maxWidth: 860,
         margin: "0 auto",
-        padding: "0 var(--mantine-spacing-lg)",
+        padding: "0 24px",
       }}
     >
       {allItems.map((item) => (
-        <div
-          key={itemKey(item)}
-          style={{ marginBottom: "var(--mantine-spacing-sm)" }}
-        >
+        <div key={itemKey(item)} style={{ marginBottom: 8 }}>
           <TranscriptItemRenderer
             item={item}
             onResolve={onResolve}
@@ -126,20 +118,14 @@ function TranscriptColumn({
   );
 }
 
-// SessionView is the unified home + transcript component rendered persistently
-// in the Shell (outside the route outlet), so it stays mounted across route
-// changes and captures WS deltas that arrive before navigation settles.
 export function SessionView({
   sessionId: sessionIdFromRoute,
 }: {
   sessionId: string | null;
 }): React.JSX.Element {
-  // activeSessionId can be set eagerly by onSessionCreated (before URL change)
-  // so WS events for a brand-new session are captured immediately.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     sessionIdFromRoute,
   );
-  // Ref lets the WS handler (stale closure) always read the latest value.
   const activeSessionIdRef = useRef<string | null>(sessionIdFromRoute);
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
@@ -176,9 +162,6 @@ export function SessionView({
     enabled: !!activeSessionId,
   });
 
-  // Shares the Shell's attention-queue query (same key, same cache entry, no
-  // extra request) so a reload can re-show the card a live event would have
-  // shown, instead of the operator only finding out by watching it happen.
   const { data: pendingHumanInput = [] } = useQuery<ApprovalRequest[]>({
     queryKey: ["sessions-pending-human-input"],
     queryFn: () =>
@@ -241,8 +224,6 @@ export function SessionView({
       if (env.type === "RUN_STOPPED") {
         const { sessionId } = env.payload;
         if (sessionId !== sid) return;
-        // The partial turn was already persisted and appended to the query
-        // cache via RUN_FINISHED events emitted from persist() before this.
         setIsRunning(false);
         setLiveItems([]);
         return;
@@ -251,14 +232,12 @@ export function SessionView({
       if (env.type === "RUN_FAILED") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
-        // A crashed investigation never persisted its turn; drop the live buffer
-        // and tell the operator instead of leaving the run spinning forever.
         setIsRunning(false);
         setLiveItems([]);
-        notifications.show({
-          color: "red",
+        toast.show({
           title: "Investigation failed",
           message,
+          variant: "error",
         });
         return;
       }
@@ -272,9 +251,6 @@ export function SessionView({
     [queryClient],
   );
 
-  // The card is optimistically flipped to "pending" before the POST. If the POST
-  // fails the interrupt is still open server-side, so clear "pending" to re-enable
-  // the controls and tell the operator, rather than leaving a card wedged forever.
   const respond = useMutation({
     mutationFn: (vars: { toolUseId: string; body: Record<string, unknown> }) =>
       apiFetch<void>(`/api/sessions/${activeSessionId}/respond`, {
@@ -293,10 +269,10 @@ export function SessionView({
             : item,
         ),
       );
-      notifications.show({
-        color: "red",
+      toast.show({
         title: "Response not sent",
         message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
       });
     },
   });
@@ -356,7 +332,7 @@ export function SessionView({
             justifyContent: "center",
           }}
         >
-          <Text c="dimmed" size="sm">
+          <Text className="text-ink-muted text-sm">
             Start a conversation to begin an investigation.
           </Text>
         </div>
@@ -377,7 +353,7 @@ export function SessionView({
       <div
         style={{
           flex: 1,
-          padding: "var(--mantine-spacing-md) 0",
+          padding: "16px 0",
           overflowY: "auto",
         }}
       >

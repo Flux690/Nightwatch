@@ -1,39 +1,38 @@
 import "./TextInput.css";
 
-import React from "react";
+import {
+  TextInput as MantineTextInput,
+  type TextInputProps as MantineTextInputProps,
+} from "@mantine/core";
 
-type TextInputProps = Omit<React.ComponentPropsWithoutRef<"input">, "id"> & {
-  label?: string;
-  error?: string;
-  id?: string;
+type TextInputProps = {
+  label?: MantineTextInputProps["label"];
+  description?: MantineTextInputProps["description"];
+  error?: MantineTextInputProps["error"];
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+  value?: string;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
+  onBlur?: React.FocusEventHandler<HTMLInputElement>;
+  className?: string;
 };
 
-export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
-  function TextInput(
-    { label, error, id: externalId, className, ...rest },
-    ref,
-  ) {
-    const generatedId = React.useId();
-    const inputId = externalId ?? generatedId;
-    const errorId = error ? `${inputId}-error` : undefined;
-
-    return (
-      <div className="field">
-        {label && <label htmlFor={inputId}>{label}</label>}
-        <input
-          ref={ref}
-          id={inputId}
-          className={className ? `input ${className}` : "input"}
-          aria-invalid={error ? "true" : undefined}
-          aria-describedby={errorId}
-          {...rest}
-        />
-        {error && (
-          <span id={errorId} role="alert">
-            {error}
-          </span>
-        )}
-      </div>
-    );
-  },
-);
+export function TextInput({
+  className,
+  ...props
+}: TextInputProps): React.JSX.Element {
+  return (
+    <MantineTextInput
+      unstyled
+      classNames={{
+        root: "field",
+        label: "field__label",
+        description: "field__description",
+        input: className ? `input ${className}` : "input",
+        error: "field__error",
+      }}
+      {...props}
+    />
+  );
+}

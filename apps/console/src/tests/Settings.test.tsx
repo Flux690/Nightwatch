@@ -8,12 +8,12 @@ import {
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadlessMantineProvider } from "@mantine/core";
-import { Notifications, notifications } from "@mantine/notifications";
+import { TestProviders } from "./renderWithProviders.js";
 import type { AgentConfig } from "@nightwatch/shared";
 
 import { AuthProvider } from "../auth/AuthContext.js";
 import { SettingsPage } from "../pages/Settings.js";
+import { toast } from "../ui/Toast.js";
 
 const OWNER_EMAIL = "admin@example.com";
 const AUTH_STATUS_RESPONSE = {
@@ -96,14 +96,13 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
   });
 
   render(
-    <HeadlessMantineProvider>
-      <Notifications />
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <SettingsPage />
         </AuthProvider>
       </QueryClientProvider>
-    </HeadlessMantineProvider>,
+    </TestProviders>,
   );
 
   return { fetchMock };
@@ -112,7 +111,7 @@ function setup(configOverride?: Partial<typeof CONFIG>) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  notifications.clean();
+  toast.clean();
 });
 
 describe("SettingsPage", () => {
@@ -208,14 +207,13 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <HeadlessMantineProvider>
-        <Notifications />
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     const modelInput = await screen.findByLabelText(/^model$/i);
@@ -282,14 +280,13 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <HeadlessMantineProvider>
-        <Notifications />
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     const modelInput = await screen.findByLabelText(/^model$/i);
@@ -415,14 +412,13 @@ describe("SettingsPage", () => {
       defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
     render(
-      <HeadlessMantineProvider>
-        <Notifications />
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <SettingsPage />
           </AuthProvider>
         </QueryClientProvider>
-      </HeadlessMantineProvider>,
+      </TestProviders>,
     );
 
     const keyInput = await screen.findByPlaceholderText(/paste api key/i);
@@ -545,14 +541,13 @@ describe("SettingsPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
       render(
-        <HeadlessMantineProvider>
-          <Notifications />
+        <TestProviders>
           <QueryClientProvider client={qc}>
             <AuthProvider>
               <SettingsPage />
             </AuthProvider>
           </QueryClientProvider>
-        </HeadlessMantineProvider>,
+        </TestProviders>,
       );
 
       return { fetchMock, clipboardWrite };

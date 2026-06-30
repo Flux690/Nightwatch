@@ -21,6 +21,7 @@ const colorMap: Record<StatusDomain, Record<string, StatusColor>> = {
     stopped: "neutral",
   },
   remediation: {
+    executing: "awaiting",
     executed: "running",
     failed: "failed",
     rejected: "neutral",

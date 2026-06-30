@@ -5,23 +5,24 @@ import {
   type ModalProps as MantineModalProps,
 } from "@mantine/core";
 
-type ModalProps = Omit<
-  MantineModalProps,
-  "unstyled" | "classNames" | "overlayProps"
-> & {
+type ModalProps = {
   opened: boolean;
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
-  size?: string;
+  className?: string;
 };
 
-export function Modal({ children, ...props }: ModalProps): React.JSX.Element {
+export function Modal({
+  className,
+  children,
+  ...props
+}: ModalProps): React.JSX.Element {
   return (
     <MantineModal
       unstyled
       classNames={{
-        root: "modal",
+        root: className ? `modal ${className}` : "modal",
         header: "modal__header",
         body: "modal__body",
         overlay: "modal__overlay",
