@@ -13,6 +13,16 @@ import { RouterProvider } from "@tanstack/react-router";
 import { SessionView } from "../pages/SessionView.js";
 import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
 
+vi.mock("../auth/AuthContext.js", () => ({
+  useAuth: () => ({
+    phase: { kind: "authenticated", email: "operator@nightwatch.io" },
+    login: vi.fn(),
+    signup: vi.fn(),
+    logout: vi.fn(),
+    logoutAll: vi.fn(),
+  }),
+}));
+
 let latestWs: MockWs | null = null;
 
 class MockWs {
@@ -103,6 +113,49 @@ function setup(
   );
 
   return { qc };
+}
+
+function setupEmpty() {
+  latestWs = null;
+
+  vi.stubGlobal("WebSocket", MockWs);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (url.includes("pending-human-input")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ sessionId: "new-s1" }),
+      });
+    }),
+  );
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+
+  const root = createRootRoute({
+    component: () => <SessionView sessionId={null} />,
+  });
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+
+  render(
+    <TestProviders>
+      <QueryClientProvider client={qc}>
+        <ConsoleWsProvider>
+          <RouterProvider router={router} />
+        </ConsoleWsProvider>
+      </QueryClientProvider>
+    </TestProviders>,
+  );
 }
 
 afterEach(() => {
@@ -1030,7 +1083,7 @@ describe("SessionView", () => {
         expect(screen.getByRole("textbox")).not.toBeDisabled();
         expect(
           screen.getByRole("button", { name: /send/i }),
-        ).not.toBeDisabled();
+        ).toBeInTheDocument();
       });
     });
 
@@ -1066,7 +1119,7 @@ describe("SessionView", () => {
         expect(screen.getByRole("textbox")).not.toBeDisabled();
         expect(
           screen.getByRole("button", { name: /send/i }),
-        ).not.toBeDisabled();
+        ).toBeInTheDocument();
       });
     });
   });
@@ -1267,8 +1320,18 @@ describe("SessionView", () => {
     });
   });
 
-  describe("composer as Other for approval", () => {
-    function pushApprovalInterrupt(): void {
+  describe("composer hidden during approval/clarification", () => {
+    it("hides the composer when an approval interrupt is pending", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+
       act(() => {
         latestWs?.push({
           messageId: "ap1",
@@ -1277,60 +1340,20 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-ap",
             toolName: "restart_service",
-            input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
-              risk: "high",
-            },
+            input: { risk: "high" },
             incidentId: "inc-ap",
-            kind: "approval",
           },
         });
       });
-    }
-
-    it("posts to /respond with text when user types while approval interrupt is pending", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("Service is down on web-01"),
-        ).toBeInTheDocument();
-      });
-
-      pushApprovalInterrupt();
 
       await waitFor(() => {
         expect(screen.getByTestId("approval-card")).toBeInTheDocument();
       });
 
-      const user = userEvent.setup();
-      await user.type(screen.getByRole("textbox"), "Hold off, monitoring now");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/respond",
-          expect.objectContaining({
-            method: "POST",
-            body: JSON.stringify({
-              text: "Hold off, monitoring now",
-              resolvedBy: "console",
-            }),
-          }),
-        );
-      });
-
-      expect(fetch).not.toHaveBeenCalledWith(
-        "/api/sessions/s1/messages",
-        expect.anything(),
-      );
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     });
 
-    it("composer shows Add context placeholder while approval interrupt is pending", async () => {
+    it("hides the composer when a clarification interrupt is pending", async () => {
       setup();
 
       await waitFor(() => {
@@ -1339,65 +1362,7 @@ describe("SessionView", () => {
         ).toBeInTheDocument();
       });
 
-      pushApprovalInterrupt();
-
-      await waitFor(() => {
-        expect(screen.getByRole("textbox")).toHaveAttribute(
-          "placeholder",
-          "Add context…",
-        );
-      });
-    });
-
-    it("clears the pending interrupt from the composer when INTERRUPT_RESOLVED context_added arrives", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("Service is down on web-01"),
-        ).toBeInTheDocument();
-      });
-
-      pushApprovalInterrupt();
-
-      await waitFor(() => {
-        expect(screen.getByRole("textbox")).toHaveAttribute(
-          "placeholder",
-          "Add context…",
-        );
-      });
-
-      act(() => {
-        latestWs?.push({
-          messageId: "ctx-res",
-          type: "HUMAN_INPUT_RESOLVED",
-          payload: {
-            incidentId: "inc-ap",
-            toolUseId: "tu-ap",
-            status: "context_added",
-            resolvedBy: "console",
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(screen.getByRole("textbox")).toHaveAttribute(
-          "placeholder",
-          "Type a message…",
-        );
-      });
-    });
-  });
-
-  describe("composer as Other for clarification", () => {
-    it("posts to /respond with text when user types while clarification interrupt is pending", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("Service is down on web-01"),
-        ).toBeInTheDocument();
-      });
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
 
       act(() => {
         latestWs?.push({
@@ -1405,13 +1370,13 @@ describe("SessionView", () => {
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-clar2",
+            toolUseId: "tu-clar",
             toolName: "request_clarification",
             input: {},
-            incidentId: "inc-clar2",
+            incidentId: "inc-clar",
             kind: "clarification",
-            question: "Any other context?",
-            options: [{ label: "No", description: "Nothing else" }],
+            question: "Which service?",
+            options: [{ label: "nginx", description: "web" }],
           },
         });
       });
@@ -1420,36 +1385,62 @@ describe("SessionView", () => {
         expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
       });
 
-      const user = userEvent.setup();
-      await user.type(screen.getByRole("textbox"), "Check memory too");
-      await user.click(screen.getByRole("button", { name: /send/i }));
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("restores the composer after an approval interrupt is resolved", async () => {
+      setup();
 
       await waitFor(() => {
-        expect(fetch).toHaveBeenCalledWith(
-          "/api/sessions/s1/respond",
-          expect.objectContaining({
-            method: "POST",
-            body: JSON.stringify({
-              text: "Check memory too",
-              resolvedBy: "console",
-            }),
-          }),
-        );
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
       });
 
-      expect(fetch).not.toHaveBeenCalledWith(
-        "/api/sessions/s1/messages",
-        expect.anything(),
-      );
+      act(() => {
+        latestWs?.push({
+          messageId: "ap1",
+          type: "HUMAN_INPUT_REQUIRED",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-ap",
+            toolName: "restart_service",
+            input: { risk: "high" },
+            incidentId: "inc-ap",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+      });
+
+      act(() => {
+        latestWs?.push({
+          messageId: "ap-res",
+          type: "HUMAN_INPUT_RESOLVED",
+          payload: {
+            incidentId: "inc-ap",
+            toolUseId: "tu-ap",
+            status: "approved",
+            resolvedBy: "operator",
+            resolvedAt: "2024-01-01T00:03:00Z",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeInTheDocument();
+      });
     });
   });
 
   describe("role-based rendering", () => {
-    it("renders a persisted user message as a right-aligned bubble", async () => {
+    it("renders a persisted user message as a full-width left-aligned turn", async () => {
       setup([SESSION_MESSAGE_1]);
 
       await waitFor(() => {
-        expect(screen.getByTestId("user-bubble")).toBeInTheDocument();
+        expect(screen.getByTestId("user-turn")).toBeInTheDocument();
         expect(
           screen.getByText("Service is down on web-01"),
         ).toBeInTheDocument();
@@ -1518,6 +1509,37 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("transcript-column")).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("empty state (no session)", () => {
+    it("shows a personalized greeting and suggestion buttons", async () => {
+      setupEmpty();
+
+      await waitFor(() => {
+        expect(screen.getByText("Hello, Operator")).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("button", { name: "Check pod health" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Review recent alerts" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Show fleet status" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Investigate last failure" }),
+      ).toBeInTheDocument();
+    });
+
+    it("renders the composer for new messages", async () => {
+      setupEmpty();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeInTheDocument();
       });
     });
   });

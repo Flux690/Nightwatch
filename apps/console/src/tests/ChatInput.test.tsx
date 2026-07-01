@@ -18,10 +18,7 @@ function setup(
   props: {
     sessionId: string | null;
     isRunning: boolean;
-    pendingInterrupt?: {
-      id: string;
-      kind: "approval" | "clarification" | "continue";
-    };
+    disabled?: boolean;
   },
   routePath = "/sessions/new",
 ) {
@@ -45,7 +42,7 @@ function setup(
       <ChatInput
         sessionId={props.sessionId}
         isRunning={props.isRunning}
-        pendingInterrupt={props.pendingInterrupt}
+        disabled={props.disabled}
       />
     ),
   });
@@ -78,13 +75,17 @@ afterEach(() => {
 
 describe("ChatInput", () => {
   describe("idle state (isRunning=false)", () => {
-    it("renders an enabled textarea and send button", async () => {
+    it("renders an enabled textarea and a send button that enables on input", async () => {
+      const user = userEvent.setup();
       setup({ sessionId: null, isRunning: false });
 
       const textarea = await screen.findByRole("textbox");
       const button = screen.getByRole("button", { name: /send/i });
 
       expect(textarea).not.toBeDisabled();
+      expect(button).toBeDisabled();
+
+      await user.type(textarea, "hello");
       expect(button).not.toBeDisabled();
     });
   });
@@ -112,6 +113,19 @@ describe("ChatInput", () => {
       expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1/stop", {
         method: "POST",
       });
+    });
+  });
+
+  describe("disabled state (disabled=true)", () => {
+    it("disables the textarea and send button when disabled prop is set", async () => {
+      const user = userEvent.setup();
+      setup({ sessionId: "s1", isRunning: false, disabled: true });
+
+      const textarea = await screen.findByRole("textbox");
+      expect(textarea).toBeDisabled();
+
+      await user.type(textarea, "hello");
+      expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
     });
   });
 
@@ -155,116 +169,6 @@ describe("ChatInput", () => {
           body: JSON.stringify({ message: "Why did that tool call fail?" }),
         }),
       );
-    });
-  });
-
-  describe("pending interrupt routing", () => {
-    it("posts to /respond with text when pendingInterrupt.kind is approval", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup(
-        {
-          sessionId: "s1",
-          isRunning: false,
-          pendingInterrupt: { id: "inc-1", kind: "approval" },
-        },
-        "/sessions/new",
-      );
-
-      const textarea = await screen.findByRole("textbox");
-      await user.type(textarea, "Keep the container up for now");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/sessions/s1/respond",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({
-            text: "Keep the container up for now",
-            resolvedBy: "console",
-          }),
-        }),
-      );
-      expect(fetchMock).not.toHaveBeenCalledWith(
-        "/api/sessions/s1/messages",
-        expect.anything(),
-      );
-    });
-
-    it("posts to /respond with text when pendingInterrupt.kind is clarification", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup(
-        {
-          sessionId: "s1",
-          isRunning: false,
-          pendingInterrupt: { id: "inc-2", kind: "clarification" },
-        },
-        "/sessions/new",
-      );
-
-      const textarea = await screen.findByRole("textbox");
-      await user.type(textarea, "Focus on memory pressure");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/sessions/s1/respond",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({
-            text: "Focus on memory pressure",
-            resolvedBy: "console",
-          }),
-        }),
-      );
-      expect(fetchMock).not.toHaveBeenCalledWith(
-        "/api/sessions/s1/messages",
-        expect.anything(),
-      );
-    });
-
-    it("shows 'Add context...' placeholder when approval interrupt is pending", async () => {
-      setup(
-        {
-          sessionId: "s1",
-          isRunning: false,
-          pendingInterrupt: { id: "inc-1", kind: "approval" },
-        },
-        "/sessions/new",
-      );
-
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toHaveAttribute("placeholder", "Add context…");
-    });
-
-    it("shows 'Type your answer...' placeholder when clarification interrupt is pending", async () => {
-      setup(
-        {
-          sessionId: "s1",
-          isRunning: false,
-          pendingInterrupt: { id: "inc-2", kind: "clarification" },
-        },
-        "/sessions/new",
-      );
-
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toHaveAttribute("placeholder", "Type your answer…");
-    });
-
-    it("shows informational placeholder and disables textarea when continue interrupt is pending", async () => {
-      setup(
-        {
-          sessionId: "s1",
-          isRunning: false,
-          pendingInterrupt: { id: "inc-3", kind: "continue" },
-        },
-        "/sessions/new",
-      );
-
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toHaveAttribute(
-        "placeholder",
-        "Use the controls above to resume or end…",
-      );
-      expect(textarea).toBeDisabled();
     });
   });
 });

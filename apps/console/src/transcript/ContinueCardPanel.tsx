@@ -29,7 +29,7 @@ export function ContinueCardPanel({
       </Text>
       {resolved ? (
         <Text className="text-xs" data-testid="continue-resolution">
-          {item.approval === "continued" ? "Resumed" : "Ended"}
+          {item.approval === "continued" ? "Continued" : "Cancelled"}
           {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
         </Text>
       ) : (
@@ -39,7 +39,7 @@ export function ContinueCardPanel({
             disabled={disabled}
             onClick={() => onResolve?.("approve")}
           >
-            Resume
+            Continue
           </Button>
           <Button
             size="xs"
@@ -47,7 +47,7 @@ export function ContinueCardPanel({
             disabled={disabled}
             onClick={() => onResolve?.("reject")}
           >
-            End investigation
+            Cancel
           </Button>
         </div>
       )}

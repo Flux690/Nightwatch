@@ -35,21 +35,18 @@ afterEach(() => {
 });
 
 describe("TranscriptItemRenderer", () => {
-  describe("user_turn — right-aligned bubble", () => {
-    it("renders the user text inside a bubble", () => {
+  describe("user_turn — full-width left-aligned turn", () => {
+    it("renders the user text inside a turn block", () => {
       wrap({ kind: "user_turn", id: "u1", text: "Hello agent" });
 
       expect(screen.getByText("Hello agent")).toBeInTheDocument();
+      expect(screen.getByTestId("user-turn")).toBeInTheDocument();
     });
 
-    it("bubble wrapper is right-aligned", () => {
+    it("shows a You label above the message", () => {
       wrap({ kind: "user_turn", id: "u1", text: "Hello agent" });
 
-      const bubble = screen.getByTestId("user-bubble");
-      const style = window.getComputedStyle(bubble);
-      expect(
-        style.justifyContent === "flex-end" || style.marginLeft === "auto",
-      ).toBe(true);
+      expect(screen.getByText("You")).toBeInTheDocument();
     });
   });
 
@@ -382,68 +379,66 @@ describe("TranscriptItemRenderer", () => {
       toolUseId: "continue-uuid-1",
     };
 
-    it("renders Resume and End investigation buttons when unresolved", () => {
+    it("renders Continue and Cancel buttons when unresolved", () => {
       wrap(continueItem);
 
       expect(
-        screen.getByRole("button", { name: /resume/i }),
+        screen.getByRole("button", { name: /^continue$/i }),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /end investigation/i }),
+        screen.getByRole("button", { name: /cancel/i }),
       ).toBeInTheDocument();
     });
 
-    it("calls onResolve with 'approve' when Resume is clicked", async () => {
+    it("calls onResolve with 'approve' when Continue is clicked", async () => {
       const user = userEvent.setup();
       const onResolve = vi.fn();
       wrap(continueItem, { onResolve });
 
-      await user.click(screen.getByRole("button", { name: /resume/i }));
+      await user.click(screen.getByRole("button", { name: /^continue$/i }));
 
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "approve");
     });
 
-    it("calls onResolve with 'reject' when End investigation is clicked", async () => {
+    it("calls onResolve with 'reject' when Cancel is clicked", async () => {
       const user = userEvent.setup();
       const onResolve = vi.fn();
       wrap(continueItem, { onResolve });
 
-      await user.click(
-        screen.getByRole("button", { name: /end investigation/i }),
-      );
+      await user.click(screen.getByRole("button", { name: /cancel/i }));
 
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
     });
 
-    it("shows Resumed and hides buttons when approval is 'continued'", () => {
+    it("shows Continued and hides buttons when approval is 'continued'", () => {
       wrap({ ...continueItem, approval: "continued", resolvedBy: "console" });
 
       expect(screen.getByTestId("continue-resolution")).toHaveTextContent(
-        "Resumed by console",
+        "Continued by console",
       );
       expect(
-        screen.queryByRole("button", { name: /resume/i }),
+        screen.queryByRole("button", { name: /^continue$/i }),
       ).not.toBeInTheDocument();
     });
 
-    it("shows Ended and hides buttons when approval is 'rejected'", () => {
+    it("shows Cancelled and hides buttons when approval is 'rejected'", () => {
       wrap({ ...continueItem, approval: "rejected" });
 
       expect(screen.getByTestId("continue-resolution")).toHaveTextContent(
-        "Ended",
+        "Cancelled",
       );
       expect(
-        screen.queryByRole("button", { name: /end investigation/i }),
+        screen.queryByRole("button", { name: /cancel/i }),
       ).not.toBeInTheDocument();
     });
 
     it("disables buttons when approval is 'pending'", () => {
       wrap({ ...continueItem, approval: "pending" });
 
-      expect(screen.getByRole("button", { name: /resume/i })).toBeDisabled();
       expect(
-        screen.getByRole("button", { name: /end investigation/i }),
+        screen.getByRole("button", { name: /^continue$/i }),
       ).toBeDisabled();
+      expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
     });
   });
 

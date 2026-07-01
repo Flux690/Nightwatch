@@ -1,52 +1,42 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Square } from "lucide-react";
-import { Button } from "../ui/Button.js";
-import { Textarea } from "../ui/Textarea.js";
+import { ArrowUp, Square } from "lucide-react";
 import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 
-const STOP_ICON_PROPS = {
-  size: 14,
-  strokeWidth: 1.5,
-  "aria-hidden": true,
-} as const;
-
-export interface PendingInterrupt {
-  id: string;
-  kind: "approval" | "clarification" | "continue";
-}
+const MAX_TEXTAREA_HEIGHT = 200;
+const ICON_PROPS = { size: 16, strokeWidth: 2, "aria-hidden": true } as const;
 
 export interface ChatInputProps {
   sessionId: string | null;
   isRunning: boolean;
-  pendingInterrupt?: PendingInterrupt;
+  disabled?: boolean;
   onSessionCreated?: (sessionId: string, firstMessage: string) => void;
 }
 
 export function ChatInput({
   sessionId,
   isRunning,
-  pendingInterrupt,
+  disabled,
   onSessionCreated,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composingRef = useRef(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+  }, [text]);
 
   const submit = useMutation({
     mutationFn: async (trimmed: string): Promise<string | null> => {
-      if (pendingInterrupt) {
-        if (sessionId === null) return null;
-        await apiFetch<void>(`/api/sessions/${sessionId}/respond`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: trimmed, resolvedBy: "console" }),
-        });
-        return null;
-      }
       if (sessionId === null) {
-        const data = await apiFetch<{ sessionId: string }>(`/api/chat`, {
+        const data = await apiFetch<{ sessionId: string }>("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: trimmed }),
@@ -70,6 +60,7 @@ export function ChatInput({
           replace: true,
         });
       }
+      textareaRef.current?.focus();
     },
     onError: (err) => {
       toast.show({
@@ -79,12 +70,6 @@ export function ChatInput({
       });
     },
   });
-
-  function handleSubmit(): void {
-    const trimmed = text.trim();
-    if (!trimmed || isRunning || submit.isPending) return;
-    submit.mutate(trimmed);
-  }
 
   const stop = useMutation({
     mutationFn: () =>
@@ -98,62 +83,78 @@ export function ChatInput({
     },
   });
 
-  function placeholder(): string {
-    if (isRunning) return "Agent is running…";
-    if (pendingInterrupt?.kind === "approval") return "Add context…";
-    if (pendingInterrupt?.kind === "clarification") return "Type your answer…";
-    if (pendingInterrupt?.kind === "continue")
-      return "Use the controls above to resume or end…";
-    return "Type a message…";
-  }
+  const handleSubmit = useCallback(() => {
+    const trimmed = text.trim();
+    if (!trimmed || isRunning || disabled || submit.isPending) return;
+    submit.mutate(trimmed);
+  }, [text, isRunning, disabled, submit]);
+
+  const canSend =
+    text.trim().length > 0 && !isRunning && !disabled && !submit.isPending;
+  const inputDisabled = isRunning || !!disabled;
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key !== "Enter") return;
+      if (e.shiftKey || composingRef.current) return;
+      if (window.matchMedia("(pointer: coarse)").matches) return;
+      e.preventDefault();
+      handleSubmit();
+    },
+    [handleSubmit],
+  );
 
   return (
-    <div
-      style={{
-        borderTop: "1px solid var(--color-line)",
-        background: "var(--color-surface)",
-        padding: 8,
-        display: "flex",
-        gap: 4,
-        alignItems: "flex-end",
-      }}
-    >
-      <Textarea
-        style={{ flex: 1 }}
-        placeholder={placeholder()}
-        value={text}
-        onChange={(e) => setText(e.currentTarget.value)}
-        disabled={isRunning || pendingInterrupt?.kind === "continue"}
-        autosize
-        minRows={1}
-        maxRows={6}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit();
-          }
-        }}
-      />
-      {isRunning ? (
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => sessionId !== null && stop.mutate()}
-          loading={stop.isPending}
-          leftSection={<Square {...STOP_ICON_PROPS} />}
-        >
-          Stop
-        </Button>
-      ) : (
-        <Button
-          size="sm"
-          onClick={() => handleSubmit()}
-          loading={submit.isPending}
-          disabled={submit.isPending}
-        >
-          Send
-        </Button>
-      )}
+    <div className="composer">
+      <label htmlFor="composer-textarea" className="sr-only">
+        Message
+      </label>
+      <div
+        className="composer__container"
+        data-disabled={inputDisabled ? "" : undefined}
+      >
+        <textarea
+          ref={textareaRef}
+          id="composer-textarea"
+          className="composer__textarea"
+          placeholder={isRunning ? "Agent is running…" : "Type a message…"}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
+          disabled={inputDisabled}
+          rows={1}
+        />
+        <div className="composer__action">
+          {isRunning ? (
+            <button
+              type="button"
+              className="composer__send"
+              data-stop=""
+              aria-label="Stop generating"
+              onClick={() => sessionId !== null && stop.mutate()}
+              disabled={stop.isPending}
+            >
+              <Square {...ICON_PROPS} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="composer__send"
+              aria-label="Send message"
+              onClick={handleSubmit}
+              disabled={!canSend}
+            >
+              <ArrowUp {...ICON_PROPS} />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

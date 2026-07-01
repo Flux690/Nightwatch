@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronDown } from "lucide-react";
 import type {
   SessionMeta,
   SessionMessage,
@@ -7,16 +9,28 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
-import { Text } from "../ui/Text.js";
+import { Button } from "../ui/Button.js";
 import { toast } from "../ui/Toast.js";
+import { useAuth } from "../auth/AuthContext.js";
 import { useConsoleWs } from "../hooks/ConsoleWsProvider.js";
 import { ChatInput } from "./ChatInput.js";
-import type { PendingInterrupt } from "./ChatInput.js";
 import { applyLiveEvent } from "../transcript/liveConverter.js";
 import { convertPersistedMessages } from "../transcript/persistedConverter.js";
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
 import { apiFetch } from "../api/client.js";
+
+const SUGGESTIONS = [
+  "Check pod health",
+  "Review recent alerts",
+  "Show fleet status",
+  "Investigate last failure",
+];
+
+interface PendingInterrupt {
+  id: string;
+  kind: "approval" | "clarification" | "continue";
+}
 
 function pendingApprovalToEnvelope(
   p: ApprovalRequest,
@@ -79,6 +93,11 @@ function itemKey(item: TranscriptItem): string {
   return item.toolUseId;
 }
 
+function displayNameFromEmail(email: string): string {
+  const local = email.split("@")[0];
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}
+
 function TranscriptColumn({
   persistedMessages,
   liveItems,
@@ -99,8 +118,10 @@ function TranscriptColumn({
   return (
     <div
       data-testid="transcript-column"
+      role="log"
+      aria-label="Session transcript"
       style={{
-        maxWidth: 860,
+        maxWidth: 760,
         margin: "0 auto",
         padding: "0 24px",
       }}
@@ -130,7 +151,16 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const shouldAutoScrollRef = useRef(true);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { phase } = useAuth();
+
+  const displayName =
+    phase.kind === "authenticated" ? displayNameFromEmail(phase.email) : "";
 
   const prevRouteIdRef = useRef<string | null>(sessionIdFromRoute);
   useEffect(() => {
@@ -314,6 +344,55 @@ export function SessionView({
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
+  function handleScroll(): void {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+    setShowScrollButton(!atBottom);
+    shouldAutoScrollRef.current = atBottom;
+  }
+
+  function scrollToBottom(): void {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    shouldAutoScrollRef.current = true;
+    setShowScrollButton(false);
+  }
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
+    bottomRef.current?.scrollIntoView({
+      behavior: "instant" as ScrollBehavior,
+    });
+  }, [liveItems, messages]);
+
+  const createSession = useMutation({
+    mutationFn: async (message: string) => {
+      const data = await apiFetch<{ sessionId: string }>("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      handleSessionCreated(data.sessionId, message);
+      return data.sessionId;
+    },
+    onSuccess: async (sessionId) => {
+      await navigate({
+        to: "/sessions/$id",
+        params: { id: sessionId },
+        replace: true,
+      });
+    },
+    onError: (err) => {
+      toast.show({
+        title: "Could not start session",
+        message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
+      });
+    },
+  });
+
   if (!activeSessionId) {
     return (
       <div
@@ -322,54 +401,92 @@ export function SessionView({
           display: "flex",
           flexDirection: "column",
           height: "100%",
+          alignItems: "center",
         }}
       >
         <div
           style={{
-            flex: 1,
+            flex: 3,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Text className="text-ink-muted text-sm">
-            Start a conversation to begin an investigation.
-          </Text>
+          <div style={{ textAlign: "center" }}>
+            <h1 className="session-landing__greeting">Hello, {displayName}</h1>
+            <div className="session-landing__suggestions">
+              {SUGGESTIONS.map((s) => (
+                <Button
+                  key={s}
+                  variant="secondary"
+                  size="sm"
+                  disabled={createSession.isPending}
+                  onClick={() => createSession.mutate(s)}
+                >
+                  {s}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
-        <ChatInput
-          sessionId={null}
-          isRunning={false}
-          onSessionCreated={handleSessionCreated}
-        />
+        <div style={{ flex: 2, width: "100%", paddingTop: 8 }}>
+          <ChatInput
+            sessionId={null}
+            isRunning={false}
+            onSessionCreated={handleSessionCreated}
+          />
+        </div>
       </div>
     );
   }
+
+  const composerHidden =
+    pendingInterrupt?.kind === "approval" ||
+    pendingInterrupt?.kind === "clarification";
+  const composerDisabled = pendingInterrupt?.kind === "continue";
 
   return (
     <div
       className="page"
       style={{ display: "flex", flexDirection: "column", height: "100%" }}
     >
-      <div
-        style={{
-          flex: 1,
-          padding: "16px 0",
-          overflowY: "auto",
-        }}
-      >
-        <TranscriptColumn
-          persistedMessages={messages}
-          liveItems={liveItems}
-          onResolve={handleResolve}
-          onAnswer={handleAnswer}
-        />
+      <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          style={{
+            height: "100%",
+            overflowY: "auto",
+            padding: "16px 0",
+          }}
+        >
+          <TranscriptColumn
+            persistedMessages={messages}
+            liveItems={liveItems}
+            onResolve={handleResolve}
+            onAnswer={handleAnswer}
+          />
+          <div ref={bottomRef} />
+        </div>
+        {showScrollButton && (
+          <button
+            type="button"
+            className="scroll-to-bottom"
+            aria-label="Scroll to bottom"
+            onClick={scrollToBottom}
+          >
+            <ChevronDown size={18} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        )}
       </div>
 
-      <ChatInput
-        sessionId={activeSessionId}
-        isRunning={isRunning}
-        pendingInterrupt={pendingInterrupt}
-      />
+      {!composerHidden && (
+        <ChatInput
+          sessionId={activeSessionId}
+          isRunning={isRunning}
+          disabled={composerDisabled}
+        />
+      )}
     </div>
   );
 }

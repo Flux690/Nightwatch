@@ -9,28 +9,13 @@ import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
 
-function UserBubble({ text }: { text: string }): React.JSX.Element {
+function UserTurn({ text }: { text: string }): React.JSX.Element {
   return (
-    <div
-      data-testid="user-bubble"
-      style={{
-        display: "flex",
-        justifyContent: "flex-end",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "75%",
-          background: "var(--color-surface-hover)",
-          border: "1px solid var(--color-line)",
-          borderRadius: "var(--radius-md)",
-          padding: "4px 8px",
-        }}
-      >
-        <Text className="text-sm" style={{ whiteSpace: "pre-wrap" }}>
-          {text}
-        </Text>
-      </div>
+    <div data-testid="user-turn" className="user-turn">
+      <div className="user-turn__label">You</div>
+      <Text className="text-sm" style={{ whiteSpace: "pre-wrap" }}>
+        {text}
+      </Text>
     </div>
   );
 }
@@ -89,7 +74,7 @@ export function TranscriptItemRenderer({
 }): React.JSX.Element {
   switch (item.kind) {
     case "user_turn":
-      return <UserBubble text={item.text} />;
+      return <UserTurn text={item.text} />;
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
     case "thinking":
