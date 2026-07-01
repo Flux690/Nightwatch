@@ -1,21 +1,44 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
-import { Badge } from "../ui/Badge.js";
-import { Loader } from "../ui/Loader.js";
-import { Stack } from "../ui/Stack.js";
-import { Text } from "../ui/Text.js";
-import { Title } from "../ui/Title.js";
+import { BellOff } from "lucide-react";
+import { Alert } from "../ui/Alert.js";
+import { StatusChip } from "../ui/StatusChip.js";
+import {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "../ui/Table.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 
-type AlertIntent = "error" | "warning" | "info";
-
-const SEVERITY_INTENT: Record<UnresolvedAlertRecord["severity"], AlertIntent> =
-  {
-    critical: "error",
-    warning: "warning",
-    info: "info",
-  };
+function SkeletonRows({ count }: { count: number }): React.JSX.Element {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <TableRow key={i}>
+          <TableCell data-mono>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell data-mono>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell>
+            <span className="skeleton skeleton--chip" />
+          </TableCell>
+          <TableCell>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell data-mono data-align="right">
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
 
 export function UnresolvedAlertsPage(): React.JSX.Element {
   const {
@@ -28,51 +51,111 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
     refetchInterval: 30_000,
   });
 
-  return (
-    <div className="page" style={{ padding: 16 }}>
-      <Title order={2} className="text-lg mb-4">
-        Unresolved alerts
-      </Title>
+  const isEmpty = !isLoading && !isError && alerts?.length === 0;
 
-      {isLoading && <Loader aria-label="Loading unresolved alerts" />}
+  return (
+    <div className="page page--data">
+      <header className="page-header">
+        <h1 className="page-title">Unresolved alerts</h1>
+      </header>
+
+      {isLoading && (
+        <div
+          className="page-table-wrap"
+          role="status"
+          aria-label="Loading unresolved alerts"
+        >
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Alert</TableHeader>
+                <TableHeader>Identity</TableHeader>
+                <TableHeader>Severity</TableHeader>
+                <TableHeader>Reason</TableHeader>
+                <TableHeader data-align="right">Received</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <SkeletonRows count={3} />
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {isError && (
-        <Text className="text-sm text-status-failed">
-          Failed to load unresolved alerts.
-        </Text>
+        <Alert
+          intent="error"
+          title="Failed to load unresolved alerts"
+          className="page-alert"
+        >
+          Something went wrong loading unresolved alerts. It will retry
+          automatically.
+        </Alert>
       )}
 
-      {!isLoading && !isError && alerts?.length === 0 && (
-        <Text className="text-sm text-ink-muted">No unresolved alerts.</Text>
+      {isEmpty && (
+        <div className="empty-state">
+          <div className="empty-state__content">
+            <BellOff
+              size={28}
+              strokeWidth={1.5}
+              className="empty-state__icon"
+              aria-hidden="true"
+            />
+            <p className="empty-state__text">
+              No unresolved alerts. When an incoming alert cannot be routed to a
+              runner, it appears here with the rejection reason so you can
+              diagnose fleet coverage gaps.
+            </p>
+          </div>
+        </div>
       )}
 
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {(alerts ?? []).map((alert, i) => (
-          <li
-            key={`${alert.sourceAlertId}-${i}`}
-            style={{
-              borderTop: "1px solid var(--color-line)",
-              padding: "8px 0",
-            }}
-          >
-            <Stack className="gap-0.5">
-              <Text className="text-sm font-mono">{alert.alertType}</Text>
-              <Text className="text-xs text-ink-muted font-mono">
-                {alert.identityKey}
-              </Text>
-              <Badge intent={SEVERITY_INTENT[alert.severity]}>
-                {alert.severity}
-              </Badge>
-              <Text className="text-xs text-ink-muted">
-                {alert.rejectionReason}
-              </Text>
-              <Text className="text-xs text-ink-muted">
-                {timeAgo(alert.createdAt)}
-              </Text>
-            </Stack>
-          </li>
-        ))}
-      </ul>
+      {!isLoading && !isError && alerts && alerts.length > 0 && (
+        <div className="page-table-wrap">
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Alert</TableHeader>
+                <TableHeader>Identity</TableHeader>
+                <TableHeader>Severity</TableHeader>
+                <TableHeader>Reason</TableHeader>
+                <TableHeader data-align="right">Received</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {alerts.map((alert, i) => (
+                <TableRow key={`${alert.sourceAlertId}-${i}`}>
+                  <TableCell data-mono>
+                    <span className="cell-truncate" title={alert.alertType}>
+                      {alert.alertType}
+                    </span>
+                  </TableCell>
+                  <TableCell data-mono>
+                    <span className="cell-truncate" title={alert.identityKey}>
+                      {alert.identityKey}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusChip status={alert.severity} domain="alert" />
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="cell-truncate"
+                      title={alert.rejectionReason}
+                    >
+                      {alert.rejectionReason}
+                    </span>
+                  </TableCell>
+                  <TableCell data-mono data-align="right">
+                    {timeAgo(alert.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

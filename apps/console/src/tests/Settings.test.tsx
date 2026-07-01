@@ -311,7 +311,8 @@ describe("SettingsPage", () => {
   it("shows 'Not configured' when apiKeyMasked is null", async () => {
     setup({ apiKeyMasked: null });
     await waitFor(() => {
-      expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+      const form = document.querySelector("form");
+      expect(within(form!).getByText(/not configured/i)).toBeInTheDocument();
     });
   });
 

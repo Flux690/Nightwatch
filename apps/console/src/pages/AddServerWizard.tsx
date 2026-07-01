@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwatch/shared";
+import { AlertCircle } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
 import { Badge } from "../ui/Badge.js";
 import { Button } from "../ui/Button.js";
@@ -203,7 +204,14 @@ export function AddServerWizard({
               value={serverName}
               onChange={(e) => setServerName(e.currentTarget.value)}
               onBlur={() => setServerNameTouched(true)}
-              error={serverNameError}
+              error={
+                serverNameError ? (
+                  <>
+                    <AlertCircle size={12} aria-hidden="true" />
+                    {serverNameError}
+                  </>
+                ) : undefined
+              }
             />
 
             <RadioGroup

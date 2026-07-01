@@ -8,10 +8,8 @@ import { Checkbox } from "../ui/Checkbox.js";
 import { Group } from "../ui/Group.js";
 import { NumberInput } from "../ui/NumberInput.js";
 import { Select } from "../ui/Select.js";
-import { Stack } from "../ui/Stack.js";
 import { Text } from "../ui/Text.js";
 import { TextInput } from "../ui/TextInput.js";
-import { Title } from "../ui/Title.js";
 import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 import { IngestCredentialSection } from "./IngestCredentialSection.js";
@@ -92,7 +90,8 @@ export function SettingsPage(): React.JSX.Element {
     },
   });
 
-  function handleSave(): void {
+  function handleSave(e: React.FormEvent): void {
+    e.preventDefault();
     if (!form || !config) return;
     const delta = buildDelta(form, config);
     if (Object.keys(delta).length === 0) return;
@@ -138,185 +137,196 @@ export function SettingsPage(): React.JSX.Element {
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
 
   return (
-    <div className="page" style={{ padding: 16, maxWidth: 520 }}>
-      <Title order={2} className="text-lg mb-4">
-        Settings
-      </Title>
+    <div className="page page--data">
+      <header className="page-header">
+        <h1 className="page-title">Settings</h1>
+      </header>
 
       {form && (
-        <Stack className="gap-6">
-          <Stack className="gap-3">
-            <Text className="text-xs text-ink-muted uppercase font-semibold">
-              Model
-            </Text>
-
-            <Select
-              label="Protocol"
-              data={[
-                { value: "anthropic", label: "Anthropic native" },
-                { value: "openai", label: "OpenAI-compatible" },
-              ]}
-              value={form.provider}
-              onChange={(v) =>
-                v && setField("provider", v as AgentConfig["provider"])
-              }
-              allowDeselect={false}
-            />
-
-            <TextInput
-              label="Base URL"
-              placeholder={
-                form.provider === "anthropic"
-                  ? "https://api.anthropic.com"
-                  : "https://api.openai.com/v1"
-              }
-              value={form.baseUrl ?? ""}
-              onChange={(e) =>
-                setField("baseUrl", e.currentTarget.value || undefined)
-              }
-            />
-
-            <Stack className="gap-1">
-              <Text className="text-sm font-medium">API key</Text>
-              <Text className="text-sm text-ink-muted">
-                {form.apiKeyMasked ? form.apiKeyMasked : "Not configured"}
-              </Text>
-              <TextInput
-                placeholder="Paste API key"
-                type="password"
-                value={newApiKey}
-                onChange={(e) => {
-                  setNewApiKey(e.currentTarget.value);
-                  setTestResult(null);
-                }}
-              />
-              <Group className="gap-2 items-center">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  loading={testConnection.isPending}
-                  onClick={() => handleTestConnection()}
-                >
-                  Test connection
-                </Button>
-                {testResult?.ok && <Badge intent="success">Connected</Badge>}
-                {testResult && !testResult.ok && (
-                  <Badge intent="error">
-                    {ERROR_LABELS[testResult.error] ?? testResult.error}
-                  </Badge>
-                )}
-              </Group>
-            </Stack>
-
-            <Autocomplete
-              label="Model"
-              data={availableModels}
-              value={form.model}
-              onChange={(v) => setField("model", v)}
-            />
-
-            <NumberInput
-              label="Max output tokens"
-              value={form.maxOutputTokens}
-              onChange={(v) => setField("maxOutputTokens", numberValue(v))}
-            />
-
-            {isAnthropic && (
-              <>
+        <div style={{ maxWidth: 720 }}>
+          <form onSubmit={handleSave}>
+            <fieldset className="fieldset">
+              <legend className="fieldset__legend">Model</legend>
+              <div className="fieldset__fields">
                 <Select
-                  label="Thinking mode"
+                  label="Protocol"
                   data={[
-                    {
-                      value: "adaptive",
-                      label: "Adaptive (extended thinking)",
-                    },
-                    { value: "off", label: "Off" },
+                    { value: "anthropic", label: "Anthropic native" },
+                    { value: "openai", label: "OpenAI-compatible" },
                   ]}
-                  value={form.thinking}
+                  value={form.provider}
                   onChange={(v) =>
-                    v && setField("thinking", v as AgentConfig["thinking"])
+                    v && setField("provider", v as AgentConfig["provider"])
                   }
                   allowDeselect={false}
                 />
-                <Checkbox
-                  label="Prompt caching"
-                  checked={form.promptCaching ?? true}
+
+                <TextInput
+                  label="Base URL"
+                  placeholder={
+                    form.provider === "anthropic"
+                      ? "https://api.anthropic.com"
+                      : "https://api.openai.com/v1"
+                  }
+                  value={form.baseUrl ?? ""}
                   onChange={(e) =>
-                    setField("promptCaching", e.currentTarget.checked)
+                    setField("baseUrl", e.currentTarget.value || undefined)
                   }
                 />
-              </>
-            )}
 
-            {!isAnthropic && (
-              <Select
-                label="Reasoning effort"
-                data={[
-                  { value: "low", label: "Low" },
-                  { value: "medium", label: "Medium" },
-                  { value: "high", label: "High" },
-                ]}
-                value={form.reasoningEffort ?? null}
-                onChange={(v) =>
-                  setField("reasoningEffort", (v as ReasoningEffort) ?? null)
-                }
-                clearable
-                placeholder="Not set"
-              />
-            )}
-          </Stack>
+                <div>
+                  <Text className="text-sm font-medium">API key</Text>
+                  <Text
+                    className="text-sm text-ink-muted"
+                    style={{ marginTop: 4 }}
+                  >
+                    {form.apiKeyMasked ? form.apiKeyMasked : "Not configured"}
+                  </Text>
+                  <TextInput
+                    placeholder="Paste API key"
+                    type="password"
+                    value={newApiKey}
+                    onChange={(e) => {
+                      setNewApiKey(e.currentTarget.value);
+                      setTestResult(null);
+                    }}
+                  />
+                  <Group
+                    className="gap-2 items-center"
+                    style={{ marginTop: 8 }}
+                  >
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="secondary"
+                      loading={testConnection.isPending}
+                      onClick={() => handleTestConnection()}
+                    >
+                      Test connection
+                    </Button>
+                    {testResult?.ok && (
+                      <Badge intent="success">Connected</Badge>
+                    )}
+                    {testResult && !testResult.ok && (
+                      <Badge intent="error">
+                        {ERROR_LABELS[testResult.error] ?? testResult.error}
+                      </Badge>
+                    )}
+                  </Group>
+                </div>
 
-          <Stack className="gap-3">
-            <Text className="text-xs text-ink-muted uppercase font-semibold">
-              Loop
-            </Text>
-            <NumberInput
-              label="Max retries"
-              value={form.maxRetries}
-              onChange={(v) => setField("maxRetries", numberValue(v))}
-            />
-            <NumberInput
-              label="Request timeout (ms)"
-              value={form.requestTimeoutMs}
-              onChange={(v) => setField("requestTimeoutMs", numberValue(v))}
-            />
-            <NumberInput
-              label="Hard timeout (ms)"
-              value={form.hardTimeoutMs}
-              onChange={(v) => setField("hardTimeoutMs", numberValue(v))}
-            />
-            <NumberInput
-              label="Tool timeout (ms)"
-              value={form.toolTimeoutMs}
-              onChange={(v) => setField("toolTimeoutMs", numberValue(v))}
-            />
-          </Stack>
+                <Autocomplete
+                  label="Model"
+                  data={availableModels}
+                  value={form.model}
+                  onChange={(v) => setField("model", v)}
+                />
 
-          <Button
-            onClick={() => handleSave()}
-            disabled={!hasChanges || saveConfig.isPending}
-            loading={saveConfig.isPending}
-            style={{ alignSelf: "flex-start" }}
-          >
-            Save
-          </Button>
-        </Stack>
+                <NumberInput
+                  label="Max output tokens"
+                  value={form.maxOutputTokens}
+                  onChange={(v) => setField("maxOutputTokens", numberValue(v))}
+                />
+
+                {isAnthropic && (
+                  <>
+                    <Select
+                      label="Thinking mode"
+                      data={[
+                        {
+                          value: "adaptive",
+                          label: "Adaptive (extended thinking)",
+                        },
+                        { value: "off", label: "Off" },
+                      ]}
+                      value={form.thinking}
+                      onChange={(v) =>
+                        v && setField("thinking", v as AgentConfig["thinking"])
+                      }
+                      allowDeselect={false}
+                    />
+                    <Checkbox
+                      label="Prompt caching"
+                      checked={form.promptCaching ?? true}
+                      onChange={(e) =>
+                        setField("promptCaching", e.currentTarget.checked)
+                      }
+                    />
+                  </>
+                )}
+
+                {!isAnthropic && (
+                  <Select
+                    label="Reasoning effort"
+                    data={[
+                      { value: "low", label: "Low" },
+                      { value: "medium", label: "Medium" },
+                      { value: "high", label: "High" },
+                    ]}
+                    value={form.reasoningEffort ?? null}
+                    onChange={(v) =>
+                      setField(
+                        "reasoningEffort",
+                        (v as ReasoningEffort) ?? null,
+                      )
+                    }
+                    clearable
+                    placeholder="Not set"
+                  />
+                )}
+              </div>
+            </fieldset>
+
+            <fieldset className="fieldset">
+              <legend className="fieldset__legend">Loop</legend>
+              <div className="fieldset__fields">
+                <NumberInput
+                  label="Max retries"
+                  value={form.maxRetries}
+                  onChange={(v) => setField("maxRetries", numberValue(v))}
+                />
+                <NumberInput
+                  label="Request timeout (ms)"
+                  value={form.requestTimeoutMs}
+                  onChange={(v) => setField("requestTimeoutMs", numberValue(v))}
+                />
+                <NumberInput
+                  label="Hard timeout (ms)"
+                  value={form.hardTimeoutMs}
+                  onChange={(v) => setField("hardTimeoutMs", numberValue(v))}
+                />
+                <NumberInput
+                  label="Tool timeout (ms)"
+                  value={form.toolTimeoutMs}
+                  onChange={(v) => setField("toolTimeoutMs", numberValue(v))}
+                />
+              </div>
+            </fieldset>
+
+            <div className="form-actions">
+              <Button
+                type="submit"
+                disabled={!hasChanges || saveConfig.isPending}
+                loading={saveConfig.isPending}
+              >
+                Save
+              </Button>
+            </div>
+          </form>
+
+          <fieldset className="fieldset">
+            <legend className="fieldset__legend">Alerting</legend>
+            <IngestCredentialSection />
+          </fieldset>
+
+          <fieldset className="fieldset">
+            <legend className="fieldset__legend">Account</legend>
+            <Button variant="ghost" onClick={() => void logoutAll()}>
+              Log out all devices
+            </Button>
+          </fieldset>
+        </div>
       )}
-
-      <IngestCredentialSection />
-
-      <Stack className="gap-3 mt-8">
-        <Text className="text-xs text-ink-muted uppercase font-semibold">
-          Account
-        </Text>
-        <Button
-          variant="ghost"
-          style={{ alignSelf: "flex-start" }}
-          onClick={() => void logoutAll()}
-        >
-          Log out all devices
-        </Button>
-      </Stack>
     </div>
   );
 }

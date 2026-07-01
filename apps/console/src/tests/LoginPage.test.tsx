@@ -71,9 +71,7 @@ describe("LoginPage", () => {
     setup({ ownerExists: false });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: /create your account/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/create your account/i)).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/^email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^password/i)).toBeInTheDocument();
@@ -85,7 +83,7 @@ describe("LoginPage", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("heading", { name: /^log in$/i }),
+        screen.getByText(/^log in$/i, { selector: "legend" }),
       ).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/^email/i)).toBeInTheDocument();
@@ -95,10 +93,22 @@ describe("LoginPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("wraps form fields in a fieldset element", async () => {
+    setup({ ownerExists: false });
+    await waitFor(() => {
+      expect(screen.getByText(/create your account/i)).toBeInTheDocument();
+    });
+    const fieldset = document.querySelector("fieldset");
+    expect(fieldset).not.toBeNull();
+    const legend = fieldset!.querySelector("legend");
+    expect(legend).not.toBeNull();
+    expect(legend!.textContent).toMatch(/create your account/i);
+  });
+
   it("does not flag confirm password as mismatched when tabbed through while still empty", async () => {
     const user = userEvent.setup();
     setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
     await user.tab();
@@ -110,7 +120,7 @@ describe("LoginPage", () => {
   it("flags a password under 12 characters as soon as the field loses focus, with no submit and no round-trip", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^password/i), "tooshort");
     await user.tab();
@@ -124,10 +134,28 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a validation icon alongside error text", async () => {
+    const user = userEvent.setup();
+    setup({ ownerExists: false });
+    await screen.findByText(/create your account/i);
+
+    await user.type(screen.getByLabelText(/^password/i), "tooshort");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(screen.getByText(/at least 12 characters/i)).toBeInTheDocument();
+    });
+    const errorContainer = screen
+      .getByText(/at least 12 characters/i)
+      .closest(".validation-error");
+    expect(errorContainer).not.toBeNull();
+    expect(errorContainer!.querySelector("svg")).not.toBeNull();
+  });
+
   it("flags a confirm-password mismatch as soon as the field loses focus, with no submit and no round-trip", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
     await user.type(
@@ -143,7 +171,7 @@ describe("LoginPage", () => {
   it("rejects a password under 12 characters inline with no round-trip", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "tooshort");
@@ -159,7 +187,7 @@ describe("LoginPage", () => {
   it("rejects a confirm-password mismatch inline with no round-trip", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -176,7 +204,7 @@ describe("LoginPage", () => {
   it("submits /api/setup with email and password (not confirmPassword) on valid setup", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -203,7 +231,7 @@ describe("LoginPage", () => {
   it("submits /api/login with email and password on valid login", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: true, authenticated: false });
-    await screen.findByRole("heading", { name: /^log in$/i });
+    await screen.findByText(/^log in$/i, { selector: "legend" });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -239,7 +267,7 @@ describe("LoginPage", () => {
       return Promise.resolve(jsonResponse(200, { ok: true }));
     });
     setupWithMock(fetchMock);
-    await screen.findByRole("heading", { name: /^log in$/i });
+    await screen.findByText(/^log in$/i, { selector: "legend" });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "wrongpassword123");

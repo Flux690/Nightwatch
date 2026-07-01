@@ -72,56 +72,146 @@ afterEach(() => {
 });
 
 describe("AuditLogPage", () => {
-  it("fetches GET /api/remediation-actions on mount", async () => {
-    const { fetchMock } = setup();
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("/api/remediation-actions");
+  describe("table semantics", () => {
+    it("renders a semantic table with column headers", async () => {
+      setup([EXECUTED_DOCKER]);
+      await waitFor(() => {
+        expect(screen.getByText("restart_service")).toBeInTheDocument();
+      });
+      expect(screen.getByRole("table")).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: /action/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: /service/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: /outcome/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("uses tnum on timestamp and identity cells", async () => {
+      setup([EXECUTED_DOCKER]);
+      await waitFor(() => {
+        expect(screen.getByText("restart_service")).toBeInTheDocument();
+      });
+      const monoCells = document.querySelectorAll("td[data-mono]");
+      expect(monoCells.length).toBeGreaterThanOrEqual(2);
     });
   });
 
-  it("renders identity, action, outcome, and resolver for a recorded action", async () => {
-    setup([EXECUTED_DOCKER]);
-    await waitFor(() => {
-      expect(screen.getByText("docker/svc-01/api")).toBeInTheDocument();
+  describe("data rendering", () => {
+    it("fetches GET /api/remediation-actions on mount", async () => {
+      const { fetchMock } = setup();
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/remediation-actions");
+      });
     });
-    expect(screen.getByText("restart_service")).toBeInTheDocument();
-    expect(screen.getByText(/^executed$/i)).toBeInTheDocument();
-    expect(screen.getByText(/operator/)).toBeInTheDocument();
+
+    it("renders identity, action, outcome, and resolver for a recorded action", async () => {
+      setup([EXECUTED_DOCKER]);
+      await waitFor(() => {
+        expect(screen.getByText("docker/svc-01/api")).toBeInTheDocument();
+      });
+      expect(screen.getByText("restart_service")).toBeInTheDocument();
+      expect(screen.getByText(/^executed$/i)).toBeInTheDocument();
+      expect(screen.getByText("operator")).toBeInTheDocument();
+    });
+
+    it("renders a Kubernetes identity key verbatim, same as a Docker one (no hardcoded shape)", async () => {
+      setup([REJECTED_K8S]);
+      await waitFor(() => {
+        expect(
+          screen.getByText("kubernetes/prod/checkout"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText(/^rejected$/i)).toBeInTheDocument();
+      expect(screen.getByText("console")).toBeInTheDocument();
+    });
+
+    it("lists newest-first order as returned by the API, without re-sorting", async () => {
+      setup([REJECTED_K8S, EXECUTED_DOCKER]);
+      await waitFor(() => {
+        expect(
+          screen.getByText("kubernetes/prod/checkout"),
+        ).toBeInTheDocument();
+      });
+      const rows = screen.getAllByRole("row");
+      const dataRows = rows.slice(1);
+      expect(dataRows).toHaveLength(2);
+      expect(dataRows[0].textContent).toContain("kubernetes/prod/checkout");
+      expect(dataRows[1].textContent).toContain("docker/svc-01/api");
+    });
+
+    it("shows in progress for a crash-interrupted action stuck in executing", async () => {
+      setup([STILL_EXECUTING]);
+      await waitFor(() => {
+        expect(screen.getByText(/^executing$/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/in progress/i)).toBeInTheDocument();
+    });
+
+    it("truncates long cell values with a title attribute", async () => {
+      setup([EXECUTED_DOCKER]);
+      await waitFor(() => {
+        expect(screen.getByText("restart_service")).toBeInTheDocument();
+      });
+      const toolCell = screen.getByText("restart_service");
+      expect(toolCell.getAttribute("title")).toBe("restart_service");
+    });
   });
 
-  it("renders a Kubernetes identity key verbatim, same as a Docker one (no hardcoded shape)", async () => {
-    setup([REJECTED_K8S]);
-    await waitFor(() => {
-      expect(screen.getByText("kubernetes/prod/checkout")).toBeInTheDocument();
-    });
-    expect(screen.getByText(/^rejected$/i)).toBeInTheDocument();
-    expect(screen.getByText(/console/)).toBeInTheDocument();
-  });
-
-  it("lists newest-first order as returned by the API, without re-sorting", async () => {
-    setup([REJECTED_K8S, EXECUTED_DOCKER]);
-    await waitFor(() => {
-      expect(screen.getByText("kubernetes/prod/checkout")).toBeInTheDocument();
-    });
-    const rows = screen.getAllByRole("listitem");
-    expect(rows).toHaveLength(2);
-    expect(rows[0].textContent).toContain("kubernetes/prod/checkout");
-    expect(rows[1].textContent).toContain("docker/svc-01/api");
-  });
-
-  it("shows an empty state when there are no recorded actions", async () => {
-    setup([]);
-    await waitFor(() => {
-      expect(screen.getByText(/no remediation actions/i)).toBeInTheDocument();
+  describe("empty state", () => {
+    it("shows the Linear two-region empty state when there are no recorded actions", async () => {
+      setup([]);
+      await waitFor(() => {
+        expect(
+          screen.getByText(/no remediation actions recorded/i),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("heading", { name: /audit log/i }),
+      ).toBeInTheDocument();
     });
   });
 
-  it("shows in progress for a crash-interrupted action stuck in executing", async () => {
-    setup([STILL_EXECUTING]);
-    await waitFor(() => {
-      expect(screen.getByText(/^executing$/i)).toBeInTheDocument();
+  describe("loading state", () => {
+    it("shows skeleton rows while loading", () => {
+      setup();
+      expect(
+        screen.getByRole("status", { name: /loading audit log/i }),
+      ).toBeInTheDocument();
+      expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
     });
-    expect(screen.getByText(/in progress/i)).toBeInTheDocument();
-    expect(screen.queryByText(/resolved never/i)).not.toBeInTheDocument();
+  });
+
+  describe("error state", () => {
+    it("shows an error alert when the fetch fails", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+      );
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+
+      render(
+        <TestProviders>
+          <QueryClientProvider client={qc}>
+            <AuditLogPage />
+          </QueryClientProvider>
+        </TestProviders>,
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/failed to load audit log/i),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByText(/no remediation actions/i),
+      ).not.toBeInTheDocument();
+    });
   });
 });

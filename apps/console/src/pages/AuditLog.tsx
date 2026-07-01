@@ -1,12 +1,48 @@
 import { useQuery } from "@tanstack/react-query";
 import type { RemediationActionRecord } from "@nightwatch/shared";
-import { Loader } from "../ui/Loader.js";
-import { Stack } from "../ui/Stack.js";
+import { ScrollText } from "lucide-react";
+import { Alert } from "../ui/Alert.js";
+import { Button } from "../ui/Button.js";
 import { StatusChip } from "../ui/StatusChip.js";
-import { Text } from "../ui/Text.js";
-import { Title } from "../ui/Title.js";
+import {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "../ui/Table.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
+
+function SkeletonRows({ count }: { count: number }): React.JSX.Element {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <TableRow key={i}>
+          <TableCell data-mono>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell data-mono>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell>
+            <span className="skeleton skeleton--chip" />
+          </TableCell>
+          <TableCell>
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+          <TableCell data-mono data-align="right">
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+          <TableCell data-mono data-align="right">
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </>
+  );
+}
 
 export function AuditLogPage(): React.JSX.Element {
   const {
@@ -20,52 +56,121 @@ export function AuditLogPage(): React.JSX.Element {
     refetchInterval: 30_000,
   });
 
-  return (
-    <div className="page" style={{ padding: 16 }}>
-      <Title order={2} className="text-lg mb-4">
-        Audit log
-      </Title>
+  const isEmpty = !isLoading && !isError && actions?.length === 0;
 
-      {isLoading && <Loader aria-label="Loading audit log" />}
+  return (
+    <div className="page page--data">
+      <header className="page-header">
+        <h1 className="page-title">Audit log</h1>
+      </header>
+
+      {isLoading && (
+        <div
+          className="page-table-wrap"
+          role="status"
+          aria-label="Loading audit log"
+        >
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Action</TableHeader>
+                <TableHeader>Service</TableHeader>
+                <TableHeader>Outcome</TableHeader>
+                <TableHeader>Decided by</TableHeader>
+                <TableHeader data-align="right">Created</TableHeader>
+                <TableHeader data-align="right">Resolved</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <SkeletonRows count={3} />
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {isError && (
-        <Text className="text-sm text-status-failed">
-          Couldn&apos;t load the audit log. Retrying…
-        </Text>
+        <Alert
+          intent="error"
+          title="Failed to load audit log"
+          className="page-alert"
+        >
+          Something went wrong loading the audit log. It will retry
+          automatically.
+        </Alert>
       )}
 
-      {!isLoading && !isError && actions?.length === 0 && (
-        <Text className="text-sm text-ink-muted">
-          No remediation actions recorded yet.
-        </Text>
+      {isEmpty && (
+        <div className="empty-state">
+          <div className="empty-state__content">
+            <ScrollText
+              size={28}
+              strokeWidth={1.5}
+              className="empty-state__icon"
+              aria-hidden="true"
+            />
+            <p className="empty-state__text">
+              No remediation actions recorded yet. When Nightwatch executes,
+              rejects, or fails a remediation action, it appears here so you can
+              audit every decision the system made on your behalf.
+            </p>
+          </div>
+        </div>
       )}
 
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {(actions ?? []).map((action) => (
-          <li
-            key={`${action.sessionId}/${action.toolUseId}`}
-            style={{
-              borderTop: "1px solid var(--color-line)",
-              padding: "8px 0",
-            }}
-          >
-            <Stack className="gap-0.5">
-              <Text className="text-sm font-mono">{action.toolName}</Text>
-              <Text className="text-xs text-ink-muted font-mono">
-                {action.serviceIdentityKey ?? "unknown service"}
-              </Text>
-              <StatusChip status={action.status} domain="remediation" />
-              <Text className="text-xs text-ink-muted">
-                {action.resolvedBy ?? "unknown"} · decided{" "}
-                {timeAgo(action.createdAt)} ·{" "}
-                {action.status === "executing"
-                  ? "in progress"
-                  : `resolved ${timeAgo(action.resolvedAt)}`}
-              </Text>
-            </Stack>
-          </li>
-        ))}
-      </ul>
+      {!isLoading && !isError && actions && actions.length > 0 && (
+        <div className="page-table-wrap">
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Action</TableHeader>
+                <TableHeader>Service</TableHeader>
+                <TableHeader>Outcome</TableHeader>
+                <TableHeader>Decided by</TableHeader>
+                <TableHeader data-align="right">Created</TableHeader>
+                <TableHeader data-align="right">Resolved</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {actions.map((action) => (
+                <TableRow key={`${action.sessionId}/${action.toolUseId}`}>
+                  <TableCell data-mono>
+                    <span className="cell-truncate" title={action.toolName}>
+                      {action.toolName}
+                    </span>
+                  </TableCell>
+                  <TableCell data-mono>
+                    <span
+                      className="cell-truncate"
+                      title={action.serviceIdentityKey ?? "unknown service"}
+                    >
+                      {action.serviceIdentityKey ?? "unknown service"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusChip status={action.status} domain="remediation" />
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="cell-truncate"
+                      title={action.resolvedBy ?? "unknown"}
+                    >
+                      {action.resolvedBy ?? "unknown"}
+                    </span>
+                  </TableCell>
+                  <TableCell data-mono data-align="right">
+                    {timeAgo(action.createdAt)}
+                  </TableCell>
+                  <TableCell data-mono data-align="right">
+                    {action.status === "executing"
+                      ? "in progress"
+                      : timeAgo(action.resolvedAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

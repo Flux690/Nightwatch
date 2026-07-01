@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
+import { Network, Plus, ServerOff } from "lucide-react";
+import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
-import { Group } from "../ui/Group.js";
 import { Loader } from "../ui/Loader.js";
-import { Stack } from "../ui/Stack.js";
 import { StatusChip } from "../ui/StatusChip.js";
 import { Text } from "../ui/Text.js";
-import { Title } from "../ui/Title.js";
+import {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from "../ui/Table.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
 import { AddServerWizard } from "./AddServerWizard.js";
@@ -18,11 +25,106 @@ function runnerStatus(runner: RunnerRecord): RunnerStatus {
   return runner.online ? "online" : "offline";
 }
 
+type SortField = "hostname" | "status" | "lastSeen" | "services";
+type SortDir = "asc" | "desc";
+
+function compareRunners(
+  a: RunnerRecord,
+  b: RunnerRecord,
+  field: SortField,
+  dir: SortDir,
+): number {
+  let cmp = 0;
+  switch (field) {
+    case "hostname":
+      cmp = (a.hostname ?? "").localeCompare(b.hostname ?? "");
+      break;
+    case "status": {
+      const aOnline = a.online ? 1 : 0;
+      const bOnline = b.online ? 1 : 0;
+      cmp = aOnline - bOnline;
+      break;
+    }
+    case "lastSeen": {
+      const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+      const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+      cmp = aTime - bTime;
+      break;
+    }
+    case "services": {
+      const aCount = a.manifest?.capabilities.services.length ?? 0;
+      const bCount = b.manifest?.capabilities.services.length ?? 0;
+      cmp = aCount - bCount;
+      break;
+    }
+  }
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function SortableHeader({
+  label,
+  field,
+  activeField,
+  activeDir,
+  onSort,
+  align,
+}: {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  activeDir: SortDir;
+  onSort: (field: SortField) => void;
+  align?: "right";
+}): React.JSX.Element {
+  const active = field === activeField;
+  return (
+    <TableHeader
+      data-align={align}
+      aria-sort={
+        active ? (activeDir === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button type="button" className="sort-btn" onClick={() => onSort(field)}>
+        {label}
+        <span className="sort-indicator" aria-hidden="true">
+          {active ? (activeDir === "asc" ? " ↑" : " ↓") : ""}
+        </span>
+      </button>
+    </TableHeader>
+  );
+}
+
+function SkeletonRows({ count }: { count: number }): React.JSX.Element {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <span className="skeleton skeleton--text" />
+          </TableCell>
+          <TableCell>
+            <span className="skeleton skeleton--chip" />
+          </TableCell>
+          <TableCell data-mono>
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+          <TableCell data-mono data-align="right">
+            <span className="skeleton skeleton--text-sm" />
+          </TableCell>
+          <TableCell />
+        </TableRow>
+      ))}
+    </>
+  );
+}
+
 export function FleetPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>("hostname");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const {
     data: runners,
@@ -35,6 +137,18 @@ export function FleetPage(): React.JSX.Element {
   });
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
+  const sorted = [...connectedRunners].sort((a, b) =>
+    compareRunners(a, b, sortField, sortDir),
+  );
+
+  function handleSort(field: SortField): void {
+    if (field === sortField) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
 
   function handleWizardClose(): void {
     setWizardOpen(false);
@@ -43,90 +157,200 @@ export function FleetPage(): React.JSX.Element {
 
   async function handleRemove(token: string): Promise<void> {
     setRemoving(token);
-    setError(null);
+    setRemoveError(null);
     try {
       await apiFetch<void>(`/api/tokens/${token}`, { method: "DELETE" });
       await queryClient.invalidateQueries({ queryKey: ["runners"] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove server");
+      setRemoveError(
+        err instanceof Error ? err.message : "Failed to remove server",
+      );
     } finally {
       setRemoving(null);
     }
   }
 
+  const isEmpty = !isLoading && !isError && connectedRunners.length === 0;
+
   return (
-    <div className="page" style={{ padding: 16 }}>
-      <Group className="justify-between items-center mb-4">
-        <Title order={2} className="text-lg">
-          Fleet
-        </Title>
-        <Button size="xs" onClick={() => setWizardOpen(true)}>
+    <div className="page page--data">
+      <header className="page-header">
+        <h1 className="page-title">Fleet</h1>
+        <Button
+          size="xs"
+          onClick={() => setWizardOpen(true)}
+          leftSection={<Plus size={14} strokeWidth={2} aria-hidden="true" />}
+        >
           Add a server
         </Button>
-      </Group>
+      </header>
 
-      {error !== null && (
-        <Text className="text-sm text-status-failed mb-3">{error}</Text>
+      {removeError !== null && (
+        <Alert intent="error" title="Remove failed" className="page-alert">
+          {removeError}
+        </Alert>
       )}
 
-      {isLoading && <Loader aria-label="Loading fleet" />}
+      {isLoading && (
+        <div
+          className="page-table-wrap"
+          role="status"
+          aria-label="Loading fleet"
+        >
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeader>Server</TableHeader>
+                <TableHeader>Status</TableHeader>
+                <TableHeader>Services</TableHeader>
+                <TableHeader data-align="right">Last seen</TableHeader>
+                <TableHeader />
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <SkeletonRows count={3} />
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {isError && (
-        <Text className="text-sm text-status-failed">
-          Couldn&apos;t load the fleet. Retrying…
-        </Text>
+        <Alert
+          intent="error"
+          title="Failed to load fleet"
+          className="page-alert"
+        >
+          Something went wrong loading the fleet. It will retry automatically.
+        </Alert>
       )}
 
-      {!isLoading && !isError && connectedRunners.length === 0 && (
-        <Text className="text-sm text-ink-muted">No runners connected.</Text>
-      )}
-
-      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-        {connectedRunners.map((runner) => {
-          const status = runnerStatus(runner);
-          const services = runner.manifest?.capabilities.services ?? [];
-          return (
-            <li
-              key={runner.token}
-              style={{
-                borderTop: "1px solid var(--color-line)",
-                padding: "8px 0",
-              }}
+      {isEmpty && (
+        <div className="empty-state">
+          <div className="empty-state__content">
+            <Network
+              size={28}
+              strokeWidth={1.5}
+              className="empty-state__icon"
+              aria-hidden="true"
+            />
+            <p className="empty-state__text">
+              Your fleet is empty. Servers you add will appear here with their
+              status, services, and last check-in time so you can monitor your
+              infrastructure at a glance.
+            </p>
+            <Button
+              size="xs"
+              onClick={() => setWizardOpen(true)}
+              leftSection={
+                <Plus size={14} strokeWidth={2} aria-hidden="true" />
+              }
             >
-              <Group className="justify-between items-start">
-                <Stack className="gap-0.5">
-                  {runner.hostname !== null && (
-                    <Text className="text-sm font-mono">{runner.hostname}</Text>
-                  )}
-                  <StatusChip status={status} domain="runner" />
-                  {runner.lastSeen !== null && (
-                    <Text className="text-xs text-ink-muted font-mono">
+              Add your first server
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !isError && connectedRunners.length > 0 && (
+        <div className="page-table-wrap">
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader
+                  label="Server"
+                  field="hostname"
+                  activeField={sortField}
+                  activeDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Status"
+                  field="status"
+                  activeField={sortField}
+                  activeDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Services"
+                  field="services"
+                  activeField={sortField}
+                  activeDir={sortDir}
+                  onSort={handleSort}
+                  align="right"
+                />
+                <SortableHeader
+                  label="Last seen"
+                  field="lastSeen"
+                  activeField={sortField}
+                  activeDir={sortDir}
+                  onSort={handleSort}
+                  align="right"
+                />
+                <TableHeader>
+                  <span className="sr-only">Actions</span>
+                </TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sorted.map((runner) => {
+                const status = runnerStatus(runner);
+                const services = runner.manifest?.capabilities.services ?? [];
+                const isOffline = !runner.online;
+                return (
+                  <TableRow
+                    key={runner.token}
+                    data-offline={isOffline || undefined}
+                  >
+                    <TableCell>
+                      <span
+                        className="cell-truncate"
+                        title={runner.hostname ?? undefined}
+                      >
+                        {runner.hostname}
+                      </span>
+                      {services.length > 0 && (
+                        <span
+                          className="cell-services"
+                          title={services
+                            .map((s) => serviceIdentityKey(s.identity))
+                            .join(", ")}
+                        >
+                          {services
+                            .map((s) => serviceIdentityKey(s.identity))
+                            .join(", ")}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip status={status} domain="runner" />
+                    </TableCell>
+                    <TableCell data-mono data-align="right">
+                      {services.length}
+                    </TableCell>
+                    <TableCell data-mono data-align="right">
                       {timeAgo(runner.lastSeen)}
-                    </Text>
-                  )}
-                  {services.map((service) => (
-                    <Text
-                      key={serviceIdentityKey(service.identity)}
-                      className="text-xs text-ink-muted font-mono"
-                    >
-                      {serviceIdentityKey(service.identity)}
-                    </Text>
-                  ))}
-                </Stack>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  loading={removing === runner.token}
-                  aria-label={`Remove server ${runner.hostname ?? runner.id}`}
-                  onClick={() => void handleRemove(runner.token)}
-                >
-                  Remove
-                </Button>
-              </Group>
-            </li>
-          );
-        })}
-      </ul>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        loading={removing === runner.token}
+                        aria-label={`Remove server ${runner.hostname ?? runner.id}`}
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          void handleRemove(runner.token);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />
     </div>

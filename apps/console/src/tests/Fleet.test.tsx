@@ -129,6 +129,31 @@ afterEach(() => {
 });
 
 describe("FleetPage", () => {
+  describe("table semantics", () => {
+    it("renders a semantic table with column headers", async () => {
+      setup([WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+      expect(screen.getByRole("table")).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: /server/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: /status/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("uses tnum on numeric cells (services count, last seen)", async () => {
+      setup([WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+      const cells = document.querySelectorAll("td[data-mono]");
+      expect(cells.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   describe("fleet list", () => {
     it("fetches GET /api/runners on mount", async () => {
       const { fetchMock } = setup();
@@ -139,10 +164,8 @@ describe("FleetPage", () => {
 
     it("hides a runner that has never connected (no hostname)", async () => {
       setup([AWAITING_RUNNER]);
-      // A minted-but-never-connected token is a credential, not a fleet member,
-      // so it is filtered out and the page settles into the empty state.
       await waitFor(() => {
-        expect(screen.getByText(/no runners connected/i)).toBeInTheDocument();
+        expect(screen.getByText(/your fleet is empty/i)).toBeInTheDocument();
       });
       expect(
         screen.queryByText(/awaiting connection/i),
@@ -156,47 +179,80 @@ describe("FleetPage", () => {
         expect(screen.getByText("web-01")).toBeInTheDocument();
       });
       expect(screen.getByText(/^online$/i)).toBeInTheDocument();
-      expect(screen.getByText("docker/nginx/nginx")).toBeInTheDocument();
-      expect(screen.getByText("docker/api/api")).toBeInTheDocument();
+      expect(screen.getByText(/docker\/nginx\/nginx/)).toBeInTheDocument();
       expect(screen.getByText("30s ago")).toBeInTheDocument();
     });
 
-    it("renders an offline runner and a Kubernetes service identity", async () => {
+    it("renders an offline runner with reduced opacity", async () => {
       vi.spyOn(Date, "now").mockReturnValue(NOW);
       setup([DB_RUNNER]);
       await waitFor(() => {
         expect(screen.getByText("db-02")).toBeInTheDocument();
       });
       expect(screen.getByText(/^offline$/i)).toBeInTheDocument();
+      const row = screen.getByText("db-02").closest("tr");
+      expect(row?.dataset.offline).toBeDefined();
+    });
+
+    it("renders a Kubernetes service identity", async () => {
+      vi.spyOn(Date, "now").mockReturnValue(NOW);
+      setup([DB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("db-02")).toBeInTheDocument();
+      });
       expect(
-        screen.getByText("kubernetes/production/postgres"),
+        screen.getByText(/kubernetes\/production\/postgres/),
       ).toBeInTheDocument();
       expect(screen.getByText("5m ago")).toBeInTheDocument();
     });
+  });
 
-    it("shows an empty state when no runners are connected", async () => {
+  describe("empty state", () => {
+    it("shows the Linear two-region empty state when no runners are connected", async () => {
       setup([]);
       await waitFor(() => {
-        expect(screen.getByText(/no runners connected/i)).toBeInTheDocument();
+        expect(screen.getByText(/your fleet is empty/i)).toBeInTheDocument();
       });
+      expect(
+        screen.getByRole("button", { name: /add your first server/i }),
+      ).toBeInTheDocument();
     });
 
-    it("re-polls every 30s, picking up a runner that has gone offline", async () => {
-      vi.useFakeTimers();
-      let call = 0;
-      const fetchMock = vi.fn().mockImplementation(() => {
-        call += 1;
-        const online = call === 1;
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve([{ ...WEB_RUNNER, online }]),
-        });
+    it("page header remains visible in the empty state with Add a server action", async () => {
+      setup([]);
+      await waitFor(() => {
+        expect(screen.getByText(/your fleet is empty/i)).toBeInTheDocument();
       });
-      vi.stubGlobal("fetch", fetchMock);
+      expect(
+        screen.getByRole("heading", { name: /fleet/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /add a server/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("loading state", () => {
+    it("shows skeleton rows while loading", () => {
+      setup();
+      expect(
+        screen.getByRole("status", { name: /loading fleet/i }),
+      ).toBeInTheDocument();
+      expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("error state", () => {
+    it("shows an error alert when the fetch fails", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({ ok: false, status: 500 }),
+      );
 
       const qc = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
+
       render(
         <TestProviders>
           <QueryClientProvider client={qc}>
@@ -205,18 +261,53 @@ describe("FleetPage", () => {
         </TestProviders>,
       );
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(0);
+      await waitFor(() => {
+        expect(screen.getByText(/failed to load fleet/i)).toBeInTheDocument();
       });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(screen.getByText(/^online$/i)).toBeInTheDocument();
+    });
+  });
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30_000);
+  describe("sorting", () => {
+    it("sorts by server name ascending by default", async () => {
+      setup([DB_RUNNER, WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
       });
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-      const polled = qc.getQueryData<RunnerRecord[]>(["runners"]);
-      expect(polled?.[0].online).toBe(false);
+      const rows = screen.getAllByRole("row");
+      const dataRows = rows.slice(1);
+      expect(dataRows[0].textContent).toContain("db-02");
+      expect(dataRows[1].textContent).toContain("web-01");
+    });
+
+    it("toggles sort direction on column header click", async () => {
+      const user = userEvent.setup();
+      setup([DB_RUNNER, WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /^server/i }));
+
+      const rows = screen.getAllByRole("row");
+      const dataRows = rows.slice(1);
+      expect(dataRows[0].textContent).toContain("web-01");
+      expect(dataRows[1].textContent).toContain("db-02");
+    });
+
+    it("sortable headers are keyboard-operable", async () => {
+      const user = userEvent.setup();
+      setup([DB_RUNNER, WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+
+      const serverSortBtn = screen.getByRole("button", { name: /^server/i });
+      serverSortBtn.focus();
+      await user.keyboard("{Enter}");
+
+      const rows = screen.getAllByRole("row");
+      const dataRows = rows.slice(1);
+      expect(dataRows[0].textContent).toContain("web-01");
     });
   });
 
@@ -230,6 +321,17 @@ describe("FleetPage", () => {
           screen.getByRole("radio", { name: /docker/i }),
         ).toBeInTheDocument();
       });
+    });
+
+    it("add-server lives in the page header, not the sidebar", async () => {
+      setup([]);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /add a server/i }),
+        ).toBeInTheDocument();
+      });
+      const btn = screen.getByRole("button", { name: /add a server/i });
+      expect(btn.closest("header")).not.toBeNull();
     });
   });
 
@@ -307,6 +409,59 @@ describe("FleetPage", () => {
       await waitFor(() => {
         expect(screen.queryByText("web-01")).not.toBeInTheDocument();
       });
+    });
+
+    it("row action click does not trigger row navigation", async () => {
+      const user = userEvent.setup();
+      setup([WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+      const removeBtn = screen.getByRole("button", { name: /remove/i });
+      const clickEvent = new MouseEvent("click", { bubbles: true });
+      const stopSpy = vi.spyOn(clickEvent, "stopPropagation");
+      removeBtn.dispatchEvent(clickEvent);
+      expect(stopSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("polling", () => {
+    it("re-polls every 30s, picking up a runner that has gone offline", async () => {
+      vi.useFakeTimers();
+      let call = 0;
+      const fetchMock = vi.fn().mockImplementation(() => {
+        call += 1;
+        const online = call === 1;
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ ...WEB_RUNNER, online }]),
+        });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      render(
+        <TestProviders>
+          <QueryClientProvider client={qc}>
+            <FleetPage />
+          </QueryClientProvider>
+        </TestProviders>,
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/^online$/i)).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const polled = qc.getQueryData<RunnerRecord[]>(["runners"]);
+      expect(polled?.[0].online).toBe(false);
     });
   });
 });

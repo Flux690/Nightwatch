@@ -30,6 +30,9 @@ const colorMap: Record<StatusDomain, Record<string, StatusColor>> = {
   alert: {
     resolved: "running",
     unresolved: "awaiting",
+    critical: "failed",
+    warning: "awaiting",
+    info: "neutral",
   },
 };
 

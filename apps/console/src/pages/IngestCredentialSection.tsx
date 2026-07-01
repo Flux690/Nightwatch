@@ -69,10 +69,7 @@ export function IngestCredentialSection(): React.JSX.Element {
   }
 
   return (
-    <Stack className="gap-3 mt-8">
-      <Text className="text-xs text-ink-muted uppercase font-semibold">
-        Alerting
-      </Text>
+    <Stack className="gap-3">
       <Group className="gap-2 items-center">
         <Text className="text-sm font-medium">Ingest credential</Text>
         <Badge intent={ingestCredential?.configured ? "success" : undefined}>
