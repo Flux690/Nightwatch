@@ -215,12 +215,13 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("shows a relative timestamp on each row", async () => {
+    it("shows only the session name, without a timestamp", async () => {
       setup();
 
       await waitFor(() => {
-        expect(screen.getByText(/ago/i)).toBeInTheDocument();
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
       });
+      expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
     });
 
     it("gives each session row an accessible title attribute with the full title", async () => {
@@ -329,7 +330,9 @@ describe("SessionsSidebar", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: /CPU spike on web-01/i }),
+        screen
+          .getByRole("button", { name: /CPU spike on web-01/i })
+          .closest("li"),
       ).toHaveAttribute("data-active", "true");
     });
 
@@ -341,7 +344,9 @@ describe("SessionsSidebar", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: /CPU spike on web-01/i }),
+        screen
+          .getByRole("button", { name: /CPU spike on web-01/i })
+          .closest("li"),
       ).not.toHaveAttribute("data-active");
     });
   });

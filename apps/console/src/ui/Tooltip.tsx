@@ -19,7 +19,6 @@ export function Tooltip({
 }: TooltipProps): React.JSX.Element {
   return (
     <MantineTooltip
-      unstyled
       classNames={{
         tooltip: "tooltip",
         arrow: "tooltip__arrow",

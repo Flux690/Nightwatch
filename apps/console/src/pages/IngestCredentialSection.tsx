@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
 import { Badge } from "../ui/Badge.js";
 import { Button } from "../ui/Button.js";
@@ -123,7 +124,7 @@ export function IngestCredentialSection(): React.JSX.Element {
               {token}
             </Code>
             <IconButton aria-label="Copy ingest credential" onClick={copyToken}>
-              ⧉
+              <Copy size={16} strokeWidth={1.75} aria-hidden="true" />
             </IconButton>
           </Group>
         </Alert>

@@ -15,10 +15,9 @@ type SelectProps = Omit<MantineSelectProps, "unstyled" | "classNames"> & {
 export function Select({ ...props }: SelectProps): React.JSX.Element {
   return (
     <MantineSelect
-      unstyled
+      variant="unstyled"
       classNames={{
-        root: "select",
-        input: "select__input",
+        input: "input select__input",
         dropdown: "select__dropdown",
         option: "select__option",
       }}

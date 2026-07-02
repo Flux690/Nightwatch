@@ -20,7 +20,7 @@ export function Autocomplete({
 }: AutocompleteProps): React.JSX.Element {
   return (
     <MantineAutocomplete
-      unstyled
+      variant="unstyled"
       classNames={{
         root: "field",
         label: "field__label",

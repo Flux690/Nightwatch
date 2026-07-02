@@ -1,15 +1,16 @@
+/* Mantine badges default to uppercase with a fixed height; this design uses
+   sentence case, so both are steered back through the badge variables. */
 .badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
+  --badge-height: 22px;
+  --badge-fz: var(--text-xs);
+  --badge-padding-x: 9px;
+  --badge-radius: 999px;
+
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
 }
-.badge__label {
-  white-space: nowrap;
-}
+
 .badge--success {
   background: color-mix(in srgb, var(--color-status-running) 12%, transparent);
   color: var(--color-status-running);

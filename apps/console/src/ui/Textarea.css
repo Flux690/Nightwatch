@@ -1,3 +1,6 @@
+/* Multi-line exception to the fixed-height input rule: grows with content. */
 .textarea {
+  height: auto;
+  min-height: 80px;
   resize: vertical;
 }

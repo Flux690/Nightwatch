@@ -2,10 +2,17 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
-import { AddServerWizard } from "../pages/AddServerWizard.js";
+import { AddServerPage } from "../pages/AddServerPage.js";
 
 const GENERATED_TOKEN = {
   id: "new-token-uuid",
@@ -67,6 +74,40 @@ function textOk(body: string) {
   return Promise.resolve({ ok: true, text: () => Promise.resolve(body) });
 }
 
+/* The page is a routed screen with a navigation guard, so the seam under
+   test is the route: a memory router with a stub /fleet destination. */
+function renderAddServerRoute() {
+  const rootRoute = createRootRoute();
+  const addRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/fleet/add",
+    component: AddServerPage,
+  });
+  const fleetRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/fleet",
+    component: () => <div>Fleet destination</div>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([addRoute, fleetRoute]),
+    history: createMemoryHistory({ initialEntries: ["/fleet/add"] }),
+  });
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+
+  const view = render(
+    <TestProviders>
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </TestProviders>,
+  );
+
+  return { router, ...view };
+}
+
 function setup(opts: { runners?: RunnerRecord[] } = {}) {
   const clipboardWrite = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", {
@@ -100,21 +141,7 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
     });
   vi.stubGlobal("fetch", fetchMock);
 
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-
-  const onClose = vi.fn();
-
-  const view = render(
-    <TestProviders>
-      <QueryClientProvider client={qc}>
-        <AddServerWizard opened onClose={onClose} />
-      </QueryClientProvider>
-    </TestProviders>,
-  );
-
-  return { fetchMock, onClose, ...view };
+  return { fetchMock, ...renderAddServerRoute() };
 }
 
 type Monitoring = "bundled" | "byo";
@@ -133,7 +160,7 @@ async function fillServerStep(
     monitoring = "bundled",
   } = opts;
   await user.click(
-    screen.getByRole("radio", {
+    await screen.findByRole("radio", {
       name: provider === "docker" ? /docker/i : /kubernetes/i,
     }),
   );
@@ -173,24 +200,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AddServerWizard", () => {
-  it("renders nothing when not opened", () => {
-    const qc = new QueryClient();
-    render(
-      <TestProviders>
-        <QueryClientProvider client={qc}>
-          <AddServerWizard opened={false} onClose={() => {}} />
-        </QueryClientProvider>
-      </TestProviders>,
-    );
-    expect(screen.queryByText(/add a server/i)).not.toBeInTheDocument();
+describe("AddServerPage", () => {
+  it("renders the title and a back link to the fleet", async () => {
+    setup();
+    expect(
+      await screen.findByRole("heading", { name: /add a server/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
   });
 
   describe("server step", () => {
-    it("shows provider selection as the first step", () => {
+    it("shows provider selection as the first step", async () => {
       setup();
       expect(
-        screen.getByRole("radio", { name: /docker/i }),
+        await screen.findByRole("radio", { name: /docker/i }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("radio", { name: /kubernetes/i }),
@@ -201,7 +224,7 @@ describe("AddServerWizard", () => {
       const user = userEvent.setup();
       setup();
 
-      await user.click(screen.getByRole("radio", { name: /docker/i }));
+      await user.click(await screen.findByRole("radio", { name: /docker/i }));
       expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
 
       await user.type(
@@ -220,7 +243,7 @@ describe("AddServerWizard", () => {
       const user = userEvent.setup();
       setup();
 
-      await user.click(screen.getByRole("radio", { name: /docker/i }));
+      await user.click(await screen.findByRole("radio", { name: /docker/i }));
       await user.type(
         screen.getByRole("textbox", { name: /server name/i }),
         "prod/web",
@@ -426,14 +449,14 @@ describe("AddServerWizard", () => {
   });
 
   describe("verify step", () => {
-    it("closes via the Done button", async () => {
+    it("navigates back to the fleet via the Done button", async () => {
       const user = userEvent.setup();
-      const { onClose } = setup({ runners: [CONNECTED_RUNNER] });
+      setup({ runners: [CONNECTED_RUNNER] });
       await advanceToVerify(user);
 
       await user.click(screen.getByRole("button", { name: /done/i }));
 
-      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
     });
 
     it("sends a test alert and reports success once the pipeline confirms", async () => {
@@ -490,9 +513,10 @@ describe("AddServerWizard", () => {
     });
   });
 
-  describe("token hygiene on close", () => {
-    it("deletes the minted token when closed before the runner connects", async () => {
+  describe("token hygiene on leaving the page", () => {
+    it("confirms, deletes the minted token, and navigates when leaving before the runner connects", async () => {
       const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
       const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
@@ -500,18 +524,42 @@ describe("AddServerWizard", () => {
         expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
-      await user.keyboard("{Escape}");
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
 
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith(
           `/api/tokens/${GENERATED_TOKEN.id}`,
           expect.objectContaining({ method: "DELETE" }),
         );
       });
+      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
     });
 
-    it("keeps the token once the runner has connected", async () => {
+    it("stays on the page and keeps the token when the leave prompt is declined", async () => {
       const user = userEvent.setup();
+      vi.spyOn(window, "confirm").mockReturnValue(false);
+      const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });
+
+      await startInstall(user, { name: "web-01" });
+      await waitFor(() => {
+        expect(screen.getByText(/install-docker/)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
+
+      expect(
+        screen.getByRole("heading", { name: /add a server/i }),
+      ).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        expect.stringContaining("/api/tokens/"),
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+
+    it("leaves without a prompt and keeps the token once the runner has connected", async () => {
+      const user = userEvent.setup();
+      const confirmSpy = vi.spyOn(window, "confirm");
       const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
@@ -519,8 +567,10 @@ describe("AddServerWizard", () => {
         expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
       });
 
-      await user.keyboard("{Escape}");
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
 
+      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
+      expect(confirmSpy).not.toHaveBeenCalled();
       expect(fetchMock).not.toHaveBeenCalledWith(
         expect.stringContaining("/api/tokens/"),
         expect.objectContaining({ method: "DELETE" }),

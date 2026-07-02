@@ -24,7 +24,7 @@ export function TextInput({
 }: TextInputProps): React.JSX.Element {
   return (
     <MantineTextInput
-      unstyled
+      variant="unstyled"
       classNames={{
         root: "field",
         label: "field__label",

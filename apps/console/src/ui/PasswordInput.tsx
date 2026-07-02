@@ -1,4 +1,5 @@
 import "./TextInput.css";
+import "./PasswordInput.css";
 
 import {
   PasswordInput as MantinePasswordInput,
@@ -7,7 +8,9 @@ import {
 
 type PasswordInputProps = {
   label?: MantinePasswordInputProps["label"];
+  description?: MantinePasswordInputProps["description"];
   required?: boolean;
+  placeholder?: string;
   value?: string;
   error?: MantinePasswordInputProps["error"];
   onChange?: React.ChangeEventHandler<HTMLInputElement>;
@@ -21,15 +24,17 @@ export function PasswordInput({
 }: PasswordInputProps): React.JSX.Element {
   return (
     <MantinePasswordInput
-      unstyled
+      variant="unstyled"
       classNames={{
         root: "field",
         label: "field__label",
-        input: className ? `input ${className}` : "input",
-        innerInput: "input",
+        description: "field__description",
         error: "field__error",
-        visibilityToggle: "icon-btn",
-        wrapper: "field__wrapper",
+        input: className
+          ? `input input--password ${className}`
+          : "input input--password",
+        innerInput: "password-input__inner",
+        visibilityToggle: "password-input__toggle",
       }}
       {...props}
     />

@@ -3,7 +3,7 @@ import { UnstyledButton } from "../ui/UnstyledButton.js";
 import { Link, useRouterState } from "@tanstack/react-router";
 
 export const RAIL_WIDTH = 56;
-export const EXPANDED_WIDTH = 250;
+export const EXPANDED_WIDTH = 260;
 export const NAV_PAD = 8;
 
 interface SideRowProps {
@@ -30,7 +30,9 @@ export function SideRow({
   const inner = (
     <>
       <span className="side-row__icon">{icon}</span>
-      {expanded && <span className="side-row__label">{label}</span>}
+      <span className="side-row__label" data-hidden={expanded ? undefined : ""}>
+        {label}
+      </span>
     </>
   );
 

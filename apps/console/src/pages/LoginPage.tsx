@@ -6,27 +6,22 @@ import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
 import { Center } from "../ui/Center.js";
 import { PasswordInput } from "../ui/PasswordInput.js";
-import { Stack } from "../ui/Stack.js";
 import { TextInput } from "../ui/TextInput.js";
 import { useAuth } from "../auth/AuthContext.js";
 
 const MIN_PASSWORD = 12;
 
 function ValidationError({ message }: { message: string }): React.JSX.Element {
+  if (!message) return <></>;
+
   return (
-    <div
-      className="validation-error"
-      role="alert"
-      style={{ visibility: message ? "visible" : "hidden" }}
-    >
-      {message && (
-        <AlertCircle
-          size={14}
-          className="validation-error__icon"
-          aria-hidden="true"
-        />
-      )}
-      <span>{message || " "}</span>
+    <div className="validation-error" role="alert">
+      <AlertCircle
+        size={14}
+        className="validation-error__icon"
+        aria-hidden="true"
+      />
+      <span>{message}</span>
     </div>
   );
 }
@@ -81,19 +76,11 @@ function SetupForm(): React.JSX.Element {
   }
 
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(e)}
-      style={{ width: "100%", maxWidth: 360 }}
-    >
-      <fieldset className="fieldset">
-        <legend className="fieldset__legend--title">Create your account</legend>
-        <Stack className="gap-3">
-          <Alert
-            intent="error"
-            style={{ visibility: serverError ? "visible" : "hidden" }}
-          >
-            {serverError || " "}
-          </Alert>
+    <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
+      <fieldset className="auth-fieldset">
+        <legend className="auth-title">Create your account</legend>
+        {serverError && <Alert intent="error">{serverError}</Alert>}
+        <div className="auth-fields">
           <TextInput
             label="Email"
             type="email"
@@ -101,7 +88,7 @@ function SetupForm(): React.JSX.Element {
             value={email}
             onChange={(e) => setEmail(e.currentTarget.value)}
           />
-          <div>
+          <div className="auth-field-group">
             <PasswordInput
               label="Password"
               required
@@ -112,7 +99,7 @@ function SetupForm(): React.JSX.Element {
             />
             <ValidationError message={passwordError} />
           </div>
-          <div>
+          <div className="auth-field-group">
             <PasswordInput
               label="Confirm password"
               required
@@ -123,10 +110,12 @@ function SetupForm(): React.JSX.Element {
             />
             <ValidationError message={confirmError} />
           </div>
-          <Button type="submit" loading={submitting}>
+        </div>
+        <div className="auth-actions">
+          <Button type="submit" className="auth-submit" loading={submitting}>
             Create account
           </Button>
-        </Stack>
+        </div>
       </fieldset>
     </form>
   );
@@ -151,19 +140,11 @@ function LoginForm(): React.JSX.Element {
   }
 
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(e)}
-      style={{ width: "100%", maxWidth: 360 }}
-    >
-      <fieldset className="fieldset">
-        <legend className="fieldset__legend--title">Log in</legend>
-        <Stack className="gap-3">
-          <Alert
-            intent="error"
-            style={{ visibility: serverError ? "visible" : "hidden" }}
-          >
-            {serverError || " "}
-          </Alert>
+    <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
+      <fieldset className="auth-fieldset">
+        <legend className="auth-title">Log in</legend>
+        {serverError && <Alert intent="error">{serverError}</Alert>}
+        <div className="auth-fields">
           <TextInput
             label="Email"
             type="email"
@@ -177,10 +158,12 @@ function LoginForm(): React.JSX.Element {
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
           />
-          <Button type="submit" loading={submitting}>
+        </div>
+        <div className="auth-actions">
+          <Button type="submit" className="auth-submit" loading={submitting}>
             Log in
           </Button>
-        </Stack>
+        </div>
       </fieldset>
     </form>
   );
@@ -197,7 +180,7 @@ export function LoginPage(): React.JSX.Element | null {
   if (phase.kind === "loading" || phase.kind === "authenticated") return null;
 
   return (
-    <Center className="min-h-screen p-4">
+    <Center className="auth-screen">
       {phase.kind === "needs-setup" ? <SetupForm /> : <LoginForm />}
     </Center>
   );

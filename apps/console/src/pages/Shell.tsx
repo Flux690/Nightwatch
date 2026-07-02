@@ -19,7 +19,12 @@ import {
   ScrollText,
   Network,
 } from "lucide-react";
-import { AppShell, AppShellNavbar, AppShellMain } from "../ui/AppShell.js";
+import {
+  AppShell,
+  AppShellHeader,
+  AppShellNavbar,
+  AppShellMain,
+} from "../ui/AppShell.js";
 import { Drawer } from "../ui/Drawer.js";
 import { Text } from "../ui/Text.js";
 import { Tooltip } from "../ui/Tooltip.js";
@@ -30,14 +35,16 @@ import { useSidebarExpanded } from "../hooks/useSidebarExpanded.js";
 import { SideRow, RAIL_WIDTH, EXPANDED_WIDTH, NAV_PAD } from "./SideRow.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SessionView } from "./SessionView.js";
+import { SettingsModal } from "./SettingsModal.js";
 
 const ICON_PROPS = { size: 18, strokeWidth: 1.5, "aria-hidden": true } as const;
-const TRANSITION = "200ms ease";
+const HEADER_HEIGHT = 44;
 
 export function Shell(): React.JSX.Element {
   const [expanded, toggleExpanded] = useSidebarExpanded();
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const params = useParams({ strict: false }) as { id?: string };
@@ -46,12 +53,22 @@ export function Shell(): React.JSX.Element {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 767px)");
 
-  const isSessionArea = pathname === "/" || pathname.startsWith("/sessions/");
+  /* /settings survives as an alias: it renders the session area with the
+     settings modal open, so old links and muscle memory keep working. */
+  const isSettingsAlias = pathname === "/settings";
+  const settingsOpened = settingsOpen || isSettingsAlias;
+  const isSessionArea =
+    pathname === "/" || pathname.startsWith("/sessions/") || isSettingsAlias;
   const ownerEmail = phase.kind === "authenticated" ? phase.email : null;
 
   useEffect(() => {
     setDrawerOpen(false);
   }, [pathname]);
+
+  function closeSettings(): void {
+    setSettingsOpen(false);
+    if (isSettingsAlias) void navigate({ to: "/" });
+  }
 
   function navContent(
     navExpanded: boolean,
@@ -69,8 +86,8 @@ export function Shell(): React.JSX.Element {
         >
           {navExpanded && (
             <Text
-              className="side-nowrap text-sm font-semibold"
-              style={{ paddingInlineStart: 4 }}
+              className="side-nowrap text-base font-semibold"
+              style={{ paddingInlineStart: 4, letterSpacing: "-0.2px" }}
             >
               Nightwatch
             </Text>
@@ -114,9 +131,9 @@ export function Shell(): React.JSX.Element {
               alignItems: "center",
               height: 34,
               borderRadius: "var(--radius-sm)",
-              background: "var(--color-accent)",
-              color: "var(--color-canvas)",
-              fontWeight: 700,
+              background: "var(--color-primary-fill)",
+              color: "var(--color-card)",
+              fontWeight: 600,
               fontSize: 12,
               overflow: "hidden",
             }}
@@ -135,9 +152,7 @@ export function Shell(): React.JSX.Element {
             style={{
               flex: 1,
               minHeight: 0,
-              marginTop: 4,
-              paddingTop: 4,
-              borderTop: "1px solid var(--color-line)",
+              marginTop: 8,
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
@@ -157,7 +172,7 @@ export function Shell(): React.JSX.Element {
               }}
             >
               <Text
-                className="side-nowrap text-xs font-bold uppercase text-ink-muted"
+                className="side-nowrap text-xs font-semibold uppercase text-ink-muted"
                 style={{ letterSpacing: "0.06em" }}
               >
                 Recent sessions
@@ -180,9 +195,7 @@ export function Shell(): React.JSX.Element {
 
         <div
           style={{
-            borderTop: "1px solid var(--color-line)",
-            marginTop: 4,
-            paddingTop: 4,
+            marginTop: 8,
             display: "flex",
             flexDirection: "column",
             gap: 2,
@@ -192,12 +205,6 @@ export function Shell(): React.JSX.Element {
             icon={<Network {...ICON_PROPS} />}
             label="Fleet"
             to="/fleet"
-            expanded={navExpanded}
-          />
-          <SideRow
-            icon={<Settings {...ICON_PROPS} />}
-            label="Settings"
-            to="/settings"
             expanded={navExpanded}
           />
           <SideRow
@@ -212,11 +219,17 @@ export function Shell(): React.JSX.Element {
             to="/unresolved-alerts"
             expanded={navExpanded}
           />
+          <SideRow
+            icon={<Settings {...ICON_PROPS} />}
+            label="Settings"
+            expanded={navExpanded}
+            onClick={() => setSettingsOpen(true)}
+          />
         </div>
 
         <div
           style={{
-            marginTop: 4,
+            marginTop: 8,
             display: "flex",
             flexDirection: "column",
             gap: 2,
@@ -247,42 +260,40 @@ export function Shell(): React.JSX.Element {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <>
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
-
-      {isMobile && (
-        <div className="mobile-topbar">
-          <UnstyledButton
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
-            style={{ display: "flex" }}
-          >
-            <MenuIcon {...ICON_PROPS} />
-          </UnstyledButton>
-          <Text className="text-sm font-semibold">Nightwatch</Text>
-        </div>
-      )}
 
       <AppShell
         navbar={{
           width: isMobile ? 0 : expanded ? EXPANDED_WIDTH : RAIL_WIDTH,
           breakpoint: 0,
         }}
-        style={{ flex: 1, minHeight: 0 }}
+        header={{ height: HEADER_HEIGHT, collapsed: !isMobile }}
+        transitionDuration={200}
       >
+        {isMobile && (
+          <AppShellHeader className="mobile-topbar">
+            <UnstyledButton
+              aria-label="Open menu"
+              onClick={() => setDrawerOpen(true)}
+              style={{ display: "flex" }}
+            >
+              <MenuIcon {...ICON_PROPS} />
+            </UnstyledButton>
+            <Text className="text-sm font-semibold">Nightwatch</Text>
+          </AppShellHeader>
+        )}
+
         {!isMobile && (
           <AppShellNavbar
             style={{
-              background: "var(--color-surface)",
-              borderRight: "1px solid var(--color-line)",
               display: "flex",
               flexDirection: "column",
               padding: NAV_PAD,
               gap: 4,
               overflow: "hidden",
-              transition: `width ${TRANSITION}`,
             }}
           >
             {navContent(expanded, true)}
@@ -295,8 +306,7 @@ export function Shell(): React.JSX.Element {
           style={{
             display: "flex",
             flexDirection: "column",
-            height: "100%",
-            transition: `padding ${TRANSITION}`,
+            height: "100dvh",
             overflow: isSessionArea ? "hidden" : "auto",
           }}
         >
@@ -307,6 +317,8 @@ export function Shell(): React.JSX.Element {
           )}
         </AppShellMain>
       </AppShell>
+
+      <SettingsModal opened={settingsOpened} onClose={closeSettings} />
 
       {isMobile && (
         <Drawer
@@ -319,6 +331,6 @@ export function Shell(): React.JSX.Element {
           {navContent(true, false)}
         </Drawer>
       )}
-    </div>
+    </>
   );
 }

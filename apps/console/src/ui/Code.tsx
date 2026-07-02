@@ -13,7 +13,6 @@ export function Code({
 }: CodeProps): React.JSX.Element {
   return (
     <MantineCode
-      unstyled
       block={block}
       classNames={{
         root: className ? `code ${className}` : "code",

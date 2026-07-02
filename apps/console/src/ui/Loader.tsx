@@ -8,5 +8,5 @@ type LoaderProps = {
 };
 
 export function Loader(props: LoaderProps): React.JSX.Element {
-  return <MantineLoader unstyled classNames={{ root: "loader" }} {...props} />;
+  return <MantineLoader classNames={{ root: "loader" }} {...props} />;
 }

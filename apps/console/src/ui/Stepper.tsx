@@ -20,7 +20,6 @@ export function Stepper({
 }: StepperProps): React.JSX.Element {
   return (
     <MantineStepper
-      unstyled
       classNames={{
         root: className ? `stepper ${className}` : "stepper",
         steps: "stepper__steps",

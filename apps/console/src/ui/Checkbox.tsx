@@ -16,7 +16,6 @@ export function Checkbox({
 }: CheckboxProps): React.JSX.Element {
   return (
     <MantineCheckbox
-      unstyled
       classNames={{
         root: className ? `checkbox ${className}` : "checkbox",
         input: "checkbox__input",

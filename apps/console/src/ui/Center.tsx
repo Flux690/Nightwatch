@@ -10,7 +10,6 @@ export function Center({
 }: CenterProps): React.JSX.Element {
   return (
     <MantineCenter
-      unstyled
       classNames={{ root: className ? `center ${className}` : "center" }}
       {...props}
     />

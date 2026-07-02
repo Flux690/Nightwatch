@@ -26,7 +26,6 @@ export function Button({
 }: ButtonProps): React.JSX.Element {
   return (
     <MantineButton
-      unstyled
       classNames={{
         root: className ? `btn ${className}` : "btn",
         inner: "btn__inner",

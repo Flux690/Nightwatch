@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/session-start.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\""
           }
         ]
       }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/pre-bash-guard.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-bash-guard.sh\""
           }
         ]
       },
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/pre-file-guard.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-file-guard.sh\""
           }
         ]
       }
@@ -62,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/post-ts-check.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-ts-check.sh\""
           }
         ]
       }
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/post-compact-reinject.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-compact-reinject.sh\""
           }
         ]
       }
@@ -82,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/stop-verify.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-verify.sh\""
           }
         ]
       }

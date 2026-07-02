@@ -4,6 +4,8 @@ import { vi } from "vitest";
 const { getComputedStyle } = window;
 window.getComputedStyle = (elt) => getComputedStyle(elt);
 window.HTMLElement.prototype.scrollIntoView = () => {};
+// jsdom has no scrollTo; the router's scroll restoration calls it on navigate.
+window.scrollTo = () => {};
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { Copy } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
 import { Code } from "../ui/Code.js";
@@ -8,7 +9,7 @@ import { IconButton } from "../ui/IconButton.js";
 import { Stack } from "../ui/Stack.js";
 import { Text } from "../ui/Text.js";
 import { apiFetch } from "../api/client.js";
-import type { Provider } from "./AddServerWizard.js";
+import type { Provider } from "./AddServerPage.js";
 
 interface ValidateAlertResult {
   sourceAlertId: string;
@@ -71,7 +72,7 @@ function CopyableSnippet({
         aria-label={label}
         onClick={() => void navigator.clipboard.writeText(text)}
       >
-        ⧉
+        <Copy size={16} strokeWidth={1.75} aria-hidden="true" />
       </IconButton>
     </Group>
   );

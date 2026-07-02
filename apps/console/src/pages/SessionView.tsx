@@ -121,7 +121,7 @@ function TranscriptColumn({
       role="log"
       aria-label="Session transcript"
       style={{
-        maxWidth: 760,
+        maxWidth: "var(--container-prose)",
         margin: "0 auto",
         padding: "0 24px",
       }}

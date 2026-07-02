@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Text } from "../ui/Text.js";
 import { UnstyledButton } from "../ui/UnstyledButton.js";
 import Markdown from "react-markdown";
@@ -12,8 +13,7 @@ import { ContinueCardPanel } from "./ContinueCardPanel.js";
 function UserTurn({ text }: { text: string }): React.JSX.Element {
   return (
     <div data-testid="user-turn" className="user-turn">
-      <div className="user-turn__label">You</div>
-      <Text className="text-sm" style={{ whiteSpace: "pre-wrap" }}>
+      <Text className="text-base" style={{ whiteSpace: "pre-wrap" }}>
         {text}
       </Text>
     </div>
@@ -24,7 +24,7 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
     <div
       style={{
-        fontSize: "0.875rem",
+        fontSize: "1rem",
         lineHeight: 1.6,
       }}
     >
@@ -39,22 +39,26 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
   return (
     <div data-testid="thinking-block" data-streaming={item.streaming}>
       <UnstyledButton
+        className="thinking__trigger"
+        aria-expanded={expanded}
         onClick={() => setExpanded((prev) => !prev)}
-        style={{ display: "flex", alignItems: "center", gap: 6 }}
       >
+        <ChevronRight
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden="true"
+          className="thinking__chevron"
+        />
         <Text
-          className={`text-xs text-ink-muted font-semibold${item.streaming ? " thinking-pulse" : ""}`}
+          className={`text-sm font-medium${item.streaming ? " thinking-pulse" : ""}`}
         >
           Thinking
-        </Text>
-        <Text className="text-xs text-ink-muted" aria-hidden="true">
-          {expanded ? "▾" : "▸"}
         </Text>
       </UnstyledButton>
       <div style={{ display: expanded ? "block" : "none" }}>
         <Text
-          className="text-xs text-ink-muted"
-          style={{ whiteSpace: "pre-wrap", paddingLeft: 16, paddingTop: 4 }}
+          className="text-sm text-ink-muted"
+          style={{ whiteSpace: "pre-wrap", paddingLeft: 20, paddingTop: 4 }}
         >
           {item.text}
         </Text>

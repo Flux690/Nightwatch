@@ -2,35 +2,23 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
 }
 .field__label {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
   color: var(--color-ink);
 }
 .field__description {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--color-ink-muted);
 }
 .field__error {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--color-status-failed);
-}
-.field__wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.field__controls {
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 .field__control {
   display: flex;
@@ -47,41 +35,43 @@
   color: var(--color-ink);
 }
 
+/* Stripe-style single-outline input: focus is signalled by the border itself
+   (color swap + 1px shadow = one crisp 2px line), never a floating ring. */
 .input {
+  box-sizing: border-box;
+  height: 40px;
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
   padding: 8px 12px;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-sm);
-  background: var(--color-canvas);
+  background: var(--color-card);
   color: var(--color-ink);
   width: 100%;
-  transition: border-color var(--duration-fast) var(--ease-out);
 }
 .input::placeholder {
   color: var(--color-ink-muted);
 }
 .input:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-  border-color: var(--color-line-strong);
+  outline: none;
+  border-color: var(--color-signal);
+  box-shadow: 0 0 0 1px var(--color-signal);
 }
 .input[aria-invalid="true"],
-.input[data-invalid] {
+.input[data-error] {
   border-color: var(--color-status-failed);
 }
 .input[aria-invalid="true"]:focus-visible,
-.input[data-invalid]:focus-visible {
-  outline-color: var(--color-status-failed);
+.input[data-error]:focus-visible {
+  border-color: var(--color-status-failed);
+  box-shadow: 0 0 0 1px var(--color-status-failed);
 }
 .input[disabled] {
-  opacity: 0.5;
+  background: var(--color-canvas);
+  color: var(--color-ink-faint);
   cursor: not-allowed;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .input {
-    transition: none;
-  }
+.input--tnum {
+  font-feature-settings: "tnum";
 }

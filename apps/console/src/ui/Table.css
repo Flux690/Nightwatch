@@ -1,12 +1,12 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
 }
 .table__th {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -26,9 +26,20 @@
 .table__td[data-align="right"] {
   text-align: right;
 }
+.table__th:first-child,
+.table__td:first-child {
+  padding-inline-start: 16px;
+}
+.table__th:last-child,
+.table__td:last-child {
+  padding-inline-end: 16px;
+}
+.table tbody tr:last-child .table__td {
+  border-bottom: none;
+}
 .table__td[data-mono] {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-feature-settings: "tnum";
 }
 .table tbody tr:hover {

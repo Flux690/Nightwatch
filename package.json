@@ -15,7 +15,8 @@
     "dev:infra": "docker compose -f apps/runner/docker-compose.dev.yaml up -d"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
-    "prettier": "3.8.3"
+    "@types/node": "^26.0.1",
+    "prettier": "3.8.3",
+    "typescript": "6.0.3"
   }
 }

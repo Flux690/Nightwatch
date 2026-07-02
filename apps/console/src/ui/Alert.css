@@ -16,13 +16,13 @@
   min-width: 0;
 }
 .alert__title {
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-ink);
   margin-bottom: 4px;
 }
 .alert__message {
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--color-ink);
 }
 .alert__close {

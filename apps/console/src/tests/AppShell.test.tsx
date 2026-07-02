@@ -187,19 +187,19 @@ describe("Shell", () => {
       });
     });
 
-    it("renders nav links for Fleet and Settings", async () => {
+    it("renders the Fleet nav link and the Settings trigger", async () => {
       setup();
       await waitFor(() => {
         expect(
           screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("link", { name: /settings/i }),
+          screen.getByRole("button", { name: /^settings$/i }),
         ).toBeInTheDocument();
       });
     });
 
-    it("footer nav is Fleet, Settings, Audit, Unresolved alerts in that order", async () => {
+    it("footer nav is Fleet, Audit log, Unresolved alerts, Settings in that order", async () => {
       setup();
       await waitFor(() =>
         expect(
@@ -207,18 +207,16 @@ describe("Shell", () => {
         ).toBeInTheDocument(),
       );
 
-      const footerLinkNames = [
-        "Fleet",
-        "Settings",
-        "Audit log",
-        "Unresolved alerts",
+      const rows = [
+        screen.getByRole("link", { name: "Fleet" }),
+        screen.getByRole("link", { name: "Audit log" }),
+        screen.getByRole("link", { name: "Unresolved alerts" }),
+        screen.getByRole("button", { name: "Settings" }),
       ];
-      const links = footerLinkNames.map((name) =>
-        screen.getByRole("link", { name }),
+      const all = Array.from(
+        document.querySelectorAll<HTMLElement>("a, button"),
       );
-      const positions = links.map((link) =>
-        Array.from(document.querySelectorAll<HTMLElement>("a")).indexOf(link),
-      );
+      const positions = rows.map((row) => all.indexOf(row));
       expect(positions).toEqual([...positions].sort((a, b) => a - b));
     });
 
@@ -229,12 +227,12 @@ describe("Shell", () => {
       });
     });
 
-    it("sidebar rows show title and relative time but no status badge", async () => {
+    it("sidebar rows show the title alone, without timestamps or status badges", async () => {
       setup();
       await waitFor(() => {
         expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-        expect(screen.getByText(/ago/i)).toBeInTheDocument();
       });
+      expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
       expect(screen.queryByText("concluded")).not.toBeInTheDocument();
       expect(screen.queryByText("streaming")).not.toBeInTheDocument();
       expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
@@ -299,15 +297,16 @@ describe("Shell", () => {
       );
 
       await waitFor(() => {
-        // Text labels gone
-        expect(screen.queryByText("Fleet")).not.toBeInTheDocument();
-        expect(screen.queryByText("Settings")).not.toBeInTheDocument();
-        // Links still accessible via aria-label
+        // Text labels fade out (kept in the DOM so the width animation can
+        // cross-fade them; data-hidden drives opacity 0)
+        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden");
+        expect(screen.getByText("Settings")).toHaveAttribute("data-hidden");
+        // Rows still accessible via aria-label
         expect(
           screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("link", { name: /settings/i }),
+          screen.getByRole("button", { name: /^settings$/i }),
         ).toBeInTheDocument();
         // Session list hidden
         expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
@@ -328,15 +327,15 @@ describe("Shell", () => {
 
       // Verify collapsed
       await waitFor(() =>
-        expect(screen.queryByText("Fleet")).not.toBeInTheDocument(),
+        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden"),
       );
 
       // Expand again
       await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
 
       await waitFor(() => {
-        expect(screen.getByText("Fleet")).toBeInTheDocument();
-        expect(screen.getByText("Settings")).toBeInTheDocument();
+        expect(screen.getByText("Fleet")).not.toHaveAttribute("data-hidden");
+        expect(screen.getByText("Settings")).not.toHaveAttribute("data-hidden");
         expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
       });
     });
@@ -384,8 +383,9 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() => {
-        // In collapsed state labels are absent
-        expect(screen.queryByText("Fleet")).not.toBeInTheDocument();
+        // In collapsed state row labels are faded out and the sessions
+        // section is not rendered at all
+        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden");
         expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
         // But links are still accessible
         expect(
@@ -559,20 +559,51 @@ describe("Shell", () => {
       });
     });
 
-    it("clicking Settings nav link shows settings content", async () => {
+    it("clicking Settings opens the settings modal in place", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
       await waitFor(() => {
         expect(
-          screen.getByRole("link", { name: /settings/i }),
+          screen.getByRole("button", { name: /^settings$/i }),
         ).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /settings/i }));
+      await user.click(screen.getByRole("button", { name: /^settings$/i }));
 
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/settings");
+        expect(
+          screen.getByRole("navigation", { name: /settings sections/i }),
+        ).toBeInTheDocument();
+      });
+      // In place: the route does not change
+      expect(router.state.location.pathname).toBe("/");
+    });
+
+    it("landing on /settings opens the modal over the session area", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /^settings$/i }),
+        ).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await router.navigate({ to: "/settings" });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("navigation", { name: /settings sections/i }),
+        ).toBeInTheDocument();
+      });
+
+      // Closing the alias-opened modal returns to the session area
+      await user.click(screen.getByRole("button", { name: /close settings/i }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
       });
     });
   });
@@ -778,7 +809,9 @@ describe("Shell", () => {
           screen.queryByRole("link", { name: /fleet/i }),
         ).not.toBeInTheDocument();
       });
-      expect(hamburger).toHaveFocus();
+      await waitFor(() => {
+        expect(hamburger).toHaveFocus();
+      });
     });
 
     it("closes the drawer after navigating via a footer nav link", async () => {

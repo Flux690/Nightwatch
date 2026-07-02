@@ -17,7 +17,6 @@ export function IconButton({
 }: IconButtonProps): React.JSX.Element {
   return (
     <MantineActionIcon
-      unstyled
       classNames={{
         root: className ? `icon-btn ${className}` : "icon-btn",
         loader: "icon-btn__loader",

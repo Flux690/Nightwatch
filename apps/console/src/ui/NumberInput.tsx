@@ -18,13 +18,14 @@ export function NumberInput({
 }: NumberInputProps): React.JSX.Element {
   return (
     <MantineNumberInput
-      unstyled
+      variant="unstyled"
       classNames={{
         root: "field",
         label: "field__label",
-        input: className ? `input ${className}` : "input",
+        input: className
+          ? `input input--tnum ${className}`
+          : "input input--tnum",
         error: "field__error",
-        controls: "field__controls",
         control: "field__control",
       }}
       {...props}

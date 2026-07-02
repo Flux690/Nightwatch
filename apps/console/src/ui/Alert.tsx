@@ -26,7 +26,6 @@ export function Alert({
 }: AlertProps): React.JSX.Element {
   return (
     <MantineAlert
-      unstyled
       classNames={{
         root: className
           ? `alert alert--${intent} ${className}`

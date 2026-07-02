@@ -27,7 +27,7 @@ export function Textarea({
 }: TextareaProps): React.JSX.Element {
   return (
     <MantineTextarea
-      unstyled
+      variant="unstyled"
       classNames={{
         root: "field",
         label: "field__label",

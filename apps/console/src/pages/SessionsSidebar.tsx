@@ -7,7 +7,6 @@ import { Text } from "../ui/Text.js";
 import { UnstyledButton } from "../ui/UnstyledButton.js";
 import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
-import { timeAgo } from "../utils/time.js";
 
 const ICON_PROPS = { size: 14, strokeWidth: 1.5, "aria-hidden": true } as const;
 
@@ -79,16 +78,16 @@ export function SessionsSidebar(): React.JSX.Element {
       {sessions.map((session, index) => (
         <li
           key={session.sessionId}
-          style={{ display: "flex", alignItems: "center" }}
+          className="session-row"
+          data-active={
+            activeSessionId === session.sessionId ? "true" : undefined
+          }
         >
           <button
             ref={(el) => {
               rowRefs.current[index] = el;
             }}
-            className="session-row"
-            data-active={
-              activeSessionId === session.sessionId ? "true" : undefined
-            }
+            className="session-row__name"
             tabIndex={index === activeRoveIndex ? 0 : -1}
             onKeyDown={(e) => handleRowKeyDown(e, index)}
             onFocus={() => setRoveIndex(index)}
@@ -98,36 +97,18 @@ export function SessionsSidebar(): React.JSX.Element {
                 params: { id: session.sessionId },
               })
             }
-            style={{
-              flex: 1,
-              minWidth: 0,
-              border: "none",
-              cursor: "pointer",
-              padding: 4,
-              borderRadius: "var(--radius-sm)",
-              textAlign: "left",
-              color: "var(--color-ink)",
-            }}
+            title={session.title}
           >
-            <Text className="text-sm truncate" title={session.title}>
-              {session.title}
-            </Text>
-            <Text className="text-xs text-ink-muted font-mono">
-              {timeAgo(session.createdAt)}
-            </Text>
+            {session.title}
           </button>
           <UnstyledButton
+            className="session-row__delete"
             aria-label="Delete session"
             onClick={(e) => handleDelete(e, session.sessionId)}
             disabled={
               deleteSession.isPending &&
               deleteSession.variables === session.sessionId
             }
-            style={{
-              padding: 4,
-              color: "var(--color-ink-muted)",
-              display: "flex",
-            }}
           >
             <Trash2 {...ICON_PROPS} />
           </UnstyledButton>

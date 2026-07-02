@@ -1,56 +1,45 @@
+/* Deterministic ladder: explicit height and equal padding on both sides
+   (Mantine's data-with-left-section rule would otherwise shrink the icon
+   side). --button-color feeds the built-in loading spinner. */
 .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 650;
+  --button-color: currentColor;
+
+  height: 36px;
+  padding-inline: 16px;
+  font-size: var(--text-sm);
+  font-weight: 500;
   letter-spacing: 0.01em;
-  line-height: 1;
-  padding: 8px 14px;
   border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  border-radius: var(--radius-md);
   transition: background-color var(--duration-fast) var(--ease-out);
 }
-.btn__inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+
+.btn[data-size="sm"] {
+  height: 32px;
+  padding-inline: 12px;
 }
-.btn__loader {
-  display: flex;
-  align-items: center;
+
+.btn[data-size="xs"] {
+  height: 28px;
+  padding-inline: 10px;
+  font-size: var(--text-xs);
 }
-.btn:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
+
 .btn[disabled],
 .btn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn[data-size="sm"] {
-  font-size: 13px;
-  padding: 6px 12px;
-}
-.btn[data-size="xs"] {
-  font-size: 12px;
-  padding: 4px 10px;
-}
-
 .btn[data-variant="primary"] {
-  background: var(--color-accent);
+  background: var(--color-primary-fill);
   color: var(--color-card);
 }
 .btn[data-variant="primary"]:hover:not([disabled]) {
-  background: var(--color-accent-hover);
+  background: var(--color-primary-hover);
 }
 .btn[data-variant="primary"]:active:not([disabled]) {
-  background: var(--color-accent-press);
+  background: var(--color-primary-press);
 }
 .btn[data-variant="secondary"] {
   background: var(--color-card);
@@ -73,9 +62,6 @@
 }
 .btn[data-variant="destructive"]:hover:not([disabled]) {
   background: color-mix(in srgb, var(--color-status-failed) 85%, black);
-}
-.btn[data-variant="destructive"]:focus-visible {
-  outline-color: var(--color-status-failed);
 }
 
 @media (prefers-reduced-motion: reduce) {

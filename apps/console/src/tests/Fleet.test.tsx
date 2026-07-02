@@ -2,6 +2,13 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
@@ -86,6 +93,33 @@ const DB_RUNNER: RunnerRecord = {
   remediationMode: false,
 };
 
+/* FleetPage navigates to /fleet/add, so it renders under a memory router
+   with a stub destination route. */
+function renderFleetRoute(qc: QueryClient) {
+  const rootRoute = createRootRoute();
+  const fleetRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/fleet",
+    component: FleetPage,
+  });
+  const addServerRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/fleet/add",
+    component: () => <div>Add server destination</div>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([fleetRoute, addServerRoute]),
+    history: createMemoryHistory({ initialEntries: ["/fleet"] }),
+  });
+  return render(
+    <TestProviders>
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </TestProviders>,
+  );
+}
+
 function setup(runners: RunnerRecord[] = []) {
   const fetchMock = vi
     .fn()
@@ -111,13 +145,7 @@ function setup(runners: RunnerRecord[] = []) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  render(
-    <TestProviders>
-      <QueryClientProvider client={qc}>
-        <FleetPage />
-      </QueryClientProvider>
-    </TestProviders>,
-  );
+  renderFleetRoute(qc);
 
   return { fetchMock, qc };
 }
@@ -218,7 +246,7 @@ describe("FleetPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("page header remains visible in the empty state with Add a server action", async () => {
+    it("shows exactly one add-server call to action in the empty state", async () => {
       setup([]);
       await waitFor(() => {
         expect(screen.getByText(/your fleet is empty/i)).toBeInTheDocument();
@@ -226,17 +254,28 @@ describe("FleetPage", () => {
       expect(
         screen.getByRole("heading", { name: /fleet/i }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /add a server/i }),
-      ).toBeInTheDocument();
+      const addButtons = screen.getAllByRole("button", {
+        name: /add .*server/i,
+      });
+      expect(addButtons).toHaveLength(1);
+      expect(addButtons[0]).toHaveTextContent(/add your first server/i);
+    });
+
+    it("shows the header add-server action once the fleet has rows", async () => {
+      setup([WEB_RUNNER]);
+      await waitFor(() => {
+        expect(screen.getByText("web-01")).toBeInTheDocument();
+      });
+      const addButton = screen.getByRole("button", { name: /add a server/i });
+      expect(addButton.closest("header")).not.toBeNull();
     });
   });
 
   describe("loading state", () => {
-    it("shows skeleton rows while loading", () => {
+    it("shows skeleton rows while loading", async () => {
       setup();
       expect(
-        screen.getByRole("status", { name: /loading fleet/i }),
+        await screen.findByRole("status", { name: /loading fleet/i }),
       ).toBeInTheDocument();
       expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
     });
@@ -253,13 +292,7 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
 
-      render(
-        <TestProviders>
-          <QueryClientProvider client={qc}>
-            <FleetPage />
-          </QueryClientProvider>
-        </TestProviders>,
-      );
+      renderFleetRoute(qc);
 
       await waitFor(() => {
         expect(screen.getByText(/failed to load fleet/i)).toBeInTheDocument();
@@ -312,26 +345,15 @@ describe("FleetPage", () => {
   });
 
   describe("Add a server", () => {
-    it("opens the add-server wizard when 'Add a server' is clicked", async () => {
+    it("navigates to the add-server page when the empty-state action is clicked", async () => {
       const user = userEvent.setup();
       setup([]);
-      await user.click(screen.getByRole("button", { name: /add a server/i }));
-      await waitFor(() => {
-        expect(
-          screen.getByRole("radio", { name: /docker/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("add-server lives in the page header, not the sidebar", async () => {
-      setup([]);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /add a server/i }),
-        ).toBeInTheDocument();
-      });
-      const btn = screen.getByRole("button", { name: /add a server/i });
-      expect(btn.closest("header")).not.toBeNull();
+      await user.click(
+        await screen.findByRole("button", { name: /add your first server/i }),
+      );
+      expect(
+        await screen.findByText(/add server destination/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -392,13 +414,7 @@ describe("FleetPage", () => {
       const qc = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
-      render(
-        <TestProviders>
-          <QueryClientProvider client={qc}>
-            <FleetPage />
-          </QueryClientProvider>
-        </TestProviders>,
-      );
+      renderFleetRoute(qc);
 
       await waitFor(() => {
         expect(screen.getByText("web-01")).toBeInTheDocument();
@@ -442,13 +458,7 @@ describe("FleetPage", () => {
       const qc = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
-      render(
-        <TestProviders>
-          <QueryClientProvider client={qc}>
-            <FleetPage />
-          </QueryClientProvider>
-        </TestProviders>,
-      );
+      renderFleetRoute(qc);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);

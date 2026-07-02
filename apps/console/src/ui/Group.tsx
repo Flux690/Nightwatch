@@ -7,7 +7,6 @@ type GroupProps = React.HTMLAttributes<HTMLDivElement>;
 export function Group({ className, ...props }: GroupProps): React.JSX.Element {
   return (
     <MantineGroup
-      unstyled
       classNames={{ root: className ? `group ${className}` : "group" }}
       {...props}
     />

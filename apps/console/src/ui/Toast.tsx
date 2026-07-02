@@ -12,9 +12,7 @@ type ShowProps = {
 
 export function ToastContainer(): React.JSX.Element {
   return (
-    <div aria-live="polite">
-      <Notifications unstyled className="toast-container" />
-    </div>
+    <Notifications position="bottom-right" zIndex={300} containerWidth={400} />
   );
 }
 

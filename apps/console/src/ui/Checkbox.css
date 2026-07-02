@@ -1,37 +1,26 @@
+/* Size flows through Mantine's variable so box, wrapper, and check icon
+   scale together - never set width/height on the input directly. */
 .checkbox {
-  display: inline-flex;
-  cursor: pointer;
+  --checkbox-size: 18px;
+  --checkbox-radius: var(--mantine-radius-xs);
 }
-.checkbox__body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+.checkbox__input:not(:checked) {
+  border-color: var(--color-line-strong);
+  background: var(--color-card);
 }
-.checkbox__inner {
-  position: relative;
-  display: flex;
-}
-.checkbox__input {
-  accent-color: var(--color-accent);
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  cursor: pointer;
-}
-.checkbox__input:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
+
 .checkbox__input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
 .checkbox__label {
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--color-ink);
-  cursor: pointer;
 }
-.checkbox__input:disabled ~ .checkbox__label {
+
+.checkbox__label[data-disabled] {
   opacity: 0.5;
-  cursor: not-allowed;
+  color: var(--color-ink);
 }

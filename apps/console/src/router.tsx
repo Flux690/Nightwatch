@@ -7,8 +7,8 @@ import {
 import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { SettingsPage } from "./pages/Settings.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
+import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
 import { UnresolvedAlertsPage } from "./pages/UnresolvedAlerts.js";
 
@@ -49,10 +49,12 @@ const sessionIdRoute = createRoute({
   component: () => null,
 });
 
+/* Alias only: Shell detects /settings and opens the settings modal over the
+   session area, so the URL keeps working without a dedicated page. */
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: SettingsPage,
+  component: () => null,
 });
 
 const auditRoute = createRoute({
@@ -67,6 +69,12 @@ const fleetRoute = createRoute({
   component: FleetPage,
 });
 
+const addServerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/fleet/add",
+  component: AddServerPage,
+});
+
 const unresolvedAlertsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/unresolved-alerts",
@@ -79,6 +87,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     sessionIdRoute,
     fleetRoute,
+    addServerRoute,
     settingsRoute,
     auditRoute,
     unresolvedAlertsRoute,

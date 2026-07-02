@@ -15,7 +15,6 @@ type RadioProps = {
 export function Radio({ className, ...props }: RadioProps): React.JSX.Element {
   return (
     <MantineRadio
-      unstyled
       classNames={{
         root: className ? `radio ${className}` : "radio",
         radio: "radio__input",

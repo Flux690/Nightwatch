@@ -17,7 +17,6 @@ export function Badge({
 }: BadgeProps): React.JSX.Element {
   return (
     <MantineBadge
-      unstyled
       classNames={{
         root: className
           ? `badge badge--${intent} ${className}`

@@ -43,10 +43,11 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByTestId("user-turn")).toBeInTheDocument();
     });
 
-    it("shows a You label above the message", () => {
+    it("renders the message alone in the bubble, without a You label", () => {
       wrap({ kind: "user_turn", id: "u1", text: "Hello agent" });
 
-      expect(screen.getByText("You")).toBeInTheDocument();
+      expect(screen.queryByText("You")).not.toBeInTheDocument();
+      expect(screen.getByTestId("user-turn")).toHaveTextContent("Hello agent");
     });
   });
 

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { Network, Plus, ServerOff } from "lucide-react";
+import { Network, Plus } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
 import { Loader } from "../ui/Loader.js";
@@ -17,7 +18,6 @@ import {
 } from "../ui/Table.js";
 import { apiFetch } from "../api/client.js";
 import { timeAgo } from "../utils/time.js";
-import { AddServerWizard } from "./AddServerWizard.js";
 
 type RunnerStatus = "online" | "offline";
 
@@ -120,7 +120,7 @@ function SkeletonRows({ count }: { count: number }): React.JSX.Element {
 
 export function FleetPage(): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const navigate = useNavigate();
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("hostname");
@@ -133,7 +133,7 @@ export function FleetPage(): React.JSX.Element {
   } = useQuery<RunnerRecord[]>({
     queryKey: ["runners"],
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-    refetchInterval: wizardOpen ? false : 30_000,
+    refetchInterval: 30_000,
   });
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
@@ -148,11 +148,6 @@ export function FleetPage(): React.JSX.Element {
       setSortField(field);
       setSortDir("asc");
     }
-  }
-
-  function handleWizardClose(): void {
-    setWizardOpen(false);
-    void queryClient.invalidateQueries({ queryKey: ["runners"] });
   }
 
   async function handleRemove(token: string): Promise<void> {
@@ -176,13 +171,15 @@ export function FleetPage(): React.JSX.Element {
     <div className="page page--data">
       <header className="page-header">
         <h1 className="page-title">Fleet</h1>
-        <Button
-          size="xs"
-          onClick={() => setWizardOpen(true)}
-          leftSection={<Plus size={14} strokeWidth={2} aria-hidden="true" />}
-        >
-          Add a server
-        </Button>
+        {!isEmpty && (
+          <Button
+            size="sm"
+            onClick={() => void navigate({ to: "/fleet/add" })}
+            leftSection={<Plus size={14} strokeWidth={2} aria-hidden="true" />}
+          >
+            Add a server
+          </Button>
+        )}
       </header>
 
       {removeError !== null && (
@@ -239,8 +236,7 @@ export function FleetPage(): React.JSX.Element {
               infrastructure at a glance.
             </p>
             <Button
-              size="xs"
-              onClick={() => setWizardOpen(true)}
+              onClick={() => void navigate({ to: "/fleet/add" })}
               leftSection={
                 <Plus size={14} strokeWidth={2} aria-hidden="true" />
               }
@@ -351,8 +347,6 @@ export function FleetPage(): React.JSX.Element {
           </Table>
         </div>
       )}
-
-      <AddServerWizard opened={wizardOpen} onClose={handleWizardClose} />
     </div>
   );
 }

@@ -1,40 +1,17 @@
+/* Positioning and slide transitions belong to Mantine; only surface visuals
+   and the nav-column body layout live here. */
 .drawer__overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(13, 12, 11, 0.4);
-  z-index: 200;
+  background: rgba(13, 37, 61, 0.4);
 }
 .drawer__content {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100vh;
   background: var(--color-surface);
   border-right: 1px solid var(--color-line);
-  box-shadow: var(--shadow-overlay);
-  z-index: 201;
-  overflow-y: auto;
 }
 .drawer__body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   padding: 8px;
-}
-.drawer__close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  color: var(--color-ink-muted);
-  background: transparent;
-}
-.drawer__close:hover {
-  background: var(--color-surface-hover);
 }
