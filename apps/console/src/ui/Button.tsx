@@ -5,7 +5,12 @@ import {
   type ButtonProps as MantineButtonProps,
 } from "@mantine/core";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "destructive"
+  | "plain";
 type ButtonSize = "default" | "sm" | "xs";
 
 type ButtonProps = Omit<React.ComponentPropsWithoutRef<"button">, "color"> & {

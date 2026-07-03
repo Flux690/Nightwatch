@@ -8,6 +8,7 @@ import { Group } from "../ui/Group.js";
 import { IconButton } from "../ui/IconButton.js";
 import { Stack } from "../ui/Stack.js";
 import { Text } from "../ui/Text.js";
+import { ICON_UI } from "../ui/iconProps.js";
 import { apiFetch } from "../api/client.js";
 import type { Provider } from "./AddServerPage.js";
 
@@ -72,7 +73,7 @@ function CopyableSnippet({
         aria-label={label}
         onClick={() => void navigator.clipboard.writeText(text)}
       >
-        <Copy size={16} strokeWidth={1.75} aria-hidden="true" />
+        <Copy {...ICON_UI} />
       </IconButton>
     </Group>
   );
@@ -120,7 +121,10 @@ export function WizardMonitoringStep({
   });
 
   return (
-    <Alert intent="info" title="Bring-your-own monitoring">
+    <section>
+      <Text className="text-sm font-semibold" style={{ marginBottom: 12 }}>
+        Bring-your-own monitoring
+      </Text>
       <Stack className="gap-4">
         <Text className="text-sm">
           Wire your own Prometheus and Alertmanager to Nightwatch. Every server
@@ -214,6 +218,6 @@ export function WizardMonitoringStep({
           )}
         </Stack>
       </Stack>
-    </Alert>
+    </section>
   );
 }

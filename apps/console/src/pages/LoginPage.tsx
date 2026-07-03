@@ -4,7 +4,6 @@ import { AlertCircle } from "lucide-react";
 
 import { Alert } from "../ui/Alert.js";
 import { Button } from "../ui/Button.js";
-import { Center } from "../ui/Center.js";
 import { PasswordInput } from "../ui/PasswordInput.js";
 import { TextInput } from "../ui/TextInput.js";
 import { useAuth } from "../auth/AuthContext.js";
@@ -12,16 +11,18 @@ import { useAuth } from "../auth/AuthContext.js";
 const MIN_PASSWORD = 12;
 
 function ValidationError({ message }: { message: string }): React.JSX.Element {
-  if (!message) return <></>;
-
   return (
     <div className="validation-error" role="alert">
-      <AlertCircle
-        size={14}
-        className="validation-error__icon"
-        aria-hidden="true"
-      />
-      <span>{message}</span>
+      {message && (
+        <>
+          <AlertCircle
+            size={14}
+            className="validation-error__icon"
+            aria-hidden="true"
+          />
+          <span>{message}</span>
+        </>
+      )}
     </div>
   );
 }
@@ -79,7 +80,11 @@ function SetupForm(): React.JSX.Element {
     <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
       <fieldset className="auth-fieldset">
         <legend className="auth-title">Create your account</legend>
-        {serverError && <Alert intent="error">{serverError}</Alert>}
+        {serverError && (
+          <Alert intent="error" className="auth-alert">
+            {serverError}
+          </Alert>
+        )}
         <div className="auth-fields">
           <TextInput
             label="Email"
@@ -143,7 +148,11 @@ function LoginForm(): React.JSX.Element {
     <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
       <fieldset className="auth-fieldset">
         <legend className="auth-title">Log in</legend>
-        {serverError && <Alert intent="error">{serverError}</Alert>}
+        {serverError && (
+          <Alert intent="error" className="auth-alert">
+            {serverError}
+          </Alert>
+        )}
         <div className="auth-fields">
           <TextInput
             label="Email"
@@ -180,8 +189,8 @@ export function LoginPage(): React.JSX.Element | null {
   if (phase.kind === "loading" || phase.kind === "authenticated") return null;
 
   return (
-    <Center className="auth-screen">
+    <div className="auth-screen">
       {phase.kind === "needs-setup" ? <SetupForm /> : <LoginForm />}
-    </Center>
+    </div>
   );
 }

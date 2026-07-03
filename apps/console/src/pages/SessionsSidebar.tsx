@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import type { SessionMeta } from "@nightwatch/shared";
 import { Text } from "../ui/Text.js";
-import { UnstyledButton } from "../ui/UnstyledButton.js";
+import { Button } from "../ui/Button.js";
 import { toast } from "../ui/Toast.js";
 import { apiFetch } from "../api/client.js";
 
@@ -101,17 +101,20 @@ export function SessionsSidebar(): React.JSX.Element {
           >
             {session.title}
           </button>
-          <UnstyledButton
+          <Button
+            variant="plain"
             className="session-row__delete"
             aria-label="Delete session"
-            onClick={(e) => handleDelete(e, session.sessionId)}
+            onClick={(e: React.MouseEvent) =>
+              handleDelete(e, session.sessionId)
+            }
             disabled={
               deleteSession.isPending &&
               deleteSession.variables === session.sessionId
             }
           >
             <Trash2 {...ICON_PROPS} />
-          </UnstyledButton>
+          </Button>
         </li>
       ))}
     </ul>

@@ -9,7 +9,7 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
-import { Button } from "../ui/Button.js";
+import { Text } from "../ui/Text.js";
 import { toast } from "../ui/Toast.js";
 import { useAuth } from "../auth/AuthContext.js";
 import { useConsoleWs } from "../hooks/ConsoleWsProvider.js";
@@ -19,13 +19,6 @@ import { convertPersistedMessages } from "../transcript/persistedConverter.js";
 import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
 import type { TranscriptItem } from "../transcript/types.js";
 import { apiFetch } from "../api/client.js";
-
-const SUGGESTIONS = [
-  "Check pod health",
-  "Review recent alerts",
-  "Show fleet status",
-  "Investigate last failure",
-];
 
 interface PendingInterrupt {
   id: string;
@@ -126,8 +119,13 @@ function TranscriptColumn({
         padding: "0 24px",
       }}
     >
-      {allItems.map((item) => (
-        <div key={itemKey(item)} style={{ marginBottom: 8 }}>
+      {allItems.map((item, index) => (
+        <div
+          key={itemKey(item)}
+          style={{
+            marginTop: index === 0 ? 0 : item.kind === "user_turn" ? 32 : 8,
+          }}
+        >
           <TranscriptItemRenderer
             item={item}
             onResolve={onResolve}
@@ -367,69 +365,16 @@ export function SessionView({
     });
   }, [liveItems, messages]);
 
-  const createSession = useMutation({
-    mutationFn: async (message: string) => {
-      const data = await apiFetch<{ sessionId: string }>("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      handleSessionCreated(data.sessionId, message);
-      return data.sessionId;
-    },
-    onSuccess: async (sessionId) => {
-      await navigate({
-        to: "/sessions/$id",
-        params: { id: sessionId },
-        replace: true,
-      });
-    },
-    onError: (err) => {
-      toast.show({
-        title: "Could not start session",
-        message: err instanceof Error ? err.message : "Try again.",
-        variant: "error",
-      });
-    },
-  });
-
   if (!activeSessionId) {
     return (
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          alignItems: "center",
-        }}
-      >
-        <div
-          style={{
-            flex: 3,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div style={{ textAlign: "center" }}>
-            <h1 className="session-landing__greeting">Hello, {displayName}</h1>
-            <div className="session-landing__suggestions">
-              {SUGGESTIONS.map((s) => (
-                <Button
-                  key={s}
-                  variant="secondary"
-                  size="sm"
-                  disabled={createSession.isPending}
-                  onClick={() => createSession.mutate(s)}
-                >
-                  {s}
-                </Button>
-              ))}
-            </div>
-          </div>
+      <div className="session-landing">
+        <div className="session-landing__center">
+          <h1 className="session-landing__greeting">Hello, {displayName}</h1>
+          <Text className="session-landing__hint">
+            Start an investigation or ask about your fleet.
+          </Text>
         </div>
-        <div style={{ flex: 2, width: "100%", paddingTop: 8 }}>
+        <div style={{ width: "100%" }}>
           <ChatInput
             sessionId={null}
             isRunning={false}

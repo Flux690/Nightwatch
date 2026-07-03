@@ -258,23 +258,23 @@ export function SettingsModal({
 
               {form && section === "model" && (
                 <div className="settings-modal__fields">
-                  <div className="control--md">
-                    <Select
-                      label="Protocol"
-                      data={[
-                        { value: "anthropic", label: "Anthropic native" },
-                        { value: "openai", label: "OpenAI-compatible" },
-                      ]}
-                      value={form.provider}
-                      onChange={(v) =>
-                        v && setField("provider", v as AgentConfig["provider"])
-                      }
-                      allowDeselect={false}
-                    />
-                  </div>
+                  <Select
+                    label="Protocol"
+                    w="md"
+                    data={[
+                      { value: "anthropic", label: "Anthropic native" },
+                      { value: "openai", label: "OpenAI-compatible" },
+                    ]}
+                    value={form.provider}
+                    onChange={(v) =>
+                      v && setField("provider", v as AgentConfig["provider"])
+                    }
+                    allowDeselect={false}
+                  />
 
                   <TextInput
                     label="Base URL"
+                    w="md"
                     placeholder={
                       form.provider === "anthropic"
                         ? "https://api.anthropic.com"
@@ -286,45 +286,43 @@ export function SettingsModal({
                     }
                   />
 
-                  <div className="control--md">
-                    <Autocomplete
-                      label="Model"
-                      data={availableModels}
-                      value={form.model}
-                      onChange={(v) => setField("model", v)}
-                    />
-                  </div>
+                  <Autocomplete
+                    label="Model"
+                    w="md"
+                    data={availableModels}
+                    value={form.model}
+                    onChange={(v) => setField("model", v)}
+                  />
 
-                  <div className="control--sm">
-                    <NumberInput
-                      label="Max output tokens"
-                      value={form.maxOutputTokens}
-                      onChange={(v) =>
-                        setField("maxOutputTokens", numberValue(v))
-                      }
-                    />
-                  </div>
+                  <NumberInput
+                    label="Max output tokens"
+                    w="xs"
+                    step={1000}
+                    value={form.maxOutputTokens}
+                    onChange={(v) =>
+                      setField("maxOutputTokens", numberValue(v))
+                    }
+                  />
 
                   {isAnthropic && (
                     <>
-                      <div className="control--md">
-                        <Select
-                          label="Thinking mode"
-                          data={[
-                            {
-                              value: "adaptive",
-                              label: "Adaptive (extended thinking)",
-                            },
-                            { value: "off", label: "Off" },
-                          ]}
-                          value={form.thinking}
-                          onChange={(v) =>
-                            v &&
-                            setField("thinking", v as AgentConfig["thinking"])
-                          }
-                          allowDeselect={false}
-                        />
-                      </div>
+                      <Select
+                        label="Thinking mode"
+                        w="md"
+                        data={[
+                          {
+                            value: "adaptive",
+                            label: "Adaptive (extended thinking)",
+                          },
+                          { value: "off", label: "Off" },
+                        ]}
+                        value={form.thinking}
+                        onChange={(v) =>
+                          v &&
+                          setField("thinking", v as AgentConfig["thinking"])
+                        }
+                        allowDeselect={false}
+                      />
                       <Checkbox
                         label="Prompt caching"
                         checked={form.promptCaching ?? true}
@@ -336,25 +334,24 @@ export function SettingsModal({
                   )}
 
                   {!isAnthropic && (
-                    <div className="control--md">
-                      <Select
-                        label="Reasoning effort"
-                        data={[
-                          { value: "low", label: "Low" },
-                          { value: "medium", label: "Medium" },
-                          { value: "high", label: "High" },
-                        ]}
-                        value={form.reasoningEffort ?? null}
-                        onChange={(v) =>
-                          setField(
-                            "reasoningEffort",
-                            (v as ReasoningEffort) ?? null,
-                          )
-                        }
-                        clearable
-                        placeholder="Not set"
-                      />
-                    </div>
+                    <Select
+                      label="Reasoning effort"
+                      w="sm"
+                      data={[
+                        { value: "low", label: "Low" },
+                        { value: "medium", label: "Medium" },
+                        { value: "high", label: "High" },
+                      ]}
+                      value={form.reasoningEffort ?? null}
+                      onChange={(v) =>
+                        setField(
+                          "reasoningEffort",
+                          (v as ReasoningEffort) ?? null,
+                        )
+                      }
+                      clearable
+                      placeholder="Not set"
+                    />
                   )}
                 </div>
               )}
@@ -367,17 +364,16 @@ export function SettingsModal({
                       {form.apiKeyMasked ? form.apiKeyMasked : "Not configured"}
                     </Text>
                   </div>
-                  <div className="control--md">
-                    <PasswordInput
-                      label="New API key"
-                      placeholder="Paste API key"
-                      value={newApiKey}
-                      onChange={(e) => {
-                        setNewApiKey(e.currentTarget.value);
-                        setTestResult(null);
-                      }}
-                    />
-                  </div>
+                  <PasswordInput
+                    label="New API key"
+                    w="md"
+                    placeholder="Paste API key"
+                    value={newApiKey}
+                    onChange={(e) => {
+                      setNewApiKey(e.currentTarget.value);
+                      setTestResult(null);
+                    }}
+                  />
                   <Group className="gap-2 items-center">
                     <Button
                       type="button"
@@ -404,11 +400,13 @@ export function SettingsModal({
                 <div className="settings-row-grid">
                   <NumberInput
                     label="Max retries"
+                    step={1}
                     value={form.maxRetries}
                     onChange={(v) => setField("maxRetries", numberValue(v))}
                   />
                   <NumberInput
                     label="Request timeout (ms)"
+                    step={1000}
                     value={form.requestTimeoutMs}
                     onChange={(v) =>
                       setField("requestTimeoutMs", numberValue(v))
@@ -416,11 +414,13 @@ export function SettingsModal({
                   />
                   <NumberInput
                     label="Hard timeout (ms)"
+                    step={1000}
                     value={form.hardTimeoutMs}
                     onChange={(v) => setField("hardTimeoutMs", numberValue(v))}
                   />
                   <NumberInput
                     label="Tool timeout (ms)"
+                    step={1000}
                     value={form.toolTimeoutMs}
                     onChange={(v) => setField("toolTimeoutMs", numberValue(v))}
                   />

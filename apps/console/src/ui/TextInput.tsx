@@ -16,17 +16,19 @@ type TextInputProps = {
   onChange?: React.ChangeEventHandler<HTMLInputElement>;
   onBlur?: React.FocusEventHandler<HTMLInputElement>;
   className?: string;
+  w?: "xs" | "sm" | "md" | "lg";
 };
 
 export function TextInput({
   className,
+  w,
   ...props
 }: TextInputProps): React.JSX.Element {
   return (
     <MantineTextInput
       variant="unstyled"
       classNames={{
-        root: "field",
+        root: `field${w ? ` field--${w}` : ""}`,
         label: "field__label",
         description: "field__description",
         input: className ? `input ${className}` : "input",

@@ -1,11 +1,20 @@
 /* Size flows through Mantine's variable so circle and dot scale together. */
 .radio {
-  --radio-size: 18px;
+  --radio-size: 16px;
 }
 
 .radio__input:not(:checked) {
   border-color: var(--color-line-strong);
   background: var(--color-card);
+}
+
+.radio__input:checked {
+  background: var(--color-signal);
+  border-color: var(--color-signal);
+}
+
+.radio__input:not(:checked):hover {
+  border-color: var(--color-ink-muted);
 }
 
 .radio__input:disabled {
@@ -26,5 +35,5 @@
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }

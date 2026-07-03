@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RemediationActionRecord } from "@nightwatch/shared";
 import { ScrollText } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
-import { Button } from "../ui/Button.js";
+import { ICON_DISPLAY } from "../ui/iconProps.js";
 import { StatusChip } from "../ui/StatusChip.js";
 import {
   Table,
@@ -102,16 +102,14 @@ export function AuditLogPage(): React.JSX.Element {
       {isEmpty && (
         <div className="empty-state">
           <div className="empty-state__content">
-            <ScrollText
-              size={28}
-              strokeWidth={1.5}
-              className="empty-state__icon"
-              aria-hidden="true"
-            />
+            <ScrollText {...ICON_DISPLAY} className="empty-state__icon" />
+            <h2 className="empty-state__title">
+              No remediation actions recorded yet
+            </h2>
             <p className="empty-state__text">
-              No remediation actions recorded yet. When Nightwatch executes,
-              rejects, or fails a remediation action, it appears here so you can
-              audit every decision the system made on your behalf.
+              When Nightwatch executes, rejects, or fails a remediation action,
+              it appears here so you can audit every decision the system made on
+              your behalf.
             </p>
           </div>
         </div>

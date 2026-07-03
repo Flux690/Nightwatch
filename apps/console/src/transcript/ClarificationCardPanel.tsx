@@ -69,17 +69,12 @@ export function ClarificationCardPanel({
     <>
       <div
         data-testid="clarification-card"
-        style={{
-          border: "1px solid var(--color-status-awaiting)",
-          borderRadius: "var(--radius-sm)",
-          background: "var(--color-surface)",
-          padding: 4,
-          marginBottom: 4,
-        }}
+        className="interrupt-card"
+        data-resolved={resolved || undefined}
       >
-        <Text className="text-xs mb-2">{item.question}</Text>
+        <Text className="text-sm">{item.question}</Text>
         {resolved ? (
-          <Text className="text-xs" data-testid="clarification-resolution">
+          <Text className="text-sm" data-testid="clarification-resolution">
             Answered{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
           </Text>
         ) : (
@@ -87,7 +82,7 @@ export function ClarificationCardPanel({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 4,
+              gap: 8,
             }}
           >
             {item.multiSelect ? (
@@ -123,7 +118,7 @@ export function ClarificationCardPanel({
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    gap: 4,
+                    gap: 8,
                   }}
                 >
                   {options.map((opt) => (
@@ -150,7 +145,7 @@ export function ClarificationCardPanel({
               />
             )}
             <Button
-              size="xs"
+              size="sm"
               disabled={disabled || !canSubmit}
               onClick={handleSubmit}
             >

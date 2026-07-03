@@ -8,7 +8,7 @@
 .select__dropdown {
   background: var(--color-card);
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-overlay);
   padding: 4px;
 }
@@ -27,5 +27,9 @@
 }
 
 .select__option[data-combobox-selected] {
-  background: var(--color-selected-tint);
+  background: var(--color-surface-active);
+}
+
+.select__section {
+  color: var(--color-ink-muted);
 }

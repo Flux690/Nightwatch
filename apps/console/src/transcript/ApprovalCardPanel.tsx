@@ -16,34 +16,29 @@ export function ApprovalCardPanel({
     <>
       <div
         data-testid="approval-card"
-        style={{
-          border: "1px solid var(--color-status-awaiting)",
-          borderRadius: "var(--radius-sm)",
-          background: "var(--color-surface)",
-          padding: 4,
-          marginBottom: 4,
-        }}
+        className="interrupt-card"
+        data-resolved={resolved || undefined}
       >
-        <Text className="text-xs font-mono font-semibold">{item.toolName}</Text>
-        <Text className="text-xs text-ink-muted mb-2">
+        <Text className="text-sm font-mono font-medium">{item.toolName}</Text>
+        <Text className="text-xs text-ink-muted">
           Risk: {item.risk ?? "unknown"}
         </Text>
         {resolved ? (
-          <Text className="text-xs" data-testid="approval-resolution">
+          <Text className="text-sm" data-testid="approval-resolution">
             {item.approval === "approved" ? "Approved" : "Rejected"}
             {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
           </Text>
         ) : (
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <Button
-              size="xs"
+              size="sm"
               disabled={item.approval === "pending"}
               onClick={() => onResolve?.("approve")}
             >
               Approve
             </Button>
             <Button
-              size="xs"
+              size="sm"
               variant="secondary"
               disabled={item.approval === "pending"}
               onClick={() => onResolve?.("reject")}

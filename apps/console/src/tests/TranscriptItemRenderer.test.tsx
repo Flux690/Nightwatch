@@ -98,7 +98,7 @@ describe("TranscriptItemRenderer", () => {
         streaming: true,
       });
 
-      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+      expect(screen.queryByText("Checking the logs")).not.toBeInTheDocument();
     });
 
     it("renders collapsed by default for a reloaded (non-streaming) block", () => {
@@ -110,7 +110,7 @@ describe("TranscriptItemRenderer", () => {
       });
 
       expect(screen.getByText("Thinking")).toBeInTheDocument();
-      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+      expect(screen.queryByText("Checking the logs")).not.toBeInTheDocument();
     });
 
     it("expands to show the text when the header is clicked", async () => {
@@ -140,7 +140,7 @@ describe("TranscriptItemRenderer", () => {
       await user.click(button);
       await user.click(button);
 
-      expect(screen.queryByText("Checking the logs")).not.toBeVisible();
+      expect(screen.queryByText("Checking the logs")).not.toBeInTheDocument();
     });
 
     it("does not pulse once the burst has finished streaming", () => {

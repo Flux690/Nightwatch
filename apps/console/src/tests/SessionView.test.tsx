@@ -206,7 +206,9 @@ describe("SessionView", () => {
           screen.getByText("Restarting nginx should fix it."),
         ).toBeInTheDocument();
       });
-      expect(screen.getByText("Checked the container logs")).not.toBeVisible();
+      expect(
+        screen.queryByText("Checked the container logs"),
+      ).not.toBeInTheDocument();
     });
 
     it("renders no thinking dropdown for a reloaded session with no thinking blocks", async () => {
@@ -557,7 +559,9 @@ describe("SessionView", () => {
       await waitFor(() => {
         expect(screen.getByText("Thinking")).toBeInTheDocument();
       });
-      expect(screen.getByText("Let me check the logs")).not.toBeVisible();
+      expect(
+        screen.queryByText("Let me check the logs"),
+      ).not.toBeInTheDocument();
     });
 
     it("expands a streaming thinking block when clicked", async () => {
@@ -613,7 +617,7 @@ describe("SessionView", () => {
       await waitFor(() => {
         expect(screen.getByText("The answer.")).toBeInTheDocument();
       });
-      expect(screen.getByText("Reasoning")).not.toBeVisible();
+      expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
     });
 
     it("renders multiple thinking bursts as independent, ordered blocks", async () => {
@@ -1514,7 +1518,7 @@ describe("SessionView", () => {
   });
 
   describe("empty state (no session)", () => {
-    it("shows a personalized greeting and suggestion buttons", async () => {
+    it("shows a personalized greeting and hint, without suggestion chips", async () => {
       setupEmpty();
 
       await waitFor(() => {
@@ -1522,17 +1526,21 @@ describe("SessionView", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: "Check pod health" }),
+        screen.getByText("Start an investigation or ask about your fleet."),
       ).toBeInTheDocument();
+
       expect(
-        screen.getByRole("button", { name: "Review recent alerts" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "Check pod health" }),
+      ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Show fleet status" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "Review recent alerts" }),
+      ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Investigate last failure" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: "Show fleet status" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Investigate last failure" }),
+      ).not.toBeInTheDocument();
     });
 
     it("renders the composer for new messages", async () => {

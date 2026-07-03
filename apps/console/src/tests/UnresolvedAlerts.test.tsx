@@ -143,7 +143,7 @@ describe("UnresolvedAlertsPage", () => {
         expect(screen.getByText(/no unresolved alerts/i)).toBeInTheDocument();
       });
       expect(
-        screen.getByRole("heading", { name: /unresolved alerts/i }),
+        screen.getByRole("heading", { level: 1, name: /unresolved alerts/i }),
       ).toBeInTheDocument();
     });
   });

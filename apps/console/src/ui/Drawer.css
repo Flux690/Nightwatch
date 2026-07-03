@@ -1,7 +1,7 @@
 /* Positioning and slide transitions belong to Mantine; only surface visuals
    and the nav-column body layout live here. */
 .drawer__overlay {
-  background: rgba(13, 37, 61, 0.4);
+  background: var(--color-scrim);
 }
 .drawer__content {
   background: var(--color-surface);

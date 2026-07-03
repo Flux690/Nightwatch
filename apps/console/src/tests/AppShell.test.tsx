@@ -271,10 +271,9 @@ describe("Shell", () => {
       });
     });
 
-    it("owner email and Log out button are present in expanded view", async () => {
+    it("Log out button is present in expanded view", async () => {
       setup();
       await waitFor(() => {
-        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
         expect(
           screen.getByRole("button", { name: /log out/i }),
         ).toBeInTheDocument();
@@ -837,11 +836,14 @@ describe("Shell", () => {
   });
 
   describe("account", () => {
-    it("shows the logged-in operator's email", async () => {
+    it("does not show the operator email in the sidebar", async () => {
       setup();
-      await waitFor(() => {
-        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
-      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: /log out/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.queryByText(OWNER_EMAIL)).not.toBeInTheDocument();
     });
 
     it("Log out posts /api/logout", async () => {

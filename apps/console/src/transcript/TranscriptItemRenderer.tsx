@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionControl,
+  AccordionPanel,
+} from "../ui/Accordion.js";
 import { Text } from "../ui/Text.js";
-import { UnstyledButton } from "../ui/UnstyledButton.js";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { TranscriptItem, ThinkingItem } from "./types.js";
@@ -22,47 +25,34 @@ function UserTurn({ text }: { text: string }): React.JSX.Element {
 
 function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
-    <div
-      style={{
-        fontSize: "1rem",
-        lineHeight: 1.6,
-      }}
-    >
+    <div className="agent-prose">
       <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
     </div>
   );
 }
 
 function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <div data-testid="thinking-block" data-streaming={item.streaming}>
-      <UnstyledButton
-        className="thinking__trigger"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((prev) => !prev)}
-      >
-        <ChevronRight
-          size={14}
-          strokeWidth={1.75}
-          aria-hidden="true"
-          className="thinking__chevron"
-        />
-        <Text
-          className={`text-sm font-medium${item.streaming ? " thinking-pulse" : ""}`}
-        >
-          Thinking
-        </Text>
-      </UnstyledButton>
-      <div style={{ display: expanded ? "block" : "none" }}>
-        <Text
-          className="text-sm text-ink-muted"
-          style={{ whiteSpace: "pre-wrap", paddingLeft: 20, paddingTop: 4 }}
-        >
-          {item.text}
-        </Text>
-      </div>
+      <Accordion>
+        <AccordionItem value="thinking">
+          <AccordionControl>
+            <Text
+              className={`text-sm font-medium${item.streaming ? " thinking-pulse" : ""}`}
+            >
+              Thinking
+            </Text>
+          </AccordionControl>
+          <AccordionPanel>
+            <Text
+              className="text-sm text-ink-muted"
+              style={{ whiteSpace: "pre-wrap" }}
+            >
+              {item.text}
+            </Text>
+          </AccordionPanel>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }

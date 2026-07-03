@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 import { BellOff } from "lucide-react";
 import { Alert } from "../ui/Alert.js";
+import { ICON_DISPLAY } from "../ui/iconProps.js";
 import { StatusChip } from "../ui/StatusChip.js";
 import {
   Table,
@@ -96,16 +97,12 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
       {isEmpty && (
         <div className="empty-state">
           <div className="empty-state__content">
-            <BellOff
-              size={28}
-              strokeWidth={1.5}
-              className="empty-state__icon"
-              aria-hidden="true"
-            />
+            <BellOff {...ICON_DISPLAY} className="empty-state__icon" />
+            <h2 className="empty-state__title">No unresolved alerts</h2>
             <p className="empty-state__text">
-              No unresolved alerts. When an incoming alert cannot be routed to a
-              runner, it appears here with the rejection reason so you can
-              diagnose fleet coverage gaps.
+              When an incoming alert cannot be routed to a runner, it appears
+              here with the rejection reason so you can diagnose fleet coverage
+              gaps.
             </p>
           </div>
         </div>

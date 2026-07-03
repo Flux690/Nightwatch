@@ -1,5 +1,5 @@
 import { Tooltip } from "../ui/Tooltip.js";
-import { UnstyledButton } from "../ui/UnstyledButton.js";
+import { Button } from "../ui/Button.js";
 import { Link, useRouterState } from "@tanstack/react-router";
 
 export const RAIL_WIDTH = 56;
@@ -47,19 +47,22 @@ export function SideRow({
         {inner}
       </Link>
     ) : (
-      <UnstyledButton
+      <Button
+        variant="plain"
         aria-label={label}
         onClick={onClick}
         className="side-row"
         data-primary={primary || undefined}
       >
         {inner}
-      </UnstyledButton>
+      </Button>
     );
 
   return (
-    <Tooltip label={label} position="right" withArrow disabled={expanded}>
-      {row}
-    </Tooltip>
+    <li className="side-row__li">
+      <Tooltip label={label} position="right" withArrow disabled={expanded}>
+        {row}
+      </Tooltip>
+    </li>
   );
 }

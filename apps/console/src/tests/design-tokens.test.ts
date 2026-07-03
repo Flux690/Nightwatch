@@ -83,7 +83,8 @@ describe("design token contrast contract", () => {
     }
   });
 
-  it("keeps meaningful borders at 3:1+ non-text contrast (WCAG 1.4.11)", () => {
+  // The boundary of unlabeled controls (checkbox/radio) where the box IS the control
+  it("keeps line-strong at 3:1+ non-text contrast on card and canvas (WCAG 1.4.11)", () => {
     expect(
       contrast(token("line-strong"), token("canvas")),
       "line-strong on canvas",
@@ -94,6 +95,16 @@ describe("design token contrast contract", () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
+  // Labeled inputs/composer identify via label + fill + focus; resting boundary
+  // is deliberately sub-3:1 per the calm-border decision; focus border is signal at >=4.5:1
+  it("keeps line-control between 1.5:1 and 3:1 on card (calm-border split)", () => {
+    const ratio = contrast(token("line-control"), token("card"));
+    expect(ratio, "line-control on card lower bound").toBeGreaterThanOrEqual(
+      1.5,
+    );
+    expect(ratio, "line-control on card upper bound").toBeLessThanOrEqual(3);
+  });
+
   it("keeps the signal color at AA for links and 3:1+ as a focus border", () => {
     expect(
       contrast(token("signal"), token("card")),
@@ -102,10 +113,6 @@ describe("design token contrast contract", () => {
     expect(
       contrast(token("signal"), token("canvas")),
       "signal on canvas",
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrast(token("signal"), token("selected-tint")),
-      "signal on selected-tint",
     ).toBeGreaterThanOrEqual(4.5);
   });
 

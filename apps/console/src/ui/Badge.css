@@ -1,9 +1,7 @@
-/* Mantine badges default to uppercase with a fixed height; this design uses
-   sentence case, so both are steered back through the badge variables. */
 .badge {
   --badge-height: 22px;
   --badge-fz: var(--text-xs);
-  --badge-padding-x: 9px;
+  --badge-padding-x: 8px;
   --badge-radius: 999px;
 
   text-transform: none;
@@ -12,19 +10,19 @@
 }
 
 .badge--success {
-  background: color-mix(in srgb, var(--color-status-running) 12%, transparent);
+  background: var(--color-status-running-tint);
   color: var(--color-status-running);
 }
 .badge--error {
-  background: color-mix(in srgb, var(--color-status-failed) 12%, transparent);
+  background: var(--color-status-failed-tint);
   color: var(--color-status-failed);
 }
 .badge--warning {
-  background: color-mix(in srgb, var(--color-status-awaiting) 12%, transparent);
+  background: var(--color-status-awaiting-tint);
   color: var(--color-status-awaiting);
 }
 .badge--info {
-  background: color-mix(in srgb, var(--color-ink-muted) 10%, transparent);
+  background: var(--color-surface);
   color: var(--color-ink-muted);
 }
 .badge--neutral {

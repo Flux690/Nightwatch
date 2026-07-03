@@ -4,6 +4,10 @@
   gap: 4px;
   width: 100%;
 }
+.field--xs { max-width: 112px; }
+.field--sm { max-width: 160px; }
+.field--md { max-width: 320px; }
+.field--lg { max-width: 440px; }
 .field__label {
   font-size: var(--text-sm);
   font-weight: 500;
@@ -24,8 +28,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 12px;
+  width: 28px;
+  height: 16px;
   border: none;
   background: transparent;
   color: var(--color-ink-muted);
@@ -39,24 +43,28 @@
    (color swap + 1px shadow = one crisp 2px line), never a floating ring. */
 .input {
   box-sizing: border-box;
-  height: 40px;
+  height: 34px;
   font-family: inherit;
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
-  padding: 8px 12px;
-  border: 1px solid var(--color-line-strong);
+  padding: 6px 10px;
+  border: 1px solid var(--color-line-control);
   border-radius: var(--radius-sm);
-  background: var(--color-card);
+  background: var(--color-canvas);
   color: var(--color-ink);
   width: 100%;
 }
 .input::placeholder {
   color: var(--color-ink-muted);
 }
+.input:hover:not(:focus-visible):not([disabled]) {
+  border-color: var(--color-ink-faint);
+}
 .input:focus-visible {
   outline: none;
   border-color: var(--color-signal);
   box-shadow: 0 0 0 1px var(--color-signal);
+  background: var(--color-card);
 }
 .input[aria-invalid="true"],
 .input[data-error] {
@@ -68,10 +76,14 @@
   box-shadow: 0 0 0 1px var(--color-status-failed);
 }
 .input[disabled] {
-  background: var(--color-canvas);
+  background: var(--color-surface);
   color: var(--color-ink-faint);
+  border-color: var(--color-line);
   cursor: not-allowed;
 }
 .input--tnum {
   font-feature-settings: "tnum";
+}
+.input--number {
+  padding-right: 36px;
 }

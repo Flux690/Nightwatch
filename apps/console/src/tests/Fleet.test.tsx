@@ -252,7 +252,7 @@ describe("FleetPage", () => {
         expect(screen.getByText(/your fleet is empty/i)).toBeInTheDocument();
       });
       expect(
-        screen.getByRole("heading", { name: /fleet/i }),
+        screen.getByRole("heading", { level: 1, name: /fleet/i }),
       ).toBeInTheDocument();
       const addButtons = screen.getAllByRole("button", {
         name: /add .*server/i,

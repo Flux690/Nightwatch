@@ -52,7 +52,9 @@ export function StatusChip({
   return (
     <span className="status-chip" data-color={color}>
       <span className="status-chip__dot" />
-      <span className="status-chip__label">{status}</span>
+      <span className="status-chip__label">
+        {status.charAt(0).toUpperCase() + status.slice(1).replace(/-/g, " ")}
+      </span>
     </span>
   );
 }

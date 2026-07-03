@@ -109,10 +109,7 @@ export function ChatInput({
       <label htmlFor="composer-textarea" className="sr-only">
         Message
       </label>
-      <div
-        className="composer__container"
-        data-disabled={inputDisabled ? "" : undefined}
-      >
+      <div className="composer__container">
         <textarea
           ref={textareaRef}
           id="composer-textarea"
