@@ -27,8 +27,10 @@
   --color-popover-foreground: var(--ink);
   --color-secondary: var(--surface-1);
   --color-secondary-foreground: var(--ink);
+  --color-secondary-hover: var(--surface-2);
   --color-muted: var(--surface-1);
   --color-muted-foreground: var(--ink-muted);
+  --color-muted-hover: var(--surface-2);
   --color-accent: var(--surface-2);
   --color-accent-foreground: var(--ink);
 
@@ -52,6 +54,7 @@
 
   /* Accent tint (very subtle accent bg for checked fields etc.) */
   --color-accent-tint: var(--accent-tint);
+  --color-accent-wash: var(--accent-wash);
 
   /* Borders */
   --color-border: var(--hairline);
