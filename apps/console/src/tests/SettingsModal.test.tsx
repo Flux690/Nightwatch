@@ -106,8 +106,8 @@ async function openSection(
   user: ReturnType<typeof userEvent.setup>,
   name: RegExp,
 ): Promise<void> {
-  const rail = screen.getByRole("navigation", { name: /settings sections/i });
-  await user.click(within(rail).getByRole("button", { name }));
+  const tablist = screen.getByRole("tablist", { name: /settings sections/i });
+  await user.click(within(tablist).getByRole("tab", { name }));
 }
 
 afterEach(() => {

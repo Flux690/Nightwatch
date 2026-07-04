@@ -597,7 +597,7 @@ describe("Shell", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("navigation", { name: /settings sections/i }),
+          screen.getByRole("tablist", { name: /settings sections/i }),
         ).toBeInTheDocument();
       });
       // In place: the route does not change
@@ -620,7 +620,7 @@ describe("Shell", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("navigation", { name: /settings sections/i }),
+          screen.getByRole("tablist", { name: /settings sections/i }),
         ).toBeInTheDocument();
       });
 
