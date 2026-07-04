@@ -283,8 +283,8 @@ export function AddServerPage(): React.JSX.Element {
           )}
 
           <WizardActions>
-            <span />
             <Button
+              className="ml-auto"
               disabled={!canContinueFromServer}
               onClick={() => void handleStartInstall()}
             >

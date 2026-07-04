@@ -223,7 +223,7 @@ export function SettingsModal({
     >
       <DialogContent
         showCloseButton={false}
-        className="max-w-[920px] gap-0 overflow-hidden rounded-2xl p-0 shadow-overlay sm:max-w-[920px]"
+        className="max-w-page gap-0 overflow-hidden rounded-2xl p-0 shadow-overlay"
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">

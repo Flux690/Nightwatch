@@ -330,10 +330,7 @@ export function FleetPage(): React.JSX.Element {
                         size="xs"
                         disabled={removing === runner.token}
                         aria-label={`Remove server ${runner.hostname ?? runner.id}`}
-                        onClick={(e: React.MouseEvent) => {
-                          e.stopPropagation();
-                          void handleRemove(runner.token);
-                        }}
+                        onClick={() => void handleRemove(runner.token)}
                       >
                         {removing === runner.token && (
                           <Spinner className="size-3" />

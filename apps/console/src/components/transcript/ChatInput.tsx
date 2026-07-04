@@ -132,7 +132,6 @@ export function ChatInput({
               variant="default"
               size="icon-sm"
               className="rounded-full"
-              data-stop=""
               aria-label="Stop generating"
               onClick={() => sessionId !== null && stop.mutate()}
               disabled={stop.isPending}

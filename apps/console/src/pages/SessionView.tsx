@@ -126,16 +126,15 @@ function TranscriptColumn({
         <MessageScrollerItem
           key={itemKey(item)}
           scrollAnchor={index === allItems.length - 1}
-          style={{
-            marginTop:
-              index === 0
-                ? 0
-                : item.kind === "user_turn"
-                  ? 32
-                  : item.kind === "thinking"
-                    ? 4
-                    : 8,
-          }}
+          className={
+            index === 0
+              ? "mt-0"
+              : item.kind === "user_turn"
+                ? "mt-8"
+                : item.kind === "thinking"
+                  ? "mt-1"
+                  : "mt-2"
+          }
         >
           <TranscriptItemRenderer
             item={item}

@@ -44,8 +44,7 @@ export function SessionsSidebar(): React.JSX.Element {
     },
   });
 
-  function handleDelete(e: React.MouseEvent, sessionId: string): void {
-    e.stopPropagation();
+  function handleDelete(sessionId: string): void {
     setConfirmingId(sessionId);
   }
 
@@ -77,9 +76,7 @@ export function SessionsSidebar(): React.JSX.Element {
                 deleteSession.isPending &&
                 deleteSession.variables === session.sessionId
               }
-              onClick={(e: React.MouseEvent) =>
-                handleDelete(e, session.sessionId)
-              }
+              onClick={() => handleDelete(session.sessionId)}
             >
               <Trash2 />
             </SidebarMenuAction>
