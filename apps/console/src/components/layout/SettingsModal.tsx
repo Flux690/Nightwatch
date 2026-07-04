@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -265,7 +266,7 @@ export function SettingsModal({
               className="absolute right-3 top-3 z-[1]"
               onClick={handleClose}
             >
-              <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              <X {...ICON_UI} />
             </Button>
 
             <form

@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
+import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
 
@@ -111,7 +112,7 @@ function ShellContent({
             }
             onClick={() => toggleSidebar()}
           >
-            <PanelLeft />
+            <PanelLeft {...ICON_UI} />
           </Button>
         </SidebarHeader>
 
@@ -128,7 +129,7 @@ function ShellContent({
                     void navigate({ to: "/" });
                   }}
                 >
-                  <Plus />
+                  <Plus {...ICON_NAV} />
                   <span>New session</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -140,7 +141,7 @@ function ShellContent({
                   onClick={dismissMobile}
                   render={<Link to="/fleet" />}
                 >
-                  <Network />
+                  <Network {...ICON_NAV} />
                   <span>Fleet</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -152,7 +153,7 @@ function ShellContent({
                   onClick={dismissMobile}
                   render={<Link to="/audit" />}
                 >
-                  <ScrollText />
+                  <ScrollText {...ICON_NAV} />
                   <span>Audit log</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -164,7 +165,7 @@ function ShellContent({
                   onClick={dismissMobile}
                   render={<Link to="/unresolved-alerts" />}
                 >
-                  <AlertCircle />
+                  <AlertCircle {...ICON_NAV} />
                   <span>Unresolved alerts</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -206,7 +207,7 @@ function ShellContent({
                     setSettingsOpen(true);
                   }}
                 >
-                  <Settings />
+                  <Settings {...ICON_NAV} />
                   <span>Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -219,7 +220,7 @@ function ShellContent({
                     void logout();
                   }}
                 >
-                  <LogOut />
+                  <LogOut {...ICON_NAV} />
                   <span>Log out</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -242,7 +243,7 @@ function ShellContent({
             aria-label="Open menu"
             onClick={() => toggleSidebar()}
           >
-            <Menu />
+            <Menu {...ICON_UI} />
           </Button>
           <span className="text-sm font-semibold">Nightwatch</span>
         </header>

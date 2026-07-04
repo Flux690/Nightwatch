@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
+import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -121,7 +122,7 @@ export function IngestCredentialSection(): React.JSX.Element {
               aria-label="Dismiss"
               onClick={() => setToken(null)}
             >
-              <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              <X {...ICON_UI} />
             </Button>
           </AlertAction>
         </Alert>

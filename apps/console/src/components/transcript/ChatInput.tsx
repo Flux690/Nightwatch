@@ -9,10 +9,9 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
-
-const ICON_PROPS = { size: 16, strokeWidth: 2, "aria-hidden": true } as const;
 
 export interface ChatInputProps {
   sessionId: string | null;
@@ -138,7 +137,7 @@ export function ChatInput({
               onClick={() => sessionId !== null && stop.mutate()}
               disabled={stop.isPending}
             >
-              <Square {...ICON_PROPS} />
+              <Square {...ICON_UI} />
             </InputGroupButton>
           ) : (
             <InputGroupButton
@@ -150,7 +149,7 @@ export function ChatInput({
               onClick={handleSubmit}
               disabled={!canSend}
             >
-              <ArrowUp {...ICON_PROPS} />
+              <ArrowUp {...ICON_UI} />
             </InputGroupButton>
           )}
         </InputGroupAddon>
