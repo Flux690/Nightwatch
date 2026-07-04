@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 /* Page shell for data screens (Fleet, Audit log, Unresolved alerts,
@@ -56,13 +57,10 @@ export const backLinkClass =
 export function PageTableWrap({
   className,
   ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
+}: React.ComponentProps<typeof Card>): React.JSX.Element {
   return (
-    <div
-      className={cn(
-        "overflow-x-auto rounded-xl border border-border bg-card",
-        className,
-      )}
+    <Card
+      className={cn("overflow-x-auto py-0", className)}
       {...props}
     />
   );

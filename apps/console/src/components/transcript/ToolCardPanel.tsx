@@ -1,3 +1,4 @@
+import { Card, CardContent } from "@/components/ui/card";
 import type { ToolCardItem } from "./types.js";
 
 export function ToolCardPanel({
@@ -13,13 +14,12 @@ export function ToolCardPanel({
   return (
     <div data-testid="tool-card">
       <p className="mb-1.5 font-mono text-xs font-medium">{toolName}</p>
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="px-3.5 py-2.5">
+      <Card size="sm" className="gap-0 py-0">
+        <CardContent className="px-3.5 py-2.5">
           <p className={ioLabelClass}>IN</p>
           <pre className={preClass}>{JSON.stringify(input, null, 2)}</pre>
-        </div>
-        <div className="border-t border-border" />
-        <div className="px-3.5 py-2.5">
+        </CardContent>
+        <CardContent className="border-t border-border px-3.5 py-2.5">
           <p className={ioLabelClass}>OUT</p>
           {result === null ? (
             <p
@@ -31,8 +31,8 @@ export function ToolCardPanel({
           ) : (
             <pre className={preClass}>{JSON.stringify(result, null, 2)}</pre>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
