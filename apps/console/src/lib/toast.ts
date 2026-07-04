@@ -1,7 +1,5 @@
 import { toast as sonnerToast } from "sonner";
 
-import { Toaster } from "@/components/ui/sonner";
-
 type ToastVariant = "info" | "success" | "error";
 
 type ShowProps = {
@@ -9,10 +7,6 @@ type ShowProps = {
   message: string;
   variant?: ToastVariant;
 };
-
-export function ToastContainer(): React.JSX.Element {
-  return <Toaster position="bottom-right" />;
-}
 
 export const toast = {
   show({ variant = "info", title, message }: ShowProps): void {

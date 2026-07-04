@@ -12,8 +12,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { router } from "./router.js";
-import { ToastContainer } from "@/lib/toast";
 
 const queryClient = new QueryClient();
 
@@ -23,7 +23,7 @@ if (!root) throw new Error("Root element not found");
 createRoot(root).render(
   <StrictMode>
     <TooltipProvider>
-      <ToastContainer />
+      <Toaster />
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>
