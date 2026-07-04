@@ -1,5 +1,36 @@
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+
+/* Warm Steel column headers: small, muted, upper-case across every data
+   table. Apply as the Table className. */
+export const TABLE_HEAD =
+  "[&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
+
+/* Generic loading placeholder for data tables. Renders `count` rows of
+   `columns` skeleton cells. */
+export function SkeletonRows({
+  count,
+  columns,
+}: {
+  count: number;
+  columns: number;
+}): React.JSX.Element {
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <TableRow key={i}>
+          {Array.from({ length: columns }, (_, j) => (
+            <TableCell key={j}>
+              <Skeleton className="h-3.5 w-[120px]" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  );
+}
 
 /* Page shell for data screens (Fleet, Audit log, Unresolved alerts,
    Add server). Single max-width (--container-page), centered, column flow. */

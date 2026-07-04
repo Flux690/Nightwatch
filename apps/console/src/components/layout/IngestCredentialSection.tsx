@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import {
   Alert,
@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -67,10 +68,6 @@ export function IngestCredentialSection(): React.JSX.Element {
     }
   }
 
-  function copyToken(): void {
-    if (token !== null) void navigator.clipboard.writeText(token);
-  }
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -115,19 +112,7 @@ export function IngestCredentialSection(): React.JSX.Element {
               : "Ingest credential"}
           </AlertTitle>
           <AlertDescription>
-            <div className="flex flex-nowrap items-start gap-2">
-              <pre className="block flex-1 overflow-auto rounded-sm border border-border bg-card p-3 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
-                {token}
-              </pre>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Copy ingest credential"
-                onClick={copyToken}
-              >
-                <Copy size={16} strokeWidth={1.75} aria-hidden="true" />
-              </Button>
-            </div>
+            <CopyableSnippet text={token} label="Copy ingest credential" />
           </AlertDescription>
           <AlertAction>
             <Button

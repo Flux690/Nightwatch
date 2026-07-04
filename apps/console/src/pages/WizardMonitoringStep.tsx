@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { ICON_UI } from "@/lib/iconProps";
+import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { apiFetch } from "@/api/client";
 import type { Provider } from "@/pages/AddServerPage";
 
@@ -44,31 +43,6 @@ function sampleWebhookPayload(provider: Provider, serverName: string): unknown {
       },
     ],
   };
-}
-
-function CopyableSnippet({
-  lines,
-  label,
-}: {
-  lines: string[];
-  label: string;
-}): React.JSX.Element {
-  const text = lines.join("\n");
-  return (
-    <div className="flex flex-nowrap items-start gap-2">
-      <pre className="block flex-1 overflow-auto rounded-sm border border-border bg-card p-3 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
-        {text}
-      </pre>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={label}
-        onClick={() => void navigator.clipboard.writeText(text)}
-      >
-        <Copy {...ICON_UI} />
-      </Button>
-    </div>
-  );
 }
 
 export function WizardMonitoringStep({
@@ -129,11 +103,11 @@ export function WizardMonitoringStep({
             </p>
             <CopyableSnippet
               label="Copy Prometheus config"
-              lines={[
+              text={[
                 "global:",
                 "  external_labels:",
                 `    server: "${trimmedServerName}"`,
-              ]}
+              ].join("\n")}
             />
           </div>
         )}
@@ -144,17 +118,17 @@ export function WizardMonitoringStep({
           </p>
 
           <p className="text-xs text-muted-foreground">Webhook URL</p>
-          <CopyableSnippet label="Copy webhook URL" lines={[ingestUrl]} />
+          <CopyableSnippet label="Copy webhook URL" text={ingestUrl} />
 
           <p className="text-xs text-muted-foreground">Auth (Bearer token)</p>
-          <CopyableSnippet label="Copy ingest token" lines={[ingestToken]} />
+          <CopyableSnippet label="Copy ingest token" text={ingestToken} />
 
           <p className="text-xs text-muted-foreground">
             Or paste this receiver directly:
           </p>
           <CopyableSnippet
             label="Copy Alertmanager receiver"
-            lines={[
+            text={[
               "receivers:",
               "  - name: nightwatch",
               "    webhook_configs:",
@@ -163,7 +137,7 @@ export function WizardMonitoringStep({
               "          authorization:",
               "            type: Bearer",
               `            credentials: '${ingestToken}'`,
-            ]}
+            ].join("\n")}
           />
         </div>
 

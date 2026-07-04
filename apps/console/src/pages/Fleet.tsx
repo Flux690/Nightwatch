@@ -12,6 +12,8 @@ import {
   PageHeader,
   PageTitle,
   PageTableWrap,
+  TABLE_HEAD,
+  SkeletonRows,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -35,10 +37,6 @@ import {
 } from "@/components/ui/table";
 import { apiFetch } from "@/api/client";
 import { timeAgo } from "@/lib/time";
-
-// Warm Steel column headers: small, muted, upper-case across every data table.
-const TABLE_HEAD =
-  "[&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
 
 type RunnerStatus = "online" | "offline";
 
@@ -125,30 +123,6 @@ function SortableHeader({
   );
 }
 
-function SkeletonRows({ count }: { count: number }): React.JSX.Element {
-  return (
-    <>
-      {Array.from({ length: count }, (_, i) => (
-        <TableRow key={i}>
-          <TableCell>
-            <Skeleton className="h-3.5 w-[120px]" />
-          </TableCell>
-          <TableCell>
-            <Skeleton className="h-[18px] w-20 rounded-full" />
-          </TableCell>
-          <TableCell className="font-mono tabular-nums">
-            <Skeleton className="h-3.5 w-16" />
-          </TableCell>
-          <TableCell className="font-mono tabular-nums text-right">
-            <Skeleton className="ml-auto h-3.5 w-16" />
-          </TableCell>
-          <TableCell />
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
 export function FleetPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -230,7 +204,7 @@ export function FleetPage(): React.JSX.Element {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <SkeletonRows count={3} />
+              <SkeletonRows count={3} columns={5} />
             </TableBody>
           </Table>
         </PageTableWrap>

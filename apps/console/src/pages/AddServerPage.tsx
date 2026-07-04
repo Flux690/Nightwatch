@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { AlertCircle, ArrowLeft, Copy } from "lucide-react";
+import { AlertCircle, ArrowLeft } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,8 @@ import {
   WizardActions,
 } from "@/components/layout/WizardStepper";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
+import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
+import { ICON_INLINE } from "@/lib/iconProps";
 import { ApiError, apiFetch } from "@/api/client";
 import { WizardMonitoringStep } from "@/pages/WizardMonitoringStep";
 
@@ -164,10 +165,6 @@ export function AddServerPage(): React.JSX.Element {
     } finally {
       setMinting(false);
     }
-  }
-
-  function copyInstallText(): void {
-    if (installText !== null) void navigator.clipboard.writeText(installText);
   }
 
   const sendTestAlert = useMutation({
@@ -321,19 +318,10 @@ export function AddServerPage(): React.JSX.Element {
                 <p className="text-sm">
                   Run this on the target server to install the runner:
                 </p>
-                <div className="flex flex-nowrap items-start gap-2">
-                  <pre className="block max-h-60 flex-1 overflow-auto rounded-sm border border-border bg-card p-3 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
-                    {installText}
-                  </pre>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Copy install command"
-                    onClick={copyInstallText}
-                  >
-                    <Copy {...ICON_UI} />
-                  </Button>
-                </div>
+                <CopyableSnippet
+                  text={installText}
+                  label="Copy install command"
+                />
               </div>
 
               {monitoring === "bundled" && (
