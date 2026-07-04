@@ -1,23 +1,28 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { theme } from "../theme.js";
 
-/* Pins the Navy/Cobalt accessibility contract (split AA bar): body ink stays
-   near-black-free, muted text and interactive color at AA (>=4.5:1),
-   non-text boundaries >=3:1, status colors deliberately kept at AAA (>=7:1),
-   and the styles.css <-> theme.ts navy ramp staying identical. Retune tokens
-   only with this test. */
+/* Pins the Nightwatch accessibility contract. All hex values live in the
+   :root block of styles.css. The test reads them from there and verifies
+   contrast ratios against WCAG 2.1 criteria:
+   - Body ink at 12:1+ on primary surfaces (well above AAA)
+   - Muted text at AA (4.5:1+) on every text-bearing surface
+   - Status colors at AAA (7:1+) on card and canvas
+   - Border-strong at 3:1+ non-text contrast (WCAG 1.4.11)
+   - Accent (cobalt) at AA for links and focus rings
+   - White labels at AA on accent fill states */
 
-function parseThemeColorTokens(css: string): Map<string, string> {
-  const themeBlock = /@theme\s*\{([\s\S]*?)\n\}/.exec(css);
-  if (!themeBlock)
+/** Parse hex tokens from the :root block in styles.css.
+ *  Matches patterns like `--canvas: #f6f9fc;` and `--accent-color: #2563eb;` */
+function parseRootTokens(css: string): Map<string, string> {
+  const rootBlock = /:root\s*\{([\s\S]*?)\n\}/.exec(css);
+  if (!rootBlock)
     throw new Error(
-      `no @theme block found in styles.css; got: ${css.slice(0, 120)}`,
+      `no :root block found in styles.css; got: ${css.slice(0, 120)}`,
     );
   const tokens = new Map<string, string>();
-  for (const m of themeBlock[1].matchAll(
-    /--color-([a-z-]+):\s*(#[0-9A-Fa-f]{6})\s*;/g,
+  for (const m of rootBlock[1].matchAll(
+    /--([a-z][-a-z0-9]*):\s*(#[0-9A-Fa-f]{6})\s*;/g,
   )) {
     tokens.set(m[1], m[2].toUpperCase());
   }
@@ -39,19 +44,19 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-const tokens = parseThemeColorTokens(
+const tokens = parseRootTokens(
   readFileSync(join(process.cwd(), "src/styles.css"), "utf8"),
 );
 
 function token(name: string): string {
   const value = tokens.get(name);
-  if (!value) throw new Error(`token --color-${name} missing from @theme`);
+  if (!value) throw new Error(`token --${name} missing from :root`);
   return value;
 }
 
 describe("design token contrast contract", () => {
   it("keeps ink readable at 12:1+ on primary surfaces", () => {
-    for (const surface of ["card", "canvas", "surface"]) {
+    for (const surface of ["card", "canvas", "surface-1"]) {
       expect(
         contrast(token("ink"), token(surface)),
         `ink on ${surface}`,
@@ -59,8 +64,8 @@ describe("design token contrast contract", () => {
     }
   });
 
-  it("keeps muted ink at AA (4.5:1+) on every text-bearing surface", () => {
-    for (const surface of ["card", "canvas", "surface", "surface-hover"]) {
+  it("keeps ink-muted at AA (4.5:1+) on every text-bearing surface", () => {
+    for (const surface of ["card", "canvas", "surface-1", "surface-2"]) {
       expect(
         contrast(token("ink-muted"), token(surface)),
         `ink-muted on ${surface}`,
@@ -69,11 +74,7 @@ describe("design token contrast contract", () => {
   });
 
   it("keeps status colors at AAA on canvas and card", () => {
-    for (const status of [
-      "status-running",
-      "status-awaiting",
-      "status-failed",
-    ]) {
+    for (const status of ["success", "warning", "destructive"]) {
       for (const surface of ["canvas", "card"]) {
         expect(
           contrast(token(status), token(surface)),
@@ -83,44 +84,41 @@ describe("design token contrast contract", () => {
     }
   });
 
-  // The boundary of unlabeled controls (checkbox/radio) where the box IS the control
-  it("keeps line-strong at 3:1+ non-text contrast on card and canvas (WCAG 1.4.11)", () => {
+  it("keeps hairline-strong at 3:1+ non-text contrast (WCAG 1.4.11)", () => {
     expect(
-      contrast(token("line-strong"), token("canvas")),
-      "line-strong on canvas",
+      contrast(token("hairline-strong"), token("canvas")),
+      "hairline-strong on canvas",
     ).toBeGreaterThanOrEqual(3);
     expect(
-      contrast(token("line-strong"), token("card")),
-      "line-strong on card",
+      contrast(token("hairline-strong"), token("card")),
+      "hairline-strong on card",
     ).toBeGreaterThanOrEqual(3);
   });
 
-  // Labeled inputs/composer identify via label + fill + focus; resting boundary
-  // is deliberately sub-3:1 per the calm-border decision; focus border is signal at >=4.5:1
-  it("keeps line-control between 1.5:1 and 3:1 on card (calm-border split)", () => {
-    const ratio = contrast(token("line-control"), token("card"));
-    expect(ratio, "line-control on card lower bound").toBeGreaterThanOrEqual(
+  it("keeps hairline-input between 1.5:1 and 3:1 on card (calm-border split)", () => {
+    const ratio = contrast(token("hairline-input"), token("card"));
+    expect(ratio, "hairline-input on card lower bound").toBeGreaterThanOrEqual(
       1.5,
     );
-    expect(ratio, "line-control on card upper bound").toBeLessThanOrEqual(3);
+    expect(ratio, "hairline-input on card upper bound").toBeLessThanOrEqual(3);
   });
 
-  it("keeps the signal color at AA for links and 3:1+ as a focus border", () => {
+  it("keeps accent at AA for links and 3:1+ as a focus border", () => {
     expect(
-      contrast(token("signal"), token("card")),
-      "signal on card",
+      contrast(token("accent-color"), token("card")),
+      "accent on card",
     ).toBeGreaterThanOrEqual(4.5);
     expect(
-      contrast(token("signal"), token("canvas")),
-      "signal on canvas",
+      contrast(token("accent-color"), token("canvas")),
+      "accent on canvas",
     ).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps white labels at AA on the primary fill trio", () => {
-    for (const fill of ["primary-fill", "primary-hover", "primary-press"]) {
+  it("keeps white labels at AA on accent fill states", () => {
+    for (const fill of ["accent-color", "accent-hover", "accent-press"]) {
       expect(
-        contrast(token("card"), token(fill)),
-        `card text on ${fill}`,
+        contrast(token("on-accent"), token(fill)),
+        `on-accent text on ${fill}`,
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -128,9 +126,9 @@ describe("design token contrast contract", () => {
   it("keeps adjacent surface steps perceptibly separated", () => {
     const pairs: [string, string][] = [
       ["card", "canvas"],
-      ["canvas", "surface"],
-      ["surface", "surface-hover"],
-      ["surface-hover", "surface-active"],
+      ["canvas", "surface-1"],
+      ["surface-1", "surface-2"],
+      ["surface-2", "surface-3"],
     ];
     for (const [a, b] of pairs) {
       expect(
@@ -138,30 +136,5 @@ describe("design token contrast contract", () => {
         `${a} vs ${b}`,
       ).toBeGreaterThanOrEqual(1.04);
     }
-  });
-
-  it("keeps the Mantine navy scale identical to the CSS ramp", () => {
-    const ramp = [
-      token("card"),
-      token("canvas"),
-      token("surface"),
-      token("surface-hover"),
-      token("surface-active"),
-      token("line"),
-      token("line-strong"),
-      token("ink-faint"),
-      token("ink-muted"),
-      token("ink"),
-    ];
-    const navy = theme.colors?.navy;
-    if (!navy) throw new Error("theme.colors.navy missing");
-    expect([...navy].map((c) => c.toUpperCase())).toEqual(ramp);
-  });
-
-  it("anchors the Mantine cobalt scale on the signal tokens", () => {
-    const cobalt = theme.colors?.cobalt;
-    if (!cobalt) throw new Error("theme.colors.cobalt missing");
-    expect(cobalt[6].toUpperCase()).toBe(token("signal"));
-    expect(cobalt[7].toUpperCase()).toBe(token("signal-hover"));
   });
 });

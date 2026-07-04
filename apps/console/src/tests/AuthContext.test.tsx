@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-import { AuthProvider, useAuth } from "../auth/AuthContext.js";
-import type { AuthActionResult } from "../auth/AuthContext.js";
+import { AuthProvider, useAuth } from "@/auth/AuthContext";
+import type { AuthActionResult } from "@/auth/AuthContext";
 
 function Probe(): React.JSX.Element {
   const { phase, login, signup, logout, logoutAll } = useAuth();

@@ -95,7 +95,7 @@ describe("AuditLogPage", () => {
       await waitFor(() => {
         expect(screen.getByText("restart_service")).toBeInTheDocument();
       });
-      const monoCells = document.querySelectorAll("td[data-mono]");
+      const monoCells = document.querySelectorAll("td.tabular-nums");
       expect(monoCells.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -181,7 +181,7 @@ describe("AuditLogPage", () => {
       expect(
         screen.getByRole("status", { name: /loading audit log/i }),
       ).toBeInTheDocument();
-      expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+      expect(document.querySelectorAll("[data-slot=\"skeleton\"]").length).toBeGreaterThan(0);
     });
   });
 

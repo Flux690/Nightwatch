@@ -177,7 +177,7 @@ describe("FleetPage", () => {
       await waitFor(() => {
         expect(screen.getByText("web-01")).toBeInTheDocument();
       });
-      const cells = document.querySelectorAll("td[data-mono]");
+      const cells = document.querySelectorAll("td.tabular-nums");
       expect(cells.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -277,7 +277,7 @@ describe("FleetPage", () => {
       expect(
         await screen.findByRole("status", { name: /loading fleet/i }),
       ).toBeInTheDocument();
-      expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+      expect(document.querySelectorAll("[data-slot=\"skeleton\"]").length).toBeGreaterThan(0);
     });
   });
 

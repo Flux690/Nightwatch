@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
-import { applyLiveEvent } from "../transcript/liveConverter.js";
-import type { TranscriptItem, ThinkingItem } from "../transcript/types.js";
+import { applyLiveEvent } from "@/components/transcript/liveConverter";
+import type { TranscriptItem, ThinkingItem } from "@/components/transcript/types";
 
 function textDelta(delta: string): ConsoleEvent {
   return {

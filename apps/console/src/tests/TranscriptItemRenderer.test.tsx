@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { TestProviders } from "./renderWithProviders.js";
 
-import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
-import type { TranscriptItem } from "../transcript/types.js";
+import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
+import type { TranscriptItem } from "@/components/transcript/types";
 
 function wrap(
   item: TranscriptItem,

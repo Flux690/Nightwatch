@@ -11,6 +11,7 @@ import { AuditLogPage } from "./pages/AuditLog.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
 import { UnresolvedAlertsPage } from "./pages/UnresolvedAlerts.js";
+import { SessionView } from "./pages/SessionView.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -40,21 +41,24 @@ const appRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  component: () => null,
+  component: () => <SessionView />,
 });
 
 const sessionIdRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/sessions/$id",
-  component: () => null,
+  component: function SessionRoute() {
+    const { id } = sessionIdRoute.useParams();
+    return <SessionView sessionId={id} />;
+  },
 });
 
 /* Alias only: Shell detects /settings and opens the settings modal over the
-   session area, so the URL keeps working without a dedicated page. */
+   session area. Renders SessionView underneath so the chat is still visible. */
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: () => null,
+  component: () => <SessionView />,
 });
 
 const auditRoute = createRoute({

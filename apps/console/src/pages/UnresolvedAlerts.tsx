@@ -1,39 +1,51 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UnresolvedAlertRecord } from "@nightwatch/shared";
 import { BellOff } from "lucide-react";
-import { Alert } from "../ui/Alert.js";
-import { ICON_DISPLAY } from "../ui/iconProps.js";
-import { StatusChip } from "../ui/StatusChip.js";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Page,
+  PageHeader,
+  PageTitle,
+  PageTableWrap,
+  EmptyState,
+} from "@/components/layout/Page";
+import { ICON_DISPLAY } from "@/lib/iconProps";
+import { StatusBadge } from "@/components/StatusBadge";
 import {
   Table,
-  TableHead,
+  TableHeader,
   TableBody,
   TableRow,
-  TableHeader,
+  TableHead,
   TableCell,
-} from "../ui/Table.js";
-import { apiFetch } from "../api/client.js";
-import { timeAgo } from "../utils/time.js";
+} from "@/components/ui/table";
+import { apiFetch } from "@/api/client";
+import { timeAgo } from "@/lib/time";
+
+// Warm Steel column headers: small, muted, upper-case across every data table.
+const TABLE_HEAD =
+  "[&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
 
 function SkeletonRows({ count }: { count: number }): React.JSX.Element {
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
         <TableRow key={i}>
-          <TableCell data-mono>
-            <span className="skeleton skeleton--text" />
+          <TableCell className="font-mono tabular-nums">
+            <Skeleton className="h-3.5 w-[120px]" />
           </TableCell>
-          <TableCell data-mono>
-            <span className="skeleton skeleton--text" />
-          </TableCell>
-          <TableCell>
-            <span className="skeleton skeleton--chip" />
+          <TableCell className="font-mono tabular-nums">
+            <Skeleton className="h-3.5 w-[120px]" />
           </TableCell>
           <TableCell>
-            <span className="skeleton skeleton--text" />
+            <Skeleton className="h-[18px] w-20 rounded-full" />
           </TableCell>
-          <TableCell data-mono data-align="right">
-            <span className="skeleton skeleton--text-sm" />
+          <TableCell>
+            <Skeleton className="h-3.5 w-[120px]" />
+          </TableCell>
+          <TableCell className="font-mono tabular-nums text-right">
+            <Skeleton className="ml-auto h-3.5 w-16" />
           </TableCell>
         </TableRow>
       ))}
@@ -55,104 +67,104 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
   const isEmpty = !isLoading && !isError && alerts?.length === 0;
 
   return (
-    <div className="page page--data">
-      <header className="page-header">
-        <h1 className="page-title">Unresolved alerts</h1>
-      </header>
+    <Page>
+      <PageHeader>
+        <PageTitle>Unresolved alerts</PageTitle>
+      </PageHeader>
 
       {isLoading && (
-        <div
-          className="page-table-wrap"
-          role="status"
-          aria-label="Loading unresolved alerts"
-        >
-          <Table>
-            <TableHead>
+        <PageTableWrap role="status" aria-label="Loading unresolved alerts">
+          <Table className={TABLE_HEAD}>
+            <TableHeader>
               <TableRow>
-                <TableHeader>Alert</TableHeader>
-                <TableHeader>Identity</TableHeader>
-                <TableHeader>Severity</TableHeader>
-                <TableHeader>Reason</TableHeader>
-                <TableHeader data-align="right">Received</TableHeader>
+                <TableHead>Alert</TableHead>
+                <TableHead>Identity</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead className="text-right">Received</TableHead>
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               <SkeletonRows count={3} />
             </TableBody>
           </Table>
-        </div>
+        </PageTableWrap>
       )}
 
       {isError && (
-        <Alert
-          intent="error"
-          title="Failed to load unresolved alerts"
-          className="page-alert"
-        >
-          Something went wrong loading unresolved alerts. It will retry
-          automatically.
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Failed to load unresolved alerts</AlertTitle>
+          <AlertDescription>
+            Something went wrong loading unresolved alerts. It will retry
+            automatically.
+          </AlertDescription>
         </Alert>
       )}
 
       {isEmpty && (
-        <div className="empty-state">
-          <div className="empty-state__content">
-            <BellOff {...ICON_DISPLAY} className="empty-state__icon" />
-            <h2 className="empty-state__title">No unresolved alerts</h2>
-            <p className="empty-state__text">
-              When an incoming alert cannot be routed to a runner, it appears
-              here with the rejection reason so you can diagnose fleet coverage
-              gaps.
-            </p>
-          </div>
-        </div>
+        <EmptyState>
+          <BellOff {...ICON_DISPLAY} className="mb-3 text-muted-foreground" />
+          <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
+            No unresolved alerts
+          </h2>
+          <p className="m-0 mb-4 text-sm text-muted-foreground">
+            When an incoming alert cannot be routed to a runner, it appears here
+            with the rejection reason so you can diagnose fleet coverage gaps.
+          </p>
+        </EmptyState>
       )}
 
       {!isLoading && !isError && alerts && alerts.length > 0 && (
-        <div className="page-table-wrap">
-          <Table>
-            <TableHead>
+        <PageTableWrap>
+          <Table className={TABLE_HEAD}>
+            <TableHeader>
               <TableRow>
-                <TableHeader>Alert</TableHeader>
-                <TableHeader>Identity</TableHeader>
-                <TableHeader>Severity</TableHeader>
-                <TableHeader>Reason</TableHeader>
-                <TableHeader data-align="right">Received</TableHeader>
+                <TableHead>Alert</TableHead>
+                <TableHead>Identity</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead className="text-right">Received</TableHead>
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               {alerts.map((alert, i) => (
                 <TableRow key={`${alert.sourceAlertId}-${i}`}>
-                  <TableCell data-mono>
-                    <span className="cell-truncate" title={alert.alertType}>
+                  <TableCell className="font-mono tabular-nums">
+                    <span
+                      className="block max-w-[240px] truncate"
+                      title={alert.alertType}
+                    >
                       {alert.alertType}
                     </span>
                   </TableCell>
-                  <TableCell data-mono>
-                    <span className="cell-truncate" title={alert.identityKey}>
+                  <TableCell className="font-mono tabular-nums">
+                    <span
+                      className="block max-w-[240px] truncate"
+                      title={alert.identityKey}
+                    >
                       {alert.identityKey}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <StatusChip status={alert.severity} domain="alert" />
+                    <StatusBadge status={alert.severity} domain="alert" />
                   </TableCell>
                   <TableCell>
                     <span
-                      className="cell-truncate"
+                      className="block max-w-[240px] truncate"
                       title={alert.rejectionReason}
                     >
                       {alert.rejectionReason}
                     </span>
                   </TableCell>
-                  <TableCell data-mono data-align="right">
+                  <TableCell className="font-mono tabular-nums text-right">
                     {timeAgo(alert.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </div>
+        </PageTableWrap>
       )}
-    </div>
+    </Page>
   );
 }

@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Copy } from "lucide-react";
-import { Alert } from "../ui/Alert.js";
-import { Button } from "../ui/Button.js";
-import { Code } from "../ui/Code.js";
-import { Group } from "../ui/Group.js";
-import { IconButton } from "../ui/IconButton.js";
-import { Stack } from "../ui/Stack.js";
-import { Text } from "../ui/Text.js";
-import { ICON_UI } from "../ui/iconProps.js";
-import { apiFetch } from "../api/client.js";
-import type { Provider } from "./AddServerPage.js";
+
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { ICON_UI } from "@/lib/iconProps";
+import { apiFetch } from "@/api/client";
+import type { Provider } from "@/pages/AddServerPage";
 
 interface ValidateAlertResult {
   sourceAlertId: string;
@@ -58,24 +55,19 @@ function CopyableSnippet({
 }): React.JSX.Element {
   const text = lines.join("\n");
   return (
-    <Group className="gap-2 items-start flex-nowrap">
-      <Code
-        block
-        style={{
-          flex: 1,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-        }}
-      >
+    <div className="flex flex-nowrap items-start gap-2">
+      <pre className="block flex-1 overflow-auto rounded-sm border border-border bg-card p-3 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
         {text}
-      </Code>
-      <IconButton
+      </pre>
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label={label}
         onClick={() => void navigator.clipboard.writeText(text)}
       >
         <Copy {...ICON_UI} />
-      </IconButton>
-    </Group>
+      </Button>
+    </div>
   );
 }
 
@@ -122,21 +114,19 @@ export function WizardMonitoringStep({
 
   return (
     <section>
-      <Text className="text-sm font-semibold" style={{ marginBottom: 12 }}>
-        Bring-your-own monitoring
-      </Text>
-      <Stack className="gap-4">
-        <Text className="text-sm">
+      <p className="mb-3 text-sm font-semibold">Bring-your-own monitoring</p>
+      <div className="flex flex-col gap-4">
+        <p className="text-sm">
           Wire your own Prometheus and Alertmanager to Nightwatch. Every server
           shares this one ingest credential; the server label tells Nightwatch
           which server an alert is about.
-        </Text>
+        </p>
 
         {provider === "docker" && trimmedServerName && (
-          <Stack className="gap-2">
-            <Text className="text-sm font-semibold">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold">
               1. In your Prometheus &mdash; stamp the server label
-            </Text>
+            </p>
             <CopyableSnippet
               label="Copy Prometheus config"
               lines={[
@@ -145,23 +135,23 @@ export function WizardMonitoringStep({
                 `    server: "${trimmedServerName}"`,
               ]}
             />
-          </Stack>
+          </div>
         )}
 
-        <Stack className="gap-2">
-          <Text className="text-sm font-semibold">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold">
             2. In your Alertmanager &mdash; forward alerts to Nightwatch
-          </Text>
+          </p>
 
-          <Text className="text-xs text-ink-muted">Webhook URL</Text>
+          <p className="text-xs text-muted-foreground">Webhook URL</p>
           <CopyableSnippet label="Copy webhook URL" lines={[ingestUrl]} />
 
-          <Text className="text-xs text-ink-muted">Auth (Bearer token)</Text>
+          <p className="text-xs text-muted-foreground">Auth (Bearer token)</p>
           <CopyableSnippet label="Copy ingest token" lines={[ingestToken]} />
 
-          <Text className="text-xs text-ink-muted">
+          <p className="text-xs text-muted-foreground">
             Or paste this receiver directly:
-          </Text>
+          </p>
           <CopyableSnippet
             label="Copy Alertmanager receiver"
             lines={[
@@ -175,16 +165,17 @@ export function WizardMonitoringStep({
               `            credentials: '${ingestToken}'`,
             ]}
           />
-        </Stack>
+        </div>
 
-        <Stack className="gap-2">
+        <div className="flex flex-col gap-2">
           <Button
             size="xs"
             variant="secondary"
-            style={{ alignSelf: "flex-start" }}
-            loading={testWebhook.isPending}
+            className="self-start"
+            disabled={testWebhook.isPending}
             onClick={() => testWebhook.mutate()}
           >
+            {testWebhook.isPending && <Spinner className="size-3" />}
             Test webhook
           </Button>
 
@@ -192,32 +183,37 @@ export function WizardMonitoringStep({
             webhookTestResult.results.map((result) => (
               <Alert
                 key={result.sourceAlertId}
-                intent={
-                  result.resolution.status === "resolved" ? "success" : "error"
-                }
-                title={
+                variant={
                   result.resolution.status === "resolved"
-                    ? "Resolved"
-                    : "Rejected"
+                    ? undefined
+                    : "destructive"
                 }
               >
-                <Text className="text-sm">{result.identityKey}</Text>
-                {result.resolution.status === "resolved" ? (
-                  <Text className="text-sm">
-                    Would route to {result.resolution.hostname}.
-                  </Text>
-                ) : (
-                  <Text className="text-sm">{result.resolution.reason}</Text>
-                )}
+                <AlertTitle>
+                  {result.resolution.status === "resolved"
+                    ? "Resolved"
+                    : "Rejected"}
+                </AlertTitle>
+                <AlertDescription>
+                  <span className="block">{result.identityKey}</span>
+                  {result.resolution.status === "resolved" ? (
+                    <span className="block">
+                      Would route to {result.resolution.hostname}.
+                    </span>
+                  ) : (
+                    <span className="block">{result.resolution.reason}</span>
+                  )}
+                </AlertDescription>
               </Alert>
             ))}
           {webhookTestResult?.ok === false && (
-            <Alert intent="error" title="Test webhook failed">
-              {webhookTestResult.error}
+            <Alert variant="destructive">
+              <AlertTitle>Test webhook failed</AlertTitle>
+              <AlertDescription>{webhookTestResult.error}</AlertDescription>
             </Alert>
           )}
-        </Stack>
-      </Stack>
+        </div>
+      </div>
     </section>
   );
 }

@@ -3,22 +3,34 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
 import { ChevronDown, ChevronUp, Network, Plus } from "lucide-react";
-import { Alert } from "../ui/Alert.js";
-import { Button } from "../ui/Button.js";
-import { Loader } from "../ui/Loader.js";
-import { StatusChip } from "../ui/StatusChip.js";
-import { Text } from "../ui/Text.js";
-import { ICON_INLINE, ICON_DISPLAY } from "../ui/iconProps.js";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Page,
+  PageHeader,
+  PageTitle,
+  PageTableWrap,
+  EmptyState,
+} from "@/components/layout/Page";
+import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/StatusBadge";
+import { ICON_INLINE, ICON_DISPLAY } from "@/lib/iconProps";
 import {
   Table,
-  TableHead,
+  TableHeader,
   TableBody,
   TableRow,
-  TableHeader,
+  TableHead,
   TableCell,
-} from "../ui/Table.js";
-import { apiFetch } from "../api/client.js";
-import { timeAgo } from "../utils/time.js";
+} from "@/components/ui/table";
+import { apiFetch } from "@/api/client";
+import { timeAgo } from "@/lib/time";
+
+// Warm Steel column headers: small, muted, upper-case across every data table.
+const TABLE_HEAD =
+  "[&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
 
 type RunnerStatus = "online" | "offline";
 
@@ -79,16 +91,20 @@ function SortableHeader({
 }): React.JSX.Element {
   const active = field === activeField;
   return (
-    <TableHeader
-      data-align={align}
+    <TableHead
+      className={align === "right" ? "text-right" : undefined}
       aria-sort={
         active ? (activeDir === "asc" ? "ascending" : "descending") : "none"
       }
     >
-      <button type="button" className="sort-btn" onClick={() => onSort(field)}>
+      <button
+        type="button"
+        className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm border-0 bg-none p-0 font-[inherit] text-[inherit] tracking-[inherit] hover:text-foreground"
+        onClick={() => onSort(field)}
+      >
         {label}
         {active && (
-          <span className="sort-indicator" aria-hidden="true">
+          <span className="text-xs" aria-hidden="true">
             {activeDir === "asc" ? (
               <ChevronUp size={12} strokeWidth={2} />
             ) : (
@@ -97,7 +113,7 @@ function SortableHeader({
           </span>
         )}
       </button>
-    </TableHeader>
+    </TableHead>
   );
 }
 
@@ -107,16 +123,16 @@ function SkeletonRows({ count }: { count: number }): React.JSX.Element {
       {Array.from({ length: count }, (_, i) => (
         <TableRow key={i}>
           <TableCell>
-            <span className="skeleton skeleton--text" />
+            <Skeleton className="h-3.5 w-[120px]" />
           </TableCell>
           <TableCell>
-            <span className="skeleton skeleton--chip" />
+            <Skeleton className="h-[18px] w-20 rounded-full" />
           </TableCell>
-          <TableCell data-mono>
-            <span className="skeleton skeleton--text-sm" />
+          <TableCell className="font-mono tabular-nums">
+            <Skeleton className="h-3.5 w-16" />
           </TableCell>
-          <TableCell data-mono data-align="right">
-            <span className="skeleton skeleton--text-sm" />
+          <TableCell className="font-mono tabular-nums text-right">
+            <Skeleton className="ml-auto h-3.5 w-16" />
           </TableCell>
           <TableCell />
         </TableRow>
@@ -175,83 +191,74 @@ export function FleetPage(): React.JSX.Element {
   const isEmpty = !isLoading && !isError && connectedRunners.length === 0;
 
   return (
-    <div className="page page--data">
-      <header className="page-header">
-        <h1 className="page-title">Fleet</h1>
+    <Page>
+      <PageHeader>
+        <PageTitle>Fleet</PageTitle>
         {!isEmpty && (
-          <Button
-            size="sm"
-            onClick={() => void navigate({ to: "/fleet/add" })}
-            leftSection={<Plus {...ICON_INLINE} />}
-          >
+          <Button size="sm" onClick={() => void navigate({ to: "/fleet/add" })}>
+            <Plus {...ICON_INLINE} />
             Add a server
           </Button>
         )}
-      </header>
+      </PageHeader>
 
       {removeError !== null && (
-        <Alert intent="error" title="Remove failed" className="page-alert">
-          {removeError}
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Remove failed</AlertTitle>
+          <AlertDescription>{removeError}</AlertDescription>
         </Alert>
       )}
 
       {isLoading && (
-        <div
-          className="page-table-wrap"
-          role="status"
-          aria-label="Loading fleet"
-        >
-          <Table>
-            <TableHead>
+        <PageTableWrap role="status" aria-label="Loading fleet">
+          <Table className={TABLE_HEAD}>
+            <TableHeader>
               <TableRow>
-                <TableHeader>Server</TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Services</TableHeader>
-                <TableHeader data-align="right">Last seen</TableHeader>
-                <TableHeader />
+                <TableHead>Server</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Services</TableHead>
+                <TableHead className="text-right">Last seen</TableHead>
+                <TableHead />
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               <SkeletonRows count={3} />
             </TableBody>
           </Table>
-        </div>
+        </PageTableWrap>
       )}
 
       {isError && (
-        <Alert
-          intent="error"
-          title="Failed to load fleet"
-          className="page-alert"
-        >
-          Something went wrong loading the fleet. It will retry automatically.
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>Failed to load fleet</AlertTitle>
+          <AlertDescription>
+            Something went wrong loading the fleet. It will retry automatically.
+          </AlertDescription>
         </Alert>
       )}
 
       {isEmpty && (
-        <div className="empty-state">
-          <div className="empty-state__content">
-            <Network {...ICON_DISPLAY} className="empty-state__icon" />
-            <h2 className="empty-state__title">Your fleet is empty</h2>
-            <p className="empty-state__text">
-              Servers you add will appear here with their status, services, and
-              last check-in time so you can monitor your infrastructure at a
-              glance.
-            </p>
-            <Button
-              onClick={() => void navigate({ to: "/fleet/add" })}
-              leftSection={<Plus {...ICON_INLINE} />}
-            >
-              Add your first server
-            </Button>
-          </div>
-        </div>
+        <EmptyState>
+          <Network {...ICON_DISPLAY} className="mb-3 text-muted-foreground" />
+          <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
+            Your fleet is empty
+          </h2>
+          <p className="m-0 mb-4 text-sm text-muted-foreground">
+            Servers you add will appear here with their status, services, and
+            last check-in time so you can monitor your infrastructure at a
+            glance.
+          </p>
+          <Button onClick={() => void navigate({ to: "/fleet/add" })}>
+            <Plus {...ICON_INLINE} />
+            Add your first server
+          </Button>
+        </EmptyState>
       )}
 
       {!isLoading && !isError && connectedRunners.length > 0 && (
-        <div className="page-table-wrap">
-          <Table>
-            <TableHead>
+        <PageTableWrap>
+          <Table className={TABLE_HEAD}>
+            <TableHeader>
               <TableRow>
                 <SortableHeader
                   label="Server"
@@ -283,11 +290,11 @@ export function FleetPage(): React.JSX.Element {
                   onSort={handleSort}
                   align="right"
                 />
-                <TableHeader>
+                <TableHead>
                   <span className="sr-only">Actions</span>
-                </TableHeader>
+                </TableHead>
               </TableRow>
-            </TableHead>
+            </TableHeader>
             <TableBody>
               {sorted.map((runner) => {
                 const status = runnerStatus(runner);
@@ -297,17 +304,18 @@ export function FleetPage(): React.JSX.Element {
                   <TableRow
                     key={runner.token}
                     data-offline={isOffline || undefined}
+                    className={cn(isOffline && "opacity-60")}
                   >
                     <TableCell>
                       <span
-                        className="cell-truncate"
+                        className="block max-w-[240px] truncate"
                         title={runner.hostname ?? undefined}
                       >
                         {runner.hostname}
                       </span>
                       {services.length > 0 && (
                         <span
-                          className="cell-services"
+                          className="mt-0.5 block max-w-[240px] truncate font-mono text-xs text-muted-foreground"
                           title={services
                             .map((s) => serviceIdentityKey(s.identity))
                             .join(", ")}
@@ -319,25 +327,28 @@ export function FleetPage(): React.JSX.Element {
                       )}
                     </TableCell>
                     <TableCell>
-                      <StatusChip status={status} domain="runner" />
+                      <StatusBadge status={status} domain="runner" />
                     </TableCell>
-                    <TableCell data-mono data-align="right">
+                    <TableCell className="font-mono tabular-nums text-right">
                       {services.length}
                     </TableCell>
-                    <TableCell data-mono data-align="right">
+                    <TableCell className="font-mono tabular-nums text-right">
                       {timeAgo(runner.lastSeen)}
                     </TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"
                         size="xs"
-                        loading={removing === runner.token}
+                        disabled={removing === runner.token}
                         aria-label={`Remove server ${runner.hostname ?? runner.id}`}
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation();
                           void handleRemove(runner.token);
                         }}
                       >
+                        {removing === runner.token && (
+                          <Spinner className="size-3" />
+                        )}
                         Remove
                       </Button>
                     </TableCell>
@@ -346,8 +357,8 @@ export function FleetPage(): React.JSX.Element {
               })}
             </TableBody>
           </Table>
-        </div>
+        </PageTableWrap>
       )}
-    </div>
+    </Page>
   );
 }

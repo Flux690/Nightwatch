@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown } from "lucide-react";
 import type {
   SessionMeta,
   SessionMessage,
@@ -9,16 +8,24 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
-import { Text } from "../ui/Text.js";
-import { toast } from "../ui/Toast.js";
-import { useAuth } from "../auth/AuthContext.js";
-import { useConsoleWs } from "../hooks/ConsoleWsProvider.js";
-import { ChatInput } from "./ChatInput.js";
-import { applyLiveEvent } from "../transcript/liveConverter.js";
-import { convertPersistedMessages } from "../transcript/persistedConverter.js";
-import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
-import type { TranscriptItem } from "../transcript/types.js";
-import { apiFetch } from "../api/client.js";
+
+import {
+  MessageScrollerProvider,
+  MessageScroller,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+} from "@/components/ui/message-scroller";
+import { toast } from "@/lib/toast";
+import { useAuth } from "@/auth/AuthContext";
+import { useConsoleWs } from "@/hooks/ConsoleWsProvider";
+import { ChatInput } from "@/components/transcript/ChatInput";
+import { applyLiveEvent } from "@/components/transcript/liveConverter";
+import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
+import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
+import type { TranscriptItem } from "@/components/transcript/types";
+import { apiFetch } from "@/api/client";
 
 interface PendingInterrupt {
   id: string;
@@ -109,21 +116,25 @@ function TranscriptColumn({
   const allItems = [...persistedItems, ...liveItems];
 
   return (
-    <div
+    <MessageScrollerContent
       data-testid="transcript-column"
       role="log"
       aria-label="Session transcript"
-      style={{
-        maxWidth: "var(--container-prose)",
-        margin: "0 auto",
-        padding: "0 24px",
-      }}
+      className="mx-auto w-full max-w-chat gap-0 px-6 pb-8 pt-4"
     >
       {allItems.map((item, index) => (
-        <div
+        <MessageScrollerItem
           key={itemKey(item)}
+          scrollAnchor={index === allItems.length - 1}
           style={{
-            marginTop: index === 0 ? 0 : item.kind === "user_turn" ? 32 : 8,
+            marginTop:
+              index === 0
+                ? 0
+                : item.kind === "user_turn"
+                  ? 32
+                  : item.kind === "thinking"
+                    ? 4
+                    : 8,
           }}
         >
           <TranscriptItemRenderer
@@ -131,17 +142,18 @@ function TranscriptColumn({
             onResolve={onResolve}
             onAnswer={onAnswer}
           />
-        </div>
+        </MessageScrollerItem>
       ))}
-    </div>
+    </MessageScrollerContent>
   );
 }
 
+/** Index route (/) renders with no id; /sessions/$id passes the param. */
 export function SessionView({
-  sessionId: sessionIdFromRoute,
+  sessionId: sessionIdFromRoute = null,
 }: {
-  sessionId: string | null;
-}): React.JSX.Element {
+  sessionId?: string | null;
+} = {}): React.JSX.Element {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     sessionIdFromRoute,
   );
@@ -149,10 +161,6 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const shouldAutoScrollRef = useRef(true);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { phase } = useAuth();
@@ -342,39 +350,18 @@ export function SessionView({
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
-  function handleScroll(): void {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
-    setShowScrollButton(!atBottom);
-    shouldAutoScrollRef.current = atBottom;
-  }
-
-  function scrollToBottom(): void {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    shouldAutoScrollRef.current = true;
-    setShowScrollButton(false);
-  }
-
-  useEffect(() => {
-    if (!shouldAutoScrollRef.current) return;
-    bottomRef.current?.scrollIntoView({
-      behavior: "instant" as ScrollBehavior,
-    });
-  }, [liveItems, messages]);
-
   if (!activeSessionId) {
     return (
-      <div className="session-landing">
-        <div className="session-landing__center">
-          <h1 className="session-landing__greeting">Hello, {displayName}</h1>
-          <Text className="session-landing__hint">
+      <div className="flex h-full flex-1 flex-col items-center">
+        <div className="flex flex-1 flex-col justify-center pb-[10vh]">
+          <h1 className="m-0 mb-1.5 text-center text-3xl font-semibold tracking-[-0.4px] text-foreground">
+            Hello, {displayName}
+          </h1>
+          <p className="m-0 mb-4 text-center text-sm text-muted-foreground">
             Start an investigation or ask about your fleet.
-          </Text>
+          </p>
         </div>
-        <div style={{ width: "100%" }}>
+        <div className="w-full">
           <ChatInput
             sessionId={null}
             isRunning={false}
@@ -391,39 +378,20 @@ export function SessionView({
   const composerDisabled = pendingInterrupt?.kind === "continue";
 
   return (
-    <div
-      className="page"
-      style={{ display: "flex", flexDirection: "column", height: "100%" }}
-    >
-      <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
-        <div
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          style={{
-            height: "100%",
-            overflowY: "auto",
-            padding: "16px 0",
-          }}
-        >
-          <TranscriptColumn
-            persistedMessages={messages}
-            liveItems={liveItems}
-            onResolve={handleResolve}
-            onAnswer={handleAnswer}
-          />
-          <div ref={bottomRef} />
-        </div>
-        {showScrollButton && (
-          <button
-            type="button"
-            className="scroll-to-bottom"
-            aria-label="Scroll to bottom"
-            onClick={scrollToBottom}
-          >
-            <ChevronDown size={18} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        )}
-      </div>
+    <div className="flex h-full flex-col">
+      <MessageScrollerProvider>
+        <MessageScroller className="min-h-0 flex-1">
+          <MessageScrollerViewport>
+            <TranscriptColumn
+              persistedMessages={messages}
+              liveItems={liveItems}
+              onResolve={handleResolve}
+              onAnswer={handleAnswer}
+            />
+          </MessageScrollerViewport>
+          <MessageScrollerButton direction="end" />
+        </MessageScroller>
+      </MessageScrollerProvider>
 
       {!composerHidden && (
         <ChatInput

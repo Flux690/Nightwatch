@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestProviders } from "./renderWithProviders.js";
 import type { AgentConfig } from "@nightwatch/shared";
 
-import { AuthProvider } from "../auth/AuthContext.js";
-import { SettingsModal } from "../pages/SettingsModal.js";
-import { toast } from "../ui/Toast.js";
+import { AuthProvider } from "@/auth/AuthContext";
+import { SettingsModal } from "@/components/layout/SettingsModal";
+import { toast } from "@/lib/toast";
 
 const OWNER_EMAIL = "admin@example.com";
 const AUTH_STATUS_RESPONSE = {
@@ -139,12 +139,10 @@ describe("SettingsModal", () => {
       const user = userEvent.setup();
       setup();
       await waitFor(() => {
-        expect(screen.getByLabelText(/max output tokens/i)).toHaveValue(
-          "32000",
-        );
+        expect(screen.getByLabelText(/max output tokens/i)).toHaveValue(32000);
       });
       await openSection(user, /loop/i);
-      expect(screen.getByLabelText(/max retries/i)).toHaveValue("2");
+      expect(screen.getByLabelText(/max retries/i)).toHaveValue(2);
     });
 
     it("PATCHes /config with only the changed field when Save is clicked", async () => {
@@ -235,13 +233,15 @@ describe("SettingsModal", () => {
       await user.click(saveButton);
 
       await waitFor(() => {
-        expect(saveButton).toHaveAttribute("data-loading", "true");
+        expect(within(saveButton).getByRole("status")).toBeInTheDocument();
       });
 
       resolvePatch?.(CONFIG);
 
       await waitFor(() => {
-        expect(saveButton).not.toHaveAttribute("data-loading", "true");
+        expect(
+          within(saveButton).queryByRole("status"),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -476,7 +476,7 @@ describe("SettingsModal", () => {
       setup({ provider: "anthropic" });
       await waitFor(() => {
         expect(
-          screen.getByLabelText(/thinking/i, { selector: "input" }),
+          screen.getByRole("combobox", { name: /thinking mode/i }),
         ).toBeInTheDocument();
       });
     });
@@ -486,14 +486,16 @@ describe("SettingsModal", () => {
       await waitFor(() => {
         expect(screen.getByLabelText(/max output tokens/i)).toBeInTheDocument();
       });
-      expect(screen.queryByLabelText(/^thinking/i)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("combobox", { name: /thinking mode/i }),
+      ).not.toBeInTheDocument();
     });
 
     it("shows Reasoning effort selector only when provider is OpenAI", async () => {
       setup({ provider: "openai" });
       await waitFor(() => {
         expect(
-          screen.getByLabelText(/reasoning effort/i, { selector: "input" }),
+          screen.getByRole("combobox", { name: /reasoning effort/i }),
         ).toBeInTheDocument();
       });
     });
@@ -504,7 +506,7 @@ describe("SettingsModal", () => {
         expect(screen.getByLabelText(/max output tokens/i)).toBeInTheDocument();
       });
       expect(
-        screen.queryByLabelText(/reasoning effort/i, { selector: "input" }),
+        screen.queryByRole("combobox", { name: /reasoning effort/i }),
       ).not.toBeInTheDocument();
     });
   });

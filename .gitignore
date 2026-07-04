@@ -27,8 +27,7 @@ Thumbs.db
 Desktop.ini
 
 # Local doc/reference dumps used while designing — not source
-mantinedocs.txt
-claudeapidocs.txt
+*.txt
 
 # Local work tracking — issues stay untracked
 issues

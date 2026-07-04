@@ -1,7 +1,0 @@
-/* Multi-line exception to the fixed-height input rule: grows with content. */
-.textarea {
-  height: auto;
-  min-height: 64px;
-  padding: 8px 10px;
-  resize: vertical;
-}

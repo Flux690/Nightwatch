@@ -82,7 +82,7 @@ describe("UnresolvedAlertsPage", () => {
       await waitFor(() => {
         expect(screen.getByText("docker/myproject/api")).toBeInTheDocument();
       });
-      const monoCells = document.querySelectorAll("td[data-mono]");
+      const monoCells = document.querySelectorAll("td.tabular-nums");
       expect(monoCells.length).toBeGreaterThanOrEqual(2);
     });
   });
@@ -154,7 +154,7 @@ describe("UnresolvedAlertsPage", () => {
       expect(
         screen.getByRole("status", { name: /loading unresolved alerts/i }),
       ).toBeInTheDocument();
-      expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+      expect(document.querySelectorAll("[data-slot=\"skeleton\"]").length).toBeGreaterThan(0);
     });
   });
 

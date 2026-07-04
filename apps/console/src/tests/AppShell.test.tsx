@@ -8,12 +8,22 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
-import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
-import { Shell } from "../pages/Shell.js";
+import { AuthProvider } from "@/auth/AuthContext";
+import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { Shell } from "@/components/layout/Shell";
+import { SessionView } from "@/pages/SessionView";
+
+function ShellLayout(): React.JSX.Element {
+  return (
+    <Shell>
+      <Outlet />
+    </Shell>
+  );
+}
 
 const OWNER_EMAIL = "admin@example.com";
 
@@ -125,16 +135,19 @@ function setup(pendingCount = 0) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const rootRoute = createRootRoute({ component: Shell });
+  const rootRoute = createRootRoute({ component: ShellLayout });
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: () => null,
+    component: () => <SessionView />,
   });
   const sessionIdRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/sessions/$id",
-    component: () => null,
+    component: function SessionRoute() {
+      const { id } = sessionIdRoute.useParams();
+      return <SessionView sessionId={id} />;
+    },
   });
   const fleetRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -144,7 +157,7 @@ function setup(pendingCount = 0) {
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
-    component: () => <div>Settings Page</div>,
+    component: () => <SessionView />,
   });
 
   const router = createRouter({
@@ -178,12 +191,26 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+// The shadcn Sidebar exposes its collapsed/expanded state on the container via
+// data-state; text labels hide purely through CSS, which jsdom does not apply,
+// so the collapse contract is asserted through this attribute and the toggle's
+// accessible name rather than label visibility.
+function sidebarState(): string | null {
+  return (
+    document
+      .querySelector('[data-slot="sidebar"]')
+      ?.getAttribute("data-state") ?? null
+  );
+}
+
 describe("Shell", () => {
   describe("nav + sidebar structure", () => {
     it("renders the Nightwatch wordmark in the header", async () => {
       setup();
+      // The wordmark appears in the sidebar header and, on small screens, the
+      // mobile top bar; both live in the DOM at once under jsdom.
       await waitFor(() => {
-        expect(screen.getByText("Nightwatch")).toBeInTheDocument();
+        expect(screen.getAllByText("Nightwatch").length).toBeGreaterThan(0);
       });
     });
 
@@ -280,15 +307,12 @@ describe("Shell", () => {
       });
     });
 
-    it("toggle collapses sidebar: text labels disappear and links remain accessible via aria-label", async () => {
+    it("toggle collapses sidebar to the icon rail while links stay reachable", async () => {
       const user = userEvent.setup();
       setup();
 
-      // Start expanded: text labels visible
-      await waitFor(() => {
-        expect(screen.getByText("Fleet")).toBeInTheDocument();
-        expect(screen.getByText("Settings")).toBeInTheDocument();
-      });
+      // Start expanded
+      await waitFor(() => expect(sidebarState()).toBe("expanded"));
 
       // Collapse
       await user.click(
@@ -296,23 +320,23 @@ describe("Shell", () => {
       );
 
       await waitFor(() => {
-        // Text labels fade out (kept in the DOM so the width animation can
-        // cross-fade them; data-hidden drives opacity 0)
-        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden");
-        expect(screen.getByText("Settings")).toHaveAttribute("data-hidden");
-        // Rows still accessible via aria-label
+        // The rail is now in its collapsed (icon) state and the toggle flips
+        // its accessible name to offer re-expansion.
+        expect(sidebarState()).toBe("collapsed");
+        expect(
+          screen.getByRole("button", { name: /expand sidebar/i }),
+        ).toBeInTheDocument();
+        // Rows remain reachable (labels are only visually hidden via CSS)
         expect(
           screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("button", { name: /^settings$/i }),
         ).toBeInTheDocument();
-        // Session list hidden
-        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
       });
     });
 
-    it("toggle expands sidebar: text labels reappear", async () => {
+    it("toggle expands the sidebar again", async () => {
       const user = userEvent.setup();
       setup();
 
@@ -325,16 +349,16 @@ describe("Shell", () => {
       );
 
       // Verify collapsed
-      await waitFor(() =>
-        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden"),
-      );
+      await waitFor(() => expect(sidebarState()).toBe("collapsed"));
 
       // Expand again
       await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
 
       await waitFor(() => {
-        expect(screen.getByText("Fleet")).not.toHaveAttribute("data-hidden");
-        expect(screen.getByText("Settings")).not.toHaveAttribute("data-hidden");
+        expect(sidebarState()).toBe("expanded");
+        expect(
+          screen.getByRole("button", { name: /collapse sidebar/i }),
+        ).toBeInTheDocument();
         expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
       });
     });
@@ -382,11 +406,12 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() => {
-        // In collapsed state row labels are faded out and the sessions
-        // section is not rendered at all
-        expect(screen.getByText("Fleet")).toHaveAttribute("data-hidden");
-        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
-        // But links are still accessible
+        // Restores the collapsed rail from the persisted preference; the toggle
+        // offers to expand and links stay reachable.
+        expect(sidebarState()).toBe("collapsed");
+        expect(
+          screen.getByRole("button", { name: /expand sidebar/i }),
+        ).toBeInTheDocument();
         expect(
           screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
@@ -744,19 +769,10 @@ describe("Shell", () => {
 
   describe("responsive drawer (below md)", () => {
     function setupMobile(pendingCount = 0) {
-      vi.stubGlobal(
-        "matchMedia",
-        vi.fn().mockImplementation((query: string) => ({
-          matches: true,
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
-      );
+      // The Sidebar's useIsMobile hook keys off window.innerWidth (< 768), not
+      // matchMedia.matches; drive it below the breakpoint so the shell renders
+      // its mobile drawer. unstubAllGlobals restores the jsdom default after.
+      vi.stubGlobal("innerWidth", 500);
       return setup(pendingCount);
     }
 

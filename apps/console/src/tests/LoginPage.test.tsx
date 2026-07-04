@@ -10,7 +10,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
+import { AuthProvider } from "@/auth/AuthContext";
 import { LoginPage } from "../pages/LoginPage.js";
 
 function jsonResponse(status: number, body: object) {
@@ -147,7 +147,7 @@ describe("LoginPage", () => {
     });
     const errorContainer = screen
       .getByText(/at least 12 characters/i)
-      .closest(".validation-error");
+      .closest('[role="alert"]');
     expect(errorContainer).not.toBeNull();
     expect(errorContainer!.querySelector("svg")).not.toBeNull();
   });

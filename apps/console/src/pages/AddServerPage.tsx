@@ -3,20 +3,33 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
 import { AlertCircle, ArrowLeft, Copy } from "lucide-react";
-import { Alert } from "../ui/Alert.js";
-import { Badge } from "../ui/Badge.js";
-import { Button } from "../ui/Button.js";
-import { Code } from "../ui/Code.js";
-import { Group } from "../ui/Group.js";
-import { IconButton } from "../ui/IconButton.js";
-import { Loader } from "../ui/Loader.js";
-import { Radio, RadioGroup } from "../ui/Radio.js";
-import { Stack } from "../ui/Stack.js";
-import { Text } from "../ui/Text.js";
-import { TextInput } from "../ui/TextInput.js";
-import { ICON_INLINE, ICON_UI } from "../ui/iconProps.js";
-import { ApiError, apiFetch } from "../api/client.js";
-import { WizardMonitoringStep } from "./WizardMonitoringStep.js";
+
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldLabel,
+  FieldDescription,
+  FieldError,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  Page,
+  PageHeader,
+  PageTitle,
+  backLinkClass,
+} from "@/components/layout/Page";
+import {
+  WizardStepper,
+  WizardActions,
+} from "@/components/layout/WizardStepper";
+import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
+import { ApiError, apiFetch } from "@/api/client";
+import { WizardMonitoringStep } from "@/pages/WizardMonitoringStep";
 
 export type Provider = "docker" | "kubernetes";
 type Monitoring = "bundled" | "byo";
@@ -38,39 +51,6 @@ function validateServerName(name: string): string | null {
   if (name.trim().length === 0) return "Server name is required";
   if (name.includes("/")) return "Server name must not contain '/'";
   return null;
-}
-
-function ProgressHeader({
-  step,
-  total,
-}: {
-  step: number;
-  total: number;
-}): React.JSX.Element {
-  return (
-    <div className="step-header">
-      <div className="step-header__caption">
-        Step {step + 1} of {total}
-      </div>
-      <div className="step-header__title">{STEP_TITLES[step]}</div>
-      <div
-        className="progress-track"
-        role="progressbar"
-        aria-valuemin={1}
-        aria-valuemax={total}
-        aria-valuenow={step + 1}
-        aria-valuetext={`Step ${step + 1} of ${total}: ${STEP_TITLES[step]}`}
-      >
-        {Array.from({ length: total }, (_, i) => (
-          <div
-            key={i}
-            className="progress-track__segment"
-            data-done={i <= step || undefined}
-          />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export function AddServerPage(): React.JSX.Element {
@@ -212,68 +192,96 @@ export function AddServerPage(): React.JSX.Element {
   const trimmedServerName = serverName.trim();
 
   return (
-    <div className="page page--data page--prose">
-      <Link to="/fleet" className="back-link">
+    <Page>
+      <Link to="/fleet" className={backLinkClass}>
         <ArrowLeft {...ICON_INLINE} />
         Fleet
       </Link>
-      <header className="page-header">
-        <h1 className="page-title">Add a server</h1>
-      </header>
+      <PageHeader>
+        <PageTitle>Add a server</PageTitle>
+      </PageHeader>
 
-      <ProgressHeader step={step} total={3} />
+      <WizardStepper step={step} total={3} title={STEP_TITLES[step]} />
 
       {step === 0 && (
-        <Stack className="gap-8">
-          <RadioGroup
-            label="Which substrate is this server running?"
-            value={provider ?? ""}
-            onChange={(v) => setProvider(v as Provider)}
-          >
-            <Group className="mt-2">
-              <Radio value="docker" label="Docker" />
-              <Radio value="kubernetes" label="Kubernetes" />
-            </Group>
-          </RadioGroup>
+        <div className="flex flex-col gap-8">
+          <Field>
+            <FieldLabel>Which substrate is this server running?</FieldLabel>
+            <RadioGroup
+              className="mt-2 flex flex-row gap-6"
+              value={provider ?? ""}
+              onValueChange={(v) => setProvider(v as Provider)}
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="docker" id="provider-docker" />
+                <Label htmlFor="provider-docker" className="font-normal">
+                  Docker
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="kubernetes" id="provider-kubernetes" />
+                <Label htmlFor="provider-kubernetes" className="font-normal">
+                  Kubernetes
+                </Label>
+              </div>
+            </RadioGroup>
+          </Field>
 
-          <TextInput
-            label="Server name"
-            w="md"
-            description="A unique name for this server in your fleet. Immutable once installed."
-            placeholder="e.g. prod-web-01"
-            value={serverName}
-            onChange={(e) => setServerName(e.currentTarget.value)}
-            onBlur={() => setServerNameTouched(true)}
-            error={
-              serverNameError ? (
-                <>
-                  <AlertCircle size={12} aria-hidden="true" />
-                  {serverNameError}
-                </>
-              ) : undefined
-            }
-          />
+          <Field className="max-w-80">
+            <FieldLabel htmlFor="server-name">Server name</FieldLabel>
+            <FieldDescription>
+              A unique name for this server in your fleet. Immutable once
+              installed.
+            </FieldDescription>
+            <Input
+              id="server-name"
+              placeholder="e.g. prod-web-01"
+              value={serverName}
+              aria-invalid={serverNameError !== null}
+              onChange={(e) => setServerName(e.currentTarget.value)}
+              onBlur={() => setServerNameTouched(true)}
+            />
+            {serverNameError && (
+              <FieldError>
+                <AlertCircle size={12} aria-hidden="true" />
+                {serverNameError}
+              </FieldError>
+            )}
+          </Field>
 
-          <RadioGroup
-            label="Monitoring"
-            description="Nightwatch needs Prometheus and Alertmanager to receive alerts."
-            value={monitoring ?? ""}
-            onChange={(v) => setMonitoring(v as Monitoring)}
-          >
-            <Stack className="gap-2 mt-2">
-              <Radio
-                value="bundled"
-                label="Bundle Prometheus + Alertmanager for me"
-              />
-              <Radio value="byo" label="I already run my own monitoring" />
-            </Stack>
-          </RadioGroup>
+          <Field>
+            <FieldLabel>Monitoring</FieldLabel>
+            <FieldDescription>
+              Nightwatch needs Prometheus and Alertmanager to receive alerts.
+            </FieldDescription>
+            <RadioGroup
+              className="mt-2 gap-2"
+              value={monitoring ?? ""}
+              onValueChange={(v) => setMonitoring(v as Monitoring)}
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="bundled" id="monitoring-bundled" />
+                <Label htmlFor="monitoring-bundled" className="font-normal">
+                  Bundle Prometheus + Alertmanager for me
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="byo" id="monitoring-byo" />
+                <Label htmlFor="monitoring-byo" className="font-normal">
+                  I already run my own monitoring
+                </Label>
+              </div>
+            </RadioGroup>
+          </Field>
 
           {installError !== null && (
-            <Text className="text-sm text-status-failed">{installError}</Text>
+            <FieldError>
+              <AlertCircle size={12} aria-hidden="true" />
+              {installError}
+            </FieldError>
           )}
 
-          <div className="step-actions">
+          <WizardActions>
             <span />
             <Button
               disabled={!canContinueFromServer}
@@ -281,58 +289,57 @@ export function AddServerPage(): React.JSX.Element {
             >
               Continue
             </Button>
-          </div>
-        </Stack>
+          </WizardActions>
+        </div>
       )}
 
       {step === 1 && (
-        <Stack className="gap-4">
+        <div className="flex flex-col gap-4">
           {minting && (
-            <Group className="gap-2">
-              <Loader />
-              <Text className="text-sm text-ink-muted">
+            <div className="flex items-center gap-2">
+              <Spinner />
+              <p className="text-sm text-muted-foreground">
                 Generating a runner token...
-              </Text>
-            </Group>
+              </p>
+            </div>
           )}
 
           {installError !== null && (
-            <Text className="text-sm text-status-failed">{installError}</Text>
+            <FieldError>
+              <AlertCircle size={12} aria-hidden="true" />
+              {installError}
+            </FieldError>
           )}
 
           {installText !== null && (
-            <Stack className="gap-4">
-              <Stack className="gap-2">
-                <Text className="text-sm">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <p className="text-sm">
                   Run this on the target server to install the runner:
-                </Text>
-                <Group className="gap-2 items-start flex-nowrap">
-                  <Code
-                    block
-                    style={{
-                      flex: 1,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-all",
-                      maxHeight: 240,
-                      overflow: "auto",
-                    }}
-                  >
+                </p>
+                <div className="flex flex-nowrap items-start gap-2">
+                  <pre className="block max-h-60 flex-1 overflow-auto rounded-sm border border-border bg-card p-3 font-mono text-sm leading-normal whitespace-pre-wrap break-all text-foreground">
                     {installText}
-                  </Code>
-                  <IconButton
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     aria-label="Copy install command"
                     onClick={copyInstallText}
                   >
                     <Copy {...ICON_UI} />
-                  </IconButton>
-                </Group>
-              </Stack>
+                  </Button>
+                </div>
+              </div>
 
               {monitoring === "bundled" && (
-                <Alert intent="info" title="Monitoring bundled">
-                  Prometheus, Alertmanager and cAdvisor ship inside the runner
-                  and are wired to Nightwatch automatically. Nothing else to
-                  configure.
+                <Alert>
+                  <AlertTitle>Monitoring bundled</AlertTitle>
+                  <AlertDescription>
+                    Prometheus, Alertmanager and cAdvisor ship inside the runner
+                    and are wired to Nightwatch automatically. Nothing else to
+                    configure.
+                  </AlertDescription>
                 </Alert>
               )}
 
@@ -348,62 +355,68 @@ export function AddServerPage(): React.JSX.Element {
                   />
                 )}
 
-              <Group className="gap-2 items-center">
+              <div className="flex items-center gap-2">
                 {connectedRunner ? (
-                  <Badge intent="success">Runner connected</Badge>
+                  <Badge className="border-transparent bg-success-tint text-success">
+                    Runner connected
+                  </Badge>
                 ) : (
-                  <Group className="gap-2">
-                    <Loader />
-                    <Text className="text-sm text-ink-muted">
+                  <div className="flex items-center gap-2">
+                    <Spinner />
+                    <p className="text-sm text-muted-foreground">
                       Waiting for the runner to connect...
-                    </Text>
-                  </Group>
+                    </p>
+                  </div>
                 )}
-              </Group>
-            </Stack>
+              </div>
+            </div>
           )}
 
-          <div className="step-actions">
+          <WizardActions>
             <Button variant="ghost" onClick={() => setStep(0)}>
               Back
             </Button>
             <Button disabled={!connectedRunner} onClick={() => setStep(2)}>
               Continue
             </Button>
-          </div>
-        </Stack>
+          </WizardActions>
+        </div>
       )}
 
       {step === 2 && (
-        <Stack className="gap-4">
-          <Text className="text-sm">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm">
             Send a synthetic alert through the full pipeline to confirm it
             reaches this server.
-          </Text>
+          </p>
 
           <Button
-            style={{ alignSelf: "flex-start" }}
-            loading={sendTestAlert.isPending}
-            disabled={!connectedRunner}
+            className="self-start"
+            disabled={!connectedRunner || sendTestAlert.isPending}
             onClick={() =>
               connectedRunner && sendTestAlert.mutate(connectedRunner.id)
             }
           >
+            {sendTestAlert.isPending && <Spinner className="size-4" />}
             Send test alert
           </Button>
 
           {verifyResult?.ok === true && (
-            <Alert intent="success" title="Pipeline verified">
-              Alert received and routed to {verifyResult.hostname}.
+            <Alert>
+              <AlertTitle>Pipeline verified</AlertTitle>
+              <AlertDescription>
+                Alert received and routed to {verifyResult.hostname}.
+              </AlertDescription>
             </Alert>
           )}
           {verifyResult?.ok === false && (
-            <Alert intent="error" title="Verification failed">
-              {verifyResult.error}
+            <Alert variant="destructive">
+              <AlertTitle>Verification failed</AlertTitle>
+              <AlertDescription>{verifyResult.error}</AlertDescription>
             </Alert>
           )}
 
-          <div className="step-actions">
+          <WizardActions>
             <Button variant="ghost" onClick={() => setStep(1)}>
               Back
             </Button>
@@ -413,9 +426,9 @@ export function AddServerPage(): React.JSX.Element {
             >
               Done
             </Button>
-          </div>
-        </Stack>
+          </WizardActions>
+        </div>
       )}
-    </div>
+    </Page>
   );
 }

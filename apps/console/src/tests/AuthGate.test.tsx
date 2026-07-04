@@ -11,7 +11,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
+import { AuthProvider } from "@/auth/AuthContext";
 import { AuthGate } from "../auth/AuthGate.js";
 
 class MockWs {

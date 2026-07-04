@@ -1,18 +1,20 @@
-import { MantineProvider } from "@mantine/core";
-import { theme } from "../theme.js";
-import { ToastContainer } from "../ui/Toast.js";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { ToastContainer } from "@/lib/toast";
 
-/* env="test" is Mantine's documented Vitest setup: the production provider
-   with transitions and portals disabled for deterministic DOM assertions. */
+/* The production providers with the app's UI context, for deterministic DOM
+   assertions. TooltipProvider + SidebarProvider back the shadcn components. */
 export function TestProviders({
   children,
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <MantineProvider theme={theme} env="test">
-      <ToastContainer />
-      {children}
-    </MantineProvider>
+    <TooltipProvider>
+      <SidebarProvider>
+        <ToastContainer />
+        {children}
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }

@@ -12,7 +12,7 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 import userEvent from "@testing-library/user-event";
 
-import { ChatInput } from "../pages/ChatInput.js";
+import { ChatInput } from "@/components/transcript/ChatInput";
 
 function setup(
   props: {

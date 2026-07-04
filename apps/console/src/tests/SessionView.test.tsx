@@ -11,9 +11,9 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
-import { ConsoleWsProvider } from "../hooks/ConsoleWsProvider.js";
+import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
 
-vi.mock("../auth/AuthContext.js", () => ({
+vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
     phase: { kind: "authenticated", email: "operator@nightwatch.io" },
     login: vi.fn(),

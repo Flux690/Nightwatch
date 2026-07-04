@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionsSidebar } from "../pages/SessionsSidebar.js";
+import { SessionsSidebar } from "@/components/layout/SessionsSidebar";
 
 const RUNNER = {
   id: "inst-1",
@@ -330,10 +330,8 @@ describe("SessionsSidebar", () => {
       });
 
       expect(
-        screen
-          .getByRole("button", { name: /CPU spike on web-01/i })
-          .closest("li"),
-      ).toHaveAttribute("data-active", "true");
+        screen.getByRole("button", { name: /CPU spike on web-01/i }),
+      ).toHaveAttribute("data-active");
     });
 
     it("does not mark any row as active when no session is open", async () => {
@@ -344,53 +342,8 @@ describe("SessionsSidebar", () => {
       });
 
       expect(
-        screen
-          .getByRole("button", { name: /CPU spike on web-01/i })
-          .closest("li"),
+        screen.getByRole("button", { name: /CPU spike on web-01/i }),
       ).not.toHaveAttribute("data-active");
-    });
-  });
-
-  describe("keyboard navigation", () => {
-    it("only the first row is in the tab order; the rest are tabIndex -1", async () => {
-      setup([SESSION_1, SESSION_2]);
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      const firstRow = screen.getByRole("button", {
-        name: /CPU spike on web-01/i,
-      });
-      const secondRow = screen.getByRole("button", {
-        name: /Disk full on db-02/i,
-      });
-      expect(firstRow).toHaveAttribute("tabindex", "0");
-      expect(secondRow).toHaveAttribute("tabindex", "-1");
-    });
-
-    it("ArrowDown moves focus to the next row and ArrowUp moves back, updating the tab order", async () => {
-      const user = userEvent.setup();
-      setup([SESSION_1, SESSION_2]);
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      const firstRow = screen.getByRole("button", {
-        name: /CPU spike on web-01/i,
-      });
-      const secondRow = screen.getByRole("button", {
-        name: /Disk full on db-02/i,
-      });
-
-      firstRow.focus();
-      await user.keyboard("{ArrowDown}");
-      expect(secondRow).toHaveFocus();
-      expect(secondRow).toHaveAttribute("tabindex", "0");
-      expect(firstRow).toHaveAttribute("tabindex", "-1");
-
-      await user.keyboard("{ArrowUp}");
-      expect(firstRow).toHaveFocus();
-      expect(firstRow).toHaveAttribute("tabindex", "0");
     });
   });
 

@@ -2,22 +2,26 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
 
-import { Alert } from "../ui/Alert.js";
-import { Button } from "../ui/Button.js";
-import { PasswordInput } from "../ui/PasswordInput.js";
-import { TextInput } from "../ui/TextInput.js";
-import { useAuth } from "../auth/AuthContext.js";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/auth/AuthContext";
 
 const MIN_PASSWORD = 12;
 
 function ValidationError({ message }: { message: string }): React.JSX.Element {
   return (
-    <div className="validation-error" role="alert">
+    <div
+      className="flex min-h-[18px] items-start gap-1 text-xs text-destructive"
+      role="alert"
+    >
       {message && (
         <>
           <AlertCircle
             size={14}
-            className="validation-error__icon"
+            className="mt-px shrink-0"
             aria-hidden="true"
           />
           <span>{message}</span>
@@ -77,47 +81,61 @@ function SetupForm(): React.JSX.Element {
   }
 
   return (
-    <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
-      <fieldset className="auth-fieldset">
-        <legend className="auth-title">Create your account</legend>
+    <form className="w-[360px]" onSubmit={(e) => void handleSubmit(e)}>
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="mb-6 p-0 text-2xl font-semibold tracking-[-0.3px] text-foreground">
+          Create your account
+        </legend>
         {serverError && (
-          <Alert intent="error" className="auth-alert">
-            {serverError}
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{serverError}</AlertDescription>
           </Alert>
         )}
-        <div className="auth-fields">
-          <TextInput
-            label="Email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-          />
-          <div className="auth-field-group">
-            <PasswordInput
-              label="Password"
+        <div className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor="setup-email">Email</FieldLabel>
+            <Input
+              id="setup-email"
+              type="email"
               required
-              value={password}
-              error={Boolean(passwordError)}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              onBlur={(e) => validatePassword(e.currentTarget.value)}
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
             />
+          </Field>
+          <div className="flex flex-col gap-1.5">
+            <Field>
+              <FieldLabel htmlFor="setup-password">Password</FieldLabel>
+              <Input
+                id="setup-password"
+                type="password"
+                required
+                value={password}
+                aria-invalid={Boolean(passwordError)}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                onBlur={(e) => validatePassword(e.currentTarget.value)}
+              />
+            </Field>
             <ValidationError message={passwordError} />
           </div>
-          <div className="auth-field-group">
-            <PasswordInput
-              label="Confirm password"
-              required
-              value={confirmPassword}
-              error={Boolean(confirmError)}
-              onChange={(e) => setConfirmPassword(e.currentTarget.value)}
-              onBlur={(e) => validateConfirm(e.currentTarget.value, password)}
-            />
+          <div className="flex flex-col gap-1.5">
+            <Field>
+              <FieldLabel htmlFor="setup-confirm">Confirm password</FieldLabel>
+              <Input
+                id="setup-confirm"
+                type="password"
+                required
+                value={confirmPassword}
+                aria-invalid={Boolean(confirmError)}
+                onChange={(e) => setConfirmPassword(e.currentTarget.value)}
+                onBlur={(e) => validateConfirm(e.currentTarget.value, password)}
+              />
+            </Field>
             <ValidationError message={confirmError} />
           </div>
         </div>
-        <div className="auth-actions">
-          <Button type="submit" className="auth-submit" loading={submitting}>
+        <div className="mt-6 flex justify-start">
+          <Button type="submit" className="min-w-[148px]" disabled={submitting}>
+            {submitting && <Spinner className="size-4" />}
             Create account
           </Button>
         </div>
@@ -145,31 +163,41 @@ function LoginForm(): React.JSX.Element {
   }
 
   return (
-    <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
-      <fieldset className="auth-fieldset">
-        <legend className="auth-title">Log in</legend>
+    <form className="w-[360px]" onSubmit={(e) => void handleSubmit(e)}>
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="mb-6 p-0 text-2xl font-semibold tracking-[-0.3px] text-foreground">
+          Log in
+        </legend>
         {serverError && (
-          <Alert intent="error" className="auth-alert">
-            {serverError}
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{serverError}</AlertDescription>
           </Alert>
         )}
-        <div className="auth-fields">
-          <TextInput
-            label="Email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-          />
-          <PasswordInput
-            label="Password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.currentTarget.value)}
-          />
+        <div className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor="login-email">Email</FieldLabel>
+            <Input
+              id="login-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="login-password">Password</FieldLabel>
+            <Input
+              id="login-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+            />
+          </Field>
         </div>
-        <div className="auth-actions">
-          <Button type="submit" className="auth-submit" loading={submitting}>
+        <div className="mt-6 flex justify-start">
+          <Button type="submit" className="min-w-[148px]" disabled={submitting}>
+            {submitting && <Spinner className="size-4" />}
             Log in
           </Button>
         </div>
@@ -189,7 +217,7 @@ export function LoginPage(): React.JSX.Element | null {
   if (phase.kind === "loading" || phase.kind === "authenticated") return null;
 
   return (
-    <div className="auth-screen">
+    <div className="flex min-h-screen items-start justify-center p-6 pt-[clamp(96px,18vh,240px)]">
       {phase.kind === "needs-setup" ? <SetupForm /> : <LoginForm />}
     </div>
   );
