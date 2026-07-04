@@ -27,6 +27,7 @@ import {
   WizardStepper,
   WizardActions,
 } from "@/components/layout/WizardStepper";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
 import { ApiError, apiFetch } from "@/api/client";
 import { WizardMonitoringStep } from "@/pages/WizardMonitoringStep";
@@ -97,22 +98,25 @@ export function AddServerPage(): React.JSX.Element {
   }, [connectedRunner]);
 
   const tokenPending = mintedToken !== null && !committed;
-  useBlocker({
-    shouldBlockFn: () => {
-      const leave = window.confirm(
-        "Leave setup? The server token you generated will be revoked.",
-      );
-      if (!leave) return true;
-      if (mintedToken !== null) {
-        void apiFetch<void>(`/api/tokens/${mintedToken.id}`, {
-          method: "DELETE",
-        }).catch(() => {});
-      }
-      return false;
-    },
+  const blocker = useBlocker({
+    shouldBlockFn: () => true,
     disabled: !tokenPending,
     enableBeforeUnload: () => tokenPending,
+    withResolver: true,
   });
+
+  function confirmLeaveSetup(): void {
+    if (mintedToken !== null) {
+      void apiFetch<void>(`/api/tokens/${mintedToken.id}`, {
+        method: "DELETE",
+      }).catch(() => {});
+    }
+    if (blocker.status === "blocked") blocker.proceed();
+  }
+
+  function cancelLeaveSetup(): void {
+    if (blocker.status === "blocked") blocker.reset();
+  }
 
   async function handleStartInstall(): Promise<void> {
     if (!canContinueFromServer) return;
@@ -429,6 +433,18 @@ export function AddServerPage(): React.JSX.Element {
           </WizardActions>
         </div>
       )}
+
+      <ConfirmDialog
+        open={blocker.status === "blocked"}
+        onOpenChange={(o) => {
+          if (!o) cancelLeaveSetup();
+        }}
+        title="Leave setup?"
+        description="The server token you generated will be revoked."
+        confirmLabel="Leave setup"
+        destructive
+        onConfirm={confirmLeaveSetup}
+      />
     </Page>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
@@ -9,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -17,6 +19,7 @@ export function SessionsSidebar(): React.JSX.Element {
   const queryClient = useQueryClient();
   const params = useParams({ strict: false }) as { id?: string };
   const activeSessionId = params.id ?? null;
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const { data: sessions = [], isLoading } = useQuery<SessionMeta[]>({
     queryKey: ["sessions"],
@@ -43,45 +46,60 @@ export function SessionsSidebar(): React.JSX.Element {
 
   function handleDelete(e: React.MouseEvent, sessionId: string): void {
     e.stopPropagation();
-    if (!window.confirm("Delete this session?")) return;
-    deleteSession.mutate(sessionId);
+    setConfirmingId(sessionId);
   }
 
   return (
-    <SidebarMenu className="gap-0.5 overflow-y-auto">
-      {!isLoading && sessions.length === 0 && (
-        <p className="px-2 py-2 text-xs text-muted-foreground">
-          Your sessions will show up here.
-        </p>
-      )}
-      {sessions.map((session) => (
-        <SidebarMenuItem key={session.sessionId}>
-          <SidebarMenuButton
-            isActive={activeSessionId === session.sessionId}
-            onClick={() =>
-              void navigate({
-                to: "/sessions/$id",
-                params: { id: session.sessionId },
-              })
-            }
-          >
-            <span title={session.title}>{session.title}</span>
-          </SidebarMenuButton>
-          <SidebarMenuAction
-            showOnHover
-            aria-label="Delete session"
-            disabled={
-              deleteSession.isPending &&
-              deleteSession.variables === session.sessionId
-            }
-            onClick={(e: React.MouseEvent) =>
-              handleDelete(e, session.sessionId)
-            }
-          >
-            <Trash2 />
-          </SidebarMenuAction>
-        </SidebarMenuItem>
-      ))}
-    </SidebarMenu>
+    <>
+      <SidebarMenu className="gap-0.5 overflow-y-auto">
+        {!isLoading && sessions.length === 0 && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            Your sessions will show up here.
+          </p>
+        )}
+        {sessions.map((session) => (
+          <SidebarMenuItem key={session.sessionId}>
+            <SidebarMenuButton
+              isActive={activeSessionId === session.sessionId}
+              onClick={() =>
+                void navigate({
+                  to: "/sessions/$id",
+                  params: { id: session.sessionId },
+                })
+              }
+            >
+              <span title={session.title}>{session.title}</span>
+            </SidebarMenuButton>
+            <SidebarMenuAction
+              showOnHover
+              aria-label="Delete session"
+              disabled={
+                deleteSession.isPending &&
+                deleteSession.variables === session.sessionId
+              }
+              onClick={(e: React.MouseEvent) =>
+                handleDelete(e, session.sessionId)
+              }
+            >
+              <Trash2 />
+            </SidebarMenuAction>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+
+      <ConfirmDialog
+        open={confirmingId !== null}
+        onOpenChange={(o) => {
+          if (!o) setConfirmingId(null);
+        }}
+        title="Delete this session?"
+        description="The session and its transcript will be removed permanently."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          if (confirmingId !== null) deleteSession.mutate(confirmingId);
+        }}
+      />
+    </>
   );
 }

@@ -314,19 +314,17 @@ describe("SettingsModal", () => {
   describe("dirty-close guard", () => {
     it("closes without a prompt when nothing changed", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm");
       const { onClose } = setup();
 
       await screen.findByLabelText(/max output tokens/i);
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it("asks before discarding unsaved changes and stays open on decline", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
       const { onClose } = setup();
 
       const modelInput = await screen.findByLabelText(/^model$/i, {
@@ -335,13 +333,19 @@ describe("SettingsModal", () => {
       await user.type(modelInput, "-edited");
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      const dialog = await screen.findByRole("alertdialog");
+      expect(
+        within(dialog).getByText(/discard unsaved changes/i),
+      ).toBeInTheDocument();
+      await user.click(
+        within(dialog).getByRole("button", { name: /^cancel$/i }),
+      );
+
       expect(onClose).not.toHaveBeenCalled();
     });
 
     it("discards edits and closes when the prompt is accepted", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       const { onClose } = setup();
 
       const modelInput = await screen.findByLabelText(/^model$/i, {
@@ -349,6 +353,11 @@ describe("SettingsModal", () => {
       });
       await user.type(modelInput, "-edited");
       await user.click(screen.getByRole("button", { name: /close settings/i }));
+
+      const dialog = await screen.findByRole("alertdialog");
+      await user.click(
+        within(dialog).getByRole("button", { name: /^discard$/i }),
+      );
 
       expect(onClose).toHaveBeenCalledTimes(1);
     });

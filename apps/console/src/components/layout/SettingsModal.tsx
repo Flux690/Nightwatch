@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { IngestCredentialSection } from "./IngestCredentialSection.js";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -91,6 +92,7 @@ export function SettingsModal({
 }): React.JSX.Element {
   const { logoutAll } = useAuth();
   const [section, setSection] = useState<SectionId>("model");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const { data: config } = useQuery<AgentConfig>({
     queryKey: ["config"],
@@ -193,14 +195,19 @@ export function SettingsModal({
      persisted config so a re-open never shows stale edits. */
   function handleClose(): void {
     if (dirty) {
-      const discard = window.confirm(
-        "Discard unsaved changes? Your edits will be lost.",
-      );
-      if (!discard) return;
-      setForm(config ?? null);
+      setConfirmDiscard(true);
+      return;
     }
     setNewApiKey("");
     setTestResult(null);
+    onClose();
+  }
+
+  function confirmDiscardEdits(): void {
+    setForm(config ?? null);
+    setNewApiKey("");
+    setTestResult(null);
+    setConfirmDiscard(false);
     onClose();
   }
 
@@ -577,6 +584,17 @@ export function SettingsModal({
           </div>
         </div>
       </DialogContent>
+      <ConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={(o) => {
+          if (!o) setConfirmDiscard(false);
+        }}
+        title="Discard unsaved changes?"
+        description="Your edits will be lost and the form will reset to the saved values."
+        confirmLabel="Discard"
+        destructive
+        onConfirm={confirmDiscardEdits}
+      />
     </Dialog>
   );
 }

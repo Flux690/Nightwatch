@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -516,7 +516,6 @@ describe("AddServerPage", () => {
   describe("token hygiene on leaving the page", () => {
     it("confirms, deletes the minted token, and navigates when leaving before the runner connects", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
       const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
@@ -526,7 +525,11 @@ describe("AddServerPage", () => {
 
       await user.click(screen.getByRole("link", { name: /fleet/i }));
 
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      const dialog = await screen.findByRole("alertdialog");
+      await user.click(
+        within(dialog).getByRole("button", { name: /^leave setup$/i }),
+      );
+
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledWith(
           `/api/tokens/${GENERATED_TOKEN.id}`,
@@ -538,7 +541,6 @@ describe("AddServerPage", () => {
 
     it("stays on the page and keeps the token when the leave prompt is declined", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
@@ -547,6 +549,11 @@ describe("AddServerPage", () => {
       });
 
       await user.click(screen.getByRole("link", { name: /fleet/i }));
+
+      const dialog = await screen.findByRole("alertdialog");
+      await user.click(
+        within(dialog).getByRole("button", { name: /^cancel$/i }),
+      );
 
       expect(
         screen.getByRole("heading", { name: /add a server/i }),
@@ -559,7 +566,6 @@ describe("AddServerPage", () => {
 
     it("leaves without a prompt and keeps the token once the runner has connected", async () => {
       const user = userEvent.setup();
-      const confirmSpy = vi.spyOn(window, "confirm");
       const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
 
       await startInstall(user, { name: "web-01" });
@@ -570,7 +576,7 @@ describe("AddServerPage", () => {
       await user.click(screen.getByRole("link", { name: /fleet/i }));
 
       expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
-      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalledWith(
         expect.stringContaining("/api/tokens/"),
         expect.objectContaining({ method: "DELETE" }),

@@ -264,7 +264,6 @@ describe("SessionsSidebar", () => {
 
     it("deletes the session when confirmed and removes it from the list", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       setup();
       const fetchMock = vi.mocked(fetch);
 
@@ -273,6 +272,9 @@ describe("SessionsSidebar", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /delete session/i }));
+      await user.click(
+        await screen.findByRole("button", { name: /^delete$/i }),
+      );
 
       expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1", {
         method: "DELETE",
@@ -286,7 +288,6 @@ describe("SessionsSidebar", () => {
 
     it("keeps the session in the list when the delete request fails", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       setup([SESSION_1], false);
 
       await waitFor(() => {
@@ -294,6 +295,9 @@ describe("SessionsSidebar", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /delete session/i }));
+      await user.click(
+        await screen.findByRole("button", { name: /^delete$/i }),
+      );
 
       // The delete is not optimistic: a failed request leaves the row in place
       // (and surfaces an error) rather than dropping it as if it succeeded.
@@ -308,7 +312,6 @@ describe("SessionsSidebar", () => {
 
     it("does not delete when the confirmation is dismissed", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
       setup();
 
       await waitFor(() => {
@@ -316,6 +319,9 @@ describe("SessionsSidebar", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /delete session/i }));
+      await user.click(
+        await screen.findByRole("button", { name: /^cancel$/i }),
+      );
 
       expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
     });
