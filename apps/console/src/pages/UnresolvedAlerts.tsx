@@ -11,7 +11,8 @@ import {
   EmptyState,
 } from "@/components/layout/Page";
 import { ICON_DISPLAY } from "@/lib/iconProps";
-import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { statusVariant } from "@/lib/statusVariants";
 import {
   Table,
   TableHeader,
@@ -127,8 +128,10 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {alerts.map((alert, i) => (
-                <TableRow key={`${alert.sourceAlertId}-${i}`}>
+              {alerts.map((alert, i) => {
+                const severityView = statusVariant("alert", alert.severity);
+                return (
+                  <TableRow key={`${alert.sourceAlertId}-${i}`}>
                   <TableCell className="font-mono tabular-nums">
                     <span
                       className="block max-w-[240px] truncate"
@@ -146,7 +149,9 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={alert.severity} domain="alert" />
+                    <Badge variant={severityView.variant} dot>
+                      {severityView.label}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <span
@@ -160,7 +165,8 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
                     {timeAgo(alert.createdAt)}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </PageTableWrap>

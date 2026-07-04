@@ -473,7 +473,7 @@ export function SettingsModal({
                         Test connection
                       </Button>
                       {testResult?.ok && (
-                        <Badge className="border-transparent bg-success-tint text-success">
+                        <Badge variant="success">
                           Connected
                         </Badge>
                       )}

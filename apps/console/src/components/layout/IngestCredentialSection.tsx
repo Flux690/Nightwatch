@@ -76,7 +76,7 @@ export function IngestCredentialSection(): React.JSX.Element {
       <div className="flex items-center gap-2">
         <p className="text-sm font-medium">Ingest credential</p>
         {ingestCredential?.configured ? (
-          <Badge className="border-transparent bg-success-tint text-success">
+          <Badge variant="success">
             Configured
           </Badge>
         ) : (

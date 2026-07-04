@@ -11,7 +11,8 @@ import {
   EmptyState,
 } from "@/components/layout/Page";
 import { ICON_DISPLAY } from "@/lib/iconProps";
-import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { statusVariant } from "@/lib/statusVariants";
 import {
   Table,
   TableHeader,
@@ -137,8 +138,13 @@ export function AuditLogPage(): React.JSX.Element {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {actions.map((action) => (
-                <TableRow key={`${action.sessionId}/${action.toolUseId}`}>
+              {actions.map((action) => {
+                const statusView = statusVariant(
+                  "remediation",
+                  action.status,
+                );
+                return (
+                  <TableRow key={`${action.sessionId}/${action.toolUseId}`}>
                   <TableCell className="font-mono tabular-nums">
                     <span
                       className="block max-w-[240px] truncate"
@@ -156,7 +162,9 @@ export function AuditLogPage(): React.JSX.Element {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={action.status} domain="remediation" />
+                    <Badge variant={statusView.variant} dot>
+                      {statusView.label}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <span
@@ -175,7 +183,8 @@ export function AuditLogPage(): React.JSX.Element {
                       : timeAgo(action.resolvedAt)}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </PageTableWrap>

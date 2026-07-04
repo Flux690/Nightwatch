@@ -15,7 +15,8 @@ import {
   EmptyState,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { statusVariant } from "@/lib/statusVariants";
 import { ICON_INLINE, ICON_DISPLAY } from "@/lib/iconProps";
 import {
   Table,
@@ -298,6 +299,7 @@ export function FleetPage(): React.JSX.Element {
             <TableBody>
               {sorted.map((runner) => {
                 const status = runnerStatus(runner);
+                const statusView = statusVariant("runner", status);
                 const services = runner.manifest?.capabilities.services ?? [];
                 const isOffline = !runner.online;
                 return (
@@ -327,7 +329,9 @@ export function FleetPage(): React.JSX.Element {
                       )}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={status} domain="runner" />
+                      <Badge variant={statusView.variant} dot>
+                        {statusView.label}
+                      </Badge>
                     </TableCell>
                     <TableCell className="font-mono tabular-nums text-right">
                       {services.length}

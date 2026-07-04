@@ -361,7 +361,7 @@ export function AddServerPage(): React.JSX.Element {
 
               <div className="flex items-center gap-2">
                 {connectedRunner ? (
-                  <Badge className="border-transparent bg-success-tint text-success">
+                  <Badge variant="success">
                     Runner connected
                   </Badge>
                 ) : (

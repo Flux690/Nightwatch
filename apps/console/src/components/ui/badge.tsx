@@ -14,6 +14,10 @@ const badgeVariants = cva(
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary",
         destructive:
           "bg-destructive-tint text-destructive [a]:hover:bg-destructive-tint",
+        success:
+          "bg-success-tint text-success [a]:hover:bg-success-tint",
+        warning:
+          "bg-warning-tint text-warning [a]:hover:bg-warning-tint",
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
@@ -27,19 +31,49 @@ const badgeVariants = cva(
   }
 )
 
+const dotClass: Record<NonNullable<VariantProps<typeof badgeVariants>["variant"]>, string> = {
+  default: "bg-primary-foreground",
+  secondary: "bg-secondary-foreground",
+  destructive: "bg-destructive",
+  success: "bg-success",
+  warning: "bg-warning",
+  outline: "bg-foreground",
+  ghost: "bg-foreground",
+  link: "bg-primary",
+}
+
 function Badge({
   className,
   variant = "default",
+  dot = false,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+}: useRender.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { dot?: boolean }) {
   return useRender({
     defaultTagName: "span",
     props: mergeProps<"span">(
       {
         className: cn(badgeVariants({ variant }), className),
       },
-      props
+      {
+        ...props,
+        children: dot ? (
+          <>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-1.5 rounded-full",
+                dotClass[variant ?? "default"]
+              )}
+            />
+            {children}
+          </>
+        ) : (
+          children
+        ),
+      }
     ),
     render,
     state: {
