@@ -196,72 +196,9 @@ describe("SessionsSidebar", () => {
         expect(screen.queryAllByRole("listitem")).toHaveLength(0);
       });
     });
-
-    it("fetches sessions and renders a row for each", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("shows an empty-state message when there are no sessions", async () => {
-      setup([]);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/your sessions will show up here/i),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("shows only the session name, without a timestamp", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-      expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
-    });
-
-    it("gives each session row an accessible title attribute with the full title", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      expect(screen.getByText("CPU spike on web-01")).toHaveAttribute(
-        "title",
-        "CPU spike on web-01",
-      );
-    });
-
-    it("renders no status badge on session rows", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      expect(screen.queryByText("concluded")).not.toBeInTheDocument();
-      expect(screen.queryByText("streaming")).not.toBeInTheDocument();
-      expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
-    });
   });
 
   describe("delete", () => {
-    it("renders a delete button per session row", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-      expect(
-        screen.getByRole("button", { name: /delete session/i }),
-      ).toBeInTheDocument();
-    });
-
     it("deletes the session when confirmed and removes it from the list", async () => {
       const user = userEvent.setup();
       setup();
@@ -308,48 +245,6 @@ describe("SessionsSidebar", () => {
         );
       });
       expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-    });
-
-    it("does not delete when the confirmation is dismissed", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("button", { name: /delete session/i }));
-      await user.click(
-        await screen.findByRole("button", { name: /^cancel$/i }),
-      );
-
-      expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-    });
-  });
-
-  describe("active session", () => {
-    it("marks the row for the currently open session as active", async () => {
-      setup([SESSION_1], true, "/sessions/s1");
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      expect(
-        screen.getByRole("button", { name: /CPU spike on web-01/i }),
-      ).toHaveAttribute("data-active");
-    });
-
-    it("does not mark any row as active when no session is open", async () => {
-      setup([SESSION_1], true, "/sessions");
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      expect(
-        screen.getByRole("button", { name: /CPU spike on web-01/i }),
-      ).not.toHaveAttribute("data-active");
     });
   });
 

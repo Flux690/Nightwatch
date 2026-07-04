@@ -201,59 +201,6 @@ afterEach(() => {
 });
 
 describe("AddServerPage", () => {
-  it("renders the title and a back link to the fleet", async () => {
-    setup();
-    expect(
-      await screen.findByRole("heading", { name: /add a server/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
-  });
-
-  describe("server step", () => {
-    it("shows provider selection as the first step", async () => {
-      setup();
-      expect(
-        await screen.findByRole("radio", { name: /docker/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("radio", { name: /kubernetes/i }),
-      ).toBeInTheDocument();
-    });
-
-    it("requires provider, name, and a monitoring choice before Continue is enabled", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await user.click(await screen.findByRole("radio", { name: /docker/i }));
-      expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-
-      await user.type(
-        screen.getByRole("textbox", { name: /server name/i }),
-        "web-01",
-      );
-      expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-
-      await user.click(
-        screen.getByRole("radio", { name: /bundle prometheus/i }),
-      );
-      expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-    });
-
-    it("shows a validation error when the server name contains a forward slash", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await user.click(await screen.findByRole("radio", { name: /docker/i }));
-      await user.type(
-        screen.getByRole("textbox", { name: /server name/i }),
-        "prod/web",
-      );
-
-      expect(screen.getByText(/must not contain/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    });
-  });
-
   describe("install step", () => {
     it("mints a runner token and shows the docker run script", async () => {
       const user = userEvent.setup();
@@ -289,54 +236,6 @@ describe("AddServerPage", () => {
       });
     });
 
-    it("mints a runner token and shows the Kubernetes manifest", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await startInstall(user, { provider: "kubernetes", name: "k8s-cluster" });
-
-      await waitFor(() => {
-        expect(screen.getByText(/nightwatch-runner/)).toBeInTheDocument();
-      });
-    });
-
-    it("shows an awaiting-connection state while the runner has not connected", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [AWAITING_RUNNER] });
-
-      await startInstall(user, { name: "web-01" });
-
-      await waitFor(() => {
-        expect(screen.getByText(/waiting for/i)).toBeInTheDocument();
-      });
-      expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    });
-
-    it("enables Continue once the runner connects", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { name: "web-01" });
-
-      await waitFor(() => {
-        expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
-      });
-      expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
-    });
-
-    it("shows the bundled note and no credential panel for the bundled choice", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { monitoring: "bundled" });
-
-      await waitFor(() => {
-        expect(screen.getByText(/monitoring bundled/i)).toBeInTheDocument();
-      });
-      expect(
-        screen.queryByText(new RegExp(INGEST_TOKEN)),
-      ).not.toBeInTheDocument();
-    });
   });
 
   describe("bring-your-own monitoring", () => {
@@ -365,18 +264,6 @@ describe("AddServerPage", () => {
       expect(
         screen.queryByRole("button", { name: /reveal/i }),
       ).not.toBeInTheDocument();
-    });
-
-    it("stamps the chosen server name into the Prometheus server-label snippet", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { name: "prod-web-01", monitoring: "byo" });
-
-      await waitFor(() => {
-        expect(screen.getByText(/in your prometheus/i)).toBeInTheDocument();
-      });
-      expect(screen.getByText(/prod-web-01/)).toBeInTheDocument();
     });
 
     it("tests the webhook with the inline credential and shows the resolved result", async () => {

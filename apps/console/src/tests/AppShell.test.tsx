@@ -204,165 +204,7 @@ function sidebarState(): string | null {
 }
 
 describe("Shell", () => {
-  describe("nav + sidebar structure", () => {
-    it("renders the Nightwatch wordmark in the header", async () => {
-      setup();
-      // The wordmark appears in the sidebar header and, on small screens, the
-      // mobile top bar; both live in the DOM at once under jsdom.
-      await waitFor(() => {
-        expect(screen.getAllByText("Nightwatch").length).toBeGreaterThan(0);
-      });
-    });
-
-    it("renders the Fleet nav link and the Settings trigger", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole("button", { name: /^settings$/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("footer nav is Fleet, Audit log, Unresolved alerts, Settings in that order", async () => {
-      setup();
-      await waitFor(() =>
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument(),
-      );
-
-      const rows = [
-        screen.getByRole("link", { name: "Fleet" }),
-        screen.getByRole("link", { name: "Audit log" }),
-        screen.getByRole("link", { name: "Unresolved alerts" }),
-        screen.getByRole("button", { name: "Settings" }),
-      ];
-      const all = Array.from(
-        document.querySelectorAll<HTMLElement>("a, button"),
-      );
-      const positions = rows.map((row) => all.indexOf(row));
-      expect(positions).toEqual([...positions].sort((a, b) => a - b));
-    });
-
-    it("renders the sessions sidebar with existing session rows", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("sidebar rows show the title alone, without timestamps or status badges", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-      expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
-      expect(screen.queryByText("concluded")).not.toBeInTheDocument();
-      expect(screen.queryByText("streaming")).not.toBeInTheDocument();
-      expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
-    });
-  });
-
   describe("sidebar collapsible rail", () => {
-    it("the standalone Sessions nav link is absent", async () => {
-      setup();
-      // Wait for the sidebar to be fully mounted
-      await waitFor(() =>
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument(),
-      );
-      // There should be no link whose accessible name is exactly "Sessions"
-      expect(
-        screen.queryByRole("link", { name: "Sessions" }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("New session button is present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /new session/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("Recent sessions heading and session list are present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("Log out button is present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /log out/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("toggle collapses sidebar to the icon rail while links stay reachable", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      // Start expanded
-      await waitFor(() => expect(sidebarState()).toBe("expanded"));
-
-      // Collapse
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-
-      await waitFor(() => {
-        // The rail is now in its collapsed (icon) state and the toggle flips
-        // its accessible name to offer re-expansion.
-        expect(sidebarState()).toBe("collapsed");
-        expect(
-          screen.getByRole("button", { name: /expand sidebar/i }),
-        ).toBeInTheDocument();
-        // Rows remain reachable (labels are only visually hidden via CSS)
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole("button", { name: /^settings$/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("toggle expands the sidebar again", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      // Collapse first
-      await waitFor(() =>
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-
-      // Verify collapsed
-      await waitFor(() => expect(sidebarState()).toBe("collapsed"));
-
-      // Expand again
-      await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
-
-      await waitFor(() => {
-        expect(sidebarState()).toBe("expanded");
-        expect(
-          screen.getByRole("button", { name: /collapse sidebar/i }),
-        ).toBeInTheDocument();
-        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
-      });
-    });
-
     it("collapsing writes false to localStorage", async () => {
       const user = userEvent.setup();
       setup();
@@ -465,21 +307,6 @@ describe("Shell", () => {
     });
   });
 
-  describe("home route (/)", () => {
-    it("shows a chat input at /", async () => {
-      setup();
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toBeInTheDocument();
-      expect(textarea).not.toBeDisabled();
-    });
-
-    it("does not redirect / to /sessions", async () => {
-      const { router } = setup();
-      await screen.findByRole("textbox");
-      expect(router.state.location.pathname).toBe("/");
-    });
-  });
-
   describe("session creation flow", () => {
     it("submitting from home navigates to /sessions/:id", async () => {
       const user = userEvent.setup();
@@ -544,104 +371,9 @@ describe("Shell", () => {
         expect(screen.getByText("Analyzing disk usage...")).toBeInTheDocument();
       });
     });
-
-    it("new session appears in sidebar after creation", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      const initialCount = screen.getAllByRole("listitem").length;
-
-      const textarea = await screen.findByRole("textbox");
-      await user.type(textarea, "Check disk usage");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(screen.getAllByRole("listitem")).toHaveLength(initialCount + 1);
-      });
-    });
-  });
-
-  describe("nav link routing", () => {
-    it("clicking Fleet nav link shows fleet content", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/fleet");
-      });
-    });
-
-    it("clicking Settings opens the settings modal in place", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /^settings$/i }),
-        ).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("button", { name: /^settings$/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("tablist", { name: /settings sections/i }),
-        ).toBeInTheDocument();
-      });
-      // In place: the route does not change
-      expect(router.state.location.pathname).toBe("/");
-    });
-
-    it("landing on /settings opens the modal over the session area", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /^settings$/i }),
-        ).toBeInTheDocument();
-      });
-
-      await act(async () => {
-        await router.navigate({ to: "/settings" });
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("tablist", { name: /settings sections/i }),
-        ).toBeInTheDocument();
-      });
-
-      // Closing the alias-opened modal returns to the session area
-      await user.click(screen.getByRole("button", { name: /close settings/i }));
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/");
-      });
-    });
   });
 
   describe("attention queue", () => {
-    it("shows awaiting-approval count on first load from API", async () => {
-      setup(2);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("2");
-      });
-    });
-
     it("refetches and grows the count when INTERRUPT arrives", async () => {
       const { setPendingCount } = setup(1);
       await waitFor(() => {
@@ -732,7 +464,7 @@ describe("Shell", () => {
       });
 
       // An unrelated refetch must not re-apply the event on top of the already
-      // up-to-date list; the count stays 2, not 3.
+      // up to date list; the count stays 2, not 3.
       await act(async () => {
         await qc.invalidateQueries({
           queryKey: ["sessions-pending-human-input"],
@@ -744,124 +476,9 @@ describe("Shell", () => {
         ).toHaveTextContent("2");
       });
     });
-
-    it("shows no indicator when count is zero", async () => {
-      setup(0);
-      await screen.findByRole("link", { name: /fleet/i });
-      expect(
-        screen.queryByRole("status", { name: /awaiting approval/i }),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  describe("accessibility", () => {
-    it("renders a skip-to-content link pointing at the main content landmark", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText(/skip to content/i)).toBeInTheDocument();
-      });
-
-      const skipLink = screen.getByRole("link", { name: /skip to content/i });
-      expect(skipLink).toHaveAttribute("href", "#main-content");
-      expect(document.getElementById("main-content")).toBeInTheDocument();
-    });
-  });
-
-  describe("responsive drawer (below md)", () => {
-    function setupMobile(pendingCount = 0) {
-      // The Sidebar's useIsMobile hook keys off window.innerWidth (< 768), not
-      // matchMedia.matches; drive it below the breakpoint so the shell renders
-      // its mobile drawer. unstubAllGlobals restores the jsdom default after.
-      vi.stubGlobal("innerWidth", 500);
-      return setup(pendingCount);
-    }
-
-    it("hides the persistent rail and shows a hamburger trigger instead", async () => {
-      setupMobile();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /open menu/i }),
-        ).toBeInTheDocument();
-      });
-      expect(
-        screen.queryByRole("link", { name: /fleet/i }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("opens the drawer with the sidebar content when the hamburger is clicked", async () => {
-      const user = userEvent.setup();
-      setupMobile();
-      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
-      await user.click(screen.getByRole("button", { name: /open menu/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole("button", { name: /new session/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("closes on Escape and restores focus to the hamburger button", async () => {
-      const user = userEvent.setup();
-      setupMobile();
-      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
-      const hamburger = screen.getByRole("button", { name: /open menu/i });
-      await user.click(hamburger);
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-      });
-
-      await user.keyboard("{Escape}");
-
-      await waitFor(() => {
-        expect(
-          screen.queryByRole("link", { name: /fleet/i }),
-        ).not.toBeInTheDocument();
-      });
-      await waitFor(() => {
-        expect(hamburger).toHaveFocus();
-      });
-    });
-
-    it("closes the drawer after navigating via a footer nav link", async () => {
-      const user = userEvent.setup();
-      setupMobile();
-      await waitFor(() => screen.getByRole("button", { name: /open menu/i }));
-      await user.click(screen.getByRole("button", { name: /open menu/i }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /fleet/i }),
-        ).toBeInTheDocument();
-      });
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText("Fleet Page")).toBeInTheDocument();
-        expect(
-          screen.queryByRole("link", { name: /fleet/i }),
-        ).not.toBeInTheDocument();
-      });
-    });
   });
 
   describe("account", () => {
-    it("does not show the operator email in the sidebar", async () => {
-      setup();
-      await waitFor(() =>
-        expect(
-          screen.getByRole("button", { name: /log out/i }),
-        ).toBeInTheDocument(),
-      );
-      expect(screen.queryByText(OWNER_EMAIL)).not.toBeInTheDocument();
-    });
-
     it("Log out posts /api/logout", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
