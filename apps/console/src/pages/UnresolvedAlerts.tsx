@@ -8,8 +8,14 @@ import {
   PageHeader,
   PageTitle,
   PageTableWrap,
-  EmptyState,
 } from "@/components/layout/Page";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { ICON_DISPLAY } from "@/lib/iconProps";
 import { Badge } from "@/components/ui/badge";
 import { statusVariant } from "@/lib/statusVariants";
@@ -103,16 +109,19 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
       )}
 
       {isEmpty && (
-        <EmptyState>
-          <BellOff {...ICON_DISPLAY} className="mb-3 text-muted-foreground" />
-          <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
-            No unresolved alerts
-          </h2>
-          <p className="m-0 mb-4 text-sm text-muted-foreground">
-            When an incoming alert cannot be routed to a runner, it appears here
-            with the rejection reason so you can diagnose fleet coverage gaps.
-          </p>
-        </EmptyState>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <BellOff {...ICON_DISPLAY} />
+            </EmptyMedia>
+            <EmptyTitle>No unresolved alerts</EmptyTitle>
+            <EmptyDescription>
+              When an incoming alert cannot be routed to a runner, it appears
+              here with the rejection reason so you can diagnose fleet coverage
+              gaps.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {!isLoading && !isError && alerts && alerts.length > 0 && (

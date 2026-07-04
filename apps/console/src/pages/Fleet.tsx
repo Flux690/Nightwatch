@@ -12,10 +12,17 @@ import {
   PageHeader,
   PageTitle,
   PageTableWrap,
-  EmptyState,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { statusVariant } from "@/lib/statusVariants";
 import { ICON_INLINE, ICON_DISPLAY } from "@/lib/iconProps";
 import {
@@ -239,21 +246,25 @@ export function FleetPage(): React.JSX.Element {
       )}
 
       {isEmpty && (
-        <EmptyState>
-          <Network {...ICON_DISPLAY} className="mb-3 text-muted-foreground" />
-          <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
-            Your fleet is empty
-          </h2>
-          <p className="m-0 mb-4 text-sm text-muted-foreground">
-            Servers you add will appear here with their status, services, and
-            last check-in time so you can monitor your infrastructure at a
-            glance.
-          </p>
-          <Button onClick={() => void navigate({ to: "/fleet/add" })}>
-            <Plus {...ICON_INLINE} />
-            Add your first server
-          </Button>
-        </EmptyState>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Network {...ICON_DISPLAY} />
+            </EmptyMedia>
+            <EmptyTitle>Your fleet is empty</EmptyTitle>
+            <EmptyDescription>
+              Servers you add will appear here with their status, services, and
+              last check-in time so you can monitor your infrastructure at a
+              glance.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={() => void navigate({ to: "/fleet/add" })}>
+              <Plus {...ICON_INLINE} />
+              Add your first server
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
 
       {!isLoading && !isError && connectedRunners.length > 0 && (

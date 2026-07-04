@@ -8,8 +8,14 @@ import {
   PageHeader,
   PageTitle,
   PageTableWrap,
-  EmptyState,
 } from "@/components/layout/Page";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { ICON_DISPLAY } from "@/lib/iconProps";
 import { Badge } from "@/components/ui/badge";
 import { statusVariant } from "@/lib/statusVariants";
@@ -108,20 +114,19 @@ export function AuditLogPage(): React.JSX.Element {
       )}
 
       {isEmpty && (
-        <EmptyState>
-          <ScrollText
-            {...ICON_DISPLAY}
-            className="mb-3 text-muted-foreground"
-          />
-          <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
-            No remediation actions recorded yet
-          </h2>
-          <p className="m-0 mb-4 text-sm text-muted-foreground">
-            When Nightwatch executes, rejects, or fails a remediation action, it
-            appears here so you can audit every decision the system made on your
-            behalf.
-          </p>
-        </EmptyState>
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ScrollText {...ICON_DISPLAY} />
+            </EmptyMedia>
+            <EmptyTitle>No remediation actions recorded yet</EmptyTitle>
+            <EmptyDescription>
+              When Nightwatch executes, rejects, or fails a remediation action,
+              it appears here so you can audit every decision the system made on
+              your behalf.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {!isLoading && !isError && actions && actions.length > 0 && (

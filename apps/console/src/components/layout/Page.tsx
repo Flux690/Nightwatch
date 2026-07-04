@@ -65,21 +65,3 @@ export function PageTableWrap({
     />
   );
 }
-
-/* Two-region left-aligned empty state used across the data screens. */
-export function EmptyState({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
-  return (
-    <div
-      className={cn("flex flex-1 items-center justify-center", className)}
-      {...props}
-    >
-      <div className="flex max-w-[380px] flex-col items-start text-left">
-        {children}
-      </div>
-    </div>
-  );
-}
