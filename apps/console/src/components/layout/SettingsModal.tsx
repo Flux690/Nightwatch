@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
@@ -223,7 +224,7 @@ export function SettingsModal({
     >
       <DialogContent
         showCloseButton={false}
-        className="max-w-page gap-0 overflow-hidden rounded-2xl p-0 shadow-overlay"
+        className="gap-0 overflow-hidden rounded-2xl p-0 shadow-overlay sm:max-w-page"
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
@@ -273,316 +274,322 @@ export function SettingsModal({
               onSubmit={handleSave}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="flex-1 overflow-y-auto p-6">
-                <h3 className="mb-1 text-lg font-semibold tracking-[-0.2px] text-foreground">
-                  {active.label}
-                </h3>
-                <p className="mb-5 text-xs text-muted-foreground">
-                  {active.description}
-                </p>
+              <ScrollArea className="flex-1">
+                <div className="p-6">
+                  <h3 className="mb-1 text-lg font-semibold tracking-[-0.2px] text-foreground">
+                    {active.label}
+                  </h3>
+                  <p className="mb-5 text-xs text-muted-foreground">
+                    {active.description}
+                  </p>
 
-                <TabsContent value="model">
-                  {form && (
-                    <div className="flex flex-col items-start gap-4 [&>*]:w-full">
-                      <Field className="max-w-80">
-                        <FieldLabel htmlFor="settings-provider">
-                          Protocol
-                        </FieldLabel>
-                        <NativeSelect
-                          id="settings-provider"
-                          className="w-full"
-                          value={form.provider}
-                          onChange={(e) =>
-                            setField(
-                              "provider",
-                              e.currentTarget.value as AgentConfig["provider"],
-                            )
-                          }
-                        >
-                          <NativeSelectOption value="anthropic">
-                            Anthropic native
-                          </NativeSelectOption>
-                          <NativeSelectOption value="openai">
-                            OpenAI-compatible
-                          </NativeSelectOption>
-                        </NativeSelect>
-                      </Field>
-
-                      <Field className="max-w-80">
-                        <FieldLabel htmlFor="settings-base-url">
-                          Base URL
-                        </FieldLabel>
-                        <Input
-                          id="settings-base-url"
-                          placeholder={
-                            form.provider === "anthropic"
-                              ? "https://api.anthropic.com"
-                              : "https://api.openai.com/v1"
-                          }
-                          value={form.baseUrl ?? ""}
-                          onChange={(e) =>
-                            setField(
-                              "baseUrl",
-                              e.currentTarget.value || undefined,
-                            )
-                          }
-                        />
-                      </Field>
-
-                      <Field className="max-w-80">
-                        <FieldLabel htmlFor="settings-model">Model</FieldLabel>
-                        <Input
-                          id="settings-model"
-                          list="settings-model-options"
-                          value={form.model}
-                          onChange={(e) =>
-                            setField("model", e.currentTarget.value)
-                          }
-                        />
-                        <datalist id="settings-model-options">
-                          {availableModels.map((m) => (
-                            <option key={m} value={m} />
-                          ))}
-                        </datalist>
-                      </Field>
-
-                      <Field className="max-w-28">
-                        <FieldLabel htmlFor="settings-max-tokens">
-                          Max output tokens
-                        </FieldLabel>
-                        <Input
-                          id="settings-max-tokens"
-                          type="number"
-                          step={1000}
-                          value={form.maxOutputTokens}
-                          onChange={(e) =>
-                            setField(
-                              "maxOutputTokens",
-                              numberValue(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Field>
-
-                      {isAnthropic && (
-                        <>
-                          <Field className="max-w-80">
-                            <FieldLabel htmlFor="settings-thinking">
-                              Thinking mode
-                            </FieldLabel>
-                            <NativeSelect
-                              id="settings-thinking"
-                              className="w-full"
-                              value={form.thinking}
-                              onChange={(e) =>
-                                setField(
-                                  "thinking",
-                                  e.currentTarget
-                                    .value as AgentConfig["thinking"],
-                                )
-                              }
-                            >
-                              <NativeSelectOption value="adaptive">
-                                Adaptive (extended thinking)
-                              </NativeSelectOption>
-                              <NativeSelectOption value="off">
-                                Off
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                          <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                              checked={form.promptCaching ?? true}
-                              onCheckedChange={(checked) =>
-                                setField("promptCaching", checked === true)
-                              }
-                            />
-                            Prompt caching
-                          </label>
-                        </>
-                      )}
-
-                      {!isAnthropic && (
-                        <Field className="max-w-40">
-                          <FieldLabel htmlFor="settings-reasoning">
-                            Reasoning effort
+                  <TabsContent value="model">
+                    {form && (
+                      <div className="flex flex-col items-start gap-4 [&>*]:w-full">
+                        <Field className="max-w-80">
+                          <FieldLabel htmlFor="settings-provider">
+                            Protocol
                           </FieldLabel>
                           <NativeSelect
-                            id="settings-reasoning"
+                            id="settings-provider"
                             className="w-full"
-                            value={form.reasoningEffort ?? ""}
+                            value={form.provider}
                             onChange={(e) =>
                               setField(
-                                "reasoningEffort",
-                                (e.currentTarget.value ||
-                                  null) as ReasoningEffort | null,
+                                "provider",
+                                e.currentTarget
+                                  .value as AgentConfig["provider"],
                               )
                             }
                           >
-                            <NativeSelectOption value="">
-                              Not set
+                            <NativeSelectOption value="anthropic">
+                              Anthropic native
                             </NativeSelectOption>
-                            <NativeSelectOption value="low">
-                              Low
-                            </NativeSelectOption>
-                            <NativeSelectOption value="medium">
-                              Medium
-                            </NativeSelectOption>
-                            <NativeSelectOption value="high">
-                              High
+                            <NativeSelectOption value="openai">
+                              OpenAI-compatible
                             </NativeSelectOption>
                           </NativeSelect>
                         </Field>
-                      )}
-                    </div>
-                  )}
-                </TabsContent>
 
-                <TabsContent value="api-key">
-                  {form && (
-                    <div className="flex flex-col items-start gap-4 [&>*]:w-full">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Current key</p>
-                        <p className="mt-0.5 text-sm">
-                          {form.apiKeyMasked
-                            ? form.apiKeyMasked
-                            : "Not configured"}
-                        </p>
+                        <Field className="max-w-80">
+                          <FieldLabel htmlFor="settings-base-url">
+                            Base URL
+                          </FieldLabel>
+                          <Input
+                            id="settings-base-url"
+                            placeholder={
+                              form.provider === "anthropic"
+                                ? "https://api.anthropic.com"
+                                : "https://api.openai.com/v1"
+                            }
+                            value={form.baseUrl ?? ""}
+                            onChange={(e) =>
+                              setField(
+                                "baseUrl",
+                                e.currentTarget.value || undefined,
+                              )
+                            }
+                          />
+                        </Field>
+
+                        <Field className="max-w-80">
+                          <FieldLabel htmlFor="settings-model">
+                            Model
+                          </FieldLabel>
+                          <Input
+                            id="settings-model"
+                            list="settings-model-options"
+                            value={form.model}
+                            onChange={(e) =>
+                              setField("model", e.currentTarget.value)
+                            }
+                          />
+                          <datalist id="settings-model-options">
+                            {availableModels.map((m) => (
+                              <option key={m} value={m} />
+                            ))}
+                          </datalist>
+                        </Field>
+
+                        <Field className="max-w-28">
+                          <FieldLabel htmlFor="settings-max-tokens">
+                            Max output tokens
+                          </FieldLabel>
+                          <Input
+                            id="settings-max-tokens"
+                            type="number"
+                            step={1000}
+                            value={form.maxOutputTokens}
+                            onChange={(e) =>
+                              setField(
+                                "maxOutputTokens",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+
+                        {isAnthropic && (
+                          <>
+                            <Field className="max-w-80">
+                              <FieldLabel htmlFor="settings-thinking">
+                                Thinking mode
+                              </FieldLabel>
+                              <NativeSelect
+                                id="settings-thinking"
+                                className="w-full"
+                                value={form.thinking}
+                                onChange={(e) =>
+                                  setField(
+                                    "thinking",
+                                    e.currentTarget
+                                      .value as AgentConfig["thinking"],
+                                  )
+                                }
+                              >
+                                <NativeSelectOption value="adaptive">
+                                  Adaptive (extended thinking)
+                                </NativeSelectOption>
+                                <NativeSelectOption value="off">
+                                  Off
+                                </NativeSelectOption>
+                              </NativeSelect>
+                            </Field>
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox
+                                checked={form.promptCaching ?? true}
+                                onCheckedChange={(checked) =>
+                                  setField("promptCaching", checked === true)
+                                }
+                              />
+                              Prompt caching
+                            </label>
+                          </>
+                        )}
+
+                        {!isAnthropic && (
+                          <Field className="max-w-40">
+                            <FieldLabel htmlFor="settings-reasoning">
+                              Reasoning effort
+                            </FieldLabel>
+                            <NativeSelect
+                              id="settings-reasoning"
+                              className="w-full"
+                              value={form.reasoningEffort ?? ""}
+                              onChange={(e) =>
+                                setField(
+                                  "reasoningEffort",
+                                  (e.currentTarget.value ||
+                                    null) as ReasoningEffort | null,
+                                )
+                              }
+                            >
+                              <NativeSelectOption value="">
+                                Not set
+                              </NativeSelectOption>
+                              <NativeSelectOption value="low">
+                                Low
+                              </NativeSelectOption>
+                              <NativeSelectOption value="medium">
+                                Medium
+                              </NativeSelectOption>
+                              <NativeSelectOption value="high">
+                                High
+                              </NativeSelectOption>
+                            </NativeSelect>
+                          </Field>
+                        )}
                       </div>
-                      <Field className="max-w-80">
-                        <FieldLabel htmlFor="settings-api-key">
-                          New API key
-                        </FieldLabel>
-                        <Input
-                          id="settings-api-key"
-                          type="password"
-                          placeholder="Paste API key"
-                          value={newApiKey}
-                          onChange={(e) => {
-                            setNewApiKey(e.currentTarget.value);
-                            setTestResult(null);
-                          }}
-                        />
-                      </Field>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="xs"
-                          variant="secondary"
-                          disabled={testConnection.isPending}
-                          onClick={() => handleTestConnection()}
-                        >
-                          {testConnection.isPending && (
-                            <Spinner className="size-3" />
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="api-key">
+                    {form && (
+                      <div className="flex flex-col items-start gap-4 [&>*]:w-full">
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            Current key
+                          </p>
+                          <p className="mt-0.5 text-sm">
+                            {form.apiKeyMasked
+                              ? form.apiKeyMasked
+                              : "Not configured"}
+                          </p>
+                        </div>
+                        <Field className="max-w-80">
+                          <FieldLabel htmlFor="settings-api-key">
+                            New API key
+                          </FieldLabel>
+                          <Input
+                            id="settings-api-key"
+                            type="password"
+                            placeholder="Paste API key"
+                            value={newApiKey}
+                            onChange={(e) => {
+                              setNewApiKey(e.currentTarget.value);
+                              setTestResult(null);
+                            }}
+                          />
+                        </Field>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="secondary"
+                            disabled={testConnection.isPending}
+                            onClick={() => handleTestConnection()}
+                          >
+                            {testConnection.isPending && (
+                              <Spinner className="size-3" />
+                            )}
+                            Test connection
+                          </Button>
+                          {testResult?.ok && (
+                            <Badge variant="success">Connected</Badge>
                           )}
-                          Test connection
-                        </Button>
-                        {testResult?.ok && (
-                          <Badge variant="success">
-                            Connected
-                          </Badge>
-                        )}
-                        {testResult && !testResult.ok && (
-                          <Badge variant="destructive">
-                            {ERROR_LABELS[testResult.error] ?? testResult.error}
-                          </Badge>
-                        )}
+                          {testResult && !testResult.ok && (
+                            <Badge variant="destructive">
+                              {ERROR_LABELS[testResult.error] ??
+                                testResult.error}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="loop">
+                    {form && (
+                      <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
+                        <Field>
+                          <FieldLabel htmlFor="settings-max-retries">
+                            Max retries
+                          </FieldLabel>
+                          <Input
+                            id="settings-max-retries"
+                            type="number"
+                            step={1}
+                            value={form.maxRetries}
+                            onChange={(e) =>
+                              setField(
+                                "maxRetries",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-request-timeout">
+                            Request timeout (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-request-timeout"
+                            type="number"
+                            step={1000}
+                            value={form.requestTimeoutMs}
+                            onChange={(e) =>
+                              setField(
+                                "requestTimeoutMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-hard-timeout">
+                            Hard timeout (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-hard-timeout"
+                            type="number"
+                            step={1000}
+                            value={form.hardTimeoutMs}
+                            onChange={(e) =>
+                              setField(
+                                "hardTimeoutMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-tool-timeout">
+                            Tool timeout (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-tool-timeout"
+                            type="number"
+                            step={1000}
+                            value={form.toolTimeoutMs}
+                            onChange={(e) =>
+                              setField(
+                                "toolTimeoutMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="alerting">
+                    <IngestCredentialSection />
+                  </TabsContent>
+
+                  <TabsContent value="account">
+                    <div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => void logoutAll()}
+                      >
+                        Log out all devices
+                      </Button>
                     </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="loop">
-                  {form && (
-                    <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
-                      <Field>
-                        <FieldLabel htmlFor="settings-max-retries">
-                          Max retries
-                        </FieldLabel>
-                        <Input
-                          id="settings-max-retries"
-                          type="number"
-                          step={1}
-                          value={form.maxRetries}
-                          onChange={(e) =>
-                            setField(
-                              "maxRetries",
-                              numberValue(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="settings-request-timeout">
-                          Request timeout (ms)
-                        </FieldLabel>
-                        <Input
-                          id="settings-request-timeout"
-                          type="number"
-                          step={1000}
-                          value={form.requestTimeoutMs}
-                          onChange={(e) =>
-                            setField(
-                              "requestTimeoutMs",
-                              numberValue(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="settings-hard-timeout">
-                          Hard timeout (ms)
-                        </FieldLabel>
-                        <Input
-                          id="settings-hard-timeout"
-                          type="number"
-                          step={1000}
-                          value={form.hardTimeoutMs}
-                          onChange={(e) =>
-                            setField(
-                              "hardTimeoutMs",
-                              numberValue(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="settings-tool-timeout">
-                          Tool timeout (ms)
-                        </FieldLabel>
-                        <Input
-                          id="settings-tool-timeout"
-                          type="number"
-                          step={1000}
-                          value={form.toolTimeoutMs}
-                          onChange={(e) =>
-                            setField(
-                              "toolTimeoutMs",
-                              numberValue(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Field>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="alerting">
-                  <IngestCredentialSection />
-                </TabsContent>
-
-                <TabsContent value="account">
-                  <div>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => void logoutAll()}
-                    >
-                      Log out all devices
-                    </Button>
-                  </div>
-                </TabsContent>
-              </div>
+                  </TabsContent>
+                </div>
+              </ScrollArea>
 
               <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-3">
                 <Button type="submit" disabled={!dirty || saveConfig.isPending}>

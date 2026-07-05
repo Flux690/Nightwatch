@@ -113,39 +113,39 @@ export function UnresolvedAlertsPage(): React.JSX.Element {
                 const severityView = statusVariant("alert", alert.severity);
                 return (
                   <TableRow key={`${alert.sourceAlertId}-${i}`}>
-                  <TableCell className="font-mono tabular-nums">
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={alert.alertType}
-                    >
-                      {alert.alertType}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums">
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={alert.identityKey}
-                    >
-                      {alert.identityKey}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={severityView.variant} dot>
-                      {severityView.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={alert.rejectionReason}
-                    >
-                      {alert.rejectionReason}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums text-right">
-                    {timeAgo(alert.createdAt)}
-                  </TableCell>
-                </TableRow>
+                    <TableCell className="font-mono tabular-nums">
+                      <span
+                        className="block max-w-60 truncate"
+                        title={alert.alertType}
+                      >
+                        {alert.alertType}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums">
+                      <span
+                        className="block max-w-60 truncate"
+                        title={alert.identityKey}
+                      >
+                        {alert.identityKey}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={severityView.variant} dot>
+                        {severityView.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className="block max-w-60 truncate"
+                        title={alert.rejectionReason}
+                      >
+                        {alert.rejectionReason}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums text-right">
+                      {timeAgo(alert.createdAt)}
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>

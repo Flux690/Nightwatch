@@ -244,7 +244,7 @@ export function AddServerPage(): React.JSX.Element {
             />
             {serverNameError && (
               <FieldError>
-                <AlertCircle size={12} aria-hidden="true" />
+                <AlertCircle {...ICON_INLINE} />
                 {serverNameError}
               </FieldError>
             )}
@@ -277,7 +277,7 @@ export function AddServerPage(): React.JSX.Element {
 
           {installError !== null && (
             <FieldError>
-              <AlertCircle size={12} aria-hidden="true" />
+              <AlertCircle {...ICON_INLINE} />
               {installError}
             </FieldError>
           )}
@@ -307,7 +307,7 @@ export function AddServerPage(): React.JSX.Element {
 
           {installError !== null && (
             <FieldError>
-              <AlertCircle size={12} aria-hidden="true" />
+              <AlertCircle {...ICON_INLINE} />
               {installError}
             </FieldError>
           )}
@@ -349,9 +349,7 @@ export function AddServerPage(): React.JSX.Element {
 
               <div className="flex items-center gap-2">
                 {connectedRunner ? (
-                  <Badge variant="success">
-                    Runner connected
-                  </Badge>
+                  <Badge variant="success">Runner connected</Badge>
                 ) : (
                   <div className="flex items-center gap-2">
                     <Spinner />
@@ -365,7 +363,7 @@ export function AddServerPage(): React.JSX.Element {
           )}
 
           <WizardActions>
-            <Button variant="ghost" onClick={() => setStep(0)}>
+            <Button variant="outline" onClick={() => setStep(0)}>
               Back
             </Button>
             <Button disabled={!connectedRunner} onClick={() => setStep(2)}>
@@ -409,7 +407,7 @@ export function AddServerPage(): React.JSX.Element {
           )}
 
           <WizardActions>
-            <Button variant="ghost" onClick={() => setStep(1)}>
+            <Button variant="outline" onClick={() => setStep(1)}>
               Back
             </Button>
             <Button

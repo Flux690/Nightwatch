@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -18,7 +19,11 @@ import { ContinueCardPanel } from "./ContinueCardPanel.js";
 
 function UserTurn({ text }: { text: string }): React.JSX.Element {
   return (
-    <Message align="end" data-testid="user-turn">
+    <Message
+      align="end"
+      className="animate-in fade-in duration-300"
+      data-testid="user-turn"
+    >
       <Bubble variant="secondary">
         <BubbleContent className="text-base whitespace-pre-wrap">
           {text}
@@ -30,28 +35,58 @@ function UserTurn({ text }: { text: string }): React.JSX.Element {
 
 function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
-    <div className="prose prose-sm prose-nightwatch max-w-none">
+    <div className="animate-in fade-in duration-300 prose prose-nightwatch max-w-none">
       <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
     </div>
   );
 }
 
 function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
+  const [open, setOpen] = useState(item.streaming);
+  const prevStreaming = useRef(item.streaming);
+
+  useEffect(() => {
+    if (prevStreaming.current && !item.streaming) {
+      const timer = setTimeout(() => setOpen(false), 800);
+      prevStreaming.current = item.streaming;
+      return () => clearTimeout(timer);
+    }
+    if (!prevStreaming.current && item.streaming) {
+      setOpen(true);
+    }
+    prevStreaming.current = item.streaming;
+  }, [item.streaming]);
+
+  const trimmed = item.text.trim();
+
   return (
-    <div data-testid="thinking-block" data-streaming={item.streaming}>
-      <Collapsible>
-        <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
-          <span className={item.streaming ? "animate-pulse" : undefined}>
-            Thinking
-          </span>
-          <ChevronRight className="size-3.5 shrink-0 transition-transform group-aria-expanded:rotate-90" />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {item.text}
-          </p>
-        </CollapsibleContent>
-      </Collapsible>
+    <div
+      className="animate-in fade-in duration-300"
+      data-testid="thinking-block"
+      data-streaming={item.streaming}
+    >
+      {!trimmed && item.streaming ? (
+        <span className="text-sm text-muted-foreground animate-pulse">
+          Thinking
+        </span>
+      ) : (
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
+            <span className={item.streaming ? "animate-pulse" : undefined}>
+              Thinking
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
+              {trimmed}
+            </p>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }

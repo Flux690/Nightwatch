@@ -1,9 +1,5 @@
 import { useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useRouterState,
-} from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   AlertCircle,
   Plus,
@@ -34,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
+import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
@@ -248,8 +245,10 @@ function ShellContent({
           <span className="text-sm font-semibold">Nightwatch</span>
         </header>
         <div
-          className="flex min-h-0 flex-1 flex-col"
-          style={{ overflow: isSessionArea ? "hidden" : "auto" }}
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            isSessionArea ? "overflow-hidden" : "overflow-auto",
+          )}
         >
           {children}
         </div>

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ICON_INLINE } from "@/lib/iconProps";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -19,11 +20,7 @@ function ValidationError({ message }: { message: string }): React.JSX.Element {
     >
       {message && (
         <>
-          <AlertCircle
-            size={14}
-            className="mt-px shrink-0"
-            aria-hidden="true"
-          />
+          <AlertCircle {...ICON_INLINE} className="mt-px shrink-0" />
           <span>{message}</span>
         </>
       )}
@@ -81,7 +78,7 @@ function SetupForm(): React.JSX.Element {
   }
 
   return (
-    <form className="w-[360px]" onSubmit={(e) => void handleSubmit(e)}>
+    <form className="w-90" onSubmit={(e) => void handleSubmit(e)}>
       <fieldset className="m-0 border-0 p-0">
         <legend className="mb-6 p-0 text-2xl font-semibold tracking-[-0.3px] text-foreground">
           Create your account
@@ -134,7 +131,7 @@ function SetupForm(): React.JSX.Element {
           </div>
         </div>
         <div className="mt-6 flex justify-start">
-          <Button type="submit" className="min-w-[148px]" disabled={submitting}>
+          <Button type="submit" className="px-6" disabled={submitting}>
             {submitting && <Spinner className="size-4" />}
             Create account
           </Button>
@@ -163,7 +160,7 @@ function LoginForm(): React.JSX.Element {
   }
 
   return (
-    <form className="w-[360px]" onSubmit={(e) => void handleSubmit(e)}>
+    <form className="w-90" onSubmit={(e) => void handleSubmit(e)}>
       <fieldset className="m-0 border-0 p-0">
         <legend className="mb-6 p-0 text-2xl font-semibold tracking-[-0.3px] text-foreground">
           Log in
@@ -196,7 +193,7 @@ function LoginForm(): React.JSX.Element {
           </Field>
         </div>
         <div className="mt-6 flex justify-start">
-          <Button type="submit" className="min-w-[148px]" disabled={submitting}>
+          <Button type="submit" className="px-6" disabled={submitting}>
             {submitting && <Spinner className="size-4" />}
             Log in
           </Button>

@@ -18,6 +18,7 @@ export interface ChatInputProps {
   isRunning: boolean;
   disabled?: boolean;
   onSessionCreated?: (sessionId: string, firstMessage: string) => void;
+  onSend?: (text: string) => void;
 }
 
 export function ChatInput({
@@ -25,6 +26,7 @@ export function ChatInput({
   isRunning,
   disabled,
   onSessionCreated,
+  onSend,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,8 +86,9 @@ export function ChatInput({
   const handleSubmit = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || isRunning || disabled || submit.isPending) return;
+    onSend?.(trimmed);
     submit.mutate(trimmed);
-  }, [text, isRunning, disabled, submit]);
+  }, [text, isRunning, disabled, submit, onSend]);
 
   const canSend =
     text.trim().length > 0 && !isRunning && !disabled && !submit.isPending;

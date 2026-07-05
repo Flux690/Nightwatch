@@ -16,6 +16,7 @@ import {
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerButton,
+  useMessageScroller,
 } from "@/components/ui/message-scroller";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
@@ -98,6 +99,25 @@ function displayNameFromEmail(email: string): string {
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
+function ScrollToEndChatInput(
+  props: React.ComponentProps<typeof ChatInput>,
+): React.JSX.Element {
+  const { scrollToEnd } = useMessageScroller();
+  const originalOnSend = props.onSend;
+
+  const handleSend = useCallback(
+    (text: string) => {
+      originalOnSend?.(text);
+      requestAnimationFrame(() => {
+        scrollToEnd({ behavior: "smooth" });
+      });
+    },
+    [originalOnSend, scrollToEnd],
+  );
+
+  return <ChatInput {...props} onSend={handleSend} />;
+}
+
 function TranscriptColumn({
   persistedMessages,
   liveItems,
@@ -125,7 +145,6 @@ function TranscriptColumn({
       {allItems.map((item, index) => (
         <MessageScrollerItem
           key={itemKey(item)}
-          scrollAnchor={index === allItems.length - 1}
           className={
             index === 0
               ? "mt-0"
@@ -347,19 +366,30 @@ export function SessionView({
 
   useConsoleWs(handleEnvelope);
 
+  const handleSend = useCallback((text: string) => {
+    setLiveItems((prev) => [
+      ...prev,
+      { kind: "user_turn", id: `optimistic-user-${Date.now()}`, text },
+      {
+        kind: "thinking",
+        id: `optimistic-thinking-${Date.now()}`,
+        text: "",
+        streaming: true,
+      },
+    ]);
+  }, []);
+
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
   if (!activeSessionId) {
     return (
-      <div className="flex h-full flex-1 flex-col items-center">
-        <div className="flex flex-1 flex-col justify-center pb-[10vh]">
-          <h1 className="m-0 mb-1.5 text-center text-3xl font-semibold tracking-[-0.4px] text-foreground">
-            Hello, {displayName}
-          </h1>
-          <p className="m-0 mb-4 text-center text-sm text-muted-foreground">
-            Start an investigation or ask about your fleet.
-          </p>
-        </div>
+      <div className="flex h-full flex-1 flex-col items-center justify-center">
+        <h1 className="m-0 mb-1.5 text-center text-3xl font-semibold tracking-[-0.4px] text-foreground">
+          Hello, {displayName}
+        </h1>
+        <p className="m-0 mb-6 text-center text-base text-muted-foreground">
+          Start an investigation or ask about your fleet.
+        </p>
         <div className="w-full">
           <ChatInput
             sessionId={null}
@@ -377,8 +407,8 @@ export function SessionView({
   const composerDisabled = pendingInterrupt?.kind === "continue";
 
   return (
-    <div className="flex h-full flex-col">
-      <MessageScrollerProvider>
+    <MessageScrollerProvider defaultScrollPosition="end">
+      <div className="flex h-full flex-col">
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <TranscriptColumn
@@ -390,15 +420,16 @@ export function SessionView({
           </MessageScrollerViewport>
           <MessageScrollerButton direction="end" />
         </MessageScroller>
-      </MessageScrollerProvider>
 
-      {!composerHidden && (
-        <ChatInput
-          sessionId={activeSessionId}
-          isRunning={isRunning}
-          disabled={composerDisabled}
-        />
-      )}
-    </div>
+        {!composerHidden && (
+          <ScrollToEndChatInput
+            sessionId={activeSessionId}
+            isRunning={isRunning}
+            disabled={composerDisabled}
+            onSend={handleSend}
+          />
+        )}
+      </div>
+    </MessageScrollerProvider>
   );
 }

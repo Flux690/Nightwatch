@@ -1,5 +1,5 @@
 /* Nightwatch Console — Tailwind v4 + shadcn (base-nova).
-   Canonical structure: imports → @theme inline → :root → @layer base.
+   Single @theme block with direct values. No :root indirection.
    Token philosophy: single accent (cobalt), surface ladder, ink hierarchy,
    explicit state tokens — no opacity divisors anywhere. */
 
@@ -8,90 +8,75 @@
 @import "shadcn/tailwind.css";
 @plugin "@tailwindcss/typography";
 
-/* ── Tailwind namespace registration ───────────────────────────────────────
-   Maps :root custom properties to --color-* / --shadow-* / etc. so Tailwind
-   generates the matching utility classes. Uses `inline` so utilities resolve
-   to the var() value, not the theme variable itself. */
-
-@theme inline {
+@theme {
   /* Fonts */
-  --font-sans: var(--font-family-sans);
-  --font-mono: var(--font-family-mono);
+  --font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", Menlo,
+    Consolas, monospace;
 
-  /* Surfaces → shadcn expected names */
-  --color-background: var(--canvas);
-  --color-foreground: var(--ink);
-  --color-card: var(--card);
-  --color-card-foreground: var(--ink);
-  --color-popover: var(--card);
-  --color-popover-foreground: var(--ink);
-  --color-secondary: var(--surface-1);
-  --color-secondary-foreground: var(--ink);
-  --color-secondary-hover: var(--surface-2);
-  --color-muted: var(--surface-1);
-  --color-muted-foreground: var(--ink-muted);
-  --color-muted-hover: var(--surface-2);
-  --color-accent: var(--surface-2);
-  --color-accent-foreground: var(--ink);
+  /* Surfaces */
+  --color-background: #f6f9fc;
+  --color-foreground: #0d253d;
+  --color-card: #ffffff;
+  --color-card-foreground: #0d253d;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0d253d;
+  --color-secondary: #edf1f6;
+  --color-secondary-foreground: #0d253d;
+  --color-secondary-hover: #e3eaf1;
+  --color-muted: #edf1f6;
+  --color-muted-foreground: #56677f;
+  --color-muted-hover: #e3eaf1;
+  --color-surface: #edf1f6;
+  --color-surface-hover: #e3eaf1;
+  --color-surface-active: #d8e1ea;
+  --color-ink-subtle: #8a99ad;
 
-  /* Nightwatch surface ladder (custom tokens) */
-  --color-canvas: var(--canvas);
-  --color-surface: var(--surface-1);
-  --color-surface-hover: var(--surface-2);
-  --color-surface-active: var(--surface-3);
+  /* Primary (cobalt) */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-press: #1e40af;
+  --color-primary-foreground: #ffffff;
+  --color-ring: #2563eb;
 
-  /* Nightwatch ink extras */
-  --color-ink-subtle: var(--ink-subtle);
-
-  /* Primary = accent (single chromatic: cobalt) */
-  --color-primary: var(--accent-color);
-  --color-primary-hover: var(--accent-hover);
-  --color-primary-press: var(--accent-press);
-  --color-primary-foreground: var(--on-accent);
-
-  /* Ring = accent (same hue) */
-  --color-ring: var(--accent-color);
-
-  /* Accent tint (very subtle accent bg for checked fields etc.) */
-  --color-accent-tint: var(--accent-tint);
-  --color-accent-wash: var(--accent-wash);
+  /* Accent tint */
+  --color-accent-tint: #eff6ff;
+  --color-accent-wash: #bfdbfe;
 
   /* Borders */
-  --color-border: var(--hairline);
-  --color-border-strong: var(--hairline-strong);
-  --color-input: var(--hairline-input);
+  --color-border: #e3e8ee;
+  --color-border-strong: #6e859e;
+  --color-input: #b9c6d3;
 
   /* Semantic status */
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-destructive: var(--destructive);
-  --color-success-tint: var(--success-tint);
-  --color-warning-tint: var(--warning-tint);
-  --color-destructive-tint: var(--destructive-tint);
-  --color-destructive-wash: var(--destructive-wash);
+  --color-success: #00552a;
+  --color-warning: #684000;
+  --color-destructive: #7a0e0e;
+  --color-success-tint: color-mix(in srgb, #00552a 11%, #ffffff);
+  --color-warning-tint: color-mix(in srgb, #684000 11%, #ffffff);
+  --color-destructive-tint: color-mix(in srgb, #7a0e0e 11%, #ffffff);
+  --color-destructive-wash: color-mix(in srgb, #7a0e0e 20%, #ffffff);
 
   /* Sidebar */
-  --color-sidebar: var(--surface-1);
-  --color-sidebar-foreground: var(--ink-muted);
-  --color-sidebar-accent: var(--surface-2);
-  --color-sidebar-accent-foreground: var(--ink);
-  --color-sidebar-border: var(--hairline);
+  --color-sidebar: #edf1f6;
+  --color-sidebar-foreground: #56677f;
+  --color-sidebar-accent: #e3eaf1;
+  --color-sidebar-accent-foreground: #0d253d;
+  --color-sidebar-border: #e3e8ee;
 
   /* Scrim */
-  --color-scrim: var(--scrim);
+  --color-scrim: rgba(13, 37, 61, 0.4);
 
-  /* Radius scale (shadcn convention: derive from --radius) */
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-}
+  /* Radius */
+  --radius: 0.5rem;
+  --radius-sm: 0.3rem;
+  --radius-md: 0.4rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.7rem;
+  --radius-2xl: 0.9rem;
 
-/* Non-inline theme: direct values that don't reference other vars.
-   Tailwind needs these outside `inline` to generate correct utilities. */
-@theme {
-  /* Type scale (line-height pairs) */
+  /* Type scale */
   --text-xs: 0.75rem;
   --text-xs--line-height: calc(16 / 12);
   --text-sm: 0.875rem;
@@ -107,15 +92,11 @@
   --text-3xl: 1.75rem;
   --text-3xl--line-height: calc(34 / 28);
 
-  /* Radius base */
-  --radius: 0.5rem;
-
   /* Containers */
   --container-page: 920px;
   --container-chat: 760px;
 
   /* Shadows */
-  --shadow-card: rgba(13, 37, 61, 0.08) 0 1px 3px;
   --shadow-overlay:
     rgba(13, 37, 61, 0.08) 0 8px 24px, rgba(13, 37, 61, 0.04) 0 2px 6px;
   --shadow-raised:
@@ -127,59 +108,6 @@
   --duration-base: 180ms;
   --duration-slow: 240ms;
 }
-
-/* ── Design token values ───────────────────────────────────────────────────
-   Raw values live here. No --color- prefix — that's the Tailwind namespace
-   above. Hex literals are pinned by tests/design-tokens.test.ts. */
-
-:root {
-  /* Font families */
-  --font-family-sans:
-    "IBM Plex Sans", Inter, ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-family-mono:
-    "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", Menlo, Consolas,
-    monospace;
-
-  /* Surface ladder */
-  --canvas: #f6f9fc;
-  --card: #ffffff;
-  --surface-1: #edf1f6;
-  --surface-2: #e3eaf1;
-  --surface-3: #d8e1ea;
-
-  /* Ink hierarchy */
-  --ink: #0d253d;
-  --ink-muted: #56677f;
-  --ink-subtle: #8a99ad;
-  --on-accent: #ffffff;
-
-  /* Hairline borders */
-  --hairline: #e3e8ee;
-  --hairline-strong: #6e859e;
-  --hairline-input: #b9c6d3;
-
-  /* Accent — single chromatic (cobalt) */
-  --accent-color: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-press: #1e40af;
-  --accent-wash: #bfdbfe;
-  --accent-tint: #eff6ff;
-
-  /* Semantic status */
-  --success: #00552a;
-  --warning: #684000;
-  --destructive: #7a0e0e;
-  --success-tint: color-mix(in srgb, #00552a 11%, #ffffff);
-  --warning-tint: color-mix(in srgb, #684000 11%, #ffffff);
-  --destructive-tint: color-mix(in srgb, #7a0e0e 11%, #ffffff);
-  --destructive-wash: color-mix(in srgb, #7a0e0e 20%, #ffffff);
-
-  /* Scrim */
-  --scrim: rgba(13, 37, 61, 0.4);
-}
-
-/* ── Prose theme for agent markdown ────────────────────────────────────── */
 
 @utility prose-nightwatch {
   --tw-prose-body: var(--color-foreground);
@@ -200,24 +128,19 @@
   --tw-prose-td-borders: var(--color-border);
 }
 
-/* ── Focus ring — single universal treatment for every focusable element,
-   shadcn primitive or plain, no exceptions. Kept unlayered (not inside
-   @layer base) so it deterministically overrides any Tailwind utility,
-   including a stray outline-none, regardless of specificity. ───────────── */
+/* Focus fallback for interactive elements without data-slot (e.g. Fleet's
+   sortable column headers, plain <Link>s). Primitives with data-slot handle
+   their own focus via focus-visible:border-ring on the element itself. */
 
-:focus-visible {
+:focus-visible:not([data-slot]) {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
 
-/* ── Selection ─────────────────────────────────────────────────────────── */
-
 ::selection {
-  background: var(--accent-wash);
+  background: var(--color-accent-wash);
   color: var(--color-foreground);
 }
-
-/* ── Base layer (shadcn canonical) ─────────────────────────────────────── */
 
 @layer base {
   * {
@@ -235,9 +158,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
-    font-size: var(--text-sm);
-    line-height: var(--text-sm--line-height);
+    @apply bg-background text-foreground text-sm;
     color-scheme: light;
     margin: 0;
   }

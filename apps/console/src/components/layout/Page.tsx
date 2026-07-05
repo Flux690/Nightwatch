@@ -23,7 +23,7 @@ export function SkeletonRows({
         <TableRow key={i}>
           {Array.from({ length: columns }, (_, j) => (
             <TableCell key={j}>
-              <Skeleton className="h-3.5 w-[120px]" />
+              <Skeleton className="h-3.5 w-30" />
             </TableCell>
           ))}
         </TableRow>
@@ -89,10 +89,5 @@ export function PageTableWrap({
   className,
   ...props
 }: React.ComponentProps<typeof Card>): React.JSX.Element {
-  return (
-    <Card
-      className={cn("overflow-x-auto py-0", className)}
-      {...props}
-    />
-  );
+  return <Card className={cn("overflow-x-auto py-0", className)} {...props} />;
 }

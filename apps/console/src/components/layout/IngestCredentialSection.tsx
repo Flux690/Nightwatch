@@ -74,9 +74,7 @@ export function IngestCredentialSection(): React.JSX.Element {
       <div className="flex items-center gap-2">
         <p className="text-sm font-medium">Ingest credential</p>
         {ingestCredential?.configured ? (
-          <Badge variant="success">
-            Configured
-          </Badge>
+          <Badge variant="success">Configured</Badge>
         ) : (
           <Badge variant="secondary">Not configured</Badge>
         )}
@@ -96,7 +94,7 @@ export function IngestCredentialSection(): React.JSX.Element {
         {ingestCredential?.configured && (
           <Button
             size="xs"
-            variant="ghost"
+            variant="secondary"
             disabled={revealing || generating}
             onClick={() => void handleReveal()}
           >

@@ -14,7 +14,7 @@ export function WizardStepper({
 }): React.JSX.Element {
   return (
     <div className="mb-8">
-      <div className="mb-1 text-xs font-medium uppercase tracking-[0.06em] text-ink-subtle">
+      <div className="mb-1 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
         Step {step + 1} of {total}
       </div>
       <div className="mb-4 text-lg font-semibold tracking-[-0.2px] text-foreground">
@@ -33,7 +33,7 @@ export function WizardStepper({
             key={i}
             data-done={i <= step || undefined}
             className={cn(
-              "h-[3px] flex-1 rounded-full transition-colors duration-[180ms] ease-out",
+              "h-[3px] flex-1 rounded-full transition-colors duration-base ease-out",
               i <= step ? "bg-primary" : "bg-border",
             )}
           />

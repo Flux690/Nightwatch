@@ -112,9 +112,9 @@ function SortableHeader({
         {active && (
           <span className="text-xs" aria-hidden="true">
             {activeDir === "asc" ? (
-              <ChevronUp size={12} strokeWidth={2} />
+              <ChevronUp {...ICON_INLINE} />
             ) : (
-              <ChevronDown size={12} strokeWidth={2} />
+              <ChevronDown {...ICON_INLINE} />
             )}
           </span>
         )}
@@ -295,14 +295,14 @@ export function FleetPage(): React.JSX.Element {
                   >
                     <TableCell>
                       <span
-                        className="block max-w-[240px] truncate"
+                        className="block max-w-60 truncate"
                         title={runner.hostname ?? undefined}
                       >
                         {runner.hostname}
                       </span>
                       {services.length > 0 && (
                         <span
-                          className="mt-0.5 block max-w-[240px] truncate font-mono text-xs text-muted-foreground"
+                          className="mt-0.5 block max-w-60 truncate font-mono text-xs text-muted-foreground"
                           title={services
                             .map((s) => serviceIdentityKey(s.identity))
                             .join(", ")}
@@ -326,7 +326,7 @@ export function FleetPage(): React.JSX.Element {
                     </TableCell>
                     <TableCell>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="xs"
                         disabled={removing === runner.token}
                         aria-label={`Remove server ${runner.hostname ?? runner.id}`}

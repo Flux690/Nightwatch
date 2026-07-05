@@ -113,50 +113,47 @@ export function AuditLogPage(): React.JSX.Element {
             </TableHeader>
             <TableBody>
               {actions.map((action) => {
-                const statusView = statusVariant(
-                  "remediation",
-                  action.status,
-                );
+                const statusView = statusVariant("remediation", action.status);
                 return (
                   <TableRow key={`${action.sessionId}/${action.toolUseId}`}>
-                  <TableCell className="font-mono tabular-nums">
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={action.toolName}
-                    >
-                      {action.toolName}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums">
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={action.serviceIdentityKey ?? "unknown service"}
-                    >
-                      {action.serviceIdentityKey ?? "unknown service"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={statusView.variant} dot>
-                      {statusView.label}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className="block max-w-[240px] truncate"
-                      title={action.resolvedBy ?? "unknown"}
-                    >
-                      {action.resolvedBy ?? "unknown"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums text-right">
-                    {timeAgo(action.createdAt)}
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums text-right">
-                    {action.status === "executing"
-                      ? "in progress"
-                      : timeAgo(action.resolvedAt)}
-                  </TableCell>
-                </TableRow>
+                    <TableCell className="font-mono tabular-nums">
+                      <span
+                        className="block max-w-60 truncate"
+                        title={action.toolName}
+                      >
+                        {action.toolName}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums">
+                      <span
+                        className="block max-w-60 truncate"
+                        title={action.serviceIdentityKey ?? "unknown service"}
+                      >
+                        {action.serviceIdentityKey ?? "unknown service"}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusView.variant} dot>
+                        {statusView.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className="block max-w-60 truncate"
+                        title={action.resolvedBy ?? "unknown"}
+                      >
+                        {action.resolvedBy ?? "unknown"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums text-right">
+                      {timeAgo(action.createdAt)}
+                    </TableCell>
+                    <TableCell className="font-mono tabular-nums text-right">
+                      {action.status === "executing"
+                        ? "in progress"
+                        : timeAgo(action.resolvedAt)}
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>
