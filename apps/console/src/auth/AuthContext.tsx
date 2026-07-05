@@ -61,10 +61,17 @@ export function AuthProvider({
 
   useEffect(() => {
     fetch("/api/auth/status")
-      .then((res) => res.json())
-      // The auth/status route is a project-controlled contract; its shape is
-      // AuthStatusResponse on every 2xx reply.
-      .then((data: AuthStatusResponse) => setPhase(phaseFromStatus(data)));
+      .then((res) => {
+        if (!res.ok) throw new Error(`auth status ${res.status}`);
+        // The auth/status route is a project-controlled contract; its shape is
+        // AuthStatusResponse on every 2xx reply.
+        return res.json() as Promise<AuthStatusResponse>;
+      })
+      .then((data) => setPhase(phaseFromStatus(data)))
+      // A failed/unreachable status check must not leave the app stuck on the
+      // loading screen forever; fall back to the login page (reachable, and it
+      // surfaces its own error if the API is genuinely down).
+      .catch(() => setPhase({ kind: "needs-login" }));
   }, []);
 
   useEffect(

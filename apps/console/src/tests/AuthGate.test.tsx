@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -11,9 +11,8 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
+import { AuthProvider } from "@/auth/AuthContext";
 import { AuthGate } from "../auth/AuthGate.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 class MockWs {
   static OPEN = 1;
@@ -82,17 +81,13 @@ function setup(statusResponse: object) {
   const router = makeRouter();
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
           <RouterProvider router={router} />
         </AuthProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </TestProviders>,
   );
 
   return { router, fetchMock };
@@ -113,9 +108,7 @@ describe("AuthGate", () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: /runners/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
     });
     expect(router.state.location.pathname).toBe("/");
   });
@@ -138,7 +131,7 @@ describe("AuthGate", () => {
     expect(screen.getByText("LOGIN")).toBeInTheDocument();
   });
 
-  it("renders nothing while the status fetch is pending so there is no flash", () => {
+  it("shows a loader (not the shell or login) while the status fetch is pending", async () => {
     vi.stubGlobal("WebSocket", MockWs);
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
 
@@ -148,22 +141,22 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </TestProviders>,
     );
 
+    // A spinner during the check, but never the protected shell or a login flash.
+    expect(
+      await screen.findByRole("status", { name: /checking sign-in/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("LOGIN")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /runners/i }),
+      screen.queryByRole("link", { name: /fleet/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -206,23 +199,17 @@ describe("AuthGate", () => {
     const router = makeRouter();
 
     render(
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="light"
-      >
+      <TestProviders>
         <QueryClientProvider client={qc}>
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
         </QueryClientProvider>
-      </MantineProvider>,
+      </TestProviders>,
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("link", { name: /runners/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
     });
 
     await fetch("/trigger-401");

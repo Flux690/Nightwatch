@@ -23,7 +23,11 @@ function makeAlert(
   return {
     sourceAlertId,
     runnerId,
-    targetIdentifier: "web-01",
+    targetIdentifier: {
+      provider: "docker",
+      project: "web-01",
+      service: "web-01",
+    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),
@@ -41,10 +45,9 @@ function alertInput(
   };
 }
 
-// Fakes the durable session->alert lookup (the real one is
-// `getSession(id)?.originatingAlert ?? null`). Tests register a session's alert
-// here the same way `createSession` would have persisted it, so a resumed
-// dispatch (no `input.alert`) still resolves correctly via the lookup fallback.
+// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert). Tests
+// register a session's alert here as createSession would have, so a resumed dispatch (no
+// input.alert) still resolves via the fallback.
 function fakeAlertLookup(): {
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
   register: (sessionId: string, alert: NormalizedAlert) => void;

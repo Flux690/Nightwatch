@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { getLoginVersion } from "../config/store.js";
+import { getLoginVersion } from "../db/user.js";
 
 const AUTH_COOKIE = "nw_auth";
 const SESSION_LIFETIME_S = 7 * 24 * 60 * 60;
@@ -41,9 +41,8 @@ function extractCookieValue(header: string | undefined): string | undefined {
   return undefined;
 }
 
-// Verifies the nw_auth cookie (signature, expiry, and loginVersion against the
-// stored value) without writing a reply. The returned loginVersion is read
-// exactly once per call so a concurrent epoch bump can't be validated against
+// Verifies the nw_auth cookie (signature, expiry, loginVersion) without replying.
+// loginVersion is read once per call so a concurrent epoch bump can't be validated against
 // one value and reissued under another.
 async function verifySessionCookie(
   cookieHeaderValue: string | undefined,

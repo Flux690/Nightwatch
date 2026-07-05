@@ -1,38 +1,24 @@
-# Architecture Invariants
+# Architecture notes
 
-These rules encode structural decisions that span all phases (see CONTEXT.md
-"Decisions"). They do not change as features are added — they are the
-load-bearing walls of the system.
+Current structural facts worth knowing before changing load-bearing code. These
+are descriptions, not commandments - revisit any of them on merits when there is a
+real reason. The code is the source of truth: if a note here disagrees with the
+code, the code wins and the note is what is wrong.
 
-- Shared types belong in `packages/shared` only. Never define TypeScript types
-  or interfaces in `apps/`.
-- The API's SQLite file is the single system of record (`tokens`, `config`,
-  `sessions`, `session_messages`, `pending_human_input`). The runner
-  is stateless — its only persistent state is its `runner-id` file. Never add
-  durable storage to the runner.
-- No Redis, no BullMQ, no Postgres, no ORM. Background work runs on the
-  in-process dispatcher; live console events ride the in-process event bus. Do
-  not add external infrastructure to solve a single-process problem.
-- `createProvider()` in `apps/api/src/llm/factory.ts` is the only way to
-  instantiate an LLM client. Never `new AnthropicProvider()` or
-  `new OpenAIProvider()` directly.
-- `sendCommand()` in `apps/api/src/ws/router.ts` is the only path from the API
-  to a runner. No code in `apps/api` may write to a runner socket directly.
-- `REQUIRES_APPROVAL` in `apps/api/src/investigation/tools.ts` is the gate set.
-  Gated tools and `request_clarification` suspend the run via a
-  `pending_human_input` row — the loop never awaits a human decision in memory,
-  and there is no decision timeout. Resolution = append tool_result, delete the
-  row, reseed from the transcript, redispatch. Any new remediation tool must be
-  added to `REQUIRES_APPROVAL` before its handler is wired up — never after.
-- Investigations enter only through the dispatcher (alert, chat, and resume all
-  funnel through it). Never invoke the investigation loop directly.
-- Every runner command must have a matching type in `packages/shared/src/ws.ts`
-  before the handler is written in `apps/runner/src/index.ts`.
-- Runner command handlers in `commands/*.ts` must be side-effect-free. Write
-  operations belong exclusively in `commands/remediation.ts`.
-- Tokens are stored as SHA-256 hashes; plaintext is shown once at mint and never
-  appears in logs, identifiers, or URLs we control. Every surface that accepts a
-  token (ingest, chat, runner WS, console WS) validates it.
-- Sessions have no status column and runs have no state enum. "Awaiting human"
-  is derived from `pending_human_input`; "running" from the in-memory active set.
-  Do not persist what can be derived.
+- The API's SQLite file is the system of record. The runner is fully stateless -
+  it executes commands and keeps no durable state of its own. Its identity is
+  `runner.id`, the permanent primary key of its row, assigned once at onboarding and
+  never changed; the token on that row is a rotatable credential, not the identity
+  (in-place token rotation: issue 035). No local id file exists. Giving the runner
+  durable state is a real design change, not a local tweak.
+- Tokens are validated against a stored SHA-256 hash, never appear in logs,
+  identifiers, or URLs we control, and every surface that accepts a token (ingest,
+  chat, runner WS, console WS) validates it. Runner tokens are hash-only: the
+  plaintext is shown once at mint and cannot be recovered. The fleet ingest token
+  is the one exception - it is also kept encrypted at rest so the operator can
+  reveal it on demand, but only via an explicit POST (`/ingest-credential/reveal`),
+  never on the idempotent GET, which returns status only.
+- A tool requires human approval purely by its registry `access` value: `write`
+  and `ask` suspend the investigation for a human, `read` runs immediately. There
+  is no separate approval list - setting `access: "write"` is what gates a tool, so
+  the gate cannot be forgotten.

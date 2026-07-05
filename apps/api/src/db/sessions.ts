@@ -34,10 +34,8 @@ export function createSession(
     });
 }
 
-// Append one turn's worth of messages atomically. The UNIQUE(session_id, seq)
-// constraint makes a duplicate seq impossible; wrapping the batch in a
-// transaction makes the whole turn all-or-nothing so a partial turn can never be
-// persisted (the transcript is the checkpoint - it must never hold a hole).
+// Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
+// the transaction makes the turn all-or-nothing so the transcript checkpoint never holds a hole.
 export function appendSessionMessages(messages: SessionMessage[]): void {
   if (messages.length === 0) return;
   const insert = getDb().prepare(
@@ -104,19 +102,11 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Cascades manually: no FK has ON DELETE CASCADE (architecture invariant), so
-// children are deleted before the parent row, all inside one transaction.
+// Deletes the session and, via ON DELETE CASCADE, its transcript and pending approval. The
+// remediation audit log is NOT a child of sessions, so it survives - the record of what
+// changed outlives the conversation.
 export function deleteSession(sessionId: string): void {
-  const txn = getDb().transaction(() => {
-    getDb()
-      .prepare(`DELETE FROM pending_human_input WHERE session_id = ?`)
-      .run(sessionId);
-    getDb()
-      .prepare(`DELETE FROM session_messages WHERE session_id = ?`)
-      .run(sessionId);
-    getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
-  });
-  txn();
+  getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
 
 export function listAllSessions(): SessionMeta[] {

@@ -1,21 +1,20 @@
-import { randomUUID } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { parseAlertmanager } from "./parsers/alertmanager.js";
-import { isDuplicate } from "./dedup.js";
-import { checkRateLimit } from "./rate-limit.js";
-import { batchWindow } from "./batch-window.js";
-import { dispatcher } from "../dispatcher.js";
-import { findTokenByValue, touchLastUsed } from "../db/tokens.js";
+import { serviceIdentityKey } from "@nightwatch/shared";
+import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
+import { resolveAlerts } from "./resolve-identity.js";
+import { routeAlert } from "./route-alert.js";
+import { findRunnerByToken, hashToken } from "../db/runner.js";
+import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { getRunnerIdentity } from "../ws/router.js";
+import { getFleetView } from "../ws/router.js";
+import { insertUnresolvedAlert } from "../db/unresolved-alerts.js";
 import { logger } from "../logger.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   fastify.post<{ Body: unknown }>("/alerts/ingest", async (request, reply) => {
-    const userAgent = request.headers["user-agent"] ?? "";
     const plaintext = extractToken(request.headers);
 
     if (!plaintext) {
@@ -24,78 +23,168 @@ export async function registerAlertRoutes(
       });
     }
 
-    const tokenRecord = findTokenByValue(plaintext);
-    if (!tokenRecord) {
+    if (!authenticate(plaintext)) {
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
 
-    // Touch before any processing so lastUsedAt reflects authenticated use.
-    touchLastUsed(tokenRecord.id);
-
-    // Use the token's UUID as the internal identifier for all dispatch and
-    // session records — the plaintext never flows downstream.
-    const tokenId = tokenRecord.id;
-    const identity = getRunnerIdentity(tokenId);
-    const runnerId = tokenRecord.runnerId ?? identity?.runnerId ?? tokenId;
-    const hostname = identity?.hostname ?? undefined;
-
-    let alerts: NormalizedAlert[];
+    let parsed: ParsedAlert[];
     try {
-      alerts = parseSource(userAgent, request.body, runnerId, hostname);
+      parsed = parseSource(request.body);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: msg });
     }
 
-    let enqueued = 0;
-    let skipped = 0;
-
-    for (const alert of alerts) {
-      // 1. Derived dedup: same alert already active or durably suspended.
-      if (isDuplicate(alert)) {
-        skipped++;
-        continue;
+    // The token authenticates the request; the alert's labels - matched
+    // against the fleet's advertised services - are the sole source of
+    // routing (ADR-0004 resolve-or-reject, never a token-derived guess).
+    const resolution = resolveAlerts(parsed, getFleetView());
+    if (resolution.kind === "no-runners") {
+      for (const p of parsed) {
+        tryRecordUnresolved(p.sourceAlertId, {
+          sourceAlertId: p.sourceAlertId,
+          identityKey: serviceIdentityKey(p.targetIdentifier),
+          alertType: p.alertType,
+          severity: p.severity,
+          rejectionReason: "no runner connected to route this alert",
+        });
       }
-
-      // 2. Intra-window dedup: same tokenId+sourceAlertId already queued in
-      //    the batch window. True duplicate — the model would see it twice.
-      if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) {
-        skipped++;
-        continue;
-      }
-
-      // 3. Rate limit: per-server budget.
-      if (!checkRateLimit(alert.runnerId, alert.severity)) {
-        skipped++;
-        fastify.log.warn({ alertId: alert.sourceAlertId }, "rate limited");
-        continue;
-      }
-
-      // 4. Route: inject into the one active alert investigation (if any) or
-      //    add to the operator-wide batch window. A suspended session is not
-      //    in the active set, so it falls through to the batch window and a
-      //    new session is created — suspended sessions never receive injections
-      //    (CONTEXT.md alert pipeline).
-      const activeSessionId = dispatcher.getActiveAlertSession();
-      if (activeSessionId !== null) {
-        dispatcher.injectAlert(activeSessionId, alert);
-        fastify.log.info(
-          { alertId: alert.sourceAlertId, sessionId: activeSessionId },
-          "alert injected into active run",
-        );
-      } else {
-        batchWindow.add(alert);
-        fastify.log.info(
-          { alertId: alert.sourceAlertId, type: alert.alertType },
-          "alert added to batch window",
-        );
-      }
-
-      enqueued++;
+      return reply
+        .code(503)
+        .send({ error: "no runner connected to route this alert" });
     }
 
-    return reply.code(200).send({ received: alerts.length, enqueued, skipped });
+    let enqueued = 0;
+    let skipped = 0;
+    const rejected: Array<{ sourceAlertId: string; reason: string }> = [];
+
+    // Verdicts are produced 1:1 in order with parsed (same loop in resolveAlerts),
+    // so index i is always the parsed alert that yielded verdicts[i].
+    for (let i = 0; i < resolution.verdicts.length; i++) {
+      const verdict = resolution.verdicts[i]!;
+      if (verdict.kind === "resolved") {
+        if (routeAlert(verdict.alert) === "enqueued") enqueued++;
+        else skipped++;
+      } else {
+        rejected.push({
+          sourceAlertId: verdict.sourceAlertId,
+          reason: verdict.reason,
+        });
+        const parsedAlert = parsed[i]!;
+        tryRecordUnresolved(verdict.sourceAlertId, {
+          sourceAlertId: verdict.sourceAlertId,
+          identityKey: serviceIdentityKey(parsedAlert.targetIdentifier),
+          alertType: parsedAlert.alertType,
+          severity: parsedAlert.severity,
+          rejectionReason: verdict.reason,
+        });
+      }
+    }
+
+    const received = enqueued + skipped + rejected.length;
+    return reply.code(200).send({ received, enqueued, skipped, rejected });
   });
+
+  // Lets an operator dry-run a BYO webhook: same auth/normalizer/fleet-match as ingest but
+  // never routes. Each alert is resolved individually, so a multi-alert payload reports
+  // which would route and which would be rejected.
+  fastify.post<{ Body: unknown }>(
+    "/alerts/validate",
+    async (request, reply) => {
+      const plaintext = extractToken(request.headers);
+      if (!plaintext) {
+        return reply.code(401).send({
+          error: "X-Nightwatch-Token or Authorization: Bearer token required",
+        });
+      }
+      if (!authenticate(plaintext)) {
+        return reply.code(401).send({ error: "unknown or revoked token" });
+      }
+
+      let parsed: ParsedAlert[];
+      try {
+        parsed = parseSource(request.body);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return reply.code(400).send({ error: msg });
+      }
+
+      if (parsed.length === 0) {
+        return reply.code(400).send({
+          error:
+            "no alerts found in payload - expected an Alertmanager webhook or a generic { alerts: [...] } body",
+        });
+      }
+
+      const fleet = getFleetView();
+      const resolution = resolveAlerts(parsed, fleet);
+
+      // verdicts are produced in 1:1 order with parsed (same loop in
+      // resolveAlerts), so index i is always valid when kind === "verdicts".
+      const alerts = parsed.map((p, i) => {
+        let res:
+          | {
+              status: "resolved";
+              runnerId: string;
+              hostname: string | undefined;
+            }
+          | { status: "rejected"; reason: string };
+
+        if (resolution.kind === "no-runners") {
+          res = {
+            status: "rejected",
+            reason: "no runner connected to route this alert",
+          };
+        } else {
+          const verdict = resolution.verdicts[i]!;
+          res =
+            verdict.kind === "resolved"
+              ? {
+                  status: "resolved",
+                  runnerId: verdict.alert.runnerId,
+                  hostname: verdict.alert.hostname,
+                }
+              : { status: "rejected", reason: verdict.reason };
+        }
+
+        return {
+          sourceAlertId: p.sourceAlertId,
+          identity: p.targetIdentifier,
+          identityKey: serviceIdentityKey(p.targetIdentifier),
+          alertType: p.alertType,
+          severity: p.severity,
+          resolution: res,
+        };
+      });
+
+      return reply.code(200).send({ alerts });
+    },
+  );
+}
+
+// Authenticates only - grants no routing. `nwi_` (fleet) and `nwr_` (per-runner) both just
+// prove the request may submit; which runner receives it is decided later by matching
+// labels against the fleet (ADR-0004).
+function authenticate(plaintext: string): boolean {
+  if (plaintext.startsWith("nwi_")) {
+    const ingestHash = getIngestTokenHash();
+    return (
+      ingestHash !== null &&
+      timingSafeHexEqual(hashToken(plaintext), ingestHash)
+    );
+  }
+
+  const tokenRecord = findRunnerByToken(plaintext);
+  if (!tokenRecord) return false;
+  return true;
+}
+
+// Constant-time compare of two hex digests so token validation leaks no timing
+// information, consistent with the rest of the token-handling posture.
+function timingSafeHexEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "hex");
+  const bb = Buffer.from(b, "hex");
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 function extractToken(
@@ -106,23 +195,16 @@ function extractToken(
   return extractBearerToken(headers["authorization"]);
 }
 
-function parseSource(
-  userAgent: string,
-  body: unknown,
-  runnerId: string,
-  hostname: string | undefined,
-): NormalizedAlert[] {
-  if (
-    userAgent.toLowerCase().includes("alertmanager") ||
-    isAlertmanagerShape(body)
-  ) {
-    return parseAlertmanager(body, runnerId, hostname);
+// Source is decided by the body's structure alone - the only authoritative
+// signal. A User-Agent is client-controlled and spoofable, and the shape check
+// is sufficient, so it is not consulted.
+function parseSource(body: unknown): ParsedAlert[] {
+  if (isAlertmanagerShape(body)) {
+    return parseAlertmanager(body);
   }
-  logger.warn(
-    { preview: JSON.stringify(body).slice(0, 200) },
-    "ingest: unknown alert source, ignoring",
+  throw new Error(
+    "unrecognized payload - expected an Alertmanager webhook body ({ alerts: [...] })",
   );
-  return [];
 }
 
 function isAlertmanagerShape(body: unknown): boolean {
@@ -132,4 +214,17 @@ function isAlertmanagerShape(body: unknown): boolean {
     "alerts" in body &&
     Array.isArray((body as Record<string, unknown>)["alerts"])
   );
+}
+
+// A DB error writing to the unresolved feed must never abort the ingest
+// response: routing of matched alerts must not be undone by a storage hiccup.
+function tryRecordUnresolved(
+  sourceAlertId: string,
+  params: Parameters<typeof insertUnresolvedAlert>[0],
+): void {
+  try {
+    insertUnresolvedAlert(params);
+  } catch (err) {
+    logger.warn({ err, sourceAlertId }, "failed to record unresolved alert");
+  }
 }

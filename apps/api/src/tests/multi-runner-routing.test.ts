@@ -37,7 +37,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -45,8 +45,8 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
@@ -59,24 +59,83 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
+// Anonymous-container convention (no Compose labels): project === service === name.
+function svc(name: string): {
+  provider: "docker";
+  project: string;
+  service: string;
+} {
+  return { provider: "docker", project: name, service: name };
+}
+
+function k8sSvc(
+  workload: string,
+  namespace = "default",
+): { provider: "kubernetes"; namespace: string; workload: string } {
+  return { provider: "kubernetes", namespace, workload };
+}
+
+function scopedSvc(
+  name: string,
+  server: string,
+): { provider: "docker"; project: string; service: string; server: string } {
+  return { provider: "docker", project: name, service: name, server };
+}
+
 function makeManifest(
   hostname: string,
   containers: string[],
 ): CapabilityManifest {
   return {
-    runnerId: `runner-${hostname}`,
     hostname,
     runnerVersion: "2.0.0",
     capabilities: {
       docker: true,
-      containers,
-      prometheus: { available: false },
+      kubernetes: false,
+      services: containers.map((name) => ({
+        identity: svc(name),
+        status: "running",
+      })),
       postgres: { available: false },
       redis: { available: false },
       hostMetrics: true,
       fileRead: true,
       remediationEnabled: true,
     },
+  };
+}
+
+function makeK8sManifest(
+  hostname: string,
+  workloads: Array<{ workload: string; namespace: string }>,
+): CapabilityManifest {
+  return {
+    hostname,
+    runnerVersion: "2.0.0",
+    capabilities: {
+      docker: false,
+      kubernetes: true,
+      services: workloads.map(({ workload, namespace }) => ({
+        identity: k8sSvc(workload, namespace),
+        status: "running",
+      })),
+      postgres: { available: false },
+      redis: { available: false },
+      hostMetrics: true,
+      fileRead: true,
+      remediationEnabled: false,
+    },
+  };
+}
+
+function makeSend(
+  log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
+) {
+  return (raw: string) => {
+    const msg = JSON.parse(raw) as RunnerCommandMessage;
+    const { commandName, commandInput, correlationId } = msg.payload;
+    log.push({ commandName, commandInput });
+    resolveCommand({ correlationId, success: true, result: {} });
   };
 }
 
@@ -95,8 +154,8 @@ function waitForConnected(ws: WebSocket): Promise<void> {
 
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
-  let tokenIdA: string;
-  let tokenIdB: string;
+  let runnerIdA: string;
+  let runnerIdB: string;
   let SESSION: string;
   let server: FastifyInstance;
   let port: number;
@@ -110,57 +169,58 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
-  // runner-c is on a different token to test cross-token routing.
-  let tokenId2: string;
+  // runner-c is on a separate runner to test cross-runner routing.
+  let runnerId2: string;
   const commandsC: Array<{
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
-
-  function makeSend(
-    log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
-  ) {
-    return (raw: string) => {
-      const msg = JSON.parse(raw) as RunnerCommandMessage;
-      const { commandName, commandInput, correlationId } = msg.payload;
-      log.push({ commandName, commandInput });
-      resolveCommand({
-        correlationId,
-        success: true,
-        result: { restarted: true },
-      });
-    };
-  }
+  // runner-k8s hosts Kubernetes workloads.
+  let runnerIdK: string;
+  const commandsK: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
 
   beforeAll(async () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    tokenIdA = generateToken("routing-a").id;
-    tokenIdB = generateToken("routing-b").id;
+    runnerIdA = generateRunnerToken("routing-a").id;
+    runnerIdB = generateRunnerToken("routing-b").id;
 
-    registerRunner(tokenIdA, makeSend(commandsA), () => {});
-    setRunnerManifest(tokenIdA, makeManifest("web-01", ["nginx", "api"]));
+    registerRunner(runnerIdA, makeSend(commandsA), () => {});
+    setRunnerManifest(runnerIdA, makeManifest("web-01", ["nginx", "api"]));
 
-    registerRunner(tokenIdB, makeSend(commandsB), () => {});
-    setRunnerManifest(tokenIdB, makeManifest("db-02", ["postgres"]));
+    registerRunner(runnerIdB, makeSend(commandsB), () => {});
+    setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
-    tokenId2 = generateToken("routing-cross").id;
-    registerRunner(tokenId2, makeSend(commandsC), () => {});
-    setRunnerManifest(tokenId2, makeManifest("cache-01", ["redis"]));
+    runnerId2 = generateRunnerToken("routing-cross").id;
+    registerRunner(runnerId2, makeSend(commandsC), () => {});
+    setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
+
+    runnerIdK = generateRunnerToken("routing-k8s").id;
+    registerRunner(runnerIdK, makeSend(commandsK), () => {});
+    setRunnerManifest(
+      runnerIdK,
+      makeK8sManifest("k8s-cluster-01", [
+        { workload: "api-server", namespace: "production" },
+      ]),
+    );
 
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
 
   afterAll(async () => {
-    unregisterRunner(tokenIdA);
-    unregisterRunner(tokenIdB);
-    unregisterRunner(tokenId2);
+    unregisterRunner(runnerIdA);
+    unregisterRunner(runnerIdB);
+    unregisterRunner(runnerId2);
+    unregisterRunner(runnerIdK);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -170,6 +230,7 @@ describe("multi-runner routing", () => {
     commandsA.length = 0;
     commandsB.length = 0;
     commandsC.length = 0;
+    commandsK.length = 0;
   });
 
   async function runSession(): Promise<string> {
@@ -189,8 +250,8 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-1",
-            name: "get_container_logs",
-            input: { containerName: "postgres" },
+            name: "get_service_logs",
+            input: { service: svc("postgres") },
           },
         ],
       },
@@ -200,7 +261,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsB).toHaveLength(1);
-    expect(commandsB[0].commandName).toBe("get_container_logs");
+    expect(commandsB[0].commandName).toBe("get_service_logs");
     expect(commandsA).toHaveLength(0);
   });
 
@@ -211,8 +272,8 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-2",
-            name: "get_container_stats",
-            input: { containerName: "nginx" },
+            name: "get_service_stats",
+            input: { service: svc("nginx") },
           },
         ],
       },
@@ -222,7 +283,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsA).toHaveLength(1);
-    expect(commandsA[0].commandName).toBe("get_container_stats");
+    expect(commandsA[0].commandName).toBe("get_service_stats");
     expect(commandsB).toHaveLength(0);
   });
 
@@ -233,8 +294,8 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-3",
-            name: "get_container_logs",
-            input: { containerName: "ghost-svc" },
+            name: "get_service_logs",
+            input: { service: svc("ghost-svc") },
           },
         ],
       },
@@ -310,9 +371,9 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-restart",
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "postgres",
+              service: svc("postgres"),
               rationale: "OOM killed",
               risk: "low",
               estimatedDowntimeSeconds: 5,
@@ -349,7 +410,7 @@ describe("multi-runner routing", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Wait for the approval interrupt — restart_container is a gated tool.
+    // Wait for the approval interrupt — restart_service is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
         (e) =>
@@ -362,7 +423,7 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
 
     // Approve — the approve route calls sendCommand with the persisted toolInput
-    // (which has containerName: "postgres"), routing it to runner-b.
+    // (which has service: docker/postgres/postgres), routing it to runner-b.
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
       {
@@ -378,29 +439,30 @@ describe("multi-runner routing", () => {
 
     // runner-b owns "postgres" and must receive the restart command.
     await waitFor(() =>
-      commandsB.some((c) => c.commandName === "restart_container"),
+      commandsB.some((c) => c.commandName === "restart_service"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "restart_container")
-        ?.commandInput["containerName"],
-    ).toBe("postgres");
+      commandsB.find((c) => c.commandName === "restart_service")?.commandInput[
+        "service"
+      ],
+    ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 
     ws.close();
   });
 
-  it("cross-token: routes to a runner connected under a different token by container name", async () => {
-    // runner-c is registered under tokenId2, not tokenId. The session dispatches
-    // with tokenId. With the flat registry, sendCommand routes globally by
-    // container name, so "redis" (only on runner-c) must still be reached.
+  it("cross-token: routes to a runner connected under a different token by service identity", async () => {
+    // runner-c is registered under runnerId2, separate from runnerIdA and runnerIdB. With
+    // the flat registry, sendCommand routes globally by service identity, so "redis"
+    // (only on runner-c) must still be reached.
     setScript([
       {
         text: "Checking redis.",
         toolUses: [
           {
             id: "tu-cross",
-            name: "get_container_logs",
-            input: { containerName: "redis" },
+            name: "get_service_logs",
+            input: { service: svc("redis") },
           },
         ],
       },
@@ -410,8 +472,180 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsC).toHaveLength(1);
-    expect(commandsC[0].commandName).toBe("get_container_logs");
+    expect(commandsC[0].commandName).toBe("get_service_logs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
+  });
+
+  it("kubernetes service identity routes to the Kubernetes runner", async () => {
+    setScript([
+      {
+        text: "Checking Kubernetes api-server.",
+        toolUses: [
+          {
+            id: "tu-k8s",
+            name: "get_service_logs",
+            input: { service: k8sSvc("api-server", "production") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runSession();
+
+    expect(commandsK).toHaveLength(1);
+    expect(commandsK[0].commandName).toBe("get_service_logs");
+    expect(commandsA).toHaveLength(0);
+    expect(commandsB).toHaveLength(0);
+    expect(commandsC).toHaveLength(0);
+  });
+});
+
+describe("assigned-name server-scoped routing", () => {
+  // Two runners whose manifests carry server-scoped Docker identities — the
+  // shape produced by the runner when NIGHTWATCH_SERVER_NAME is set. Routing
+  // must match exclusively on the full (server, project, service) key.
+  let cleanupDb2: () => void;
+  let runnerIdS1: string;
+  let runnerIdS2: string;
+
+  const commandsS1: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
+  const commandsS2: Array<{
+    commandName: string;
+    commandInput: Record<string, unknown>;
+  }> = [];
+
+  function makeScopedManifest(
+    server: string,
+    services: string[],
+  ): CapabilityManifest {
+    return {
+      hostname: server,
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        kubernetes: false,
+        services: services.map((name) => ({
+          identity: scopedSvc(name, server),
+          status: "running",
+        })),
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: false,
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-scoped-tests-32byte");
+    cleanupDb2 = useTempDb();
+    await mintTestSession();
+
+    runnerIdS1 = generateRunnerToken("scoped-runner-1").id;
+    registerRunner(runnerIdS1, makeSend(commandsS1), () => {});
+    setRunnerManifest(
+      runnerIdS1,
+      makeScopedManifest("prod-server-01", ["api", "worker"]),
+    );
+
+    runnerIdS2 = generateRunnerToken("scoped-runner-2").id;
+    registerRunner(runnerIdS2, makeSend(commandsS2), () => {});
+    setRunnerManifest(
+      runnerIdS2,
+      makeScopedManifest("prod-server-02", ["api", "db"]),
+    );
+  });
+
+  afterAll(() => {
+    unregisterRunner(runnerIdS1);
+    unregisterRunner(runnerIdS2);
+    cleanupDb2();
+    vi.unstubAllEnvs();
+  });
+
+  beforeEach(() => {
+    commandsS1.length = 0;
+    commandsS2.length = 0;
+  });
+
+  async function runScopedSession(): Promise<string> {
+    const sessionId = randomUUID();
+    dispatcher.dispatch({ sessionId, userMessage: "investigate" });
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    return sessionId;
+  }
+
+  it("routes to the runner whose assigned server name matches the target identity", async () => {
+    setScript([
+      {
+        text: "Checking api on prod-server-01.",
+        toolUses: [
+          {
+            id: "tu-scoped-1",
+            name: "get_service_logs",
+            input: { service: scopedSvc("api", "prod-server-01") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS1).toHaveLength(1);
+    expect(commandsS1[0].commandName).toBe("get_service_logs");
+    expect(commandsS2).toHaveLength(0);
+  });
+
+  it("routes to the other runner when the server name differs", async () => {
+    setScript([
+      {
+        text: "Checking db on prod-server-02.",
+        toolUses: [
+          {
+            id: "tu-scoped-2",
+            name: "get_service_logs",
+            input: { service: scopedSvc("db", "prod-server-02") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS2).toHaveLength(1);
+    expect(commandsS2[0].commandName).toBe("get_service_logs");
+    expect(commandsS1).toHaveLength(0);
+  });
+
+  it("same service name on different servers routes independently — server scope prevents ambiguity", async () => {
+    // Both runners advertise "api" — server scope is what disambiguates them.
+    // Targeting prod-server-02/api must not reach prod-server-01.
+    setScript([
+      {
+        text: "Checking api on prod-server-02.",
+        toolUses: [
+          {
+            id: "tu-scoped-3",
+            name: "get_service_logs",
+            input: { service: scopedSvc("api", "prod-server-02") },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    await runScopedSession();
+
+    expect(commandsS2).toHaveLength(1);
+    expect(commandsS2[0].commandName).toBe("get_service_logs");
+    expect(commandsS1).toHaveLength(0);
   });
 });

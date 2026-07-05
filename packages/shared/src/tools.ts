@@ -1,5 +1,7 @@
 // LLM tool input/output types — matched to Anthropic TOOL_SCHEMAS in apps/api
 
+import type { ServiceIdentity } from "./service-identity.js";
+
 export interface GetContainerListInput {
   environment: "docker" | "kubernetes";
   namespace?: string;
@@ -7,6 +9,7 @@ export interface GetContainerListInput {
 export interface ContainerInfo {
   name: string;
   id: string;
+  service: ServiceIdentity;
   image: string;
   imageTag: string;
   status: string;
@@ -17,7 +20,7 @@ export interface ContainerInfo {
 }
 
 export interface GetContainerLogsInput {
-  containerName: string;
+  service: ServiceIdentity;
   tailLines?: number;
   sinceTimestamp?: string;
   stderrOnly?: boolean;
@@ -30,7 +33,7 @@ export interface ContainerLogsResult {
 }
 
 export interface GetContainerInspectInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerInspectResult {
   name: string;
@@ -51,7 +54,7 @@ export interface ContainerInspectResult {
 }
 
 export interface GetContainerStatsInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerStatsResult {
   cpuPercent: number;
@@ -66,27 +69,18 @@ export interface ContainerStatsResult {
 }
 
 export interface GetContainerEventsInput {
-  containerName: string;
+  service: ServiceIdentity;
   sinceMinutes?: number;
 }
 export interface ContainerEvent {
   timestamp: string;
-  eventType:
-    | "start"
-    | "stop"
-    | "restart"
-    | "oom"
-    | "die"
-    | "health_status"
-    | "pull"
-    | "create"
-    | "destroy";
+  eventType: string;
   message: string;
   actor: string;
 }
 
 export interface GetContainerProcessesInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ContainerProcess {
   pid: number;
@@ -148,56 +142,13 @@ export interface GetHostDmesgResult {
   fsErrorsFound: boolean;
 }
 
-export interface QueryPrometheusInput {
-  query: string;
-  startTime: string;
-  endTime: string;
-  step: string;
-}
-export interface PrometheusResult {
-  metric: string;
-  dataPoints: Array<{ timestamp: string; value: number }>;
-  min: number;
-  max: number;
-  avg: number;
-  firstAnomalyTimestamp?: string;
-}
-
 export interface GetAlertHistoryInput {
-  containerName?: string;
+  service?: ServiceIdentity;
   limitDays?: number;
 }
 
-export interface GetRecentCommitsInput {
-  repoOwner: string;
-  repoName: string;
-  branch?: string;
-  limit?: number;
-}
-export interface CommitInfo {
-  sha: string;
-  shortSha: string;
-  message: string;
-  author: string;
-  timestamp: string;
-  filesChanged: string[];
-  additions: number;
-  deletions: number;
-}
-
-export interface GetRecentDeploysInput {
-  containerName: string;
-}
-export interface DeployInfo {
-  currentImageDigest: string;
-  currentImageCreatedAt: string;
-  previousImageDigest?: string;
-  imageChangedAt?: string;
-  timeSinceChangeMinutes?: number;
-}
-
 export interface GetEnvVariableNamesInput {
-  containerName: string;
+  service: ServiceIdentity;
 }
 export interface ReadFileInput {
   path: string;
@@ -218,7 +169,7 @@ export interface RequestClarificationInput {
 export type RiskLevel = "low" | "medium" | "high";
 
 export interface RestartContainerInput {
-  containerName: string;
+  service: ServiceIdentity;
   delaySeconds?: number;
   rationale: string;
   risk: RiskLevel;
@@ -231,22 +182,16 @@ export interface RestartContainerResult {
   newStatus: string;
 }
 
-export interface RollbackDeployInput {
-  containerName: string;
-  targetImageDigest: string;
-  rationale: string;
-  risk: RiskLevel;
-  estimatedDowntimeSeconds: number;
-}
-export interface RollbackDeployResult {
+// Kubernetes restart is a rollout restart (annotation patch), not a container
+// restart, so it has no exit code or container status to report.
+export interface RestartServiceK8sResult {
   success: boolean;
-  previousImage: string;
-  newImage: string;
-  restartedAt: string;
+  startedAt: string;
+  resourceKind: "Deployment" | "StatefulSet";
 }
 
 export interface ExecCommandInput {
-  containerName: string;
+  service: ServiceIdentity;
   command: string[];
   reason: string;
   risk: RiskLevel;
@@ -256,4 +201,10 @@ export interface ExecCommandResult {
   stdout: string;
   stderr: string;
   executedAt: string;
+}
+
+// Kubernetes-only: provider-specific tool (ADR-0002 providers hook). Not
+// offered to Docker-only fleets.
+export interface GetK8sRolloutStatusInput {
+  service: ServiceIdentity;
 }

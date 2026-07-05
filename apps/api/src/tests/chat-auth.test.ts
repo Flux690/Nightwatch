@@ -38,7 +38,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -88,7 +88,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
   });
 
-  it("POST /chat/:tokenId (old route) returns 404 — token-scoped chat removed", async () => {
+  it("POST /chat/:id (old route) returns 404 — token-scoped chat removed", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/chat/some-token-id`, {
       method: "POST",
       headers: {

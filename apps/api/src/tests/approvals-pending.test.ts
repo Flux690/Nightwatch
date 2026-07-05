@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -33,8 +33,9 @@ import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
   unregisterRunner,
-  resolveCommand,
+  setRunnerRemediationMode,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 import type { ApprovalRequest } from "@nightwatch/shared";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -55,7 +56,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -67,7 +68,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns pending interrupt rows with session cookie", async () => {
-    const tokA = generateToken("qa").id;
+    const tokA = generateRunnerToken("qa").id;
     registerRunner(
       tokA,
       (raw: string) => {
@@ -80,6 +81,8 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    // Remediation on so the write tool is offered (chat reads the live fleet).
+    setRunnerRemediationMode(tokA, true);
 
     setScript([
       {
@@ -87,9 +90,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-qa-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -125,7 +132,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
     const found = body[0];
-    expect(found.toolName).toBe("restart_container");
+    expect(found.toolName).toBe("restart_service");
     expect(found.status).toBe("pending");
     expect(found.sessionId).toBeTruthy();
 
@@ -152,7 +159,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns interrupts from all runner tokens (operator-wide)", async () => {
-    const tokC = generateToken("scope-c").id;
+    const tokC = generateRunnerToken("scope-c").id;
 
     setScript([
       {
@@ -160,9 +167,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-sc-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -185,6 +196,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    setRunnerRemediationMode(tokC, true);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -227,7 +239,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   });
 
   it("returns empty list after interrupt is resolved", async () => {
-    const tokE = generateToken("empty-after").id;
+    const tokE = generateRunnerToken("empty-after").id;
 
     setScript([
       {
@@ -235,9 +247,13 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-emp-${randomUUID()}`,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -260,6 +276,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       },
       () => {},
     );
+    setRunnerRemediationMode(tokE, true);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

@@ -4,6 +4,11 @@ import { vi } from "vitest";
 const { getComputedStyle } = window;
 window.getComputedStyle = (elt) => getComputedStyle(elt);
 window.HTMLElement.prototype.scrollIntoView = () => {};
+// jsdom has no scrollTo; the router's scroll restoration calls it on navigate.
+window.scrollTo = () => {};
+// jsdom doesn't implement the Web Animations API; Base UI's ScrollArea
+// viewport calls element.getAnimations() to detect transition completion.
+window.Element.prototype.getAnimations ??= () => [];
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

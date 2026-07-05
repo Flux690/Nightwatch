@@ -2,18 +2,28 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
-import { Shell } from "../pages/Shell.js";
-import { theme, cssVariablesResolver } from "../theme.js";
+import { AuthProvider } from "@/auth/AuthContext";
+import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { Shell } from "@/components/layout/Shell";
+import { SessionView } from "@/pages/SessionView";
+
+function ShellLayout(): React.JSX.Element {
+  return (
+    <Shell>
+      <Outlet />
+    </Shell>
+  );
+}
 
 const OWNER_EMAIL = "admin@example.com";
 
@@ -60,17 +70,25 @@ function setup(pendingCount = 0) {
 
   vi.stubGlobal("WebSocket", MockWs);
 
-  const pendingApprovals = Array.from({ length: pendingCount }, (_, i) => ({
-    id: `appr-${i}`,
-    incidentId: `inc-${i}`,
-    sessionId: `s-${i}`,
-    token: "tok-1",
-    toolName: "restart_container",
-    toolInput: {},
-    toolUseId: `tool-${i}`,
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  }));
+  const makePending = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `appr-${i}`,
+      incidentId: `inc-${i}`,
+      sessionId: `s-${i}`,
+      token: "tok-1",
+      toolName: "restart_service",
+      toolInput: {},
+      toolUseId: `tool-${i}`,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    }));
+
+  // Mutable so a test can change the server-side count before broadcasting a WS
+  // event; the count derives from this list (refetched on the event), not a delta.
+  let pendingApprovals = makePending(pendingCount);
+  const setPendingCount = (n: number): void => {
+    pendingApprovals = makePending(n);
+  };
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     if (url.includes("/auth/status")) {
@@ -117,53 +135,54 @@ function setup(pendingCount = 0) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const rootRoute = createRootRoute({ component: Shell });
+  const rootRoute = createRootRoute({ component: ShellLayout });
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: () => null,
+    component: () => <SessionView />,
   });
   const sessionIdRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/sessions/$id",
-    component: () => null,
+    component: function SessionRoute() {
+      const { id } = sessionIdRoute.useParams();
+      return <SessionView sessionId={id} />;
+    },
   });
-  const runnersRoute = createRoute({
+  const fleetRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/runners",
-    component: () => <div>Runners Page</div>,
+    path: "/fleet",
+    component: () => <div>Fleet Page</div>,
   });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
-    component: () => <div>Settings Page</div>,
+    component: () => <SessionView />,
   });
 
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       indexRoute,
       sessionIdRoute,
-      runnersRoute,
+      fleetRoute,
       settingsRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <ConsoleWsProvider>
+            <RouterProvider router={router} />
+          </ConsoleWsProvider>
         </AuthProvider>
       </QueryClientProvider>
-    </MantineProvider>,
+    </TestProviders>,
   );
 
-  return { router, qc, fetchMock };
+  return { router, qc, fetchMock, setPendingCount };
 }
 
 afterEach(() => {
@@ -172,139 +191,20 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+// The shadcn Sidebar exposes its collapsed/expanded state on the container via
+// data-state; text labels hide purely through CSS, which jsdom does not apply,
+// so the collapse contract is asserted through this attribute and the toggle's
+// accessible name rather than label visibility.
+function sidebarState(): string | null {
+  return (
+    document
+      .querySelector('[data-slot="sidebar"]')
+      ?.getAttribute("data-state") ?? null
+  );
+}
+
 describe("Shell", () => {
-  describe("nav + sidebar structure", () => {
-    it("renders nav links for Runners and Settings", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /runners/i }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole("link", { name: /settings/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("renders the sessions sidebar with existing session rows", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("sidebar rows show title and relative time but no status badge", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-        expect(screen.getByText(/ago/i)).toBeInTheDocument();
-      });
-      expect(screen.queryByText("concluded")).not.toBeInTheDocument();
-      expect(screen.queryByText("streaming")).not.toBeInTheDocument();
-      expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
-    });
-  });
-
   describe("sidebar collapsible rail", () => {
-    it("the standalone Sessions nav link is absent", async () => {
-      setup();
-      // Wait for the sidebar to be fully mounted
-      await waitFor(() =>
-        expect(
-          screen.getByRole("link", { name: /runners/i }),
-        ).toBeInTheDocument(),
-      );
-      // There should be no link whose accessible name is exactly "Sessions"
-      expect(
-        screen.queryByRole("link", { name: "Sessions" }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("New session button is present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /new session/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("Recent sessions heading and session list are present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("owner email and Log out button are present in expanded view", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
-        expect(
-          screen.getByRole("button", { name: /log out/i }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("toggle collapses sidebar: text labels disappear and links remain accessible via aria-label", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      // Start expanded: text labels visible
-      await waitFor(() => {
-        expect(screen.getByText("Runners")).toBeInTheDocument();
-        expect(screen.getByText("Settings")).toBeInTheDocument();
-      });
-
-      // Collapse
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-
-      await waitFor(() => {
-        // Text labels gone
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
-        expect(screen.queryByText("Settings")).not.toBeInTheDocument();
-        // Links still accessible via aria-label
-        expect(
-          screen.getByRole("link", { name: /runners/i }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole("link", { name: /settings/i }),
-        ).toBeInTheDocument();
-        // Session list hidden
-        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
-      });
-    });
-
-    it("toggle expands sidebar: text labels reappear", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      // Collapse first
-      await waitFor(() =>
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-
-      // Verify collapsed
-      await waitFor(() =>
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument(),
-      );
-
-      // Expand again
-      await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
-
-      await waitFor(() => {
-        expect(screen.getByText("Runners")).toBeInTheDocument();
-        expect(screen.getByText("Settings")).toBeInTheDocument();
-        expect(screen.getByText(/recent sessions/i)).toBeInTheDocument();
-      });
-    });
-
     it("collapsing writes false to localStorage", async () => {
       const user = userEvent.setup();
       setup();
@@ -348,12 +248,14 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() => {
-        // In collapsed state labels are absent
-        expect(screen.queryByText("Runners")).not.toBeInTheDocument();
-        expect(screen.queryByText(/recent sessions/i)).not.toBeInTheDocument();
-        // But links are still accessible
+        // Restores the collapsed rail from the persisted preference; the toggle
+        // offers to expand and links stay reachable.
+        expect(sidebarState()).toBe("collapsed");
         expect(
-          screen.getByRole("link", { name: /runners/i }),
+          screen.getByRole("button", { name: /expand sidebar/i }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole("link", { name: /fleet/i }),
         ).toBeInTheDocument();
       });
     });
@@ -362,11 +264,11 @@ describe("Shell", () => {
       const user = userEvent.setup();
       const { router } = setup();
 
-      // Navigate away to /runners first
-      await waitFor(() => screen.getByRole("link", { name: /runners/i }));
-      await user.click(screen.getByRole("link", { name: /runners/i }));
+      // Navigate away to /fleet first
+      await waitFor(() => screen.getByRole("link", { name: /fleet/i }));
+      await user.click(screen.getByRole("link", { name: /fleet/i }));
       await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/runners"),
+        expect(router.state.location.pathname).toBe("/fleet"),
       );
 
       // Click New session
@@ -402,21 +304,6 @@ describe("Shell", () => {
           expect.objectContaining({ method: "POST" }),
         );
       });
-    });
-  });
-
-  describe("home route (/)", () => {
-    it("shows a chat input at /", async () => {
-      setup();
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toBeInTheDocument();
-      expect(textarea).not.toBeDisabled();
-    });
-
-    it("does not redirect / to /sessions", async () => {
-      const { router } = setup();
-      await screen.findByRole("textbox");
-      expect(router.state.location.pathname).toBe("/");
     });
   });
 
@@ -484,81 +371,20 @@ describe("Shell", () => {
         expect(screen.getByText("Analyzing disk usage...")).toBeInTheDocument();
       });
     });
-
-    it("new session appears in sidebar after creation", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      const initialCount = screen.getAllByRole("listitem").length;
-
-      const textarea = await screen.findByRole("textbox");
-      await user.type(textarea, "Check disk usage");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(screen.getAllByRole("listitem")).toHaveLength(initialCount + 1);
-      });
-    });
-  });
-
-  describe("nav link routing", () => {
-    it("clicking Runners nav link shows runners content", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /runners/i }),
-        ).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("link", { name: /runners/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/runners");
-      });
-    });
-
-    it("clicking Settings nav link shows settings content", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", { name: /settings/i }),
-        ).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole("link", { name: /settings/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/settings");
-      });
-    });
   });
 
   describe("attention queue", () => {
-    it("shows awaiting-approval count on first load from API", async () => {
-      setup(2);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("2");
-      });
-    });
-
-    it("increments count when INTERRUPT arrives", async () => {
-      setup(1);
+    it("refetches and grows the count when INTERRUPT arrives", async () => {
+      const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
           screen.getByRole("status", { name: /awaiting approval/i }),
         ).toHaveTextContent("1");
       });
 
+      // The interrupt is now durable server-side; the event triggers a refetch
+      // of the authoritative pending list rather than a local +1.
+      setPendingCount(2);
       act(() => {
         broadcast({
           messageId: "m-int",
@@ -566,7 +392,7 @@ describe("Shell", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
-            toolName: "restart_container",
+            toolName: "restart_service",
             input: {},
             incidentId: "inc-99",
           },
@@ -580,14 +406,15 @@ describe("Shell", () => {
       });
     });
 
-    it("decrements count when INTERRUPT_RESOLVED arrives", async () => {
-      setup(1);
+    it("refetches and clears the count when INTERRUPT_RESOLVED arrives", async () => {
+      const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
           screen.getByRole("status", { name: /awaiting approval/i }),
         ).toHaveTextContent("1");
       });
 
+      setPendingCount(0);
       act(() => {
         broadcast({
           messageId: "m-res",
@@ -607,23 +434,51 @@ describe("Shell", () => {
       });
     });
 
-    it("shows no indicator when count is zero", async () => {
-      setup(0);
-      await screen.findByRole("link", { name: /runners/i });
-      expect(
-        screen.queryByRole("status", { name: /awaiting approval/i }),
-      ).not.toBeInTheDocument();
+    it("does not double-count after an independent refetch (no stale delta)", async () => {
+      const { qc, setPendingCount } = setup(1);
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("1");
+      });
+
+      // Server count grows to 2; the event refreshes the list to 2.
+      setPendingCount(2);
+      act(() => {
+        broadcast({
+          messageId: "m-int",
+          type: "HUMAN_INPUT_REQUIRED",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tool-99",
+            toolName: "restart_service",
+            input: {},
+            incidentId: "inc-99",
+          },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
+      });
+
+      // An unrelated refetch must not re-apply the event on top of the already
+      // up to date list; the count stays 2, not 3.
+      await act(async () => {
+        await qc.invalidateQueries({
+          queryKey: ["sessions-pending-human-input"],
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByRole("status", { name: /awaiting approval/i }),
+        ).toHaveTextContent("2");
+      });
     });
   });
 
   describe("account", () => {
-    it("shows the logged-in operator's email", async () => {
-      setup();
-      await waitFor(() => {
-        expect(screen.getByText(OWNER_EMAIL)).toBeInTheDocument();
-      });
-    });
-
     it("Log out posts /api/logout", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();

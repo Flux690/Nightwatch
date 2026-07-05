@@ -1,0 +1,395 @@
+import { afterEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  redactSecrets,
+  capOutput,
+  isPathAllowed,
+  openAllowedFile,
+} from "../safety/allowlist.js";
+
+describe("redactSecrets", () => {
+  describe("key-value patterns (JSON, YAML, env)", () => {
+    it("redacts a password= assignment", () => {
+      const { content, redactedCount } = redactSecrets("password=s3cr3t-pass!");
+      expect(content).not.toContain("s3cr3t-pass!");
+      expect(content).toContain("[REDACTED]");
+      expect(redactedCount).toBe(1);
+    });
+
+    it("redacts a JSON password field", () => {
+      const { content } = redactSecrets('{"password": "hunter2"}');
+      expect(content).not.toContain("hunter2");
+      expect(content).toContain("[REDACTED]");
+    });
+
+    it("redacts a token: value line", () => {
+      const { content } = redactSecrets("token: abc123XYZ");
+      expect(content).not.toContain("abc123XYZ");
+      expect(content).toContain("[REDACTED]");
+    });
+
+    it("redacts a secret=value assignment", () => {
+      const { content } = redactSecrets("secret=my-secret-value");
+      expect(content).not.toContain("my-secret-value");
+    });
+
+    it("preserves the key name when redacting key=value", () => {
+      const { content } = redactSecrets("api_key=ABCD1234");
+      expect(content).toContain("api_key");
+      expect(content).not.toContain("ABCD1234");
+    });
+
+    it("redacts credential and access_key forms", () => {
+      const { content: c1 } = redactSecrets("credential=mysecretcredential");
+      const { content: c2 } = redactSecrets("access_key=MYACCESSKEYVALUE");
+      expect(c1).not.toContain("mysecretcredential");
+      expect(c2).not.toContain("MYACCESSKEYVALUE");
+    });
+
+    it("redacts a quoted value with spaces in full (no leak after the first space)", () => {
+      const { content } = redactSecrets('password = "my secret pass phrase"');
+      expect(content).not.toContain("secret");
+      expect(content).not.toContain("phrase");
+      expect(content).toContain("password");
+      expect(content).toContain("[REDACTED]");
+    });
+
+    it("redacts a short value the old four-char minimum would have skipped", () => {
+      const { content } = redactSecrets("token=abc");
+      expect(content).not.toContain("abc");
+      expect(content).toContain("[REDACTED]");
+    });
+  });
+
+  describe("JWT tokens", () => {
+    it("redacts a JWT found in a Bearer header", () => {
+      const jwt =
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMSJ9.SflKxwRJSMeKKF2QT4fw";
+      const { content, redactedCount } = redactSecrets(
+        `Authorization: Bearer ${jwt}`,
+      );
+      expect(content).not.toContain(jwt);
+      expect(content).toContain("[REDACTED]");
+      expect(redactedCount).toBe(1);
+    });
+
+    it("redacts a JWT with no surrounding context", () => {
+      const jwt =
+        "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ1c2VyQGV4YW1wbGUuY29tIn0.ABCDEF";
+      const { content } = redactSecrets(jwt);
+      expect(content).not.toContain("eyJhbGci");
+    });
+  });
+
+  describe("PEM private keys", () => {
+    it("redacts a PEM RSA private key block", () => {
+      const pem =
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA1234\n-----END RSA PRIVATE KEY-----";
+      const { content, redactedCount } = redactSecrets(pem);
+      expect(content).not.toContain("MIIEpAIBAAKCAQEA1234");
+      expect(content).toContain("[REDACTED]");
+      expect(redactedCount).toBe(1);
+    });
+
+    it("redacts a generic PRIVATE KEY block (PKCS#8 form)", () => {
+      const pem =
+        "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2Vd\n-----END PRIVATE KEY-----";
+      const { content } = redactSecrets(pem);
+      expect(content).not.toContain("MC4CAQAwBQYDK2Vd");
+    });
+  });
+
+  describe("cloud provider keys", () => {
+    it("redacts an AWS access key ID", () => {
+      const { content, redactedCount } = redactSecrets(
+        "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
+      );
+      expect(content).not.toContain("AKIAIOSFODNN7EXAMPLE");
+      expect(content).toContain("[REDACTED]");
+      expect(redactedCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("redacts a Google API key", () => {
+      const { content } = redactSecrets(
+        "GOOGLE_API_KEY=AIzaSyD-9tSrke72I6gHMfoAASXlB9MrFaHm5bk",
+      );
+      expect(content).not.toContain("AIzaSyD-9tSrke72I6gHMfoAASXlB9MrFaHm5bk");
+    });
+
+    it("redacts a GitHub PAT (ghp_ prefix) via the dedicated rule", () => {
+      const pat = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij";
+      const { content } = redactSecrets(pat);
+      expect(content).not.toContain(pat);
+      expect(content).toBe("[REDACTED]");
+    });
+
+    it("redacts a Slack bot token", () => {
+      const { content } = redactSecrets(
+        "SLACK_TOKEN=xoxb-12345-67890-abcdefghijklmno",
+      );
+      expect(content).not.toContain("xoxb-12345-67890-abcdefghijklmno");
+    });
+
+    it("redacts a Stripe secret key", () => {
+      const { content } = redactSecrets(
+        "STRIPE_KEY=sk_live_ABCDEFGHIJKLMNOPQRSTUV",
+      );
+      expect(content).not.toContain("sk_live_ABCDEFGHIJKLMNOPQRSTUV");
+    });
+
+    it("redacts an npm automation token", () => {
+      const token = "npm_" + "A".repeat(36);
+      const { content } = redactSecrets(`NPM_TOKEN=${token}`);
+      expect(content).not.toContain(token);
+    });
+
+    it("does not leave a double-redaction artifact when a cloud-key rule and the key-value rule both target the same value", () => {
+      const token = "npm_" + "A".repeat(36);
+      const { content } = redactSecrets(`NPM_TOKEN=${token}`);
+      expect(content).toBe("NPM_TOKEN=[REDACTED]");
+    });
+  });
+
+  describe("connection strings", () => {
+    it("redacts a PostgreSQL connection string", () => {
+      const { content, redactedCount } = redactSecrets(
+        "DATABASE_URL=postgresql://user:s3cret@db.internal:5432/mydb",
+      );
+      expect(content).not.toContain("s3cret");
+      expect(content).toContain("[REDACTED]");
+      expect(redactedCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("redacts a Redis URL", () => {
+      const { content } = redactSecrets(
+        "CACHE_URL=redis://default:redispass@cache:6379",
+      );
+      expect(content).not.toContain("redispass");
+    });
+
+    it("redacts a MongoDB connection string", () => {
+      const { content } = redactSecrets(
+        "MONGO_URI=mongodb://admin:mongopass@mongo:27017/db",
+      );
+      expect(content).not.toContain("mongopass");
+    });
+  });
+
+  describe("high-entropy tokens (entropy pass)", () => {
+    it("redacts a high-entropy alphanumeric token not matched by keyword rules", () => {
+      // This token has no keyword prefix; only entropy catches it.
+      const token = "K9rGpP9mN2xQvL3wHjRtZaDcEbFsUyMoWiVnYeXq";
+      const { content, redactedCount } = redactSecrets(
+        `DEPLOY_HMAC_SIGNATURE=${token}`,
+      );
+      expect(content).not.toContain(token);
+      expect(redactedCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it("does not redact short normal identifiers", () => {
+      const { content } = redactSecrets("container-id=abc123");
+      expect(content).toContain("abc123");
+    });
+
+    it("does not redact normal log lines", () => {
+      const { content } = redactSecrets(
+        "Starting server on port 8080 in production mode",
+      );
+      expect(content).toBe("Starting server on port 8080 in production mode");
+    });
+
+    it("does not redact a file path even if long", () => {
+      const { content } = redactSecrets("/var/log/nginx/access.log");
+      expect(content).toBe("/var/log/nginx/access.log");
+    });
+  });
+
+  describe("return value", () => {
+    it("returns redactedCount 0 when nothing to redact", () => {
+      const { redactedCount } = redactSecrets("hello world, port=8080");
+      expect(redactedCount).toBe(0);
+    });
+
+    it("returns the original string unchanged when nothing matches", () => {
+      const input = "INFO: server started successfully";
+      const { content } = redactSecrets(input);
+      expect(content).toBe(input);
+    });
+
+    it("counts multiple redactions across multiple rule matches", () => {
+      const input = "password=abc123 token=xyz789";
+      const { redactedCount } = redactSecrets(input);
+      expect(redactedCount).toBeGreaterThanOrEqual(2);
+    });
+  });
+});
+
+describe("capOutput", () => {
+  it("returns short output unchanged", () => {
+    const text = "hello world";
+    expect(capOutput(text)).toBe(text);
+  });
+
+  it("caps output over 64 KB with an elision marker", () => {
+    const big = "x".repeat(70 * 1024);
+    const capped = capOutput(big);
+    expect(capped).toContain("[... ");
+    expect(capped).toContain("bytes elided");
+    expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(big.length);
+  });
+
+  it("preserves the head and tail of the output", () => {
+    const head = "HEAD_CONTENT ";
+    const tail = " TAIL_CONTENT";
+    const middle = "M".repeat(70 * 1024);
+    const big = head + middle + tail;
+    const capped = capOutput(big);
+    expect(capped).toContain("HEAD_CONTENT");
+    expect(capped).toContain("TAIL_CONTENT");
+  });
+
+  it("returns exactly 64 KB of content plus the elision marker for very large input", () => {
+    const big = "A".repeat(200 * 1024);
+    const capped = capOutput(big);
+    // The elided section reports the missing bytes
+    expect(capped).toMatch(/\[...\s+\d+ bytes elided\s+\.\.\.\]/);
+  });
+
+  it("accepts a custom maxBytes limit", () => {
+    const text = "x".repeat(100);
+    const capped = capOutput(text, 40);
+    expect(capped).toContain("bytes elided");
+    expect(Buffer.byteLength(capped, "utf8")).toBeLessThan(text.length);
+  });
+
+  it("does not split a multibyte character into a replacement char at the cut", () => {
+    // Each emoji is 4 UTF-8 bytes, so an arbitrary byte cut lands mid-character;
+    // a naive byte slice would decode the split halves as U+FFFD.
+    const big = "😀".repeat(40_000);
+    const capped = capOutput(big);
+    expect(capped).toContain("bytes elided");
+    expect(capped).not.toContain("�");
+  });
+});
+
+describe("isPathAllowed", () => {
+  afterEach(() => {
+    delete process.env["FILE_ALLOWLIST"];
+  });
+
+  it("allows a path within an allowlisted root", () => {
+    expect(isPathAllowed("/var/log/nginx/access.log")).toBe(true);
+  });
+
+  it("allows the exact allowlisted root", () => {
+    expect(isPathAllowed("/var/log")).toBe(true);
+  });
+
+  it("rejects .. traversal out of an allowed root", () => {
+    expect(isPathAllowed("/var/log/../../etc/shadow")).toBe(false);
+  });
+
+  it("rejects a sibling-prefix path", () => {
+    // /etc/app is allowlisted but /etc/app-secrets must not be
+    expect(isPathAllowed("/etc/app-secrets")).toBe(false);
+  });
+
+  it("rejects a symlink inside an allowed directory that points outside it", () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "nw-allowlist-"));
+    const allowed = path.join(outer, "allowed");
+    fs.mkdirSync(allowed);
+    const target = path.join(outer, "secret.txt");
+    fs.writeFileSync(target, "secret");
+    const link = path.join(allowed, "escape");
+    fs.symlinkSync(target, link);
+    process.env["FILE_ALLOWLIST"] = allowed;
+    try {
+      expect(isPathAllowed(link)).toBe(false);
+    } finally {
+      fs.unlinkSync(link);
+      fs.unlinkSync(target);
+      fs.rmdirSync(allowed);
+      fs.rmdirSync(outer);
+    }
+  });
+
+  it("allows a legitimate read via the env var extension", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-allowlist-"));
+    process.env["FILE_ALLOWLIST"] = tmpDir;
+    try {
+      expect(isPathAllowed(path.join(tmpDir, "app.log"))).toBe(true);
+    } finally {
+      fs.rmdirSync(tmpDir);
+    }
+  });
+
+  it("rejects a path outside all allowlisted roots", () => {
+    expect(isPathAllowed("/home/user/passwords.txt")).toBe(false);
+  });
+});
+
+describe("openAllowedFile", () => {
+  afterEach(() => {
+    delete process.env["FILE_ALLOWLIST"];
+  });
+
+  it("opens and reads a file inside an allowlisted root", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
+    const file = path.join(dir, "app.log");
+    fs.writeFileSync(file, "hello\nworld\n");
+    process.env["FILE_ALLOWLIST"] = dir;
+    try {
+      const handle = await openAllowedFile(file);
+      try {
+        expect(await handle.readFile("utf8")).toBe("hello\nworld\n");
+      } finally {
+        await handle.close();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an existing file outside every allowlisted root", async () => {
+    // A real file in tmp, which is under none of the default allowlist roots, so
+    // the open succeeds but the canonical-path check rejects it.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
+    const file = path.join(dir, "passwords.txt");
+    fs.writeFileSync(file, "secret");
+    try {
+      await expect(openAllowedFile(file)).rejects.toThrow(/not in allowlist/i);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symlink inside an allowed dir that escapes it", async () => {
+    const outer = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
+    const allowed = path.join(outer, "allowed");
+    fs.mkdirSync(allowed);
+    const target = path.join(outer, "secret.txt");
+    fs.writeFileSync(target, "secret");
+    const link = path.join(allowed, "escape");
+    fs.symlinkSync(target, link);
+    process.env["FILE_ALLOWLIST"] = allowed;
+    try {
+      await expect(openAllowedFile(link)).rejects.toThrow(/not in allowlist/i);
+    } finally {
+      fs.rmSync(outer, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to read a directory as a file", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nw-openfile-"));
+    process.env["FILE_ALLOWLIST"] = dir;
+    try {
+      // A directory opens read-only on POSIX but is not a regular file; the
+      // fstat guard rejects it before any read.
+      await expect(openAllowedFile(dir)).rejects.toThrow();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

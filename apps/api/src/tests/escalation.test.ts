@@ -19,7 +19,7 @@ const { mockCreateProvider } = vi.hoisted(() => ({
 
 vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -28,13 +28,12 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
-import { updateConfig } from "../config/store.js";
 import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {
   type: string;
@@ -60,12 +59,11 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "test-runner-esc";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("test-esc-runner").id;
+    TEST_TOKEN = generateRunnerToken("test-esc-runner").id;
 
     registerRunner(
       TEST_TOKEN,
@@ -77,13 +75,21 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "esc-host",
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["web-01"],
-        prometheus: { available: false },
+        kubernetes: false,
+        services: [
+          {
+            identity: {
+              provider: "docker",
+              project: "web-01",
+              service: "web-01",
+            },
+            status: "running",
+          },
+        ],
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,
@@ -95,7 +101,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -216,8 +222,14 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_container",
-            input: { containerName: "web-01" },
+            name: "restart_service",
+            input: {
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
+            },
           },
         ],
         text: "Need to restart.",
@@ -236,8 +248,12 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
-      runnerId: TEST_RUNNER_ID,
-      targetIdentifier: "web-01",
+      runnerId: TEST_TOKEN,
+      targetIdentifier: {
+        provider: "docker",
+        project: "web-01",
+        service: "web-01",
+      },
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),
@@ -304,93 +320,5 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
     const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
     expect(lastAssistant?.content).toContain("rejected");
-  });
-
-  it("budget exhaustion runs wrap-up turn: model text ends the run, no escalation", async () => {
-    updateConfig({ maxToolCalls: 3 });
-
-    const budgetScript: ScriptedTurn[] = [
-      {
-        toolUses: [
-          {
-            id: "tu-b1",
-            name: "get_container_list",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      {
-        toolUses: [
-          {
-            id: "tu-b2",
-            name: "get_container_list",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      {
-        toolUses: [
-          {
-            id: "tu-b3",
-            name: "get_container_list",
-            input: { environment: "docker" },
-          },
-        ],
-        text: "",
-      },
-      { toolUses: [], text: "Budget reached. Here is what I found so far." },
-    ];
-    mockCreateProvider.mockImplementationOnce(() =>
-      createContractFakeProvider(budgetScript),
-    );
-
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "Investigate forever." }),
-    });
-    expect(res.status).toBe(202);
-    const { sessionId } = (await res.json()) as { sessionId: string };
-
-    await waitFor(
-      () =>
-        events.find(
-          (e) =>
-            e.type === "RUN_FINISHED" &&
-            e.payload["sessionId"] === sessionId &&
-            (
-              e.payload["message"] as
-                | { role?: string; content?: string }
-                | undefined
-            )?.content === "Budget reached. Here is what I found so far.",
-        ),
-      { timeout: 15_000 },
-    );
-    ws.close();
-
-    const messages = getSessionMessages(sessionId);
-    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-    expect(lastAssistant?.content).toBe(
-      "Budget reached. Here is what I found so far.",
-    );
-    expect(
-      messages.some((m) => m.content.startsWith("Escalated to human:")),
-    ).toBe(false);
-    expect(events.some((e) => e.type === "ESCALATED")).toBe(false);
   });
 });

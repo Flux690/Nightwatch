@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { MantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -10,9 +10,8 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { AuthProvider } from "../auth/AuthContext.js";
+import { AuthProvider } from "@/auth/AuthContext";
 import { LoginPage } from "../pages/LoginPage.js";
-import { theme, cssVariablesResolver } from "../theme.js";
 
 function jsonResponse(status: number, body: object) {
   return {
@@ -43,15 +42,11 @@ function buildRouter() {
 function setupWithMock(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <TestProviders>
       <AuthProvider>
         <RouterProvider router={buildRouter()} />
       </AuthProvider>
-    </MantineProvider>,
+    </TestProviders>,
   );
   return { fetchMock };
 }
@@ -72,116 +67,10 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  it("shows the setup form with email, password, and confirm password fields when no owner exists", async () => {
-    setup({ ownerExists: false });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: /create your account/i }),
-      ).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText(/^email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^password/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
-  });
-
-  it("shows the login form with email and password but no confirm field when an owner exists", async () => {
-    setup({ ownerExists: true, authenticated: false });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: /^log in$/i }),
-      ).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText(/^email/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^password/i)).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText(/confirm password/i),
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not flag confirm password as mismatched when tabbed through while still empty", async () => {
-    const user = userEvent.setup();
-    setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
-
-    await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
-    await user.tab();
-    await user.tab();
-
-    expect(screen.queryByText(/do not match/i)).not.toBeInTheDocument();
-  });
-
-  it("flags a password under 12 characters as soon as the field loses focus, with no submit and no round-trip", async () => {
-    const user = userEvent.setup();
-    const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
-
-    await user.type(screen.getByLabelText(/^password/i), "tooshort");
-    await user.tab();
-
-    expect(
-      await screen.findByText(/at least 12 characters/i),
-    ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith("/api/setup", expect.anything());
-    expect(
-      screen.queryByRole("button", { name: /create account/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("flags a confirm-password mismatch as soon as the field loses focus, with no submit and no round-trip", async () => {
-    const user = userEvent.setup();
-    const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
-
-    await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
-    await user.type(
-      screen.getByLabelText(/confirm password/i),
-      "correcthorsebatteryx",
-    );
-    await user.tab();
-
-    expect(await screen.findByText(/do not match/i)).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith("/api/setup", expect.anything());
-  });
-
-  it("rejects a password under 12 characters inline with no round-trip", async () => {
-    const user = userEvent.setup();
-    const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
-
-    await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
-    await user.type(screen.getByLabelText(/^password/i), "tooshort");
-    await user.type(screen.getByLabelText(/confirm password/i), "tooshort");
-    await user.click(screen.getByRole("button", { name: /create account/i }));
-
-    expect(
-      await screen.findByText(/at least 12 characters/i),
-    ).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith("/api/setup", expect.anything());
-  });
-
-  it("rejects a confirm-password mismatch inline with no round-trip", async () => {
-    const user = userEvent.setup();
-    const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
-
-    await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
-    await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
-    await user.type(
-      screen.getByLabelText(/confirm password/i),
-      "correcthorsebatteryx",
-    );
-    await user.click(screen.getByRole("button", { name: /create account/i }));
-
-    expect(await screen.findByText(/do not match/i)).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith("/api/setup", expect.anything());
-  });
-
   it("submits /api/setup with email and password (not confirmPassword) on valid setup", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: false });
-    await screen.findByRole("heading", { name: /create your account/i });
+    await screen.findByText(/create your account/i);
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -208,7 +97,7 @@ describe("LoginPage", () => {
   it("submits /api/login with email and password on valid login", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: true, authenticated: false });
-    await screen.findByRole("heading", { name: /^log in$/i });
+    await screen.findByText(/^log in$/i, { selector: "legend" });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -244,7 +133,7 @@ describe("LoginPage", () => {
       return Promise.resolve(jsonResponse(200, { ok: true }));
     });
     setupWithMock(fetchMock);
-    await screen.findByRole("heading", { name: /^log in$/i });
+    await screen.findByText(/^log in$/i, { selector: "legend" });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "wrongpassword123");

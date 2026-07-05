@@ -27,13 +27,14 @@ const BASE_CONFIG: AgentConfig = {
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  maxToolCalls: 24,
   hardTimeoutMs: 300_000,
   toolTimeoutMs: 15_000,
+  remediationBreakerLimit: 5,
+  remediationBreakerWindowMs: 600_000,
 };
 
 const READ_TOOL = {
-  name: "get_container_list",
+  name: "list_services",
   description: "List containers.",
   input_schema: {
     type: "object" as const,
@@ -96,7 +97,7 @@ describe("AnthropicProvider", () => {
       output_config?: unknown;
     };
     expect((callArgs.tools ?? []).map((t) => t.name)).toEqual([
-      "get_container_list",
+      "list_services",
     ]);
     expect(callArgs.output_config).toBeUndefined();
   });
@@ -108,7 +109,7 @@ describe("AnthropicProvider", () => {
         {
           type: "tool_use",
           id: "tu-1",
-          name: "get_container_list",
+          name: "list_services",
           input: { environment: "docker" },
         },
       ],
@@ -119,7 +120,7 @@ describe("AnthropicProvider", () => {
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("get_container_list");
+    expect(response.toolUses[0].name).toBe("list_services");
     expect(response.toolUses[0].id).toBe("tu-1");
   });
 });

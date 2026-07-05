@@ -2,16 +2,36 @@ import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
 import { logger } from "../logger.js";
+import { setRemediationEnabled } from "../remediation-state.js";
 import type {
   RunnerCommandMessage,
   RunnerHeartbeatMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
+  SetRemediationModeMessage,
 } from "@nightwatch/shared";
 
 type CommandHandler = (input: unknown) => Promise<unknown>;
 
 const BACKOFF_STEPS = [2, 4, 8, 16, 32, 60];
+
+// Bound on the manifest refresh so a hung Docker/k8s API cannot stall the
+// heartbeat (which would get the runner marked offline).
+const MANIFEST_REFRESH_TIMEOUT_MS = 5000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error(`timed out after ${ms}ms`)),
+        ms,
+      );
+      // Don't let the timeout keep the process alive on its own.
+      t.unref();
+    }),
+  ]);
+}
 
 export function startWebSocketClient(
   dispatch: Map<string, CommandHandler>,
@@ -43,7 +63,10 @@ export function startWebSocketClient(
   }
 
   async function sendManifest(socket: WebSocket): Promise<void> {
-    const manifest = await detectCapabilities();
+    const manifest = await withTimeout(
+      detectCapabilities(),
+      MANIFEST_REFRESH_TIMEOUT_MS,
+    );
     const msg: RunnerManifestMessage = {
       messageId: randomUUID(),
       type: "manifest",
@@ -52,15 +75,44 @@ export function startWebSocketClient(
     socket.send(JSON.stringify(msg));
   }
 
+  async function sendHeartbeat(socket: WebSocket): Promise<void> {
+    if (socket.readyState !== WebSocket.OPEN) return;
+
+    // Liveness first: a bare timestamp nothing can block. Sending it before the
+    // manifest refresh means a hung Docker/k8s API can never delay the heartbeat
+    // and get this runner marked offline.
+    const heartbeatMsg: RunnerHeartbeatMessage = {
+      messageId: randomUUID(),
+      type: "heartbeat",
+      payload: { timestamp: new Date().toISOString() },
+    };
+    socket.send(JSON.stringify(heartbeatMsg));
+
+    // Manifest refresh is best-effort and time-bounded; a failure or timeout
+    // never affects the liveness ping already sent above.
+    try {
+      const manifest = await withTimeout(
+        detectCapabilities(),
+        MANIFEST_REFRESH_TIMEOUT_MS,
+      );
+      if (socket.readyState === WebSocket.OPEN) {
+        const manifestMsg: RunnerManifestMessage = {
+          messageId: randomUUID(),
+          type: "manifest",
+          payload: manifest,
+        };
+        socket.send(JSON.stringify(manifestMsg));
+      }
+    } catch (err: unknown) {
+      logger.warn({ err }, "heartbeat manifest refresh failed or timed out");
+    }
+  }
+
   function startHeartbeat(socket: WebSocket): void {
     heartbeatTimer = setInterval(() => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      const msg: RunnerHeartbeatMessage = {
-        messageId: randomUUID(),
-        type: "heartbeat",
-        payload: { timestamp: new Date().toISOString() },
-      };
-      socket.send(JSON.stringify(msg));
+      sendHeartbeat(socket).catch((err: unknown) =>
+        logger.error({ err }, "heartbeat failed"),
+      );
     }, 30_000);
   }
 
@@ -136,6 +188,13 @@ export function startWebSocketClient(
       if (parsed["type"] === "command") {
         handleCommand(ws!, parsed as unknown as RunnerCommandMessage).catch(
           (err: unknown) => logger.error({ err }, "command handler error"),
+        );
+      } else if (parsed["type"] === "set_remediation_mode") {
+        const msg = parsed as unknown as SetRemediationModeMessage;
+        setRemediationEnabled(msg.payload.enabled);
+        logger.info(
+          { enabled: msg.payload.enabled },
+          "remediation mode updated",
         );
       }
     });

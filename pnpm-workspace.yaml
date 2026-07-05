@@ -7,9 +7,12 @@ allowBuilds:
   '@prisma/engines': true
   argon2: true
   better-sqlite3: true
+  cpu-features: true
   esbuild: true
   msgpackr-extract: true
   prisma: true
+  protobufjs: true
+  ssh2: true
 minimumReleaseAgeExclude:
   - openai@6.42.0
   - '@mantine/core@9.3.1'

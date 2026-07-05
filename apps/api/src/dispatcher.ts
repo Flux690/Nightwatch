@@ -3,6 +3,7 @@ import { runInvestigation } from "./agent/loop.js";
 import type { RunInvestigationInput } from "./agent/loop.js";
 import { getSession } from "./db/sessions.js";
 import { logger } from "./logger.js";
+import { publishRunFailed } from "./session/stream.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
 // Architecture invariant: alert, chat, and resume all funnel through dispatch().
@@ -78,15 +79,21 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
           { err, sessionId: input.sessionId },
           "investigation failed",
         );
+        // Surface the crash to the console so the run shows as failed instead of
+        // silently going idle; the dispatcher is the single chokepoint that sees
+        // every run's terminal rejection.
+        publishRunFailed(
+          input.sessionId,
+          err instanceof Error ? err.message : "Investigation failed.",
+        );
       })
       .finally(() => {
         activeSessionIds.delete(input.sessionId);
         controllers.delete(input.sessionId);
         if (alert != null) {
-          // Dispatch inbox leftovers as one new session (CONTEXT.md alert pipeline:
-          // "inbox leftovers at run end become new sessions"). Multiple leftovers
-          // batch together as additionalAlerts — identical to the batch-window
-          // path — so the at-most-one active alert session invariant holds.
+          // Dispatch inbox leftovers as one new session (leftovers at run end become new sessions).
+          // Multiple leftovers batch as additionalAlerts, so the at-most-one active alert session
+          // invariant holds.
           const leftovers = inbox.get(input.sessionId) ?? [];
           inbox.delete(input.sessionId);
           if (leftovers.length > 0) {

@@ -211,9 +211,8 @@ export function createContractFakeProvider(
   );
 }
 
-// Module-level script shared across provider instances: setScript resets the
-// sequence and successive runs (e.g. a suspend then a resume) continue from
-// where the previous run left off. Preserves the long-standing per-file
+// Module-level script shared across instances: setScript resets the sequence and successive
+// runs (suspend then resume) continue where the last left off, preserving the per-file
 // setScript([...]) pattern so converting a file needs no per-run rewrites.
 export interface ScriptRunner {
   setScript: (turns: ScriptedTurn[]) => void;
@@ -234,11 +233,9 @@ export function createScriptRunner(): ScriptRunner {
   };
 }
 
-// A FIFO gate shared across provider instances in a test file. Pass `gate` to
-// createContractFakeProvider so each chat() parks until releaseNext()/releaseAll()
-// lets it proceed - the faithful equivalent of the old per-file `gates` arrays,
-// used by timing tests (e.g. mid-run alert injection) that must act while a run
-// is parked. Non-timing tests omit it and chat() resolves immediately.
+// A FIFO gate shared across instances: pass `gate` so each chat() parks until
+// releaseNext()/releaseAll(), the faithful equivalent of the old per-file `gates` arrays for
+// timing tests (e.g. mid-run injection). Non-timing tests omit it and chat() resolves at once.
 export interface GateController {
   gate: () => Promise<void>;
   releaseNext: () => void;

@@ -20,12 +20,12 @@ export interface RunnerCommandMessage extends WsEnvelope {
   };
 }
 
-// API → Runner: replace the runner's Prometheus alert rules and reload.
-// Settings, not remediation — does not pass through the approval gate.
-export interface UpdateAlertRulesCommand {
-  commandName: "update_alert_rules";
-  commandInput: { rulesYaml: string };
-  correlationId: string;
+// API → Runner: update the in-memory remediation mode (fire-and-forget).
+// The runner applies it immediately and reports it in subsequent manifests.
+// Reconciliation: the API pushes this whenever a manifest disagrees with DB.
+export interface SetRemediationModeMessage extends WsEnvelope {
+  type: "set_remediation_mode";
+  payload: { enabled: boolean };
 }
 
 // Runner → API: capability manifest on connect

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# {{PLATFORM_URL}}, {{WS_URL}}, and {{NIGHTWATCH_TOKEN}} are substituted at
-# serve time by GET /connect.sh — do not edit them here.
+# The {{...}} placeholders are substituted at serve time by GET /connect.sh -
+# do not edit them here. NIGHTWATCH_INGEST_TOKEN is the fleet-wide nwi_ alert
+# credential, shared by every server; NIGHTWATCH_TOKEN is this runner's own nwr_.
 set -euo pipefail
 
 IMAGE="${NIGHTWATCH_IMAGE:-nightwatch/runner:latest}"
@@ -8,6 +9,8 @@ CONTAINER_NAME="nightwatch"
 PLATFORM_URL="{{PLATFORM_URL}}"
 WS_URL="{{WS_URL}}"
 NIGHTWATCH_TOKEN="{{NIGHTWATCH_TOKEN}}"
+NIGHTWATCH_SERVER_NAME="{{NIGHTWATCH_SERVER_NAME}}"
+NIGHTWATCH_INGEST_TOKEN="{{NIGHTWATCH_INGEST_TOKEN}}"
 
 detect_service() {
   local port="$1" health_path="$2"
@@ -72,11 +75,12 @@ DOCKER_ARGS=(
   -v nightwatch-data:/var/nightwatch
 
   -e "NIGHTWATCH_TOKEN=${NIGHTWATCH_TOKEN}"
+  -e "NIGHTWATCH_INGEST_TOKEN=${NIGHTWATCH_INGEST_TOKEN}"
   -e "WS_URL=${WS_URL}"
   -e "PLATFORM_URL=${PLATFORM_URL}"
+  -e "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}"
   -e "HOST_PROC=/host/proc"
-  -e "NIGHTWATCH_DB_PATH=/var/nightwatch/history.db"
-  -e "REMEDIATION_ENABLED=${REMEDIATION_ENABLED:-false}"
+  -e "NIGHTWATCH_DATA_DIR=/var/nightwatch"
 )
 
 if [ -n "$PROMETHEUS_URL" ]; then
@@ -120,7 +124,7 @@ if [ -n "$ALERTMANAGER_URL" ]; then
   echo "          http_config:"
   echo "            authorization:"
   echo "              type: Bearer"
-  echo "              credentials: '${NIGHTWATCH_TOKEN}'"
+  echo "              credentials: '${NIGHTWATCH_INGEST_TOKEN}'"
   echo ""
 fi
 

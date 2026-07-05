@@ -1,6 +1,16 @@
 export type { AlertSeverity, NormalizedAlert } from "./alerts.js";
 export type { AuthStatusResponse } from "./auth.js";
 export type {
+  DockerServiceIdentity,
+  KubernetesServiceIdentity,
+  ServiceIdentity,
+} from "./service-identity.js";
+export {
+  deriveDockerServiceIdentity,
+  deriveServiceIdentity,
+  serviceIdentityKey,
+} from "./service-identity.js";
+export type {
   GetContainerListInput,
   ContainerInfo,
   GetContainerLogsInput,
@@ -19,13 +29,7 @@ export type {
   GetHostNetworkResult,
   GetHostDmesgInput,
   GetHostDmesgResult,
-  QueryPrometheusInput,
-  PrometheusResult,
   GetAlertHistoryInput,
-  GetRecentCommitsInput,
-  CommitInfo,
-  GetRecentDeploysInput,
-  DeployInfo,
   GetEnvVariableNamesInput,
   ReadFileInput,
   ReadFileResult,
@@ -33,16 +37,16 @@ export type {
   RiskLevel,
   RestartContainerInput,
   RestartContainerResult,
-  RollbackDeployInput,
-  RollbackDeployResult,
+  RestartServiceK8sResult,
   ExecCommandInput,
   ExecCommandResult,
+  GetK8sRolloutStatusInput,
 } from "./tools.js";
 export type {
   MessageDirection,
   WsEnvelope,
   RunnerCommandMessage,
-  UpdateAlertRulesCommand,
+  SetRemediationModeMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
   RunnerHeartbeatMessage,
@@ -57,6 +61,7 @@ export type {
   ConsoleInterrupt,
   ConsoleToolCallEnd,
   ConsoleRunStopped,
+  ConsoleRunFailed,
   ConsoleEvent,
 } from "./console-events.js";
 export type {
@@ -67,13 +72,19 @@ export type {
 } from "./approvals.js";
 export type {
   CapabilityManifest,
-  MetricSnapshot,
+  FleetRunner,
   RunnerRecord,
+  ServiceManifestEntry,
 } from "./runner.js";
 export type { SessionRole, SessionMeta, SessionMessage } from "./sessions.js";
+export type {
+  RemediationStatus,
+  RemediationActionRecord,
+} from "./remediation.js";
 export type {
   LLMProviderName,
   ThinkingMode,
   ReasoningEffort,
   AgentConfig,
 } from "./config.js";
+export type { UnresolvedAlertRecord } from "./unresolved-alerts.js";

@@ -6,7 +6,12 @@ export interface ConsoleHumanInputResolved extends WsEnvelope {
   payload: {
     sessionId: string;
     toolUseId: string;
-    status: "approved" | "rejected" | "context_added" | "answered";
+    status:
+      | "approved"
+      | "rejected"
+      | "context_added"
+      | "answered"
+      | "continued";
     resolvedBy?: string;
     resolvedAt?: string;
   };
@@ -50,7 +55,7 @@ export interface ConsoleHumanInputRequired extends WsEnvelope {
     toolUseId: string;
     toolName: string;
     input: Record<string, unknown>;
-    kind: "approval" | "clarification";
+    kind: "approval" | "clarification" | "continue";
     question?: string;
     options?: Array<{ label: string; description: string }>;
     multiSelect?: boolean;
@@ -76,6 +81,16 @@ export interface ConsoleRunStopped extends WsEnvelope {
   };
 }
 
+// An investigation threw an unexpected error and ended without finishing. Tells
+// the console to surface the failure instead of leaving the run looking idle.
+export interface ConsoleRunFailed extends WsEnvelope {
+  type: "RUN_FAILED";
+  payload: {
+    sessionId: string;
+    message: string;
+  };
+}
+
 // Discriminated union of all API→console WebSocket messages.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -85,4 +100,5 @@ export type ConsoleEvent =
   | ConsoleHumanInputRequired
   | ConsoleToolCallEnd
   | ConsoleHumanInputResolved
-  | ConsoleRunStopped;
+  | ConsoleRunStopped
+  | ConsoleRunFailed;

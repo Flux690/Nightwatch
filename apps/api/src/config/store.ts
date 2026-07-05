@@ -1,7 +1,8 @@
 import { getDb } from "../db/client.js";
 import {
   DEFAULT_HARD_TIMEOUT_MS,
-  DEFAULT_MAX_TOOL_CALLS,
+  DEFAULT_REMEDIATION_BREAKER_LIMIT,
+  DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
@@ -27,9 +28,10 @@ type ConfigRow = {
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
-  maxToolCalls: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
+  remediationBreakerLimit: number;
+  remediationBreakerWindowMs: number;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -41,9 +43,10 @@ const SELECT_ROW = `
          max_output_tokens  AS maxOutputTokens,
          max_retries        AS maxRetries,
          request_timeout_ms AS requestTimeoutMs,
-         max_tool_calls     AS maxToolCalls,
          hard_timeout_ms    AS hardTimeoutMs,
          tool_timeout_ms    AS toolTimeoutMs,
+         remediation_breaker_limit     AS remediationBreakerLimit,
+         remediation_breaker_window_ms AS remediationBreakerWindowMs,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -74,9 +77,10 @@ function defaultConfigFromEnv(): AgentConfig {
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     maxRetries: MAX_RETRIES,
     requestTimeoutMs: REQUEST_TIMEOUT_MS,
-    maxToolCalls: DEFAULT_MAX_TOOL_CALLS,
     hardTimeoutMs: DEFAULT_HARD_TIMEOUT_MS,
     toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
+    remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
+    remediationBreakerWindowMs: DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -106,9 +110,10 @@ export function loadConfig(): AgentConfig {
     maxOutputTokens: row.maxOutputTokens,
     maxRetries: row.maxRetries,
     requestTimeoutMs: row.requestTimeoutMs,
-    maxToolCalls: row.maxToolCalls,
     hardTimeoutMs: row.hardTimeoutMs,
     toolTimeoutMs: row.toolTimeoutMs,
+    remediationBreakerLimit: row.remediationBreakerLimit,
+    remediationBreakerWindowMs: row.remediationBreakerWindowMs,
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -130,11 +135,13 @@ export function loadApiKey(): string | undefined {
 const UPSERT_CONFIG = `
   INSERT INTO config (
     id, provider, model, thinking, max_output_tokens, max_retries,
-    request_timeout_ms, max_tool_calls, hard_timeout_ms, tool_timeout_ms,
+    request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
+    remediation_breaker_limit, remediation_breaker_window_ms,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
-    @requestTimeoutMs, @maxToolCalls, @hardTimeoutMs, @toolTimeoutMs,
+    @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
+    @remediationBreakerLimit, @remediationBreakerWindowMs,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -144,9 +151,10 @@ const UPSERT_CONFIG = `
     max_output_tokens = excluded.max_output_tokens,
     max_retries = excluded.max_retries,
     request_timeout_ms = excluded.request_timeout_ms,
-    max_tool_calls = excluded.max_tool_calls,
     hard_timeout_ms = excluded.hard_timeout_ms,
     tool_timeout_ms = excluded.tool_timeout_ms,
+    remediation_breaker_limit = excluded.remediation_breaker_limit,
+    remediation_breaker_window_ms = excluded.remediation_breaker_window_ms,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -167,59 +175,16 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       maxOutputTokens: next.maxOutputTokens,
       maxRetries: next.maxRetries,
       requestTimeoutMs: next.requestTimeoutMs,
-      maxToolCalls: next.maxToolCalls,
       hardTimeoutMs: next.hardTimeoutMs,
       toolTimeoutMs: next.toolTimeoutMs,
+      remediationBreakerLimit: next.remediationBreakerLimit,
+      remediationBreakerWindowMs: next.remediationBreakerWindowMs,
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,
       updatedAt: new Date().toISOString(),
     });
   return next;
-}
-
-export function getLoginVersion(): number {
-  const row = getDb()
-    .prepare("SELECT login_version FROM config WHERE id = ?")
-    .get(CONFIG_ID) as { login_version: number } | undefined;
-  return row?.login_version ?? 0;
-}
-
-export function getOwnerCredentials(): { email: string; hash: string } | null {
-  const row = getDb()
-    .prepare(
-      "SELECT owner_email AS email, owner_hash AS hash FROM config WHERE id = ?",
-    )
-    .get(CONFIG_ID) as
-    | { email: string | null; hash: string | null }
-    | undefined;
-  if (!row?.hash || !row.email) return null;
-  return { email: row.email, hash: row.hash };
-}
-
-export function bumpLoginVersion(): void {
-  getDb()
-    .prepare(
-      `INSERT INTO config (id, login_version, updated_at)
-       VALUES (@id, 1, @updatedAt)
-       ON CONFLICT(id) DO UPDATE SET
-         login_version = login_version + 1,
-         updated_at = @updatedAt`,
-    )
-    .run({ id: CONFIG_ID, updatedAt: new Date().toISOString() });
-}
-
-export function saveOwner(email: string, hash: string): void {
-  getDb()
-    .prepare(
-      `INSERT INTO config (id, owner_email, owner_hash, updated_at)
-       VALUES (@id, @email, @hash, @updatedAt)
-       ON CONFLICT(id) DO UPDATE SET
-         owner_email = excluded.owner_email,
-         owner_hash = excluded.owner_hash,
-         updated_at = excluded.updated_at`,
-    )
-    .run({ id: CONFIG_ID, email, hash, updatedAt: new Date().toISOString() });
 }
 
 // Persists the encrypted key without touching other config fields. On first

@@ -12,8 +12,9 @@ import { registerWsRoutes } from "../ws/server.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
+import { waitFor } from "./wait.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -68,7 +69,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         id: string;
       };
       const row = getDb()
-        .prepare("SELECT token FROM tokens WHERE id = ?")
+        .prepare("SELECT token FROM runner WHERE id = ?")
         .get(id) as { token: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.token).toBe(sha256hex(token));
@@ -101,6 +102,83 @@ describe("Runner token lifecycle (issue 038)", () => {
       const tokenA = (JSON.parse(a.body) as { token: string }).token;
       const tokenB = (JSON.parse(b.body) as { token: string }).token;
       expect(tokenA).not.toBe(tokenB);
+    });
+
+    it("stores and returns serverName when provided", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-01" },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body) as { serverName: string };
+      expect(body.serverName).toBe("web-01");
+    });
+
+    it("returns 400 when serverName is empty", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("returns 400 when serverName contains a forward slash", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "prod/web-01" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("reclaims a server name whose runner never connected (abandoned setup)", async () => {
+      const first = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "db-server-01" },
+      });
+      const { id: firstId } = JSON.parse(first.body) as { id: string };
+
+      const second = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "db-server-01" },
+      });
+      expect(second.statusCode).toBe(201);
+
+      // The abandoned orphan is gone; only the fresh reservation holds the name.
+      const rows = getDb()
+        .prepare("SELECT id FROM runner WHERE server_name = 'db-server-01'")
+        .all() as Array<{ id: string }>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).not.toBe(firstId);
+    });
+
+    it("returns 409 when the server name belongs to a runner that has connected", async () => {
+      const first = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-prod-01" },
+      });
+      const { id } = JSON.parse(first.body) as { id: string };
+      // Simulate the runner manifesting (manifest handler sets last_used_at).
+      touchLastUsed(id);
+
+      const res = await server.inject({
+        method: "POST",
+        url: "/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "web-prod-01" },
+      });
+      expect(res.statusCode).toBe(409);
     });
   });
 
@@ -303,7 +381,7 @@ describe("Runner token lifecycle (issue 038)", () => {
   });
 
   describe("lastUsedAt", () => {
-    it("is set after a successful runner WS connect", async () => {
+    it("is set after the runner sends its manifest", async () => {
       const mint = await server.inject({
         method: "POST",
         url: "/tokens",
@@ -323,8 +401,30 @@ describe("Runner token lifecycle (issue 038)", () => {
         ws.on("message", (raw) => {
           const msg = JSON.parse(String(raw)) as { type: string };
           if (msg.type === "connected") {
-            ws.close();
-            resolve();
+            ws.send(
+              JSON.stringify({
+                type: "manifest",
+                payload: {
+                  hostname: "test-host",
+                  runnerVersion: "2.0.0",
+                  capabilities: {
+                    docker: false,
+                    kubernetes: false,
+                    services: [],
+                    postgres: { available: false },
+                    redis: { available: false },
+                    hostMetrics: false,
+                    fileRead: false,
+                    remediationEnabled: false,
+                  },
+                },
+              }),
+            );
+            // Give the server one event-loop tick to process the manifest before closing.
+            setTimeout(() => {
+              ws.close();
+              resolve();
+            }, 20);
           }
         });
         ws.on("error", reject);
@@ -345,7 +445,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
-      const { id: tokenId } = generateToken("history-test");
+      const { id: runnerId } = generateRunnerToken("history-test");
       createSession(
         {
           sessionId: "sess-history-1",
@@ -357,7 +457,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       await server.inject({
         method: "DELETE",
-        url: `/tokens/${tokenId}`,
+        url: `/tokens/${runnerId}`,
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 

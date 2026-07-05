@@ -6,16 +6,16 @@ import type {
   ConsoleInterruptResolved,
   ConsoleRunFinished,
   ConsoleRunStopped,
+  ConsoleRunFailed,
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
   SessionMessage,
 } from "@nightwatch/shared";
 
-// Every envelope goes to the one console bus; the console WS forwards all of
-// them and the client routes by type and sessionId. Publishing is synchronous
-// and in-process now, so there is nothing to fail - but the serialized form
-// stays the wire-identical envelope the console already parses.
+// Every envelope goes to the one console bus; the console WS forwards all and the client
+// routes by type/sessionId. Publishing is synchronous in-process now, but the serialized
+// form stays the wire-identical envelope the console parses.
 function publishRaw(env: unknown): void {
   publishConsoleEvent(JSON.stringify(env));
 }
@@ -80,6 +80,15 @@ export function publishRunStopped(sessionId: string): void {
     messageId: randomUUID(),
     type: "RUN_STOPPED",
     payload: { sessionId },
+  };
+  publishRaw(env);
+}
+
+export function publishRunFailed(sessionId: string, message: string): void {
+  const env: ConsoleRunFailed = {
+    messageId: randomUUID(),
+    type: "RUN_FAILED",
+    payload: { sessionId, message },
   };
   publishRaw(env);
 }

@@ -6,10 +6,8 @@ import { subscribeConsole } from "../session/bus.js";
 
 const LOCALHOST_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
 
-// Built once at registration time so the env var is read exactly once per server
-// instance. Two modes:
-//   - No CONSOLE_ORIGINS: allow any origin whose hostname is localhost/127.0.0.1
-//   - CONSOLE_ORIGINS set: exact match against the comma-separated list
+// Built once per server so the env var is read once. Two modes: no CONSOLE_ORIGINS allows
+// any localhost origin; CONSOLE_ORIGINS set is an exact match against the comma-separated list.
 function buildOriginChecker(): (origin: string | undefined) => boolean {
   const raw = process.env["CONSOLE_ORIGINS"]?.trim();
   if (!raw) {
@@ -31,11 +29,9 @@ function buildOriginChecker(): (origin: string | undefined) => boolean {
   return (origin) => !!origin && allowed.has(origin);
 }
 
-// The console's real-time feed. It subscribes to the in-process event bus and
-// relays every session event and global console event straight to the socket;
-// the client routes by type and sessionId. Single-admin, so forwarding every
-// event is fine. The subscription is registered synchronously before the
-// `connected` ack, so no event published after the ack can be missed.
+// The console's real-time feed: subscribes to the in-process bus and relays every event to
+// the socket, which the client routes by type/sessionId. Subscribed synchronously before the
+// `connected` ack, so no post-ack event is missed.
 export async function registerConsoleWsRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {

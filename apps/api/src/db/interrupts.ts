@@ -5,7 +5,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 export interface PendingHumanInput {
   sessionId: string;
   toolUseId: string;
-  kind: "approval" | "clarification";
+  kind: "approval" | "clarification" | "continue";
   toolName: string;
   toolInput: Record<string, unknown>;
   completedResults: ToolResult[];
@@ -32,14 +32,38 @@ interface RawRowWithSession extends RawRow {
   originatingAlert: string | null;
 }
 
+function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
+  return kind === "approval" || kind === "clarification" || kind === "continue";
+}
+
+// The row is from our own INSERT but still untrusted on read (partial write, hand-edit,
+// schema drift): fail loudly on an unknown kind or bad JSON rather than crashing deep in
+// the resume path.
 function parseRow(row: RawRow): PendingHumanInput {
+  if (!isHumanInputKind(row.kind)) {
+    throw new Error(
+      `pending_human_input(${row.sessionId}) has unknown kind "${row.kind}"`,
+    );
+  }
+  let toolInput: Record<string, unknown>;
+  let completedResults: ToolResult[];
+  try {
+    toolInput = JSON.parse(row.toolInput) as Record<string, unknown>;
+    completedResults = JSON.parse(row.completedResults) as ToolResult[];
+  } catch (err) {
+    throw new Error(
+      `pending_human_input(${row.sessionId}) has corrupt JSON: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
   return {
     sessionId: row.sessionId,
     toolUseId: row.toolUseId,
-    kind: row.kind as "approval" | "clarification",
+    kind: row.kind,
     toolName: row.toolName,
-    toolInput: JSON.parse(row.toolInput) as Record<string, unknown>,
-    completedResults: JSON.parse(row.completedResults) as ToolResult[],
+    toolInput,
+    completedResults,
     claimedAt: row.claimedAt,
     createdAt: row.createdAt,
   };

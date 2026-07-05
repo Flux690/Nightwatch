@@ -18,6 +18,10 @@ import {
   deleteSession,
 } from "../db/sessions.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import {
+  insertExecutingRemediationAction,
+  findRemediationAction,
+} from "../db/remediation-actions.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -47,7 +51,11 @@ function msg(
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
   runnerId: "runner-A",
-  targetIdentifier: "web-01",
+  targetIdentifier: {
+    provider: "docker",
+    project: "web-01",
+    service: "web-01",
+  },
   alertType: "ContainerDown",
   severity: "critical",
   firedAt: "2026-06-13T00:00:00.000Z",
@@ -161,7 +169,7 @@ describe("API-local session store", () => {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
       kind: "approval",
-      toolName: "restart_container",
+      toolName: "restart_service",
       toolInput: {},
       completedResults: [],
       claimedAt: null,
@@ -177,5 +185,32 @@ describe("API-local session store", () => {
 
   it("deleteSession on an unknown session is a no-op", () => {
     expect(() => deleteSession("nope")).not.toThrow();
+  });
+
+  it("deleteSession preserves the remediation audit log (the record outlives the session)", () => {
+    const m = meta();
+    createSession(m, alert);
+    insertExecutingRemediationAction({
+      toolUseId: "tu-audit-survives",
+      sessionId: m.sessionId,
+      toolName: "restart_service",
+      input: {
+        service: { provider: "docker", project: "web", service: "web" },
+      },
+      resolvedBy: "console",
+    });
+
+    deleteSession(m.sessionId);
+
+    expect(getSession(m.sessionId)).toBeUndefined();
+    expect(
+      findRemediationAction(m.sessionId, "tu-audit-survives"),
+    ).toBeDefined();
+  });
+
+  it("rejects a transcript message for a session that does not exist (foreign keys enforced)", () => {
+    expect(() => appendSessionMessages([msg("ghost-session", 0)])).toThrow(
+      /FOREIGN KEY/i,
+    );
   });
 });

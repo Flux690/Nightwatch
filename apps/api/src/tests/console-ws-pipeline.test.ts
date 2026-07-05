@@ -12,10 +12,9 @@ import type {
 } from "@nightwatch/shared";
 
 const { mockCreateProvider } = vi.hoisted(() => {
-  // Each createProvider() call returns a fresh, stateful provider instance so
-  // that snapshot() reflects the messages accumulated via seed/start/chat/append.
-  // The fixed-array mock would return seed.length items on resume, causing
-  // persist() to skip all new messages (persistedCount == snap.length).
+  // Each createProvider() returns a fresh stateful instance so snapshot() reflects messages
+  // from seed/start/chat/append; a fixed-array mock would return seed.length on resume and
+  // persist() would skip all new messages.
   const makeProvider = () => {
     type ProvMsg = {
       role: "user" | "assistant";
@@ -69,23 +68,19 @@ vi.mock("../llm/factory.js", () => ({
   createProvider: mockCreateProvider,
 }));
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import {
-  registerRunner,
-  unregisterRunner,
-  resolveCommand,
-} from "../ws/router.js";
+import { registerRunner, unregisterRunner } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 
-// Wait for the console handler's `connected` ack, sent only after it subscribes
-// to the event bus. Dispatch is now in-process and synchronous, so a run can
-// publish before a subscriber that only waited for the socket `open` handshake;
-// pre-subscribe events are correctly dropped (the transcript is durable).
+// Wait for the `connected` ack, sent only after the handler subscribes: dispatch is
+// synchronous, so a run can publish before a subscriber that only waited for socket `open`;
+// pre-subscribe events are correctly dropped (transcript is durable).
 function waitForConnected(ws: WebSocket): Promise<void> {
   return new Promise<void>((resolve) => {
     const onMessage = (raw: WebSocket.RawData): void => {
@@ -105,12 +100,11 @@ describe("console WS pipeline", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "test-runner-1";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("test-runner").id;
+    TEST_TOKEN = generateRunnerToken("test-runner").id;
 
     // Persistence is local now; the provider calls no runner tool here, so the
     // runner receives nothing. Resolve defensively for any stray command.
@@ -130,7 +124,7 @@ describe("console WS pipeline", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -172,10 +166,9 @@ describe("console WS pipeline", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
 
-    // The POST dispatched the run in-process; the mocked investigation publishes
-    // session_delta then session_message over the event bus to the console WS.
-    // The run resolves in microtasks - possibly before this captured sessionId -
-    // so buffer every event and poll for the match rather than racing arrival.
+    // The POST dispatches in-process; the mocked run publishes session_delta then session_message
+    // over the bus. It resolves in microtasks (maybe before this sessionId), so buffer every event
+    // and poll for the match rather than racing.
     await waitFor(() =>
       events.some(
         (e) =>
@@ -238,17 +231,14 @@ describe("console WS pipeline", () => {
       ).length;
 
     // Start a new chat session (first run).
-    const startRes = await fetch(
-      `http://127.0.0.1:${port}/chat`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
-        },
-        body: JSON.stringify({ message: "Is the system healthy?" }),
+    const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
       },
-    );
+      body: JSON.stringify({ message: "Is the system healthy?" }),
+    });
     expect(startRes.status).toBe(202);
     const { sessionId } = (await startRes.json()) as { sessionId: string };
 
@@ -299,4 +289,3 @@ describe("console WS pipeline", () => {
     );
   });
 });
-

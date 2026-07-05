@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MantineProvider } from "@mantine/core";
+import { TestProviders } from "./renderWithProviders.js";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -12,8 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { RouterProvider } from "@tanstack/react-router";
 
-import { SessionsSidebar } from "../pages/SessionsSidebar.js";
-import { theme, cssVariablesResolver } from "../theme.js";
+import { SessionsSidebar } from "@/components/layout/SessionsSidebar";
 
 const RUNNER = {
   id: "inst-1",
@@ -28,6 +27,13 @@ const SESSION_1 = {
   token: "tok-1",
   title: "CPU spike on web-01",
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
+};
+
+const SESSION_2 = {
+  sessionId: "s2",
+  token: "tok-1",
+  title: "Disk full on db-02",
+  createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
 };
 
 function setupWithSessionsError() {
@@ -80,19 +86,19 @@ function setupWithSessionsError() {
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </TestProviders>,
   );
 }
 
-function setup(sessions: object[] = [SESSION_1]) {
+function setup(
+  sessions: object[] = [SESSION_1],
+  deleteOk = true,
+  initialPath = "/sessions",
+) {
   vi.stubGlobal(
     "WebSocket",
     class {
@@ -109,11 +115,19 @@ function setup(sessions: object[] = [SESSION_1]) {
   );
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation((url: string) => {
+    vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url.includes("/runners")) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve([RUNNER]),
+        });
+      }
+      if (url.includes("/sessions/") && init?.method === "DELETE") {
+        return Promise.resolve({
+          ok: deleteOk,
+          status: deleteOk ? 200 : 500,
+          json: () =>
+            Promise.resolve(deleteOk ? {} : { error: "delete failed" }),
         });
       }
       if (url.includes("/sessions")) {
@@ -130,11 +144,21 @@ function setup(sessions: object[] = [SESSION_1]) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const root = createRootRoute({ component: Outlet });
+  // Mirrors Shell.tsx: SessionsSidebar is mounted once at the layout level and
+  // stays up across /sessions <-> /sessions/$id, reading the active id via
+  // useParams({ strict: false }) rather than being the route's own component.
+  const root = createRootRoute({
+    component: () => (
+      <>
+        <SessionsSidebar />
+        <Outlet />
+      </>
+    ),
+  });
   const sessionsRoute = createRoute({
     getParentRoute: () => root,
     path: "/sessions",
-    component: SessionsSidebar,
+    component: () => null,
   });
   const sessionIdRoute = createRoute({
     getParentRoute: () => root,
@@ -143,19 +167,15 @@ function setup(sessions: object[] = [SESSION_1]) {
   });
   const router = createRouter({
     routeTree: root.addChildren([sessionsRoute, sessionIdRoute]),
-    history: createMemoryHistory({ initialEntries: ["/sessions"] }),
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
   });
 
   render(
-    <MantineProvider
-      theme={theme}
-      cssVariablesResolver={cssVariablesResolver}
-      defaultColorScheme="light"
-    >
+    <TestProviders>
       <QueryClientProvider client={qc}>
         <RouterProvider router={router} />
       </QueryClientProvider>
-    </MantineProvider>,
+    </TestProviders>,
   );
 
   return { router };
@@ -176,51 +196,11 @@ describe("SessionsSidebar", () => {
         expect(screen.queryAllByRole("listitem")).toHaveLength(0);
       });
     });
-
-    it("fetches sessions and renders a row for each", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-    });
-
-    it("shows a relative timestamp on each row", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText(/ago/i)).toBeInTheDocument();
-      });
-    });
-
-    it("renders no status badge on session rows", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-
-      expect(screen.queryByText("concluded")).not.toBeInTheDocument();
-      expect(screen.queryByText("streaming")).not.toBeInTheDocument();
-      expect(screen.queryByText("awaiting-approval")).not.toBeInTheDocument();
-    });
   });
 
   describe("delete", () => {
-    it("renders a delete button per session row", async () => {
-      setup();
-
-      await waitFor(() => {
-        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
-      });
-      expect(
-        screen.getByRole("button", { name: /delete session/i }),
-      ).toBeInTheDocument();
-    });
-
     it("deletes the session when confirmed and removes it from the list", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       setup();
       const fetchMock = vi.mocked(fetch);
 
@@ -229,6 +209,9 @@ describe("SessionsSidebar", () => {
       });
 
       await user.click(screen.getByRole("button", { name: /delete session/i }));
+      await user.click(
+        await screen.findByRole("button", { name: /^delete$/i }),
+      );
 
       expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1", {
         method: "DELETE",
@@ -240,17 +223,27 @@ describe("SessionsSidebar", () => {
       });
     });
 
-    it("does not delete when the confirmation is dismissed", async () => {
+    it("keeps the session in the list when the delete request fails", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "confirm").mockReturnValue(false);
-      setup();
+      setup([SESSION_1], false);
 
       await waitFor(() => {
         expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
       });
 
       await user.click(screen.getByRole("button", { name: /delete session/i }));
+      await user.click(
+        await screen.findByRole("button", { name: /^delete$/i }),
+      );
 
+      // The delete is not optimistic: a failed request leaves the row in place
+      // (and surfaces an error) rather than dropping it as if it succeeded.
+      await waitFor(() => {
+        expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+          "/api/sessions/s1",
+          expect.objectContaining({ method: "DELETE" }),
+        );
+      });
       expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
     });
   });

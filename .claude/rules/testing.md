@@ -1,13 +1,26 @@
 # Testing Rules
 
 - Test files live in `src/tests/` within each app. Never use `__tests__` (no double-underscore directories anywhere).
-- One test file per source module or component. The split boundary is the unit under test, not line count.
-- Use `describe` blocks to organize related tests within a file. Do not split a single component's tests into multiple files.
-- Test file names mirror the source file, **including case**: `dispatcher.ts` →
-  `dispatcher.test.ts`, `Sessions.tsx` → `Sessions.test.tsx`. The case follows the
-  source (kebab-case source → kebab-case test); do not rename to camelCase. An
-  integration test that spans several modules has no single source to mirror, so
-  name it for the behaviour it exercises (e.g. `approval-cycle.test.ts`).
+- **Organize tests around behavioural seams, not source modules.** A seam is the
+  highest public boundary that exercises the behaviour: an HTTP route, the
+  runner/console WebSocket protocol, a subsystem's public function, a component's
+  rendered behaviour. One behaviour usually spans several modules and gets *one*
+  seam test - the seam is the split boundary, not the file count or the module
+  graph. (e.g. `approval-cycle.test.ts` drives loop + gate + human-input + db
+  together; `kubernetes-runner.test.ts` drives resolve + commands through the
+  command dispatch.)
+- **A module reached only through a seam does not get its own test file** - it is
+  covered by the seam test that exercises it. The transcript card panels are
+  tested through `TranscriptItemRenderer`; the approval executor through the
+  respond route; the command transport through the WS protocol. Add a dedicated
+  test only when a module has a public contract worth pinning on its own (e.g.
+  `service-identity` key building, the allowlist redaction corpus).
+- Name a test for the seam/behaviour it exercises. When a test *is* a single
+  module's seam, mirror that file's name including case (`dispatcher.ts` →
+  `dispatcher.test.ts`, `Sessions.tsx` → `Sessions.test.tsx`); kebab-case source →
+  kebab-case test, never renamed to camelCase.
+- Use `describe` blocks to organize related cases within a file. Do not split one
+  seam's tests across multiple files.
 - Mock only at system boundaries: external HTTP, WebSocket, time, randomness. Never mock our own modules.
 - A boundary test double must honour the real contract it stands in for. For the
   LLM boundary use the shared `contract-fake-provider` (it validates transcript

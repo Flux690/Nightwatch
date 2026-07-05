@@ -21,10 +21,8 @@ async function buildServer(): Promise<{
   return { server, port };
 }
 
-// Attempts a WS connection and resolves with:
-//   1000  - connected and closed normally
-//   4001  - WS close frame from server with code 4001
-//     -1  - HTTP-level rejection (error event, non-101 upgrade)
+// Attempts a WS connection and resolves with: 1000 connected+closed normally; 4001 server
+// close frame (code 4001); -1 HTTP-level rejection (error event, non-101 upgrade).
 function connectWs(
   port: number,
   session: string,

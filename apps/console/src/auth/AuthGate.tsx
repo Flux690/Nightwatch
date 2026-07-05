@@ -1,8 +1,10 @@
 import { useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate } from "@tanstack/react-router";
 
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "./AuthContext.js";
-import { Shell } from "../pages/Shell.js";
+import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { Shell } from "@/components/layout/Shell";
 
 export function AuthGate(): React.JSX.Element | null {
   const { phase } = useAuth();
@@ -14,6 +16,23 @@ export function AuthGate(): React.JSX.Element | null {
     }
   }, [phase.kind, navigate]);
 
+  if (phase.kind === "loading") {
+    return (
+      <div
+        className="flex h-screen items-center justify-center"
+        role="status"
+        aria-label="Checking sign-in"
+      >
+        <Spinner />
+      </div>
+    );
+  }
   if (phase.kind !== "authenticated") return null;
-  return <Shell />;
+  return (
+    <ConsoleWsProvider>
+      <Shell>
+        <Outlet />
+      </Shell>
+    </ConsoleWsProvider>
+  );
 }

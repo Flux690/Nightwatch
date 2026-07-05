@@ -1,6 +1,5 @@
 # Git Rules
 
-- All work happens on short-lived feature branches cut from `main`.
 - Commits follow Conventional Commits: `<type>[scope]: <description>` (https://www.conventionalcommits.org/en/v1.0.0/)
   - Types: feat, fix, chore, docs, style, refactor, test, perf, ci, build, revert
   - No em dashes (—) ever. Use a hyphen (-) or comma instead.
@@ -18,7 +17,7 @@
   body of work.
 - Never amend published commits. Create a new commit instead.
 - Never `git push` under any circumstances. Only the human pushes. No exceptions.
-- Never `git push --force` to `main`. Blocked by hooks.
+- Never `git push --force` to main. Blocked by hooks.
 - Never `git commit --no-verify`. Hooks are there for a reason.
-- Worktrees branch from `main` (baseRef: head). Merge back when done.
-- PRs: feature/worktree branch → `main` when the work is complete and all tests pass.
+- Worktrees branch from the current feature branch (baseRef: head). Merge back when done.
+- PRs: worktree branch → feature branch. Feature branch → main when complete and all tests pass.

@@ -9,10 +9,10 @@ import {
 } from "./session.js";
 import {
   bumpLoginVersion,
-  getOwnerCredentials,
+  getUserCredentials,
   getLoginVersion,
-  saveOwner,
-} from "../config/store.js";
+  saveUser,
+} from "../db/user.js";
 import { createCredentialRateLimiter } from "./rate-limit.js";
 
 const MIN_PASSWORD = 12;
@@ -31,7 +31,7 @@ export async function registerAuthRoutes(
   fastify.post<{ Body: { email?: string; password?: string } }>(
     "/setup",
     async (request, reply) => {
-      if (getOwnerCredentials()) {
+      if (getUserCredentials()) {
         return reply.code(409).send({ error: "setup already complete" });
       }
       if (!checkSetupRateLimit(request.ip)) {
@@ -50,8 +50,8 @@ export async function registerAuthRoutes(
           .code(400)
           .send({ error: "password must be at least 12 characters" });
       }
-      const ownerHash = await hash(password);
-      saveOwner(email, ownerHash);
+      const userHash = await hash(password);
+      saveUser(email, userHash);
       const cookie = await mintSession(getLoginVersion());
       reply.header("Set-Cookie", cookieHeader(cookie, isHttps(request)));
       return reply.code(200).send({ ok: true });
@@ -67,10 +67,10 @@ export async function registerAuthRoutes(
           .send({ error: "too many attempts, try again later" });
       }
       const { email, password } = request.body ?? {};
-      const owner = getOwnerCredentials();
-      const hashToVerify = owner?.hash ?? dummyHash;
+      const user = getUserCredentials();
+      const hashToVerify = user?.hash ?? dummyHash;
       const valid = await verify(hashToVerify, password ?? "");
-      if (!owner || owner.email !== email || !valid) {
+      if (!user || user.email !== email || !valid) {
         return reply.code(401).send({ error: "invalid credentials" });
       }
       const cookie = await mintSession(getLoginVersion());
@@ -97,11 +97,11 @@ export async function registerAuthRoutes(
   );
 
   fastify.get("/auth/status", async (request): Promise<AuthStatusResponse> => {
-    const owner = getOwnerCredentials();
-    if (!owner) return { ownerExists: false };
+    const user = getUserCredentials();
+    if (!user) return { ownerExists: false };
     if (!(await isAuthenticated(request))) {
       return { ownerExists: true, authenticated: false };
     }
-    return { ownerExists: true, authenticated: true, email: owner.email };
+    return { ownerExists: true, authenticated: true, email: user.email };
   });
 }

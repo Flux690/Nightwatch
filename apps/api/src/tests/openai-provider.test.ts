@@ -31,13 +31,14 @@ const BASE_CONFIG: AgentConfig = {
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  maxToolCalls: 24,
   hardTimeoutMs: 300_000,
   toolTimeoutMs: 15_000,
+  remediationBreakerLimit: 5,
+  remediationBreakerWindowMs: 600_000,
 };
 
 const READ_TOOL = {
-  name: "get_container_list",
+  name: "list_services",
   description: "List containers.",
   input_schema: {
     type: "object" as const,
@@ -119,7 +120,7 @@ describe("OpenAIProvider", () => {
       response_format?: unknown;
     };
     expect((callArgs.tools ?? []).map((t) => t.function.name)).toEqual([
-      "get_container_list",
+      "list_services",
     ]);
     expect(callArgs.response_format).toBeUndefined();
   });
@@ -137,7 +138,7 @@ describe("OpenAIProvider", () => {
                 type: "function",
                 id: "call-123",
                 function: {
-                  name: "get_container_list",
+                  name: "list_services",
                   arguments: JSON.stringify({ environment: "docker" }),
                 },
               },
@@ -151,8 +152,43 @@ describe("OpenAIProvider", () => {
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("get_container_list");
+    expect(response.toolUses[0].name).toBe("list_services");
     expect(response.toolUses[0].id).toBe("call-123");
+  });
+
+  it("does not crash the run when tool-call arguments are malformed JSON", async () => {
+    mockFinalChatCompletion.mockResolvedValueOnce({
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                type: "function",
+                id: "call-bad",
+                function: {
+                  name: "list_services",
+                  // The model emitted invalid JSON; this must not throw out of
+                  // chat() and crash the whole investigation.
+                  arguments: "{ environment: docker",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const response = await provider.chat([READ_TOOL]);
+
+    // The call still surfaces, with an empty input the runner's per-tool
+    // validation rejects with a corrective error - not an uncaught exception.
+    expect(response.stopReason).toBe("tool_use");
+    expect(response.toolUses).toHaveLength(1);
+    expect(response.toolUses[0].name).toBe("list_services");
+    expect(response.toolUses[0].input).toEqual({});
   });
 
   describe("seed", () => {

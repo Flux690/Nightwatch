@@ -3,7 +3,7 @@ global:
 
 route:
   receiver: nightwatch
-  group_by: ['alertname', 'name']
+  group_by: ['alertname', 'compose_project', 'compose_service', 'name']
   group_wait: 5s
   group_interval: 5m
   repeat_interval: 4h
@@ -15,5 +15,5 @@ receivers:
         http_config:
           authorization:
             type: Bearer
-            credentials: "${NIGHTWATCH_TOKEN}"
+            credentials: "${NIGHTWATCH_INGEST_TOKEN}"
         send_resolved: true

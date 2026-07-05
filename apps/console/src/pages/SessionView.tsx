@@ -1,6 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Text } from "@mantine/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import type {
   SessionMeta,
   SessionMessage,
@@ -8,23 +8,36 @@ import type {
   ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwatch/shared";
-import { useConsoleWs } from "../hooks/useConsoleWs.js";
-import { ChatInput } from "./ChatInput.js";
-import type { PendingInterrupt } from "./ChatInput.js";
-import { applyLiveEvent } from "../transcript/liveConverter.js";
-import { convertPersistedMessages } from "../transcript/persistedConverter.js";
-import { TranscriptItemRenderer } from "../transcript/TranscriptItemRenderer.js";
-import type { TranscriptItem } from "../transcript/types.js";
 
-// durable: operator may reload minutes or hours after the live HUMAN_INPUT_REQUIRED event fired.
-// Reconstruct the same envelope so it flows through the shared converter, not a second hand-rolled path.
+import {
+  MessageScrollerProvider,
+  MessageScroller,
+  MessageScrollerViewport,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerButton,
+  useMessageScroller,
+} from "@/components/ui/message-scroller";
+import { toast } from "@/lib/toast";
+import { useAuth } from "@/auth/AuthContext";
+import { useConsoleWs } from "@/hooks/ConsoleWsProvider";
+import { ChatInput } from "@/components/transcript/ChatInput";
+import { applyLiveEvent } from "@/components/transcript/liveConverter";
+import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
+import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
+import type { TranscriptItem } from "@/components/transcript/types";
+import { apiFetch } from "@/api/client";
+
+interface PendingInterrupt {
+  id: string;
+  kind: "approval" | "clarification" | "continue";
+}
+
 function pendingApprovalToEnvelope(
   p: ApprovalRequest,
 ): ConsoleHumanInputRequired {
   const isClarification = p.kind === "clarification";
-  // Clarification's question/options/multiSelect ride inside toolInput - the
-  // API embeds them there at publish time (agent/loop.ts) because
-  // they originate from the tool call's own input, not a separate column.
+  const isContinue = p.kind === "continue";
   const clarInput = isClarification
     ? (p.toolInput as {
         question: string;
@@ -40,7 +53,11 @@ function pendingApprovalToEnvelope(
       toolUseId: p.toolUseId,
       toolName: p.toolName,
       input: p.toolInput,
-      kind: isClarification ? "clarification" : "approval",
+      kind: isClarification
+        ? "clarification"
+        : isContinue
+          ? "continue"
+          : "approval",
       ...(clarInput !== null && {
         question: clarInput.question,
         options: clarInput.options,
@@ -60,6 +77,9 @@ function pendingInterruptFromItems(
     if (item.kind === "clarification_card" && !item.approval) {
       return { id: item.toolUseId, kind: "clarification" };
     }
+    if (item.kind === "continue_card" && !item.approval) {
+      return { id: item.toolUseId, kind: "continue" };
+    }
   }
   return undefined;
 }
@@ -72,6 +92,30 @@ function itemKey(item: TranscriptItem): string {
   )
     return item.id;
   return item.toolUseId;
+}
+
+function displayNameFromEmail(email: string): string {
+  const local = email.split("@")[0];
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}
+
+function ScrollToEndChatInput(
+  props: React.ComponentProps<typeof ChatInput>,
+): React.JSX.Element {
+  const { scrollToEnd } = useMessageScroller();
+  const originalOnSend = props.onSend;
+
+  const handleSend = useCallback(
+    (text: string) => {
+      originalOnSend?.(text);
+      requestAnimationFrame(() => {
+        scrollToEnd({ behavior: "smooth" });
+      });
+    },
+    [originalOnSend, scrollToEnd],
+  );
+
+  return <ChatInput {...props} onSend={handleSend} />;
 }
 
 function TranscriptColumn({
@@ -92,49 +136,55 @@ function TranscriptColumn({
   const allItems = [...persistedItems, ...liveItems];
 
   return (
-    <div
+    <MessageScrollerContent
       data-testid="transcript-column"
-      style={{
-        maxWidth: 860,
-        margin: "0 auto",
-        padding: "0 var(--mantine-spacing-lg)",
-      }}
+      role="log"
+      aria-label="Session transcript"
+      className="mx-auto w-full max-w-chat gap-0 px-6 pb-8 pt-4"
     >
-      {allItems.map((item) => (
-        <div
+      {allItems.map((item, index) => (
+        <MessageScrollerItem
           key={itemKey(item)}
-          style={{ marginBottom: "var(--mantine-spacing-sm)" }}
+          className={
+            index === 0
+              ? "mt-0"
+              : item.kind === "user_turn"
+                ? "mt-8"
+                : item.kind === "thinking"
+                  ? "mt-1"
+                  : "mt-2"
+          }
         >
           <TranscriptItemRenderer
             item={item}
             onResolve={onResolve}
             onAnswer={onAnswer}
           />
-        </div>
+        </MessageScrollerItem>
       ))}
-    </div>
+    </MessageScrollerContent>
   );
 }
 
-// SessionView is the unified home + transcript component rendered persistently
-// in the Shell (outside the route outlet), so it stays mounted across route
-// changes and captures WS deltas that arrive before navigation settles.
+/** Index route (/) renders with no id; /sessions/$id passes the param. */
 export function SessionView({
-  sessionId: sessionIdFromRoute,
+  sessionId: sessionIdFromRoute = null,
 }: {
-  sessionId: string | null;
-}): React.JSX.Element {
-  // activeSessionId can be set eagerly by onSessionCreated (before URL change)
-  // so WS events for a brand-new session are captured immediately.
+  sessionId?: string | null;
+} = {}): React.JSX.Element {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(
     sessionIdFromRoute,
   );
-  // Ref lets the WS handler (stale closure) always read the latest value.
   const activeSessionIdRef = useRef<string | null>(sessionIdFromRoute);
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { phase } = useAuth();
+
+  const displayName =
+    phase.kind === "authenticated" ? displayNameFromEmail(phase.email) : "";
 
   const prevRouteIdRef = useRef<string | null>(sessionIdFromRoute);
   useEffect(() => {
@@ -162,23 +212,14 @@ export function SessionView({
   const { data: messages = [] } = useQuery<SessionMessage[]>({
     queryKey: ["session", activeSessionId],
     queryFn: () =>
-      fetch(`/api/sessions/${activeSessionId}`).then((r) => {
-        if (!r.ok) throw new Error(`sessions/${activeSessionId} ${r.status}`);
-        return r.json() as Promise<SessionMessage[]>;
-      }),
+      apiFetch<SessionMessage[]>(`/api/sessions/${activeSessionId}`),
     enabled: !!activeSessionId,
   });
 
-  // Shares the Shell's attention-queue query (same key, same cache entry, no
-  // extra request) so a reload can re-show the card a live event would have
-  // shown, instead of the operator only finding out by watching it happen.
   const { data: pendingHumanInput = [] } = useQuery<ApprovalRequest[]>({
     queryKey: ["sessions-pending-human-input"],
     queryFn: () =>
-      fetch("/api/sessions/pending-human-input").then((r) => {
-        if (!r.ok) throw new Error(`pending-human-input ${r.status}`);
-        return r.json() as Promise<ApprovalRequest[]>;
-      }),
+      apiFetch<ApprovalRequest[]>("/api/sessions/pending-human-input"),
   });
   const pendingForSession = pendingHumanInput.find(
     (p) => p.sessionId === activeSessionId,
@@ -191,7 +232,8 @@ export function SessionView({
       const alreadySeeded = prev.some(
         (item) =>
           (item.kind === "approval_card" ||
-            item.kind === "clarification_card") &&
+            item.kind === "clarification_card" ||
+            item.kind === "continue_card") &&
           item.toolUseId === pendingForSession.toolUseId,
       );
       if (alreadySeeded) return prev;
@@ -236,10 +278,21 @@ export function SessionView({
       if (env.type === "RUN_STOPPED") {
         const { sessionId } = env.payload;
         if (sessionId !== sid) return;
-        // The partial turn was already persisted and appended to the query
-        // cache via RUN_FINISHED events emitted from persist() before this.
         setIsRunning(false);
         setLiveItems([]);
+        return;
+      }
+
+      if (env.type === "RUN_FAILED") {
+        const { sessionId, message } = env.payload;
+        if (sessionId !== sid) return;
+        setIsRunning(false);
+        setLiveItems([]);
+        toast.show({
+          title: "Investigation failed",
+          message,
+          variant: "error",
+        });
         return;
       }
 
@@ -252,22 +305,48 @@ export function SessionView({
     [queryClient],
   );
 
+  const respond = useMutation({
+    mutationFn: (vars: { toolUseId: string; body: Record<string, unknown> }) =>
+      apiFetch<void>(`/api/sessions/${activeSessionId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vars.body),
+      }),
+    onError: (err, vars) => {
+      setLiveItems((prev) =>
+        prev.map((item) =>
+          (item.kind === "approval_card" ||
+            item.kind === "clarification_card" ||
+            item.kind === "continue_card") &&
+          item.toolUseId === vars.toolUseId
+            ? { ...item, approval: undefined }
+            : item,
+        ),
+      );
+      toast.show({
+        title: "Response not sent",
+        message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
+      });
+    },
+  });
+
   const handleResolve = useCallback(
     (toolUseId: string, action: "approve" | "reject") => {
       setLiveItems((prev) =>
         prev.map((item) =>
-          item.kind === "approval_card" && item.toolUseId === toolUseId
+          (item.kind === "approval_card" || item.kind === "continue_card") &&
+          item.toolUseId === toolUseId
             ? { ...item, approval: "pending" }
             : item,
         ),
       );
-      void fetch(`/api/sessions/${activeSessionId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: action, resolvedBy: "console" }),
+      respond.mutate({
+        toolUseId,
+        body: { decision: action, resolvedBy: "console" },
       });
     },
-    [activeSessionId],
+    [respond],
   );
 
   const handleAnswer = useCallback(
@@ -280,75 +359,77 @@ export function SessionView({
         ),
       );
       const text = Array.isArray(answer) ? answer.join(", ") : answer;
-      void fetch(`/api/sessions/${activeSessionId}/respond`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, resolvedBy: "console" }),
-      });
+      respond.mutate({ toolUseId, body: { text, resolvedBy: "console" } });
     },
-    [activeSessionId],
+    [respond],
   );
 
   useConsoleWs(handleEnvelope);
+
+  const handleSend = useCallback((text: string) => {
+    setLiveItems((prev) => [
+      ...prev,
+      { kind: "user_turn", id: `optimistic-user-${Date.now()}`, text },
+      {
+        kind: "thinking",
+        id: `optimistic-thinking-${Date.now()}`,
+        text: "",
+        streaming: true,
+      },
+    ]);
+  }, []);
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
 
   if (!activeSessionId) {
     return (
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-        }}
-      >
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Text c="dimmed" size="sm">
-            Start a conversation to begin an investigation.
-          </Text>
+      <div className="flex h-full flex-1 flex-col items-center justify-center">
+        <h1 className="m-0 mb-1.5 text-center text-3xl font-semibold tracking-[-0.4px] text-foreground">
+          Hello, {displayName}
+        </h1>
+        <p className="m-0 mb-6 text-center text-base text-muted-foreground">
+          Start an investigation or ask about your fleet.
+        </p>
+        <div className="w-full">
+          <ChatInput
+            sessionId={null}
+            isRunning={false}
+            onSessionCreated={handleSessionCreated}
+          />
         </div>
-        <ChatInput
-          sessionId={null}
-          isRunning={false}
-          onSessionCreated={handleSessionCreated}
-        />
       </div>
     );
   }
 
-  return (
-    <div
-      className="nw-page"
-      style={{ display: "flex", flexDirection: "column", height: "100%" }}
-    >
-      <div
-        style={{
-          flex: 1,
-          padding: "var(--mantine-spacing-md) 0",
-          overflowY: "auto",
-        }}
-      >
-        <TranscriptColumn
-          persistedMessages={messages}
-          liveItems={liveItems}
-          onResolve={handleResolve}
-          onAnswer={handleAnswer}
-        />
-      </div>
+  const composerHidden =
+    pendingInterrupt?.kind === "approval" ||
+    pendingInterrupt?.kind === "clarification";
+  const composerDisabled = pendingInterrupt?.kind === "continue";
 
-      <ChatInput
-        sessionId={activeSessionId}
-        isRunning={isRunning}
-        pendingInterrupt={pendingInterrupt}
-      />
-    </div>
+  return (
+    <MessageScrollerProvider defaultScrollPosition="end">
+      <div className="flex h-full flex-col">
+        <MessageScroller className="min-h-0 flex-1">
+          <MessageScrollerViewport>
+            <TranscriptColumn
+              persistedMessages={messages}
+              liveItems={liveItems}
+              onResolve={handleResolve}
+              onAnswer={handleAnswer}
+            />
+          </MessageScrollerViewport>
+          <MessageScrollerButton direction="end" />
+        </MessageScroller>
+
+        {!composerHidden && (
+          <ScrollToEndChatInput
+            sessionId={activeSessionId}
+            isRunning={isRunning}
+            disabled={composerDisabled}
+            onSend={handleSend}
+          />
+        )}
+      </div>
+    </MessageScrollerProvider>
   );
 }

@@ -1,31 +1,29 @@
-import { execFile } from "node:child_process";
 import { hostname } from "node:os";
-import { promisify } from "node:util";
-import type { CapabilityManifest } from "@nightwatch/shared";
-import { getRunnerId } from "./identity.js";
+import {
+  deriveDockerServiceIdentity,
+  serviceIdentityKey,
+  type CapabilityManifest,
+  type ServiceManifestEntry,
+} from "@nightwatch/shared";
+import { getDocker } from "../docker/client.js";
+import { getAppsV1Api } from "../kubernetes/client.js";
+import { isRemediationEnabled } from "../remediation-state.js";
 
-const execFileAsync = promisify(execFile);
 const RUNNER_VERSION = "0.2.0";
 
 export async function detectCapabilities(): Promise<CapabilityManifest> {
-  const [docker, prometheusAvailable] = await Promise.all([
+  const [docker, kubernetes] = await Promise.all([
     detectDocker(),
-    detectPrometheus(),
+    detectKubernetes(),
   ]);
 
-  const prometheusEndpoint =
-    process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
-
   return {
-    runnerId: getRunnerId(),
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,
     capabilities: {
       docker: docker.available,
-      containers: docker.containers,
-      prometheus: prometheusAvailable
-        ? { available: true, endpoint: prometheusEndpoint }
-        : { available: false },
+      kubernetes: kubernetes.available,
+      services: [...docker.services, ...kubernetes.services],
       postgres: process.env["POSTGRES_URL"]
         ? { available: true, via: "connection_string" }
         : { available: false },
@@ -34,36 +32,77 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
         : { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: process.env["REMEDIATION_ENABLED"] === "true",
+      remediationEnabled: isRemediationEnabled(),
     },
   };
 }
 
 async function detectDocker(): Promise<{
   available: boolean;
-  containers: string[];
+  services: ServiceManifestEntry[];
 }> {
   try {
-    const { stdout } = await execFileAsync(
-      "docker",
-      ["ps", "--format", "{{.Names}}"],
-      { timeout: 3000 },
-    );
-    const containers = stdout.trim().split("\n").filter(Boolean);
-    return { available: true, containers };
+    const docker = getDocker();
+    // `all: true` so a service whose only container is currently stopped is
+    // still advertised - otherwise routing would reject the call before the
+    // runner ever gets to JIT-resolve it and report a clean finding.
+    const list = await docker.listContainers({ all: true });
+    const server = process.env["NIGHTWATCH_SERVER_NAME"];
+    const byKey = new Map<string, ServiceManifestEntry>();
+    for (const c of list) {
+      const name = (c.Names[0] ?? "").replace(/^\//, "");
+      const base = deriveDockerServiceIdentity(c.Labels, name);
+      const identity = server ? { ...base, server } : base;
+      const key = serviceIdentityKey(identity);
+      const existing = byKey.get(key);
+      // Prefer "running" over any stopped state when multiple containers share
+      // an identity (e.g. scaled Compose replicas or a restarted container
+      // that left a stopped predecessor in the list).
+      if (!existing || existing.status !== "running") {
+        byKey.set(key, { identity, status: c.State });
+      }
+    }
+    return { available: true, services: [...byKey.values()] };
   } catch {
-    return { available: false, containers: [] };
+    return { available: false, services: [] };
   }
 }
 
-async function detectPrometheus(): Promise<boolean> {
+async function detectKubernetes(): Promise<{
+  available: boolean;
+  services: ServiceManifestEntry[];
+}> {
   try {
-    const url = process.env["PROMETHEUS_URL"] ?? "http://localhost:9090";
-    const res = await fetch(`${url}/-/healthy`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return res.ok;
+    const appsApi = getAppsV1Api();
+    const [deployments, statefulSets] = await Promise.all([
+      appsApi.listDeploymentForAllNamespaces(),
+      appsApi.listStatefulSetForAllNamespaces(),
+    ]);
+
+    // The cluster scope comes only from the operator-assigned env var, never the
+    // kubeconfig context name (which drifts and would not match the `cluster`
+    // label inbound alerts carry). Absent => an unscoped, single-cluster identity.
+    const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
+    const byKey = new Map<string, ServiceManifestEntry>();
+    for (const item of [...deployments.items, ...statefulSets.items]) {
+      const ns = item.metadata?.namespace ?? "default";
+      const workload = item.metadata?.name ?? "";
+      if (!workload) continue;
+      // A workload with no ready replicas is advertised as stopped, not running,
+      // so routing and the snapshot don't treat a scaled-to-0 service as up.
+      const ready = (item.status?.readyReplicas ?? 0) > 0;
+      byKey.set(`${ns}/${workload}`, {
+        identity: {
+          provider: "kubernetes",
+          namespace: ns,
+          workload,
+          ...(cluster && { cluster }),
+        },
+        status: ready ? "running" : "stopped",
+      });
+    }
+    return { available: true, services: [...byKey.values()] };
   } catch {
-    return false;
+    return { available: false, services: [] };
   }
 }

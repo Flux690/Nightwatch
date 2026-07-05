@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { SessionMessage } from "@nightwatch/shared";
 
-import { convertPersistedMessages } from "../transcript/persistedConverter.js";
-import type { ThinkingItem } from "../transcript/types.js";
+import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
+import type { ThinkingItem } from "@/components/transcript/types";
 
 function assistantMessage(
   seq: number,

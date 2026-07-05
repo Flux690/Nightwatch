@@ -11,7 +11,16 @@ if [ -n "$ALERTMANAGER_URL" ]; then
 else
   ALERTMANAGER_TARGET="localhost:9093"
 fi
-export ALERTMANAGER_TARGET PLATFORM_URL NIGHTWATCH_TOKEN
+
+# Fleet-wide nwi_ ingest credential for Alertmanager webhook auth.
+# Falls back to the runner's own nwr_ token when no fleet credential is
+# configured (backward compat - the ingest endpoint accepts both token types).
+NIGHTWATCH_INGEST_TOKEN="${NIGHTWATCH_INGEST_TOKEN:-$NIGHTWATCH_TOKEN}"
+
+# NIGHTWATCH_SERVER_NAME is stamped as the `server` external_label in Prometheus so
+# every alert carries the same name the runner advertises (manifest/detect.ts) and
+# routes. Exported so envsubst can fill it into the template.
+export ALERTMANAGER_TARGET PLATFORM_URL NIGHTWATCH_TOKEN NIGHTWATCH_INGEST_TOKEN NIGHTWATCH_SERVER_NAME
 
 if [ -z "$PROMETHEUS_URL" ]; then
   envsubst < /etc/nightwatch/templates/prometheus.yml > /etc/nightwatch/prometheus.yml

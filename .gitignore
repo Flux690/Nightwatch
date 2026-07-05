@@ -9,13 +9,9 @@ node_modules/
 # Build output
 dist/
 
-# SQLite database files (runner local storage)
-*.db
-*.db-shm
-*.db-wal
-
-# Runner stable identity (generated per host at first start)
-runner-id
+# Runtime data (API SQLite db; runner identity file)
+apps/api/data
+apps/runner/data
 
 # Claude Code — personal/generated only; settings.json, hooks/, rules/, agents/ are committed
 .claude/settings.local.json
@@ -31,11 +27,12 @@ Thumbs.db
 Desktop.ini
 
 # Local doc/reference dumps used while designing — not source
-mantinedocs.txt
-claudeapidocs.txt
+*.txt
 
 # Local work tracking — issues stay untracked
 issues
 
 # Per-feature PRDs — local working docs, not published
 .claude/*-prd.md
+docs
+CONTEXT.md

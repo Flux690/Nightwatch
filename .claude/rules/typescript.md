@@ -7,4 +7,4 @@
 - Shared types belong in `packages/shared` only. Never duplicate across packages.
 - Import order: Node built-ins → external packages → internal packages → relative imports.
 - No internal barrel files: don't add a folder `index.ts` to re-export siblings for shorter imports - import directly from the file. A single curated public-API entry per package is fine (e.g. `packages/shared/src/index.ts`); use explicit named re-exports (`export { Foo } from './foo.js'`), never `export *`.
-- Comments: `//` for single-line, `/* */` for multi-line. No decorative banners of any kind: no `//────`, `// ===`, `// ***`, `// ─── X ───`, or any line-fill character used to separate sections. Only comment the WHY, never the WHAT.
+- Comments: `//` for single-line, `/* */` for multi-line. No decorative banners of any kind: no `//────`, `// ===`, `// ***`, `// ─── X ───`, or any line-fill character used to separate sections. Only comment the WHY, never the WHAT. Keep any comment to at most three lines - state the reason and stop; do not narrate the mechanism.

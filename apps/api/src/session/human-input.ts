@@ -1,18 +1,15 @@
-import { loadConfig } from "../config/store.js";
 import {
   claimPendingHumanInput,
   deletePendingHumanInput,
   getPendingHumanInputWithSessionBySessionId,
 } from "../db/interrupts.js";
+import { insertRejectedRemediationAction } from "../db/remediation-actions.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
-import {
-  publishInterruptResolved,
-  publishToolCallEnd,
-} from "./stream.js";
+import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
 import { buildSeed } from "./seed.js";
-import { sendCommand } from "../ws/router.js";
+import { executeApprovedTool } from "./approval-executor.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
 
 export class HumanInputError extends Error {
@@ -103,6 +100,58 @@ export async function respondToPendingHumanInput(
   const pending = requirePendingHumanInput(sessionId);
   const { decision, text } = request;
 
+  if (pending.kind === "continue") {
+    // No async work between resolve and dispatch, so ensureDeleted alone is the concurrency
+    // gate - SQLite's atomic DELETE returns 0 rows to the loser, which becomes a 409.
+    // claimOrThrow is skipped: it only marks in-progress during async tool execution, of which there is none here.
+    ensureDeleted(sessionId);
+    const resolvedAt = new Date().toISOString();
+    if (decision === "reject") {
+      publishInterruptResolved({
+        sessionId,
+        toolUseId: pending.toolUseId,
+        status: "rejected",
+        resolvedBy,
+        resolvedAt,
+      });
+      logger.info(
+        { sessionId, resolvedBy },
+        "continue request ended by operator",
+      );
+      dispatcher.dispatch({
+        sessionId,
+        seed: buildSeed(sessionId),
+        wrapUp: true,
+      });
+      return {
+        sessionId,
+        toolUseId: pending.toolUseId,
+        status: "rejected",
+        resolvedBy,
+        resolvedAt,
+      };
+    }
+    publishInterruptResolved({
+      sessionId,
+      toolUseId: pending.toolUseId,
+      status: "continued",
+      resolvedBy,
+      resolvedAt,
+    });
+    logger.info(
+      { sessionId, resolvedBy },
+      "continue request resumed by operator",
+    );
+    dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
+    return {
+      sessionId,
+      toolUseId: pending.toolUseId,
+      status: "continued",
+      resolvedBy,
+      resolvedAt,
+    };
+  }
+
   if (pending.kind === "clarification") {
     if (decision !== undefined) {
       throw new HumanInputError(
@@ -128,28 +177,11 @@ export async function respondToPendingHumanInput(
 
   // kind === "approval"
   if (decision === "approve") {
+    // Once claimed, the interrupt can never be re-approved, so the approve path must reach
+    // unpause() (which deletes the row); executeApprovedTool never throws - it turns every
+    // fault into an is_error result - so the run always resumes.
     claimOrThrow(sessionId);
-    const config = loadConfig();
-    let gatedResult: ToolResult;
-    try {
-      const result = await sendCommand(
-        pending.toolName,
-        pending.toolInput,
-        config.toolTimeoutMs,
-        pending.originatingAlert?.runnerId,
-      );
-      gatedResult = {
-        tool_use_id: pending.toolUseId,
-        content: JSON.stringify(result),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      gatedResult = {
-        tool_use_id: pending.toolUseId,
-        content: `Error executing ${pending.toolName}: ${message}`,
-        is_error: true,
-      };
-    }
+    const gatedResult = await executeApprovedTool(pending, resolvedBy);
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
     return unpause(
       sessionId,
@@ -173,6 +205,19 @@ export async function respondToPendingHumanInput(
       is_error: true,
     };
     claimOrThrow(sessionId);
+    const wrote = insertRejectedRemediationAction({
+      toolUseId: pending.toolUseId,
+      sessionId,
+      toolName: pending.toolName,
+      input: pending.toolInput,
+      resolvedBy,
+    });
+    if (!wrote) {
+      logger.warn(
+        { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
+        "reject record skipped: existing row holds the slot — action may have run before crash",
+      );
+    }
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
     return unpause(
       sessionId,

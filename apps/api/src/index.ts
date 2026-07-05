@@ -5,13 +5,17 @@ import { resolveSecretKey } from "./config/secret-key.js";
 import { initDb } from "./db/client.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerTokenRoutes } from "./auth/token.js";
+import { registerIngestCredentialRoutes } from "./auth/ingest-credential.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleWsRoutes } from "./ws/console.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
+import { registerAlertTestRoutes } from "./alerts/test-alert.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerConnectRoutes } from "./runners/connect.js";
+import { registerManifestRoutes } from "./runners/manifest.js";
+import { registerRemediationRoutes } from "./remediation/routes.js";
 
 // D16: explicit SECRET_KEY env var wins; otherwise a key file beside the
 // SQLite database is reused or generated on first boot.
@@ -30,13 +34,17 @@ await fastify.register(FastifyWebSocket);
 
 await registerAuthRoutes(fastify);
 await registerTokenRoutes(fastify);
+await registerIngestCredentialRoutes(fastify);
 await registerWsRoutes(fastify);
 await registerConsoleWsRoutes(fastify);
 await registerAlertRoutes(fastify);
+await registerAlertTestRoutes(fastify);
 await registerConfigRoutes(fastify);
 await registerSessionRoutes(fastify);
 await registerRunnerRoutes(fastify);
 await registerConnectRoutes(fastify);
+await registerManifestRoutes(fastify);
+await registerRemediationRoutes(fastify);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 

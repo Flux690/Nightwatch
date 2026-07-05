@@ -24,7 +24,7 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -37,8 +37,8 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-  resolveCommand,
 } from "../ws/router.js";
+import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {
   type: string;
@@ -78,20 +78,19 @@ describe("clarification interrupts", () => {
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
   let SESSION: string;
-  const TEST_RUNNER_ID = "runner-clarification-023";
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateToken("clarification-023").id;
+    TEST_TOKEN = generateRunnerToken("clarification-023").id;
 
     registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_container") {
+        if (commandName === "restart_service") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -105,13 +104,21 @@ describe("clarification interrupts", () => {
       () => {},
     );
     setRunnerManifest(TEST_TOKEN, {
-      runnerId: TEST_RUNNER_ID,
       hostname: "clarification-host",
       runnerVersion: "2.0.0",
       capabilities: {
         docker: true,
-        containers: ["web-01"],
-        prometheus: { available: false },
+        kubernetes: false,
+        services: [
+          {
+            identity: {
+              provider: "docker",
+              project: "web-01",
+              service: "web-01",
+            },
+            status: "running",
+          },
+        ],
         postgres: { available: false },
         redis: { available: false },
         hostMetrics: true,
@@ -123,7 +130,7 @@ describe("clarification interrupts", () => {
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
     await registerConsoleWsRoutes(server);
-        await registerSessionRoutes(server);
+    await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -520,9 +527,13 @@ describe("clarification interrupts", () => {
           },
           {
             id: restart1Id,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -535,9 +546,13 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: restart2Id,
-            name: "restart_container",
+            name: "restart_service",
             input: {
-              containerName: "web-01",
+              service: {
+                provider: "docker",
+                project: "web-01",
+                service: "web-01",
+              },
               rationale: "confirmed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -601,7 +616,7 @@ describe("clarification interrupts", () => {
           e.payload["kind"] === "approval",
       ),
     );
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_container");
+    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(

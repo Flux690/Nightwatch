@@ -4,7 +4,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
-import { generateToken } from "../db/tokens.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { registerConnectRoutes } from "../runners/connect.js";
 
 describe("GET /connect.sh", () => {
@@ -16,7 +16,7 @@ describe("GET /connect.sh", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TOKEN = generateToken("test-server").plaintext;
+    TOKEN = generateRunnerToken("test-server").plaintext;
     server = Fastify({ logger: false, trustProxy: true });
     await registerConnectRoutes(server);
     await server.ready();
@@ -144,7 +144,41 @@ describe("GET /connect.sh", () => {
 
     expect(res.body).not.toContain("/alerts/ingest?token=");
     expect(res.body).toContain("authorization:");
-    expect(res.body).toContain("credentials: '${NIGHTWATCH_TOKEN}'");
+    expect(res.body).toContain("credentials: '${NIGHTWATCH_INGEST_TOKEN}'");
+  });
+
+  it("bakes in the fleet ingest token and passes it to the container", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${TOKEN}`,
+      },
+    });
+    expect(res.body).toMatch(/NIGHTWATCH_INGEST_TOKEN="nwi_[^"]+"/);
+    expect(res.body).toContain(
+      "NIGHTWATCH_INGEST_TOKEN=${NIGHTWATCH_INGEST_TOKEN}",
+    );
+  });
+
+  it("reuses one fleet ingest token across servers", async () => {
+    const ingestOf = async (token: string): Promise<string> => {
+      const res = await server.inject({
+        method: "GET",
+        url: "/connect.sh",
+        headers: {
+          cookie: `nw_auth=${SESSION}`,
+          authorization: `Bearer ${token}`,
+        },
+      });
+      const match = /NIGHTWATCH_INGEST_TOKEN="(nwi_[^"]+)"/.exec(res.body);
+      if (match === null) throw new Error("ingest token not baked into script");
+      return match[1];
+    };
+
+    const second = generateRunnerToken("second-server").plaintext;
+    expect(await ingestOf(TOKEN)).toBe(await ingestOf(second));
   });
 
   it("script contains neither nightwatch.sh nor inst_", async () => {
@@ -158,5 +192,39 @@ describe("GET /connect.sh", () => {
     });
     expect(res.body).not.toContain("nightwatch.sh");
     expect(res.body).not.toContain("inst_");
+  });
+
+  it("script contains NIGHTWATCH_SERVER_NAME baked in from the token's server name", async () => {
+    const namedToken = generateRunnerToken(
+      "named-server",
+      "prod-web-01",
+    ).plaintext;
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${namedToken}`,
+      },
+    });
+    expect(res.body).toContain('NIGHTWATCH_SERVER_NAME="prod-web-01"');
+  });
+
+  it("script passes NIGHTWATCH_SERVER_NAME env var to the Docker container", async () => {
+    const namedToken = generateRunnerToken(
+      "named-server-2",
+      "staging-api-01",
+    ).plaintext;
+    const res = await server.inject({
+      method: "GET",
+      url: "/connect.sh",
+      headers: {
+        cookie: `nw_auth=${SESSION}`,
+        authorization: `Bearer ${namedToken}`,
+      },
+    });
+    expect(res.body).toContain(
+      "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}",
+    );
   });
 });
