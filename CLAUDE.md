@@ -17,7 +17,7 @@
 - No `any` in TypeScript. Use `unknown` and narrow.
 - No `console.log` in source files. Use structured logger.
 - Never edit `.env` directly. Never.
-- No `git push --force` to main or v2.
+- No `git push --force` to main.
 - Shared types live in `packages/shared` only.
 - Every new WebSocket command needs a matching type in `shared/ws.ts`.
 
