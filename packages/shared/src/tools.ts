@@ -147,23 +147,6 @@ export interface GetAlertHistoryInput {
   limitDays?: number;
 }
 
-export interface GetRecentCommitsInput {
-  repoOwner: string;
-  repoName: string;
-  branch?: string;
-  limit?: number;
-}
-export interface CommitInfo {
-  sha: string;
-  shortSha: string;
-  message: string;
-  author: string;
-  timestamp: string;
-  filesChanged: string[];
-  additions: number;
-  deletions: number;
-}
-
 export interface GetEnvVariableNamesInput {
   service: ServiceIdentity;
 }

@@ -81,7 +81,6 @@ DOCKER_ARGS=(
   -e "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}"
   -e "HOST_PROC=/host/proc"
   -e "NIGHTWATCH_DATA_DIR=/var/nightwatch"
-  -e "REMEDIATION_ENABLED=${REMEDIATION_ENABLED:-false}"
 )
 
 if [ -n "$PROMETHEUS_URL" ]; then

@@ -1,5 +1,4 @@
 import { executeRunnerTool } from "./executor.js";
-import type { GetRecentCommitsInput, CommitInfo } from "@nightwatch/shared";
 import type { ToolSchema } from "../llm/types.js";
 
 export type Provider = "docker" | "kubernetes";
@@ -21,9 +20,9 @@ export interface Tool {
   // narrows the tool to the listed providers (ADR-0002). Only genuinely
   // provider-specific tools carry it.
   providers?: Provider[];
-  // Present only for tools that run in the API (get_recent_commits) or are pure interrupts
-  // (request_clarification); a runner-delegated tool omits it, and executeTool dispatches by
-  // schema.name - the wire command name, no mapping table.
+  // Present only for tools that are pure interrupts (request_clarification); a
+  // runner-delegated tool omits it, and executeTool dispatches by schema.name -
+  // the wire command name, no mapping table.
   execute?(
     input: Record<string, unknown>,
     ctx: ToolExecuteContext,
@@ -79,50 +78,8 @@ const SERVICE_IDENTITY_SCHEMA = {
   ],
 } as const;
 
-async function fetchGitHubCommits(
-  input: GetRecentCommitsInput,
-): Promise<{ commits: CommitInfo[] }> {
-  const { repoOwner, repoName, branch = "main", limit = 10 } = input;
-  const token = process.env["GITHUB_TOKEN"];
-
-  const url = `https://api.github.com/repos/${repoOwner}/${repoName}/commits?sha=${branch}&per_page=${limit}`;
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.v3+json",
-    "User-Agent": "nightwatch-api/2",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const res = await fetch(url, {
-    headers,
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
-
-  const raw = (await res.json()) as Array<Record<string, unknown>>;
-  const commits: CommitInfo[] = raw.map((c) => {
-    const commit = c["commit"] as Record<string, unknown>;
-    const author = commit["author"] as Record<string, unknown>;
-    const sha = String(c["sha"] ?? "");
-    return {
-      sha,
-      shortSha: sha.slice(0, 7),
-      message: String(
-        (commit["message"] as string | undefined)?.split("\n")[0] ?? "",
-      ),
-      author: String((author?.["name"] as string | undefined) ?? ""),
-      timestamp: String((author?.["date"] as string | undefined) ?? ""),
-      filesChanged: [],
-      additions: 0,
-      deletions: 0,
-    };
-  });
-
-  return { commits };
-}
-
 // A runner-delegated tool's schema.name IS the wire command; it omits `execute` and
-// executeTool routes it to the runner. Only get_recent_commits and request_clarification
-// carry their own `execute`.
+// executeTool routes it to the runner. Only request_clarification carries its own `execute`.
 export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
@@ -339,41 +296,6 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
-  },
-  {
-    schema: {
-      name: "get_recent_commits",
-      description:
-        "Fetch recent Git commits from GitHub to correlate code changes with the incident timeline.",
-      input_schema: {
-        type: "object",
-        properties: {
-          repoOwner: { type: "string" },
-          repoName: { type: "string" },
-          branch: {
-            type: "string",
-            description: "Branch name (default: main).",
-          },
-          limit: {
-            type: "number",
-            description: "Number of commits to return (default 10).",
-          },
-        },
-        required: ["repoOwner", "repoName"],
-      },
-    },
-    access: "read",
-    execute: async (input) => {
-      try {
-        const commits = await fetchGitHubCommits(
-          input as unknown as GetRecentCommitsInput,
-        );
-        return { content: commits };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { content: `GitHub fetch failed: ${msg}`, is_error: true };
-      }
-    },
   },
   {
     schema: {

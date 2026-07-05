@@ -30,8 +30,6 @@ export type {
   GetHostDmesgInput,
   GetHostDmesgResult,
   GetAlertHistoryInput,
-  GetRecentCommitsInput,
-  CommitInfo,
   GetEnvVariableNamesInput,
   ReadFileInput,
   ReadFileResult,
