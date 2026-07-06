@@ -34,7 +34,7 @@ import {
   getContainerLogs,
   getContainerList,
   getContainerStats,
-  getEnvVariableNames,
+  getContainerInspect,
   restartService,
   execCommand as k8sExecCommand,
   getRolloutStatus,
@@ -387,8 +387,8 @@ describe("Kubernetes runner command handlers", () => {
     });
   });
 
-  describe("getEnvVariableNames", () => {
-    it("returns env variable names from the pod spec without values", async () => {
+  describe("getContainerInspect", () => {
+    it("returns env variable names and never env values", async () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({
         items: [RUNNING_POD],
       });
@@ -398,21 +398,35 @@ describe("Kubernetes runner command handlers", () => {
           containers: [
             {
               name: "api-server",
-              env: [{ name: "PORT" }, { name: "NODE_ENV" }, { name: "DB_URL" }],
+              image: "acme/api:1.2.3",
+              env: [
+                { name: "PORT", value: "3000" },
+                { name: "DB_PASSWORD", value: "super-secret-value" },
+              ],
             },
           ],
         },
+        status: {},
       });
 
-      const result = await getEnvVariableNames({ service: K8S_SERVICE });
+      const result = await getContainerInspect({ service: K8S_SERVICE });
 
-      expect(result).toEqual({ names: ["PORT", "NODE_ENV", "DB_URL"] });
+      expect(result).toMatchObject({
+        containers: [
+          expect.objectContaining({
+            name: "api-server",
+            envVarNames: ["PORT", "DB_PASSWORD"],
+          }),
+        ],
+      });
+      expect(JSON.stringify(result)).not.toContain("super-secret-value");
+      expect(JSON.stringify(result)).not.toContain("3000");
     });
 
     it("returns a not-running finding when no pods exist", async () => {
       mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [] });
 
-      const result = await getEnvVariableNames({ service: K8S_SERVICE });
+      const result = await getContainerInspect({ service: K8S_SERVICE });
 
       expect(result).toEqual({
         found: false,

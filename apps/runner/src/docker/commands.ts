@@ -15,7 +15,6 @@ import {
   type GetContainerLogsInput,
   type GetContainerProcessesInput,
   type GetContainerStatsInput,
-  type GetEnvVariableNamesInput,
   type RestartContainerInput,
   type RestartContainerResult,
 } from "@nightwatch/shared";
@@ -262,17 +261,6 @@ export async function getContainerProcesses(
   }));
 
   return { processes };
-}
-
-export async function getEnvVariableNames(
-  input: GetEnvVariableNamesInput,
-): Promise<{ names: string[] } | NoRunningInstanceResult> {
-  const docker = getDocker();
-  const resolved = await resolveService(docker, input.service);
-  if (!resolved) return notRunningResult(input.service);
-  const info = await resolved.container.inspect();
-  const names = (info.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
-  return { names };
 }
 
 export async function restartContainer(

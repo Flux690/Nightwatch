@@ -40,7 +40,7 @@ import {
 } from "../ws/router.js";
 import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools.js";
+import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools/toolset.js";
 
 interface WsEvent {
   type: string;
@@ -370,7 +370,7 @@ describe("providers filter and mismatch rejection", () => {
         const schemas = getToolSchemas(undefined, false);
         const names = schemas.map((s) => s.name);
         expect(names).not.toContain("restart_service");
-        expect(names).not.toContain("exec_command");
+        expect(names).not.toContain("exec");
         expect(names).toContain("get_service_logs");
         expect(names).toContain("list_services");
       });
@@ -379,21 +379,21 @@ describe("providers filter and mismatch rejection", () => {
         const schemas = getToolSchemas(undefined, true);
         const names = schemas.map((s) => s.name);
         expect(names).toContain("restart_service");
-        expect(names).toContain("exec_command");
+        expect(names).toContain("exec");
       });
 
       it("includes write tools when remediationEnabled is absent (backward compat)", () => {
         const schemas = getToolSchemas();
         const names = schemas.map((s) => s.name);
         expect(names).toContain("restart_service");
-        expect(names).toContain("exec_command");
+        expect(names).toContain("exec");
       });
 
       it("combines provider filter and remediation filter correctly", () => {
         const schemas = getToolSchemas(new Set(["docker"]), false);
         const names = schemas.map((s) => s.name);
         expect(names).not.toContain("restart_service");
-        expect(names).not.toContain("exec_command");
+        expect(names).not.toContain("exec");
         expect(names).not.toContain("get_k8s_rollout_status");
         expect(names).toContain("get_service_logs");
       });
@@ -496,7 +496,7 @@ describe("providers filter and mismatch rejection", () => {
         expect(toolsPassedToChat).toBeDefined();
         const offeredNames = toolsPassedToChat!.map((s) => s.name);
         expect(offeredNames).not.toContain("restart_service");
-        expect(offeredNames).not.toContain("exec_command");
+        expect(offeredNames).not.toContain("exec");
         expect(offeredNames).toContain("get_service_logs");
 
         ws.close();
@@ -664,7 +664,7 @@ describe("providers filter and mismatch rejection", () => {
         const { id: runnerId } = generateRunnerToken("db-mode-false-001");
         const offered = await runChatAndCaptureTools(runnerId, true, false);
         expect(offered).not.toContain("restart_service");
-        expect(offered).not.toContain("exec_command");
+        expect(offered).not.toContain("exec");
         expect(offered).toContain("get_service_logs");
       });
 
@@ -672,7 +672,7 @@ describe("providers filter and mismatch rejection", () => {
         const { id: runnerId } = generateRunnerToken("db-mode-true-001");
         const offered = await runChatAndCaptureTools(runnerId, false, true);
         expect(offered).toContain("restart_service");
-        expect(offered).toContain("exec_command");
+        expect(offered).toContain("exec");
       });
     });
   });

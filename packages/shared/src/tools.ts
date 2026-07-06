@@ -147,14 +147,11 @@ export interface GetAlertHistoryInput {
   limitDays?: number;
 }
 
-export interface GetEnvVariableNamesInput {
-  service: ServiceIdentity;
-}
-export interface ReadFileInput {
+export interface ReadHostFileInput {
   path: string;
   maxLines?: number;
 }
-export interface ReadFileResult {
+export interface ReadHostFileResult {
   content: string;
   lineCount: number;
   path: string;

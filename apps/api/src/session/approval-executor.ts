@@ -6,7 +6,7 @@ import {
 import type { PendingHumanInputWithSession } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
-import { findTool, executeTool } from "../agent/tools.js";
+import { findTool, executeTool } from "../agent/tools/toolset.js";
 
 // Executes an approved write and returns its result to the run. Never throws: once claimed
 // the interrupt can't be re-approved, so any fault (duplicate, missing tool, DB error)

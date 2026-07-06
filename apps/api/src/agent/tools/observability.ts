@@ -1,41 +1,5 @@
-import { executeRunnerTool } from "./executor.js";
-import type { ToolSchema } from "../llm/types.js";
-import type { CommandRoute } from "../ws/router.js";
-
-export type Provider = "docker" | "kubernetes";
-
-export interface ToolExecuteResult {
-  content: unknown;
-  is_error?: boolean;
-}
-
-export interface ToolExecuteContext {
-  runnerId?: string;
-  toolTimeoutMs: number;
-}
-
-interface ToolCommon {
-  schema: ToolSchema;
-  access: "read" | "write" | "ask";
-  // A tool that omits `providers` is provider-agnostic: always offered.
-  // Listing providers offers it only while at least one connected runner
-  // runs a listed provider; only genuinely provider-specific tools carry it.
-  providers?: Provider[];
-}
-
-// Where a tool executes is declared, never inferred: an api tool cannot exist
-// without its handler, and a runner tool must say how it is addressed.
-export type Tool = ToolCommon &
-  (
-    | {
-        on: "api";
-        execute(
-          input: Record<string, unknown>,
-          ctx: ToolExecuteContext,
-        ): Promise<ToolExecuteResult>;
-      }
-    | { on: "runner"; route: CommandRoute }
-  );
+import { SERVICE_IDENTITY_SCHEMA } from "./identity-schema.js";
+import type { Provider, Tool } from "./types.js";
 
 const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
 // Host tools are truthful only where runner and host are 1:1 (Docker). A K8s
@@ -43,55 +7,9 @@ const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
 // node; get_k8s_node_status is the cluster-level answer instead.
 const DOCKER_ONLY: Provider[] = ["docker"];
 
-// Accepts both Docker and Kubernetes service identities. Echo the identity
-// exactly as given in the alert or a prior list_services result - do not
-// guess. Provider is an opaque part of the handle.
-const SERVICE_IDENTITY_SCHEMA = {
-  oneOf: [
-    {
-      type: "object",
-      properties: {
-        provider: { type: "string", enum: ["docker"] },
-        project: {
-          type: "string",
-          description:
-            "Compose project name (or the container's own name if it has no Compose labels).",
-        },
-        service: {
-          type: "string",
-          description:
-            "Compose service name (or the container's own name if it has no Compose labels).",
-        },
-      },
-      required: ["provider", "project", "service"],
-    },
-    {
-      type: "object",
-      properties: {
-        provider: { type: "string", enum: ["kubernetes"] },
-        namespace: {
-          type: "string",
-          description: "Kubernetes namespace the workload runs in.",
-        },
-        workload: {
-          type: "string",
-          description:
-            "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
-        },
-        container: {
-          type: "string",
-          description:
-            "Optional: the specific container to target in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; a tool call against such a pod without it returns the list of choices.",
-        },
-      },
-      required: ["provider", "namespace", "workload"],
-    },
-  ],
-} as const;
-
-// A runner tool's schema.name IS the wire command, addressed by its declared
-// route; an api tool's execute IS its implementation - no mapping table.
-export const TOOL_REGISTRY: Tool[] = [
+// Read tools: run unattended, so each is a narrow typed question - never
+// arbitrary shell. Safety comes from the shape, not from review.
+export const OBSERVABILITY_TOOLS: Tool[] = [
   {
     schema: {
       name: "list_services",
@@ -334,21 +252,6 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "get_service_env_names",
-      description:
-        "List environment variable names (not values) for a service to check for missing config.",
-      input_schema: {
-        type: "object",
-        properties: { service: SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "service",
-  },
-  {
-    schema: {
       name: "get_k8s_rollout_status",
       description:
         "KUBERNETES ONLY: get the rollout status of a Deployment or StatefulSet - desired/ready/updated replica counts and conditions. Has no Docker equivalent; do not call with a docker service identity.",
@@ -403,7 +306,7 @@ export const TOOL_REGISTRY: Tool[] = [
   },
   {
     schema: {
-      name: "read_file",
+      name: "read_host_file",
       description:
         "Read a file from the host filesystem (allowlisted paths only). Secrets are automatically redacted.",
       input_schema: {
@@ -427,161 +330,4 @@ export const TOOL_REGISTRY: Tool[] = [
     on: "runner",
     route: "host",
   },
-  {
-    schema: {
-      name: "request_clarification",
-      description:
-        "Suspend the investigation and ask the on-call engineer a clarifying question. The UI always offers a free-text 'Other' answer alongside your options, do not add one of your own. List only the specific, named choices.",
-      input_schema: {
-        type: "object",
-        properties: {
-          question: {
-            type: "string",
-            description: "The specific question to ask.",
-          },
-          options: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                label: { type: "string", description: "Short option label." },
-                description: {
-                  type: "string",
-                  description: "What this option means.",
-                },
-              },
-              required: ["label", "description"],
-            },
-            description:
-              "Selectable answers for the question. Do not include a catch-all option like 'Other' or 'None of the above' - the UI adds that automatically.",
-          },
-          multiSelect: {
-            type: "boolean",
-            description: "True if multiple options may be selected.",
-          },
-        },
-        required: ["question", "options"],
-      },
-    },
-    access: "ask",
-    on: "api",
-    execute: async () => ({
-      content:
-        "request_clarification is an interrupt and cannot be executed directly.",
-      is_error: true,
-    }),
-  },
-  {
-    schema: {
-      name: "restart_service",
-      description:
-        "WRITE: Restart a service. Requires human approval. Causes brief downtime.",
-      input_schema: {
-        type: "object",
-        properties: {
-          service: SERVICE_IDENTITY_SCHEMA,
-          delaySeconds: {
-            type: "number",
-            description: "Delay before restart (default 0).",
-          },
-          rationale: {
-            type: "string",
-            description: "Why this restart is the correct remediation.",
-          },
-          risk: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-          },
-          estimatedDowntimeSeconds: { type: "number" },
-        },
-        required: ["service", "rationale", "risk", "estimatedDowntimeSeconds"],
-      },
-    },
-    access: "write",
-    on: "runner",
-    route: "service",
-  },
-  {
-    schema: {
-      name: "exec_command",
-      description:
-        "WRITE: Execute a shell command inside a container. Requires human approval. Only available when remediation is enabled.",
-      input_schema: {
-        type: "object",
-        properties: {
-          service: SERVICE_IDENTITY_SCHEMA,
-          command: {
-            type: "array",
-            items: { type: "string" },
-            description: "Command and arguments as an array.",
-          },
-          reason: { type: "string" },
-          risk: { type: "string", enum: ["low", "medium", "high"] },
-        },
-        required: ["service", "command", "reason", "risk"],
-      },
-    },
-    access: "write",
-    on: "runner",
-    route: "service",
-  },
 ];
-
-// No `providers` annotation means provider-agnostic (runs everywhere); an annotation
-// narrows it. Single home for the "absent means all" rule, shared by schema
-// filtering and the mismatch check.
-export function toolSupportsProvider(tool: Tool, provider: string): boolean {
-  // provider is a plain string so the loop can pass an arbitrary model-supplied
-  // value; widening the annotation to string[] is always safe and lets an
-  // unrecognized provider read as unsupported (the mismatch we want to report).
-  return (
-    tool.providers === undefined ||
-    (tool.providers as readonly string[]).includes(provider)
-  );
-}
-
-// Single dispatch: api tools run their own handler in this process; runner
-// tools ship schema.name (the wire command) with their declared route.
-export function executeTool(
-  tool: Tool,
-  input: Record<string, unknown>,
-  ctx: ToolExecuteContext,
-): Promise<ToolExecuteResult> {
-  if (tool.on === "api") return tool.execute(input, ctx);
-  return executeRunnerTool(tool.schema.name, tool.route, input, ctx);
-}
-
-// Resolve a tool by its schema.name. The single resolver used by both the loop
-// (live tool calls) and human-input (resuming a stored interrupt); names are
-// stable, so there is no legacy fallback.
-export function findTool(toolName: string): Tool | undefined {
-  return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
-}
-
-// The effective tool set: the single source of truth for both the offered schemas and the
-// names the loop resolves. remediationEnabled false removes write tools, the
-// fleet filter drops tools no runner serves - so hiding a write and gating it are one op.
-export function effectiveToolset(
-  fleetProviders: ReadonlySet<Provider> | undefined,
-  remediationEnabled: boolean,
-): Tool[] {
-  const eligible = remediationEnabled
-    ? TOOL_REGISTRY
-    : TOOL_REGISTRY.filter((t) => t.access !== "write");
-  if (!fleetProviders) return eligible;
-  return eligible.filter((t) =>
-    [...fleetProviders].some((p) => toolSupportsProvider(t, p)),
-  );
-}
-
-// Schemas only, for callers that just need the wire shape (e.g. tests); the loop uses
-// effectiveToolset directly. undefined remediationEnabled means no master-switch filter
-// (offer every tool).
-export function getToolSchemas(
-  fleetProviders?: ReadonlySet<Provider>,
-  remediationEnabled?: boolean,
-): ToolSchema[] {
-  return effectiveToolset(fleetProviders, remediationEnabled ?? true).map(
-    (t) => t.schema,
-  );
-}

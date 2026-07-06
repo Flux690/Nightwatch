@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
-import { effectiveToolset } from "./tools.js";
-import type { ToolExecuteContext } from "./tools.js";
+import { effectiveToolset } from "./tools/toolset.js";
+import type { ToolExecuteContext } from "./tools/types.js";
 import { currentFleetProviders, currentRemediationEnabled } from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { createProvider } from "../llm/factory.js";

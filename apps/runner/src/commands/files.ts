@@ -1,9 +1,9 @@
 import { openAllowedFile, redactSecrets } from "../safety/allowlist.js";
-import type { ReadFileInput, ReadFileResult } from "@nightwatch/shared";
+import type { ReadHostFileInput, ReadHostFileResult } from "@nightwatch/shared";
 
 export async function readFileCommand(
-  input: ReadFileInput,
-): Promise<ReadFileResult> {
+  input: ReadHostFileInput,
+): Promise<ReadHostFileResult> {
   // Open-then-validate closes the check/open symlink race; reads come from the
   // pinned handle, never re-resolving input.path.
   const handle = await openAllowedFile(input.path);

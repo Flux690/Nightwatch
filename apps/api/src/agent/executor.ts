@@ -1,7 +1,7 @@
 import { sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
 import type { CommandRoute } from "../ws/router.js";
-import type { ToolExecuteContext, ToolExecuteResult } from "./tools.js";
+import type { ToolExecuteContext, ToolExecuteResult } from "./tools/types.js";
 
 // Single dispatch + error-formatting primitive used by the loop's read path
 // and the resolver's approve path. Keeping both in one place means error

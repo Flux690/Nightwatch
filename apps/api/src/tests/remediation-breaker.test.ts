@@ -367,7 +367,7 @@ describe("remediation circuit breaker", () => {
     });
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/worker",
-      toolName: "exec_command",
+      toolName: "exec",
       status: "executed",
       count: DEFAULT_LIMIT,
     });

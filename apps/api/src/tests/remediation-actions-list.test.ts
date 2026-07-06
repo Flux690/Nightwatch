@@ -80,7 +80,7 @@ describe("GET /remediation-actions", () => {
     seedRemediationAction({
       toolUseId: "tu-list-newer",
       sessionId: "sess-list-1",
-      toolName: "exec_command",
+      toolName: "exec",
       serviceIdentityKey: "kubernetes/ns/api",
       status: "rejected",
       resolvedBy: "console",
@@ -104,7 +104,7 @@ describe("GET /remediation-actions", () => {
       sessionId: "sess-list-1",
       toolUseId: "tu-list-newer",
       serviceIdentityKey: "kubernetes/ns/api",
-      toolName: "exec_command",
+      toolName: "exec",
       status: "rejected",
       resolvedBy: "console",
       createdAt: "2024-06-01T00:00:00.000Z",

@@ -11,7 +11,6 @@ import type {
   GetContainerLogsInput,
   GetContainerProcessesInput,
   GetContainerStatsInput,
-  GetEnvVariableNamesInput,
   GetK8sRolloutStatusInput,
   RestartContainerInput,
   RestartServiceK8sResult,
@@ -139,11 +138,44 @@ export async function getContainerInspect(
   );
   if ("found" in resolved) return resolved;
 
-  // Return native K8s pod object - no normalization.
-  return coreApi.readNamespacedPod({
+  const pod = await coreApi.readNamespacedPod({
     name: resolved.podName,
     namespace: resolved.namespace,
   });
+
+  // Shaped, never the raw pod: a pod spec inlines literal env values, which
+  // are secrets and must never reach the model - env var names only, the same
+  // contract the docker handler keeps.
+  return {
+    podName: pod.metadata?.name ?? resolved.podName,
+    namespace: resolved.namespace,
+    nodeName: pod.spec?.nodeName ?? null,
+    phase: pod.status?.phase ?? "Unknown",
+    restartPolicy: pod.spec?.restartPolicy ?? "Always",
+    createdAt: pod.metadata?.creationTimestamp ?? null,
+    containers: (pod.spec?.containers ?? []).map((c) => ({
+      name: c.name,
+      image: c.image ?? "",
+      envVarNames: (c.env ?? []).flatMap((e) => (e.name ? [e.name] : [])),
+      ports: (c.ports ?? []).map(
+        (p) => `${p.containerPort}/${p.protocol ?? "TCP"}`,
+      ),
+      volumeMounts: (c.volumeMounts ?? []).map((m) => ({
+        name: m.name,
+        mountPath: m.mountPath,
+        readOnly: m.readOnly ?? false,
+      })),
+      resources: c.resources ?? {},
+      livenessProbe: c.livenessProbe ?? null,
+      readinessProbe: c.readinessProbe ?? null,
+    })),
+    containerStatuses: (pod.status?.containerStatuses ?? []).map((s) => ({
+      name: s.name,
+      ready: s.ready,
+      restartCount: s.restartCount,
+      state: s.state ?? {},
+    })),
+  };
 }
 
 export async function getContainerStats(
@@ -227,34 +259,6 @@ export async function getContainerProcesses(
     .map(parsePsLine);
 
   return { processes };
-}
-
-export async function getEnvVariableNames(
-  input: GetEnvVariableNamesInput,
-): Promise<{ names: string[] } | NoRunningInstanceResult> {
-  const service = requireK8sIdentity(input.service);
-  const coreApi = getCoreV1Api();
-  const appsApi = getAppsV1Api();
-
-  const resolved = await resolveWorkload(
-    coreApi,
-    appsApi,
-    service.namespace,
-    service.workload,
-    { container: service.container, requireLive: false },
-  );
-  if ("found" in resolved) return resolved;
-
-  const pod = await coreApi.readNamespacedPod({
-    name: resolved.podName,
-    namespace: resolved.namespace,
-  });
-
-  const names = (pod.spec?.containers ?? []).flatMap((c) =>
-    (c.env ?? []).flatMap((e) => (e.name ? [e.name] : [])),
-  );
-
-  return { names };
 }
 
 // Rollout restart via a restartedAt annotation so the controller rolls new pods (not

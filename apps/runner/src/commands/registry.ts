@@ -5,7 +5,6 @@ import {
   getContainerStats as dockerGetContainerStats,
   getContainerEvents as dockerGetContainerEvents,
   getContainerProcesses as dockerGetContainerProcesses,
-  getEnvVariableNames as dockerGetEnvVariableNames,
   restartContainer,
   execCommand,
 } from "../docker/commands.js";
@@ -16,7 +15,6 @@ import {
   getContainerStats as k8sGetContainerStats,
   getContainerEvents as k8sGetContainerEvents,
   getContainerProcesses as k8sGetContainerProcesses,
-  getEnvVariableNames as k8sGetEnvVariableNames,
   restartService as k8sRestartService,
   execCommand as k8sExecCommand,
   getRolloutStatus as k8sGetRolloutStatus,
@@ -117,27 +115,17 @@ export function createDispatchRegistry(): Map<string, Handler> {
         kubernetes: k8sGetContainerProcesses,
       }),
     ],
-    [
-      "get_service_env_names",
-      byProvider({
-        docker: dockerGetEnvVariableNames,
-        kubernetes: k8sGetEnvVariableNames,
-      }),
-    ],
     ["get_host_memory", () => getHostMemory()],
     ["get_host_cpu", () => getHostCpu()],
     ["get_host_disk", () => getHostDisk()],
     ["get_host_network", () => getHostNetwork()],
     ["get_host_dmesg", direct(getHostDmesg)],
-    ["read_file", direct(readFileCommand)],
+    ["read_host_file", direct(readFileCommand)],
     [
       "restart_service",
       byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
     ],
-    [
-      "exec_command",
-      byProvider({ docker: execCommand, kubernetes: k8sExecCommand }),
-    ],
+    ["exec", byProvider({ docker: execCommand, kubernetes: k8sExecCommand })],
     ["get_k8s_rollout_status", direct(k8sGetRolloutStatus)],
     ["get_k8s_node_status", () => k8sGetNodeStatus()],
   ]);

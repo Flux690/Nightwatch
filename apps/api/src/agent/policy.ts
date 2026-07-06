@@ -1,7 +1,7 @@
 import { getRunnerManifestForAlert, listRunners } from "../ws/router.js";
 import { getRemediationModeByRunnerRef } from "../db/runner.js";
-import { toolSupportsProvider } from "./tools.js";
-import type { Provider, Tool } from "./tools.js";
+import { toolSupportsProvider } from "./tools/toolset.js";
+import type { Provider, Tool } from "./tools/types.js";
 
 // Run policy: which tools an investigation may use and on which providers. All
 // derived from the connected fleet (WS state) and the DB-stored remediation
