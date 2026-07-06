@@ -76,14 +76,18 @@ const READ: ScriptedTurn = {
 };
 
 // Alertmanager-shaped body for driving the real POST /alerts/ingest route.
-function alertmanagerBody(fingerprint: string, severity = "warning") {
+function alertmanagerBody(
+  fingerprint: string,
+  severity = "warning",
+  startsAt = new Date().toISOString(),
+) {
   return {
     alerts: [
       {
         status: "firing",
         labels: { alertname: "HighCPU", severity, container: "web-01" },
         annotations: { summary: "CPU high" },
-        startsAt: new Date().toISOString(),
+        startsAt,
         endsAt: "0001-01-01T00:00:00Z",
         fingerprint,
       },
@@ -99,10 +103,9 @@ function alertmanagerBody(fingerprint: string, severity = "warning") {
   };
 }
 
-function alert(runnerId: string, sourceAlertId: string): NormalizedAlert {
+function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
   return {
     sourceAlertId,
-    runnerId,
     targetIdentifier: {
       provider: "docker",
       project: "web-01",
@@ -110,7 +113,7 @@ function alert(runnerId: string, sourceAlertId: string): NormalizedAlert {
     },
     alertType: "HighCPU",
     severity: "warning",
-    firedAt: new Date().toISOString(),
+    firedAt: firedAt ?? new Date().toISOString(),
     rawPayload: {},
   };
 }
@@ -158,7 +161,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(runnerId, "primary-mr"),
+      alert: alert("primary-mr"),
     });
 
     // createProvider is called synchronously in start() before the first await.
@@ -167,7 +170,7 @@ describe("mid-run alert injection (loop seam)", () => {
     };
 
     // Inject while parked at turn 1's chat()
-    dispatcher.injectAlert(sessionId, alert(runnerId, "injected-mr"));
+    dispatcher.injectAlert(sessionId, alert("injected-mr"));
 
     // Release turn 1 → loop executes list_services, drains inbox,
     // then calls appendToolResults(results, injectionText)
@@ -231,7 +234,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(runnerId, "primary-sus"),
+      alert: alert("primary-sus"),
     });
 
     // Release turn 1 → restart_service is gated → run suspends
@@ -248,7 +251,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     dispatcher.dispatch({
       sessionId: newSessionId,
-      alert: alert(runnerId, "new-after-sus"),
+      alert: alert("new-after-sus"),
     });
 
     await waitFor(() => mockCreateProvider.mock.calls.length > callsBefore);
@@ -275,11 +278,11 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(runnerId, "primary-lo"),
+      alert: alert("primary-lo"),
     });
 
     // Inject before releasing — alert sits in inbox
-    dispatcher.injectAlert(sessionId, alert(runnerId, "leftover-lo"));
+    dispatcher.injectAlert(sessionId, alert("leftover-lo"));
 
     const callsBefore = mockCreateProvider.mock.calls.length;
 
@@ -355,10 +358,11 @@ describe("mid-run alert injection (loop seam)", () => {
       [FINISH],
     );
 
+    const primaryFiredAt = "2026-07-07T03:00:00.000Z";
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert(runnerId, "primary-resume"),
+      alert: alert("primary-resume", primaryFiredAt),
     });
 
     gate.releaseNext();
@@ -391,12 +395,13 @@ describe("mid-run alert injection (loop seam)", () => {
     });
     expect(dispatcher.drainInbox(sessionId)).toHaveLength(1);
 
-    // The same alert re-firing while the resumed run is active is deduped.
+    // The same alert re-firing (same fingerprint + startsAt) while the
+    // resumed run is active is deduped.
     const refire = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
       headers: { "x-nightwatch-token": tokenPlaintext },
-      payload: alertmanagerBody("primary-resume"),
+      payload: alertmanagerBody("primary-resume", "warning", primaryFiredAt),
     });
     expect(JSON.parse(refire.body)).toMatchObject({
       enqueued: 0,

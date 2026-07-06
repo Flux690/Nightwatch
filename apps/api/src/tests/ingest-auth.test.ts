@@ -265,7 +265,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.enqueued).toBe(1);
   });
 
-  it("reports an unmatched alert in the rejected array, returning 200 so neighbouring alerts are not suppressed", async () => {
+  it("enqueues an alert whose identity no runner advertises - the agent triages it from the fleet map", async () => {
     connA = registerRunner(
       "runner-a-token",
       () => {},
@@ -281,13 +281,14 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
-      rejected: Array<{ sourceAlertId: string; reason: string }>;
+      received: number;
+      enqueued: number;
     };
-    expect(body.rejected).toHaveLength(1);
-    expect(body.rejected[0]!.reason).toMatch(/no runner advertises/i);
+    expect(body.received).toBe(1);
+    expect(body.enqueued).toBe(1);
   });
 
-  it("reports an ambiguous alert in the rejected array without a 400, listing the conflicting runners", async () => {
+  it("enqueues an alert whose identity two runners advertise - no ambiguity gate at ingest", async () => {
     connA = registerRunner(
       "runner-a-token",
       () => {},
@@ -309,12 +310,11 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
-      rejected: Array<{ sourceAlertId: string; reason: string }>;
+      received: number;
+      enqueued: number;
     };
-    expect(body.rejected).toHaveLength(1);
-    expect(body.rejected[0]!.reason).toMatch(/ambiguous/i);
-    expect(body.rejected[0]!.reason).toMatch(/host-a/);
-    expect(body.rejected[0]!.reason).toMatch(/host-b/);
+    expect(body.received).toBe(1);
+    expect(body.enqueued).toBe(1);
   });
 
   it("returns 400 for an unrecognized payload body so a misconfigured sender learns its body was not understood", async () => {

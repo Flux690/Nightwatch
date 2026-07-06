@@ -43,14 +43,18 @@ const FINISH: ScriptedTurn[] = [
   { toolUses: [], text: "Investigation complete." },
 ];
 
-function alertBody(fingerprint: string, severity = "warning") {
+function alertBody(
+  fingerprint: string,
+  severity = "warning",
+  startsAt = new Date().toISOString(),
+) {
   return {
     alerts: [
       {
         status: "firing",
         labels: { alertname: "HighCPU", severity, container: "web-01" },
         annotations: { summary: "CPU high" },
-        startsAt: new Date().toISOString(),
+        startsAt,
         endsAt: "0001-01-01T00:00:00Z",
         fingerprint,
       },
@@ -169,14 +173,16 @@ describe("alert batching (REST seam + fake timers)", () => {
     expect(openingMsg).toContain("fp-b1");
   });
 
-  it("dedup drops true duplicates (same sourceAlertId) within the window", async () => {
+  it("dedup drops true duplicates (same fingerprint + startsAt) within the window", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { plaintext: token } = generateRunnerToken("batch-dedup");
+    // A re-notification repeats the alert's startsAt - that pairing is the key.
+    const firedAt = "2026-07-07T03:00:00.000Z";
 
-    const r1 = await ingest(token, alertBody("dup-fp"));
+    const r1 = await ingest(token, alertBody("dup-fp", "warning", firedAt));
     expect(r1).toMatchObject({ enqueued: 1, skipped: 0 });
 
-    const r2 = await ingest(token, alertBody("dup-fp"));
+    const r2 = await ingest(token, alertBody("dup-fp", "warning", firedAt));
     expect(r2).toMatchObject({ enqueued: 0, skipped: 1 });
 
     const r3 = await ingest(token, alertBody("other-fp"));

@@ -7,9 +7,9 @@ export interface BatchWindow {
   // Add an alert to the operator-wide batch window. If the window is not yet
   // open, starts the 90s hold timer. Subsequent alerts from any runner join.
   add(alert: NormalizedAlert): void;
-  // True if an alert with this runnerId+sourceAlertId is already pending.
+  // True if an alert with this (fingerprint, startsAt) is already pending.
   // Used for intra-window dedup: prevents the model seeing the same alert twice.
-  has(runnerId: string, sourceAlertId: string): boolean;
+  has(sourceAlertId: string, firedAt: string): boolean;
 }
 
 export function createBatchWindow(opts: {
@@ -37,10 +37,10 @@ export function createBatchWindow(opts: {
       }
     },
 
-    has(runnerId: string, sourceAlertId: string): boolean {
+    has(sourceAlertId: string, firedAt: string): boolean {
       return (
         pending?.some(
-          (a) => a.runnerId === runnerId && a.sourceAlertId === sourceAlertId,
+          (a) => a.sourceAlertId === sourceAlertId && a.firedAt === firedAt,
         ) ?? false
       );
     },

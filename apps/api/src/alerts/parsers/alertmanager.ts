@@ -6,9 +6,9 @@ import {
 } from "@nightwatch/shared";
 import { logger } from "../../logger.js";
 
-// A parsed alert carrying a candidate identity not yet matched against the fleet;
-// runnerId/hostname aren't known at parse time, so they're absent rather than guessed.
-export type ParsedAlert = Omit<NormalizedAlert, "runnerId" | "hostname">;
+// Parsing IS normalization now: no location is ever stamped on an alert, so
+// the parser's output is the full NormalizedAlert.
+export type ParsedAlert = NormalizedAlert;
 
 // Only the envelope is validated up front; each alert is parsed defensively in the loop, so
 // one malformed alert is skipped on its own instead of aborting the batch.

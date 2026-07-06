@@ -154,18 +154,18 @@ export function listAllPendingHumanInput(): PendingHumanInputWithSession[] {
 
 // Dedup: true if a session for this alert is durably suspended.
 export function hasPendingHumanInputForAlert(
-  runnerId: string,
   sourceAlertId: string,
+  firedAt: string,
 ): boolean {
   const row = getDb()
     .prepare(
       `SELECT 1 FROM pending_human_input pi
        JOIN sessions s ON s.session_id = pi.session_id
-       WHERE json_extract(s.originating_alert, '$.runnerId') = ?
-         AND json_extract(s.originating_alert, '$.sourceAlertId') = ?
+       WHERE json_extract(s.originating_alert, '$.sourceAlertId') = ?
+         AND json_extract(s.originating_alert, '$.firedAt') = ?
        LIMIT 1`,
     )
-    .get(runnerId, sourceAlertId);
+    .get(sourceAlertId, firedAt);
   return row != null;
 }
 

@@ -109,15 +109,6 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_remediation_breaker
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
-  CREATE TABLE IF NOT EXISTS unresolved_alerts (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_alert_id  TEXT NOT NULL UNIQUE,
-    identity_key     TEXT NOT NULL,
-    alert_type       TEXT NOT NULL,
-    severity         TEXT NOT NULL,
-    rejection_reason TEXT NOT NULL,
-    created_at       TEXT NOT NULL
-  );
 `;
 
 let _db: Database.Database | undefined;

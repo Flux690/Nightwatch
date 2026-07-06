@@ -12,7 +12,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 export interface Dispatcher {
   dispatch(input: RunInvestigationInput): void;
   // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
-  isInvestigating(runnerId: string, sourceAlertId: string): boolean;
+  isInvestigating(sourceAlertId: string, firedAt: string): boolean;
   // guards the 409 on POST /sessions/:id/messages
   isSessionRunning(sessionId: string): boolean;
   getActiveAlertSession(): string | null;
@@ -29,11 +29,12 @@ export interface DispatcherOptions {
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
 }
 
-// A NUL separator cannot appear in a runnerId or sourceAlertId
-// (fingerprint/string from webhook payload), so this maps to exactly one key.
+// (fingerprint, startsAt): re-notifications of a firing alert keep both, so
+// they dedup; a twin incident (same labels on another server's stack) fires
+// independently and gets its own startsAt, so it is investigated.
 const KEY_SEP = " ";
-function dedupKey(runnerId: string, sourceAlertId: string): string {
-  return `${runnerId}${KEY_SEP}${sourceAlertId}`;
+function dedupKey(sourceAlertId: string, firedAt: string): string {
+  return `${sourceAlertId}${KEY_SEP}${firedAt}`;
 }
 
 export function createDispatcher(opts: DispatcherOptions): Dispatcher {
@@ -66,7 +67,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   function start(input: RunInvestigationInput): void {
     const alert = resolveAlert(input);
     const key =
-      alert != null ? dedupKey(alert.runnerId, alert.sourceAlertId) : null;
+      alert != null ? dedupKey(alert.sourceAlertId, alert.firedAt) : null;
 
     retain(key);
     activeSessionIds.add(input.sessionId);
@@ -111,8 +112,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   return {
     dispatch: start,
 
-    isInvestigating(runnerId: string, sourceAlertId: string): boolean {
-      return active.has(dedupKey(runnerId, sourceAlertId));
+    isInvestigating(sourceAlertId: string, firedAt: string): boolean {
+      return active.has(dedupKey(sourceAlertId, firedAt));
     },
 
     isSessionRunning(sessionId: string): boolean {

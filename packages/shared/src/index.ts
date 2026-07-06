@@ -85,4 +85,3 @@ export type {
   ReasoningEffort,
   AgentConfig,
 } from "./config.js";
-export type { UnresolvedAlertRecord } from "./unresolved-alerts.js";

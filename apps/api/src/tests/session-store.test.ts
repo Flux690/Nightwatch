@@ -50,7 +50,6 @@ function msg(
 
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
-  runnerId: "runner-A",
   targetIdentifier: {
     provider: "docker",
     project: "web-01",

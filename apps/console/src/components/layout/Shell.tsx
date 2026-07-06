@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  AlertCircle,
   Plus,
   Settings,
   LogOut,
@@ -152,18 +151,6 @@ function ShellContent({
                 >
                   <ScrollText {...ICON_NAV} />
                   <span>Audit log</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  tooltip="Unresolved alerts"
-                  aria-label="Unresolved alerts"
-                  isActive={isActive("/unresolved-alerts")}
-                  onClick={dismissMobile}
-                  render={<Link to="/unresolved-alerts" />}
-                >
-                  <AlertCircle {...ICON_NAV} />
-                  <span>Unresolved alerts</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

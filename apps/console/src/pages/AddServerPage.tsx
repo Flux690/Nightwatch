@@ -70,7 +70,7 @@ export function AddServerPage(): React.JSX.Element {
   const [installError, setInstallError] = useState<string | null>(null);
   const [committed, setCommitted] = useState(false);
   const [verifyResult, setVerifyResult] = useState<
-    { ok: true; hostname: string } | { ok: false; error: string } | null
+    { ok: true; server: string } | { ok: false; error: string } | null
   >(null);
 
   const serverNameError = serverName.includes("/")
@@ -169,7 +169,7 @@ export function AddServerPage(): React.JSX.Element {
 
   const sendTestAlert = useMutation({
     mutationFn: async (runnerId: string): Promise<string> => {
-      const body = await apiFetch<{ hostname?: string; error?: string }>(
+      const body = await apiFetch<{ server?: string; error?: string }>(
         "/api/alerts/test",
         {
           method: "POST",
@@ -177,12 +177,12 @@ export function AddServerPage(): React.JSX.Element {
           body: JSON.stringify({ runnerId }),
         },
       );
-      if (!body.hostname)
+      if (!body.server)
         throw new Error(body.error ?? "Failed to send test alert");
-      return body.hostname;
+      return body.server;
     },
     onMutate: () => setVerifyResult(null),
-    onSuccess: (hostname) => setVerifyResult({ ok: true, hostname }),
+    onSuccess: (server) => setVerifyResult({ ok: true, server }),
     onError: (err) =>
       setVerifyResult({
         ok: false,
@@ -395,7 +395,7 @@ export function AddServerPage(): React.JSX.Element {
             <Alert>
               <AlertTitle>Pipeline verified</AlertTitle>
               <AlertDescription>
-                Alert received and routed to {verifyResult.hostname}.
+                Alert received and routed to {verifyResult.server}.
               </AlertDescription>
             </Alert>
           )}

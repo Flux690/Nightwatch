@@ -135,7 +135,7 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
         return jsonOk({
           ok: true,
           runnerId: "runner-web-01",
-          hostname: "web-01",
+          server: "web-01",
         });
       if (url === "/api/alerts/validate" && init?.method === "POST")
         return jsonOk(RESOLVED_VALIDATE);

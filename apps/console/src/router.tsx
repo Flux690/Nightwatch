@@ -10,7 +10,6 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
-import { UnresolvedAlertsPage } from "./pages/UnresolvedAlerts.js";
 import { SessionView } from "./pages/SessionView.js";
 
 function RootLayout(): React.JSX.Element {
@@ -79,12 +78,6 @@ const addServerRoute = createRoute({
   component: AddServerPage,
 });
 
-const unresolvedAlertsRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/unresolved-alerts",
-  component: UnresolvedAlertsPage,
-});
-
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -94,7 +87,6 @@ const routeTree = rootRoute.addChildren([
     addServerRoute,
     settingsRoute,
     auditRoute,
-    unresolvedAlertsRoute,
   ]),
 ]);
 

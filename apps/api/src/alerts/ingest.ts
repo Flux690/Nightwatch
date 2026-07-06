@@ -2,14 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
-import { resolveAlerts } from "./resolve-identity.js";
 import { routeAlert } from "./route-alert.js";
 import { findRunnerByToken, hashToken } from "../db/runner.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
-import { insertUnresolvedAlert } from "../db/unresolved-alerts.js";
-import { logger } from "../logger.js";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
@@ -35,59 +32,30 @@ export async function registerAlertRoutes(
       return reply.code(400).send({ error: msg });
     }
 
-    // The token authenticates the request; the alert's labels - matched
-    // against the fleet's advertised services - are the sole source of
-    // routing (resolve-or-reject, never a token-derived guess).
-    const resolution = resolveAlerts(parsed, getFleetView());
-    if (resolution.kind === "no-runners") {
-      for (const p of parsed) {
-        tryRecordUnresolved(p.sourceAlertId, {
-          sourceAlertId: p.sourceAlertId,
-          identityKey: serviceIdentityKey(p.targetIdentifier),
-          alertType: p.alertType,
-          severity: p.severity,
-          rejectionReason: "no runner connected to route this alert",
-        });
-      }
+    // No identity gate: every parsed alert is investigated. The agent locates
+    // the target from the fleet map, and service-routed command validation is
+    // what prevents misrouted actions - a mislabeled alert about a real outage
+    // must reach the agent, not park on a page nobody watches at 3am.
+    if (getFleetView().length === 0) {
       return reply
         .code(503)
-        .send({ error: "no runner connected to route this alert" });
+        .send({ error: "no runner connected to investigate alerts" });
     }
 
     let enqueued = 0;
     let skipped = 0;
-    const rejected: Array<{ sourceAlertId: string; reason: string }> = [];
-
-    // Verdicts are produced 1:1 in order with parsed (same loop in resolveAlerts),
-    // so index i is always the parsed alert that yielded verdicts[i].
-    for (let i = 0; i < resolution.verdicts.length; i++) {
-      const verdict = resolution.verdicts[i]!;
-      if (verdict.kind === "resolved") {
-        if (routeAlert(verdict.alert) === "enqueued") enqueued++;
-        else skipped++;
-      } else {
-        rejected.push({
-          sourceAlertId: verdict.sourceAlertId,
-          reason: verdict.reason,
-        });
-        const parsedAlert = parsed[i]!;
-        tryRecordUnresolved(verdict.sourceAlertId, {
-          sourceAlertId: verdict.sourceAlertId,
-          identityKey: serviceIdentityKey(parsedAlert.targetIdentifier),
-          alertType: parsedAlert.alertType,
-          severity: parsedAlert.severity,
-          rejectionReason: verdict.reason,
-        });
-      }
+    for (const alert of parsed) {
+      if (routeAlert(alert) === "enqueued") enqueued++;
+      else skipped++;
     }
 
-    const received = enqueued + skipped + rejected.length;
-    return reply.code(200).send({ received, enqueued, skipped, rejected });
+    return reply.code(200).send({ received: parsed.length, enqueued, skipped });
   });
 
-  // Lets an operator dry-run a BYO webhook: same auth/normalizer/fleet-match as ingest but
-  // never routes. Each alert is resolved individually, so a multi-alert payload reports
-  // which would route and which would be rejected.
+  // Lets an operator dry-run a BYO webhook: same auth/normalizer as ingest but
+  // never routes. The fleet match is advisory only (it does not gate routing) -
+  // it tells the operator whether the agent will find an exact identity match
+  // or have to reason it out from the fleet map.
   fastify.post<{ Body: unknown }>(
     "/alerts/validate",
     async (request, reply) => {
@@ -117,43 +85,23 @@ export async function registerAlertRoutes(
       }
 
       const fleet = getFleetView();
-      const resolution = resolveAlerts(parsed, fleet);
-
-      // verdicts are produced in 1:1 order with parsed (same loop in
-      // resolveAlerts), so index i is always valid when kind === "verdicts".
-      const alerts = parsed.map((p, i) => {
-        let res:
-          | {
-              status: "resolved";
-              runnerId: string;
-              hostname: string | undefined;
-            }
-          | { status: "rejected"; reason: string };
-
-        if (resolution.kind === "no-runners") {
-          res = {
-            status: "rejected",
-            reason: "no runner connected to route this alert",
-          };
-        } else {
-          const verdict = resolution.verdicts[i]!;
-          res =
-            verdict.kind === "resolved"
-              ? {
-                  status: "resolved",
-                  runnerId: verdict.alert.runnerId,
-                  hostname: verdict.alert.hostname,
-                }
-              : { status: "rejected", reason: verdict.reason };
-        }
+      const alerts = parsed.map((p) => {
+        const key = serviceIdentityKey(p.targetIdentifier);
+        const advertisedOn = fleet
+          .filter((r) =>
+            r.services.some((s) => serviceIdentityKey(s.identity) === key),
+          )
+          .map((r) => r.serverName ?? r.hostname);
 
         return {
           sourceAlertId: p.sourceAlertId,
           identity: p.targetIdentifier,
-          identityKey: serviceIdentityKey(p.targetIdentifier),
+          identityKey: key,
           alertType: p.alertType,
           severity: p.severity,
-          resolution: res,
+          // Advisory fleet match: exact-identity owners of this alert's target.
+          advertisedOn,
+          exactMatch: advertisedOn.length === 1,
         };
       });
 
@@ -163,8 +111,7 @@ export async function registerAlertRoutes(
 }
 
 // Authenticates only - grants no routing. `nwi_` (fleet) and `nwr_` (per-runner) both just
-// prove the request may submit; which runner receives it is decided later by matching
-// labels against the fleet.
+// prove the request may submit; the agent decides what the alert is about.
 function authenticate(plaintext: string): boolean {
   if (plaintext.startsWith("nwi_")) {
     const ingestHash = getIngestTokenHash();
@@ -214,17 +161,4 @@ function isAlertmanagerShape(body: unknown): boolean {
     "alerts" in body &&
     Array.isArray((body as Record<string, unknown>)["alerts"])
   );
-}
-
-// A DB error writing to the unresolved feed must never abort the ingest
-// response: routing of matched alerts must not be undone by a storage hiccup.
-function tryRecordUnresolved(
-  sourceAlertId: string,
-  params: Parameters<typeof insertUnresolvedAlert>[0],
-): void {
-  try {
-    insertUnresolvedAlert(params);
-  } catch (err) {
-    logger.warn({ err, sourceAlertId }, "failed to record unresolved alert");
-  }
 }

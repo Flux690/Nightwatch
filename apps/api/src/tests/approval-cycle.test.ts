@@ -977,7 +977,6 @@ describe("durable approval interrupts", () => {
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
-      runnerId: TEST_TOKEN,
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

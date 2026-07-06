@@ -122,12 +122,12 @@ describe("POST /alerts/test", () => {
       ok: boolean;
       status: "enqueued" | "skipped";
       runnerId: string;
-      hostname: string;
+      server: string;
     };
     expect(body.ok).toBe(true);
     expect(body.status).toBe("enqueued");
     expect(body.runnerId).toBe("verify-runner-token");
-    expect(body.hostname).toBe("host-verify");
+    expect(body.server).toBe("host-verify");
   });
 
   it("fails verification when the runner advertises no services to route-test", async () => {

@@ -10,9 +10,9 @@ import { logger } from "../logger.js";
 export function routeAlert(alert: NormalizedAlert): "enqueued" | "skipped" {
   if (isDuplicate(alert)) return "skipped";
 
-  if (batchWindow.has(alert.runnerId, alert.sourceAlertId)) return "skipped";
+  if (batchWindow.has(alert.sourceAlertId, alert.firedAt)) return "skipped";
 
-  if (!checkRateLimit(alert.runnerId, alert.severity)) {
+  if (!checkRateLimit(alert.severity)) {
     logger.warn({ alertId: alert.sourceAlertId }, "rate limited");
     return "skipped";
   }

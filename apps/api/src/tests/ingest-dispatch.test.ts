@@ -63,6 +63,7 @@ function alertBody(
   fingerprint: string,
   severity = "warning",
   container = "web-01",
+  startsAt = new Date().toISOString(),
 ) {
   return {
     alerts: [
@@ -70,7 +71,7 @@ function alertBody(
         status: "firing",
         labels: { alertname: "HighCPU", severity, container },
         annotations: { summary: "CPU high" },
-        startsAt: new Date().toISOString(),
+        startsAt,
         endsAt: "0001-01-01T00:00:00Z",
         fingerprint,
       },
@@ -92,9 +93,8 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   let connA: RunnerConnection;
   let connB: RunnerConnection;
 
-  // Rate-limit and dedup are keyed by runnerId, so these two tests need alerts resolving to
-  // different runners - else they share the per-runner counter. Two container labels on two
-  // runners give two runnerIds, the isolation two tokens used to give for free.
+  // Two runners advertising distinct services keep the fleet non-empty for
+  // ingest and give the mixed-batch test a matched and an unmatched identity.
   beforeAll(async () => {
     cleanupDb = useTempDb();
     connA = registerRunner(
@@ -152,58 +152,76 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   }
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
-    // This test's alerts target web-01 -> resolve to runner-web-01; dedup is
-    // keyed by that runnerId now, not by the authenticating token.
     const { plaintext: token } = generateRunnerToken("dedup");
+    // A re-notification carries the SAME startsAt - that pairing is the dedup key.
+    const firedAt = "2026-07-07T03:00:00.000Z";
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     useGatedProvider(); // runs park on the gate -> stay active
 
-    const first = await ingest(token, alertBody("dup-1"));
+    const first = await ingest(
+      token,
+      alertBody("dup-1", "warning", "web-01", firedAt),
+    );
     expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
 
     // Fire the batch window timer (90s) and flush any resulting promises so the
     // run starts and parks. advanceTimersByTimeAsync flushes the microtask queue
     // at each step, which is required since waitFor itself uses setTimeout.
     await vi.advanceTimersByTimeAsync(90_001);
-    expect(dispatcher.isInvestigating("dispatch-runner-a-token", "dup-1")).toBe(
-      true,
-    );
+    expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(true);
 
-    // Same token + sourceAlertId while the first run is still active -> dropped.
-    const dupe = await ingest(token, alertBody("dup-1"));
+    // Same fingerprint + startsAt while the first run is still active -> dropped.
+    const dupe = await ingest(
+      token,
+      alertBody("dup-1", "warning", "web-01", firedAt),
+    );
     expect(dupe).toMatchObject({ enqueued: 0, skipped: 1 });
+
+    // A twin incident - same fingerprint, its own startsAt - is NOT a duplicate.
+    const twin = await ingest(
+      token,
+      alertBody("dup-1", "warning", "web-01", "2026-07-07T03:09:00.000Z"),
+    );
+    expect(twin).toMatchObject({ enqueued: 1, skipped: 0 });
 
     // End the active run; flush the async chain so the dedup key clears.
     gate.releaseAll();
     await vi.advanceTimersByTimeAsync(50);
-    expect(dispatcher.isInvestigating("dispatch-runner-a-token", "dup-1")).toBe(
-      false,
-    );
+    expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(false);
 
     // The same alert now starts a fresh investigation - no 24h suppression.
-    const refire = await ingest(token, alertBody("dup-1"));
+    const refire = await ingest(
+      token,
+      alertBody("dup-1", "warning", "web-01", firedAt),
+    );
     expect(refire).toMatchObject({ enqueued: 1, skipped: 0 });
     // Advance the refire's batch window so no stray timer outlives this test;
     // it parks on the gate and is drained by afterEach.
     await vi.advanceTimersByTimeAsync(90_001);
   });
 
-  it("rate-limits past 10 non-critical alerts per runner per hour; critical bypasses; resets after the window", async () => {
+  it("rate-limits past 30 non-critical alerts fleet-wide per hour; critical bypasses; resets after the window", async () => {
     const { plaintext: token } = generateRunnerToken("ratelimit");
     useImmediateProvider(); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.
     vi.useFakeTimers({ toFake: ["Date"] });
 
-    // 10 distinct alerts all admitted.
-    for (let i = 0; i < 10; i++) {
+    // The counter is global module state; jump past any window earlier tests
+    // opened so this test counts from zero.
+    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
+    markRunnerAlive(connA);
+    markRunnerAlive(connB);
+
+    // 30 distinct alerts all admitted.
+    for (let i = 0; i < 30; i++) {
       const r = await ingest(token, alertBody(`rl-${i}`, "warning", "web-02"));
       expect(r).toMatchObject({ enqueued: 1, skipped: 0 });
     }
 
-    // The 11th non-critical alert is rate-limited.
+    // The 31st non-critical alert is rate-limited.
     expect(
       await ingest(token, alertBody("rl-over", "warning", "web-02")),
     ).toMatchObject({
@@ -232,7 +250,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     });
   });
 
-  it("dispatches the matched alert and reports the unmatched one in rejected, neither suppressing the other", async () => {
+  it("dispatches matched and unmatched alerts alike - no identity gate at ingest", async () => {
     const { plaintext: token } = generateRunnerToken("mixed-batch");
     useImmediateProvider();
 
@@ -283,13 +301,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       received: number;
       enqueued: number;
       skipped: number;
-      rejected: Array<{ sourceAlertId: string; reason: string }>;
     };
     expect(body.received).toBe(2);
-    expect(body.enqueued).toBe(1);
+    expect(body.enqueued).toBe(2);
     expect(body.skipped).toBe(0);
-    expect(body.rejected).toHaveLength(1);
-    expect(body.rejected[0]!.sourceAlertId).toBe("mixed-no-match");
-    expect(body.rejected[0]!.reason).toMatch(/no runner advertises/i);
   });
 });

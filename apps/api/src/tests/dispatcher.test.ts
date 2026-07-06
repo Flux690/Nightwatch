@@ -16,13 +16,14 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+const FIRED_AT = "2026-07-07T03:00:00.000Z";
+
 function makeAlert(
   sourceAlertId: string,
-  runnerId = "runner-1",
+  firedAt = FIRED_AT,
 ): NormalizedAlert {
   return {
     sourceAlertId,
-    runnerId,
     targetIdentifier: {
       provider: "docker",
       project: "web-01",
@@ -30,18 +31,18 @@ function makeAlert(
     },
     alertType: "HighCPU",
     severity: "warning",
-    firedAt: new Date().toISOString(),
+    firedAt,
     rawPayload: {},
   };
 }
 
 function alertInput(
   sourceAlertId: string,
-  runnerId = "runner-1",
+  firedAt = FIRED_AT,
 ): RunInvestigationInput {
   return {
     sessionId: `s-${sourceAlertId}`,
-    alert: makeAlert(sourceAlertId, runnerId),
+    alert: makeAlert(sourceAlertId, firedAt),
   };
 }
 
@@ -85,25 +86,26 @@ describe("dispatcher", () => {
     gate.resolve();
   });
 
-  it("dedup keyed by runnerId+sourceAlertId; clears when settled", async () => {
+  it("dedup keyed by (fingerprint, startsAt); clears when settled", async () => {
     const gate = deferred();
     const d = createDispatcher({
       run: () => gate.promise,
       getAlertForSession: noAlertLookup,
     });
 
-    d.dispatch(alertInput("dup", "runner-1"));
+    d.dispatch(alertInput("dup", FIRED_AT));
 
-    // Same token + sourceAlertId → duplicate
-    expect(d.isInvestigating("runner-1", "dup")).toBe(true);
-    // Same sourceAlertId but DIFFERENT runner → not a duplicate
-    expect(d.isInvestigating("runner-2", "dup")).toBe(false);
-    expect(d.isInvestigating("runner-1", "never")).toBe(false);
+    // Same fingerprint + startsAt (a re-notification) → duplicate
+    expect(d.isInvestigating("dup", FIRED_AT)).toBe(true);
+    // Same fingerprint but a DIFFERENT startsAt: a twin incident that fired
+    // independently (identical labels on another stack) → not a duplicate
+    expect(d.isInvestigating("dup", "2026-07-07T03:05:00.000Z")).toBe(false);
+    expect(d.isInvestigating("never", FIRED_AT)).toBe(false);
 
     gate.resolve();
     await flush();
 
-    expect(d.isInvestigating("runner-1", "dup")).toBe(false);
+    expect(d.isInvestigating("dup", FIRED_AT)).toBe(false);
   });
 
   it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
@@ -148,7 +150,7 @@ describe("dispatcher", () => {
     });
 
     d.dispatch({ sessionId: "chat-1" });
-    expect(d.isInvestigating("runner-1", "anything")).toBe(false);
+    expect(d.isInvestigating("anything", FIRED_AT)).toBe(false);
 
     gate.resolve();
   });
@@ -262,7 +264,7 @@ describe("dispatcher", () => {
         getAlertForSession: lookup.getAlertForSession,
       });
 
-      const resumedAlert = makeAlert("resumed-dup", "runner-9");
+      const resumedAlert = makeAlert("resumed-dup");
       lookup.register("s-resumed-dup", resumedAlert);
 
       d.dispatch({
@@ -271,12 +273,12 @@ describe("dispatcher", () => {
         resumeToolResults: [],
       });
 
-      expect(d.isInvestigating("runner-9", "resumed-dup")).toBe(true);
+      expect(d.isInvestigating("resumed-dup", FIRED_AT)).toBe(true);
 
       gate.resolve();
       await flush();
 
-      expect(d.isInvestigating("runner-9", "resumed-dup")).toBe(false);
+      expect(d.isInvestigating("resumed-dup", FIRED_AT)).toBe(false);
     });
 
     it("inbox leftovers re-dispatch when a resumed alert run ends", async () => {

@@ -76,7 +76,7 @@ describe("POST /alerts/validate", () => {
     }
   });
 
-  it("returns the parsed identity and resolved runner for a well-labelled alert, without dispatching", async () => {
+  it("returns the parsed identity and an exact advisory fleet match for a well-labelled alert, without dispatching", async () => {
     connA = registerRunner(
       "validate-runner-a-token",
       () => {},
@@ -103,7 +103,8 @@ describe("POST /alerts/validate", () => {
       alerts: Array<{
         identity: unknown;
         identityKey: string;
-        resolution: { status: string; runnerId?: string; hostname?: string };
+        advertisedOn: string[];
+        exactMatch: boolean;
       }>;
     };
     expect(body.alerts).toHaveLength(1);
@@ -113,14 +114,11 @@ describe("POST /alerts/validate", () => {
       service: "web-01",
     });
     expect(body.alerts[0]!.identityKey).toBe("docker/web-01/web-01");
-    expect(body.alerts[0]!.resolution).toEqual({
-      status: "resolved",
-      runnerId: "validate-runner-a-token",
-      hostname: "host-a",
-    });
+    expect(body.alerts[0]!.advertisedOn).toEqual(["host-a"]);
+    expect(body.alerts[0]!.exactMatch).toBe(true);
   });
 
-  it("resolves a Kubernetes alert by namespace + deployment labels", async () => {
+  it("matches a Kubernetes alert by namespace + deployment labels", async () => {
     connA = registerRunner(
       "validate-runner-a-token",
       () => {},
@@ -157,7 +155,8 @@ describe("POST /alerts/validate", () => {
       alerts: Array<{
         identity: unknown;
         identityKey: string;
-        resolution: { status: string; runnerId?: string; hostname?: string };
+        advertisedOn: string[];
+        exactMatch: boolean;
       }>;
     };
     expect(body.alerts[0]!.identity).toEqual({
@@ -168,14 +167,11 @@ describe("POST /alerts/validate", () => {
     expect(body.alerts[0]!.identityKey).toBe(
       "kubernetes/production/api-server",
     );
-    expect(body.alerts[0]!.resolution).toEqual({
-      status: "resolved",
-      runnerId: "validate-runner-a-token",
-      hostname: "host-a",
-    });
+    expect(body.alerts[0]!.advertisedOn).toEqual(["host-a"]);
+    expect(body.alerts[0]!.exactMatch).toBe(true);
   });
 
-  it("rejects a poorly-labelled alert with a diagnostic reason, still returning its parsed identity", async () => {
+  it("reports no advisory match for a poorly-labelled alert, still returning its parsed identity", async () => {
     connA = registerRunner(
       "validate-runner-a-token",
       () => {},
@@ -201,17 +197,18 @@ describe("POST /alerts/validate", () => {
     const body = JSON.parse(res.body) as {
       alerts: Array<{
         identityKey: string;
-        resolution: { status: string; reason?: string };
+        advertisedOn: string[];
+        exactMatch: boolean;
       }>;
     };
     expect(body.alerts[0]!.identityKey).toBe(
       "docker/ghost-service/ghost-service",
     );
-    expect(body.alerts[0]!.resolution.status).toBe("rejected");
-    expect(body.alerts[0]!.resolution.reason).toMatch(/no runner advertises/i);
+    expect(body.alerts[0]!.advertisedOn).toEqual([]);
+    expect(body.alerts[0]!.exactMatch).toBe(false);
   });
 
-  it("rejects an alert advertised by two runners as ambiguous, listing both hostnames", async () => {
+  it("lists every advertising server for an identity owned by two runners, without an exact match", async () => {
     const identity = {
       provider: "docker" as const,
       project: "shared",
@@ -249,15 +246,14 @@ describe("POST /alerts/validate", () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
-      alerts: Array<{ resolution: { status: string; reason?: string } }>;
+      alerts: Array<{ advertisedOn: string[]; exactMatch: boolean }>;
     };
-    expect(body.alerts[0]!.resolution.status).toBe("rejected");
-    expect(body.alerts[0]!.resolution.reason).toMatch(/ambiguous/i);
-    expect(body.alerts[0]!.resolution.reason).toMatch(/host-a/);
-    expect(body.alerts[0]!.resolution.reason).toMatch(/host-b/);
+    expect(body.alerts[0]!.advertisedOn).toContain("host-a");
+    expect(body.alerts[0]!.advertisedOn).toContain("host-b");
+    expect(body.alerts[0]!.exactMatch).toBe(false);
   });
 
-  it("reports each alert in a multi-alert payload independently, so one rejection doesn't mask a sibling's match", async () => {
+  it("reports each alert in a multi-alert payload independently, so a non-match doesn't mask a sibling's match", async () => {
     connA = registerRunner(
       "validate-runner-a-token",
       () => {},
@@ -296,18 +292,15 @@ describe("POST /alerts/validate", () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
-      alerts: Array<{
-        sourceAlertId: string;
-        resolution: { status: string };
-      }>;
+      alerts: Array<{ sourceAlertId: string; exactMatch: boolean }>;
     };
     expect(body.alerts).toHaveLength(2);
     expect(
-      body.alerts.find((a) => a.sourceAlertId === "multi-1")!.resolution.status,
-    ).toBe("resolved");
+      body.alerts.find((a) => a.sourceAlertId === "multi-1")!.exactMatch,
+    ).toBe(true);
     expect(
-      body.alerts.find((a) => a.sourceAlertId === "multi-2")!.resolution.status,
-    ).toBe("rejected");
+      body.alerts.find((a) => a.sourceAlertId === "multi-2")!.exactMatch,
+    ).toBe(false);
   });
 
   it("returns a clear 400 error for a malformed payload missing the alerts array", async () => {

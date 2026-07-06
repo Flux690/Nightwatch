@@ -63,10 +63,9 @@ function dockerManifest(
   };
 }
 
-function makeAlert(runnerId: string, service: string): NormalizedAlert {
+function makeAlert(service: string): NormalizedAlert {
   return {
     sourceAlertId: `alert-${randomUUID()}`,
-    runnerId,
     targetIdentifier: { provider: "docker", project: service, service },
     alertType: "HighCPU",
     severity: "warning",
@@ -140,7 +139,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert("nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -174,7 +173,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert("nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -204,7 +203,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert("nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -234,7 +233,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alert: makeAlert(runnerIdA, "nginx") });
+      dispatcher.dispatch({ sessionId, alert: makeAlert("nginx") });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -253,7 +252,7 @@ describe("fleet summary injection", () => {
       const sessionId = randomUUID();
       dispatcher.dispatch({
         sessionId,
-        alert: makeAlert("ghost-runner", "nginx"),
+        alert: makeAlert("nginx"),
       });
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 

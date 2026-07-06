@@ -250,7 +250,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
-      runnerId: TEST_TOKEN,
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

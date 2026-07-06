@@ -4,12 +4,11 @@ import type { ServiceIdentity } from "@nightwatch/shared";
 import { requireSession } from "../auth/session.js";
 import { getFleetView } from "../ws/fleet.js";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
-import { resolveAlerts } from "./resolve-identity.js";
 import { routeAlert } from "./route-alert.js";
 
-// Rebuild the labels an advertised identity would arrive with, so the verify alert
-// runs through the same deriveServiceIdentity -> resolveAlerts path real alerts do.
-// A verify that pre-set the runnerId would pass even when label routing is broken.
+// Rebuild the labels an advertised identity would arrive with, so the verify
+// alert runs through the same deriveServiceIdentity path real alerts do. A
+// verify that skipped the parser would pass even when label parsing is broken.
 function identityToLabels(identity: ServiceIdentity): Record<string, string> {
   const base = { alertname: "NightwatchVerify", severity: "info" };
   if (identity.provider === "docker") {
@@ -68,30 +67,19 @@ export async function registerAlertTestRoutes(
           },
         ],
       });
-
-      const resolution = resolveAlerts(parsed, getFleetView());
-      const verdict =
-        resolution.kind === "verdicts" ? resolution.verdicts[0] : undefined;
-      if (!verdict || verdict.kind === "rejected") {
-        return reply.code(200).send({
-          error:
-            verdict?.kind === "rejected"
-              ? verdict.reason
-              : "no runner resolved",
-        });
-      }
-      if (verdict.alert.runnerId !== runnerId) {
-        return reply.code(200).send({
-          error: `alert resolved to a different runner (${verdict.alert.hostname})`,
-        });
+      const alert = parsed[0];
+      if (!alert) {
+        return reply
+          .code(200)
+          .send({ error: "verify alert failed to parse - platform bug" });
       }
 
-      const status = routeAlert(verdict.alert);
+      const status = routeAlert(alert);
       return reply.code(200).send({
         ok: true,
         status,
-        runnerId: verdict.alert.runnerId,
-        hostname: verdict.alert.hostname,
+        runnerId: fleetRunner.runnerId,
+        server: fleetRunner.serverName ?? fleetRunner.hostname,
       });
     },
   );

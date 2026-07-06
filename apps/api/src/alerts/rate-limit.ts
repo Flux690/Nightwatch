@@ -1,31 +1,28 @@
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// Per-server alert rate limit, in memory (no Redis). Keyed by
-// runnerId so each server has an independent budget. Critical severity always
-// bypasses: a page at 3am must never be dropped.
+// Fleet-wide alert budget, in memory (no Redis). Every non-critical alert now
+// reaches an LLM session, so this single counter is the storm cap: distinct
+// fingerprints get separate keys nowhere - one global budget bounds spend.
+// Critical severity always bypasses: a page at 3am must never be dropped.
 const WINDOW_MS = 60 * 60 * 1000;
-const MAX_PER_WINDOW = 10;
+const MAX_PER_WINDOW = 30;
 
 interface Counter {
   count: number;
   resetAt: number;
 }
 
-const counters = new Map<string, Counter>();
+let counter: Counter | null = null;
 
-export function checkRateLimit(
-  runnerId: string,
-  severity: NormalizedAlert["severity"],
-): boolean {
+export function checkRateLimit(severity: NormalizedAlert["severity"]): boolean {
   if (severity === "critical") return true;
 
   const now = Date.now();
-  const existing = counters.get(runnerId);
-  if (!existing || now >= existing.resetAt) {
-    counters.set(runnerId, { count: 1, resetAt: now + WINDOW_MS });
+  if (!counter || now >= counter.resetAt) {
+    counter = { count: 1, resetAt: now + WINDOW_MS };
     return true;
   }
 
-  existing.count++;
-  return existing.count <= MAX_PER_WINDOW;
+  counter.count++;
+  return counter.count <= MAX_PER_WINDOW;
 }

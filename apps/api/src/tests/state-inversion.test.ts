@@ -225,7 +225,6 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
   it("does not inject past incident history into the opening alert context", async () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
-      runnerId: "runner-history",
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

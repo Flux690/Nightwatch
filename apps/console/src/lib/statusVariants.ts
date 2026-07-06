@@ -6,7 +6,7 @@ export type BadgeVariant = NonNullable<
   VariantProps<typeof badgeVariants>["variant"]
 >;
 
-export type StatusDomain = "runner" | "session" | "remediation" | "alert";
+export type StatusDomain = "runner" | "session" | "remediation";
 
 type StatusEntry = { variant: BadgeVariant; label: string };
 
@@ -38,19 +38,10 @@ const REMEDIATION: Record<string, StatusEntry> = {
   unknown: { variant: "secondary", label: "Unknown" },
 };
 
-const ALERT: Record<string, StatusEntry> = {
-  resolved: { variant: "success", label: "Resolved" },
-  unresolved: { variant: "warning", label: "Unresolved" },
-  critical: { variant: "destructive", label: "Critical" },
-  warning: { variant: "warning", label: "Warning" },
-  info: { variant: "secondary", label: "Info" },
-};
-
 const MAPS: Record<StatusDomain, Record<string, StatusEntry>> = {
   runner: RUNNER,
   session: SESSION,
   remediation: REMEDIATION,
-  alert: ALERT,
 };
 
 const FALLBACK: StatusEntry = { variant: "secondary", label: "" };
