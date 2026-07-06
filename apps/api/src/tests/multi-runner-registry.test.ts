@@ -307,13 +307,17 @@ describe("flat runner registry", () => {
         if (msg.type === "command") correlationId = msg.payload?.correlationId;
       });
 
-      const settled = sendCommand("get_service_logs", {
-        service: {
-          provider: "docker",
-          project: "inflight-svc",
-          service: "inflight-svc",
+      const settled = sendCommand(
+        "get_service_logs",
+        {
+          service: {
+            provider: "docker",
+            project: "inflight-svc",
+            service: "inflight-svc",
+          },
         },
-      }).catch((err: unknown) => err);
+        "service",
+      ).catch((err: unknown) => err);
 
       await waitFor(() => (correlationId ? true : undefined));
       ws.close();
@@ -358,13 +362,17 @@ describe("flat runner registry", () => {
         if (msg.type === "command") sawCommand = true;
       });
 
-      const settled = sendCommand("get_service_logs", {
-        service: {
-          provider: "docker",
-          project: "displace-svc",
-          service: "displace-svc",
+      const settled = sendCommand(
+        "get_service_logs",
+        {
+          service: {
+            provider: "docker",
+            project: "displace-svc",
+            service: "displace-svc",
+          },
         },
-      }).catch((err: unknown) => err);
+        "service",
+      ).catch((err: unknown) => err);
       await waitFor(() => (sawCommand ? true : undefined));
 
       const aClosed = new Promise<void>((resolve) => {

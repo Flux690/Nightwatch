@@ -1,5 +1,6 @@
 import { executeRunnerTool } from "./executor.js";
 import type { ToolSchema } from "../llm/types.js";
+import type { CommandRoute } from "../ws/router.js";
 
 export type Provider = "docker" | "kubernetes";
 
@@ -13,23 +14,33 @@ export interface ToolExecuteContext {
   toolTimeoutMs: number;
 }
 
-export interface Tool {
+interface ToolCommon {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
   // Absent means provider-agnostic: supported on every provider. An annotation
   // narrows the tool to the listed providers (ADR-0002). Only genuinely
   // provider-specific tools carry it.
   providers?: Provider[];
-  // Present only for tools that are pure interrupts (request_clarification); a
-  // runner-delegated tool omits it, and executeTool dispatches by schema.name -
-  // the wire command name, no mapping table.
-  execute?(
-    input: Record<string, unknown>,
-    ctx: ToolExecuteContext,
-  ): Promise<ToolExecuteResult>;
 }
 
+// Where a tool executes is declared, never inferred: an api tool cannot exist
+// without its handler, and a runner tool must say how it is addressed.
+export type Tool = ToolCommon &
+  (
+    | {
+        on: "api";
+        execute(
+          input: Record<string, unknown>,
+          ctx: ToolExecuteContext,
+        ): Promise<ToolExecuteResult>;
+      }
+    | { on: "runner"; route: CommandRoute }
+  );
+
 const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
+// Host tools are truthful only where runner and host are 1:1 (Docker). A K8s
+// runner is one pod on one arbitrary node, so /proc there describes a random
+// node; get_k8s_node_status is the cluster-level answer instead.
 const DOCKER_ONLY: Provider[] = ["docker"];
 
 // Accepts both Docker and Kubernetes service identities. Echo the identity
@@ -78,8 +89,8 @@ const SERVICE_IDENTITY_SCHEMA = {
   ],
 } as const;
 
-// A runner-delegated tool's schema.name IS the wire command; it omits `execute` and
-// executeTool routes it to the runner. Only request_clarification carries its own `execute`.
+// A runner tool's schema.name IS the wire command, addressed by its declared
+// route; an api tool's execute IS its implementation - no mapping table.
 export const TOOL_REGISTRY: Tool[] = [
   {
     schema: {
@@ -109,6 +120,10 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    // Discovery call with no service identity: hostname targets the runner,
+    // `environment` picks the provider handler on it.
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -135,6 +150,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -148,6 +165,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -161,6 +180,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -180,6 +201,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -192,6 +215,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -211,6 +236,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -230,6 +257,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -249,6 +278,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -268,6 +299,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -296,6 +329,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: DOCKER_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -309,6 +344,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -340,6 +377,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: KUBERNETES_ONLY,
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -359,6 +398,8 @@ export const TOOL_REGISTRY: Tool[] = [
     },
     access: "read",
     providers: KUBERNETES_ONLY,
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -383,6 +424,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "read",
+    on: "runner",
+    route: "host",
   },
   {
     schema: {
@@ -421,6 +464,7 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "ask",
+    on: "api",
     execute: async () => ({
       content:
         "request_clarification is an interrupt and cannot be executed directly.",
@@ -454,6 +498,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
+    on: "runner",
+    route: "service",
   },
   {
     schema: {
@@ -476,6 +522,8 @@ export const TOOL_REGISTRY: Tool[] = [
       },
     },
     access: "write",
+    on: "runner",
+    route: "service",
   },
 ];
 
@@ -492,16 +540,15 @@ export function toolSupportsProvider(tool: Tool, provider: string): boolean {
   );
 }
 
-// Single dispatch: a tool with its own `execute` (API-run or interrupt) uses it; every
-// other tool is runner-delegated and routed under schema.name, the wire command name, so
-// there is no mapping table.
+// Single dispatch: api tools run their own handler in this process; runner
+// tools ship schema.name (the wire command) with their declared route.
 export function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
   ctx: ToolExecuteContext,
 ): Promise<ToolExecuteResult> {
-  if (tool.execute) return tool.execute(input, ctx);
-  return executeRunnerTool(tool.schema.name, input, ctx);
+  if (tool.on === "api") return tool.execute(input, ctx);
+  return executeRunnerTool(tool.schema.name, tool.route, input, ctx);
 }
 
 // Resolve a tool by its schema.name. The single resolver used by both the loop

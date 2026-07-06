@@ -1,12 +1,14 @@
 import { sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
+import type { CommandRoute } from "../ws/router.js";
 import type { ToolExecuteContext, ToolExecuteResult } from "./tools.js";
 
 // Single dispatch + error-formatting primitive used by the loop's read path
-// (via tool execute()) and the resolver's approve path. Keeping both in one
-// place means error message format and logging are never out of sync.
+// and the resolver's approve path. Keeping both in one place means error
+// message format and logging are never out of sync.
 export async function executeRunnerTool(
   name: string,
+  route: CommandRoute,
   input: Record<string, unknown>,
   ctx: ToolExecuteContext,
 ): Promise<ToolExecuteResult> {
@@ -14,6 +16,7 @@ export async function executeRunnerTool(
     const result = await sendCommand(
       name,
       input,
+      route,
       ctx.toolTimeoutMs,
       ctx.runnerId,
     );

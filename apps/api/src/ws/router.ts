@@ -6,8 +6,6 @@ import {
   type ServiceIdentity,
   type SetRemediationModeMessage,
 } from "@nightwatch/shared";
-import { logger } from "../logger.js";
-
 const LIVENESS_TTL_MS = 120_000;
 
 // Single map keyed by runnerId — the stable DB primary key assigned at onboarding.
@@ -182,83 +180,78 @@ function isServiceIdentity(value: unknown): value is ServiceIdentity {
   return false;
 }
 
-// Route across the flat fleet (ADR-0004 validate-and-route): a command naming a service
-// identity must match exactly one runner or fail loud; one with no identity falls back to
-// the legacy hint/single-runner/hostname chain (each logs a deprecation). Exported for the transport.
-export function resolveRunner(
-  commandInput: Record<string, unknown>,
-  runnerIdHint?: string,
-): RunnerConnection {
-  // Only runners whose manifest has arrived are routable.
+// How a runner command is addressed: by the service identity in its input, or
+// by host (hostname param / alerting runner / single-runner fleet). Declared
+// per tool in the registry, never inferred from input shape.
+export type CommandRoute = "service" | "host";
+
+// Only runners whose manifest has arrived are routable.
+function manifestedConnections(): RunnerConnection[] {
   const manifested = [...connectionsByRunnerId.values()].filter(
     (c) => c.manifest !== null,
   );
   if (manifested.length === 0) throw new RunnerOfflineError();
+  return manifested;
+}
+
+// Service-routed (ADR-0004 validate-and-route): the identity the model echoed
+// must match exactly one advertising runner, or fail loud.
+export function resolveByService(
+  commandInput: Record<string, unknown>,
+): RunnerConnection {
+  const manifested = manifestedConnections();
 
   const service = isServiceIdentity(commandInput["service"])
     ? commandInput["service"]
     : null;
-
-  if (service !== null) {
-    const key = serviceIdentityKey(service);
-    const owners = manifested.filter((conn) =>
-      conn.manifest?.capabilities.services.some(
-        (s) => serviceIdentityKey(s.identity) === key,
-      ),
-    );
-
-    const [owner] = owners;
-    if (owners.length === 1 && owner) return owner;
-
-    if (owners.length > 1) {
-      const hostnames = owners.map((c) => c.hostname).filter(Boolean);
-      throw new Error(
-        `Ambiguous service '${key}': advertised by more than one runner (${hostnames.join(", ")}). Add a server/cluster dimension to disambiguate.`,
-      );
-    }
-
-    const known = manifested
-      .flatMap((c) => c.manifest?.capabilities.services ?? [])
-      .map((s) => serviceIdentityKey(s.identity))
-      .join(", ");
+  if (service === null) {
     throw new Error(
-      `No runner has service '${key}'. Known services: ${known || "none"}`,
+      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior list_services result.",
     );
   }
 
-  if (runnerIdHint) {
-    const hinted = connectionsByRunnerId.get(runnerIdHint);
-    if (hinted && hinted.manifest !== null) {
-      logger.warn(
-        { runnerId: runnerIdHint },
-        "resolveRunner used the deprecated runnerId hint fallback; route by service identity instead",
-      );
-      return hinted;
-    }
+  const key = serviceIdentityKey(service);
+  const owners = manifested.filter((conn) =>
+    conn.manifest?.capabilities.services.some(
+      (s) => serviceIdentityKey(s.identity) === key,
+    ),
+  );
+
+  const [owner] = owners;
+  if (owners.length === 1 && owner) return owner;
+
+  if (owners.length > 1) {
+    const hostnames = owners.map((c) => c.hostname).filter(Boolean);
+    throw new Error(
+      `Ambiguous service '${key}': advertised by more than one runner (${hostnames.join(", ")}). Add a server/cluster dimension to disambiguate.`,
+    );
   }
 
-  if (manifested.length === 1) {
-    logger.warn(
-      "resolveRunner used the deprecated single-runner fallback; route by service identity instead",
-    );
-    // TypeScript cannot narrow array index access after a .length check.
-    return manifested[0] as RunnerConnection;
-  }
+  const known = manifested
+    .flatMap((c) => c.manifest?.capabilities.services ?? [])
+    .map((s) => serviceIdentityKey(s.identity))
+    .join(", ");
+  throw new Error(
+    `No runner has service '${key}'. Known services: ${known || "none"}`,
+  );
+}
+
+// Host-routed: an explicit hostname is model intent and never falls through to
+// another runner; absent one, the alerting session's runner is what the model
+// almost always means, then a single-runner fleet needs no addressing at all.
+export function resolveByHost(
+  commandInput: Record<string, unknown>,
+  runnerIdHint?: string,
+): RunnerConnection {
+  const manifested = manifestedConnections();
 
   const hostname =
     typeof commandInput["hostname"] === "string"
       ? commandInput["hostname"]
       : null;
-
   if (hostname !== null) {
     for (const conn of manifested) {
-      if (conn.hostname === hostname) {
-        logger.warn(
-          { hostname },
-          "resolveRunner used the deprecated hostname fallback; route by service identity instead",
-        );
-        return conn;
-      }
+      if (conn.hostname === hostname) return conn;
     }
     const available = manifested
       .map((c) => c.hostname)
@@ -267,6 +260,16 @@ export function resolveRunner(
     throw new Error(
       `No runner has hostname '${hostname}'. Available: ${available || "none"}`,
     );
+  }
+
+  if (runnerIdHint) {
+    const hinted = connectionsByRunnerId.get(runnerIdHint);
+    if (hinted && hinted.manifest !== null) return hinted;
+  }
+
+  if (manifested.length === 1) {
+    // TypeScript cannot narrow array index access after a .length check.
+    return manifested[0] as RunnerConnection;
   }
 
   const hostnames = manifested

@@ -106,7 +106,11 @@ describe("router", () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
 
-    await sendCommand("get_service_logs", { service: svc("postgres") });
+    await sendCommand(
+      "get_service_logs",
+      { service: svc("postgres") },
+      "service",
+    );
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
@@ -116,7 +120,7 @@ describe("router", () => {
     connect("web-01", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_service_logs", { service: svc("ghost") }),
+      sendCommand("get_service_logs", { service: svc("ghost") }, "service"),
     ).toThrow(/No runner has service/);
   });
 
@@ -125,34 +129,91 @@ describe("router", () => {
     connect("web-02", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_service_logs", { service: svc("nginx") }),
+      sendCommand("get_service_logs", { service: svc("nginx") }, "service"),
     ).toThrow(/Ambiguous service/);
   });
 
-  it("falls back to the single connected runner for a hostless, serviceless command and logs a deprecation warning", async () => {
+  it("rejects a service-routed command that carries no service identity", () => {
+    connect("web-01", ["nginx"]);
+
+    expect(() => sendCommand("get_service_logs", {}, "service")).toThrow(
+      /requires a 'service' identity/,
+    );
+  });
+
+  it("routes a hostless host command to the single connected runner with no warning", async () => {
     const warn = vi.spyOn(logger, "warn");
     const a = connect("web-01", ["nginx"]);
 
-    await sendCommand("get_host_memory", {});
+    await sendCommand("get_host_memory", {}, "host");
 
     expect(a.commands).toHaveLength(1);
-    expect(warn.mock.calls.flat()).toContainEqual(
+    expect(warn.mock.calls.flat()).not.toContainEqual(
       expect.stringMatching(/deprecat/i),
     );
   });
 
-  it("falls back to hostname matching across multiple runners and logs a deprecation warning", async () => {
+  it("routes a host command by hostname across multiple runners with no warning", async () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
     const warn = vi.spyOn(logger, "warn");
 
-    await sendCommand("get_host_memory", { hostname: "db-02" });
+    await sendCommand("get_host_memory", { hostname: "db-02" }, "host");
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
-    expect(warn).toHaveBeenCalledWith(
-      expect.anything(),
+    expect(warn.mock.calls.flat()).not.toContainEqual(
       expect.stringMatching(/deprecat/i),
+    );
+  });
+
+  it("an explicit hostname beats the runnerIdHint", async () => {
+    const a = connect("web-01", ["nginx"]);
+    const b = connect("db-02", ["postgres"]);
+
+    await sendCommand(
+      "get_host_memory",
+      { hostname: "db-02" },
+      "host",
+      15_000,
+      a.runnerId,
+    );
+
+    expect(b.commands).toHaveLength(1);
+    expect(a.commands).toHaveLength(0);
+  });
+
+  it("an unknown hostname fails loud even when a runnerIdHint could route", () => {
+    const a = connect("web-01", ["nginx"]);
+    connect("db-02", ["postgres"]);
+
+    expect(() =>
+      sendCommand(
+        "get_host_memory",
+        { hostname: "ghost-99" },
+        "host",
+        15_000,
+        a.runnerId,
+      ),
+    ).toThrow(/No runner has hostname 'ghost-99'/);
+  });
+
+  it("without a hostname, a host command routes to the alerting session's runner via the hint", async () => {
+    const a = connect("web-01", ["nginx"]);
+    const b = connect("db-02", ["postgres"]);
+
+    await sendCommand("get_host_memory", {}, "host", 15_000, b.runnerId);
+
+    expect(b.commands).toHaveLength(1);
+    expect(a.commands).toHaveLength(0);
+  });
+
+  it("a hostless, hintless host command on a multi-runner fleet fails loud listing hostnames", () => {
+    connect("web-01", ["nginx"]);
+    connect("db-02", ["postgres"]);
+
+    expect(() => sendCommand("get_host_memory", {}, "host")).toThrow(
+      /Specify a hostname parameter/,
     );
   });
 });
