@@ -5,7 +5,8 @@ import type {
 } from "@nightwatch/shared";
 import { logger } from "../logger.js";
 import { resolveByHost, resolveByService } from "./router.js";
-import type { CommandRoute, RunnerConnection } from "./router.js";
+import type { CommandRoute } from "./router.js";
+import type { RunnerConnection } from "./fleet.js";
 
 // In-flight request/reply correlation for runner commands. A command is sent with
 // a correlationId; the runner's result is matched back here. This map is owned
@@ -65,14 +66,13 @@ export function sendCommand(
   commandInput: Record<string, unknown>,
   route: CommandRoute,
   timeoutMs = 15_000,
-  runnerIdHint?: string,
 ): Promise<unknown> {
   // Resolve synchronously, before the Promise constructor: routing errors are
   // caller mistakes and should throw, not settle a pending command.
   const conn =
     route === "service"
       ? resolveByService(commandInput)
-      : resolveByHost(commandInput, runnerIdHint);
+      : resolveByHost(commandInput);
 
   const correlationId = randomUUID();
   const msg: RunnerCommandMessage = {

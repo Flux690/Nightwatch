@@ -75,8 +75,8 @@ import { waitFor } from "./wait.js";
 import { registerConsoleWsRoutes } from "../ws/console.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import { registerRunner, unregisterRunner } from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+import { registerRunner, unregisterRunner } from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 // Wait for the `connected` ack, sent only after the handler subscribes: dispatch is

@@ -37,8 +37,8 @@ import {
   setRunnerManifest,
   setRunnerRemediationMode,
   unregisterRunner,
-} from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+} from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools/toolset.js";
 

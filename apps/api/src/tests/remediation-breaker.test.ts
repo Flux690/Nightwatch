@@ -47,8 +47,8 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+} from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getDb } from "../db/client.js";
 

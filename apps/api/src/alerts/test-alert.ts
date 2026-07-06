@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { ServiceIdentity } from "@nightwatch/shared";
 import { requireSession } from "../auth/session.js";
-import { getFleetView } from "../ws/router.js";
+import { getFleetView } from "../ws/fleet.js";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { resolveAlerts } from "./resolve-identity.js";
 import { routeAlert } from "./route-alert.js";

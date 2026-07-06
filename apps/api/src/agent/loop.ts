@@ -19,7 +19,7 @@ import {
   publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
-import { getFleetView, getRunnerManifestForAlert } from "../ws/router.js";
+import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
@@ -163,23 +163,14 @@ export async function runInvestigation(
     ...(input.alert ? [input.alert] : []),
     ...(input.additionalAlerts ?? []),
   ];
-  const serviceSnapshot =
-    alert != null
-      ? getRunnerManifestForAlert(alert.runnerId)?.capabilities.services
-      : undefined;
   const remediationEnabled = currentRemediationEnabled(
     alert?.runnerId ?? undefined,
   );
   const fleetView = getFleetView();
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(
-          allAlerts,
-          serviceSnapshot,
-          remediationEnabled,
-          fleetView,
-        )
-      : buildChatContext(remediationEnabled);
+      ? buildInitialContext(allAlerts, remediationEnabled, fleetView)
+      : buildChatContext(remediationEnabled, fleetView);
   const provider = createProvider(systemPrompt, config, apiKey);
 
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);

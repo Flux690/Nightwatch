@@ -23,6 +23,7 @@ export interface CapabilityManifest {
 export interface RunnerRecord {
   id: string;
   token: string;
+  serverName: string | null;
   hostname: string | null;
   createdAt: string;
   online: boolean;
@@ -36,8 +37,12 @@ export interface RunnerRecord {
 // derived entirely from WS state.
 export interface FleetRunner {
   runnerId: string;
+  // The model-visible address: operator-assigned server name, or the
+  // self-reported hostname for legacy tokens minted without one.
+  serverName: string | null;
   hostname: string;
   online: boolean;
   lastSeen: number;
   services: ServiceManifestEntry[];
+  remediationEnabled: boolean;
 }

@@ -7,7 +7,7 @@ import { routeAlert } from "./route-alert.js";
 import { findRunnerByToken, hashToken } from "../db/runner.js";
 import { getIngestTokenHash } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
-import { getFleetView } from "../ws/router.js";
+import { getFleetView } from "../ws/fleet.js";
 import { insertUnresolvedAlert } from "../db/unresolved-alerts.js";
 import { logger } from "../logger.js";
 

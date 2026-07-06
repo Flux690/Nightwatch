@@ -28,17 +28,17 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
             description:
               "Kubernetes namespace (optional, docker ignores this).",
           },
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
-        required: ["environment"],
+        required: ["environment", "server"],
       },
     },
     access: "read",
-    // Discovery call with no service identity: hostname targets the runner,
+    // Discovery call with no service identity: `server` targets the runner,
     // `environment` picks the provider handler on it.
     on: "runner",
     route: "host",
@@ -144,12 +144,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -165,12 +166,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -186,12 +188,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -207,12 +210,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -237,12 +241,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
             enum: ["err", "warn", "all"],
             description: "Log level filter (default: err).",
           },
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -291,12 +296,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
+        required: ["server"],
       },
     },
     access: "read",
@@ -317,13 +323,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
             type: "number",
             description: "Maximum lines to return (default 500).",
           },
-          hostname: {
+          server: {
             type: "string",
             description:
-              "Target runner hostname. Required when more than one runner is registered; omit for single-runner deployments.",
+              "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
-        required: ["path"],
+        required: ["path", "server"],
       },
     },
     access: "read",

@@ -15,7 +15,7 @@ import {
   markRunnerAlive,
   pushRemediationMode,
   setRunnerRemediationMode,
-} from "./router.js";
+} from "./fleet.js";
 import {
   rejectPendingForConnection,
   resolveCommand,
@@ -55,6 +55,7 @@ export async function registerWsRoutes(
           if (socket.readyState === socket.OPEN) socket.send(msg);
         },
         () => socket.close(4003, "Token revoked"),
+        tokenRecord.serverName,
       );
 
       fastify.log.info({ runnerId: runnerId.slice(0, 8) }, "runner connected");

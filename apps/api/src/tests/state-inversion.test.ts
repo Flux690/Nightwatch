@@ -38,7 +38,7 @@ import { buildInitialContext } from "../agent/context.js";
 import {
   registerRunner,
   unregisterRunner,
-} from "../ws/router.js";
+} from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {

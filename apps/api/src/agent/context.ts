@@ -2,7 +2,6 @@ import {
   serviceIdentityKey,
   type FleetRunner,
   type NormalizedAlert,
-  type ServiceManifestEntry,
 } from "@nightwatch/shared";
 
 export interface InitialContext {
@@ -18,6 +17,7 @@ How you operate:
 - Write tools require human approval. Calling one pauses you until a human approves or rejects; your hard timeout does not run during that wait. On approval, observe the result and continue. On rejection, do not retry the same action - reassess.
 - Prefer the smallest, most reversible fix. If you cannot find a safe remediation, or critical context is missing, say so plainly.
 - Most tools are provider-agnostic: they work on both Docker and Kubernetes services, dispatching under the hood based on the service identity you pass. A few tools are provider-specific (their description says so, e.g. "KUBERNETES ONLY") and only appear when the fleet has a matching runner; calling one with a service identity from the wrong provider returns a corrective error - do not retry the same call, use an agnostic tool or one matching that provider instead.
+- Host-level tools (get_host_memory, get_host_cpu, get_host_disk, get_host_network, get_host_dmesg, read_host_file, list_services, get_k8s_node_status) require a "server" parameter: the server name exactly as listed in the FLEET SUMMARY.
 - When you are done, reply in plain text: summarize the root cause and the remediation you took or recommend. Stop replying when the investigation is complete.
 
 Budget: 5 minutes of investigation time (human approval wait excluded). When the budget runs out the investigation pauses - the operator can resume it with a fresh budget or end it.`;
@@ -35,20 +35,25 @@ function systemPromptFor(remediationEnabled: boolean): string {
     : SYSTEM_PROMPT + READ_ONLY_ADDENDUM;
 }
 
-export function buildChatContext(remediationEnabled = false): InitialContext {
+export function buildChatContext(
+  remediationEnabled = false,
+  fleetView?: FleetRunner[],
+): InitialContext {
+  // Chat has no alert message to carry the fleet map, so it rides the system
+  // prompt - the model still needs server names for the required `server` param.
   return {
-    systemPrompt: systemPromptFor(remediationEnabled),
+    systemPrompt:
+      systemPromptFor(remediationEnabled) + buildFleetSummary(fleetView),
     firstUserMessage: "",
   };
 }
 
 export function buildInitialContext(
   alerts: NormalizedAlert[],
-  serviceSnapshot?: ServiceManifestEntry[],
   remediationEnabled = false,
   fleetView?: FleetRunner[],
 ): InitialContext {
-  if (!alerts[0]) return buildChatContext(remediationEnabled);
+  if (!alerts[0]) return buildChatContext(remediationEnabled, fleetView);
 
   const alertsSection =
     alerts.length === 1
@@ -56,24 +61,12 @@ export function buildInitialContext(
       : `BATCHED ALERTS — ${alerts.length} correlated alerts\n\n` +
         alerts.map((a, i) => `Alert ${i + 1}:\n${formatAlert(a)}`).join("\n\n");
 
-  const snapshotSection =
-    serviceSnapshot && serviceSnapshot.length > 0
-      ? `\nSERVICE SNAPSHOT (same runner)\n` +
-        `------------------------------\n` +
-        serviceSnapshot
-          .map(
-            (e) => `  ${serviceIdentityKey(e.identity).padEnd(40)} ${e.status}`,
-          )
-          .join("\n") +
-        "\n"
-      : "";
-
   const fleetSection = buildFleetSummary(fleetView);
 
   const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
 --------------
 ${alertsSection}
-${snapshotSection}${fleetSection}
+${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
@@ -82,17 +75,18 @@ Begin your investigation. Start with the most targeted read tool given the alert
   };
 }
 
+// Always rendered when any runner is connected, even a single one: the map is
+// what carries the addressable server names the required `server` param needs,
+// and the incident machine's neighbours ride along as ordinary fleet lines.
 function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
-  if (!fleetView || fleetView.length <= 1) return "";
-  const lines = fleetView
-    .filter((r) => r.services.length > 0)
-    .map((r) => {
-      const identities = r.services
-        .map((s) => serviceIdentityKey(s.identity))
-        .join(", ");
-      return `  ${r.hostname}: ${identities}`;
-    });
-  if (lines.length === 0) return "";
+  if (!fleetView || fleetView.length === 0) return "";
+  const lines = fleetView.map((r) => {
+    const name = r.serverName ?? r.hostname;
+    const identities =
+      r.services.map((s) => serviceIdentityKey(s.identity)).join(", ") ||
+      "no services advertised";
+    return `  ${name} (remediation ${r.remediationEnabled ? "on" : "off"}): ${identities}`;
+  });
   return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }
 

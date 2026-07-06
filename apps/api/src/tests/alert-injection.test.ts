@@ -35,7 +35,7 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/router.js";
+} from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 

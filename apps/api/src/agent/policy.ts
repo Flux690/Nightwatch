@@ -1,4 +1,4 @@
-import { getRunnerManifestForAlert, listRunners } from "../ws/router.js";
+import { getRunnerManifestForAlert, listRunners } from "../ws/fleet.js";
 import { getRemediationModeByRunnerRef } from "../db/runner.js";
 import { toolSupportsProvider } from "./tools/toolset.js";
 import type { Provider, Tool } from "./tools/types.js";

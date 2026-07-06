@@ -33,8 +33,8 @@ import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
-} from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+} from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { dispatcher } from "../dispatcher.js";
 import type { CapabilityManifest, NormalizedAlert } from "@nightwatch/shared";
 
@@ -223,7 +223,7 @@ describe("fleet summary injection", () => {
       runnerIdA = generateRunnerToken("fleet-summary-single").id;
     });
 
-    it("single-runner fleet: no fleet summary section in first message", async () => {
+    it("single-runner fleet: fleet summary still lists the one server", async () => {
       connA = registerRunner(
         runnerIdA,
         () => {},
@@ -240,9 +240,10 @@ describe("fleet summary injection", () => {
       const msg = captureStartMessage();
       expect(msg).toBeDefined();
 
-      // A single-runner fleet has no neighbouring servers to reason about.
-      // The fleet summary section must not appear.
-      expect(msg).not.toContain("FLEET SUMMARY");
+      // The map carries the addressable server name the required `server`
+      // parameter needs - it must appear even with a single server.
+      expect(msg).toContain("FLEET SUMMARY");
+      expect(msg).toContain("web-01");
     });
 
     it("empty fleet (no connected runners): no fleet summary section", async () => {

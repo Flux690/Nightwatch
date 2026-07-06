@@ -4,11 +4,7 @@ import {
   listRunnersMeta,
   setRemediationMode,
 } from "../db/runner.js";
-import {
-  listRunners,
-  getFleetView,
-  pushRemediationMode,
-} from "../ws/router.js";
+import { listRunners, getFleetView, pushRemediationMode } from "../ws/fleet.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
@@ -35,6 +31,7 @@ export async function registerRunnerRoutes(
         records.push({
           id: t.id,
           token: t.id,
+          serverName: t.serverName,
           hostname: null,
           createdAt: t.createdAt,
           online: false,
@@ -48,6 +45,7 @@ export async function registerRunnerRoutes(
         records.push({
           id: t.id,
           token: t.id,
+          serverName: t.serverName,
           hostname: r.hostname,
           createdAt: t.createdAt,
           online: r.online,

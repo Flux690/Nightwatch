@@ -45,8 +45,8 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-} from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+} from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
@@ -317,7 +317,7 @@ describe("multi-runner routing", () => {
     expect(errorMsg?.content).toMatch(/postgres/);
   });
 
-  it("host command with hostname routes to the runner with that hostname", async () => {
+  it("host command with a server name routes to that runner", async () => {
     setScript([
       {
         text: "Checking db-02 host memory.",
@@ -325,7 +325,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-4",
             name: "get_host_memory",
-            input: { hostname: "db-02" },
+            input: { server: "db-02" },
           },
         ],
       },
@@ -339,7 +339,7 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
   });
 
-  it("host command without hostname on multiple runners produces a tool error listing available hostnames", async () => {
+  it("host command without a server produces a tool error listing available server names", async () => {
     setScript([
       {
         text: "Checking host memory.",
@@ -354,10 +354,10 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
 
-    // The error names both registered hostnames so the model can retry.
+    // The error names the registered servers so the model can retry in one step.
     const messages = getSessionMessages(sessionId);
     const errorMsg = messages.find(
-      (m) => m.role === "user" && m.content.includes("hostname"),
+      (m) => m.role === "user" && m.content.includes("'server' parameter"),
     );
     expect(errorMsg?.content).toMatch(/web-01/);
     expect(errorMsg?.content).toMatch(/db-02/);

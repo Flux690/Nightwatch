@@ -29,6 +29,7 @@ const INGEST_URL = "http://api.test/alerts/ingest";
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
+  serverName: null,
   hostname: null,
   createdAt: "2024-01-01T00:00:00Z",
   online: false,
@@ -40,6 +41,7 @@ const AWAITING_RUNNER: RunnerRecord = {
 const CONNECTED_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
+  serverName: null,
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
   online: true,
@@ -235,7 +237,6 @@ describe("AddServerPage", () => {
         );
       });
     });
-
   });
 
   describe("bring-your-own monitoring", () => {

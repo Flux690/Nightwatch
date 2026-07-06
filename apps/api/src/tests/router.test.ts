@@ -10,8 +10,8 @@ import {
   unregisterRunner,
   setRunnerManifest,
   getFleetView,
-} from "../ws/router.js";
-import type { RunnerConnection } from "../ws/router.js";
+} from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand, sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
 
@@ -141,24 +141,12 @@ describe("router", () => {
     );
   });
 
-  it("routes a hostless host command to the single connected runner with no warning", async () => {
-    const warn = vi.spyOn(logger, "warn");
-    const a = connect("web-01", ["nginx"]);
-
-    await sendCommand("get_host_memory", {}, "host");
-
-    expect(a.commands).toHaveLength(1);
-    expect(warn.mock.calls.flat()).not.toContainEqual(
-      expect.stringMatching(/deprecat/i),
-    );
-  });
-
-  it("routes a host command by hostname across multiple runners with no warning", async () => {
+  it("routes a host command by server name across multiple runners with no warning", async () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
     const warn = vi.spyOn(logger, "warn");
 
-    await sendCommand("get_host_memory", { hostname: "db-02" }, "host");
+    await sendCommand("get_host_memory", { server: "db-02" }, "host");
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
@@ -167,53 +155,41 @@ describe("router", () => {
     );
   });
 
-  it("an explicit hostname beats the runnerIdHint", async () => {
-    const a = connect("web-01", ["nginx"]);
-    const b = connect("db-02", ["postgres"]);
-
-    await sendCommand(
-      "get_host_memory",
-      { hostname: "db-02" },
-      "host",
-      15_000,
-      a.runnerId,
+  it("the operator-assigned server name is the address, beating the OS hostname", async () => {
+    // Two boxes could both self-report "ubuntu" - only assigned names are
+    // guaranteed unique, which is why routing matches serverName first.
+    const runnerId = randomUUID();
+    const commands: Array<{
+      commandName: string;
+      commandInput: Record<string, unknown>;
+    }> = [];
+    conns.push(
+      registerRunner(runnerId, makeSend(commands), () => {}, "prod-1"),
     );
+    setRunnerManifest(runnerId, makeManifest("ubuntu", ["nginx"]));
 
-    expect(b.commands).toHaveLength(1);
-    expect(a.commands).toHaveLength(0);
-  });
-
-  it("an unknown hostname fails loud even when a runnerIdHint could route", () => {
-    const a = connect("web-01", ["nginx"]);
-    connect("db-02", ["postgres"]);
+    await sendCommand("get_host_memory", { server: "prod-1" }, "host");
+    expect(commands).toHaveLength(1);
 
     expect(() =>
-      sendCommand(
-        "get_host_memory",
-        { hostname: "ghost-99" },
-        "host",
-        15_000,
-        a.runnerId,
-      ),
-    ).toThrow(/No runner has hostname 'ghost-99'/);
+      sendCommand("get_host_memory", { server: "ubuntu" }, "host"),
+    ).toThrow(/No server named 'ubuntu'/);
   });
 
-  it("without a hostname, a host command routes to the alerting session's runner via the hint", async () => {
-    const a = connect("web-01", ["nginx"]);
-    const b = connect("db-02", ["postgres"]);
-
-    await sendCommand("get_host_memory", {}, "host", 15_000, b.runnerId);
-
-    expect(b.commands).toHaveLength(1);
-    expect(a.commands).toHaveLength(0);
-  });
-
-  it("a hostless, hintless host command on a multi-runner fleet fails loud listing hostnames", () => {
+  it("an unknown server name fails loud listing the available names", () => {
     connect("web-01", ["nginx"]);
     connect("db-02", ["postgres"]);
 
+    expect(() =>
+      sendCommand("get_host_memory", { server: "ghost-99" }, "host"),
+    ).toThrow(/No server named 'ghost-99'/);
+  });
+
+  it("a host command without a server parameter fails loud even on a single-runner fleet", () => {
+    connect("web-01", ["nginx"]);
+
     expect(() => sendCommand("get_host_memory", {}, "host")).toThrow(
-      /Specify a hostname parameter/,
+      /requires a 'server' parameter/,
     );
   });
 });

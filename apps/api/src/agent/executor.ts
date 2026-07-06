@@ -13,13 +13,7 @@ export async function executeRunnerTool(
   ctx: ToolExecuteContext,
 ): Promise<ToolExecuteResult> {
   try {
-    const result = await sendCommand(
-      name,
-      input,
-      route,
-      ctx.toolTimeoutMs,
-      ctx.runnerId,
-    );
+    const result = await sendCommand(name, input, route, ctx.toolTimeoutMs);
     return { content: result };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

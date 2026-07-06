@@ -4,7 +4,7 @@ import {
   deleteRunner,
   listRunnersMeta,
 } from "../db/runner.js";
-import { closeRunnerConnections } from "../ws/router.js";
+import { closeRunnerConnections } from "../ws/fleet.js";
 import { requireSession } from "./session.js";
 
 function validateServerName(name: string): string | null {

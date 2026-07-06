@@ -18,10 +18,12 @@ function parsedAlert(overrides: Partial<ParsedAlert> = {}): ParsedAlert {
 function fleetRunner(overrides: Partial<FleetRunner> = {}): FleetRunner {
   return {
     runnerId: "runner-a",
+    serverName: null,
     hostname: "host-a",
     online: true,
     lastSeen: Date.now(),
     services: [],
+    remediationEnabled: false,
     ...overrides,
   };
 }

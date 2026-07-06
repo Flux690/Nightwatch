@@ -34,7 +34,7 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerRemediationMode,
-} from "../ws/router.js";
+} from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import type { ApprovalRequest } from "@nightwatch/shared";
 

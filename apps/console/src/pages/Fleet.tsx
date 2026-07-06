@@ -47,6 +47,12 @@ function runnerStatus(runner: RunnerRecord): RunnerStatus {
 type SortField = "hostname" | "status" | "lastSeen" | "services";
 type SortDir = "asc" | "desc";
 
+// The operator-assigned server name is the primary label everywhere; the
+// self-reported OS hostname is a fallback for legacy tokens minted without one.
+function displayName(runner: RunnerRecord): string {
+  return runner.serverName ?? runner.hostname ?? runner.id;
+}
+
 function compareRunners(
   a: RunnerRecord,
   b: RunnerRecord,
@@ -56,7 +62,7 @@ function compareRunners(
   let cmp = 0;
   switch (field) {
     case "hostname":
-      cmp = (a.hostname ?? "").localeCompare(b.hostname ?? "");
+      cmp = displayName(a).localeCompare(displayName(b));
       break;
     case "status": {
       const aOnline = a.online ? 1 : 0;
@@ -296,10 +302,17 @@ export function FleetPage(): React.JSX.Element {
                     <TableCell>
                       <span
                         className="block max-w-60 truncate"
-                        title={runner.hostname ?? undefined}
+                        title={displayName(runner)}
                       >
-                        {runner.hostname}
+                        {displayName(runner)}
                       </span>
+                      {runner.serverName !== null &&
+                        runner.hostname !== null &&
+                        runner.hostname !== runner.serverName && (
+                          <span className="mt-0.5 block max-w-60 truncate text-xs text-muted-foreground">
+                            host: {runner.hostname}
+                          </span>
+                        )}
                       {services.length > 0 && (
                         <span
                           className="mt-0.5 block max-w-60 truncate font-mono text-xs text-muted-foreground"
@@ -329,7 +342,7 @@ export function FleetPage(): React.JSX.Element {
                         variant="outline"
                         size="xs"
                         disabled={removing === runner.token}
-                        aria-label={`Remove server ${runner.hostname ?? runner.id}`}
+                        aria-label={`Remove server ${displayName(runner)}`}
                         onClick={() => void handleRemove(runner.token)}
                       >
                         {removing === runner.token && (
