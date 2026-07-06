@@ -139,7 +139,7 @@ export async function getContainerInspect(
   );
   if ("found" in resolved) return resolved;
 
-  // Return native K8s pod object - no normalization (ADR-0002).
+  // Return native K8s pod object - no normalization.
   return coreApi.readNamespacedPod({
     name: resolved.podName,
     namespace: resolved.namespace,
@@ -163,7 +163,7 @@ export async function getContainerStats(
   if ("found" in resolved) return resolved;
 
   // Metrics-server may not be installed; if not, the raw error propagates
-  // (user story 9, ADR-0002) so the agent reports the real cause.
+  // so the agent reports the real cause.
   const metricsList = await getMetrics().getPodMetrics(service.namespace);
   const podMetric = metricsList.items.find(
     (m) => m.metadata.name === resolved.podName,
@@ -271,7 +271,7 @@ export async function restartService(
     service.namespace,
     service.workload,
   );
-  // Restart is a write on a live target (CONTEXT.md): a missing or scaled-to-0
+  // Restart is a write on a live target: a missing or scaled-to-0
   // workload has nothing to roll. A running-but-unhealthy one (replicas > 0,
   // none ready) is still restartable - that is the case you most want to fix.
   if (workload === null || workload.replicas === 0) {
@@ -339,8 +339,8 @@ export async function execCommand(
   };
 }
 
-// Provider-specific (Kubernetes-only) read tool proving the providers hook
-// (ADR-0002): rollout state has no Docker equivalent, so it is never offered
+// Provider-specific (Kubernetes-only) read tool proving the providers hook:
+// rollout state has no Docker equivalent, so it is never offered
 // to Docker-only fleets.
 export async function getRolloutStatus(
   input: GetK8sRolloutStatusInput,
@@ -387,7 +387,7 @@ export async function getRolloutStatus(
 }
 
 // Node-level read: an unhealthy pod's cause may be the node. Returns each node's
-// conditions and allocatable vs capacity natively (ADR-0002); no service identity,
+// conditions and allocatable vs capacity natively; no service identity,
 // since pressure is a node fact, not a per-workload one.
 export async function getNodeStatus(): Promise<{
   nodes: Array<{
@@ -417,7 +417,7 @@ interface ExecResult {
 }
 
 // One exec primitive for reads and exec_command: a non-zero exit is a normal result
-// carried in details.causes (ADR-0002), not a failure; only a real protocol error
+// carried in details.causes, not a failure; only a real protocol error
 // (no such container, connection error) rejects.
 async function execInPod(
   namespace: string,

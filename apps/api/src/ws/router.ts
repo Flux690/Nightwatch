@@ -107,7 +107,7 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
-// The live read-only fleet picture (CONTEXT.md Fleet view): every runner whose manifest
+// The live read-only fleet picture: every runner whose manifest
 // arrived, with its advertised service identities. Used by the agent, the ingest resolver,
 // and the console fleet page.
 export function getFleetView(): FleetRunner[] {
@@ -194,7 +194,7 @@ function manifestedConnections(): RunnerConnection[] {
   return manifested;
 }
 
-// Service-routed (ADR-0004 validate-and-route): the identity the model echoed
+// Service-routed (validate-and-route): the identity the model echoed
 // must match exactly one advertising runner, or fail loud.
 export function resolveByService(
   commandInput: Record<string, unknown>,

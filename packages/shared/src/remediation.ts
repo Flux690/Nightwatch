@@ -5,7 +5,7 @@ export type RemediationStatus =
   | "rejected";
 
 // Wire shape for the audit log: one row per write the agent attempted, with the
-// operator's decision and its outcome (ADR-0003).
+// operator's decision and its outcome.
 export interface RemediationActionRecord {
   sessionId: string;
   toolUseId: string;

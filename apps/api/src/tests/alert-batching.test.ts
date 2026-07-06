@@ -35,7 +35,7 @@ import { dockerService, manifest } from "./manifest-helper.js";
 
 // Every alertBody() below carries the `container: "web-01"` label (anonymous
 // Docker fallback), so one connected runner advertising that exact identity
-// is enough for every alert in this file to resolve (ADR-0004).
+// is enough for every alert in this file to resolve.
 const WEB_01_MANIFEST = manifest("host-web-01", [dockerService("web-01")]);
 
 // A free-form finish: no tool call ends the run successfully and immediately.

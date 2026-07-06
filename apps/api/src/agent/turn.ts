@@ -14,14 +14,14 @@ export interface GatedTool {
 
 export interface TurnOutcome {
   // One tool_result per non-gated tool_use, so every block in the assistant
-  // message is answered (D10) even when a later one suspends the run.
+  // message is answered even when a later one suspends the run.
   toolResults: ToolResult[];
   // The single gated (write/ask) tool to suspend on, or null if the turn had
   // none. At most one per turn; subsequent gated tools are rejected inline.
   gated: GatedTool | null;
 }
 
-// Process a turn's tool calls in two passes (D9/D10): run every non-gated read now and
+// Process a turn's tool calls in two passes: run every non-gated read now and
 // accumulate, and pick the first gated (write/ask) tool for the loop to suspend on. Reads
 // resolve against the effective set, so a stripped tool is reported unavailable.
 export async function processToolUses(params: {
@@ -71,7 +71,7 @@ export async function processToolUses(params: {
     if (entry.access === "write" || entry.access === "ask") {
       if (gatedTool !== null) {
         // Only one gate per turn; reject subsequent gated tools so every
-        // tool_use in this assistant message still gets a tool_result (D10).
+        // tool_use in this assistant message still gets a tool_result.
         toolResults.push({
           tool_use_id: tool.id,
           content: "Another gated action is pending. Retry after it resolves.",

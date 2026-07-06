@@ -2,7 +2,7 @@ import type { ServiceIdentity } from "@nightwatch/shared";
 
 // A service identity resolved to nothing actionable (no workload, no running instance,
 // ambiguous container). Shared by both resolvers and propagated verbatim, so
-// "not running" is a finding, not an exception (ADR-0002).
+// "not running" is a finding, not an exception.
 export interface NoRunningInstanceResult {
   found: false;
   reason: string;

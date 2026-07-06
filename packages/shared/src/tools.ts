@@ -203,7 +203,7 @@ export interface ExecCommandResult {
   executedAt: string;
 }
 
-// Kubernetes-only: provider-specific tool (ADR-0002 providers hook). Not
+// Kubernetes-only: provider-specific tool (providers annotation). Not
 // offered to Docker-only fleets.
 export interface GetK8sRolloutStatusInput {
   service: ServiceIdentity;

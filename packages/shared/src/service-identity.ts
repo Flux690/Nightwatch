@@ -19,7 +19,7 @@ export interface KubernetesServiceIdentity {
 export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
 
 // Compose re-stamps the project/service labels on every recreate, so they outlive the
-// container name/ID across a redeploy (ADR-0001); anonymous `docker run` falls back to
+// container name/ID across a redeploy; anonymous `docker run` falls back to
 // the live name. The server scope is added by each caller, never read from labels here.
 export function deriveDockerServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
@@ -35,7 +35,7 @@ export function deriveDockerServiceIdentity(
     : { provider: "docker", project: liveName, service: liveName };
 }
 
-// Parse an alert's labels into a candidate identity to match against the fleet (ADR-0004),
+// Parse an alert's labels into a candidate identity to match against the fleet,
 // never trusted alone. `namespace` (which Compose/cAdvisor never carry) signals which of
 // the two provider shapes it is.
 export function deriveServiceIdentity(
@@ -73,7 +73,7 @@ function deriveKubernetesAlertIdentity(
 ): KubernetesServiceIdentity {
   // Workload comes only from a controller label (the durable handle the manifest advertises).
   // We don't guess it from a pod name - Deployment and StatefulSet pods are indistinguishable
-  // by shape - so an under-labelled alert matches nothing and is rejected loudly (ADR-0004).
+  // by shape - so an under-labelled alert matches nothing and is rejected loudly.
   const workload =
     labels["deployment"] ?? labels["statefulset"] ?? labels["pod"] ?? "unknown";
   const cluster = labels["cluster"];

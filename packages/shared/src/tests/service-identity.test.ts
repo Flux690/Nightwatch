@@ -197,7 +197,7 @@ describe("deriveServiceIdentity", () => {
   });
 });
 
-// Both sides of the fleet match (ADR-0004): the runner stamps the assigned name onto its
+// Both sides of the fleet match: the runner stamps the assigned name onto its
 // manifest, the alert carries it in the `server` label, so resolve-or-reject produces
 // the same key deterministically.
 describe("assigned-name round-trip: manifest key === alert-derived key", () => {

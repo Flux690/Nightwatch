@@ -11,7 +11,7 @@ import type { NormalizedAlert } from "@nightwatch/shared";
 // is injected rather than starting a second; chat sessions run freely in parallel.
 export interface Dispatcher {
   dispatch(input: RunInvestigationInput): void;
-  // D2/D4: derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
+  // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
   isInvestigating(runnerId: string, sourceAlertId: string): boolean;
   // guards the 409 on POST /sessions/:id/messages
   isSessionRunning(sessionId: string): boolean;
@@ -44,7 +44,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
 
-  // D4: derive, don't cache. `input.alert` is only present on the original
+  // Derive, don't cache. `input.alert` is only present on the original
   // dispatch - a resume carries no alert, so identity falls back to the
   // session's durable originating alert.
   function resolveAlert(input: RunInvestigationInput): NormalizedAlert | null {

@@ -115,7 +115,7 @@ export function findRunnerById(id: string): RunnerRow | undefined {
   return raw ? mapRow(raw) : undefined;
 }
 
-// Effective remediation mode for an alert's runner, from the DB (system of record, ADR-0003).
+// Effective remediation mode for an alert's runner, from the DB (system of record).
 // Match on id only. null means bootstrap from the manifest. Reading the DB lets a
 // post-restart resume see it pre-reconnect.
 export function getRemediationModeByRunnerRef(ref: string): boolean | null {

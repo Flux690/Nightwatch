@@ -61,7 +61,7 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
 
 // Atomically persist the assistant turn messages AND the interrupt row in one
 // transaction. The loop calls this when suspending on a gated tool so the DB
-// is always in a consistent state: both exist or neither does (D3).
+// is always in a consistent state: both exist or neither does.
 export function appendMessagesAndInterrupt(
   messages: SessionMessage[],
   pendingHumanInput: PendingHumanInput,

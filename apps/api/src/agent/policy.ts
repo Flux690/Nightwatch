@@ -7,7 +7,7 @@ import type { Provider, Tool } from "./tools.js";
 // derived from the connected fleet (WS state) and the DB-stored remediation
 // mode; pure reads, recomputed each turn by the loop.
 
-// The providers filter (ADR-0002) is keyed on the whole fleet, not just the alerting
+// The providers filter is keyed on the whole fleet, not just the alerting
 // runner - a mixed-fleet run may call agnostic tools on a sibling. Returns undefined (no
 // filter) when no manifest has arrived, so a quiet fleet hides nothing.
 export function currentFleetProviders(): ReadonlySet<Provider> | undefined {
@@ -20,7 +20,7 @@ export function currentFleetProviders(): ReadonlySet<Provider> | undefined {
   return providers.size > 0 ? providers : undefined;
 }
 
-// Remediation mode is the master write switch (ADR-0003), read from the DB (system of
+// Remediation mode is the master write switch, read from the DB (system of
 // record), not a cache - so a run resumed after a restart sees the operator's setting
 // pre-reconnect. Null DB falls back to the manifest; a chat session is on if any runner is.
 export function currentRemediationEnabled(runnerId?: string): boolean {
@@ -44,7 +44,7 @@ export function currentRemediationEnabled(runnerId?: string): boolean {
 }
 
 // Returns the service's provider when it doesn't match the tool's declared providers, so
-// the model gets a corrective error instead of acting on the wrong provider (ADR-0002).
+// the model gets a corrective error instead of acting on the wrong provider.
 // Tools with no `service`, or a supported provider, never mismatch.
 export function mismatchedServiceProvider(
   input: Record<string, unknown>,

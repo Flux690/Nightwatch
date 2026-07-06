@@ -333,7 +333,7 @@ export async function runInvestigation(
     }
 
     // Drain mid-run injected alerts at the tool boundary, riding the same user message as the
-    // tool results so the provider never sees two consecutive user turns (D10). The model
+    // tool results so the provider never sees two consecutive user turns. The model
     // judges each as downstream effect or independent incident.
     const injected = dispatcher.drainInbox(sessionId);
     const injectionText =

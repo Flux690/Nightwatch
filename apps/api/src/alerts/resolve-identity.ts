@@ -13,7 +13,7 @@ export type AlertResolution =
   | { kind: "no-runners" }
   | { kind: "verdicts"; verdicts: AlertVerdict[] };
 
-// Match each alert's candidate identity against the fleet's advertised services (ADR-0004),
+// Match each alert's candidate identity against the fleet's advertised services,
 // independently: an unmatched or ambiguous alert is rejected on its own. 503 only when no
 // runner is connected at all.
 export function resolveAlerts(

@@ -19,7 +19,7 @@ export interface ResolvedK8sPod {
 export { notRunningResult, type NoRunningInstanceResult };
 
 // A non-kubernetes identity reaching a Kubernetes runner is a routing/model
-// bug, not a missing-pod finding (ADR-0002).
+// bug, not a missing-pod finding.
 export function requireK8sIdentity(
   service: ServiceIdentity,
 ): KubernetesServiceIdentity {
@@ -33,7 +33,7 @@ export function requireK8sIdentity(
 
 // Distinguishes "not this kind, try the next" from a genuine failure
 // (permissions, network) that must propagate as-is rather than be masked by the
-// next attempt's unrelated 404 (ADR-0002, user story 9).
+// next attempt's unrelated 404.
 export function isNotFoundError(err: unknown): boolean {
   return err instanceof ApiException && err.code === 404;
 }
@@ -74,8 +74,8 @@ export async function resolveWorkloadKind(
   return null;
 }
 
-// Resolve a durable workload identity to the live pod and container at exec time
-// (ADR-0001), fail-fast: writes/exec require a Running pod; a multi-container pod needs
+// Resolve a durable workload identity to the live pod and container at exec time,
+// fail-fast: writes/exec require a Running pod; a multi-container pod needs
 // the caller's `container`, else a not-running result lists the choices, never guessing.
 export async function resolveWorkload(
   coreApi: k8s.CoreV1Api,

@@ -7,7 +7,7 @@ export interface NormalizedAlert {
   runnerId: string;
   // hostname of the server that sent this alert, stamped at ingest time from the
   // live runner registry. Preserved on the session row so history survives token
-  // deletion (CONTEXT.md runner token lifecycle).
+  // deletion.
   hostname?: string;
   targetIdentifier: ServiceIdentity;
   alertType: string;

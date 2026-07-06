@@ -31,7 +31,7 @@ export interface RunnerRecord {
   remediationMode: boolean | null;
 }
 
-// Live view of one connected runner for fleet reasoning (CONTEXT.md Fleet view): enough
+// Live view of one connected runner for fleet reasoning: enough
 // to match an alert or target identity. Unlike RunnerRecord it has no DB-only fields -
 // derived entirely from WS state.
 export interface FleetRunner {

@@ -17,9 +17,9 @@ export interface ToolExecuteContext {
 interface ToolCommon {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
-  // Absent means provider-agnostic: supported on every provider. An annotation
-  // narrows the tool to the listed providers (ADR-0002). Only genuinely
-  // provider-specific tools carry it.
+  // A tool that omits `providers` is provider-agnostic: always offered.
+  // Listing providers offers it only while at least one connected runner
+  // runs a listed provider; only genuinely provider-specific tools carry it.
   providers?: Provider[];
 }
 
@@ -45,7 +45,7 @@ const DOCKER_ONLY: Provider[] = ["docker"];
 
 // Accepts both Docker and Kubernetes service identities. Echo the identity
 // exactly as given in the alert or a prior list_services result - do not
-// guess. Provider is an opaque part of the handle (ADR-0001, ADR-0002).
+// guess. Provider is an opaque part of the handle.
 const SERVICE_IDENTITY_SCHEMA = {
   oneOf: [
     {
@@ -528,7 +528,7 @@ export const TOOL_REGISTRY: Tool[] = [
 ];
 
 // No `providers` annotation means provider-agnostic (runs everywhere); an annotation
-// narrows it (ADR-0002). Single home for the "absent means all" rule, shared by schema
+// narrows it. Single home for the "absent means all" rule, shared by schema
 // filtering and the mismatch check.
 export function toolSupportsProvider(tool: Tool, provider: string): boolean {
   // provider is a plain string so the loop can pass an arbitrary model-supplied
@@ -559,7 +559,7 @@ export function findTool(toolName: string): Tool | undefined {
 }
 
 // The effective tool set: the single source of truth for both the offered schemas and the
-// names the loop resolves. remediationEnabled false removes write tools (ADR-0003), the
+// names the loop resolves. remediationEnabled false removes write tools, the
 // fleet filter drops tools no runner serves - so hiding a write and gating it are one op.
 export function effectiveToolset(
   fleetProviders: ReadonlySet<Provider> | undefined,

@@ -6,12 +6,12 @@ import {
 } from "@nightwatch/shared";
 import { logger } from "../../logger.js";
 
-// A parsed alert carrying a candidate identity not yet matched against the fleet (ADR-0004);
+// A parsed alert carrying a candidate identity not yet matched against the fleet;
 // runnerId/hostname aren't known at parse time, so they're absent rather than guessed.
 export type ParsedAlert = Omit<NormalizedAlert, "runnerId" | "hostname">;
 
 // Only the envelope is validated up front; each alert is parsed defensively in the loop, so
-// one malformed alert is skipped on its own instead of aborting the batch (ADR-0004).
+// one malformed alert is skipped on its own instead of aborting the batch.
 const alertmanagerWebhookSchema = z.object({
   alerts: z.array(z.unknown()),
 });

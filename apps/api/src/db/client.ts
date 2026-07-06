@@ -2,8 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 
-// D1: single SQLite source of record. Lazy open so tests can set NIGHTWATCH_DB_PATH before
-// first query; exported so D16 self-provisioning can place the key file beside the database.
+// Single SQLite source of record. Lazy open so tests can set NIGHTWATCH_DB_PATH before
+// first query; exported so secret-key self-provisioning can place the key file beside the database.
 export function dbPath(): string {
   return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
 }

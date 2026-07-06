@@ -19,7 +19,7 @@ export { notRunningResult, type NoRunningInstanceResult };
 
 // Tool inputs carry the cross-provider ServiceIdentity union; a Docker runner
 // can only ever resolve the Docker arm. A non-docker identity reaching here is
-// a routing/model bug, not a missing-container finding (user story 19, ADR-0002).
+// a routing/model bug, not a missing-container finding.
 function requireDockerIdentity(
   service: ServiceIdentity,
 ): DockerServiceIdentity {
@@ -31,7 +31,7 @@ function requireDockerIdentity(
   return service;
 }
 
-// Resolve a durable identity to the live container now (ADR-0001), falling back to the
+// Resolve a durable identity to the live container now, falling back to the
 // most recently terminated instance when none is live; callers needing a live target
 // reject a `live:false` result themselves.
 export async function resolveService(
@@ -71,7 +71,7 @@ function matchesIdentity(
     return true;
   }
   // Anonymous `docker run` containers carry no Compose labels; the identity's
-  // `service` field is the live name captured at discovery time (ADR-0001).
+  // `service` field is the live name captured at discovery time.
   const name = (c.Names[0] ?? "").replace(/^\//, "");
   return name === service.service;
 }

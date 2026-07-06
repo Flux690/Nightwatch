@@ -94,7 +94,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   // Rate-limit and dedup are keyed by runnerId, so these two tests need alerts resolving to
   // different runners - else they share the per-runner counter. Two container labels on two
-  // runners give two runnerIds (ADR-0004), the isolation two tokens used to give for free.
+  // runners give two runnerIds, the isolation two tokens used to give for free.
   beforeAll(async () => {
     cleanupDb = useTempDb();
     connA = registerRunner(
@@ -153,7 +153,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     // This test's alerts target web-01 -> resolve to runner-web-01; dedup is
-    // keyed by that runnerId now, not by the authenticating token (ADR-0004).
+    // keyed by that runnerId now, not by the authenticating token.
     const { plaintext: token } = generateRunnerToken("dedup");
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
     // setImmediate is NOT faked, so inject() continues to work correctly.

@@ -10,7 +10,7 @@ function keyFilePath(): string {
   return join(dirname(dbPath()), "secret.key");
 }
 
-// Resolves SECRET_KEY (D16): an env var wins, else a 0600 key file beside the DB is reused
+// Resolves SECRET_KEY: an env var wins, else a 0600 key file beside the DB is reused
 // or generated on first boot. Losing it equals rotating SECRET_KEY - sessions invalidate and
 // the wrapped LLM key becomes undecryptable. The path (never the key) is logged at boot.
 export function resolveSecretKey(): string {

@@ -37,7 +37,7 @@ export async function registerAlertRoutes(
 
     // The token authenticates the request; the alert's labels - matched
     // against the fleet's advertised services - are the sole source of
-    // routing (ADR-0004 resolve-or-reject, never a token-derived guess).
+    // routing (resolve-or-reject, never a token-derived guess).
     const resolution = resolveAlerts(parsed, getFleetView());
     if (resolution.kind === "no-runners") {
       for (const p of parsed) {
@@ -164,7 +164,7 @@ export async function registerAlertRoutes(
 
 // Authenticates only - grants no routing. `nwi_` (fleet) and `nwr_` (per-runner) both just
 // prove the request may submit; which runner receives it is decided later by matching
-// labels against the fleet (ADR-0004).
+// labels against the fleet.
 function authenticate(plaintext: string): boolean {
   if (plaintext.startsWith("nwi_")) {
     const ingestHash = getIngestTokenHash();

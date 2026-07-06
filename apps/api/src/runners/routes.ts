@@ -16,7 +16,7 @@ import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
 export async function registerRunnerRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  // Fleet view per runner (CONTEXT.md multi-runner). Live runners come from the
+  // Fleet view per runner. Live runners come from the
   // in-memory registry (keyed by runnerId); offline tokens show as single rows so
   // their install command remains discoverable.
   fastify.get("/runners", { preHandler: requireSession }, () => {
@@ -60,7 +60,7 @@ export async function registerRunnerRoutes(
     return records;
   });
 
-  // The fleet view (CONTEXT.md "Fleet view"): every connected runner and the
+  // The fleet view: every connected runner and the
   // server-scoped service identities it advertises. Read-only, no token
   // management fields - the console fleet page's single pane of glass.
   fastify.get("/fleet", { preHandler: requireSession }, (): FleetRunner[] =>

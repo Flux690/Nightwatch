@@ -62,7 +62,7 @@ describe("POST /alerts/ingest auth", () => {
     cleanupDb = useTempDb();
     VALID_TOKEN = generateRunnerToken("test-ingest-runner").plaintext;
 
-    // Resolution now matches the alert's labels against the fleet (ADR-0004),
+    // Resolution now matches the alert's labels against the fleet,
     // so a runner advertising the matching service must be connected for the
     // 200-path tests below to mean anything.
     connAuth = registerRunner(

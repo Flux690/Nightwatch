@@ -17,7 +17,7 @@ import { registerConnectRoutes } from "./runners/connect.js";
 import { registerManifestRoutes } from "./runners/manifest.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 
-// D16: explicit SECRET_KEY env var wins; otherwise a key file beside the
+// Explicit SECRET_KEY env var wins; otherwise a key file beside the
 // SQLite database is reused or generated on first boot.
 process.env["SECRET_KEY"] = resolveSecretKey();
 

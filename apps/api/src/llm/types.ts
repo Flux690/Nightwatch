@@ -52,7 +52,7 @@ export interface ProviderMessage {
 export interface LLMProvider {
   start(firstMessage: string): void;
   // Restore a prior transcript so the loop can continue a session. start() is
-  // the empty-history special case; seed() is the general entry (D10).
+  // the empty-history special case; seed() is the general entry.
   seed(history: ProviderMessage[]): void;
   // Current conversation in neutral form, for incremental persistence.
   snapshot(): ProviderMessage[];
@@ -65,9 +65,9 @@ export interface LLMProvider {
     signal?: AbortSignal,
   ): Promise<ChatResponse>;
   // additionalText, when provided, is appended to the same user message as the
-  // tool results. Used to inject mid-run alerts at each tool boundary (D10).
+  // tool results. Used to inject mid-run alerts at each tool boundary.
   appendToolResults(results: ToolResult[], additionalText?: string): void;
   // Inject a human-authored user turn (chat / resume). Distinct from a
-  // tool_result: add_context mid-approval must stay a tool_result (D10).
+  // tool_result: add_context mid-approval must stay a tool_result.
   appendUserMessage(message: string): void;
 }
