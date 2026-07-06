@@ -7,6 +7,7 @@ import type { PendingHumanInputWithSession } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
+import { targetRemediationDisabled } from "../agent/policy.js";
 
 // Executes an approved write and returns its result to the run. Never throws: once claimed
 // the interrupt can't be re-approved, so any fault (duplicate, missing tool, DB error)
@@ -55,8 +56,24 @@ export async function executeApprovedTool(
       return result;
     }
 
+    // Authoritative per-target gate: the mode can change while the interrupt
+    // sat waiting, so the check at proposal time is not enough on its own.
+    const disabledOn = targetRemediationDisabled(toolInput);
+    if (disabledOn !== null) {
+      logger.warn(
+        { sessionId, tool: toolName, server: disabledOn },
+        "approved write refused: remediation disabled on target server",
+      );
+      const result: ToolResult = {
+        tool_use_id: toolUseId,
+        content: `Remediation is disabled on '${disabledOn}'. The approved action was NOT executed. Recommend the fix in plain text instead; the operator can enable remediation for that server from the console.`,
+        is_error: true,
+      };
+      settleRemediationAction(sessionId, toolUseId, "failed", result.content);
+      return result;
+    }
+
     const execResult = await executeTool(toolEntry, toolInput, {
-      runnerId: pending.originatingAlert?.runnerId,
       toolTimeoutMs: loadConfig().toolTimeoutMs,
     });
     settleRemediationAction(

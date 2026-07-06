@@ -205,3 +205,52 @@ describe("execCommand handler", () => {
     );
   });
 });
+
+describe("write dispatch guarded by the runner's own remediation flag", () => {
+  // Defense in depth: even if the control plane sends a write, this runner
+  // refuses while its own remediation flag is off.
+  it("refuses restart_service and exec while remediation is disabled", async () => {
+    const { createDispatchRegistry } = await import("../commands/registry.js");
+    const { setRemediationEnabled } = await import("../remediation-state.js");
+
+    const registry = createDispatchRegistry();
+    setRemediationEnabled(false);
+    try {
+      await expect(
+        registry.get("exec")!({
+          service: SERVICE,
+          command: ["ls"],
+          reason: "test",
+          risk: "low",
+        }),
+      ).rejects.toThrow(/Remediation is disabled on this runner/);
+      await expect(
+        registry.get("restart_service")!({
+          service: SERVICE,
+          rationale: "test",
+          risk: "low",
+          estimatedDowntimeSeconds: 1,
+        }),
+      ).rejects.toThrow(/Remediation is disabled on this runner/);
+    } finally {
+      setRemediationEnabled(true);
+    }
+  });
+
+  it("lets a write through to the provider handler when remediation is on", async () => {
+    const { createDispatchRegistry } = await import("../commands/registry.js");
+    const { setRemediationEnabled } = await import("../remediation-state.js");
+
+    setupDockerMock(0, "ok");
+    const registry = createDispatchRegistry();
+    setRemediationEnabled(true);
+
+    const result = await registry.get("exec")!({
+      service: SERVICE,
+      command: ["ls"],
+      reason: "test",
+      risk: "low",
+    });
+    expect((result as { exitCode: number }).exitCode).toBe(0);
+  });
+});

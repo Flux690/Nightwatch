@@ -9,7 +9,6 @@ export interface ToolExecuteResult {
 }
 
 export interface ToolExecuteContext {
-  runnerId?: string;
   toolTimeoutMs: number;
 }
 

@@ -34,6 +34,7 @@ import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
   setRunnerManifest,
+  setRunnerRemediationMode,
   unregisterRunner,
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
@@ -190,9 +191,16 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const runnerId = generateRunnerToken("inject-sus").id;
-    // Remediation on (DB is the source of truth for an alert's runner) so the
-    // write tool is offered and the run actually suspends for approval.
+    // Write offering is fleet-wide (any connected runner with remediation on),
+    // so a connection with a synced cache is required - mirroring what
+    // ws/server.ts reconciliation does after setRemediationMode.
     setRemediationMode(runnerId, true);
+    const susConn = registerRunner(
+      runnerId,
+      () => {},
+      () => {},
+    );
+    setRunnerRemediationMode(runnerId, true);
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -254,6 +262,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     gate.releaseNext(); // free-form finish for the new session
     await waitFor(() => !dispatcher.isSessionRunning(newSessionId));
+    unregisterRunner(susConn);
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
@@ -317,6 +326,8 @@ describe("mid-run alert injection (loop seam)", () => {
       () => {},
     );
     setRunnerManifest(runnerId, webOneManifest());
+    // Sync the DB mode into the connection cache, as reconciliation would.
+    setRunnerRemediationMode(runnerId, true);
 
     // R1: gated tool → run suspends. R2 (resume): free-form finish.
     queueRuns(

@@ -28,6 +28,7 @@ import {
   getHostDmesg,
 } from "./host.js";
 import { readFileCommand } from "./files.js";
+import { isRemediationEnabled } from "../remediation-state.js";
 
 type Handler = (input: unknown) => Promise<unknown>;
 
@@ -69,6 +70,20 @@ function byEnvironment<T extends { environment?: string }>(handlers: {
 // A single-provider or provider-less command: cast once and call.
 function direct<T>(fn: (input: T) => Promise<unknown>): Handler {
   return (input) => fn(input as T);
+}
+
+// Defense in depth for writes: the API gates by this runner's mode, but the
+// runner still refuses on its own flag so a control-plane bug can never
+// execute a write the operator turned off here.
+function guardedWrite(handler: Handler): Handler {
+  return (input) => {
+    if (!isRemediationEnabled()) {
+      return Promise.reject(
+        new Error("Remediation is disabled on this runner"),
+      );
+    }
+    return handler(input);
+  };
 }
 
 export function createDispatchRegistry(): Map<string, Handler> {
@@ -123,9 +138,16 @@ export function createDispatchRegistry(): Map<string, Handler> {
     ["read_host_file", direct(readFileCommand)],
     [
       "restart_service",
-      byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
+      guardedWrite(
+        byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
+      ),
     ],
-    ["exec", byProvider({ docker: execCommand, kubernetes: k8sExecCommand })],
+    [
+      "exec",
+      guardedWrite(
+        byProvider({ docker: execCommand, kubernetes: k8sExecCommand }),
+      ),
+    ],
     ["get_k8s_rollout_status", direct(k8sGetRolloutStatus)],
     ["get_k8s_node_status", () => k8sGetNodeStatus()],
   ]);

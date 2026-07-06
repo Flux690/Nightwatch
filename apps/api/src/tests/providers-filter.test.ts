@@ -677,3 +677,201 @@ describe("providers filter and mismatch rejection", () => {
     });
   });
 });
+
+describe("per-target write gating", () => {
+  let server: FastifyInstance;
+  let port: number;
+  let cleanupDb: () => void;
+  let SESSION: string;
+  let connOn: RunnerConnection;
+  let connOff: RunnerConnection;
+
+  const ON_SERVICE = {
+    provider: "docker" as const,
+    project: "gated-on-app",
+    service: "on-svc",
+  };
+  const OFF_SERVICE = {
+    provider: "docker" as const,
+    project: "gated-off-app",
+    service: "off-svc",
+  };
+
+  function gatedManifest(
+    hostname: string,
+    service: typeof ON_SERVICE,
+    remediationEnabled: boolean,
+  ) {
+    return {
+      hostname,
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        kubernetes: false,
+        services: [{ identity: service, status: "running" }],
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: false,
+        fileRead: false,
+        remediationEnabled,
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+
+    const onId = generateRunnerToken("gated-on-001", "gated-on").id;
+    const offId = generateRunnerToken("gated-off-001", "gated-off").id;
+    setRemediationMode(onId, true);
+    setRemediationMode(offId, false);
+
+    connOn = registerRunner(
+      onId,
+      () => {},
+      () => {},
+      "gated-on",
+    );
+    setRunnerManifest(onId, gatedManifest("gated-on-host", ON_SERVICE, true));
+    setRunnerRemediationMode(onId, true);
+
+    connOff = registerRunner(
+      offId,
+      () => {},
+      () => {},
+      "gated-off",
+    );
+    setRunnerManifest(
+      offId,
+      gatedManifest("gated-off-host", OFF_SERVICE, false),
+    );
+    setRunnerRemediationMode(offId, false);
+
+    server = Fastify({ logger: false });
+    await server.register(FastifyWebSocket);
+    await registerConsoleWsRoutes(server);
+    await registerSessionRoutes(server);
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    unregisterRunner(connOn);
+    unregisterRunner(connOff);
+    await server.close();
+    cleanupDb();
+  });
+
+  async function chatSession(message: string): Promise<{
+    sessionId: string;
+    events: WsEvent[];
+    ws: WebSocket;
+  }> {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
+      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+    });
+    const events: WsEvent[] = [];
+    ws.on("message", (raw) => {
+      events.push(JSON.parse(raw.toString()) as WsEvent);
+    });
+    await waitForConnected(ws);
+
+    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message }),
+    });
+    expect(res.status).toBe(202);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    return { sessionId, events, ws };
+  }
+
+  it("a write against a remediation-off server is refused before waking a human", async () => {
+    setScript([
+      {
+        text: "Restarting off-svc.",
+        toolUses: [
+          {
+            id: "tu-gated-off",
+            name: "restart_service",
+            input: {
+              service: OFF_SERVICE,
+              rationale: "wedged",
+              risk: "low",
+              estimatedDowntimeSeconds: 3,
+            },
+          },
+        ],
+      },
+      { text: "Understood, recommending instead.", toolUses: [] },
+    ]);
+
+    const { sessionId, events, ws } = await chatSession(
+      "off-svc looks wedged, restart it",
+    );
+    await waitFor(() =>
+      events.some(
+        (e) =>
+          e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
+      ),
+    );
+
+    // No approval card was ever raised - the gate rejected at proposal time.
+    expect(
+      events.some(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    ).toBe(false);
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
+
+    const messages = getSessionMessages(sessionId);
+    const rejection = messages.find(
+      (m) =>
+        m.role === "user" && m.content.includes("Remediation is disabled on"),
+    );
+    expect(rejection?.content).toContain("gated-off");
+
+    ws.close();
+  });
+
+  it("a write against a remediation-on server still raises the approval card", async () => {
+    setScript([
+      {
+        text: "Restarting on-svc.",
+        toolUses: [
+          {
+            id: "tu-gated-on",
+            name: "restart_service",
+            input: {
+              service: ON_SERVICE,
+              rationale: "wedged",
+              risk: "low",
+              estimatedDowntimeSeconds: 3,
+            },
+          },
+        ],
+      },
+      { text: "Done.", toolUses: [] },
+    ]);
+
+    const { sessionId, events, ws } = await chatSession(
+      "on-svc looks wedged, restart it",
+    );
+    await waitFor(() =>
+      events.some(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    );
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
+
+    ws.close();
+  });
+});

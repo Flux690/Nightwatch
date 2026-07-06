@@ -118,9 +118,7 @@ export async function runInvestigation(
   // wrap-up turn (no tools), then finish. The seed already carries the investigation, so
   // skip the alert/fleet context build below.
   if (input.wrapUp) {
-    const remediationEnabled = currentRemediationEnabled(
-      alert?.runnerId ?? undefined,
-    );
+    const remediationEnabled = currentRemediationEnabled();
     const { systemPrompt } = buildChatContext(remediationEnabled);
     const provider = createProvider(systemPrompt, config, apiKey);
     createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
@@ -163,9 +161,7 @@ export async function runInvestigation(
     ...(input.alert ? [input.alert] : []),
     ...(input.additionalAlerts ?? []),
   ];
-  const remediationEnabled = currentRemediationEnabled(
-    alert?.runnerId ?? undefined,
-  );
+  const remediationEnabled = currentRemediationEnabled();
   const fleetView = getFleetView();
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
@@ -213,7 +209,7 @@ export async function runInvestigation(
     const fleetProviders = currentFleetProviders();
     const toolset = effectiveToolset(
       fleetProviders,
-      currentRemediationEnabled(alert?.runnerId ?? undefined),
+      currentRemediationEnabled(),
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
@@ -262,7 +258,6 @@ export async function runInvestigation(
     }
 
     const execCtx: ToolExecuteContext = {
-      runnerId: alert?.runnerId ?? undefined,
       toolTimeoutMs: config.toolTimeoutMs,
     };
 

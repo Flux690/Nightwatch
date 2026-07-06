@@ -1,4 +1,6 @@
-import { getRunnerManifestForAlert, listRunners } from "../ws/fleet.js";
+import { addressName, listRunners } from "../ws/fleet.js";
+import type { RunnerConnection } from "../ws/fleet.js";
+import { resolveByService } from "../ws/router.js";
 import { getRemediationModeByRunnerRef } from "../db/runner.js";
 import { toolSupportsProvider } from "./tools/toolset.js";
 import type { Provider, Tool } from "./tools/types.js";
@@ -20,18 +22,10 @@ export function currentFleetProviders(): ReadonlySet<Provider> | undefined {
   return providers.size > 0 ? providers : undefined;
 }
 
-// Remediation mode is the master write switch, read from the DB (system of
-// record), not a cache - so a run resumed after a restart sees the operator's setting
-// pre-reconnect. Null DB falls back to the manifest; a chat session is on if any runner is.
-export function currentRemediationEnabled(runnerId?: string): boolean {
-  if (runnerId) {
-    const dbMode = getRemediationModeByRunnerRef(runnerId);
-    if (dbMode !== null) return dbMode;
-    return (
-      getRunnerManifestForAlert(runnerId)?.capabilities.remediationEnabled ??
-      false
-    );
-  }
+// Offering rule: write tools appear when ANY connected runner has remediation
+// on. Which machine may actually be written to is decided per call by
+// targetRemediationDisabled - offering is fleet-wide, enforcement is per-target.
+export function currentRemediationEnabled(): boolean {
   for (const runner of listRunners()) {
     if (runner.remediationMode === true) return true;
     if (
@@ -41,6 +35,26 @@ export function currentRemediationEnabled(runnerId?: string): boolean {
       return true;
   }
   return false;
+}
+
+// Returns the target server's name when a write's target runner has
+// remediation off, so callers reject before proposing or executing. The mode
+// is a property of the machine being written to, never of the session.
+// Resolution failures return null - dispatch reports those with its own error.
+export function targetRemediationDisabled(
+  input: Record<string, unknown>,
+): string | null {
+  let conn: RunnerConnection;
+  try {
+    conn = resolveByService(input);
+  } catch {
+    return null;
+  }
+  // DB first (system of record, survives restarts), manifest as bootstrap.
+  const dbMode = getRemediationModeByRunnerRef(conn.runnerId);
+  const enabled =
+    dbMode ?? conn.manifest?.capabilities.remediationEnabled ?? false;
+  return enabled ? null : (addressName(conn) ?? conn.runnerId);
 }
 
 // Returns the service's provider when it doesn't match the tool's declared providers, so

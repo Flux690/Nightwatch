@@ -1,6 +1,9 @@
 import { executeTool } from "./tools/toolset.js";
 import type { Tool, ToolExecuteContext } from "./tools/types.js";
-import { mismatchedServiceProvider } from "./policy.js";
+import {
+  mismatchedServiceProvider,
+  targetRemediationDisabled,
+} from "./policy.js";
 import { circuitBreakerRejection } from "./breaker.js";
 import { publishToolCallStart, publishToolCallEnd } from "../session/stream.js";
 import type { logger } from "../logger.js";
@@ -81,6 +84,23 @@ export async function processToolUses(params: {
       }
 
       if (entry.access === "write") {
+        // Per-target gate: a write against a machine whose remediation is off
+        // is rejected before waking a human - the switch belongs to the
+        // target, not to the session that proposed the write.
+        const disabledOn = targetRemediationDisabled(tool.input);
+        if (disabledOn !== null) {
+          log.warn(
+            { tool: tool.name, server: disabledOn },
+            "write refused: remediation disabled on target server",
+          );
+          toolResults.push({
+            tool_use_id: tool.id,
+            content: `Remediation is disabled on '${disabledOn}'. The action was NOT proposed or executed. Recommend the fix in plain text instead; the operator can enable remediation for that server from the console.`,
+            is_error: true,
+          });
+          continue;
+        }
+
         const breakerRejection = circuitBreakerRejection(tool, config);
         if (breakerRejection) {
           log.warn(
