@@ -16,6 +16,8 @@ import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { registerWsRoutes } from "../ws/server.js";
 import { registerRunnerRoutes } from "../runners/routes.js";
+import { resolveCommand, sendCommand } from "../ws/command-transport.js";
+import { logger } from "../logger.js";
 
 function manifest(hostname: string, containers: string[]): CapabilityManifest {
   return {
@@ -277,6 +279,117 @@ describe("flat runner registry", () => {
 
     a.close();
     b.close();
+  });
+
+  describe("in-flight commands on socket close", () => {
+    it("rejects an in-flight command promptly when the runner socket closes, and drops the late result", async () => {
+      const { plaintext: token, id: tokenId } = generateRunnerToken("inflight");
+      const ws = await connectRunner(
+        port,
+        token,
+        manifest("inflight-host", ["inflight-svc"]),
+      );
+      await waitFor(async () => {
+        const live = (await getRunners()).filter(
+          (r) => r.token === tokenId && r.manifest !== null,
+        );
+        return live.length === 1 ? true : undefined;
+      });
+
+      // Capture the command frame but never reply, simulating a runner that
+      // dies mid-command.
+      let correlationId: string | undefined;
+      ws.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString()) as {
+          type: string;
+          payload?: { correlationId?: string };
+        };
+        if (msg.type === "command") correlationId = msg.payload?.correlationId;
+      });
+
+      const settled = sendCommand("get_service_logs", {
+        service: {
+          provider: "docker",
+          project: "inflight-svc",
+          service: "inflight-svc",
+        },
+      }).catch((err: unknown) => err);
+
+      await waitFor(() => (correlationId ? true : undefined));
+      ws.close();
+
+      const err = await settled;
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/disconnected before responding/);
+
+      // A result arriving after the rejection has nowhere to go: it must be
+      // logged and dropped, never throw.
+      const warn = vi.spyOn(logger, "warn");
+      resolveCommand({
+        correlationId: correlationId!,
+        success: true,
+        result: {},
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ correlationId }),
+        expect.stringMatching(/late or unknown/i),
+      );
+      warn.mockRestore();
+    });
+
+    it("a displaced socket's in-flight command rejects while the replacement stays online", async () => {
+      const { plaintext: token, id: tokenId } =
+        generateRunnerToken("inflight-displace");
+      const a = await connectRunner(
+        port,
+        token,
+        manifest("inflight-d-host", ["displace-svc"]),
+      );
+      await waitFor(async () => {
+        const live = (await getRunners()).filter(
+          (r) => r.token === tokenId && r.manifest !== null,
+        );
+        return live.length === 1 ? true : undefined;
+      });
+
+      let sawCommand = false;
+      a.on("message", (raw) => {
+        const msg = JSON.parse(raw.toString()) as { type: string };
+        if (msg.type === "command") sawCommand = true;
+      });
+
+      const settled = sendCommand("get_service_logs", {
+        service: {
+          provider: "docker",
+          project: "displace-svc",
+          service: "displace-svc",
+        },
+      }).catch((err: unknown) => err);
+      await waitFor(() => (sawCommand ? true : undefined));
+
+      const aClosed = new Promise<void>((resolve) => {
+        a.on("close", () => resolve());
+      });
+      const b = await connectRunner(
+        port,
+        token,
+        manifest("inflight-d-host", ["displace-svc"]),
+      );
+      await aClosed;
+
+      const err = await settled;
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/disconnected before responding/);
+
+      // The replacement connection is unaffected by A's close and rejection.
+      await waitFor(async () => {
+        const live = (await getRunners()).filter(
+          (r) => r.token === tokenId && r.online && r.manifest !== null,
+        );
+        return live.length === 1 ? true : undefined;
+      });
+      b.close();
+    });
   });
 
   it("GET /fleet returns connected runners with their service identities, with no token-management fields", async () => {

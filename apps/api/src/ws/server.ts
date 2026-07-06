@@ -16,7 +16,10 @@ import {
   pushRemediationMode,
   setRunnerRemediationMode,
 } from "./router.js";
-import { resolveCommand } from "./command-transport.js";
+import {
+  rejectPendingForConnection,
+  resolveCommand,
+} from "./command-transport.js";
 import type {
   RunnerManifestMessage,
   RunnerResultMessage,
@@ -95,6 +98,9 @@ export async function registerWsRoutes(
       });
 
       socket.on("close", () => {
+        // Per-socket, regardless of the registry identity check below: pending
+        // commands belong to this socket even after a replacement registered.
+        rejectPendingForConnection(conn);
         if (unregisterRunner(conn)) {
           fastify.log.warn(
             { runnerId: runnerId.slice(0, 8) },
