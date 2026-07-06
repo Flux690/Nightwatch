@@ -16,7 +16,7 @@ export interface RunnerCommandMessage extends WsEnvelope {
   payload: {
     commandName: string;
     commandInput: Record<string, unknown>;
-    correlationId: string; // tool_use_id from Anthropic SDK
+    correlationId: string; // random UUID minted per command by the API transport
   };
 }
 
@@ -43,10 +43,4 @@ export interface RunnerResultMessage extends WsEnvelope {
     result: unknown;
     error?: string;
   };
-}
-
-// Runner → API: heartbeat
-export interface RunnerHeartbeatMessage extends WsEnvelope {
-  type: "heartbeat";
-  payload: { timestamp: string };
 }

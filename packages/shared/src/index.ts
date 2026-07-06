@@ -49,7 +49,6 @@ export type {
   SetRemediationModeMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
-  RunnerHeartbeatMessage,
 } from "./ws.js";
 export type {
   ConsoleHumanInputResolved,

@@ -12,7 +12,7 @@ import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
-  recordHeartbeat,
+  markRunnerAlive,
   pushRemediationMode,
   setRunnerRemediationMode,
 } from "./router.js";
@@ -24,6 +24,8 @@ import type {
   RunnerManifestMessage,
   RunnerResultMessage,
 } from "@nightwatch/shared";
+
+const PING_INTERVAL_MS = 30_000;
 
 export async function registerWsRoutes(
   fastify: FastifyInstance,
@@ -56,6 +58,27 @@ export async function registerWsRoutes(
       );
 
       fastify.log.info({ runnerId: runnerId.slice(0, 8) }, "runner connected");
+
+      // Standard ws liveness probe: a peer that misses a whole ping interval
+      // is dead (half-open TCP path), so terminate and let close-side cleanup
+      // settle its commands and registration.
+      let isAlive = true;
+      socket.on("pong", () => {
+        isAlive = true;
+        markRunnerAlive(conn);
+      });
+      const pingTimer = setInterval(() => {
+        if (!isAlive) {
+          fastify.log.warn(
+            { runnerId: runnerId.slice(0, 8) },
+            "runner missed ping; terminating socket",
+          );
+          socket.terminate();
+          return;
+        }
+        isAlive = false;
+        socket.ping();
+      }, PING_INTERVAL_MS);
 
       socket.on("message", (raw: Buffer | ArrayBuffer | Buffer[]) => {
         let parsed: Record<string, unknown>;
@@ -92,12 +115,11 @@ export async function registerWsRoutes(
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);
-        } else if (type === "heartbeat") {
-          recordHeartbeat(runnerId);
         }
       });
 
       socket.on("close", () => {
+        clearInterval(pingTimer);
         // Per-socket, regardless of the registry identity check below: pending
         // commands belong to this socket even after a replacement registered.
         rejectPendingForConnection(conn);

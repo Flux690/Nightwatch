@@ -27,7 +27,7 @@ import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
 import {
-  recordHeartbeat,
+  markRunnerAlive,
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
@@ -220,10 +220,10 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     });
 
     // After the hourly window the counter resets and non-critical flows again. Jumping the fake
-    // clock also pushes the runner's heartbeat past its TTL, so refresh it - a real runner would
-    // have kept heartbeating.
+    // clock also pushes the runner's liveness past its TTL, so refresh it - a real runner would
+    // still be answering pings.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
-    recordHeartbeat("dispatch-runner-b-token");
+    markRunnerAlive(connB);
     expect(
       await ingest(token, alertBody("rl-after", "warning", "web-02")),
     ).toMatchObject({

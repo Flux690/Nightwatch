@@ -8,7 +8,7 @@ import {
 } from "@nightwatch/shared";
 import { logger } from "../logger.js";
 
-const HEARTBEAT_TTL_MS = 120_000;
+const LIVENESS_TTL_MS = 120_000;
 
 // Single map keyed by runnerId — the stable DB primary key assigned at onboarding.
 export interface RunnerConnection {
@@ -87,9 +87,9 @@ export function setRunnerManifest(
   conn.lastSeen = Date.now();
 }
 
-export function recordHeartbeat(runnerId: string): void {
-  const conn = connectionsByRunnerId.get(runnerId);
-  if (!conn) return;
+// Takes the connection, not the runnerId: a displaced socket's late pong then
+// touches the dead object instead of the replacement's registry entry.
+export function markRunnerAlive(conn: RunnerConnection): void {
   conn.lastSeen = Date.now();
 }
 
@@ -102,7 +102,7 @@ export function listRunners(): RunnerView[] {
       hostname: conn.hostname,
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
-      online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+      online: now - conn.lastSeen < LIVENESS_TTL_MS,
       remediationMode: conn.remediationMode,
     });
   }
@@ -120,7 +120,7 @@ export function getFleetView(): FleetRunner[] {
     views.push({
       runnerId: conn.runnerId,
       hostname: conn.manifest.hostname,
-      online: now - conn.lastSeen < HEARTBEAT_TTL_MS,
+      online: now - conn.lastSeen < LIVENESS_TTL_MS,
       lastSeen: conn.lastSeen,
       services: conn.manifest.capabilities.services,
     });

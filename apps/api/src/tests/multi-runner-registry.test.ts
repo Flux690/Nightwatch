@@ -40,7 +40,8 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
 }
 
 // Connect a fake runner, wait for the server's `connected` ack, then send its
-// manifest and a heartbeat. Returns the open socket so the test can close it.
+// manifest. Liveness rides protocol ping/pong, which the ws client answers
+// automatically. Returns the open socket so the test can close it.
 async function connectRunner(
   port: number,
   token: string,
@@ -59,7 +60,6 @@ async function connectRunner(
     });
   });
   ws.send(JSON.stringify({ messageId: "m", type: "manifest", payload: m }));
-  ws.send(JSON.stringify({ messageId: "h", type: "heartbeat", payload: {} }));
   return ws;
 }
 
@@ -441,6 +441,125 @@ describe("flat runner registry", () => {
 
     a.close();
     b.close();
+  });
+});
+
+// Let real socket IO complete while timers are faked - setImmediate is never
+// in the toFake list, so these turns run on the real event loop.
+async function flushIo(turns = 50): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
+}
+
+describe("protocol ping/pong liveness", () => {
+  let server: FastifyInstance;
+  let port: number;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await server.register(FastifyWebSocket);
+    await registerWsRoutes(server);
+    await registerRunnerRoutes(server);
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    port = (server.server.address() as AddressInfo).port;
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  async function getRunners(): Promise<RunnerRecord[]> {
+    const res = await server.inject({
+      method: "GET",
+      url: "/runners",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return JSON.parse(res.body) as RunnerRecord[];
+  }
+
+  it("terminates a socket that stops answering pings and drops the runner offline", async () => {
+    const { plaintext: token, id: tokenId } = generateRunnerToken("no-pong");
+    // Fake timers before connecting: the per-connection ping interval must be
+    // created under fake timers to be advanceable. Date stays real.
+    vi.useFakeTimers({
+      toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"],
+    });
+    try {
+      const ws = await connectRunner(
+        port,
+        token,
+        manifest("no-pong-host", ["no-pong-svc"]),
+      );
+      // Dead-peer stand-in: suppress the client's automatic protocol pong.
+      ws.pong = () => {};
+      const closed = new Promise<void>((resolve) => {
+        ws.on("close", () => resolve());
+      });
+
+      await vi.advanceTimersByTimeAsync(30_000); // ping sent, isAlive cleared
+      await flushIo();
+      await vi.advanceTimersByTimeAsync(30_000); // missed pong: terminate
+      vi.useRealTimers();
+
+      await closed;
+      await waitFor(async () => {
+        const live = (await getRunners()).filter(
+          (r) => r.token === tokenId && r.online,
+        );
+        return live.length === 0 ? true : undefined;
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("pongs keep the runner online past the liveness TTL", async () => {
+    const { plaintext: token, id: tokenId } = generateRunnerToken("pong-live");
+    // Date is faked here so fake time can outrun the 120s TTL; pongs must be
+    // what keeps lastSeen fresh.
+    vi.useFakeTimers({
+      toFake: [
+        "setInterval",
+        "clearInterval",
+        "setTimeout",
+        "clearTimeout",
+        "Date",
+      ],
+    });
+    try {
+      const ws = await connectRunner(
+        port,
+        token,
+        manifest("pong-live-host", ["pong-live-svc"]),
+      );
+      await flushIo();
+
+      for (let i = 0; i < 5; i++) {
+        await vi.advanceTimersByTimeAsync(30_000);
+        // Let each ping/pong round-trip complete so lastSeen refreshes.
+        await flushIo();
+      }
+
+      // 150s of fake time elapsed - past the TTL. Only pong-driven refreshes
+      // can explain the runner still reading online.
+      const live = (await getRunners()).filter(
+        (r) => r.token === tokenId && r.online,
+      );
+      expect(live).toHaveLength(1);
+
+      vi.useRealTimers();
+      ws.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

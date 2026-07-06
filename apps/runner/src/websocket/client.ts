@@ -5,7 +5,6 @@ import { logger } from "../logger.js";
 import { setRemediationEnabled } from "../remediation-state.js";
 import type {
   RunnerCommandMessage,
-  RunnerHeartbeatMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
   SetRemediationModeMessage,
@@ -15,9 +14,16 @@ type CommandHandler = (input: unknown) => Promise<unknown>;
 
 const BACKOFF_STEPS = [2, 4, 8, 16, 32, 60];
 
-// Bound on the manifest refresh so a hung Docker/k8s API cannot stall the
-// heartbeat (which would get the runner marked offline).
+// Bound on the manifest refresh so a hung Docker/k8s API cannot wedge the
+// refresh interval indefinitely.
 const MANIFEST_REFRESH_TIMEOUT_MS = 5000;
+
+const MANIFEST_REFRESH_INTERVAL_MS = 30_000;
+
+// Three missed server ping intervals (30s each). A silently dead path (NAT
+// expiry, no FIN) never errors the socket on its own - sends just buffer - so
+// silence from the API is the only reliable death signal on this side.
+const PING_WATCHDOG_MS = 90_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -35,7 +41,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function startWebSocketClient(
   dispatch: Map<string, CommandHandler>,
-): void {
+): () => void {
   const wsUrl =
     process.env["WS_URL"] ||
     (() => {
@@ -45,13 +51,34 @@ export function startWebSocketClient(
 
   let ws: WebSocket | null = null;
   let retryCount = 0;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let manifestTimer: ReturnType<typeof setInterval> | null = null;
+  let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
 
-  function clearHeartbeat(): void {
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
+  function clearManifestRefresh(): void {
+    if (manifestTimer) {
+      clearInterval(manifestTimer);
+      manifestTimer = null;
     }
+  }
+
+  function clearWatchdog(): void {
+    if (watchdogTimer) {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }
+
+  function armWatchdog(socket: WebSocket): void {
+    clearWatchdog();
+    watchdogTimer = setTimeout(() => {
+      logger.warn(
+        { timeoutMs: PING_WATCHDOG_MS },
+        "no ping from API; terminating socket to force reconnect",
+      );
+      socket.terminate();
+    }, PING_WATCHDOG_MS);
   }
 
   function scheduleReconnect(): void {
@@ -59,7 +86,7 @@ export function startWebSocketClient(
       BACKOFF_STEPS[Math.min(retryCount, BACKOFF_STEPS.length - 1)] ?? 60;
     retryCount++;
     logger.warn({ delaySec, attempt: retryCount }, "reconnecting");
-    setTimeout(connect, delaySec * 1000);
+    reconnectTimer = setTimeout(connect, delaySec * 1000);
   }
 
   async function sendManifest(socket: WebSocket): Promise<void> {
@@ -67,6 +94,7 @@ export function startWebSocketClient(
       detectCapabilities(),
       MANIFEST_REFRESH_TIMEOUT_MS,
     );
+    if (socket.readyState !== WebSocket.OPEN) return;
     const msg: RunnerManifestMessage = {
       messageId: randomUUID(),
       type: "manifest",
@@ -75,45 +103,12 @@ export function startWebSocketClient(
     socket.send(JSON.stringify(msg));
   }
 
-  async function sendHeartbeat(socket: WebSocket): Promise<void> {
-    if (socket.readyState !== WebSocket.OPEN) return;
-
-    // Liveness first: a bare timestamp nothing can block. Sending it before the
-    // manifest refresh means a hung Docker/k8s API can never delay the heartbeat
-    // and get this runner marked offline.
-    const heartbeatMsg: RunnerHeartbeatMessage = {
-      messageId: randomUUID(),
-      type: "heartbeat",
-      payload: { timestamp: new Date().toISOString() },
-    };
-    socket.send(JSON.stringify(heartbeatMsg));
-
-    // Manifest refresh is best-effort and time-bounded; a failure or timeout
-    // never affects the liveness ping already sent above.
-    try {
-      const manifest = await withTimeout(
-        detectCapabilities(),
-        MANIFEST_REFRESH_TIMEOUT_MS,
+  function startManifestRefresh(socket: WebSocket): void {
+    manifestTimer = setInterval(() => {
+      sendManifest(socket).catch((err: unknown) =>
+        logger.warn({ err }, "manifest refresh failed or timed out"),
       );
-      if (socket.readyState === WebSocket.OPEN) {
-        const manifestMsg: RunnerManifestMessage = {
-          messageId: randomUUID(),
-          type: "manifest",
-          payload: manifest,
-        };
-        socket.send(JSON.stringify(manifestMsg));
-      }
-    } catch (err: unknown) {
-      logger.warn({ err }, "heartbeat manifest refresh failed or timed out");
-    }
-  }
-
-  function startHeartbeat(socket: WebSocket): void {
-    heartbeatTimer = setInterval(() => {
-      sendHeartbeat(socket).catch((err: unknown) =>
-        logger.error({ err }, "heartbeat failed"),
-      );
-    }, 30_000);
+    }, MANIFEST_REFRESH_INTERVAL_MS);
   }
 
   async function handleCommand(
@@ -174,7 +169,15 @@ export function startWebSocketClient(
       sendManifest(ws!).catch((err: unknown) =>
         logger.error({ err }, "manifest send failed"),
       );
-      startHeartbeat(ws!);
+      startManifestRefresh(ws!);
+      // Armed on open so a connection that never gets pinged is also detected.
+      armWatchdog(ws!);
+    });
+
+    // ws auto-pongs at the protocol level; receiving the ping is itself the
+    // proof the API can reach us, so it just re-arms the watchdog.
+    ws.on("ping", () => {
+      armWatchdog(ws!);
     });
 
     ws.on("message", (data) => {
@@ -200,16 +203,32 @@ export function startWebSocketClient(
     });
 
     ws.on("close", (code) => {
-      clearHeartbeat();
+      clearManifestRefresh();
+      clearWatchdog();
+      if (stopped) return;
       logger.warn({ code }, "ws closed");
       scheduleReconnect();
     });
 
     ws.on("error", (err) => {
+      // Tearing down a connecting socket surfaces as an error event; after
+      // stop() that is expected shutdown noise, not a fault.
+      if (stopped) return;
       logger.error({ err }, "ws error");
       // 'close' fires after 'error', which triggers reconnect
     });
   }
 
   connect();
+
+  return function stop(): void {
+    stopped = true;
+    clearManifestRefresh();
+    clearWatchdog();
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    ws?.terminate();
+  };
 }
