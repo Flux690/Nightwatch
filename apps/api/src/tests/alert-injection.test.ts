@@ -138,7 +138,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
     const runnerId = generateRunnerToken("inject-midrun").id;
-    registerRunner(
+    const conn = registerRunner(
       runnerId,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -185,7 +185,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // Release turn 2 and let the run finish cleanly.
     gate.releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    unregisterRunner(runnerId);
+    unregisterRunner(conn);
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
@@ -304,7 +304,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const { id: runnerId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");
     setRemediationMode(runnerId, true);
-    registerRunner(
+    const conn = registerRunner(
       runnerId,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -395,6 +395,6 @@ describe("mid-run alert injection (loop seam)", () => {
     await server.close();
     gate.releaseNext(); // free-form finish for the resumed run
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    unregisterRunner(runnerId);
+    unregisterRunner(conn);
   });
 });

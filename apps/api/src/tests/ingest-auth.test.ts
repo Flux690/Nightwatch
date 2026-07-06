@@ -19,6 +19,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { useTempDb } from "./temp-db.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
@@ -55,6 +56,7 @@ describe("POST /alerts/ingest auth", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let VALID_TOKEN: string;
+  let connAuth: RunnerConnection;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -63,7 +65,7 @@ describe("POST /alerts/ingest auth", () => {
     // Resolution now matches the alert's labels against the fleet (ADR-0004),
     // so a runner advertising the matching service must be connected for the
     // 200-path tests below to mean anything.
-    registerRunner(
+    connAuth = registerRunner(
       "auth-test-runner-token",
       () => {},
       () => {},
@@ -80,7 +82,7 @@ describe("POST /alerts/ingest auth", () => {
 
   afterAll(async () => {
     await server.close();
-    unregisterRunner("auth-test-runner-token");
+    unregisterRunner(connAuth);
     cleanupDb();
     vi.unstubAllEnvs();
   });
@@ -164,6 +166,8 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let INGEST_TOKEN: string;
+  let connA: RunnerConnection | undefined;
+  let connB: RunnerConnection | undefined;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -181,8 +185,14 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   afterEach(() => {
-    unregisterRunner("runner-a-token");
-    unregisterRunner("runner-b-token");
+    if (connA) {
+      unregisterRunner(connA);
+      connA = undefined;
+    }
+    if (connB) {
+      unregisterRunner(connB);
+      connB = undefined;
+    }
   });
 
   it("rejects an unknown nwi_ token with 401", async () => {
@@ -208,7 +218,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {
-    registerRunner(
+    connA = registerRunner(
       "runner-a-token",
       () => {},
       () => {},
@@ -230,13 +240,13 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   // alert's labels are matched against the fleet, so the right runner among several is found
   // deterministically.
   it("resolves correctly among multiple connected runners by matching the advertised service", async () => {
-    registerRunner(
+    connA = registerRunner(
       "runner-a-token",
       () => {},
       () => {},
     );
     setRunnerManifest("runner-a-token", manifest("host-a"));
-    registerRunner(
+    connB = registerRunner(
       "runner-b-token",
       () => {},
       () => {},
@@ -256,7 +266,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("reports an unmatched alert in the rejected array, returning 200 so neighbouring alerts are not suppressed", async () => {
-    registerRunner(
+    connA = registerRunner(
       "runner-a-token",
       () => {},
       () => {},
@@ -278,13 +288,13 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("reports an ambiguous alert in the rejected array without a 400, listing the conflicting runners", async () => {
-    registerRunner(
+    connA = registerRunner(
       "runner-a-token",
       () => {},
       () => {},
     );
     setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
-    registerRunner(
+    connB = registerRunner(
       "runner-b-token",
       () => {},
       () => {},
@@ -324,7 +334,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     // The nwr_ token is never a WS connection; a separate runner advertises the matching service.
     // Under the old token-implies-runner model this would fail; succeeding proves routing no
     // longer reads the token at all.
-    registerRunner(
+    connA = registerRunner(
       "runner-a-token",
       () => {},
       () => {},

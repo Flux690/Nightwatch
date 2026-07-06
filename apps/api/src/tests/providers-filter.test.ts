@@ -38,6 +38,7 @@ import {
   setRunnerRemediationMode,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools.js";
 
@@ -174,6 +175,7 @@ describe("providers filter and mismatch rejection", () => {
     let cleanupDb: () => void;
     let SESSION: string;
     let K8S_TOKEN: string;
+    let connK8s: RunnerConnection;
     const executedCommands: string[] = [];
 
     beforeAll(async () => {
@@ -181,7 +183,7 @@ describe("providers filter and mismatch rejection", () => {
       SESSION = await mintTestSession();
       K8S_TOKEN = generateRunnerToken("providers-filter-k8s-001").id;
 
-      registerRunner(
+      connK8s = registerRunner(
         K8S_TOKEN,
         (raw: string) => {
           const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -224,7 +226,7 @@ describe("providers filter and mismatch rejection", () => {
     });
 
     afterAll(async () => {
-      unregisterRunner(K8S_TOKEN);
+      unregisterRunner(connK8s);
       await server.close();
       cleanupDb();
       vi.unstubAllEnvs();
@@ -403,6 +405,7 @@ describe("providers filter and mismatch rejection", () => {
       let cleanupDb: () => void;
       let SESSION: string;
       let RO_TOKEN: string;
+      let connRO: RunnerConnection;
 
       const RO_SERVICE = {
         provider: "docker" as const,
@@ -415,7 +418,7 @@ describe("providers filter and mismatch rejection", () => {
         SESSION = await mintTestSession();
         RO_TOKEN = generateRunnerToken("remediation-mode-ro-001").id;
 
-        registerRunner(
+        connRO = registerRunner(
           RO_TOKEN,
           () => {},
           () => {},
@@ -444,7 +447,7 @@ describe("providers filter and mismatch rejection", () => {
       });
 
       afterAll(async () => {
-        unregisterRunner(RO_TOKEN);
+        unregisterRunner(connRO);
         await server.close();
         cleanupDb();
         vi.unstubAllEnvs();
@@ -589,8 +592,7 @@ describe("providers filter and mismatch rejection", () => {
       ): Promise<string[]> {
         setRemediationMode(runnerId, dbRemediationEnabled);
 
-        unregisterRunner(runnerId);
-        registerRunner(
+        const conn = registerRunner(
           runnerId,
           () => {},
           () => {},
@@ -650,6 +652,7 @@ describe("providers filter and mismatch rejection", () => {
         await waitFor(() => events.some((e) => e.type === "RUN_FINISHED"));
         ws.close();
         await s.close();
+        unregisterRunner(conn);
 
         const toolsPassedToChat = capturedProvider!.chat.mock.calls[0]?.[0] as
           | Array<{ name: string }>
@@ -663,7 +666,6 @@ describe("providers filter and mismatch rejection", () => {
         expect(offered).not.toContain("restart_service");
         expect(offered).not.toContain("exec_command");
         expect(offered).toContain("get_service_logs");
-        unregisterRunner(runnerId);
       });
 
       it("DB mode true offers write tools even when manifest reports remediationEnabled:false", async () => {
@@ -671,7 +673,6 @@ describe("providers filter and mismatch rejection", () => {
         const offered = await runChatAndCaptureTools(runnerId, false, true);
         expect(offered).toContain("restart_service");
         expect(offered).toContain("exec_command");
-        unregisterRunner(runnerId);
       });
     });
   });

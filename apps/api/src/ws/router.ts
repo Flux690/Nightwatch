@@ -43,8 +43,12 @@ export function registerRunner(
   runnerId: string,
   send: (msg: string) => void,
   close: () => void,
-): void {
-  connectionsByRunnerId.set(runnerId, {
+): RunnerConnection {
+  // A reconnect can beat the old socket's close event (NAT drop, cloned VM
+  // sharing a token); displace the stale socket loudly instead of trusting
+  // close ordering.
+  connectionsByRunnerId.get(runnerId)?.close();
+  const conn: RunnerConnection = {
     runnerId,
     send,
     close,
@@ -52,11 +56,18 @@ export function registerRunner(
     hostname: null,
     lastSeen: Date.now(),
     remediationMode: null,
-  });
+  };
+  connectionsByRunnerId.set(runnerId, conn);
+  return conn;
 }
 
-export function unregisterRunner(runnerId: string): void {
-  connectionsByRunnerId.delete(runnerId);
+// Identity-checked: a displaced socket's late close event must not delete the
+// replacement connection registered under the same runnerId. Returns whether
+// this connection was actually removed.
+export function unregisterRunner(conn: RunnerConnection): boolean {
+  if (connectionsByRunnerId.get(conn.runnerId) !== conn) return false;
+  connectionsByRunnerId.delete(conn.runnerId);
+  return true;
 }
 
 // Close every runner socket authenticated with this runner id. Called by the

@@ -30,6 +30,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
 // Every alertBody() below carries the `container: "web-01"` label (anonymous
@@ -68,10 +69,11 @@ function alertBody(fingerprint: string, severity = "warning") {
 describe("alert batching (REST seam + fake timers)", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
+  let conn: RunnerConnection;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    registerRunner(
+    conn = registerRunner(
       "batching-runner-token",
       () => {},
       () => {},
@@ -84,7 +86,7 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   afterAll(async () => {
     await server.close();
-    unregisterRunner("batching-runner-token");
+    unregisterRunner(conn);
     cleanupDb();
     vi.unstubAllEnvs();
   });

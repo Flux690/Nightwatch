@@ -36,6 +36,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
 
@@ -69,13 +70,14 @@ describe("continue-request interrupts", () => {
   let cleanupDb: () => void;
   let SESSION: string;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("continue-032").id;
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -121,7 +123,7 @@ describe("continue-request interrupts", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

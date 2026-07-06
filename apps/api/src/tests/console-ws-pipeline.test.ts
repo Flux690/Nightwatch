@@ -76,6 +76,7 @@ import { registerConsoleWsRoutes } from "../ws/console.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerRunner, unregisterRunner } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 // Wait for the `connected` ack, sent only after the handler subscribes: dispatch is
@@ -99,6 +100,7 @@ describe("console WS pipeline", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   let SESSION: string;
 
   beforeAll(async () => {
@@ -108,7 +110,7 @@ describe("console WS pipeline", () => {
 
     // Persistence is local now; the provider calls no runner tool here, so the
     // runner receives nothing. Resolve defensively for any stray command.
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -130,7 +132,7 @@ describe("console WS pipeline", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

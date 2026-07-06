@@ -17,6 +17,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { useTempDb } from "./temp-db.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
@@ -47,6 +48,8 @@ describe("POST /alerts/validate", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let INGEST_TOKEN: string;
+  let connA: RunnerConnection | undefined;
+  let connB: RunnerConnection | undefined;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -63,12 +66,18 @@ describe("POST /alerts/validate", () => {
   });
 
   afterEach(() => {
-    unregisterRunner("validate-runner-a-token");
-    unregisterRunner("validate-runner-b-token");
+    if (connA) {
+      unregisterRunner(connA);
+      connA = undefined;
+    }
+    if (connB) {
+      unregisterRunner(connB);
+      connB = undefined;
+    }
   });
 
   it("returns the parsed identity and resolved runner for a well-labelled alert, without dispatching", async () => {
-    registerRunner(
+    connA = registerRunner(
       "validate-runner-a-token",
       () => {},
       () => {},
@@ -112,7 +121,7 @@ describe("POST /alerts/validate", () => {
   });
 
   it("resolves a Kubernetes alert by namespace + deployment labels", async () => {
-    registerRunner(
+    connA = registerRunner(
       "validate-runner-a-token",
       () => {},
       () => {},
@@ -167,7 +176,7 @@ describe("POST /alerts/validate", () => {
   });
 
   it("rejects a poorly-labelled alert with a diagnostic reason, still returning its parsed identity", async () => {
-    registerRunner(
+    connA = registerRunner(
       "validate-runner-a-token",
       () => {},
       () => {},
@@ -208,7 +217,7 @@ describe("POST /alerts/validate", () => {
       project: "shared",
       service: "shared",
     };
-    registerRunner(
+    connA = registerRunner(
       "validate-runner-a-token",
       () => {},
       () => {},
@@ -217,7 +226,7 @@ describe("POST /alerts/validate", () => {
       "validate-runner-a-token",
       manifest("host-a", [{ identity, status: "running" }]),
     );
-    registerRunner(
+    connB = registerRunner(
       "validate-runner-b-token",
       () => {},
       () => {},
@@ -249,7 +258,7 @@ describe("POST /alerts/validate", () => {
   });
 
   it("reports each alert in a multi-alert payload independently, so one rejection doesn't mask a sibling's match", async () => {
-    registerRunner(
+    connA = registerRunner(
       "validate-runner-a-token",
       () => {},
       () => {},

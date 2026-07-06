@@ -20,6 +20,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
 const RUNNER_TOKEN_ID = "unresolved-feed-runner";
@@ -62,12 +63,13 @@ describe("unresolved alerts feed", () => {
   let cleanupDb: () => void;
   let SESSION: string;
   let VALID_TOKEN: string;
+  let conn: RunnerConnection;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
 
-    registerRunner(
+    conn = registerRunner(
       RUNNER_TOKEN_ID,
       () => {},
       () => {},
@@ -89,7 +91,7 @@ describe("unresolved alerts feed", () => {
 
   afterAll(async () => {
     await server.close();
-    unregisterRunner(RUNNER_TOKEN_ID);
+    unregisterRunner(conn);
     cleanupDb();
     vi.unstubAllEnvs();
   });
@@ -188,7 +190,7 @@ describe("unresolved alerts feed", () => {
     it("records each alert with a no-runner reason before returning 503", async () => {
       // Unregister from the WS registry so getFleetView() returns an empty fleet.
       // The DB token row remains, so authentication still passes.
-      unregisterRunner(RUNNER_TOKEN_ID);
+      unregisterRunner(conn);
       try {
         const res = await ingest([
           {
@@ -206,7 +208,7 @@ describe("unresolved alerts feed", () => {
         expect(recorded!.identityKey).toBe("docker/any-svc/any-svc");
         expect(recorded!.rejectionReason).toMatch(/no runner connected/i);
       } finally {
-        registerRunner(
+        conn = registerRunner(
           RUNNER_TOKEN_ID,
           () => {},
           () => {},

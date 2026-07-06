@@ -34,6 +34,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { insertPendingHumanInput } from "../db/interrupts.js";
 import {
@@ -68,6 +69,7 @@ describe("remediation action record", () => {
   let cleanupDb: () => void;
   let SESSION: string;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   const restartCommands: Array<Record<string, unknown>> = [];
 
   beforeAll(async () => {
@@ -75,7 +77,7 @@ describe("remediation action record", () => {
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("remediation-007").id;
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -123,7 +125,7 @@ describe("remediation action record", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

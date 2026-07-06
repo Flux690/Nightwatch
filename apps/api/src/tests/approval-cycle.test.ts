@@ -50,6 +50,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {
@@ -81,6 +82,7 @@ describe("durable approval interrupts", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   let SESSION: string;
   const restartCommands: Array<Record<string, unknown>> = [];
 
@@ -89,7 +91,7 @@ describe("durable approval interrupts", () => {
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("approval-022").id;
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -147,7 +149,7 @@ describe("durable approval interrupts", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

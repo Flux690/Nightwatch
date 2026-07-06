@@ -69,7 +69,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
   it("returns pending interrupt rows with session cookie", async () => {
     const tokA = generateRunnerToken("qa").id;
-    registerRunner(
+    const connA = registerRunner(
       tokA,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -148,7 +148,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
       },
     );
-    unregisterRunner(tokA);
+    unregisterRunner(connA);
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
@@ -184,7 +184,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       FINISH_TURN,
     ]);
 
-    registerRunner(
+    const connC = registerRunner(
       tokC,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -235,7 +235,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
       },
     );
-    unregisterRunner(tokC);
+    unregisterRunner(connC);
   });
 
   it("returns empty list after interrupt is resolved", async () => {
@@ -264,7 +264,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       FINISH_TURN,
     ]);
 
-    registerRunner(
+    const connE = registerRunner(
       tokE,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -331,6 +331,6 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     const bodyAfter = (await resAfter.json()) as ApprovalRequest[];
     expect(bodyAfter.length).toBe(0);
 
-    unregisterRunner(tokE);
+    unregisterRunner(connE);
   });
 });

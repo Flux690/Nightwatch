@@ -11,6 +11,7 @@ import {
   setRunnerManifest,
   getFleetView,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand, sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
 
@@ -57,7 +58,7 @@ function makeSend(
 }
 
 describe("router", () => {
-  const runnerIds: string[] = [];
+  const conns: RunnerConnection[] = [];
 
   function connect(
     hostname: string,
@@ -70,18 +71,17 @@ describe("router", () => {
     }>;
   } {
     const runnerId = randomUUID();
-    runnerIds.push(runnerId);
     const commands: Array<{
       commandName: string;
       commandInput: Record<string, unknown>;
     }> = [];
-    registerRunner(runnerId, makeSend(commands), () => {});
+    conns.push(registerRunner(runnerId, makeSend(commands), () => {}));
     setRunnerManifest(runnerId, makeManifest(hostname, containers));
     return { runnerId, commands };
   }
 
   afterEach(() => {
-    for (const id of runnerIds.splice(0)) unregisterRunner(id);
+    for (const conn of conns.splice(0)) unregisterRunner(conn);
     vi.restoreAllMocks();
   });
 

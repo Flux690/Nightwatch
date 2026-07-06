@@ -44,7 +44,7 @@ export async function registerWsRoutes(
 
       const { id: runnerId } = tokenRecord;
 
-      registerRunner(
+      const conn = registerRunner(
         runnerId,
         (msg) => {
           if (socket.readyState === socket.OPEN) socket.send(msg);
@@ -95,11 +95,17 @@ export async function registerWsRoutes(
       });
 
       socket.on("close", () => {
-        unregisterRunner(runnerId);
-        fastify.log.warn(
-          { runnerId: runnerId.slice(0, 8) },
-          "runner disconnected",
-        );
+        if (unregisterRunner(conn)) {
+          fastify.log.warn(
+            { runnerId: runnerId.slice(0, 8) },
+            "runner disconnected",
+          );
+        } else {
+          fastify.log.info(
+            { runnerId: runnerId.slice(0, 8) },
+            "stale runner socket closed after replacement",
+          );
+        }
       });
 
       socket.on("error", (err: Error) => {

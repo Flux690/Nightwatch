@@ -32,6 +32,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
 // A free-form finish: no tool call ends the run successfully.
@@ -88,13 +89,15 @@ function alertBody(
 describe("POST /alerts/ingest dispatch behavior", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
+  let connA: RunnerConnection;
+  let connB: RunnerConnection;
 
   // Rate-limit and dedup are keyed by runnerId, so these two tests need alerts resolving to
   // different runners - else they share the per-runner counter. Two container labels on two
   // runners give two runnerIds (ADR-0004), the isolation two tokens used to give for free.
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    registerRunner(
+    connA = registerRunner(
       "dispatch-runner-a-token",
       () => {},
       () => {},
@@ -103,7 +106,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       "dispatch-runner-a-token",
       manifest("host-web-01", [dockerService("web-01")]),
     );
-    registerRunner(
+    connB = registerRunner(
       "dispatch-runner-b-token",
       () => {},
       () => {},
@@ -119,8 +122,8 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   afterAll(async () => {
     await server.close();
-    unregisterRunner("dispatch-runner-a-token");
-    unregisterRunner("dispatch-runner-b-token");
+    unregisterRunner(connA);
+    unregisterRunner(connB);
     cleanupDb();
     vi.unstubAllEnvs();
   });

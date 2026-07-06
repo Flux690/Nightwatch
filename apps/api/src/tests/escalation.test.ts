@@ -33,6 +33,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {
@@ -58,6 +59,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   let SESSION: string;
 
   beforeAll(async () => {
@@ -65,7 +67,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("test-esc-runner").id;
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -107,7 +109,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

@@ -48,6 +48,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getDb } from "../db/client.js";
 
@@ -113,6 +114,7 @@ describe("remediation circuit breaker", () => {
   let cleanupDb: () => void;
   let SESSION: string;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   const executedCommands: string[] = [];
 
   function restartWrite(service: Record<string, unknown>): ScriptedTurn {
@@ -226,7 +228,7 @@ describe("remediation circuit breaker", () => {
       )
       .run(PRIOR_SESSION, new Date().toISOString());
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -277,7 +279,7 @@ describe("remediation circuit breaker", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

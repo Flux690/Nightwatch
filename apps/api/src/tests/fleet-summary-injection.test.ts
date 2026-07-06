@@ -34,6 +34,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { dispatcher } from "../dispatcher.js";
 import type { CapabilityManifest, NormalizedAlert } from "@nightwatch/shared";
 
@@ -89,6 +90,8 @@ describe("fleet summary injection", () => {
   let cleanupDb: () => void;
   let runnerIdA: string;
   let runnerIdB: string;
+  let connA: RunnerConnection | undefined;
+  let connB: RunnerConnection | undefined;
 
   beforeAll(() => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-fleet-summary-tests-32b");
@@ -103,8 +106,14 @@ describe("fleet summary injection", () => {
   afterEach(() => {
     mockCreateProvider.mockClear();
     // Unregister all runners between tests so fleet state is clean.
-    unregisterRunner(runnerIdA);
-    if (runnerIdB) unregisterRunner(runnerIdB);
+    if (connA) {
+      unregisterRunner(connA);
+      connA = undefined;
+    }
+    if (connB) {
+      unregisterRunner(connB);
+      connB = undefined;
+    }
   });
 
   describe("multi-runner fleet", () => {
@@ -114,14 +123,14 @@ describe("fleet summary injection", () => {
     });
 
     it("first user message lists every server and its advertised services", async () => {
-      registerRunner(
+      connA = registerRunner(
         runnerIdA,
         () => {},
         () => {},
       );
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
-      registerRunner(
+      connB = registerRunner(
         runnerIdB,
         () => {},
         () => {},
@@ -148,14 +157,14 @@ describe("fleet summary injection", () => {
     });
 
     it("a neighbouring server's service identity appears so the agent can reference it", async () => {
-      registerRunner(
+      connA = registerRunner(
         runnerIdA,
         () => {},
         () => {},
       );
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
-      registerRunner(
+      connB = registerRunner(
         runnerIdB,
         () => {},
         () => {},
@@ -178,14 +187,14 @@ describe("fleet summary injection", () => {
     });
 
     it("does not send the raw capability manifest to the model", async () => {
-      registerRunner(
+      connA = registerRunner(
         runnerIdA,
         () => {},
         () => {},
       );
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
-      registerRunner(
+      connB = registerRunner(
         runnerIdB,
         () => {},
         () => {},
@@ -215,7 +224,7 @@ describe("fleet summary injection", () => {
     });
 
     it("single-runner fleet: no fleet summary section in first message", async () => {
-      registerRunner(
+      connA = registerRunner(
         runnerIdA,
         () => {},
         () => {},

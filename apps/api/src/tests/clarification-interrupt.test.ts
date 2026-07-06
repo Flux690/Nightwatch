@@ -38,6 +38,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 interface WsEvent {
@@ -77,6 +78,7 @@ describe("clarification interrupts", () => {
   let port: number;
   let cleanupDb: () => void;
   let TEST_TOKEN: string;
+  let conn: RunnerConnection;
   let SESSION: string;
   const restartCommands: Array<Record<string, unknown>> = [];
 
@@ -85,7 +87,7 @@ describe("clarification interrupts", () => {
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("clarification-023").id;
 
-    registerRunner(
+    conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
@@ -136,7 +138,7 @@ describe("clarification interrupts", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(TEST_TOKEN);
+    unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();

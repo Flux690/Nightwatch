@@ -204,6 +204,50 @@ describe("flat runner registry", () => {
     b.close();
   });
 
+  it("a reconnect on the same token displaces the old socket and survives its late close", async () => {
+    const { plaintext: token, id: tokenId } = generateRunnerToken("displace");
+
+    const a = await connectRunner(
+      port,
+      token,
+      manifest("displace-host", ["nginx"]),
+    );
+    await waitFor(async () => {
+      const live = (await getRunners()).filter(
+        (r) => r.token === tokenId && r.online && r.manifest !== null,
+      );
+      return live.length === 1 ? true : undefined;
+    });
+
+    // A second connection on the same token displaces A: the server closes it.
+    const aClosed = new Promise<void>((resolve) => {
+      a.on("close", () => resolve());
+    });
+    const b = await connectRunner(
+      port,
+      token,
+      manifest("displace-host", ["nginx"]),
+    );
+    await aClosed;
+
+    // Regression: A's late close event must not delete B's registration, so
+    // the runner stays online through the displacement.
+    await waitFor(async () => {
+      const live = (await getRunners()).filter(
+        (r) => r.token === tokenId && r.online && r.manifest !== null,
+      );
+      return live.length === 1 ? true : undefined;
+    });
+
+    b.close();
+    await waitFor(async () => {
+      const live = (await getRunners()).filter(
+        (r) => r.token === tokenId && r.online,
+      );
+      return live.length === 0 ? true : undefined;
+    });
+  });
+
   it("two runners on different tokens both appear in the fleet", async () => {
     const { plaintext: tokenA, id: tokenAId } = generateRunnerToken("cross-a");
     const { plaintext: tokenB, id: tokenBId } = generateRunnerToken("cross-b");

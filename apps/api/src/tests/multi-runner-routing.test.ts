@@ -46,6 +46,7 @@ import {
   unregisterRunner,
   setRunnerManifest,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
@@ -181,6 +182,7 @@ describe("multi-runner routing", () => {
     commandName: string;
     commandInput: Record<string, unknown>;
   }> = [];
+  const conns: RunnerConnection[] = [];
 
   beforeAll(async () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
@@ -189,18 +191,18 @@ describe("multi-runner routing", () => {
     runnerIdA = generateRunnerToken("routing-a").id;
     runnerIdB = generateRunnerToken("routing-b").id;
 
-    registerRunner(runnerIdA, makeSend(commandsA), () => {});
+    conns.push(registerRunner(runnerIdA, makeSend(commandsA), () => {}));
     setRunnerManifest(runnerIdA, makeManifest("web-01", ["nginx", "api"]));
 
-    registerRunner(runnerIdB, makeSend(commandsB), () => {});
+    conns.push(registerRunner(runnerIdB, makeSend(commandsB), () => {}));
     setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
     runnerId2 = generateRunnerToken("routing-cross").id;
-    registerRunner(runnerId2, makeSend(commandsC), () => {});
+    conns.push(registerRunner(runnerId2, makeSend(commandsC), () => {}));
     setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
 
     runnerIdK = generateRunnerToken("routing-k8s").id;
-    registerRunner(runnerIdK, makeSend(commandsK), () => {});
+    conns.push(registerRunner(runnerIdK, makeSend(commandsK), () => {}));
     setRunnerManifest(
       runnerIdK,
       makeK8sManifest("k8s-cluster-01", [
@@ -217,10 +219,7 @@ describe("multi-runner routing", () => {
   });
 
   afterAll(async () => {
-    unregisterRunner(runnerIdA);
-    unregisterRunner(runnerIdB);
-    unregisterRunner(runnerId2);
-    unregisterRunner(runnerIdK);
+    for (const conn of conns.splice(0)) unregisterRunner(conn);
     await server.close();
     cleanupDb();
     vi.unstubAllEnvs();
@@ -509,6 +508,8 @@ describe("assigned-name server-scoped routing", () => {
   let cleanupDb2: () => void;
   let runnerIdS1: string;
   let runnerIdS2: string;
+  let connS1: RunnerConnection;
+  let connS2: RunnerConnection;
 
   const commandsS1: Array<{
     commandName: string;
@@ -548,14 +549,14 @@ describe("assigned-name server-scoped routing", () => {
     await mintTestSession();
 
     runnerIdS1 = generateRunnerToken("scoped-runner-1").id;
-    registerRunner(runnerIdS1, makeSend(commandsS1), () => {});
+    connS1 = registerRunner(runnerIdS1, makeSend(commandsS1), () => {});
     setRunnerManifest(
       runnerIdS1,
       makeScopedManifest("prod-server-01", ["api", "worker"]),
     );
 
     runnerIdS2 = generateRunnerToken("scoped-runner-2").id;
-    registerRunner(runnerIdS2, makeSend(commandsS2), () => {});
+    connS2 = registerRunner(runnerIdS2, makeSend(commandsS2), () => {});
     setRunnerManifest(
       runnerIdS2,
       makeScopedManifest("prod-server-02", ["api", "db"]),
@@ -563,8 +564,8 @@ describe("assigned-name server-scoped routing", () => {
   });
 
   afterAll(() => {
-    unregisterRunner(runnerIdS1);
-    unregisterRunner(runnerIdS2);
+    unregisterRunner(connS1);
+    unregisterRunner(connS2);
     cleanupDb2();
     vi.unstubAllEnvs();
   });

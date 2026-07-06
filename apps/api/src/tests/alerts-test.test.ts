@@ -11,6 +11,7 @@ import {
   setRunnerManifest,
   unregisterRunner,
 } from "../ws/router.js";
+import type { RunnerConnection } from "../ws/router.js";
 
 function manifest(
   hostname: string,
@@ -36,6 +37,7 @@ describe("POST /alerts/test", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let SESSION: string;
+  let conn: RunnerConnection | undefined;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -51,7 +53,10 @@ describe("POST /alerts/test", () => {
   });
 
   afterEach(() => {
-    unregisterRunner("verify-runner-token");
+    if (conn) {
+      unregisterRunner(conn);
+      conn = undefined;
+    }
   });
 
   it("returns 401 without a session cookie", async () => {
@@ -86,7 +91,7 @@ describe("POST /alerts/test", () => {
   });
 
   it("resolves a labeled alert through the real pipeline to the connected runner", async () => {
-    registerRunner(
+    conn = registerRunner(
       "verify-runner-token",
       () => {},
       () => {},
@@ -126,7 +131,7 @@ describe("POST /alerts/test", () => {
   });
 
   it("fails verification when the runner advertises no services to route-test", async () => {
-    registerRunner(
+    conn = registerRunner(
       "verify-runner-token",
       () => {},
       () => {},
@@ -146,13 +151,13 @@ describe("POST /alerts/test", () => {
   });
 
   it("returns 404 for an offline runner, never guessing reachability", async () => {
-    registerRunner(
+    const offline = registerRunner(
       "verify-runner-token",
       () => {},
       () => {},
     );
     setRunnerManifest("verify-runner-token", manifest("host-verify"));
-    unregisterRunner("verify-runner-token");
+    unregisterRunner(offline);
 
     const res = await server.inject({
       method: "POST",
