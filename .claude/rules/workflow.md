@@ -13,6 +13,7 @@ Every issue cuts through all layers and is demoable/verifiable on its own.
   (ready-for-agent|in-progress|blocked), `blocked_by`. The `ready-for-agent`
   marker is `status: ready-for-agent`.
 - **Single enduring reference:** `README.md` (project, architecture). Not a per-feature PRD - per-feature PRDs link to it. There is no separate PRD.md or docs/adr/.
+- **`issues/` is entirely gitignored** (local work tracking) - `git log` on any path under it returns nothing by design. Completing an issue means `mv issues/NNN-title.md issues/done/NNN-title.md` on disk, never a git operation; leave the frontmatter untouched. Never `git add` it and don't expect the move to show up in a commit.
 
 ## The cycle
 
@@ -32,6 +33,7 @@ pick feature (HITL) -> /grill-with-docs (HITL) -> /to-prd -> /to-issues (HITL)
 
 - `pnpm typecheck`
 - `pnpm test`
+- A green suite is the floor, not the finish line. Before the first commit attempt (not after being asked), re-read the full diff fresh against the issue's acceptance criteria worded literally, and actively hunt for boundary-crossing cases (corrupted/empty persisted state, concurrent mutation, off-by-one race windows) rather than just the happy path the tests were written against.
 
 ## TDD
 

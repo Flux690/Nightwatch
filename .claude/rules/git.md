@@ -15,6 +15,13 @@
   one commit. Each commit must still be substantial - a coherent unit of related
   changes, not a 1-2 file micro-commit; fold trivial changes into the related
   body of work.
+- Exception: when a single issue's `/tdd` implementation spans several vertical
+  slices (e.g. backend change + shared type + several new frontend modules),
+  "task" granularity is the issue as a whole, not each red-green-refactor slice.
+  Keep working slice to slice without committing, then make one commit at the
+  end covering the whole issue. Still run `pnpm typecheck && pnpm test` after
+  every slice - only the commit cadence changes. Multiple distinct issues in one
+  sitting still each warrant their own commit.
 - Never amend published commits. Create a new commit instead.
 - Never `git push` under any circumstances. Only the human pushes. No exceptions.
 - Never `git push --force` to main. Blocked by hooks.
