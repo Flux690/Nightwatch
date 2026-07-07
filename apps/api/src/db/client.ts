@@ -109,6 +109,19 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_remediation_breaker
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
+  -- Single GitHub integration row (id 'github'): one repo bound per integration.
+  -- The token is encrypted at rest and never returned by any endpoint; there is
+  -- no reveal use case - regeneration happens on GitHub via the deep link.
+  CREATE TABLE IF NOT EXISTS github_integration (
+    id               TEXT PRIMARY KEY,
+    token_encrypted  TEXT NOT NULL,
+    repo_owner       TEXT NOT NULL,
+    repo_name        TEXT NOT NULL,
+    token_expires_at TEXT,
+    validated_at     TEXT NOT NULL,
+    created_at       TEXT NOT NULL
+  );
+
 `;
 
 let _db: Database.Database | undefined;

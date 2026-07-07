@@ -8,6 +8,7 @@ import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
+import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
 import { SessionView } from "./pages/SessionView.js";
@@ -66,6 +67,12 @@ const auditRoute = createRoute({
   component: AuditLogPage,
 });
 
+const integrationsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations",
+  component: IntegrationsPage,
+});
+
 const fleetRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/fleet",
@@ -87,6 +94,7 @@ const routeTree = rootRoute.addChildren([
     addServerRoute,
     settingsRoute,
     auditRoute,
+    integrationsRoute,
   ]),
 ]);
 

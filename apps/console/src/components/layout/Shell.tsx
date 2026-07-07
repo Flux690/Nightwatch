@@ -8,6 +8,7 @@ import {
   Network,
   PanelLeft,
   Menu,
+  Plug,
 } from "lucide-react";
 
 import {
@@ -19,6 +20,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -28,6 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
+import { useGitHubExpiryDays } from "@/hooks/useGitHubExpiryDays";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
 import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
@@ -63,6 +66,8 @@ function ShellContent({
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const attentionCount = useAttentionCount();
+  const githubExpiryDays = useGitHubExpiryDays();
+  const githubExpiring = githubExpiryDays !== null && githubExpiryDays <= 7;
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -152,6 +157,26 @@ function ShellContent({
                   <ScrollText {...ICON_NAV} />
                   <span>Audit log</span>
                 </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Integrations"
+                  aria-label="Integrations"
+                  isActive={isActive("/integrations")}
+                  onClick={dismissMobile}
+                  render={<Link to="/integrations" />}
+                >
+                  <Plug {...ICON_NAV} />
+                  <span>Integrations</span>
+                </SidebarMenuButton>
+                {githubExpiring && (
+                  <SidebarMenuBadge
+                    aria-label="GitHub token expiring"
+                    className="bg-warning-tint font-semibold text-warning"
+                  >
+                    {githubExpiryDays <= 0 ? "!" : `${githubExpiryDays}d`}
+                  </SidebarMenuBadge>
+                )}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>

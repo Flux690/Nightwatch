@@ -85,3 +85,10 @@ export type {
   ReasoningEffort,
   AgentConfig,
 } from "./config.js";
+export type {
+  GitHubErrorCode,
+  GitHubIntegrationStatus,
+  GitHubRepoSummary,
+  GitHubRepoPage,
+  GitHubErrorBody,
+} from "./integrations.js";
