@@ -165,7 +165,8 @@ describe("IntegrationsPage", () => {
     );
 
     const bindCall = fetchMock.mock.calls.find(
-      ([url, init]) => !url.includes("/repos") && init?.method === "POST",
+      ([url, init]) =>
+        url === "/api/integrations/github" && init?.method === "POST",
     );
     expect(bindCall).toBeDefined();
     expect(JSON.parse(String(bindCall?.[1]?.body))).toEqual({

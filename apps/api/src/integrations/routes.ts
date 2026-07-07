@@ -13,6 +13,8 @@ import {
   ownerIsOrganization,
   validateRepoAccess,
 } from "./github.js";
+import { preflight } from "../sandbox/preflight.js";
+import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
 import type { GitHubIntegrationStatus } from "@nightwatch/shared";
 
@@ -64,6 +66,14 @@ export async function registerIntegrationRoutes(
     "/integrations/github",
     { preHandler: requireSession },
     async () => statusPayload(),
+  );
+
+  // Sandbox prerequisites, checked when the operator clicks Connect: fail
+  // loud at setup time, never at 3am mid-incident.
+  fastify.post(
+    "/integrations/github/preflight",
+    { preHandler: requireSession },
+    async () => preflight(),
   );
 
   // Picker proxy. During onboarding the token rides the body (nothing stored
@@ -137,11 +147,13 @@ export async function registerIntegrationRoutes(
   );
 
   // Disconnect deletes our stored copy only; full invalidation requires
-  // revoking the token on GitHub, and the console says so plainly.
+  // revoking the token on GitHub, and the console says so plainly. Sandboxes
+  // are torn down first, while the token still exists for a final push.
   fastify.delete(
     "/integrations/github",
     { preHandler: requireSession },
     async (_request, reply) => {
+      await teardownAll("github integration disconnected");
       deleteGitHubIntegration();
       logger.info("github integration disconnected");
       return reply.code(204).send();

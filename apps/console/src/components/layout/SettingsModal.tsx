@@ -38,7 +38,13 @@ const ERROR_LABELS: Record<string, string> = {
   unknown_model: "Model not found on endpoint",
 };
 
-type SectionId = "model" | "api-key" | "loop" | "alerting" | "account";
+type SectionId =
+  | "model"
+  | "api-key"
+  | "loop"
+  | "sandbox"
+  | "alerting"
+  | "account";
 
 const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   {
@@ -57,6 +63,12 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
     id: "loop",
     label: "Loop",
     description: "Retry and timeout budgets for a single investigation run.",
+  },
+  {
+    id: "sandbox",
+    label: "Sandbox",
+    description:
+      "Lifecycle and resource limits for per-session code sandboxes.",
   },
   {
     id: "alerting",
@@ -564,6 +576,81 @@ export function SettingsModal({
                             onChange={(e) =>
                               setField(
                                 "toolTimeoutMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-code-budget">
+                            Code session budget (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-code-budget"
+                            type="number"
+                            step={60000}
+                            value={form.codeSessionBudgetMs}
+                            onChange={(e) =>
+                              setField(
+                                "codeSessionBudgetMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="sandbox">
+                    {form && (
+                      <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
+                        <Field>
+                          <FieldLabel htmlFor="settings-sandbox-idle">
+                            Idle cleanup (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-sandbox-idle"
+                            type="number"
+                            step={60000}
+                            value={form.sandboxIdleTimeoutMs}
+                            onChange={(e) =>
+                              setField(
+                                "sandboxIdleTimeoutMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-sandbox-cpus">
+                            CPU limit (cores)
+                          </FieldLabel>
+                          <Input
+                            id="settings-sandbox-cpus"
+                            type="number"
+                            step={1}
+                            value={form.sandboxCpus}
+                            onChange={(e) =>
+                              setField(
+                                "sandboxCpus",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-sandbox-memory">
+                            Memory limit (MB)
+                          </FieldLabel>
+                          <Input
+                            id="settings-sandbox-memory"
+                            type="number"
+                            step={256}
+                            value={form.sandboxMemoryMb}
+                            onChange={(e) =>
+                              setField(
+                                "sandboxMemoryMb",
                                 numberValue(e.currentTarget.value),
                               )
                             }

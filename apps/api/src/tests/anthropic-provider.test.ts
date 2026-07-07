@@ -31,6 +31,10 @@ const BASE_CONFIG: AgentConfig = {
   toolTimeoutMs: 15_000,
   remediationBreakerLimit: 5,
   remediationBreakerWindowMs: 600_000,
+  codeSessionBudgetMs: 1_200_000,
+  sandboxIdleTimeoutMs: 3_600_000,
+  sandboxCpus: 2,
+  sandboxMemoryMb: 4096,
 };
 
 const READ_TOOL = {

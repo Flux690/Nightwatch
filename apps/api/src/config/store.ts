@@ -1,8 +1,12 @@
 import { getDb } from "../db/client.js";
 import {
+  DEFAULT_CODE_SESSION_BUDGET_MS,
   DEFAULT_HARD_TIMEOUT_MS,
   DEFAULT_REMEDIATION_BREAKER_LIMIT,
   DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
+  DEFAULT_SANDBOX_CPUS,
+  DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
+  DEFAULT_SANDBOX_MEMORY_MB,
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
@@ -32,6 +36,10 @@ type ConfigRow = {
   toolTimeoutMs: number;
   remediationBreakerLimit: number;
   remediationBreakerWindowMs: number;
+  codeSessionBudgetMs: number;
+  sandboxIdleTimeoutMs: number;
+  sandboxCpus: number;
+  sandboxMemoryMb: number;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -47,6 +55,10 @@ const SELECT_ROW = `
          tool_timeout_ms    AS toolTimeoutMs,
          remediation_breaker_limit     AS remediationBreakerLimit,
          remediation_breaker_window_ms AS remediationBreakerWindowMs,
+         code_session_budget_ms  AS codeSessionBudgetMs,
+         sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
+         sandbox_cpus            AS sandboxCpus,
+         sandbox_memory_mb       AS sandboxMemoryMb,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -81,6 +93,10 @@ function defaultConfigFromEnv(): AgentConfig {
     toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
     remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
     remediationBreakerWindowMs: DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
+    codeSessionBudgetMs: DEFAULT_CODE_SESSION_BUDGET_MS,
+    sandboxIdleTimeoutMs: DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
+    sandboxCpus: DEFAULT_SANDBOX_CPUS,
+    sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -114,6 +130,10 @@ export function loadConfig(): AgentConfig {
     toolTimeoutMs: row.toolTimeoutMs,
     remediationBreakerLimit: row.remediationBreakerLimit,
     remediationBreakerWindowMs: row.remediationBreakerWindowMs,
+    codeSessionBudgetMs: row.codeSessionBudgetMs,
+    sandboxIdleTimeoutMs: row.sandboxIdleTimeoutMs,
+    sandboxCpus: row.sandboxCpus,
+    sandboxMemoryMb: row.sandboxMemoryMb,
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -137,11 +157,13 @@ const UPSERT_CONFIG = `
     id, provider, model, thinking, max_output_tokens, max_retries,
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
+    code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
+    @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -155,6 +177,10 @@ const UPSERT_CONFIG = `
     tool_timeout_ms = excluded.tool_timeout_ms,
     remediation_breaker_limit = excluded.remediation_breaker_limit,
     remediation_breaker_window_ms = excluded.remediation_breaker_window_ms,
+    code_session_budget_ms = excluded.code_session_budget_ms,
+    sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
+    sandbox_cpus = excluded.sandbox_cpus,
+    sandbox_memory_mb = excluded.sandbox_memory_mb,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -179,6 +205,10 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       toolTimeoutMs: next.toolTimeoutMs,
       remediationBreakerLimit: next.remediationBreakerLimit,
       remediationBreakerWindowMs: next.remediationBreakerWindowMs,
+      codeSessionBudgetMs: next.codeSessionBudgetMs,
+      sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,
+      sandboxCpus: next.sandboxCpus,
+      sandboxMemoryMb: next.sandboxMemoryMb,
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,

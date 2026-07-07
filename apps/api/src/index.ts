@@ -17,6 +17,7 @@ import { registerConnectRoutes } from "./runners/connect.js";
 import { registerManifestRoutes } from "./runners/manifest.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
+import { reapOrphans } from "./sandbox/docker.js";
 
 // Explicit SECRET_KEY env var wins; otherwise a key file beside the
 // SQLite database is reused or generated on first boot.
@@ -54,6 +55,14 @@ const start = async (): Promise<void> => {
   try {
     initDb();
     fastify.log.info("SQLite ready");
+    // Sandbox containers are derived state (session map is memory-only), so
+    // every labeled survivor of a restart is an orphan. Best-effort: a host
+    // without Docker just has no sandboxes to reap.
+    void reapOrphans()
+      .then((n) => {
+        if (n > 0) fastify.log.info(`reaped ${n} orphaned sandbox containers`);
+      })
+      .catch(() => undefined);
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
     const host = process.env["HOST"] ?? "127.0.0.1";
     await fastify.listen({ port, host });

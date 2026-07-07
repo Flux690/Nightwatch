@@ -14,3 +14,11 @@ export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
 // within 10 minutes before further writes are refused.
 export const DEFAULT_REMEDIATION_BREAKER_LIMIT = 5;
 export const DEFAULT_REMEDIATION_BREAKER_WINDOW_MS = 10 * 60_000;
+
+// Code sessions: the budget a session extends to on every repo tool call
+// (clone + install + tests dwarf the 5-minute investigation default), and the
+// sandbox container's lifecycle/resource knobs.
+export const DEFAULT_CODE_SESSION_BUDGET_MS = 20 * 60_000;
+export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 60 * 60_000;
+export const DEFAULT_SANDBOX_CPUS = 2;
+export const DEFAULT_SANDBOX_MEMORY_MB = 4096;

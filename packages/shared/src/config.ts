@@ -20,6 +20,12 @@ export interface AgentConfig {
   // landed within the window, so a crash-loop fix cannot become a restart storm.
   remediationBreakerLimit: number;
   remediationBreakerWindowMs: number;
+  // Code sessions: any repo tool call re-extends the session deadline to
+  // codeSessionBudgetMs; the sandbox knobs bound the per-session container.
+  codeSessionBudgetMs: number;
+  sandboxIdleTimeoutMs: number;
+  sandboxCpus: number;
+  sandboxMemoryMb: number;
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;

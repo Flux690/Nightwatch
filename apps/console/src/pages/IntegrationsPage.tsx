@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import type {
@@ -189,6 +189,31 @@ function GitHubConnectFlow({
   const [validating, setValidating] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [preflightIssue, setPreflightIssue] = useState<string | null>(null);
+
+  // Sandbox prerequisites (docker + git on the API host), checked the moment
+  // the flow opens: fail loud at setup time, never at 3am mid-incident.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await githubPost<{ ok: boolean; reason?: string }>(
+          "/api/integrations/github/preflight",
+          {},
+        );
+        if (!cancelled && !result.ok) {
+          setPreflightIssue(
+            result.reason ?? "Sandbox prerequisites are missing",
+          );
+        }
+      } catch {
+        // Advisory only - an unreachable preflight must not block onboarding.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     if (repos === null) return [];
@@ -257,6 +282,15 @@ function GitHubConnectFlow({
 
   return (
     <div className="flex flex-col gap-4">
+      {preflightIssue !== null && (
+        <Alert variant="destructive">
+          <AlertTitle>Code sandbox prerequisites missing</AlertTitle>
+          <AlertDescription>
+            {preflightIssue}. You can finish connecting, but code sessions will
+            fail until this is fixed on the API host.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-col gap-2">
         <FieldLabel htmlFor="github-token">Personal access token</FieldLabel>
         <FieldDescription>
