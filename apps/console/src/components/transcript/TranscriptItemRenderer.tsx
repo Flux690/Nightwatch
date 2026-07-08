@@ -11,11 +11,48 @@ import {
 } from "@/components/ui/collapsible";
 import { Message } from "@/components/ui/message";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import type { TranscriptItem, ThinkingItem } from "./types.js";
+import type { TranscriptItem, ThinkingItem, ToolCardItem } from "./types.js";
 import { ToolCardPanel } from "./ToolCardPanel.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
+import { DiffCard, parseFileChange } from "./DiffCard.js";
+import { TerminalCard, parseExecResult } from "./TerminalCard.js";
+import { PRCard, parsePullRequestResult } from "./PRCard.js";
+
+/* Repo tools return structured payloads and get bespoke cards; anything that
+   doesn't parse (running, corrective error strings, other tools) falls back
+   to the generic IN/OUT panel. */
+function renderToolCard(item: ToolCardItem): React.JSX.Element {
+  if (item.result !== null) {
+    if (
+      item.toolName === "repo_edit_file" ||
+      item.toolName === "repo_write_file"
+    ) {
+      const change = parseFileChange(item.result);
+      if (change !== null) {
+        return <DiffCard toolName={item.toolName} change={change} />;
+      }
+    }
+    if (item.toolName === "repo_exec") {
+      const exec = parseExecResult(item.result);
+      if (exec !== null) {
+        return <TerminalCard input={item.input} result={exec} />;
+      }
+    }
+    if (item.toolName === "open_pull_request") {
+      const pr = parsePullRequestResult(item.result);
+      if (pr !== null) return <PRCard pr={pr} />;
+    }
+  }
+  return (
+    <ToolCardPanel
+      toolName={item.toolName}
+      input={item.input}
+      result={item.result}
+    />
+  );
+}
 
 function UserTurn({ text }: { text: string }): React.JSX.Element {
   return (
@@ -108,13 +145,7 @@ export function TranscriptItemRenderer({
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":
-      return (
-        <ToolCardPanel
-          toolName={item.toolName}
-          input={item.input}
-          result={item.result}
-        />
-      );
+      return renderToolCard(item);
     case "approval_card":
       return (
         <ApprovalCardPanel

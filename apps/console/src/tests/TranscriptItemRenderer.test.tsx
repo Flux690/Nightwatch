@@ -165,4 +165,104 @@ describe("TranscriptItemRenderer", () => {
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
     });
   });
+
+  describe("repo tool cards", () => {
+    const DIFF_RESULT = {
+      path: "src/app.ts",
+      diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n-const a = 1;\n+const a = 42;",
+    };
+
+    it("renders repo_edit_file results as a colored diff card", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-1",
+        toolName: "repo_edit_file",
+        input: { path: "src/app.ts" },
+        result: DIFF_RESULT,
+      });
+
+      expect(screen.getByTestId("diff-card")).toBeInTheDocument();
+      expect(screen.getByText("src/app.ts")).toBeInTheDocument();
+      expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
+      expect(screen.getByText("-const a = 1;")).toBeInTheDocument();
+      // File-header lines are folded into the card header, not the body.
+      expect(screen.queryByText("--- a/src/app.ts")).not.toBeInTheDocument();
+    });
+
+    it("parses the persisted JSON-string form of a diff result too", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-2",
+        toolName: "repo_write_file",
+        input: { path: "src/app.ts" },
+        result: JSON.stringify(DIFF_RESULT),
+      });
+
+      expect(screen.getByTestId("diff-card")).toBeInTheDocument();
+      expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
+    });
+
+    it("renders repo_exec results as a terminal card with an exit badge", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-3",
+        toolName: "repo_exec",
+        input: { command: "pnpm test" },
+        result: { exitCode: 1, output: "1 test failed", truncated: true },
+      });
+
+      expect(screen.getByTestId("terminal-card")).toBeInTheDocument();
+      expect(screen.getByText(/pnpm test/)).toBeInTheDocument();
+      expect(screen.getByText("exit 1")).toBeInTheDocument();
+      expect(screen.getByText("1 test failed")).toBeInTheDocument();
+      expect(screen.getByText(/output truncated/)).toBeInTheDocument();
+    });
+
+    it("renders open_pull_request results as a PR card with the GitHub link", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-4",
+        toolName: "open_pull_request",
+        input: { title: "Fix the leak" },
+        result: {
+          action: "created",
+          number: 42,
+          url: "https://github.com/acme/api/pull/42",
+          draft: true,
+          message: "Created draft PR #42.",
+          verification: { ran: true, command: "pnpm run test", passed: true },
+        },
+      });
+
+      expect(screen.getByTestId("pr-card")).toBeInTheDocument();
+      expect(screen.getByText("Pull request #42")).toBeInTheDocument();
+      expect(screen.getByText("Draft")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /view on github/i }),
+      ).toHaveAttribute("href", "https://github.com/acme/api/pull/42");
+      expect(screen.getByText(/pnpm run test passed/)).toBeInTheDocument();
+    });
+
+    it("falls back to the generic panel while a repo tool is still running", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-5",
+        toolName: "repo_edit_file",
+        input: { path: "src/app.ts" },
+        result: null,
+      });
+      expect(screen.getByTestId("tool-card")).toBeInTheDocument();
+    });
+
+    it("falls back to the generic panel for corrective error strings", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-6",
+        toolName: "repo_exec",
+        input: { command: "ls" },
+        result: "GitHub integration is not configured.",
+      });
+      expect(screen.getByTestId("tool-card")).toBeInTheDocument();
+    });
+  });
 });
