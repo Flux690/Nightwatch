@@ -1,11 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { buildInitialContext, buildChatContext } from "./context.js";
+import {
+  buildInitialContext,
+  buildChatContext,
+  type PromptOptions,
+} from "./context.js";
 import { effectiveToolset } from "./tools/toolset.js";
+import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
 import { currentFleetProviders, currentRemediationEnabled } from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
+import { getGitHubIntegration } from "../db/github-integration.js";
 import {
   createSession,
   appendSessionMessages,
@@ -163,10 +169,27 @@ export async function runInvestigation(
   ];
   const remediationEnabled = currentRemediationEnabled();
   const fleetView = getFleetView();
+  const integration = getGitHubIntegration();
+  const promptOptions: PromptOptions = {
+    budgetMinutes: Math.max(1, Math.round(config.hardTimeoutMs / 60_000)),
+    codeBudgetMinutes: Math.max(
+      1,
+      Math.round(config.codeSessionBudgetMs / 60_000),
+    ),
+    repo:
+      integration === null
+        ? null
+        : `${integration.repoOwner}/${integration.repoName}`,
+  };
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(allAlerts, remediationEnabled, fleetView)
-      : buildChatContext(remediationEnabled, fleetView);
+      ? buildInitialContext(
+          allAlerts,
+          remediationEnabled,
+          fleetView,
+          promptOptions,
+        )
+      : buildChatContext(remediationEnabled, fleetView, promptOptions);
   const provider = createProvider(systemPrompt, config, apiKey);
 
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
@@ -201,15 +224,18 @@ export async function runInvestigation(
   };
 
   let turn = 0;
-  const deadline = Date.now() + config.hardTimeoutMs;
+  let deadline = Date.now() + config.hardTimeoutMs;
 
   while (Date.now() < deadline) {
     turn++;
 
     const fleetProviders = currentFleetProviders();
+    // Re-read per turn like the remediation switch: disconnecting the GitHub
+    // integration strips the repo tools from the very next turn.
     const toolset = effectiveToolset(
       fleetProviders,
       currentRemediationEnabled(),
+      getGitHubIntegration() !== null,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
@@ -259,6 +285,7 @@ export async function runInvestigation(
 
     const execCtx: ToolExecuteContext = {
       toolTimeoutMs: config.toolTimeoutMs,
+      sessionId,
     };
 
     const { toolResults, gated } = await processToolUses({
@@ -269,6 +296,14 @@ export async function runInvestigation(
       config,
       log,
     });
+
+    // Any repo tool call re-extends the deadline to the code-session budget:
+    // clone + install + tests dwarf the investigation default. Extending on
+    // every call, not just the first, is what makes the rule survive resume -
+    // each runInvestigation computes a fresh deadline and re-extends itself.
+    if (response.toolUses.some((t) => REPO_TOOL_NAMES.has(t.name))) {
+      deadline = Math.max(deadline, Date.now() + config.codeSessionBudgetMs);
+    }
 
     if (gated !== null) {
       // Durably suspend: persist the assistant turn + interrupt row in one transaction; the run

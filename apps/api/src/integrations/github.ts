@@ -37,10 +37,23 @@ function parseExpiryHeader(res: Response): string | null {
 
 // Shared error ladder: 401 and 403-with-SSO are deterministic signals and map
 // the same way on every GitHub call; everything else is the caller's business.
-async function githubFetch(token: string, path: string): Promise<Response> {
+async function githubFetch(
+  token: string,
+  path: string,
+  init?: { method: string; body: unknown },
+): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(`${GITHUB_API}${path}`, { headers: baseHeaders(token) });
+    res = await fetch(`${GITHUB_API}${path}`, {
+      headers:
+        init === undefined
+          ? baseHeaders(token)
+          : { ...baseHeaders(token), "Content-Type": "application/json" },
+      ...(init !== undefined && {
+        method: init.method,
+        body: JSON.stringify(init.body),
+      }),
+    });
   } catch {
     throw new GitHubApiError("network", 0, "Could not reach GitHub");
   }
@@ -154,4 +167,135 @@ export async function ownerIsOrganization(owner: string): Promise<boolean> {
 // the sandbox receives this value opaque and redacts it from all output.
 export function buildAuthHeader(token: string): string {
   return `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+}
+
+export interface PullRequestInfo {
+  number: number;
+  url: string;
+  draft: boolean;
+}
+
+function toPullRequestInfo(pr: Record<string, unknown>): PullRequestInfo {
+  return {
+    number: typeof pr["number"] === "number" ? pr["number"] : 0,
+    url: typeof pr["html_url"] === "string" ? pr["html_url"] : "",
+    draft: pr["draft"] === true,
+  };
+}
+
+// One open PR per branch is the idempotency mechanism: the caller looks the
+// branch up before creating, so a second call updates instead of duplicating.
+export async function findOpenPullRequestByBranch(
+  token: string,
+  owner: string,
+  name: string,
+  branch: string,
+): Promise<PullRequestInfo | null> {
+  const res = await githubFetch(
+    token,
+    `/repos/${owner}/${name}/pulls?state=open&head=${encodeURIComponent(`${owner}:${branch}`)}`,
+  );
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} looking up pull requests`,
+    );
+  }
+  // Narrowed field-by-field below, same policy as listRepos.
+  const body = (await res.json()) as Array<Record<string, unknown>>;
+  const pr = body[0];
+  return pr === undefined ? null : toPullRequestInfo(pr);
+}
+
+async function defaultBranch(
+  token: string,
+  owner: string,
+  name: string,
+): Promise<string> {
+  const res = await githubFetch(token, `/repos/${owner}/${name}`);
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} reading the repository`,
+    );
+  }
+  // Narrowed to the single field we read.
+  const body = (await res.json()) as Record<string, unknown>;
+  return typeof body["default_branch"] === "string"
+    ? body["default_branch"]
+    : "main";
+}
+
+function isDraftUnsupported(status: number, bodyText: string): boolean {
+  return status === 422 && /draft pull request/i.test(bodyText);
+}
+
+// Draft is a courtesy latch, not the safety mechanism: where the repo's plan
+// rejects drafts (422 on private repos under Free) the PR is created regular,
+// and the returned draft:false lets the caller say so plainly.
+export async function createPullRequest(
+  token: string,
+  owner: string,
+  name: string,
+  req: { title: string; body: string; head: string; draft: boolean },
+): Promise<PullRequestInfo> {
+  const base = await defaultBranch(token, owner, name);
+  const payload = {
+    title: req.title,
+    body: req.body,
+    head: req.head,
+    base,
+    draft: req.draft,
+  };
+  let res = await githubFetch(token, `/repos/${owner}/${name}/pulls`, {
+    method: "POST",
+    body: payload,
+  });
+  if (!res.ok && req.draft) {
+    const text = await res.text();
+    if (!isDraftUnsupported(res.status, text)) {
+      throw new GitHubApiError(
+        "network",
+        res.status,
+        `GitHub refused the pull request: ${text.slice(0, 300)}`,
+      );
+    }
+    res = await githubFetch(token, `/repos/${owner}/${name}/pulls`, {
+      method: "POST",
+      body: { ...payload, draft: false },
+    });
+  }
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub refused the pull request: ${(await res.text()).slice(0, 300)}`,
+    );
+  }
+  // Narrowed field-by-field in toPullRequestInfo.
+  const body = (await res.json()) as Record<string, unknown>;
+  return toPullRequestInfo(body);
+}
+
+export async function updatePullRequest(
+  token: string,
+  owner: string,
+  name: string,
+  prNumber: number,
+  patch: { title: string; body: string },
+): Promise<void> {
+  const res = await githubFetch(
+    token,
+    `/repos/${owner}/${name}/pulls/${prNumber}`,
+    { method: "PATCH", body: patch },
+  );
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} updating pull request #${prNumber}`,
+    );
+  }
 }

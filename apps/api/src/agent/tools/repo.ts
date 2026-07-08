@@ -1,0 +1,317 @@
+import { decrypt } from "../../config/crypto.js";
+import { loadConfig } from "../../config/store.js";
+import { getGitHubIntegration } from "../../db/github-integration.js";
+import { getSession } from "../../db/sessions.js";
+import {
+  buildAuthHeader,
+  createPullRequest,
+  findOpenPullRequestByBranch,
+  GitHubApiError,
+} from "../../integrations/github.js";
+import {
+  GitOperationError,
+  PathEscapeError,
+  ReadRequiredError,
+  SandboxUnavailableError,
+} from "../../sandbox/errors.js";
+import { logger } from "../../logger.js";
+import {
+  withWorkspace,
+  type Workspace,
+  type WorkspaceOptions,
+} from "../../sandbox/workspace.js";
+import { readRepoFile } from "../../sandbox/tools/read-file.js";
+import { editRepoFile } from "../../sandbox/tools/edit-file.js";
+import { writeRepoFile } from "../../sandbox/tools/write-file.js";
+import { execInRepo } from "../../sandbox/tools/exec.js";
+import type { ServiceIdentity } from "@nightwatch/shared";
+import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
+
+const COMMIT_AUTHOR = { name: "Nightwatch", email: "noreply@nightwatch.local" };
+
+function slugTarget(identity: ServiceIdentity): string {
+  return identity.provider === "docker" ? identity.service : identity.workload;
+}
+
+function slugify(text: string): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "");
+  return slug.length > 0 ? slug : "incident";
+}
+
+// A pure function of the session row: any resume recomputes the identical
+// branch with nothing persisted, so one session maps to one branch forever.
+export function branchNameFor(sessionId: string): string {
+  const alert = getSession(sessionId)?.originatingAlert ?? null;
+  const slug =
+    alert === null
+      ? "chat"
+      : slugify(`${alert.alertType}-${slugTarget(alert.targetIdentifier)}`);
+  return `nightwatch/fix-${slug}-${sessionId.slice(0, 8)}`;
+}
+
+function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
+  const integration = getGitHubIntegration();
+  if (integration === null) return null;
+  const config = loadConfig();
+  const { repoOwner, repoName } = integration;
+  return {
+    cloneUrl: `https://github.com/${repoOwner}/${repoName}.git`,
+    branch: branchNameFor(sessionId),
+    authHeader: () => {
+      const row = getGitHubIntegration();
+      if (row === null) {
+        return Promise.reject(
+          new SandboxUnavailableError("GitHub integration was disconnected"),
+        );
+      }
+      return Promise.resolve(buildAuthHeader(decrypt(row.tokenEncrypted)));
+    },
+    limits: { cpus: config.sandboxCpus, memoryMb: config.sandboxMemoryMb },
+    idleTimeoutMs: config.sandboxIdleTimeoutMs,
+    commitAuthor: COMMIT_AUTHOR,
+    pullRequests: {
+      create: (req) =>
+        createPullRequest(tokenFor(), repoOwner, repoName, {
+          ...req,
+          head: branchNameFor(sessionId),
+        }),
+      findOpenByBranch: (branch) =>
+        findOpenPullRequestByBranch(tokenFor(), repoOwner, repoName, branch),
+    },
+    log: logger,
+  };
+
+  function tokenFor(): string {
+    const row = getGitHubIntegration();
+    if (row === null) {
+      throw new SandboxUnavailableError("GitHub integration was disconnected");
+    }
+    return decrypt(row.tokenEncrypted);
+  }
+}
+
+function correctiveMessage(err: unknown): string {
+  if (err instanceof PathEscapeError) {
+    return `${err.message}. Use a path relative to the repository root.`;
+  }
+  if (err instanceof ReadRequiredError) return err.message;
+  if (err instanceof GitHubApiError) {
+    return `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page. Continue the investigation without repo tools.`;
+  }
+  if (
+    err instanceof SandboxUnavailableError ||
+    err instanceof GitOperationError
+  ) {
+    return `${err.message}. Repo tools are unavailable until the operator fixes this (Integrations page). Continue the investigation without them.`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function runRepoTool(
+  ctx: ToolExecuteContext,
+  fn: (ws: Workspace) => Promise<unknown>,
+): Promise<ToolExecuteResult> {
+  const options = workspaceOptionsFor(ctx.sessionId);
+  if (options === null) {
+    return {
+      content:
+        "GitHub integration is not configured. The operator can connect a repository from the Integrations page. Continue without repo tools.",
+      is_error: true,
+    };
+  }
+  try {
+    return { content: await withWorkspace(ctx.sessionId, options, fn) };
+  } catch (err) {
+    return { content: correctiveMessage(err), is_error: true };
+  }
+}
+
+function requireString(
+  input: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = input[key];
+  return typeof value === "string" ? value : null;
+}
+
+function optionalNumber(
+  input: Record<string, unknown>,
+  key: string,
+): number | undefined {
+  const value = input[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function badInput(message: string): ToolExecuteResult {
+  return { content: message, is_error: true };
+}
+
+export const REPO_TOOLS: Tool[] = [
+  {
+    schema: {
+      name: "repo_read_file",
+      description:
+        "Read a file from the connected repository's isolated checkout (never the production host). Returns numbered lines. Paths are relative to the repository root.",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Repo-relative file path, e.g. src/server.ts.",
+          },
+          offset: {
+            type: "number",
+            description: "1-based line to start from (default 1).",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum lines to return (default and cap 2000).",
+          },
+        },
+        required: ["path"],
+      },
+    },
+    access: "read",
+    timeoutMs: 60_000,
+    on: "api",
+    execute: (input, ctx) => {
+      const path = requireString(input, "path");
+      if (path === null) {
+        return Promise.resolve(badInput("path (string) is required."));
+      }
+      return runRepoTool(ctx, (ws) =>
+        readRepoFile(ws, {
+          path,
+          ...(optionalNumber(input, "offset") !== undefined && {
+            offset: optionalNumber(input, "offset"),
+          }),
+          ...(optionalNumber(input, "limit") !== undefined && {
+            limit: optionalNumber(input, "limit"),
+          }),
+        }),
+      );
+    },
+  },
+  {
+    schema: {
+      name: "repo_edit_file",
+      description:
+        "Replace an exact string in a repository file. old_string must match the current content exactly and appear exactly once (or pass replace_all: true). The file must have been read this session. Result is a unified diff.",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Repo-relative file path." },
+          old_string: {
+            type: "string",
+            description: "Exact text to replace, copied from repo_read_file.",
+          },
+          new_string: { type: "string", description: "Replacement text." },
+          replace_all: {
+            type: "boolean",
+            description: "Replace every occurrence (default false).",
+          },
+        },
+        required: ["path", "old_string", "new_string"],
+      },
+    },
+    access: "read",
+    timeoutMs: 60_000,
+    on: "api",
+    execute: (input, ctx) => {
+      const path = requireString(input, "path");
+      const oldString = requireString(input, "old_string");
+      const newString = requireString(input, "new_string");
+      if (path === null || oldString === null || newString === null) {
+        return Promise.resolve(
+          badInput("path, old_string and new_string (strings) are required."),
+        );
+      }
+      return runRepoTool(ctx, (ws) =>
+        editRepoFile(ws, {
+          path,
+          old_string: oldString,
+          new_string: newString,
+          replace_all: input["replace_all"] === true,
+        }),
+      );
+    },
+  },
+  {
+    schema: {
+      name: "repo_write_file",
+      description:
+        "Create a new repository file or fully overwrite an existing one (overwriting requires having read it this session). Parent directories are created. Result is a unified diff. Prefer repo_edit_file for targeted changes.",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "Repo-relative file path." },
+          content: {
+            type: "string",
+            description: "Full file content to write.",
+          },
+        },
+        required: ["path", "content"],
+      },
+    },
+    access: "read",
+    timeoutMs: 60_000,
+    on: "api",
+    execute: (input, ctx) => {
+      const path = requireString(input, "path");
+      const content = requireString(input, "content");
+      if (path === null || content === null) {
+        return Promise.resolve(
+          badInput("path and content (strings) are required."),
+        );
+      }
+      return runRepoTool(ctx, (ws) => writeRepoFile(ws, { path, content }));
+    },
+  },
+  {
+    schema: {
+      name: "repo_exec",
+      description:
+        "Run a shell command inside the repository sandbox at the repo root (or cwd): install, build, test, grep, read-only git. This is the isolated checkout, never a production host. Use structured repo tools for edits; exec is for observing and verifying. Output is capped head+tail.",
+      input_schema: {
+        type: "object",
+        properties: {
+          command: {
+            type: "string",
+            description: "Shell command line to run.",
+          },
+          cwd: {
+            type: "string",
+            description: "Repo-relative working directory (default repo root).",
+          },
+        },
+        required: ["command"],
+      },
+    },
+    access: "read",
+    timeoutMs: 300_000,
+    on: "api",
+    execute: (input, ctx) => {
+      const command = requireString(input, "command");
+      if (command === null) {
+        return Promise.resolve(badInput("command (string) is required."));
+      }
+      const cwd = requireString(input, "cwd");
+      return runRepoTool(ctx, (ws) =>
+        execInRepo(
+          ws,
+          { command, ...(cwd !== null && { cwd }) },
+          ctx.toolTimeoutMs,
+        ),
+      );
+    },
+  },
+];
+
+export const REPO_TOOL_NAMES: ReadonlySet<string> = new Set(
+  REPO_TOOLS.map((t) => t.schema.name),
+);

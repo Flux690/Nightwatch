@@ -21,3 +21,14 @@ export class GitOperationError extends Error {
     this.name = "GitOperationError";
   }
 }
+
+// Read-before-edit guard: mutating a file never read this session is refused.
+// The message doubles as the corrective tool error the model sees.
+export class ReadRequiredError extends Error {
+  constructor(readonly path: string) {
+    super(
+      `${path} has not been read this session. Read it with repo_read_file before modifying it.`,
+    );
+    this.name = "ReadRequiredError";
+  }
+}
