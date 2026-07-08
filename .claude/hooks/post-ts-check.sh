@@ -35,6 +35,37 @@ fi
 
 SHORT="${FILE##*/}"
 
+# apps/api/src/sandbox is package-shaped by design: node builtins, external
+# packages and ./ siblings only. App imports (db/, session/, @nightwatch/*,
+# the logger) would make the eventual extraction surgery instead of a git mv.
+if [[ "$FILE" == *"apps/api/src/sandbox/"* ]]; then
+  VIOLATIONS=$(python3 -c "
+import os, re, sys
+path = sys.argv[1]
+root = os.path.abspath('apps/api/src/sandbox')
+src = open(path).read()
+bad = set()
+for m in re.finditer(r'from\s+[\"\']([^\"\']+)[\"\']', src):
+    spec = m.group(1)
+    if spec.startswith('node:'):
+        continue
+    if spec.startswith('.'):
+        target = os.path.abspath(os.path.join(os.path.dirname(path), spec))
+        if not (target == root or target.startswith(root + os.sep)):
+            bad.add(spec)
+        continue
+    if spec.startswith('@nightwatch/'):
+        bad.add(spec)
+for spec in sorted(bad):
+    print(spec)
+" "$FILE" 2>/dev/null)
+  if [[ -n "$VIOLATIONS" ]]; then
+    echo "$TS [$SID] [post-ts-check] SANDBOX BOUNDARY violation in $SHORT: $VIOLATIONS" >> "$LOG"
+    echo "sandbox import-boundary violation in $SHORT — apps/api/src/sandbox may import only node builtins, external packages, and files inside sandbox/. Host specifics enter via WorkspaceOptions callbacks. Forbidden imports found: $VIOLATIONS" >&2
+    exit 2
+  fi
+fi
+
 pnpm exec prettier --write "$FILE" 2>/dev/null
 
 ERRORS=$(cd "$PKG" && pnpm exec tsc --noEmit 2>&1 | grep "error TS" | head -10)

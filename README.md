@@ -128,7 +128,32 @@ The runner appears in your fleet within seconds of the install command running. 
 | `NIGHTWATCH_DB_PATH` | no | Path to the SQLite file (default: `/var/nightwatch/nightwatch.db`). The parent directory is created on boot if it does not exist. |
 | `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file beside the database, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
 | `CONSOLE_ORIGINS` | no | Comma-separated allowlist of origins for the console WebSocket. Unset allows any `localhost`/`127.0.0.1` origin (default: unset). |
+| `NIGHTWATCH_WORKSPACES_DIR` | no | Root directory for per-session GitHub sandbox checkouts (default: `/var/nightwatch/workspaces`). |
 | `LOG_LEVEL` | no | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`). |
+
+### GitHub integration
+
+Connecting a repository (console → Integrations) lets investigations read the
+code, verify a fix and propose it as a draft pull request that a human reviews
+and merges on GitHub - Nightwatch never merges. Requirements and properties:
+
+- **Docker and git must be installed on the API host** - each code session
+  runs in a hardened, throwaway `node:24` container there (checked when you
+  click Connect, not at 3am). If the API itself runs in a container it needs
+  the Docker socket mounted.
+- The fine-grained token is encrypted at rest, never enters the sandbox
+  container, and never appears in any URL or log; git authenticates
+  per-invocation so nothing lands in `.git/config`.
+- Honest v1 risk statement: sandbox egress is open, so a prompt-injected
+  `repo_exec` could exfiltrate **the user's source code** (e.g. an HTTP POST
+  of the workspace). "No secrets in the container" is true and necessary but
+  not sufficient - the code itself is the asset at risk until the
+  proxy-fronted egress allowlist ships (planned fast-follow). The worst code
+  outcome otherwise is a commit on a `nightwatch/*` branch inside a draft PR
+  behind GitHub's human merge gate.
+- We recommend enabling branch protection on the repository's default branch
+  (GitHub → Settings → Branches); Nightwatch's token deliberately has no
+  Administration permission and cannot do this for you.
 
 ### Runner (`apps/runner/.env`)
 
