@@ -51,6 +51,10 @@ export interface WorkspaceOptions {
       draft: boolean;
     }): Promise<PullRequestRef>;
     findOpenByBranch(branch: string): Promise<PullRequestRef | null>;
+    update(
+      prNumber: number,
+      patch: { title: string; body: string },
+    ): Promise<void>;
   };
   log?: SandboxLog;
 }

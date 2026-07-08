@@ -283,7 +283,7 @@ export async function runInvestigation(
       return;
     }
 
-    const execCtx: ToolExecuteContext = {
+    const execCtx: Omit<ToolExecuteContext, "toolUseId"> = {
       toolTimeoutMs: config.toolTimeoutMs,
       sessionId,
     };

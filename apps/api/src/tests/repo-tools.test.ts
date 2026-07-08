@@ -116,6 +116,7 @@ const SESSION_ID = "aaaabbbb-0000-4000-8000-000000000001";
 const CTX: ToolExecuteContext = {
   toolTimeoutMs: 15_000,
   sessionId: SESSION_ID,
+  toolUseId: "static",
 };
 
 function tool(name: string): Tool {

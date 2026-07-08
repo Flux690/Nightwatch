@@ -133,3 +133,20 @@ export async function push(
     authHeader,
   });
 }
+
+// Files the session's branch changed relative to where it forked from the
+// remote (origin/HEAD is set by clone). Best-effort: a missing symref just
+// means an empty list, never a failed PR.
+export async function changedFiles(dir: string): Promise<string[]> {
+  try {
+    const out = await runGit(["diff", "--name-only", "origin/HEAD...HEAD"], {
+      cwd: dir,
+    });
+    return out
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+  } catch {
+    return [];
+  }
+}

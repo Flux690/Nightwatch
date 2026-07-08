@@ -22,6 +22,18 @@ export class GitOperationError extends Error {
   }
 }
 
+// Verification reran fresh and failed: nothing was pushed, no PR was touched.
+// Carries the output tail so the corrective error shows the actual failure.
+export class VerificationFailedError extends Error {
+  constructor(
+    readonly command: string,
+    readonly output: string,
+  ) {
+    super(`Verification failed (${command})`);
+    this.name = "VerificationFailedError";
+  }
+}
+
 // Read-before-edit guard: mutating a file never read this session is refused.
 // The message doubles as the corrective tool error the model sees.
 export class ReadRequiredError extends Error {

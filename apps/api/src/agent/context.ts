@@ -45,7 +45,7 @@ function budgetLine(opts: PromptOptions): string {
 function repoToolsAddendum(repo: string): string {
   return `
 
-You can work on the connected GitHub repository ${repo} with the repo_* tools (repo_read_file, repo_edit_file, repo_write_file, repo_exec). They operate in an isolated checkout on a dedicated branch - never on any production host; the repo_ prefix marks which world a tool touches. Read a file before editing it (edits to unread files are refused), keep edits targeted, and verify your change with repo_exec (install, build, test). Use these when the root cause is in the application code itself.`;
+You can work on the connected GitHub repository ${repo} with the repo_* tools (repo_read_file, repo_edit_file, repo_write_file, repo_exec). They operate in an isolated checkout on a dedicated branch - never on any production host; the repo_ prefix marks which world a tool touches. Read a file before editing it (edits to unread files are refused), keep edits targeted, and verify your change with repo_exec (install, build, test). When the fix is complete and verified, propose it with open_pull_request - a human reviews and merges on GitHub; you never merge. Use these when the root cause is in the application code itself.`;
 }
 
 // Appended when the runner has remediation off: write tools are already filtered out of

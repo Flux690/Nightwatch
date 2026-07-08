@@ -153,6 +153,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
       findOpenByBranch: () => Promise.resolve(null),
+      update: () => Promise.resolve(),
     },
     ...overrides,
   };

@@ -6,13 +6,19 @@ import {
   buildAuthHeader,
   createPullRequest,
   findOpenPullRequestByBranch,
+  updatePullRequest,
   GitHubApiError,
 } from "../../integrations/github.js";
+import {
+  insertExecutingRemediationAction,
+  settleRemediationAction,
+} from "../../db/remediation-actions.js";
 import {
   GitOperationError,
   PathEscapeError,
   ReadRequiredError,
   SandboxUnavailableError,
+  VerificationFailedError,
 } from "../../sandbox/errors.js";
 import { logger } from "../../logger.js";
 import {
@@ -24,6 +30,8 @@ import { readRepoFile } from "../../sandbox/tools/read-file.js";
 import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
+import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
+import type { VerificationResult } from "../../sandbox/verification.js";
 import type { ServiceIdentity } from "@nightwatch/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
@@ -82,6 +90,8 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
         }),
       findOpenByBranch: (branch) =>
         findOpenPullRequestByBranch(tokenFor(), repoOwner, repoName, branch),
+      update: (prNumber, patch) =>
+        updatePullRequest(tokenFor(), repoOwner, repoName, prNumber, patch),
     },
     log: logger,
   };
@@ -100,6 +110,10 @@ function correctiveMessage(err: unknown): string {
     return `${err.message}. Use a path relative to the repository root.`;
   }
   if (err instanceof ReadRequiredError) return err.message;
+  if (err instanceof VerificationFailedError) {
+    const tail = err.output.slice(-2000);
+    return `Verification failed (${err.command}) - the pull request was NOT opened and nothing was pushed:\n${tail}\nFix the failures, then call open_pull_request again.`;
+  }
   if (err instanceof GitHubApiError) {
     return `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page. Continue the investigation without repo tools.`;
   }
@@ -149,6 +163,55 @@ function optionalNumber(
 
 function badInput(message: string): ToolExecuteResult {
   return { content: message, is_error: true };
+}
+
+// The final PR body is host policy: model text first, then incident context,
+// files changed, verification verbatim (or its honest absence), and a
+// plain-text session reference (no PUBLIC_URL exists yet to link to).
+function composePrBody(
+  sessionId: string,
+  branch: string,
+  modelBody: string,
+  verification: VerificationResult,
+  filesChanged: string[],
+): string {
+  const session = getSession(sessionId);
+  const alert = session?.originatingAlert ?? null;
+  const sections: string[] = [];
+  if (modelBody.trim().length > 0) sections.push(modelBody.trim());
+
+  sections.push(
+    alert === null
+      ? "## Incident\n\nStarted from a Nightwatch chat session."
+      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Target: ${JSON.stringify(alert.targetIdentifier)}\n- Fired at: ${alert.firedAt}`,
+  );
+
+  if (filesChanged.length > 0) {
+    const shown = filesChanged.slice(0, 50);
+    const more =
+      filesChanged.length > shown.length
+        ? `\n- ... and ${filesChanged.length - shown.length} more`
+        : "";
+    sections.push(
+      `## Files changed\n\n${shown.map((f) => `- ${f}`).join("\n")}${more}`,
+    );
+  }
+
+  if (verification.ran) {
+    const output = (verification.output ?? "").slice(-2000).trim();
+    sections.push(
+      `## Verification\n\n\`${verification.command ?? ""}\` ${verification.passed === true ? "passed" : "failed"}\n\n\`\`\`\n${output}\n\`\`\``,
+    );
+  } else {
+    sections.push(
+      "## Verification\n\nNo automated verification was run: no test, typecheck or build script was detected.",
+    );
+  }
+
+  sections.push(
+    `---\nOpened by Nightwatch from session "${session?.title ?? "unknown"}" (${sessionId}), branch \`${branch}\`.`,
+  );
+  return sections.join("\n\n");
 }
 
 export const REPO_TOOLS: Tool[] = [
@@ -306,6 +369,74 @@ export const REPO_TOOLS: Tool[] = [
           ws,
           { command, ...(cwd !== null && { cwd }) },
           ctx.toolTimeoutMs,
+        ),
+      );
+    },
+  },
+  {
+    schema: {
+      name: "open_pull_request",
+      description:
+        "Propose this session's repository changes as a draft pull request. Verification (test/typecheck/build) reruns fresh first - on failure nothing is pushed and you get the output. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context, verification result and a session reference are appended to the body automatically.",
+      input_schema: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "PR title: imperative summary of the fix.",
+          },
+          body: {
+            type: "string",
+            description:
+              "Explanation of the root cause and why this change fixes it.",
+          },
+        },
+        required: ["title"],
+      },
+    },
+    // Deliberately read: the PR is a proposal, the merge is the
+    // GitHub-enforced human gate, and gating creation would stall the 3am AFK
+    // flow this product exists for. `access` means "may run unattended", not
+    // "has no external effect" - this is the first externally-visible read.
+    access: "read",
+    timeoutMs: 600_000,
+    on: "api",
+    execute: (input, ctx) => {
+      const title = requireString(input, "title");
+      if (title === null) {
+        return Promise.resolve(badInput("title (string) is required."));
+      }
+      const modelBody = requireString(input, "body") ?? "";
+      return runRepoTool(ctx, (ws) =>
+        openPullRequest(
+          ws,
+          { title, verificationTimeoutMs: ctx.toolTimeoutMs },
+          {
+            beginAudit: () =>
+              insertExecutingRemediationAction({
+                toolUseId: ctx.toolUseId,
+                sessionId: ctx.sessionId,
+                toolName: "open_pull_request",
+                input: { title, body: modelBody },
+                resolvedBy: "agent",
+              }),
+            settleAudit: (ok, detail) => {
+              settleRemediationAction(
+                ctx.sessionId,
+                ctx.toolUseId,
+                ok ? "executed" : "failed",
+                detail,
+              );
+            },
+            composeBody: (verification, filesChanged) =>
+              composePrBody(
+                ctx.sessionId,
+                ws.branch,
+                modelBody,
+                verification,
+                filesChanged,
+              ),
+          },
         ),
       );
     },

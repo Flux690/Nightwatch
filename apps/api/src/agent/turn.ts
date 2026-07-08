@@ -31,7 +31,9 @@ export async function processToolUses(params: {
   toolUses: ToolUse[];
   toolset: Tool[];
   sessionId: string;
-  execCtx: ToolExecuteContext;
+  // toolUseId is per call, so the loop hands over a turn-scoped base context
+  // and each execution below completes it with its own tool_use id.
+  execCtx: Omit<ToolExecuteContext, "toolUseId">;
   config: AgentConfig;
   log: typeof logger;
 }): Promise<TurnOutcome> {
@@ -124,7 +126,10 @@ export async function processToolUses(params: {
       toolName: tool.name,
       input: tool.input,
     });
-    const result = await executeTool(entry, tool.input, execCtx);
+    const result = await executeTool(entry, tool.input, {
+      ...execCtx,
+      toolUseId: tool.id,
+    });
     toolResults.push({
       tool_use_id: tool.id,
       content:
