@@ -85,7 +85,7 @@ describe("GitHub integration routes", () => {
   // Return type inferred: fastify's inject() overloads resolve to the
   // promise form only when called with options and no callback.
   function authed(opts: {
-    method: "GET" | "POST" | "DELETE";
+    method: "GET" | "POST" | "PATCH" | "DELETE";
     url: string;
     payload?: Record<string, unknown>;
   }) {
@@ -115,6 +115,17 @@ describe("GitHub integration routes", () => {
         url: "/integrations/github",
       });
       expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe("PATCH /integrations/github (rebind repo) before onboarding", () => {
+    it("rejects rebinding when nothing is configured yet", async () => {
+      const res = await authed({
+        method: "PATCH",
+        url: "/integrations/github",
+        payload: { repo: "acme/api" },
+      });
+      expect(res.statusCode).toBe(400);
     });
   });
 
@@ -311,6 +322,62 @@ describe("GitHub integration routes", () => {
       });
       expect(res.statusCode).toBe(400);
       expect(mock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("PATCH /integrations/github (rebind repo)", () => {
+    it("rebinds to a different granted repo without a token in the request body", async () => {
+      const mock = stubFetch((url) => {
+        expect(url).toContain("/repos/acme/other");
+        return jsonResponse({ full_name: "acme/other" });
+      });
+
+      const res = await authed({
+        method: "PATCH",
+        url: "/integrations/github",
+        payload: { repo: "acme/other" },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toMatchObject({
+        configured: true,
+        repo: "acme/other",
+      });
+
+      const [, calledInit] = mock.mock.calls[0] ?? [];
+      const headers = (calledInit?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe(`Bearer ${TOKEN}`);
+
+      const row = getDb()
+        .prepare(
+          "SELECT token_encrypted FROM github_integration WHERE id = 'github'",
+        )
+        .get() as { token_encrypted: string };
+      expect(decrypt(row.token_encrypted)).toBe(TOKEN);
+    });
+
+    it("surfaces repo_not_found the same way bind does, without accepting a token", async () => {
+      stubFetch((url) => {
+        if (url.includes("/repos/acme/missing")) {
+          return jsonResponse({ message: "Not Found" }, { status: 404 });
+        }
+        return jsonResponse({ type: "Organization" });
+      });
+      const res = await authed({
+        method: "PATCH",
+        url: "/integrations/github",
+        payload: { repo: "acme/missing", token: "ignored" },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body)).toMatchObject({ code: "repo_not_found" });
+    });
+
+    it("requires a session", async () => {
+      const res = await server.inject({
+        method: "PATCH",
+        url: "/integrations/github",
+        payload: { repo: "acme/other" },
+      });
+      expect(res.statusCode).toBe(401);
     });
   });
 

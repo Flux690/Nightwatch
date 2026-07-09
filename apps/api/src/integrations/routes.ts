@@ -6,6 +6,7 @@ import {
   deleteGitHubIntegration,
   getGitHubIntegration,
   saveGitHubIntegration,
+  updateGitHubIntegrationRepo,
 } from "../db/github-integration.js";
 import {
   GitHubApiError,
@@ -25,6 +26,10 @@ const ReposBodySchema = z.object({
 
 const ConnectBodySchema = z.object({
   token: z.string().min(1),
+  repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
+});
+
+const RebindBodySchema = z.object({
   repo: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
 });
 
@@ -130,6 +135,47 @@ export async function registerIntegrationRoutes(
         });
         logger.info({ repo }, "github integration configured");
         return await reply.code(201).send(statusPayload());
+      } catch (err) {
+        if (err instanceof GitHubApiError && err.code === "repo_not_found") {
+          const orgApprovalUrl = (await ownerIsOrganization(owner))
+            ? `https://github.com/organizations/${owner}/settings/personal-access-token-requests`
+            : undefined;
+          return reply.code(404).send({
+            error: err.message,
+            code: err.code,
+            ...(orgApprovalUrl !== undefined && { orgApprovalUrl }),
+          });
+        }
+        return sendGitHubError(reply, err);
+      }
+    },
+  );
+
+  // Rebind: point the existing credential at a different repo. Never
+  // accepts a token - it only ever uses the one already stored, so the
+  // request itself proves nothing beyond "pick a different repo".
+  fastify.patch(
+    "/integrations/github",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const stored = getGitHubIntegration();
+      if (!stored) {
+        return reply.code(400).send({ error: "GitHub is not connected" });
+      }
+      const parsed = RebindBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: parsed.error.message });
+      }
+      const [owner, name] = parsed.data.repo.split("/") as [string, string];
+      try {
+        const token = decrypt(stored.tokenEncrypted);
+        await validateRepoAccess(token, owner, name);
+        updateGitHubIntegrationRepo(owner, name);
+        logger.info(
+          { repo: parsed.data.repo },
+          "github integration repository changed",
+        );
+        return await reply.code(200).send(statusPayload());
       } catch (err) {
         if (err instanceof GitHubApiError && err.code === "repo_not_found") {
           const orgApprovalUrl = (await ownerIsOrganization(owner))

@@ -9,6 +9,7 @@ import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
+import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
 import { SessionView } from "./pages/SessionView.js";
@@ -73,6 +74,12 @@ const integrationsRoute = createRoute({
   component: IntegrationsPage,
 });
 
+const githubConnectRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/github",
+  component: GitHubConnectPage,
+});
+
 const fleetRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/fleet",
@@ -95,6 +102,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     auditRoute,
     integrationsRoute,
+    githubConnectRoute,
   ]),
 ]);
 

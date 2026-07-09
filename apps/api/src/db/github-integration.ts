@@ -68,6 +68,27 @@ export function saveGitHubIntegration(input: {
     });
 }
 
+/* Repo-only rebind: the credential is untouched (never even read here) -
+   only the binding moves. `validatedAt` still bumps because reaching this
+   point means the stored token just proved itself live against GitHub. */
+export function updateGitHubIntegrationRepo(
+  repoOwner: string,
+  repoName: string,
+): void {
+  getDb()
+    .prepare(
+      `UPDATE github_integration
+       SET repo_owner = @repoOwner, repo_name = @repoName, validated_at = @validatedAt
+       WHERE id = @id`,
+    )
+    .run({
+      id: ROW_ID,
+      repoOwner,
+      repoName,
+      validatedAt: new Date().toISOString(),
+    });
+}
+
 export function deleteGitHubIntegration(): void {
   getDb().prepare(`DELETE FROM github_integration WHERE id = ?`).run(ROW_ID);
 }
