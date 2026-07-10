@@ -42,7 +42,6 @@ export type {
   GetK8sRolloutStatusInput,
 } from "./tools.js";
 export type {
-  MessageDirection,
   WsEnvelope,
   RunnerCommandMessage,
   SetRemediationModeMessage,

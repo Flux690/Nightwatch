@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
-import { useConsoleWs } from "@/hooks/ConsoleWsProvider";
+import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { ChatInput } from "@/components/transcript/ChatInput";
 import { applyLiveEvent } from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
@@ -364,7 +364,7 @@ export function SessionView({
     [respond],
   );
 
-  useConsoleWs(handleEnvelope);
+  useConsoleEvents(handleEnvelope);
 
   const handleSend = useCallback((text: string) => {
     setLiveItems((prev) => [

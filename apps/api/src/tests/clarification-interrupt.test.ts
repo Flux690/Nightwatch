@@ -2,9 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
@@ -28,7 +26,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
@@ -40,11 +39,6 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -59,19 +53,6 @@ const TEST_OPTIONS = [
   },
   { label: "Memory leak", description: "Gradual memory growth causing OOM" },
 ];
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 describe("clarification interrupts", () => {
   let server: FastifyInstance;
@@ -129,9 +110,8 @@ describe("clarification interrupts", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -162,14 +142,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -204,7 +180,7 @@ describe("clarification interrupts", () => {
     expect(interrupt.payload["options"]).toEqual(TEST_OPTIONS);
     expect(interrupt.payload["toolName"]).toBe("request_clarification");
 
-    ws.close();
+    close();
 
     // cleanup via /respond
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -236,14 +212,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -292,7 +264,7 @@ describe("clarification interrupts", () => {
     // Interrupt row gone after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("multiSelect answer: joins selections as comma-separated string in tool result", async () => {
@@ -314,14 +286,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -368,7 +336,7 @@ describe("clarification interrupts", () => {
     );
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("clarification with decision body returns 400", async () => {
@@ -386,14 +354,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -427,7 +391,7 @@ describe("clarification interrupts", () => {
     );
     expect(badRes.status).toBe(400);
 
-    ws.close();
+    close();
 
     // cleanup
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -456,14 +420,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -506,7 +466,7 @@ describe("clarification interrupts", () => {
     await waitFor(() => !hasPendingHumanInput(sessionId));
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("mixed two-gate turn: clarification suspends first, then approval suspends on resume, run completes", async () => {
@@ -565,14 +525,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -639,6 +595,6 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(1);
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 });

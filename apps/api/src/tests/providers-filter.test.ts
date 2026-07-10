@@ -1,9 +1,7 @@
 import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
@@ -28,7 +26,11 @@ import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import {
+  connectConsoleEvents,
+  type ConsoleEventFrame,
+} from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
@@ -41,24 +43,6 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { TOOL_REGISTRY, getToolSchemas } from "../agent/tools/toolset.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 const K8S_SERVICE = {
   provider: "kubernetes" as const,
@@ -217,9 +201,8 @@ describe("providers filter and mismatch rejection", () => {
         },
       });
 
-      server = Fastify({ logger: false });
-      await server.register(FastifyWebSocket);
-      await registerConsoleWsRoutes(server);
+      server = Fastify({ logger: false, forceCloseConnections: true });
+      await registerConsoleEventRoutes(server);
       await registerSessionRoutes(server);
       await server.listen({ port: 0, host: "127.0.0.1" });
       port = (server.server.address() as AddressInfo).port;
@@ -254,14 +237,10 @@ describe("providers filter and mismatch rejection", () => {
         { text: "Done.", toolUses: [] },
       ]);
 
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-        headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-      });
-      const events: WsEvent[] = [];
-      ws.on("message", (raw) => {
-        events.push(JSON.parse(raw.toString()) as WsEvent);
-      });
-      await waitForConnected(ws);
+      const { events, close } = await connectConsoleEvents(
+        port,
+        SESSION,
+      );
 
       const res = await fetch(`http://127.0.0.1:${port}/chat`, {
         method: "POST",
@@ -286,7 +265,7 @@ describe("providers filter and mismatch rejection", () => {
       expect(executedCommands).not.toContain("restart_service");
       expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-      ws.close();
+      close();
 
       await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
         method: "POST",
@@ -316,14 +295,10 @@ describe("providers filter and mismatch rejection", () => {
         { text: "Investigation complete.", toolUses: [] },
       ]);
 
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-        headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-      });
-      const events: WsEvent[] = [];
-      ws.on("message", (raw) => {
-        events.push(JSON.parse(raw.toString()) as WsEvent);
-      });
-      await waitForConnected(ws);
+      const { events, close } = await connectConsoleEvents(
+        port,
+        SESSION,
+      );
 
       const res = await fetch(`http://127.0.0.1:${port}/chat`, {
         method: "POST",
@@ -360,7 +335,7 @@ describe("providers filter and mismatch rejection", () => {
       // No suspension should have occurred
       expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-      ws.close();
+      close();
     });
   });
 
@@ -438,9 +413,8 @@ describe("providers filter and mismatch rejection", () => {
           },
         });
 
-        server = Fastify({ logger: false });
-        await server.register(FastifyWebSocket);
-        await registerConsoleWsRoutes(server);
+        server = Fastify({ logger: false, forceCloseConnections: true });
+        await registerConsoleEventRoutes(server);
         await registerSessionRoutes(server);
         await server.listen({ port: 0, host: "127.0.0.1" });
         port = (server.server.address() as AddressInfo).port;
@@ -463,14 +437,10 @@ describe("providers filter and mismatch rejection", () => {
 
         setScript([{ text: "Investigating in read-only mode.", toolUses: [] }]);
 
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-        });
-        const events: WsEvent[] = [];
-        ws.on("message", (raw) => {
-          events.push(JSON.parse(raw.toString()) as WsEvent);
-        });
-        await waitForConnected(ws);
+        const { events, close } = await connectConsoleEvents(
+          port,
+          SESSION,
+        );
 
         const res = await fetch(`http://127.0.0.1:${port}/chat`, {
           method: "POST",
@@ -499,21 +469,17 @@ describe("providers filter and mismatch rejection", () => {
         expect(offeredNames).not.toContain("exec");
         expect(offeredNames).toContain("get_service_logs");
 
-        ws.close();
+        close();
       });
 
       it("a write the model emits anyway is unavailable, not an approval card (gate cannot be bypassed)", async () => {
         // Read-only mode strips restart_service from the schema; the model emits it anyway (LLMs
         // hallucinate stripped names). The loop resolves against the same effective set, so it's
         // genuinely unavailable - no approval card - and the write switch can't be bypassed.
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-        });
-        const events: WsEvent[] = [];
-        ws.on("message", (raw) => {
-          events.push(JSON.parse(raw.toString()) as WsEvent);
-        });
-        await waitForConnected(ws);
+        const { events, close } = await connectConsoleEvents(
+          port,
+          SESSION,
+        );
 
         setScript([
           {
@@ -559,7 +525,7 @@ describe("providers filter and mismatch rejection", () => {
         );
         expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-        ws.close();
+        close();
       });
     });
 
@@ -623,22 +589,17 @@ describe("providers filter and mismatch rejection", () => {
         });
         setScript([{ text: "Done.", toolUses: [] }]);
 
-        const s = Fastify({ logger: false });
-        await s.register(FastifyWebSocket);
-        await registerConsoleWsRoutes(s);
+        const s = Fastify({ logger: false, forceCloseConnections: true });
+        await registerConsoleEventRoutes(s);
         await registerSessionRoutes(s);
         await s.listen({ port: 0, host: "127.0.0.1" });
         const p = (s.server.address() as AddressInfo).port;
         server = s;
 
-        const ws = new WebSocket(`ws://127.0.0.1:${p}/console/connect`, {
-          headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-        });
-        const events: WsEvent[] = [];
-        ws.on("message", (raw) => {
-          events.push(JSON.parse(raw.toString()) as WsEvent);
-        });
-        await waitForConnected(ws);
+        const { events, close } = await connectConsoleEvents(
+          p,
+          SESSION,
+        );
 
         await fetch(`http://127.0.0.1:${p}/chat`, {
           method: "POST",
@@ -650,7 +611,7 @@ describe("providers filter and mismatch rejection", () => {
         });
 
         await waitFor(() => events.some((e) => e.type === "RUN_FINISHED"));
-        ws.close();
+        close();
         await s.close();
         unregisterRunner(conn);
 
@@ -748,9 +709,8 @@ describe("per-target write gating", () => {
     );
     setRunnerRemediationMode(offId, false);
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -765,17 +725,13 @@ describe("per-target write gating", () => {
 
   async function chatSession(message: string): Promise<{
     sessionId: string;
-    events: WsEvent[];
-    ws: WebSocket;
+    events: ConsoleEventFrame[];
+    close: () => void;
   }> {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -787,7 +743,7 @@ describe("per-target write gating", () => {
     });
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
-    return { sessionId, events, ws };
+    return { sessionId, events, close };
   }
 
   it("a write against a remediation-off server is refused before waking a human", async () => {
@@ -810,7 +766,7 @@ describe("per-target write gating", () => {
       { text: "Understood, recommending instead.", toolUses: [] },
     ]);
 
-    const { sessionId, events, ws } = await chatSession(
+    const { sessionId, events, close } = await chatSession(
       "off-svc looks wedged, restart it",
     );
     await waitFor(() =>
@@ -837,7 +793,7 @@ describe("per-target write gating", () => {
     );
     expect(rejection?.content).toContain("gated-off");
 
-    ws.close();
+    close();
   });
 
   it("a write against a remediation-on server still raises the approval card", async () => {
@@ -860,7 +816,7 @@ describe("per-target write gating", () => {
       { text: "Done.", toolUses: [] },
     ]);
 
-    const { sessionId, events, ws } = await chatSession(
+    const { sessionId, events, close } = await chatSession(
       "on-svc looks wedged, restart it",
     );
     await waitFor(() =>
@@ -872,6 +828,6 @@ describe("per-target write gating", () => {
     );
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-    ws.close();
+    close();
   });
 });

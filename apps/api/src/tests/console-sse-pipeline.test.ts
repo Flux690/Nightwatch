@@ -1,115 +1,49 @@
 import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
-import type {
-  ConsoleTextMessageContent,
-  ConsoleRunFinished,
-  RunnerCommandMessage,
-} from "@nightwatch/shared";
+import type { RunnerCommandMessage } from "@nightwatch/shared";
 
-const { mockCreateProvider } = vi.hoisted(() => {
-  // Each createProvider() returns a fresh stateful instance so snapshot() reflects messages
-  // from seed/start/chat/append; a fixed-array mock would return seed.length on resume and
-  // persist() would skip all new messages.
-  const makeProvider = () => {
-    type ProvMsg = {
-      role: "user" | "assistant";
-      content: string;
-      providerContent: unknown;
-    };
-    const messages: ProvMsg[] = [];
-
-    return {
-      start: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-      seed: vi.fn((history: ProvMsg[]) => {
-        messages.length = 0;
-        messages.push(...history);
-      }),
-      snapshot: vi.fn((): ProvMsg[] => [...messages]),
-      chat: vi.fn(
-        (
-          _tools: unknown,
-          onDelta?: (d: { kind: string; text: string }) => void,
-        ) => {
-          onDelta?.({ kind: "text", text: "All " });
-          onDelta?.({ kind: "text", text: "looks well." });
-          messages.push({
-            role: "assistant",
-            content: "All looks well.",
-            providerContent: {},
-          });
-          // A free-form text finish: no tool call ends the run successfully.
-          return Promise.resolve({
-            stopReason: "end_turn" as const,
-            toolUses: [],
-            text: "All looks well.",
-          });
-        },
-      ),
-      appendToolResults: vi.fn(),
-      appendUserMessage: vi.fn((msg: string) => {
-        messages.push({ role: "user", content: msg, providerContent: {} });
-      }),
-    };
-  };
-
-  return {
-    mockCreateProvider: vi.fn(makeProvider),
-  };
-});
-
-vi.mock("../llm/factory.js", () => ({
-  createProvider: mockCreateProvider,
+const { mockCreateProvider } = vi.hoisted(() => ({
+  mockCreateProvider: vi.fn(),
 }));
+
+vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+
+import {
+  createScriptRunner,
+  type ContractFakeProvider,
+} from "./contract-fake-provider.js";
+
+const script = createScriptRunner();
+mockCreateProvider.mockImplementation(() => script.create());
 
 import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
-
+import { connectConsoleEvents } from "./console-events-helper.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
-// Wait for the `connected` ack, sent only after the handler subscribes: dispatch is
-// synchronous, so a run can publish before a subscriber that only waited for socket `open`;
-// pre-subscribe events are correctly dropped (transcript is durable).
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMessage = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMessage);
-        resolve();
-      }
-    };
-    ws.on("message", onMessage);
-  });
-}
-
-describe("console WS pipeline", () => {
+describe("console SSE pipeline", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
-  let TEST_TOKEN: string;
   let conn: RunnerConnection;
   let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("test-runner").id;
+    const TEST_TOKEN = generateRunnerToken("test-runner").id;
 
-    // Persistence is local now; the provider calls no runner tool here, so the
-    // runner receives nothing. Resolve defensively for any stray command.
+    // Persistence is local; the scripted provider calls no runner tool here, so
+    // the runner receives nothing. Resolve defensively for any stray command.
     conn = registerRunner(
       TEST_TOKEN,
       (raw: string) => {
@@ -123,9 +57,8 @@ describe("console WS pipeline", () => {
       () => {},
     );
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -135,26 +68,19 @@ describe("console WS pipeline", () => {
     unregisterRunner(conn);
     await server.close();
     cleanupDb();
-    vi.unstubAllEnvs();
   });
 
-  it("delivers session_delta events then session_message, transcript loadable after", async () => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
+  it("rejects the stream without a valid session cookie", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/console/events`, {
+      headers: { Accept: "text/event-stream" },
     });
-    const events: Array<{ type: string; payload: Record<string, unknown> }> =
-      [];
+    expect(res.status).toBe(401);
+    await res.text();
+  });
 
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString()) as {
-        type: string;
-        payload: Record<string, unknown>;
-      };
-      if (msg.type === "connected") return;
-      events.push(msg);
-    });
-
-    await waitForConnected(ws);
+  it("delivers delta events then RUN_FINISHED, transcript loadable after", async () => {
+    script.setScript([{ toolUses: [], text: "All looks well." }]);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -168,9 +94,9 @@ describe("console WS pipeline", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
 
-    // The POST dispatches in-process; the mocked run publishes session_delta then session_message
-    // over the bus. It resolves in microtasks (maybe before this sessionId), so buffer every event
-    // and poll for the match rather than racing.
+    // The POST dispatches in-process; the scripted run publishes deltas then
+    // RUN_FINISHED over the bus. It resolves in microtasks (maybe before this
+    // sessionId), so buffer every event and poll for the match rather than racing.
     await waitFor(() =>
       events.some(
         (e) =>
@@ -178,22 +104,20 @@ describe("console WS pipeline", () => {
       ),
     );
 
-    ws.close();
+    close();
 
     const deltas = events.filter(
-      (e): e is ConsoleTextMessageContent =>
+      (e) =>
         e.type === "TEXT_MESSAGE_CONTENT" &&
         e.payload["sessionId"] === sessionId,
     );
     expect(deltas.length).toBeGreaterThan(0);
-    expect(deltas[0].payload.sessionId).toBe(sessionId);
+    expect(deltas[0]?.payload["delta"]).toBe("All looks well.");
 
     const messages = events.filter(
-      (e): e is ConsoleRunFinished =>
-        e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
+      (e) => e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
     );
     expect(messages.length).toBeGreaterThan(0);
-    expect(messages[0].payload.sessionId).toBe(sessionId);
 
     const transcriptRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}`,
@@ -206,33 +130,29 @@ describe("console WS pipeline", () => {
 
   it("resume of ended session seeds provider from persisted transcript", async () => {
     mockCreateProvider.mockClear();
+    script.setScript([
+      { toolUses: [], text: "All looks well." },
+      { toolUses: [], text: "Still healthy." },
+    ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: Array<{
-      type: string;
-      payload: { sessionId: string; message?: { role: string } };
-    }> = [];
-    ws.on("message", (raw) => {
-      const msg = JSON.parse(raw.toString()) as (typeof events)[number];
-      if (msg.type === "connected") return;
-      events.push(msg);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     // Each run persists exactly one assistant turn, so counting assistant
     // RUN_FINISHED events for the session distinguishes the first run (>=1) from
     // the resumed run (>=2) without racing the captured sessionId.
     const assistantFinishes = (sessionId: string): number =>
-      events.filter(
-        (e) =>
+      events.filter((e) => {
+        const payload = e.payload as {
+          sessionId?: string;
+          message?: { role?: string };
+        };
+        return (
           e.type === "RUN_FINISHED" &&
-          e.payload.sessionId === sessionId &&
-          e.payload.message?.role === "assistant",
-      ).length;
+          payload.sessionId === sessionId &&
+          payload.message?.role === "assistant"
+        );
+      }).length;
 
-    // Start a new chat session (first run).
     const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
       headers: {
@@ -267,7 +187,7 @@ describe("console WS pipeline", () => {
     // turns are persisted - if snapshot() were not stateful this would time out).
     await waitFor(() => assistantFinishes(sessionId) >= 2);
 
-    ws.close();
+    close();
 
     // createProvider was called once per run.
     expect(mockCreateProvider.mock.calls.length).toBe(2);
@@ -275,10 +195,8 @@ describe("console WS pipeline", () => {
     // The second provider (resume run) must have been seeded with the two
     // messages persisted by the first run (user + assistant), then had the
     // follow-up appended as a user turn.
-    const resumeProvider = mockCreateProvider.mock.results[1]?.value as {
-      seed: ReturnType<typeof vi.fn>;
-      appendUserMessage: ReturnType<typeof vi.fn>;
-    };
+    const resumeProvider = mockCreateProvider.mock.results[1]
+      ?.value as ContractFakeProvider;
     expect(resumeProvider.seed).toHaveBeenCalledOnce();
     const [seededHistory] = resumeProvider.seed.mock.calls[0] as [
       Array<{ role: string; content: string }>,
@@ -289,5 +207,18 @@ describe("console WS pipeline", () => {
     expect(resumeProvider.appendUserMessage).toHaveBeenCalledWith(
       "Follow-up question.",
     );
+  });
+
+  it("sends heartbeat comments on the configured interval", async () => {
+    const hb = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(hb, { heartbeatInterval: 50 });
+    await hb.listen({ port: 0, host: "127.0.0.1" });
+    const hbPort = (hb.server.address() as AddressInfo).port;
+
+    const { comments, close } = await connectConsoleEvents(hbPort, SESSION);
+    await waitFor(() => comments.some((c) => c.includes("heartbeat")));
+
+    close();
+    await hb.close();
   });
 });

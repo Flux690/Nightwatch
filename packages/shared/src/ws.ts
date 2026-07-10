@@ -1,9 +1,3 @@
-export type MessageDirection =
-  | "api_to_runner"
-  | "runner_to_api"
-  | "api_to_console"
-  | "console_to_api";
-
 export interface WsEnvelope {
   messageId: string;
   type: string;

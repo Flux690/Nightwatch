@@ -10,9 +10,7 @@ import {
   it,
   vi,
 } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type {
   CapabilityManifest,
@@ -50,7 +48,8 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 
@@ -140,19 +139,6 @@ function makeSend(
   };
 }
 
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
-
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
   let runnerIdA: string;
@@ -210,9 +196,8 @@ describe("multi-runner routing", () => {
       ]),
     );
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -383,20 +368,7 @@ describe("multi-runner routing", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: Array<{ type: string; payload: Record<string, unknown> }> =
-      [];
-    ws.on("message", (raw) => {
-      events.push(
-        JSON.parse(raw.toString()) as {
-          type: string;
-          payload: Record<string, unknown>;
-        },
-      );
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -447,7 +419,7 @@ describe("multi-runner routing", () => {
     ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 
-    ws.close();
+    close();
   });
 
   it("cross-token: routes to a runner connected under a different token by service identity", async () => {

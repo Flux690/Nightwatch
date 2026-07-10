@@ -2,9 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
@@ -27,7 +25,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
@@ -43,25 +42,7 @@ import {
 } from "../db/remediation-actions.js";
 import { getDb } from "../db/client.js";
 
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
 const FINISH_TURN = { text: "Done.", toolUses: [] };
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 describe("remediation action record", () => {
   let server: FastifyInstance;
@@ -116,9 +97,8 @@ describe("remediation action record", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -158,14 +138,10 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) =>
-      events.push(JSON.parse(raw.toString()) as WsEvent),
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
     );
-    await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -215,7 +191,7 @@ describe("remediation action record", () => {
     expect(row!.resolvedBy).toBe("operator");
     expect(row!.resolvedAt).toBeTruthy();
 
-    ws.close();
+    close();
   });
 
   it("reject: inserts remediation_actions row with rejected status", async () => {
@@ -244,14 +220,10 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) =>
-      events.push(JSON.parse(raw.toString()) as WsEvent),
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
     );
-    await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -303,7 +275,7 @@ describe("remediation action record", () => {
     expect(row!.serviceIdentityKey).toBe("docker/svc-01/api");
     expect(row!.resolvedBy).toBe("operator");
 
-    ws.close();
+    close();
   });
 
   it("at-most-once: pre-existing executing row for same tool_use_id skips execution", async () => {
@@ -346,14 +318,10 @@ describe("remediation action record", () => {
     // LLM resumes with a single finish turn (no further tool calls)
     setScript([FINISH_TURN]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) =>
-      events.push(JSON.parse(raw.toString()) as WsEvent),
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
     );
-    await waitForConnected(ws);
 
     // Approve — should detect the conflict and skip execution
     const approveRes = await fetch(
@@ -384,7 +352,7 @@ describe("remediation action record", () => {
     const row = findRemediationAction(sessionId, toolUseId);
     expect(row!.status).toBe("executing");
 
-    ws.close();
+    close();
   });
 
   it("reject: re-rejecting an already-recorded action is idempotent", () => {
@@ -483,14 +451,10 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) =>
-      events.push(JSON.parse(raw.toString()) as WsEvent),
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
     );
-    await waitForConnected(ws);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -513,6 +477,6 @@ describe("remediation action record", () => {
     // No record in remediation_actions for this tool_use_id
     expect(findRemediationAction(sessionId, toolUseId)).toBeUndefined();
 
-    ws.close();
+    close();
   });
 });

@@ -11,7 +11,8 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
-import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
+import { MockEventSource } from "./mockEventSource.js";
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
@@ -22,30 +23,6 @@ vi.mock("@/auth/AuthContext", () => ({
     logoutAll: vi.fn(),
   }),
 }));
-
-let latestWs: MockWs | null = null;
-
-class MockWs {
-  static OPEN = 1;
-  static CONNECTING = 0;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
-  readyState = MockWs.OPEN;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((e: unknown) => void) | null = null;
-  close = vi.fn();
-
-  constructor(_url: string) {
-    latestWs = this;
-  }
-
-  push(envelope: object): void {
-    this.onmessage?.({ data: JSON.stringify(envelope) });
-  }
-}
 
 const SESSION_MESSAGE_1 = {
   sessionId: "s1",
@@ -59,27 +36,25 @@ function setup(
   messages: object[] = [SESSION_MESSAGE_1],
   pendingHumanInput: object[] = [],
 ) {
-  latestWs = null;
+  MockEventSource.reset();
 
-  vi.stubGlobal("WebSocket", MockWs);
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((url: string) => {
-      if (url.includes("pending-human-input")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(pendingHumanInput),
-        });
-      }
-      if (url.includes("/sessions/s1")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(messages),
-        });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    }),
-  );
+  vi.stubGlobal("EventSource", MockEventSource);
+  const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("pending-human-input")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(pendingHumanInput),
+      });
+    }
+    if (url.includes("/sessions/s1")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(messages),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
+  vi.stubGlobal("fetch", fetchMock);
 
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -97,14 +72,14 @@ function setup(
   render(
     <TestProviders>
       <QueryClientProvider client={qc}>
-        <ConsoleWsProvider>
+        <ConsoleEventsProvider>
           <RouterProvider router={router} />
-        </ConsoleWsProvider>
+        </ConsoleEventsProvider>
       </QueryClientProvider>
     </TestProviders>,
   );
 
-  return { qc };
+  return { qc, fetchMock };
 }
 
 afterEach(() => {
@@ -124,7 +99,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -146,12 +121,12 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing" },
         });
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: " the logs..." },
@@ -173,7 +148,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: {
@@ -199,7 +174,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -211,7 +186,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
           type: "RUN_FINISHED",
           payload: {
@@ -245,7 +220,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -273,7 +248,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -290,7 +265,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m4",
           type: "TOOL_CALL_END",
           payload: {
@@ -319,7 +294,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -329,7 +304,7 @@ describe("SessionView", () => {
             input: { service: "nginx" },
           },
         });
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m5",
           type: "TOOL_CALL_START",
           payload: {
@@ -347,7 +322,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m6",
           type: "TOOL_CALL_END",
           payload: {
@@ -375,7 +350,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -402,7 +377,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
@@ -413,7 +388,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m4",
           type: "RUN_FINISHED",
           payload: {
@@ -439,7 +414,7 @@ describe("SessionView", () => {
   describe("approval card (INTERRUPT)", () => {
     function pushGatedStart(): void {
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a1",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
@@ -515,7 +490,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a2",
           type: "HUMAN_INPUT_RESOLVED",
           payload: {
@@ -552,7 +527,7 @@ describe("SessionView", () => {
       ).toBeTruthy();
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a3",
           type: "TOOL_CALL_END",
           payload: {
@@ -717,7 +692,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -742,7 +717,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -754,7 +729,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
           type: "RUN_FINISHED",
           payload: {
@@ -788,7 +763,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -799,7 +774,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m-fail",
           type: "RUN_FAILED",
           payload: { sessionId: "s1", message: "runner disconnected" },
@@ -818,7 +793,7 @@ describe("SessionView", () => {
   describe("clarification card (INTERRUPT kind=clarification)", () => {
     function pushClarification(extra: object = {}): void {
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c1",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
@@ -916,7 +891,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c2",
           type: "HUMAN_INPUT_RESOLVED",
           payload: {
@@ -988,7 +963,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c-other",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
@@ -1008,6 +983,37 @@ describe("SessionView", () => {
         screen.queryByTestId("clarification-card"),
       ).not.toBeInTheDocument();
       expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("stream reconnect", () => {
+    it("refetches active queries after the event stream reconnects", async () => {
+      const { fetchMock } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const transcriptFetches = (): number =>
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).includes("/sessions/s1"),
+        ).length;
+      const before = transcriptFetches();
+
+      // A drop then reopen: events published during the gap are lost (the feed
+      // has no replay), so the provider must invalidate queries to catch up.
+      act(() => {
+        const es = MockEventSource.latest;
+        if (es) es.readyState = MockEventSource.CONNECTING;
+        MockEventSource.latest?.onerror?.();
+        MockEventSource.latest?.onopen?.();
+      });
+
+      await waitFor(() => {
+        expect(transcriptFetches()).toBeGreaterThan(before);
+      });
     });
   });
 });

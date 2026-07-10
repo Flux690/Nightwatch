@@ -10,9 +10,7 @@ import {
   it,
   vi,
 } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type {
   RunnerCommandMessage,
@@ -38,7 +36,11 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import {
+  connectConsoleEvents,
+  type ConsoleEventFrame,
+} from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
@@ -52,11 +54,6 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getDb } from "../db/client.js";
 
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
 const FINISH_TURN: ScriptedTurn = {
   text: "Investigation complete.",
   toolUses: [],
@@ -68,19 +65,6 @@ const DEFAULT_WINDOW_MS = 600_000;
 // A pre-existing session the seeded prior remediation actions hang off, so the
 // breaker counts a storm that spans sessions, not just the live one.
 const PRIOR_SESSION = "prior-session-breaker";
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 function seedRemediations(params: {
   serviceIdentityKey: string;
@@ -135,15 +119,16 @@ describe("remediation circuit breaker", () => {
     };
   }
 
-  async function runChat(): Promise<{ sessionId: string; events: WsEvent[] }> {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) =>
-      events.push(JSON.parse(raw.toString()) as WsEvent),
+  // Streams opened by runChat are closed in afterAll: an open SSE stream is an
+  // active request, and leaving one behind would stall server.close().
+  const openStreams: Array<() => void> = [];
+
+  async function runChat(): Promise<{ sessionId: string; events: ConsoleEventFrame[] }> {
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
     );
-    await waitForConnected(ws);
+    openStreams.push(close);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -161,7 +146,7 @@ describe("remediation circuit breaker", () => {
   // the runner was never called, and the model got the corrective tool_result.
   async function expectBreakerRefused(
     sessionId: string,
-    events: WsEvent[],
+    events: ConsoleEventFrame[],
   ): Promise<void> {
     await waitFor(() =>
       events.some((e) => {
@@ -193,7 +178,7 @@ describe("remediation circuit breaker", () => {
   // then rejects it to release the interrupt for the next test.
   async function expectApprovalThenReject(
     sessionId: string,
-    events: WsEvent[],
+    events: ConsoleEventFrame[],
   ): Promise<void> {
     const interrupt = await waitFor(() =>
       events.find(
@@ -262,9 +247,8 @@ describe("remediation circuit breaker", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -279,6 +263,7 @@ describe("remediation circuit breaker", () => {
   });
 
   afterAll(async () => {
+    for (const close of openStreams) close();
     unregisterRunner(conn);
     await server.close();
     cleanupDb();

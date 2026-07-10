@@ -1,9 +1,7 @@
 import type { AddressInfo } from "node:net";
 import "dotenv/config";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
@@ -27,7 +25,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
@@ -40,29 +39,11 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
 
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN: ScriptedTurn = {
   text: "Investigation complete.",
   toolUses: [],
 };
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 describe("continue-request interrupts", () => {
   let server: FastifyInstance;
@@ -114,9 +95,8 @@ describe("continue-request interrupts", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -134,14 +114,10 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -173,7 +149,7 @@ describe("continue-request interrupts", () => {
     expect(interrupt.payload["kind"]).toBe("continue");
     expect(interrupt.payload["toolName"]).toBe("");
 
-    ws.close();
+    close();
 
     // cleanup: end the investigation
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -191,14 +167,10 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -256,21 +228,17 @@ describe("continue-request interrupts", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("ending runs a wrap-up turn and finishes the investigation", async () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -322,21 +290,17 @@ describe("continue-request interrupts", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("restart-resume: continue interrupt survives process exit, resolve still works", async () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -382,7 +346,7 @@ describe("continue-request interrupts", () => {
     await waitFor(() => !hasPendingHumanInput(sessionId));
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("config has no tool-call budget field", () => {

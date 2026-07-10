@@ -13,13 +13,8 @@ import type {
   SessionMessage,
 } from "@nightwatch/shared";
 
-// Every envelope goes to the one console bus; the console WS forwards all and the client
-// routes by type/sessionId. Publishing is synchronous in-process now, but the serialized
-// form stays the wire-identical envelope the console parses.
-function publishRaw(env: unknown): void {
-  publishConsoleEvent(JSON.stringify(env));
-}
-
+// Every envelope goes to the one console bus as a typed ConsoleEvent; the SSE route
+// serializes it on the wire and the client routes by type/sessionId.
 export function publishTextMessageContent(
   sessionId: string,
   delta: StreamDelta,
@@ -29,7 +24,7 @@ export function publishTextMessageContent(
     type: "TEXT_MESSAGE_CONTENT",
     payload: { sessionId, kind: delta.kind, delta: delta.text },
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishRunFinished(
@@ -41,7 +36,7 @@ export function publishRunFinished(
     type: "RUN_FINISHED",
     payload: { sessionId, message },
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishToolCallStart(
@@ -52,7 +47,7 @@ export function publishToolCallStart(
     type: "TOOL_CALL_START",
     payload,
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
@@ -61,7 +56,7 @@ export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
     type: "HUMAN_INPUT_REQUIRED",
     payload,
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishToolCallEnd(
@@ -72,7 +67,7 @@ export function publishToolCallEnd(
     type: "TOOL_CALL_END",
     payload,
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishRunStopped(sessionId: string): void {
@@ -81,7 +76,7 @@ export function publishRunStopped(sessionId: string): void {
     type: "RUN_STOPPED",
     payload: { sessionId },
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishRunFailed(sessionId: string, message: string): void {
@@ -90,7 +85,7 @@ export function publishRunFailed(sessionId: string, message: string): void {
     type: "RUN_FAILED",
     payload: { sessionId, message },
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }
 
 export function publishInterruptResolved(
@@ -101,5 +96,5 @@ export function publishInterruptResolved(
     type: "HUMAN_INPUT_RESOLVED",
     payload,
   };
-  publishRaw(env);
+  publishConsoleEvent(env);
 }

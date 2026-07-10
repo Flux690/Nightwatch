@@ -37,7 +37,7 @@ prometheus --> alertmanager
 alertmanager -- POST /alerts/ingest --> api
 console -- Start investigation --> api
 api -- WebSocket --> runner
-api -- REST + WebSocket --> console
+api -- REST + SSE --> console
 
 classDef infra fill:#1b2430,stroke:#4f9cf9,color:#fff,stroke-width:1.5;
 classDef api fill:#1d3027,stroke:#4ade80,color:#fff,stroke-width:1.8;
@@ -127,7 +127,6 @@ The runner appears in your fleet within seconds of the install command running. 
 | `HOST` | no | Bind address (default: `127.0.0.1`). |
 | `NIGHTWATCH_DB_PATH` | no | Path to the SQLite file (default: `/var/nightwatch/nightwatch.db`). The parent directory is created on boot if it does not exist. |
 | `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file beside the database, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
-| `CONSOLE_ORIGINS` | no | Comma-separated allowlist of origins for the console WebSocket. Unset allows any `localhost`/`127.0.0.1` origin (default: unset). |
 | `NIGHTWATCH_WORKSPACES_DIR` | no | Root directory for per-session GitHub sandbox checkouts (default: `/var/nightwatch/workspaces`). |
 | `LOG_LEVEL` | no | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`). |
 
@@ -238,7 +237,7 @@ apps/
         ui/             shadcn-style primitives
         layout/         shell, sidebar, settings modal, wizard chrome
         transcript/     transcript dispatcher + per-card panels
-      hooks/            shared console WebSocket provider, attention counter
+      hooks/            shared console event-stream (SSE) provider, attention counter
       lib/              shared client helpers (utils, toast, time, icon/status variants)
       pages/            login, fleet, add-server wizard, session view, audit log, unresolved alerts
 packages/

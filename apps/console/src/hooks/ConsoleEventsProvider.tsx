@@ -1,13 +1,17 @@
 import { createContext, useContext, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
-const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000, 30000];
+// EventSource retries network drops itself, but a non-200 response fails the
+// connection permanently (readyState CLOSED). Recreate on a fixed cadence so
+// live updates never silently die while the console stays open.
+const RECREATE_DELAY_MS = 15000;
 
 type Subscriber = (envelope: ConsoleEvent) => void;
 type Subscribe = (fn: Subscriber) => () => void;
 
-const ConsoleWsContext = createContext<Subscribe | null>(null);
+const ConsoleEventsContext = createContext<Subscribe | null>(null);
 
 // Untrusted wire JSON: we own both ends, so trust a frame once it is an object with a
 // string `type` to switch on; anything else (garbage, truncated) is dropped here.
@@ -19,37 +23,38 @@ function isConsoleEvent(value: unknown): value is ConsoleEvent {
   );
 }
 
-// One shared socket for the whole app: every consumer subscribes through context instead
+// One shared stream for the whole app: every consumer subscribes through context instead
 // of opening its own, so the badge and session view don't race two duplicate connections.
-export function ConsoleWsProvider({
+export function ConsoleEventsProvider({
   children,
 }: {
   children: ReactNode;
 }): React.JSX.Element {
   const subscribers = useRef(new Set<Subscriber>());
+  const queryClient = useQueryClient();
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/console/connect`;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let attempt = 0;
+    let source: EventSource | null = null;
+    let recreateTimer: ReturnType<typeof setTimeout> | null = null;
+    let dropped = false;
     let disposed = false;
 
     function connect(): void {
-      const ws = new WebSocket(url);
-      socket = ws;
+      const es = new EventSource("/api/console/events");
+      source = es;
 
-      ws.onopen = () => {
-        attempt = 0;
+      es.onopen = () => {
+        // Events published during a gap are gone (the feed has no replay), so
+        // refetch active queries to catch durable state up after a reconnect.
+        if (dropped) {
+          dropped = false;
+          void queryClient.invalidateQueries();
+        }
       };
 
-      ws.onmessage = (event: MessageEvent) => {
+      es.onmessage = (event: MessageEvent) => {
         try {
-          // Includes a one-off "connected" ack that isn't a ConsoleEvent case;
-          // it passes the guard (it has a string type) and callers no-op on it.
-          const frame: unknown = JSON.parse(event.data as string);
+          const frame: unknown = JSON.parse(String(event.data));
           if (isConsoleEvent(frame)) {
             for (const fn of subscribers.current) fn(frame);
           }
@@ -58,18 +63,13 @@ export function ConsoleWsProvider({
         }
       };
 
-      ws.onerror = () => ws.close();
-
-      ws.onclose = () => {
-        if (disposed) return;
-        // Without this, live updates stop after any network blip. Reconnect with
-        // capped backoff so a transient drop self-heals.
-        const delay =
-          RECONNECT_BACKOFF_MS[
-            Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)
-          ]!;
-        attempt++;
-        reconnectTimer = setTimeout(connect, delay);
+      es.onerror = () => {
+        dropped = true;
+        // CONNECTING means the browser is retrying on its own; only a CLOSED
+        // stream (permanent failure) needs to be recreated by hand.
+        if (es.readyState === EventSource.CLOSED && !disposed) {
+          recreateTimer = setTimeout(connect, RECREATE_DELAY_MS);
+        }
       };
     }
 
@@ -77,14 +77,10 @@ export function ConsoleWsProvider({
 
     return () => {
       disposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (socket?.readyState === WebSocket.CONNECTING) {
-        socket.onopen = () => socket?.close();
-      } else {
-        socket?.close();
-      }
+      if (recreateTimer) clearTimeout(recreateTimer);
+      source?.close();
     };
-  }, []);
+  }, [queryClient]);
 
   const subscribe = useRef<Subscribe>((fn) => {
     subscribers.current.add(fn);
@@ -94,17 +90,17 @@ export function ConsoleWsProvider({
   }).current;
 
   return (
-    <ConsoleWsContext.Provider value={subscribe}>
+    <ConsoleEventsContext.Provider value={subscribe}>
       {children}
-    </ConsoleWsContext.Provider>
+    </ConsoleEventsContext.Provider>
   );
 }
 
 // Subscribe to the shared console event stream for the component's lifetime. A
 // no-op when no provider is mounted (e.g. before authentication), so callers need
 // no guard of their own.
-export function useConsoleWs(onMessage: Subscriber): void {
-  const subscribe = useContext(ConsoleWsContext);
+export function useConsoleEvents(onMessage: Subscriber): void {
+  const subscribe = useContext(ConsoleEventsContext);
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
 
