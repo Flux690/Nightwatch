@@ -137,6 +137,9 @@ let workspacesDir: string;
 
 beforeAll(() => {
   cleanupDb = useTempDb();
+  // Egress enforcement is exercised in sandbox-workspace/egress-proxy tests;
+  // keep these tool tests on the open path so no proxy machinery is needed.
+  updateConfig({ sandboxEgressPolicy: "open" });
   workspacesDir = mkdtempSync(join(tmpdir(), "nw-repo-tools-"));
   vi.stubEnv("NIGHTWATCH_WORKSPACES_DIR", workspacesDir);
   installGitMock();

@@ -5,6 +5,9 @@
 export type LLMProviderName = "anthropic" | "openai";
 export type ThinkingMode = "adaptive" | "off";
 export type ReasoningEffort = "low" | "medium" | "high";
+// "allowlist" enforces the egress domain list (deny by default); "open" leaves
+// the sandbox on the default bridge with unrestricted outbound.
+export type SandboxEgressPolicy = "allowlist" | "open";
 
 export interface AgentConfig {
   provider: LLMProviderName;
@@ -31,6 +34,11 @@ export interface AgentConfig {
   // kernel-syscall isolation. Off by default: gVisor is used automatically
   // wherever present and falls back to the hardened container otherwise.
   sandboxRequireGvisor: boolean;
+  // Sandbox network egress: policy plus the allowed hostnames (each entry
+  // covers its subdomains). Deny-by-default with the allowlist enforced by a
+  // filtering proxy the sandbox is forced through.
+  sandboxEgressPolicy: SandboxEgressPolicy;
+  sandboxEgressAllowlist: string[];
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;

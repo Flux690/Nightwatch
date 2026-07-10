@@ -31,6 +31,7 @@ import {
   type WorkspaceOptions,
 } from "../sandbox/workspace.js";
 import { reapOrphans, resetIsolationCache } from "../sandbox/docker.js";
+import { EGRESS_NETWORK, resetEgressState } from "../sandbox/egress.js";
 import { preflight } from "../sandbox/preflight.js";
 import { resolveRepoPath, assertContained } from "../sandbox/paths.js";
 import { capOutput } from "../sandbox/output.js";
@@ -109,6 +110,8 @@ const dockerState = {
   createArgs: [] as Array<Record<string, unknown>>,
   removed: [] as string[],
   listResult: [] as Array<{ Id: string }>,
+  networks: [] as Array<{ Name: string }>,
+  networkConnects: 0,
   pingFails: false,
   gvisor: false,
   nextId: 1,
@@ -145,6 +148,17 @@ function dockerFake(): Record<string, unknown> {
       },
     }),
     listContainers: () => Promise.resolve(dockerState.listResult),
+    listNetworks: () => Promise.resolve(dockerState.networks),
+    createNetwork: (opts: { Name: string }) => {
+      dockerState.networks.push({ Name: opts.Name });
+      return Promise.resolve({});
+    },
+    getNetwork: () => ({
+      connect: () => {
+        dockerState.networkConnects++;
+        return Promise.resolve();
+      },
+    }),
   };
 }
 
@@ -159,6 +173,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     limits: { cpus: 2, memoryMb: 4096 },
     idleTimeoutMs: 60_000,
     requireGvisor: false,
+    egress: { policy: "open", allowlist: [] },
     commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
@@ -197,9 +212,12 @@ afterEach(async () => {
   dockerState.createArgs = [];
   dockerState.removed = [];
   dockerState.listResult = [];
+  dockerState.networks = [];
+  dockerState.networkConnects = 0;
   dockerState.pingFails = false;
   dockerState.gvisor = false;
   resetIsolationCache();
+  resetEgressState();
 });
 
 function cloneCalls(): string[][] {
@@ -276,6 +294,49 @@ describe("workspace lifecycle", () => {
       ),
     ).rejects.toBeInstanceOf(SandboxUnavailableError);
     expect(dockerState.createArgs).toHaveLength(0);
+  });
+
+  it("in allowlist mode forces the sandbox onto the internal network via the shared proxy", async () => {
+    const sessionId = nextSessionId();
+    await withWorkspace(
+      sessionId,
+      options({
+        egress: { policy: "allowlist", allowlist: ["registry.npmjs.org"] },
+      }),
+      () => Promise.resolve(),
+    );
+
+    const sandboxCreate = dockerState.createArgs.find(
+      (a) =>
+        (a["Labels"] as Record<string, string> | undefined)?.[
+          "nightwatch.sandbox"
+        ] === "1",
+    )!;
+    const host = sandboxCreate["HostConfig"] as Record<string, unknown>;
+    expect(host["NetworkMode"]).toBe(EGRESS_NETWORK);
+    expect(sandboxCreate["Env"]).toContain(
+      "HTTPS_PROXY=http://nightwatch-sandbox-proxy:8080",
+    );
+    // A shared proxy container was ensured and dual-homed onto the network.
+    const proxyCreate = dockerState.createArgs.find(
+      (a) =>
+        (a["Labels"] as Record<string, string> | undefined)?.[
+          "nightwatch.sandbox.proxy"
+        ] === "1",
+    );
+    expect(proxyCreate).toBeDefined();
+    expect(dockerState.networkConnects).toBeGreaterThan(0);
+  });
+
+  it("in open mode keeps the default bridge and sets no proxy env", async () => {
+    const sessionId = nextSessionId();
+    await withWorkspace(sessionId, options(), () => Promise.resolve());
+    const create = dockerState.createArgs[0]!;
+    const host = create["HostConfig"] as Record<string, unknown>;
+    expect(host["NetworkMode"]).toBeUndefined();
+    expect(
+      (create["Env"] as string[]).some((e) => e.startsWith("HTTPS_PROXY=")),
+    ).toBe(false);
   });
 
   it("reuses the live workspace across calls in a burst", async () => {

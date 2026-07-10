@@ -86,11 +86,21 @@ export function apiRunsAsRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
+// Egress wiring passed in by the host: when enforcing, the sandbox joins only
+// the Internal network (no default bridge, no direct outbound) and is pointed
+// at the shared proxy. When open it keeps the default bridge - today's
+// behavior. The sandbox module never reads config; the host decides.
+export interface EgressWiring {
+  networkName: string;
+  proxyUrl: string;
+}
+
 export async function createSandboxContainer(opts: {
   sessionId: string;
   workspaceDir: string;
   limits: SandboxLimits;
   requireGvisor: boolean;
+  egress?: EgressWiring;
 }): Promise<string> {
   await ensureImage();
   const isolation = await detectIsolation();
@@ -101,6 +111,16 @@ export async function createSandboxContainer(opts: {
   }
   const memoryBytes = opts.limits.memoryMb * 1024 * 1024;
   const user = processUser();
+  const proxyEnv =
+    opts.egress === undefined
+      ? []
+      : [
+          `HTTP_PROXY=${opts.egress.proxyUrl}`,
+          `HTTPS_PROXY=${opts.egress.proxyUrl}`,
+          `http_proxy=${opts.egress.proxyUrl}`,
+          `https_proxy=${opts.egress.proxyUrl}`,
+          "NO_PROXY=localhost,127.0.0.1",
+        ];
   const docker = getDocker();
   const container = await docker.createContainer({
     Image: SANDBOX_IMAGE,
@@ -109,7 +129,7 @@ export async function createSandboxContainer(opts: {
     WorkingDir: "/workspace",
     // npm/pnpm need a writable HOME and tmp or the very first install fails;
     // the workspace is the only writable mount, so HOME lives there.
-    Env: ["HOME=/workspace"],
+    Env: ["HOME=/workspace", ...proxyEnv],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },
     ...(user !== undefined && { User: user }),
     HostConfig: {
@@ -129,6 +149,11 @@ export async function createSandboxContainer(opts: {
       Ulimits: [{ Name: "nofile", Soft: 4096, Hard: 4096 }],
       // gVisor when the host has it; the hardened runc container otherwise.
       ...(isolation === "gvisor" && { Runtime: "runsc" }),
+      // Enforcing egress means the Internal network is the sandbox's ONLY
+      // interface: no route to the internet except through the proxy.
+      ...(opts.egress !== undefined && {
+        NetworkMode: opts.egress.networkName,
+      }),
     },
   });
   await container.start();
@@ -138,7 +163,7 @@ export async function createSandboxContainer(opts: {
 // Docker multiplexes stdout/stderr into 8-byte-framed chunks when the exec
 // has no TTY; frames are concatenated in arrival order so the combined output
 // reads the way a terminal would show it.
-function demuxOutput(buf: Buffer): string {
+export function demuxOutput(buf: Buffer): string {
   if (buf.length === 0) return "";
   const first = buf[0] ?? 0;
   if (first !== 0 && first !== 1 && first !== 2) return buf.toString("utf8");

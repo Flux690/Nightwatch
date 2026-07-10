@@ -144,13 +144,24 @@ and merges on GitHub - Nightwatch never merges. Requirements and properties:
 - The fine-grained token is encrypted at rest, never enters the sandbox
   container, and never appears in any URL or log; git authenticates
   per-invocation so nothing lands in `.git/config`.
-- Honest v1 risk statement: sandbox egress is open, so a prompt-injected
-  `repo_exec` could exfiltrate **the user's source code** (e.g. an HTTP POST
-  of the workspace). "No secrets in the container" is true and necessary but
-  not sufficient - the code itself is the asset at risk until the
-  proxy-fronted egress allowlist ships (planned fast-follow). The worst code
-  outcome otherwise is a commit on a `nightwatch/*` branch inside a draft PR
-  behind GitHub's human merge gate.
+- **Container hardening**: read-only root filesystem, all Linux capabilities
+  dropped, no-new-privileges, real CPU/memory caps (swap pinned so the memory
+  limit can't be doubled), a fork-bomb PID limit and an open-files limit, and
+  the sandbox runs as the API process's own non-root user. gVisor (`runsc`) is
+  used automatically wherever the Docker host provides it; the sandbox settings
+  can require it. The worst code outcome under injection is a commit on a
+  `nightwatch/*` branch inside a draft PR behind GitHub's human merge gate.
+- **Network egress is deny-by-default** (Settings → Sandbox). Each sandbox sits
+  on an internal Docker network with no route to the internet; its only exit is
+  a filtering proxy that allows a configurable hostname allowlist (npm/yarn
+  registries, `nodejs.org`, GitHub by default) and refuses everything else,
+  including private and cloud-metadata addresses (`169.254.169.254`). A host a
+  build legitimately needs but that isn't listed shows up under "Recently
+  blocked" for a one-click add. Switch the policy to "Open" to disable
+  filtering. Honest caveat: the proxy filters by hostname without terminating
+  TLS, so a determined exfiltration could in principle hide behind an allowed
+  CDN via domain fronting - the same limitation every hostname-allowlist
+  approach shares; we do not intercept TLS.
 - We recommend enabling branch protection on the repository's default branch
   (GitHub → Settings → Branches); Nightwatch's token deliberately has no
   Administration permission and cannot do this for you.

@@ -39,6 +39,8 @@ const SCHEMA = `
     sandbox_cpus            INTEGER NOT NULL DEFAULT 2,
     sandbox_memory_mb       INTEGER NOT NULL DEFAULT 4096,
     sandbox_require_gvisor  INTEGER NOT NULL DEFAULT 0,
+    sandbox_egress_policy   TEXT NOT NULL DEFAULT 'allowlist',
+    sandbox_egress_allowlist TEXT NOT NULL DEFAULT '["registry.npmjs.org","registry.yarnpkg.com","nodejs.org","github.com","codeload.github.com","objects.githubusercontent.com","raw.githubusercontent.com","api.github.com"]',
     base_url           TEXT,
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,

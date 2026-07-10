@@ -7,6 +7,7 @@ import {
   execInContainer,
   type SandboxLimits,
 } from "./docker.js";
+import { ensureProxy, EGRESS_NETWORK, EGRESS_PROXY_URL } from "./egress.js";
 import {
   cloneAndCheckout,
   commitAll,
@@ -46,6 +47,9 @@ export interface WorkspaceOptions {
   idleTimeoutMs: number;
   // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
   requireGvisor: boolean;
+  // Network egress: "allowlist" forces the sandbox through the filtering proxy
+  // on the Internal network; "open" leaves it on the default bridge.
+  egress: { policy: "allowlist" | "open"; allowlist: string[] };
   commitAuthor: CommitAuthor;
   pullRequests: {
     create(req: {
@@ -123,11 +127,19 @@ async function createEntry(
       "API runs as root, so sandbox containers run as root too; run the API as a non-root user for full sandbox hardening",
     );
   }
+  // Bring the shared proxy up before the sandbox that depends on it, so the
+  // very first install has a working egress path.
+  let egress: { networkName: string; proxyUrl: string } | undefined;
+  if (options.egress.policy === "allowlist") {
+    await ensureProxy(options.egress.allowlist);
+    egress = { networkName: EGRESS_NETWORK, proxyUrl: EGRESS_PROXY_URL };
+  }
   const containerId = await createSandboxContainer({
     sessionId,
     workspaceDir: dir,
     limits: options.limits,
     requireGvisor: options.requireGvisor,
+    ...(egress !== undefined && { egress }),
   });
 
   const workspace: Workspace = {

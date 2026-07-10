@@ -18,6 +18,7 @@ import { registerManifestRoutes } from "./runners/manifest.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { reapOrphans } from "./sandbox/docker.js";
+import { reapEgress } from "./sandbox/egress.js";
 
 // Explicit SECRET_KEY env var wins; otherwise a key file beside the
 // SQLite database is reused or generated on first boot.
@@ -63,6 +64,9 @@ const start = async (): Promise<void> => {
         if (n > 0) fastify.log.info(`reaped ${n} orphaned sandbox containers`);
       })
       .catch(() => undefined);
+    // The shared egress proxy is derived state too; a fresh one is created on
+    // demand with the current allowlist.
+    void reapEgress().catch(() => undefined);
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
     const host = process.env["HOST"] ?? "127.0.0.1";
     await fastify.listen({ port, host });

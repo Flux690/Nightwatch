@@ -32,6 +32,8 @@ const CONFIG: AgentConfig = {
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
   sandboxRequireGvisor: false,
+  sandboxEgressPolicy: "allowlist",
+  sandboxEgressAllowlist: ["registry.npmjs.org", "github.com"],
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,
@@ -61,6 +63,12 @@ function makeFetchMock(config: AgentConfig) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ ok: true }),
+      });
+    }
+    if (url.includes("/config/sandbox/egress-denials")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ hosts: ["cdn.playwright.dev"] }),
       });
     }
     if (url.includes("/config")) {
@@ -437,6 +445,58 @@ describe("SettingsModal", () => {
 
       await user.click(screen.getByRole("button", { name: /copy/i }));
       expect(clipboardWrite).toHaveBeenCalledWith(INGEST_TOKEN);
+    });
+  });
+
+  describe("sandbox egress", () => {
+    it("shows the allowlist editor only under the allowlist policy", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /sandbox/i);
+
+      expect(
+        await screen.findByLabelText(/allowed hosts/i),
+      ).toBeInTheDocument();
+
+      await user.selectOptions(
+        screen.getByLabelText(/network egress/i),
+        "open",
+      );
+      expect(screen.queryByLabelText(/allowed hosts/i)).not.toBeInTheDocument();
+    });
+
+    it("offers a recently-blocked host as a one-click add to the allowlist", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /sandbox/i);
+
+      const chip = await screen.findByRole("button", {
+        name: /cdn\.playwright\.dev/i,
+      });
+      await user.click(chip);
+
+      const textarea = screen.getByLabelText(/allowed hosts/i);
+      expect(textarea).toHaveValue(
+        "registry.npmjs.org\ngithub.com\ncdn.playwright.dev",
+      );
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          (call) =>
+            call[0] === "/api/config" &&
+            (call[1] as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
+          sandboxEgressAllowlist?: string[];
+        };
+        expect(body.sandboxEgressAllowlist).toEqual([
+          "registry.npmjs.org",
+          "github.com",
+          "cdn.playwright.dev",
+        ]);
+      });
     });
   });
 });

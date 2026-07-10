@@ -5,6 +5,8 @@ import {
   DEFAULT_REMEDIATION_BREAKER_LIMIT,
   DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
   DEFAULT_SANDBOX_CPUS,
+  DEFAULT_SANDBOX_EGRESS_ALLOWLIST,
+  DEFAULT_SANDBOX_EGRESS_POLICY,
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
   DEFAULT_SANDBOX_MEMORY_MB,
   DEFAULT_SANDBOX_REQUIRE_GVISOR,
@@ -18,10 +20,28 @@ import type {
   AgentConfig,
   LLMProviderName,
   ReasoningEffort,
+  SandboxEgressPolicy,
   ThinkingMode,
 } from "@nightwatch/shared";
 
 const CONFIG_ID = "global";
+
+// The allowlist is stored as a JSON array string; a corrupt value falls back to
+// the built-in defaults rather than leaving a sandbox with no reachable hosts.
+function parseAllowlist(stored: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((v): v is string => typeof v === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    // fall through to defaults
+  }
+  return [...DEFAULT_SANDBOX_EGRESS_ALLOWLIST];
+}
 
 // Shape of the config row as selected (columns aliased to camelCase). The
 // provider/thinking/reasoningEffort columns are plain TEXT, constrained to their
@@ -42,6 +62,8 @@ type ConfigRow = {
   sandboxCpus: number;
   sandboxMemoryMb: number;
   sandboxRequireGvisor: number;
+  sandboxEgressPolicy: string;
+  sandboxEgressAllowlist: string;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -62,6 +84,8 @@ const SELECT_ROW = `
          sandbox_cpus            AS sandboxCpus,
          sandbox_memory_mb       AS sandboxMemoryMb,
          sandbox_require_gvisor  AS sandboxRequireGvisor,
+         sandbox_egress_policy   AS sandboxEgressPolicy,
+         sandbox_egress_allowlist AS sandboxEgressAllowlist,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -101,6 +125,8 @@ function defaultConfigFromEnv(): AgentConfig {
     sandboxCpus: DEFAULT_SANDBOX_CPUS,
     sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
     sandboxRequireGvisor: DEFAULT_SANDBOX_REQUIRE_GVISOR,
+    sandboxEgressPolicy: DEFAULT_SANDBOX_EGRESS_POLICY,
+    sandboxEgressAllowlist: [...DEFAULT_SANDBOX_EGRESS_ALLOWLIST],
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -139,6 +165,8 @@ export function loadConfig(): AgentConfig {
     sandboxCpus: row.sandboxCpus,
     sandboxMemoryMb: row.sandboxMemoryMb,
     sandboxRequireGvisor: row.sandboxRequireGvisor === 1,
+    sandboxEgressPolicy: row.sandboxEgressPolicy as SandboxEgressPolicy,
+    sandboxEgressAllowlist: parseAllowlist(row.sandboxEgressAllowlist),
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -163,14 +191,14 @@ const UPSERT_CONFIG = `
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
     code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
-    sandbox_require_gvisor,
+    sandbox_require_gvisor, sandbox_egress_policy, sandbox_egress_allowlist,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
     @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
-    @sandboxRequireGvisor,
+    @sandboxRequireGvisor, @sandboxEgressPolicy, @sandboxEgressAllowlist,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -189,6 +217,8 @@ const UPSERT_CONFIG = `
     sandbox_cpus = excluded.sandbox_cpus,
     sandbox_memory_mb = excluded.sandbox_memory_mb,
     sandbox_require_gvisor = excluded.sandbox_require_gvisor,
+    sandbox_egress_policy = excluded.sandbox_egress_policy,
+    sandbox_egress_allowlist = excluded.sandbox_egress_allowlist,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -218,6 +248,8 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       sandboxCpus: next.sandboxCpus,
       sandboxMemoryMb: next.sandboxMemoryMb,
       sandboxRequireGvisor: next.sandboxRequireGvisor ? 1 : 0,
+      sandboxEgressPolicy: next.sandboxEgressPolicy,
+      sandboxEgressAllowlist: JSON.stringify(next.sandboxEgressAllowlist),
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,

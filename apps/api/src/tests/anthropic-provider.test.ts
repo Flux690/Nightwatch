@@ -36,6 +36,8 @@ const BASE_CONFIG: AgentConfig = {
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
   sandboxRequireGvisor: false,
+  sandboxEgressPolicy: "allowlist",
+  sandboxEgressAllowlist: ["registry.npmjs.org"],
 };
 
 const READ_TOOL = {

@@ -26,3 +26,20 @@ export const DEFAULT_SANDBOX_MEMORY_MB = 4096;
 // gVisor is used automatically when the host advertises it; this flag only
 // controls whether its absence is a hard failure. Off by default.
 export const DEFAULT_SANDBOX_REQUIRE_GVISOR = false;
+
+// Deny-by-default sandbox egress: only these hosts (and their subdomains) are
+// reachable from a code sandbox. The set covers a Node install - package
+// registries, Node headers for native modules, and GitHub for git-based deps
+// and release binaries. Operators edit the list; the console surfaces blocked
+// hosts so a missing one is a one-click add.
+export const DEFAULT_SANDBOX_EGRESS_POLICY = "allowlist" as const;
+export const DEFAULT_SANDBOX_EGRESS_ALLOWLIST: readonly string[] = [
+  "registry.npmjs.org",
+  "registry.yarnpkg.com",
+  "nodejs.org",
+  "github.com",
+  "codeload.github.com",
+  "objects.githubusercontent.com",
+  "raw.githubusercontent.com",
+  "api.github.com",
+];

@@ -14,6 +14,7 @@ vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../config/crypto.js";
+import { updateConfig } from "../config/store.js";
 import { getDb } from "../db/client.js";
 import { saveGitHubIntegration } from "../db/github-integration.js";
 import { insertExecutingRemediationAction } from "../db/remediation-actions.js";
@@ -214,6 +215,9 @@ function auditRow(
 
 beforeAll(() => {
   cleanupDb = useTempDb();
+  // Egress enforcement is covered elsewhere; keep this PR-focused test on the
+  // open path so no proxy machinery is needed.
+  updateConfig({ sandboxEgressPolicy: "open" });
   workspacesDir = mkdtempSync(join(tmpdir(), "nw-opr-"));
   vi.stubEnv("NIGHTWATCH_WORKSPACES_DIR", workspacesDir);
   installGitMock();
