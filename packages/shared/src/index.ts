@@ -82,7 +82,7 @@ export type {
   LLMProviderName,
   ThinkingMode,
   ReasoningEffort,
-  SandboxEgressPolicy,
+  SandboxNetwork,
   AgentConfig,
 } from "./config.js";
 export type {

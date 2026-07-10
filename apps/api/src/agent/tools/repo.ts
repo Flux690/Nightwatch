@@ -84,10 +84,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     idleTimeoutMs: config.sandboxIdleTimeoutMs,
     workspacesDir: workspacesDir(),
     requireGvisor: config.sandboxRequireGvisor,
-    egress: {
-      policy: config.sandboxEgressPolicy,
-      allowlist: config.sandboxEgressAllowlist,
-    },
+    network: config.sandboxNetwork,
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
       create: (req) =>
@@ -133,9 +130,44 @@ function correctiveMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// Sessions whose failed-install note has been delivered once; repo_exec
+// repeats it regardless, because that is where missing dependencies bite.
+const setupNotified = new Set<string>();
+
+function setupNote(ws: Workspace): string | null {
+  if (ws.setup === null || ws.setup.exitCode === 0) return null;
+  return (
+    `NOTE: dependency install failed during sandbox setup (\`${ws.setup.command}\` exited ${ws.setup.exitCode}). ` +
+    `You cannot install dependencies (the sandbox has no network), so tests will not run - proceed with read/edit work and state this in any pull request. Install output tail:\n${ws.setup.outputTail}`
+  );
+}
+
+function withSetupNote(
+  ws: Workspace,
+  result: unknown,
+  repeat: boolean,
+): unknown {
+  const note = setupNote(ws);
+  if (note === null) return result;
+  const firstTime = !setupNotified.has(ws.sessionId);
+  if (firstTime) setupNotified.add(ws.sessionId);
+  if (!firstTime && !repeat) return result;
+  if (typeof result === "string") return `${note}\n\n${result}`;
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    typeof (result as { output?: unknown }).output === "string"
+  ) {
+    const r = result as { output: string };
+    return { ...r, output: `${note}\n\n${r.output}` };
+  }
+  return result;
+}
+
 async function runRepoTool(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<unknown>,
+  opts?: { repeatSetupNote?: boolean },
 ): Promise<ToolExecuteResult> {
   const options = workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
@@ -146,7 +178,11 @@ async function runRepoTool(
     };
   }
   try {
-    return { content: await withWorkspace(ctx.sessionId, options, fn) };
+    return {
+      content: await withWorkspace(ctx.sessionId, options, async (ws) =>
+        withSetupNote(ws, await fn(ws), opts?.repeatSetupNote === true),
+      ),
+    };
   } catch (err) {
     return { content: correctiveMessage(err), is_error: true };
   }
@@ -211,7 +247,7 @@ function composePrBody(
     );
   } else {
     sections.push(
-      "## Verification\n\nNo automated verification was run: no test, typecheck or build script was detected.",
+      `## Verification\n\nNo automated verification was run: ${verification.reason ?? "no test, typecheck or build script was detected"}.`,
     );
   }
 
@@ -346,7 +382,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "repo_exec",
       description:
-        "Run a shell command inside the repository sandbox at the repo root (or cwd): install, build, test, grep, read-only git. This is the isolated checkout, never a production host. Use structured repo tools for edits; exec is for observing and verifying. Output is capped head+tail.",
+        "Run a shell command inside the repository sandbox at the repo root (or cwd): build, test, grep, read-only git. This is the isolated checkout, never a production host. The sandbox has no network access; dependencies were installed during setup, so do not attempt installs - if the fix needs a new dependency, state that in your response and the pull request body for a human to add. Use structured repo tools for edits; exec is for observing and verifying. Output is capped head+tail.",
       input_schema: {
         type: "object",
         properties: {
@@ -371,12 +407,15 @@ export const REPO_TOOLS: Tool[] = [
         return Promise.resolve(badInput("command (string) is required."));
       }
       const cwd = requireString(input, "cwd");
-      return runRepoTool(ctx, (ws) =>
-        execInRepo(
-          ws,
-          { command, ...(cwd !== null && { cwd }) },
-          ctx.toolTimeoutMs,
-        ),
+      return runRepoTool(
+        ctx,
+        (ws) =>
+          execInRepo(
+            ws,
+            { command, ...(cwd !== null && { cwd }) },
+            ctx.toolTimeoutMs,
+          ),
+        { repeatSetupNote: true },
       );
     },
   },

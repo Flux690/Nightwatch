@@ -1,41 +1,14 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { detectToolchain, readPackageJson } from "./install.js";
 import type { Workspace } from "./workspace.js";
-
-export type PackageManager = "pnpm" | "yarn" | "npm";
 
 export interface VerificationResult {
   ran: boolean;
   command?: string;
   passed?: boolean;
   output?: string;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await readFile(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// The packageManager field (corepack convention) is authoritative; otherwise
-// the committed lockfile is the evidence - it is package-manager-specific by
-// construction. Multiple lockfiles resolve pnpm -> yarn -> npm; none means npm.
-export async function detectPackageManager(
-  dir: string,
-  pkg: Record<string, unknown>,
-): Promise<PackageManager> {
-  const declared = pkg["packageManager"];
-  if (typeof declared === "string") {
-    if (declared.startsWith("pnpm")) return "pnpm";
-    if (declared.startsWith("yarn")) return "yarn";
-    if (declared.startsWith("npm")) return "npm";
-  }
-  if (await exists(join(dir, "pnpm-lock.yaml"))) return "pnpm";
-  if (await exists(join(dir, "yarn.lock"))) return "yarn";
-  return "npm";
+  // Honest absence: why verification could not run (surfaced verbatim in the
+  // PR body), as distinct from "no script detected".
+  reason?: string;
 }
 
 const SCRIPT_PRIORITY = ["test", "typecheck", "build"] as const;
@@ -47,15 +20,15 @@ export async function runVerification(
   ws: Workspace,
   timeoutMs: number,
 ): Promise<VerificationResult> {
-  let pkg: Record<string, unknown>;
-  try {
-    // Parsed shape is narrowed field-by-field below.
-    pkg = JSON.parse(
-      await readFile(join(ws.dir, "package.json"), "utf8"),
-    ) as Record<string, unknown>;
-  } catch {
-    return { ran: false };
+  if (ws.setup !== null && ws.setup.exitCode !== 0) {
+    return {
+      ran: false,
+      reason: `dependency install failed during sandbox setup (\`${ws.setup.command}\` exited ${ws.setup.exitCode})`,
+    };
   }
+
+  const pkg = await readPackageJson(ws.dir);
+  if (pkg === null) return { ran: false };
 
   const scripts =
     typeof pkg["scripts"] === "object" && pkg["scripts"] !== null
@@ -66,8 +39,8 @@ export async function runVerification(
   );
   if (script === undefined) return { ran: false };
 
-  const pm = await detectPackageManager(ws.dir, pkg);
-  const command = `${pm} run ${script}`;
+  const { rule } = await detectToolchain(ws.dir, pkg);
+  const command = `${rule.runPrefix} run ${script}`;
   const result = await ws.exec(command, { timeoutMs });
   return {
     ran: true,

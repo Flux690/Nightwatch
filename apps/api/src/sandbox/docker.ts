@@ -85,20 +85,12 @@ export function apiRunsAsRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
-// Host-injected egress wiring: enforcing puts the sandbox on the Internal
-// network behind the proxy (no direct outbound); open keeps the default
-// bridge. The sandbox never reads config - the host decides.
-export interface EgressWiring {
-  networkName: string;
-  proxyUrl: string;
-}
-
 export async function createSandboxContainer(opts: {
   sessionId: string;
   workspaceDir: string;
+  homeDir: string;
   limits: SandboxLimits;
   requireGvisor: boolean;
-  egress?: EgressWiring;
 }): Promise<string> {
   await ensureImage();
   const isolation = await detectIsolation();
@@ -109,29 +101,23 @@ export async function createSandboxContainer(opts: {
   }
   const memoryBytes = opts.limits.memoryMb * 1024 * 1024;
   const user = processUser();
-  const proxyEnv =
-    opts.egress === undefined
-      ? []
-      : [
-          `HTTP_PROXY=${opts.egress.proxyUrl}`,
-          `HTTPS_PROXY=${opts.egress.proxyUrl}`,
-          `http_proxy=${opts.egress.proxyUrl}`,
-          `https_proxy=${opts.egress.proxyUrl}`,
-          "NO_PROXY=localhost,127.0.0.1",
-        ];
   const docker = getDocker();
   const container = await docker.createContainer({
     Image: SANDBOX_IMAGE,
     name: `nightwatch-sandbox-${opts.sessionId}`,
     Cmd: ["sleep", "infinity"],
     WorkingDir: "/workspace",
-    // npm/pnpm need a writable HOME and tmp or the very first install fails;
-    // the workspace is the only writable mount, so HOME lives there.
-    Env: ["HOME=/workspace", ...proxyEnv],
+    // HOME is a separate writable mount, NOT the checkout: package-manager
+    // caches under a HOME inside the repo would be swept into checkpoint
+    // commits by `git add -A`. The corepack var suppresses its download prompt.
+    Env: ["HOME=/home/sandbox", "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },
     ...(user !== undefined && { User: user }),
     HostConfig: {
-      Binds: [`${opts.workspaceDir}:/workspace`],
+      Binds: [
+        `${opts.workspaceDir}:/workspace`,
+        `${opts.homeDir}:/home/sandbox`,
+      ],
       ReadonlyRootfs: true,
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges"],
@@ -147,15 +133,34 @@ export async function createSandboxContainer(opts: {
       Ulimits: [{ Name: "nofile", Soft: 4096, Hard: 4096 }],
       // gVisor when the host has it; the hardened runc container otherwise.
       ...(isolation === "gvisor" && { Runtime: "runsc" }),
-      // Enforcing egress means the Internal network is the sandbox's ONLY
-      // interface: no route to the internet except through the proxy.
-      ...(opts.egress !== undefined && {
-        NetworkMode: opts.egress.networkName,
-      }),
     },
   });
   await container.start();
   return container.id;
+}
+
+// The networkless agent guarantee: after the agent-free install, every network
+// is detached and the result is verified by re-inspection. Only loopback
+// remains, so the agent has no egress path but local test servers still work.
+export async function disconnectAllNetworks(
+  containerId: string,
+): Promise<void> {
+  const docker = getDocker();
+  const container = docker.getContainer(containerId);
+  const info = await container.inspect();
+  const networks = Object.keys(info.NetworkSettings.Networks ?? {});
+  for (const name of networks) {
+    await docker
+      .getNetwork(name)
+      .disconnect({ Container: containerId, Force: true });
+  }
+  const after = await container.inspect();
+  const remaining = Object.keys(after.NetworkSettings.Networks ?? {});
+  if (remaining.length > 0) {
+    throw new SandboxUnavailableError(
+      `sandbox network disconnect failed: still attached to ${remaining.join(", ")}`,
+    );
+  }
 }
 
 // Docker multiplexes stdout/stderr into 8-byte-framed chunks when the exec

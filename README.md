@@ -149,17 +149,22 @@ and merges on GitHub - Nightwatch never merges. Requirements and properties:
   used automatically wherever the Docker host provides it; the sandbox settings
   can require it. The worst code outcome under injection is a commit on a
   `nightwatch/*` branch inside a draft PR behind GitHub's human merge gate.
-- **Network egress is deny-by-default** (Settings → Sandbox). Each sandbox sits
-  on an internal Docker network with no route to the internet; its only exit is
-  a filtering proxy that allows a configurable hostname allowlist (npm/yarn
-  registries, `nodejs.org`, GitHub by default) and refuses everything else,
-  including private and cloud-metadata addresses (`169.254.169.254`). A host a
-  build legitimately needs but that isn't listed shows up under "Recently
-  blocked" for a one-click add. Switch the policy to "Open" to disable
-  filtering. Honest caveat: the proxy filters by hostname without terminating
-  TLS, so a determined exfiltration could in principle hide behind an allowed
-  CDN via domain fronting - the same limitation every hostname-allowlist
-  approach shares; we do not intercept TLS.
+- **The agent runs without a network** (Settings → Sandbox, default). Each
+  session has two phases: an agent-free setup phase clones the repo and installs
+  dependencies deterministically from the committed lockfile (`npm ci`,
+  `pnpm install --frozen-lockfile`, `yarn install --frozen-lockfile/--immutable`
+  - the rules live in one table in `apps/api/src/sandbox/install.ts`), then the
+  container is detached from every Docker network - verified by re-inspection -
+  before the agent's first command. A prompt-injected agent has no exfiltration
+  path; loopback survives, so the repo's own local test servers still work. A
+  repo without a lockfile gets a best-effort plain install; a failed install is
+  survivable (read/edit/PR keep working) and is reported in the logs, in the
+  agent's tool results, and verbatim in the PR body's Verification section.
+  Because the agent cannot install anything, a fix that needs a new dependency
+  is flagged in the PR for a human to add. Switching the knob to "Open" keeps
+  the default bridge attached for the whole session for repos whose setup
+  genuinely needs it - accepting that a prompt-injected agent could then
+  exfiltrate repository content.
 - We recommend enabling branch protection on the repository's default branch
   (GitHub → Settings → Branches); Nightwatch's token deliberately has no
   Administration permission and cannot do this for you.

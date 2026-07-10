@@ -22,6 +22,7 @@ import type { ToolExecuteResult } from "../agent/tools/types.js";
 
 const SESSION_WITH_TESTS = "ccccdddd-0000-4000-8000-000000000001";
 const SESSION_NO_SCRIPTS = "ccccdddd-0000-4000-8000-000000000002";
+const SESSION_INSTALL_FAIL = "ccccdddd-0000-4000-8000-000000000003";
 
 const FIXTURES: Record<string, Record<string, string>> = {
   scripts: {
@@ -57,6 +58,9 @@ function installGitMock(): void {
     switch (sub) {
       case "clone": {
         const dir = stripped[stripped.length - 1]!;
+        // A real clone always yields .git/info (the local-exclude append
+        // depends on it), so the double must too.
+        mkdirSync(join(dir, ".git", "info"), { recursive: true });
         for (const [rel, content] of Object.entries(
           FIXTURES[currentFixture]!,
         )) {
@@ -86,7 +90,9 @@ function installGitMock(): void {
   });
 }
 
-const dockerState = { execExit: 0, execCmds: [] as string[][] };
+// Install and verification share the exec boundary; separate exit codes keep
+// one from poisoning the other (a failed install is its own scenario).
+const dockerState = { execExit: 0, installExit: 0, execCmds: [] as string[][] };
 
 function installDockerMock(): void {
   // Function expression: getDocker() constructs with `new`.
@@ -100,6 +106,10 @@ function installDockerMock(): void {
         remove: () => Promise.resolve(),
         exec: (opts: { Cmd: string[] }) => {
           dockerState.execCmds.push(opts.Cmd);
+          const command = opts.Cmd[4] ?? "";
+          const exitCode = command.includes("install")
+            ? dockerState.installExit
+            : dockerState.execExit;
           const stream = new PassThrough();
           process.nextTick(() => {
             stream.write(Buffer.from("verification output line\n"));
@@ -107,7 +117,7 @@ function installDockerMock(): void {
           });
           return Promise.resolve({
             start: () => Promise.resolve(stream),
-            inspect: () => Promise.resolve({ ExitCode: dockerState.execExit }),
+            inspect: () => Promise.resolve({ ExitCode: exitCode }),
           });
         },
       }),
@@ -212,9 +222,9 @@ function auditRow(
 
 beforeAll(() => {
   cleanupDb = useTempDb();
-  // Egress enforcement is covered elsewhere; keep this PR-focused test on the
-  // open path so no proxy machinery is needed.
-  updateConfig({ sandboxEgressPolicy: "open" });
+  // Network detachment is covered in sandbox-workspace tests; keep this
+  // PR-focused test on the open path so the mock needs no network machinery.
+  updateConfig({ sandboxNetwork: "open" });
   installGitMock();
   installDockerMock();
   installGitHubMock();
@@ -273,8 +283,9 @@ describe("open_pull_request", () => {
     expect(outcome.draft).toBe(true);
     expect(outcome.message).toContain("draft PR #42");
 
-    // Verification ran via the pnpm lockfile's package manager, in-container.
-    expect(dockerState.execCmds.at(-1)).toContain("pnpm run test");
+    // Verification ran via the pnpm lockfile's package manager, in-container
+    // (corepack-prefixed: node:24 ships no pnpm shim).
+    expect(dockerState.execCmds.at(-1)).toContain("corepack pnpm run test");
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
 
     const payload = prState.createPayloads.at(-1)!;
@@ -285,7 +296,7 @@ describe("open_pull_request", () => {
     expect(body).toContain("## Incident");
     expect(body).toContain("## Files changed");
     expect(body).toContain("- src/app.ts");
-    expect(body).toContain("`pnpm run test` passed");
+    expect(body).toContain("`corepack pnpm run test` passed");
     expect(body).toContain(SESSION_WITH_TESTS);
 
     const audit = auditRow(SESSION_WITH_TESTS, "opr-create");
@@ -371,5 +382,29 @@ describe("open_pull_request", () => {
     expect(result.is_error).toBeUndefined();
     const body = String(prState.createPayloads.at(-1)?.["body"]);
     expect(body).toContain("No automated verification was run");
+  });
+
+  it("a failed setup install flows into honest absence, never a blocked PR", async () => {
+    currentFixture = "scripts";
+    dockerState.installExit = 1;
+    gitState.dirty = true;
+    const execsBefore = dockerState.execCmds.length;
+    const result = await runOpr(
+      { title: "Config-only fix" },
+      SESSION_INSTALL_FAIL,
+      "opr-install-fail",
+    );
+    dockerState.installExit = 0;
+
+    expect(result.is_error).toBeUndefined();
+    const body = String(prState.createPayloads.at(-1)?.["body"]);
+    expect(body).toContain("No automated verification was run");
+    expect(body).toContain("dependency install failed during sandbox setup");
+    // No verification command ran: the short-circuit is why the PR opened.
+    expect(
+      dockerState.execCmds
+        .slice(execsBefore)
+        .some((c) => c.includes("corepack pnpm run test")),
+    ).toBe(false);
   });
 });

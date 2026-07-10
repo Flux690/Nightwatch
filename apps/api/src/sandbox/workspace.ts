@@ -1,13 +1,13 @@
-import { mkdir, rm } from "node:fs/promises";
+import { appendFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   apiRunsAsRoot,
   createSandboxContainer,
   destroyContainer,
+  disconnectAllNetworks,
   execInContainer,
   type SandboxLimits,
 } from "./docker.js";
-import { ensureProxy, EGRESS_NETWORK, EGRESS_PROXY_URL } from "./egress.js";
 import {
   cloneAndCheckout,
   commitAll,
@@ -16,6 +16,7 @@ import {
   push,
   type CommitAuthor,
 } from "./git.js";
+import { INSTALL_TIMEOUT_MS, runInstall, type SetupResult } from "./install.js";
 import { capOutput } from "./output.js";
 
 // Structural subset of pino so the host injects its logger instead of the
@@ -45,9 +46,9 @@ export interface WorkspaceOptions {
   workspacesDir: string;
   // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
   requireGvisor: boolean;
-  // Network egress: "allowlist" forces the sandbox through the filtering proxy
-  // on the Internal network; "open" leaves it on the default bridge.
-  egress: { policy: "allowlist" | "open"; allowlist: string[] };
+  // "none" detaches every network after the agent-free dependency install, so
+  // the agent phase has no egress path; "open" keeps the default bridge.
+  network: "none" | "open";
   commitAuthor: CommitAuthor;
   pullRequests: {
     create(req: {
@@ -77,6 +78,10 @@ export interface Workspace {
   // Backs the read-before-edit guard; per session by construction because the
   // workspace is per session.
   readonly readPaths: Set<string>;
+  // Outcome of the setup-phase dependency install (null: nothing to install).
+  // A non-zero exitCode is survivable - the agent can still read, edit and
+  // open a PR - but it must surface everywhere the result is consumed.
+  readonly setup: SetupResult | null;
   readonly options: WorkspaceOptions;
   exec(
     command: string,
@@ -102,15 +107,22 @@ const creating = new Map<string, Promise<Entry>>();
 // event, so it is logged once per process rather than on every sandbox.
 let warnedRootApi = false;
 
+function homeDirFor(dir: string): string {
+  return `${dir}.home`;
+}
+
 async function createEntry(
   sessionId: string,
   options: WorkspaceOptions,
 ): Promise<Entry> {
   const dir = join(options.workspacesDir, sessionId);
+  const homeDir = homeDirFor(dir);
   // A leftover dir (crash, reaped container) would break the clone; the branch
   // is the durable state, so a fresh clone is always correct.
   await rm(dir, { recursive: true, force: true });
+  await rm(homeDir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
+  await mkdir(homeDir, { recursive: true });
   const authHeader = await options.authHeader();
   await cloneAndCheckout({
     url: options.cloneUrl,
@@ -118,6 +130,9 @@ async function createEntry(
     dir,
     authHeader,
   });
+  // Local-only ignore: the setup install guarantees node_modules exists, and a
+  // repo without a .gitignore must never get it checkpoint-committed.
+  await appendFile(join(dir, ".git", "info", "exclude"), "node_modules/\n");
   if (apiRunsAsRoot() && !warnedRootApi) {
     warnedRootApi = true;
     options.log?.warn(
@@ -125,26 +140,57 @@ async function createEntry(
       "API runs as root, so sandbox containers run as root too; run the API as a non-root user for full sandbox hardening",
     );
   }
-  // Bring the shared proxy up before the sandbox that depends on it, so the
-  // very first install has a working egress path.
-  let egress: { networkName: string; proxyUrl: string } | undefined;
-  if (options.egress.policy === "allowlist") {
-    await ensureProxy(options.egress.allowlist);
-    egress = { networkName: EGRESS_NETWORK, proxyUrl: EGRESS_PROXY_URL };
-  }
   const containerId = await createSandboxContainer({
     sessionId,
     workspaceDir: dir,
+    homeDir,
     limits: options.limits,
     requireGvisor: options.requireGvisor,
-    ...(egress !== undefined && { egress }),
   });
+
+  // Two phases: the agent-free install runs while the network is attached,
+  // then every network is detached (and verified gone) before any agent
+  // command can run - a failure here must not leak a networked container.
+  let setup: SetupResult | null = null;
+  try {
+    setup = await runInstall(dir, async (command) => {
+      const result = await execInContainer(containerId, command, {
+        timeoutMs: INSTALL_TIMEOUT_MS,
+      });
+      return { exitCode: result.exitCode, output: result.output };
+    });
+    if (setup !== null && setup.exitCode !== 0) {
+      options.log?.warn(
+        {
+          sessionId,
+          command: setup.command,
+          exitCode: setup.exitCode,
+          tail: setup.outputTail,
+        },
+        "sandbox dependency install failed; session continues without installed dependencies",
+      );
+    } else if (setup !== null && !setup.frozen) {
+      options.log?.warn(
+        { sessionId, command: setup.command },
+        "sandbox dependencies installed without a frozen lockfile (non-deterministic resolution)",
+      );
+    }
+    if (options.network === "none") {
+      await disconnectAllNetworks(containerId);
+    }
+  } catch (err) {
+    await destroyContainer(containerId).catch(() => undefined);
+    await rm(dir, { recursive: true, force: true });
+    await rm(homeDir, { recursive: true, force: true });
+    throw err;
+  }
 
   const workspace: Workspace = {
     sessionId,
     dir,
     branch: options.branch,
     readPaths: new Set<string>(),
+    setup,
     options,
     async exec(command, opts) {
       const result = await execInContainer(containerId, command, opts);
@@ -264,6 +310,7 @@ export async function teardown(
   sessions.delete(sessionId);
   await destroyContainer(entry.containerId).catch(() => undefined);
   await rm(workspace.dir, { recursive: true, force: true });
+  await rm(homeDirFor(workspace.dir), { recursive: true, force: true });
   options.log?.info({ sessionId, reason }, "sandbox torn down");
 }
 

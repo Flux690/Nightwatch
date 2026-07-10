@@ -45,7 +45,7 @@ function budgetLine(opts: PromptOptions): string {
 function repoToolsAddendum(repo: string): string {
   return `
 
-You can work on the connected GitHub repository ${repo} with the repo_* tools (repo_read_file, repo_edit_file, repo_write_file, repo_exec). They operate in an isolated checkout on a dedicated branch - never on any production host; the repo_ prefix marks which world a tool touches. Read a file before editing it (edits to unread files are refused), keep edits targeted, and verify your change with repo_exec (install, build, test). When the fix is complete and verified, propose it with open_pull_request - a human reviews and merges on GitHub; you never merge. Use these when the root cause is in the application code itself.`;
+You can work on the connected GitHub repository ${repo} with the repo_* tools (repo_read_file, repo_edit_file, repo_write_file, repo_exec). They operate in an isolated checkout on a dedicated branch - never on any production host; the repo_ prefix marks which world a tool touches. The sandbox has no network access: dependencies were installed during setup, so never attempt installs - if a fix requires a new dependency, state that in your response and the pull request body for a human to add. Read a file before editing it (edits to unread files are refused), keep edits targeted, and verify your change with repo_exec (build, test). When the fix is complete and verified, propose it with open_pull_request - a human reviews and merges on GitHub; you never merge. Use these when the root cause is in the application code itself.`;
 }
 
 // Appended when the runner has remediation off: write tools are already filtered out of

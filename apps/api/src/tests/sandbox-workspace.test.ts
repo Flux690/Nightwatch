@@ -2,6 +2,7 @@ import {
   mkdtempSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -28,10 +29,10 @@ vi.mock("dockerode", () => ({ default: MockDocker }));
 import {
   teardownAll,
   withWorkspace,
+  type Workspace,
   type WorkspaceOptions,
 } from "../sandbox/workspace.js";
 import { reapOrphans, resetIsolationCache } from "../sandbox/docker.js";
-import { EGRESS_NETWORK, resetEgressState } from "../sandbox/egress.js";
 import { preflight } from "../sandbox/preflight.js";
 import { resolveRepoPath, assertContained } from "../sandbox/paths.js";
 import { capOutput } from "../sandbox/output.js";
@@ -45,13 +46,15 @@ import { waitFor } from "./wait.js";
 const AUTH_HEADER = "Basic c2VjcmV0dG9rZW4=";
 
 // Scriptable git double honouring the execFile callback contract exactly:
-// (error, stdout, stderr), options argument optional.
+// (error, stdout, stderr), options argument optional. Clone materializes
+// cloneFiles plus .git/info, matching what a real clone puts on disk.
 const gitState = {
   remoteBranchExists: false,
   dirty: false,
   unpushed: "0",
   failPush: false,
   calls: [] as string[][],
+  cloneFiles: {} as Record<string, string>,
 };
 
 type ExecCb = (error: Error | null, stdout: string, stderr: string) => void;
@@ -70,8 +73,15 @@ function installGitMock(): void {
     switch (sub) {
       case "--version":
         return ok("git version 2.44.0");
-      case "clone":
+      case "clone": {
+        const dir = stripped[stripped.length - 1]!;
+        mkdirSync(join(dir, ".git", "info"), { recursive: true });
+        for (const [rel, content] of Object.entries(gitState.cloneFiles)) {
+          mkdirSync(join(dir, rel, ".."), { recursive: true });
+          writeFileSync(join(dir, rel), content);
+        }
         return ok();
+      }
       case "rev-parse":
         return gitState.remoteBranchExists
           ? ok("abc123\n")
@@ -110,12 +120,38 @@ const dockerState = {
   createArgs: [] as Array<Record<string, unknown>>,
   removed: [] as string[],
   listResult: [] as Array<{ Id: string }>,
-  networks: [] as Array<{ Name: string }>,
-  networkConnects: 0,
+  // exec:<command> and disconnect:<network> entries in arrival order, so tests
+  // can prove the install ran before the network came off.
+  events: [] as string[],
+  execHandler: ((_command: string) => ({ exitCode: 0, output: "ok\n" })) as (
+    command: string,
+  ) => { exitCode: number; output: string },
+  // containerId -> attached networks; every container starts on the bridge.
+  networks: {} as Record<string, Record<string, unknown>>,
+  disconnectNoop: false,
   pingFails: false,
   gvisor: false,
   nextId: 1,
 };
+
+function execEvents(): string[] {
+  return dockerState.events
+    .filter((e) => e.startsWith("exec:"))
+    .map((e) => e.slice("exec:".length));
+}
+
+// Minimal stream honouring the contract execInContainer relies on: data
+// chunks, then end. Raw (non-multiplexed) output exercises demux passthrough.
+function fakeStream(output: string): {
+  on: (event: string, cb: (chunk?: Buffer) => void) => void;
+} {
+  return {
+    on(event, cb) {
+      if (event === "data" && output.length > 0) cb(Buffer.from(output));
+      if (event === "end") cb();
+    },
+  };
+}
 
 function installDockerMock(): void {
   // A function expression, not an arrow: getDocker() constructs with `new`,
@@ -139,6 +175,7 @@ function dockerFake(): Record<string, unknown> {
     createContainer: (opts: Record<string, unknown>) => {
       dockerState.createArgs.push(opts);
       const id = `container-${dockerState.nextId++}`;
+      dockerState.networks[id] = { bridge: {} };
       return Promise.resolve({ id, start: () => Promise.resolve() });
     },
     getContainer: (id: string) => ({
@@ -146,16 +183,27 @@ function dockerFake(): Record<string, unknown> {
         dockerState.removed.push(id);
         return Promise.resolve();
       },
+      inspect: () =>
+        Promise.resolve({
+          NetworkSettings: { Networks: { ...dockerState.networks[id] } },
+        }),
+      exec: (opts: { Cmd: string[] }) => {
+        const command = opts.Cmd[4] ?? "";
+        dockerState.events.push(`exec:${command}`);
+        const result = dockerState.execHandler(command);
+        return Promise.resolve({
+          start: () => Promise.resolve(fakeStream(result.output)),
+          inspect: () => Promise.resolve({ ExitCode: result.exitCode }),
+        });
+      },
     }),
     listContainers: () => Promise.resolve(dockerState.listResult),
-    listNetworks: () => Promise.resolve(dockerState.networks),
-    createNetwork: (opts: { Name: string }) => {
-      dockerState.networks.push({ Name: opts.Name });
-      return Promise.resolve({});
-    },
-    getNetwork: () => ({
-      connect: () => {
-        dockerState.networkConnects++;
+    getNetwork: (name: string) => ({
+      disconnect: (opts: { Container: string }) => {
+        dockerState.events.push(`disconnect:${name}`);
+        if (!dockerState.disconnectNoop) {
+          delete dockerState.networks[opts.Container]?.[name];
+        }
         return Promise.resolve();
       },
     }),
@@ -174,7 +222,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     idleTimeoutMs: 60_000,
     workspacesDir,
     requireGvisor: false,
-    egress: { policy: "open", allowlist: [] },
+    network: "none",
     commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
@@ -209,15 +257,17 @@ afterEach(async () => {
   gitState.dirty = false;
   gitState.unpushed = "0";
   gitState.calls = [];
+  gitState.cloneFiles = {};
   dockerState.createArgs = [];
   dockerState.removed = [];
   dockerState.listResult = [];
-  dockerState.networks = [];
-  dockerState.networkConnects = 0;
+  dockerState.events = [];
+  dockerState.execHandler = () => ({ exitCode: 0, output: "ok\n" });
+  dockerState.networks = {};
+  dockerState.disconnectNoop = false;
   dockerState.pingFails = false;
   dockerState.gvisor = false;
   resetIsolationCache();
-  resetEgressState();
 });
 
 function cloneCalls(): string[][] {
@@ -243,7 +293,10 @@ describe("workspace lifecycle", () => {
 
     const create = dockerState.createArgs[0]!;
     expect(create["Image"]).toBe("node:24");
-    expect(create["Env"]).toContain("HOME=/workspace");
+    // HOME rides its own mount so package-manager caches never land inside
+    // the checkout (git add -A would sweep them into checkpoint commits).
+    expect(create["Env"]).toContain("HOME=/home/sandbox");
+    expect(create["Env"]).toContain("COREPACK_ENABLE_DOWNLOAD_PROMPT=0");
     expect(create["Labels"]).toMatchObject({
       "nightwatch.sandbox": "1",
       "nightwatch.session": sessionId,
@@ -256,6 +309,7 @@ describe("workspace lifecycle", () => {
     expect(host["Memory"]).toBe(4096 * 1024 * 1024);
     expect(host["Binds"]).toEqual([
       `${join(workspacesDir, sessionId)}:/workspace`,
+      `${join(workspacesDir, sessionId)}.home:/home/sandbox`,
     ]);
     // Wall reinforcements: real memory cap (swap == memory), fork-bomb and fd
     // limits, non-root ownership-matched user, no-dev tmpfs.
@@ -296,49 +350,6 @@ describe("workspace lifecycle", () => {
     expect(dockerState.createArgs).toHaveLength(0);
   });
 
-  it("in allowlist mode forces the sandbox onto the internal network via the shared proxy", async () => {
-    const sessionId = nextSessionId();
-    await withWorkspace(
-      sessionId,
-      options({
-        egress: { policy: "allowlist", allowlist: ["registry.npmjs.org"] },
-      }),
-      () => Promise.resolve(),
-    );
-
-    const sandboxCreate = dockerState.createArgs.find(
-      (a) =>
-        (a["Labels"] as Record<string, string> | undefined)?.[
-          "nightwatch.sandbox"
-        ] === "1",
-    )!;
-    const host = sandboxCreate["HostConfig"] as Record<string, unknown>;
-    expect(host["NetworkMode"]).toBe(EGRESS_NETWORK);
-    expect(sandboxCreate["Env"]).toContain(
-      "HTTPS_PROXY=http://nightwatch-sandbox-proxy:8080",
-    );
-    // A shared proxy container was ensured and dual-homed onto the network.
-    const proxyCreate = dockerState.createArgs.find(
-      (a) =>
-        (a["Labels"] as Record<string, string> | undefined)?.[
-          "nightwatch.sandbox.proxy"
-        ] === "1",
-    );
-    expect(proxyCreate).toBeDefined();
-    expect(dockerState.networkConnects).toBeGreaterThan(0);
-  });
-
-  it("in open mode keeps the default bridge and sets no proxy env", async () => {
-    const sessionId = nextSessionId();
-    await withWorkspace(sessionId, options(), () => Promise.resolve());
-    const create = dockerState.createArgs[0]!;
-    const host = create["HostConfig"] as Record<string, unknown>;
-    expect(host["NetworkMode"]).toBeUndefined();
-    expect(
-      (create["Env"] as string[]).some((e) => e.startsWith("HTTPS_PROXY=")),
-    ).toBe(false);
-  });
-
   it("reuses the live workspace across calls in a burst", async () => {
     const sessionId = nextSessionId();
     await withWorkspace(sessionId, options(), () => Promise.resolve());
@@ -355,6 +366,8 @@ describe("workspace lifecycle", () => {
     vi.useRealTimers();
 
     await waitFor(() => !existsSync(join(workspacesDir, sessionId)));
+    // The sibling HOME mount dies with the workspace.
+    expect(existsSync(join(workspacesDir, `${sessionId}.home`))).toBe(false);
     expect(dockerState.removed).toHaveLength(1);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
 
@@ -445,6 +458,133 @@ describe("workspace lifecycle", () => {
     const reaped = await reapOrphans();
     expect(reaped).toBe(2);
     expect(dockerState.removed).toEqual(["orphan-1", "orphan-2"]);
+  });
+});
+
+describe("networkless two-phase setup", () => {
+  const PKG = '{ "name": "fixture" }\n';
+
+  async function createWorkspace(
+    overrides?: Partial<WorkspaceOptions>,
+  ): Promise<Workspace> {
+    const sessionId = nextSessionId();
+    let captured: Workspace | undefined;
+    await withWorkspace(sessionId, options(overrides), (ws) => {
+      captured = ws;
+      return Promise.resolve();
+    });
+    return captured!;
+  }
+
+  // One row per INSTALL_RULES entry: the lockfile (or corepack field) picks
+  // the frozen command. Keep in lockstep with sandbox/install.ts.
+  it.each([
+    ["pnpm-lock.yaml", PKG, "corepack pnpm install --frozen-lockfile"],
+    ["yarn.lock", PKG, "yarn install --frozen-lockfile"],
+    [
+      "yarn.lock",
+      '{ "name": "fixture", "packageManager": "yarn@4.5.0" }\n',
+      "corepack yarn install --immutable",
+    ],
+    ["package-lock.json", PKG, "npm ci"],
+  ])(
+    "installs from %s with the frozen command, then detaches the network",
+    async (lockfile, pkg, frozen) => {
+      gitState.cloneFiles = { "package.json": pkg, [lockfile]: "x\n" };
+      const ws = await createWorkspace();
+
+      expect(execEvents()).toEqual([frozen]);
+      expect(ws.setup).toMatchObject({ command: frozen, exitCode: 0 });
+      expect(ws.setup?.frozen).toBe(true);
+      // The install ran while the network was up; detachment came after.
+      const installAt = dockerState.events.indexOf(`exec:${frozen}`);
+      const disconnectAt = dockerState.events.indexOf("disconnect:bridge");
+      expect(disconnectAt).toBeGreaterThan(installAt);
+      expect(
+        dockerState.networks[`container-${dockerState.nextId - 1}`],
+      ).toEqual({});
+    },
+  );
+
+  it("falls back to the relaxed install when the frozen rung fails, and says so", async () => {
+    gitState.cloneFiles = { "package.json": PKG, "pnpm-lock.yaml": "x\n" };
+    dockerState.execHandler = (command) =>
+      command.includes("--frozen-lockfile")
+        ? { exitCode: 1, output: "ERR_PNPM_OUTDATED_LOCKFILE\n" }
+        : { exitCode: 0, output: "done\n" };
+
+    const ws = await createWorkspace();
+    expect(execEvents()).toEqual([
+      "corepack pnpm install --frozen-lockfile",
+      "corepack pnpm install",
+    ]);
+    expect(ws.setup).toMatchObject({
+      command: "corepack pnpm install",
+      exitCode: 0,
+      frozen: false,
+    });
+  });
+
+  it("a repo with no lockfile gets the best-effort install", async () => {
+    gitState.cloneFiles = { "package.json": PKG };
+    const ws = await createWorkspace();
+    expect(execEvents()).toEqual(["npm install"]);
+    expect(ws.setup?.frozen).toBe(false);
+  });
+
+  it("a repo with no package.json installs nothing and still detaches", async () => {
+    const ws = await createWorkspace();
+    expect(execEvents()).toEqual([]);
+    expect(ws.setup).toBeNull();
+    expect(dockerState.events).toContain("disconnect:bridge");
+  });
+
+  it("a failed install is survivable: recorded, warned, workspace still usable", async () => {
+    const warn = vi.fn();
+    gitState.cloneFiles = { "package.json": PKG, "package-lock.json": "x\n" };
+    dockerState.execHandler = () => ({ exitCode: 1, output: "EAI_AGAIN\n" });
+
+    const ws = await createWorkspace({ log: { info: vi.fn(), warn } });
+    // Both rungs were tried; the failure is on the workspace for every
+    // consumer (exec note, verification honest-absence).
+    expect(execEvents()).toEqual(["npm ci", "npm install"]);
+    expect(ws.setup).toMatchObject({ command: "npm install", exitCode: 1 });
+    expect(ws.setup?.outputTail).toContain("EAI_AGAIN");
+    expect(
+      warn.mock.calls.some((args) =>
+        String(args[1]).includes("dependency install failed"),
+      ),
+    ).toBe(true);
+    // The network still came off - a broken install never leaves egress open.
+    expect(dockerState.events).toContain("disconnect:bridge");
+  });
+
+  it("open mode skips detachment and keeps the bridge attached", async () => {
+    gitState.cloneFiles = { "package.json": PKG };
+    await createWorkspace({ network: "open" });
+    expect(execEvents()).toEqual(["npm install"]);
+    expect(dockerState.events).not.toContain("disconnect:bridge");
+    expect(
+      dockerState.networks[`container-${dockerState.nextId - 1}`],
+    ).toHaveProperty("bridge");
+  });
+
+  it("fails loud and destroys the container when detachment does not stick", async () => {
+    dockerState.disconnectNoop = true;
+    const sessionId = nextSessionId();
+    await expect(
+      withWorkspace(sessionId, options(), () => Promise.resolve()),
+    ).rejects.toBeInstanceOf(SandboxUnavailableError);
+    expect(dockerState.removed).toHaveLength(1);
+    expect(existsSync(join(workspacesDir, sessionId))).toBe(false);
+  });
+
+  it("locally excludes node_modules so a repo without .gitignore never commits it", async () => {
+    gitState.cloneFiles = { "package.json": PKG };
+    const ws = await createWorkspace();
+    expect(
+      readFileSync(join(ws.dir, ".git", "info", "exclude"), "utf8"),
+    ).toContain("node_modules/");
   });
 });
 

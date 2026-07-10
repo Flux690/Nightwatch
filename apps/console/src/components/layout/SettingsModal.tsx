@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -86,46 +85,6 @@ function buildDelta(
   return delta;
 }
 
-// Hosts the sandbox egress proxy recently refused, offered as one-click adds
-// so a legitimately-needed host is a click, not a cryptic install failure.
-// Only hosts not already listed are shown.
-function EgressDenials({
-  allowlist,
-  onAdd,
-}: {
-  allowlist: string[];
-  onAdd: (host: string) => void;
-}): React.JSX.Element | null {
-  const { data } = useQuery<{ hosts: string[] }>({
-    queryKey: ["egress-denials"],
-    queryFn: () =>
-      apiFetch<{ hosts: string[] }>("/api/config/sandbox/egress-denials"),
-    refetchInterval: 15_000,
-  });
-  const pending = (data?.hosts ?? []).filter((h) => !allowlist.includes(h));
-  if (pending.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-sm font-medium">Recently blocked</p>
-      <div className="flex flex-wrap gap-2">
-        {pending.map((host) => (
-          <button
-            key={host}
-            type="button"
-            onClick={() => onAdd(host)}
-            className="inline-flex items-center gap-1 rounded-sm bg-warning-tint px-2 py-1 font-mono text-xs text-warning hover:bg-warning-tint/70"
-          >
-            {host}
-            <span aria-hidden className="font-semibold">
-              + Add
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function SettingsModal({
   opened,
   onClose,
@@ -185,15 +144,7 @@ export function SettingsModal({
   async function handleSave(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!form || !config) return;
-    // The allowlist textarea keeps blank lines while editing; drop them (and
-    // trim) before diffing so an empty entry never reaches the API.
-    const cleaned: AgentConfig = {
-      ...form,
-      sandboxEgressAllowlist: form.sandboxEgressAllowlist
-        .map((h) => h.trim())
-        .filter(Boolean),
-    };
-    const delta = buildDelta(cleaned, config);
+    const delta = buildDelta(form, config);
     const keyToSave = newApiKey.trim();
     // A changed key must pass Test connection before it can be saved.
     if (keyToSave && !testResult?.ok) return;
@@ -748,60 +699,34 @@ export function SettingsModal({
                         </label>
                         <div className="col-span-2 mt-2 flex flex-col gap-3">
                           <Field className="max-w-52">
-                            <FieldLabel htmlFor="settings-egress-policy">
-                              Network egress
+                            <FieldLabel htmlFor="settings-sandbox-network">
+                              Agent network
                             </FieldLabel>
                             <NativeSelect
-                              id="settings-egress-policy"
-                              value={form.sandboxEgressPolicy}
+                              id="settings-sandbox-network"
+                              value={form.sandboxNetwork}
                               onChange={(e) =>
                                 setField(
-                                  "sandboxEgressPolicy",
+                                  "sandboxNetwork",
                                   e.currentTarget.value === "open"
                                     ? "open"
-                                    : "allowlist",
+                                    : "none",
                                 )
                               }
                             >
-                              <NativeSelectOption value="allowlist">
-                                Allowlist (deny by default)
+                              <NativeSelectOption value="none">
+                                None (recommended)
                               </NativeSelectOption>
                               <NativeSelectOption value="open">
                                 Open (unrestricted)
                               </NativeSelectOption>
                             </NativeSelect>
                           </Field>
-                          {form.sandboxEgressPolicy === "allowlist" && (
-                            <>
-                              <Field>
-                                <FieldLabel htmlFor="settings-egress-allowlist">
-                                  Allowed hosts (one per line; subdomains
-                                  included)
-                                </FieldLabel>
-                                <Textarea
-                                  id="settings-egress-allowlist"
-                                  rows={6}
-                                  className="font-mono text-sm"
-                                  value={form.sandboxEgressAllowlist.join("\n")}
-                                  onChange={(e) =>
-                                    setField(
-                                      "sandboxEgressAllowlist",
-                                      e.currentTarget.value.split("\n"),
-                                    )
-                                  }
-                                />
-                              </Field>
-                              <EgressDenials
-                                allowlist={form.sandboxEgressAllowlist}
-                                onAdd={(host) =>
-                                  setField("sandboxEgressAllowlist", [
-                                    ...form.sandboxEgressAllowlist,
-                                    host,
-                                  ])
-                                }
-                              />
-                            </>
-                          )}
+                          <p className="text-sm text-muted-foreground">
+                            {form.sandboxNetwork === "none"
+                              ? "Dependencies install during an agent-free setup phase; the sandbox is then detached from every network before the agent runs."
+                              : "The agent keeps full internet access for the whole session. A prompt-injected agent could exfiltrate repository content."}
+                          </p>
                         </div>
                       </div>
                     )}

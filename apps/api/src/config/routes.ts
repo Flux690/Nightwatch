@@ -3,7 +3,6 @@ import type { FastifyInstance } from "fastify";
 import { loadConfig, loadApiKey, updateConfig, saveApiKey } from "./store.js";
 import { encrypt, maskKey } from "./crypto.js";
 import { requireSession } from "../auth/session.js";
-import { readEgressDenials } from "../sandbox/egress.js";
 import { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwatch/shared";
 
@@ -23,11 +22,7 @@ const ConfigPatchSchema = z.object({
   sandboxCpus: z.number().int().positive().optional(),
   sandboxMemoryMb: z.number().int().positive().optional(),
   sandboxRequireGvisor: z.boolean().optional(),
-  sandboxEgressPolicy: z.enum(["allowlist", "open"]).optional(),
-  sandboxEgressAllowlist: z
-    .array(z.string().min(1).max(253))
-    .max(200)
-    .optional(),
+  sandboxNetwork: z.enum(["none", "open"]).optional(),
   baseUrl: z.string().url().nullable().optional(),
   promptCaching: z.boolean().optional(),
   reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
@@ -154,14 +149,6 @@ export async function registerConfigRoutes(
       logger.info({ keys: Object.keys(parsed.data) }, "agent config updated");
       return updated;
     },
-  );
-
-  // Hostnames the sandbox egress proxy has recently refused, so the operator
-  // can add a legitimately-needed one to the allowlist in a click.
-  fastify.get(
-    "/config/sandbox/egress-denials",
-    { preHandler: requireSession },
-    async () => ({ hosts: await readEgressDenials() }),
   );
 
   // proxies model list so the browser never calls the LLM endpoint directly

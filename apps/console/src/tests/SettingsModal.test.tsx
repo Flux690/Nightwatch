@@ -32,8 +32,7 @@ const CONFIG: AgentConfig = {
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
   sandboxRequireGvisor: false,
-  sandboxEgressPolicy: "allowlist",
-  sandboxEgressAllowlist: ["registry.npmjs.org", "github.com"],
+  sandboxNetwork: "none",
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,
@@ -63,12 +62,6 @@ function makeFetchMock(config: AgentConfig) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ ok: true }),
-      });
-    }
-    if (url.includes("/config/sandbox/egress-denials")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ hosts: ["cdn.playwright.dev"] }),
       });
     }
     if (url.includes("/config")) {
@@ -511,37 +504,22 @@ describe("SettingsModal", () => {
     });
   });
 
-  describe("sandbox egress", () => {
-    it("shows the allowlist editor only under the allowlist policy", async () => {
-      const user = userEvent.setup();
-      setup();
-      await openSection(user, /sandbox/i);
-
-      expect(
-        await screen.findByLabelText(/allowed hosts/i),
-      ).toBeInTheDocument();
-
-      await user.selectOptions(
-        screen.getByLabelText(/network egress/i),
-        "open",
-      );
-      expect(screen.queryByLabelText(/allowed hosts/i)).not.toBeInTheDocument();
-    });
-
-    it("offers a recently-blocked host as a one-click add to the allowlist", async () => {
+  describe("sandbox network", () => {
+    it("saves the agent network knob and explains what each mode means", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
       await openSection(user, /sandbox/i);
 
-      const chip = await screen.findByRole("button", {
-        name: /cdn\.playwright\.dev/i,
-      });
-      await user.click(chip);
+      const select = await screen.findByLabelText(/agent network/i);
+      expect(select).toHaveValue("none");
+      expect(
+        screen.getByText(/detached from every network/i),
+      ).toBeInTheDocument();
 
-      const textarea = screen.getByLabelText(/allowed hosts/i);
-      expect(textarea).toHaveValue(
-        "registry.npmjs.org\ngithub.com\ncdn.playwright.dev",
-      );
+      await user.selectOptions(select, "open");
+      expect(
+        screen.getByText(/could exfiltrate repository content/i),
+      ).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /^save$/i }));
       await waitFor(() => {
@@ -552,13 +530,9 @@ describe("SettingsModal", () => {
         );
         expect(patch).toBeDefined();
         const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
-          sandboxEgressAllowlist?: string[];
+          sandboxNetwork?: string;
         };
-        expect(body.sandboxEgressAllowlist).toEqual([
-          "registry.npmjs.org",
-          "github.com",
-          "cdn.playwright.dev",
-        ]);
+        expect(body.sandboxNetwork).toBe("open");
       });
     });
   });

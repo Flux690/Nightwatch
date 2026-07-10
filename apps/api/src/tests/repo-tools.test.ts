@@ -57,6 +57,9 @@ function installGitMock(): void {
     switch (sub) {
       case "clone": {
         const dir = stripped[stripped.length - 1]!;
+        // A real clone always yields .git/info (the local-exclude append
+        // depends on it), so the double must too.
+        mkdirSync(join(dir, ".git", "info"), { recursive: true });
         for (const [rel, content] of Object.entries(FIXTURE_FILES)) {
           mkdirSync(join(dir, rel, ".."), { recursive: true });
           writeFileSync(join(dir, rel), content);
@@ -134,9 +137,9 @@ let cleanupDb: () => void;
 
 beforeAll(() => {
   cleanupDb = useTempDb();
-  // Egress enforcement is exercised in sandbox-workspace/egress-proxy tests;
-  // keep these tool tests on the open path so no proxy machinery is needed.
-  updateConfig({ sandboxEgressPolicy: "open" });
+  // Network detachment is exercised in sandbox-workspace tests; keep these
+  // tool tests on the open path so the mock needs no network machinery.
+  updateConfig({ sandboxNetwork: "open" });
   installGitMock();
   installDockerMock();
   saveGitHubIntegration({
