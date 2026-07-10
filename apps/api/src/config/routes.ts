@@ -36,6 +36,8 @@ const ConfigPatchSchema = z.object({
 const TestBodySchema = z.object({
   apiKey: z.string().min(1),
   model: z.string().optional(),
+  provider: z.enum(["anthropic", "openai"]).optional(),
+  baseUrl: z.string().url().optional(),
 });
 
 const KeyBodySchema = z.object({
@@ -183,6 +185,8 @@ export async function registerConfigRoutes(
     }
   });
 
+  // Tests only - never persists. Provider/baseUrl overrides let the caller
+  // probe against unsaved form edits instead of whatever is on disk.
   fastify.post(
     "/config/test",
     { preHandler: requireSession },
@@ -191,12 +195,13 @@ export async function registerConfigRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const { apiKey, model } = parsed.data;
+      const { apiKey, model, provider, baseUrl } = parsed.data;
 
-      const encrypted = encrypt(apiKey);
-      saveApiKey(encrypted);
-
-      const config = loadConfig();
+      const config: AgentConfig = {
+        ...loadConfig(),
+        ...(provider !== undefined && { provider }),
+        ...(baseUrl !== undefined && { baseUrl }),
+      };
       const result = await probeEndpoint(config, apiKey, model);
       logger.info({ ok: result.ok }, "config/test probe completed");
       return result;

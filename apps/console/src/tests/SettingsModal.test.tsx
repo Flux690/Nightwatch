@@ -236,10 +236,10 @@ describe("SettingsModal", () => {
   });
 
   describe("API key", () => {
-    it("POSTs /config/test with the entered key on Test Connection click", async () => {
+    it("lives in the Provider section, and Test Connection sends the entered key plus current provider/baseUrl/model", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
-      await openSection(user, /api key/i);
+      await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
@@ -257,12 +257,16 @@ describe("SettingsModal", () => {
           (testCall?.[1] as RequestInit).body as string,
         ) as {
           apiKey: string;
+          provider: string;
+          model: string;
         };
         expect(body.apiKey).toBe("sk-ant-newkey");
+        expect(body.provider).toBe(CONFIG.provider);
+        expect(body.model).toBe(CONFIG.model);
       });
     });
 
-    it("shows an error badge when Test Connection returns bad_key", async () => {
+    it("shows an error badge when Test Connection returns bad_key, and never PATCHes /config/key", async () => {
       const user = userEvent.setup();
       const fetchMock = vi
         .fn()
@@ -295,7 +299,7 @@ describe("SettingsModal", () => {
           return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         });
       renderModal(fetchMock);
-      await openSection(user, /api key/i);
+      await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-bad");
@@ -305,6 +309,65 @@ describe("SettingsModal", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/invalid api key/i)).toBeInTheDocument();
+      });
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            (url as string).includes("/config/key") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        ),
+      ).toBe(false);
+    });
+
+    it("disables Save for an untested key, and enables it once Test Connection succeeds", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
+      await user.type(keyInput, "sk-ant-newkey");
+
+      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+
+      await user.click(
+        screen.getByRole("button", { name: /test connection/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/connected/i)).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: /^save$/i }),
+      ).not.toBeDisabled();
+    });
+
+    it("PATCHes /config/key on Save after a successful test", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /provider/i);
+
+      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
+      await user.type(keyInput, "sk-ant-newkey");
+      await user.click(
+        screen.getByRole("button", { name: /test connection/i }),
+      );
+      await waitFor(() => {
+        expect(screen.getByText(/connected/i)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      await waitFor(() => {
+        const keyCall = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            (url as string).includes("/config/key") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(keyCall).toBeDefined();
+        const body = JSON.parse(
+          (keyCall?.[1] as RequestInit).body as string,
+        ) as { apiKey: string };
+        expect(body.apiKey).toBe("sk-ant-newkey");
       });
     });
   });

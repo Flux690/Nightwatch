@@ -39,26 +39,14 @@ const ERROR_LABELS: Record<string, string> = {
   unknown_model: "Model not found on endpoint",
 };
 
-type SectionId =
-  | "model"
-  | "api-key"
-  | "loop"
-  | "sandbox"
-  | "alerting"
-  | "account";
+type SectionId = "model" | "loop" | "sandbox" | "alerting" | "account";
 
 const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   {
     id: "model",
-    label: "Model",
+    label: "Provider",
     description:
-      "Provider, endpoint and generation limits for the investigation agent.",
-  },
-  {
-    id: "api-key",
-    label: "API key",
-    description:
-      "Stored write-only. Testing a new key replaces the current one.",
+      "Protocol, endpoint, API key and generation limits for the investigation agent.",
   },
   {
     id: "loop",
@@ -183,24 +171,18 @@ export function SettingsModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(delta),
       }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(["config"], updated);
-      toast.show({
-        title: "Settings saved",
-        message: "Your changes have been saved.",
-        variant: "success",
-      });
-    },
-    onError: (err) => {
-      toast.show({
-        title: "Save failed",
-        message: err instanceof Error ? err.message : "Unknown error",
-        variant: "error",
-      });
-    },
   });
 
-  function handleSave(e: React.FormEvent): void {
+  const saveApiKey = useMutation({
+    mutationFn: (apiKey: string) =>
+      apiFetch<{ apiKeyMasked: string }>("/api/config/key", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      }),
+  });
+
+  async function handleSave(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!form || !config) return;
     // The allowlist textarea keeps blank lines while editing; drop them (and
@@ -212,31 +194,60 @@ export function SettingsModal({
         .filter(Boolean),
     };
     const delta = buildDelta(cleaned, config);
-    if (Object.keys(delta).length === 0) return;
-    saveConfig.mutate(delta);
+    const keyToSave = newApiKey.trim();
+    // A changed key must pass Test connection before it can be saved.
+    if (keyToSave && !testResult?.ok) return;
+    if (Object.keys(delta).length === 0 && !keyToSave) return;
+
+    try {
+      await Promise.all([
+        Object.keys(delta).length > 0
+          ? saveConfig.mutateAsync(delta)
+          : undefined,
+        keyToSave ? saveApiKey.mutateAsync(keyToSave) : undefined,
+      ]);
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+      setNewApiKey("");
+      setTestResult(null);
+      toast.show({
+        title: "Settings saved",
+        message: "Your changes have been saved.",
+        variant: "success",
+      });
+    } catch (err) {
+      toast.show({
+        title: "Save failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+        variant: "error",
+      });
+    }
   }
 
   const testConnection = useMutation({
-    mutationFn: (vars: { apiKey: string; model: string | undefined }) =>
+    mutationFn: (vars: {
+      apiKey: string;
+      model: string | undefined;
+      provider: AgentConfig["provider"] | undefined;
+      baseUrl: string | undefined;
+    }) =>
       apiFetch<TestResult>("/api/config/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(vars),
       }),
-    onSuccess: async (data) => {
-      setTestResult(data);
-      if (data.ok) {
-        await queryClient.invalidateQueries({ queryKey: ["config"] });
-        setNewApiKey("");
-      }
-    },
+    onSuccess: (data) => setTestResult(data),
     onError: () => setTestResult({ ok: false, error: "unreachable" }),
   });
 
   function handleTestConnection(): void {
-    if (!newApiKey.trim()) return;
+    if (!newApiKey.trim() || !form) return;
     setTestResult(null);
-    testConnection.mutate({ apiKey: newApiKey, model: form?.model });
+    testConnection.mutate({
+      apiKey: newApiKey,
+      model: form.model,
+      provider: form.provider,
+      baseUrl: form.baseUrl,
+    });
   }
 
   function setField<K extends keyof AgentConfig>(
@@ -246,13 +257,26 @@ export function SettingsModal({
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  // Provider/baseUrl/model changes invalidate any prior test result - it was
+  // only ever a verdict on the combination tested at the time.
+  function setConnectionField<K extends "provider" | "baseUrl" | "model">(
+    key: K,
+    value: AgentConfig[K],
+  ): void {
+    setField(key, value);
+    setTestResult(null);
+  }
+
   function numberValue(value: string | number): number {
     return typeof value === "number" ? value : Number(value);
   }
 
   const isAnthropic = form?.provider === "anthropic";
-  const dirty =
+  const keyDirty = newApiKey.trim() !== "";
+  const keyUntested = keyDirty && !testResult?.ok;
+  const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
+  const dirty = configDirty || keyDirty;
 
   /* Closing with unsaved edits asks first; a discarded form re-syncs to the
      persisted config so a re-open never shows stale edits. */
@@ -289,15 +313,15 @@ export function SettingsModal({
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Configure the investigation agent, API key, loop budgets, alerting and
-          account.
+          Configure the investigation agent's provider, API key, loop budgets,
+          sandbox, alerting and account.
         </DialogDescription>
 
         <Tabs
           orientation="vertical"
           value={section}
           onValueChange={(v) => setSection(v as SectionId)}
-          className="grid h-[min(640px,85vh)] grid-cols-1 grid-rows-[auto_1fr] gap-0 sm:grid-cols-[210px_minmax(0,1fr)] sm:grid-rows-none"
+          className="grid h-[min(640px,85vh)] grid-cols-1 grid-rows-[auto_1fr] gap-0 sm:grid-cols-[210px_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)]"
         >
           <div className="flex flex-col border-b border-border bg-surface p-2 max-sm:flex-row max-sm:overflow-x-auto sm:border-b-0 sm:border-r sm:px-2 sm:py-4">
             <h2 className="mb-3 px-2.5 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground max-sm:hidden">
@@ -312,7 +336,7 @@ export function SettingsModal({
                 <TabsTrigger
                   key={s.id}
                   value={s.id}
-                  className="justify-start rounded-md bg-transparent px-2.5 py-2 text-muted-foreground hover:bg-surface-hover hover:text-foreground data-active:bg-surface-active data-active:text-foreground data-active:hover:bg-surface-active max-sm:w-auto max-sm:whitespace-nowrap after:hidden"
+                  className="justify-start rounded-md bg-transparent px-2.5 py-2 text-muted-foreground hover:bg-surface-hover hover:text-foreground data-active:!bg-surface-hover data-active:text-foreground max-sm:w-auto max-sm:whitespace-nowrap after:hidden"
                 >
                   {s.label}
                 </TabsTrigger>
@@ -320,7 +344,7 @@ export function SettingsModal({
             </TabsList>
           </div>
 
-          <div className="relative flex min-w-0 flex-col bg-card">
+          <div className="relative flex min-h-0 min-w-0 flex-col bg-card">
             <Button
               variant="ghost"
               size="icon"
@@ -335,7 +359,7 @@ export function SettingsModal({
               onSubmit={handleSave}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <ScrollArea className="flex-1">
+              <ScrollArea className="min-h-0 flex-1">
                 <div className="p-6">
                   <h3 className="mb-1 text-lg font-semibold tracking-[-0.2px] text-foreground">
                     {active.label}
@@ -356,7 +380,7 @@ export function SettingsModal({
                             className="w-full"
                             value={form.provider}
                             onChange={(e) =>
-                              setField(
+                              setConnectionField(
                                 "provider",
                                 e.currentTarget
                                   .value as AgentConfig["provider"],
@@ -385,13 +409,67 @@ export function SettingsModal({
                             }
                             value={form.baseUrl ?? ""}
                             onChange={(e) =>
-                              setField(
+                              setConnectionField(
                                 "baseUrl",
                                 e.currentTarget.value || undefined,
                               )
                             }
                           />
                         </Field>
+
+                        <div className="w-full">
+                          <p className="text-xs text-muted-foreground">
+                            Current key
+                          </p>
+                          <p className="mt-0.5 text-sm">
+                            {form.apiKeyMasked
+                              ? form.apiKeyMasked
+                              : "Not configured"}
+                          </p>
+                        </div>
+                        <Field className="max-w-80">
+                          <FieldLabel htmlFor="settings-api-key">
+                            New API key
+                          </FieldLabel>
+                          <Input
+                            id="settings-api-key"
+                            type="password"
+                            placeholder="Paste API key"
+                            value={newApiKey}
+                            onChange={(e) => {
+                              setNewApiKey(e.currentTarget.value);
+                              setTestResult(null);
+                            }}
+                          />
+                        </Field>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="secondary"
+                            disabled={testConnection.isPending || !keyDirty}
+                            onClick={() => handleTestConnection()}
+                          >
+                            {testConnection.isPending && (
+                              <Spinner className="size-3" />
+                            )}
+                            Test connection
+                          </Button>
+                          {testResult?.ok && (
+                            <Badge variant="success">Connected</Badge>
+                          )}
+                          {testResult && !testResult.ok && (
+                            <Badge variant="destructive">
+                              {ERROR_LABELS[testResult.error] ??
+                                testResult.error}
+                            </Badge>
+                          )}
+                        </div>
+                        {keyUntested && (
+                          <p className="text-xs text-muted-foreground">
+                            Test connection before you can save this key.
+                          </p>
+                        )}
 
                         <Field className="max-w-80">
                           <FieldLabel htmlFor="settings-model">
@@ -402,7 +480,7 @@ export function SettingsModal({
                             list="settings-model-options"
                             value={form.model}
                             onChange={(e) =>
-                              setField("model", e.currentTarget.value)
+                              setConnectionField("model", e.currentTarget.value)
                             }
                           />
                           <datalist id="settings-model-options">
@@ -500,61 +578,6 @@ export function SettingsModal({
                             </NativeSelect>
                           </Field>
                         )}
-                      </div>
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="api-key">
-                    {form && (
-                      <div className="flex flex-col items-start gap-4 [&>*]:w-full">
-                        <div>
-                          <p className="text-xs text-muted-foreground">
-                            Current key
-                          </p>
-                          <p className="mt-0.5 text-sm">
-                            {form.apiKeyMasked
-                              ? form.apiKeyMasked
-                              : "Not configured"}
-                          </p>
-                        </div>
-                        <Field className="max-w-80">
-                          <FieldLabel htmlFor="settings-api-key">
-                            New API key
-                          </FieldLabel>
-                          <Input
-                            id="settings-api-key"
-                            type="password"
-                            placeholder="Paste API key"
-                            value={newApiKey}
-                            onChange={(e) => {
-                              setNewApiKey(e.currentTarget.value);
-                              setTestResult(null);
-                            }}
-                          />
-                        </Field>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="secondary"
-                            disabled={testConnection.isPending}
-                            onClick={() => handleTestConnection()}
-                          >
-                            {testConnection.isPending && (
-                              <Spinner className="size-3" />
-                            )}
-                            Test connection
-                          </Button>
-                          {testResult?.ok && (
-                            <Badge variant="success">Connected</Badge>
-                          )}
-                          {testResult && !testResult.ok && (
-                            <Badge variant="destructive">
-                              {ERROR_LABELS[testResult.error] ??
-                                testResult.error}
-                            </Badge>
-                          )}
-                        </div>
                       </div>
                     )}
                   </TabsContent>
@@ -723,7 +746,7 @@ export function SettingsModal({
                             </span>
                           </span>
                         </label>
-                        <div className="col-span-2 mt-2 flex flex-col gap-3 border-t border-border pt-4">
+                        <div className="col-span-2 mt-2 flex flex-col gap-3">
                           <Field className="max-w-52">
                             <FieldLabel htmlFor="settings-egress-policy">
                               Network egress
@@ -802,9 +825,19 @@ export function SettingsModal({
                 </div>
               </ScrollArea>
 
-              <div className="flex justify-end gap-2 border-t border-border bg-card px-6 py-3">
-                <Button type="submit" disabled={!dirty || saveConfig.isPending}>
-                  {saveConfig.isPending && <Spinner className="size-4" />}
+              <div className="flex justify-end gap-2 px-6 py-2">
+                <Button
+                  type="submit"
+                  disabled={
+                    !dirty ||
+                    keyUntested ||
+                    saveConfig.isPending ||
+                    saveApiKey.isPending
+                  }
+                >
+                  {(saveConfig.isPending || saveApiKey.isPending) && (
+                    <Spinner className="size-4" />
+                  )}
                   Save
                 </Button>
               </div>
