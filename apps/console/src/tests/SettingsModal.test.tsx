@@ -31,6 +31,7 @@ const CONFIG: AgentConfig = {
   sandboxIdleTimeoutMs: 3600000,
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
+  sandboxRequireGvisor: false,
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,

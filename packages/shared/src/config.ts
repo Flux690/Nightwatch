@@ -26,6 +26,11 @@ export interface AgentConfig {
   sandboxIdleTimeoutMs: number;
   sandboxCpus: number;
   sandboxMemoryMb: number;
+  // When true, a sandbox refuses to start unless the Docker host provides the
+  // gVisor (runsc) runtime - fail-loud for hosts that must guarantee
+  // kernel-syscall isolation. Off by default: gVisor is used automatically
+  // wherever present and falls back to the hardened container otherwise.
+  sandboxRequireGvisor: boolean;
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;

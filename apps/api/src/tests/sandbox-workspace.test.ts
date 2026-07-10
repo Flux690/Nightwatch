@@ -30,11 +30,15 @@ import {
   withWorkspace,
   type WorkspaceOptions,
 } from "../sandbox/workspace.js";
-import { reapOrphans } from "../sandbox/docker.js";
+import { reapOrphans, resetIsolationCache } from "../sandbox/docker.js";
 import { preflight } from "../sandbox/preflight.js";
 import { resolveRepoPath, assertContained } from "../sandbox/paths.js";
 import { capOutput } from "../sandbox/output.js";
-import { GitOperationError, PathEscapeError } from "../sandbox/errors.js";
+import {
+  GitOperationError,
+  PathEscapeError,
+  SandboxUnavailableError,
+} from "../sandbox/errors.js";
 import { waitFor } from "./wait.js";
 
 const AUTH_HEADER = "Basic c2VjcmV0dG9rZW4=";
@@ -106,6 +110,7 @@ const dockerState = {
   removed: [] as string[],
   listResult: [] as Array<{ Id: string }>,
   pingFails: false,
+  gvisor: false,
   nextId: 1,
 };
 
@@ -123,6 +128,10 @@ function dockerFake(): Record<string, unknown> {
       dockerState.pingFails
         ? Promise.reject(new Error("connect ENOENT /var/run/docker.sock"))
         : Promise.resolve({}),
+    info: () =>
+      Promise.resolve({
+        Runtimes: dockerState.gvisor ? { runc: {}, runsc: {} } : { runc: {} },
+      }),
     getImage: () => ({ inspect: () => Promise.resolve({}) }),
     createContainer: (opts: Record<string, unknown>) => {
       dockerState.createArgs.push(opts);
@@ -149,6 +158,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     authHeader: () => Promise.resolve(AUTH_HEADER),
     limits: { cpus: 2, memoryMb: 4096 },
     idleTimeoutMs: 60_000,
+    requireGvisor: false,
     commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
@@ -188,6 +198,8 @@ afterEach(async () => {
   dockerState.removed = [];
   dockerState.listResult = [];
   dockerState.pingFails = false;
+  dockerState.gvisor = false;
+  resetIsolationCache();
 });
 
 function cloneCalls(): string[][] {
@@ -227,6 +239,43 @@ describe("workspace lifecycle", () => {
     expect(host["Binds"]).toEqual([
       `${join(workspacesDir, sessionId)}:/workspace`,
     ]);
+    // Wall reinforcements: real memory cap (swap == memory), fork-bomb and fd
+    // limits, non-root ownership-matched user, no-dev tmpfs.
+    expect(host["MemorySwap"]).toBe(4096 * 1024 * 1024);
+    expect(host["PidsLimit"]).toBe(512);
+    expect(host["Ulimits"]).toEqual([
+      { Name: "nofile", Soft: 4096, Hard: 4096 },
+    ]);
+    expect(host["Tmpfs"]).toEqual({ "/tmp": "rw,exec,nosuid,nodev,size=1g" });
+    const uid = process.getuid?.();
+    const gid = process.getgid?.();
+    if (uid !== undefined && gid !== undefined) {
+      expect(create["User"]).toBe(`${uid}:${gid}`);
+    }
+    // Standard host advertises no runsc runtime: no Runtime override.
+    expect(host["Runtime"]).toBeUndefined();
+  });
+
+  it("runs under the gVisor runtime when the host advertises runsc", async () => {
+    dockerState.gvisor = true;
+    const sessionId = nextSessionId();
+    await withWorkspace(sessionId, options(), () => Promise.resolve());
+    const host = dockerState.createArgs[0]!["HostConfig"] as Record<
+      string,
+      unknown
+    >;
+    expect(host["Runtime"]).toBe("runsc");
+  });
+
+  it("refuses to create a sandbox when requireGvisor is on but the host lacks it", async () => {
+    dockerState.gvisor = false;
+    const sessionId = nextSessionId();
+    await expect(
+      withWorkspace(sessionId, options({ requireGvisor: true }), () =>
+        Promise.resolve(),
+      ),
+    ).rejects.toBeInstanceOf(SandboxUnavailableError);
+    expect(dockerState.createArgs).toHaveLength(0);
   });
 
   it("reuses the live workspace across calls in a burst", async () => {
@@ -339,8 +388,19 @@ describe("workspace lifecycle", () => {
 });
 
 describe("preflight", () => {
-  it("passes when git and the docker daemon respond", async () => {
-    await expect(preflight()).resolves.toEqual({ ok: true });
+  it("passes when git and the docker daemon respond, reporting the isolation mode", async () => {
+    await expect(preflight()).resolves.toEqual({
+      ok: true,
+      isolation: "standard",
+    });
+  });
+
+  it("reports gvisor isolation when the host advertises runsc", async () => {
+    dockerState.gvisor = true;
+    await expect(preflight()).resolves.toEqual({
+      ok: true,
+      isolation: "gvisor",
+    });
   });
 
   it("reports an unreachable docker daemon", async () => {

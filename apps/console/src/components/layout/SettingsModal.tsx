@@ -656,6 +656,24 @@ export function SettingsModal({
                             }
                           />
                         </Field>
+                        <label className="col-span-2 flex items-start gap-2 text-sm">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={form.sandboxRequireGvisor === true}
+                            onCheckedChange={(checked) =>
+                              setField("sandboxRequireGvisor", checked === true)
+                            }
+                          />
+                          <span>
+                            Require gVisor
+                            <span className="block text-muted-foreground">
+                              Refuse to start a sandbox unless the Docker host
+                              provides the gVisor (runsc) runtime. Off by
+                              default: gVisor is used automatically when
+                              present.
+                            </span>
+                          </span>
+                        </label>
                       </div>
                     )}
                   </TabsContent>

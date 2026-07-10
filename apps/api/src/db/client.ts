@@ -38,6 +38,7 @@ const SCHEMA = `
     sandbox_idle_timeout_ms INTEGER NOT NULL DEFAULT 3600000,
     sandbox_cpus            INTEGER NOT NULL DEFAULT 2,
     sandbox_memory_mb       INTEGER NOT NULL DEFAULT 4096,
+    sandbox_require_gvisor  INTEGER NOT NULL DEFAULT 0,
     base_url           TEXT,
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,

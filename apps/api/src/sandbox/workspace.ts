@@ -1,6 +1,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  apiRunsAsRoot,
   createSandboxContainer,
   destroyContainer,
   execInContainer,
@@ -43,6 +44,8 @@ export interface WorkspaceOptions {
   authHeader(): Promise<string>;
   limits: SandboxLimits;
   idleTimeoutMs: number;
+  // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
+  requireGvisor: boolean;
   commitAuthor: CommitAuthor;
   pullRequests: {
     create(req: {
@@ -93,6 +96,10 @@ interface Entry {
 const sessions = new Map<string, Entry>();
 const creating = new Map<string, Promise<Entry>>();
 
+// One-shot: the root-API recommendation is a deployment fact, not a per-session
+// event, so it is logged once per process rather than on every sandbox.
+let warnedRootApi = false;
+
 async function createEntry(
   sessionId: string,
   options: WorkspaceOptions,
@@ -109,10 +116,18 @@ async function createEntry(
     dir,
     authHeader,
   });
+  if (apiRunsAsRoot() && !warnedRootApi) {
+    warnedRootApi = true;
+    options.log?.warn(
+      { sessionId },
+      "API runs as root, so sandbox containers run as root too; run the API as a non-root user for full sandbox hardening",
+    );
+  }
   const containerId = await createSandboxContainer({
     sessionId,
     workspaceDir: dir,
     limits: options.limits,
+    requireGvisor: options.requireGvisor,
   });
 
   const workspace: Workspace = {

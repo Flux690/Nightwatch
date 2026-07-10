@@ -21,6 +21,35 @@ export async function pingDocker(): Promise<void> {
   }
 }
 
+export type Isolation = "gvisor" | "standard";
+
+// Whether the Docker host advertises the gVisor (runsc) runtime. Cached per
+// boot: runtimes don't change under a running daemon, and every sandbox
+// creation would otherwise pay an info() round-trip.
+let cachedIsolation: Isolation | undefined;
+
+export async function detectIsolation(): Promise<Isolation> {
+  if (cachedIsolation !== undefined) return cachedIsolation;
+  try {
+    const info = (await getDocker().info()) as {
+      Runtimes?: Record<string, unknown>;
+    };
+    cachedIsolation =
+      info.Runtimes !== undefined && "runsc" in info.Runtimes
+        ? "gvisor"
+        : "standard";
+  } catch {
+    cachedIsolation = "standard";
+  }
+  return cachedIsolation;
+}
+
+// The isolation probe is memoized for the process; tests that vary the host's
+// advertised runtimes reset it, the same support `resetDb` provides.
+export function resetIsolationCache(): void {
+  cachedIsolation = undefined;
+}
+
 export async function ensureImage(): Promise<void> {
   const docker = getDocker();
   try {
@@ -42,12 +71,36 @@ export interface SandboxLimits {
   memoryMb: number;
 }
 
+// The sandbox process runs as the API's own uid:gid so files it creates in the
+// bind-mounted workspace match the host-side clone's ownership - no chown, no
+// permission friction - and it is non-root whenever the API is. undefined on
+// platforms without getuid (the container then keeps the image's default user).
+function processUser(): string | undefined {
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  const gid = typeof process.getgid === "function" ? process.getgid() : null;
+  if (uid === null || gid === null) return undefined;
+  return `${uid}:${gid}`;
+}
+
+export function apiRunsAsRoot(): boolean {
+  return typeof process.getuid === "function" && process.getuid() === 0;
+}
+
 export async function createSandboxContainer(opts: {
   sessionId: string;
   workspaceDir: string;
   limits: SandboxLimits;
+  requireGvisor: boolean;
 }): Promise<string> {
   await ensureImage();
+  const isolation = await detectIsolation();
+  if (opts.requireGvisor && isolation !== "gvisor") {
+    throw new SandboxUnavailableError(
+      "sandboxRequireGvisor is on but the Docker host has no gVisor (runsc) runtime",
+    );
+  }
+  const memoryBytes = opts.limits.memoryMb * 1024 * 1024;
+  const user = processUser();
   const docker = getDocker();
   const container = await docker.createContainer({
     Image: SANDBOX_IMAGE,
@@ -58,14 +111,24 @@ export async function createSandboxContainer(opts: {
     // the workspace is the only writable mount, so HOME lives there.
     Env: ["HOME=/workspace"],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },
+    ...(user !== undefined && { User: user }),
     HostConfig: {
       Binds: [`${opts.workspaceDir}:/workspace`],
       ReadonlyRootfs: true,
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges"],
-      Tmpfs: { "/tmp": "rw,exec,nosuid,size=1g" },
+      Tmpfs: { "/tmp": "rw,exec,nosuid,nodev,size=1g" },
       NanoCpus: Math.round(opts.limits.cpus * 1e9),
-      Memory: opts.limits.memoryMb * 1024 * 1024,
+      Memory: memoryBytes,
+      // Equal to Memory so the cap is real: an unset swap limit lets Docker
+      // grant up to 2x the memory via swap.
+      MemorySwap: memoryBytes,
+      // Fork-bomb and fd-exhaustion caps: a runaway command can wedge itself
+      // but not the API host.
+      PidsLimit: 512,
+      Ulimits: [{ Name: "nofile", Soft: 4096, Hard: 4096 }],
+      // gVisor when the host has it; the hardened runc container otherwise.
+      ...(isolation === "gvisor" && { Runtime: "runsc" }),
     },
   });
   await container.start();

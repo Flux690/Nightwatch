@@ -1,9 +1,17 @@
 import { execFile } from "node:child_process";
-import { ensureImage, pingDocker } from "./docker.js";
+import {
+  detectIsolation,
+  ensureImage,
+  pingDocker,
+  type Isolation,
+} from "./docker.js";
 
 export interface PreflightResult {
   ok: boolean;
   reason?: string;
+  // Which isolation the host will actually use for sandboxes, so the console
+  // can show it plainly rather than leaving it silent.
+  isolation?: Isolation;
 }
 
 function gitAvailable(): Promise<boolean> {
@@ -30,6 +38,7 @@ export async function preflight(): Promise<PreflightResult> {
           : "Docker daemon is not reachable on the API host",
     };
   }
+  const isolation = await detectIsolation();
   void ensureImage().catch(() => undefined);
-  return { ok: true };
+  return { ok: true, isolation };
 }

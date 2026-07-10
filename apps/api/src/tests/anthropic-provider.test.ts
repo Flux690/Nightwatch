@@ -35,6 +35,7 @@ const BASE_CONFIG: AgentConfig = {
   sandboxIdleTimeoutMs: 3_600_000,
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
+  sandboxRequireGvisor: false,
 };
 
 const READ_TOOL = {

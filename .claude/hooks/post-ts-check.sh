@@ -42,7 +42,11 @@ if [[ "$FILE" == *"apps/api/src/sandbox/"* ]]; then
   VIOLATIONS=$(python3 -c "
 import os, re, sys
 path = sys.argv[1]
-root = os.path.abspath('apps/api/src/sandbox')
+# Derive the boundary root from the file path itself, not the CWD: the bash
+# guard already proved the marker is in the path, so both root and the import
+# targets resolve from the same absolute base regardless of where the hook runs.
+marker = 'apps/api/src/sandbox'
+root = os.path.abspath(path[: path.index(marker) + len(marker)])
 src = open(path).read()
 bad = set()
 for m in re.finditer(r'from\s+[\"\']([^\"\']+)[\"\']', src):

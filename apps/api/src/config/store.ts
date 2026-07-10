@@ -7,6 +7,7 @@ import {
   DEFAULT_SANDBOX_CPUS,
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
   DEFAULT_SANDBOX_MEMORY_MB,
+  DEFAULT_SANDBOX_REQUIRE_GVISOR,
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
@@ -40,6 +41,7 @@ type ConfigRow = {
   sandboxIdleTimeoutMs: number;
   sandboxCpus: number;
   sandboxMemoryMb: number;
+  sandboxRequireGvisor: number;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -59,6 +61,7 @@ const SELECT_ROW = `
          sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
          sandbox_cpus            AS sandboxCpus,
          sandbox_memory_mb       AS sandboxMemoryMb,
+         sandbox_require_gvisor  AS sandboxRequireGvisor,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -97,6 +100,7 @@ function defaultConfigFromEnv(): AgentConfig {
     sandboxIdleTimeoutMs: DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
     sandboxCpus: DEFAULT_SANDBOX_CPUS,
     sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
+    sandboxRequireGvisor: DEFAULT_SANDBOX_REQUIRE_GVISOR,
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -134,6 +138,7 @@ export function loadConfig(): AgentConfig {
     sandboxIdleTimeoutMs: row.sandboxIdleTimeoutMs,
     sandboxCpus: row.sandboxCpus,
     sandboxMemoryMb: row.sandboxMemoryMb,
+    sandboxRequireGvisor: row.sandboxRequireGvisor === 1,
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -158,12 +163,14 @@ const UPSERT_CONFIG = `
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
     code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
+    sandbox_require_gvisor,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
     @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
+    @sandboxRequireGvisor,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -181,6 +188,7 @@ const UPSERT_CONFIG = `
     sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
     sandbox_cpus = excluded.sandbox_cpus,
     sandbox_memory_mb = excluded.sandbox_memory_mb,
+    sandbox_require_gvisor = excluded.sandbox_require_gvisor,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -209,6 +217,7 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,
       sandboxCpus: next.sandboxCpus,
       sandboxMemoryMb: next.sandboxMemoryMb,
+      sandboxRequireGvisor: next.sandboxRequireGvisor ? 1 : 0,
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,

@@ -22,3 +22,7 @@ export const DEFAULT_CODE_SESSION_BUDGET_MS = 20 * 60_000;
 export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 60 * 60_000;
 export const DEFAULT_SANDBOX_CPUS = 2;
 export const DEFAULT_SANDBOX_MEMORY_MB = 4096;
+
+// gVisor is used automatically when the host advertises it; this flag only
+// controls whether its absence is a hard failure. Off by default.
+export const DEFAULT_SANDBOX_REQUIRE_GVISOR = false;

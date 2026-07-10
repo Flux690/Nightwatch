@@ -81,6 +81,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     },
     limits: { cpus: config.sandboxCpus, memoryMb: config.sandboxMemoryMb },
     idleTimeoutMs: config.sandboxIdleTimeoutMs,
+    requireGvisor: config.sandboxRequireGvisor,
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
       create: (req) =>

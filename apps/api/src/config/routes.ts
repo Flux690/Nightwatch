@@ -21,6 +21,7 @@ const ConfigPatchSchema = z.object({
   sandboxIdleTimeoutMs: z.number().int().positive().optional(),
   sandboxCpus: z.number().int().positive().optional(),
   sandboxMemoryMb: z.number().int().positive().optional(),
+  sandboxRequireGvisor: z.boolean().optional(),
   baseUrl: z.string().url().nullable().optional(),
   promptCaching: z.boolean().optional(),
   reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
