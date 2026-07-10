@@ -18,12 +18,6 @@ import {
 } from "./git.js";
 import { capOutput } from "./output.js";
 
-export function workspacesRoot(): string {
-  return (
-    process.env["NIGHTWATCH_WORKSPACES_DIR"] ?? "/var/nightwatch/workspaces"
-  );
-}
-
 // Structural subset of pino so the host injects its logger instead of the
 // module importing one - a hard requirement of the package-shaped boundary.
 export interface SandboxLog {
@@ -45,6 +39,10 @@ export interface WorkspaceOptions {
   authHeader(): Promise<string>;
   limits: SandboxLimits;
   idleTimeoutMs: number;
+  // Absolute host dir the checkout is created under and bind-mounted from.
+  // Host-provided and absolute by contract: the sandbox never guesses a path,
+  // and a Docker bind rejects a relative source.
+  workspacesDir: string;
   // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
   requireGvisor: boolean;
   // Network egress: "allowlist" forces the sandbox through the filtering proxy
@@ -108,7 +106,7 @@ async function createEntry(
   sessionId: string,
   options: WorkspaceOptions,
 ): Promise<Entry> {
-  const dir = join(workspacesRoot(), sessionId);
+  const dir = join(options.workspacesDir, sessionId);
   // A leftover dir (crash, reaped container) would break the clone; the branch
   // is the durable state, so a fresh clone is always correct.
   await rm(dir, { recursive: true, force: true });
@@ -223,10 +221,9 @@ export async function withWorkspace<T>(
   }
 }
 
-// Teardown is lossless by construction: dirty work becomes a checkpoint
-// commit and anything unpushed is pushed before container and workspace go
-// away. On the idle path a push failure aborts the teardown so work is never
-// destroyed silently; force (disconnect) proceeds and says so via the log.
+// Lossless teardown: dirty work is checkpoint-committed and pushed before the
+// container and dir go. An idle-path push failure aborts (work is never lost);
+// force (disconnect) proceeds and logs it.
 export async function teardown(
   sessionId: string,
   reason: string,

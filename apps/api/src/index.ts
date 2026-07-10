@@ -19,9 +19,20 @@ import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { reapEgress } from "./sandbox/egress.js";
+import { nightwatchDir } from "./config/paths.js";
+import { logger } from "./logger.js";
 
-// Explicit SECRET_KEY env var wins; otherwise a key file beside the
-// SQLite database is reused or generated on first boot.
+// Resolve the state directory first so a relative NIGHTWATCH_DIR fails here with
+// a clear message, not lazily mid-request.
+try {
+  logger.info({ dir: nightwatchDir() }, "state directory");
+} catch (err) {
+  logger.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
+
+// Explicit SECRET_KEY env var wins; otherwise a key file in the state directory
+// is reused or generated on first boot.
 process.env["SECRET_KEY"] = resolveSecretKey();
 
 const isDev = process.env["NODE_ENV"] !== "production";

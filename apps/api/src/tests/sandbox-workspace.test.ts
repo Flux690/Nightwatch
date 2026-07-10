@@ -172,6 +172,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     authHeader: () => Promise.resolve(AUTH_HEADER),
     limits: { cpus: 2, memoryMb: 4096 },
     idleTimeoutMs: 60_000,
+    workspacesDir,
     requireGvisor: false,
     egress: { policy: "open", allowlist: [] },
     commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
@@ -191,7 +192,6 @@ function nextSessionId(): string {
 
 beforeAll(() => {
   workspacesDir = mkdtempSync(join(tmpdir(), "nw-sandbox-"));
-  vi.stubEnv("NIGHTWATCH_WORKSPACES_DIR", workspacesDir);
   installGitMock();
   installDockerMock();
 });

@@ -1,6 +1,5 @@
 import "dotenv/config";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -183,7 +182,6 @@ function installGitHubMock(): void {
 }
 
 let cleanupDb: () => void;
-let workspacesDir: string;
 let toolUseCounter = 0;
 
 function runOpr(
@@ -218,8 +216,6 @@ beforeAll(() => {
   // Egress enforcement is covered elsewhere; keep this PR-focused test on the
   // open path so no proxy machinery is needed.
   updateConfig({ sandboxEgressPolicy: "open" });
-  workspacesDir = mkdtempSync(join(tmpdir(), "nw-opr-"));
-  vi.stubEnv("NIGHTWATCH_WORKSPACES_DIR", workspacesDir);
   installGitMock();
   installDockerMock();
   installGitHubMock();
@@ -234,7 +230,6 @@ beforeAll(() => {
 afterAll(async () => {
   await teardownAll("test cleanup");
   cleanupDb();
-  rmSync(workspacesDir, { recursive: true, force: true });
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });

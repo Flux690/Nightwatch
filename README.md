@@ -125,9 +125,8 @@ The runner appears in your fleet within seconds of the install command running. 
 | `OPENAI_MODEL` | no | Model id for the OpenAI provider (default: `openai/gpt-oss-120b:free`). |
 | `PORT` | no | HTTP port the API listens on (default: `3000`). |
 | `HOST` | no | Bind address (default: `127.0.0.1`). |
-| `NIGHTWATCH_DB_PATH` | no | Path to the SQLite file (default: `/var/nightwatch/nightwatch.db`). The parent directory is created on boot if it does not exist. |
-| `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file beside the database, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
-| `NIGHTWATCH_WORKSPACES_DIR` | no | Root directory for per-session GitHub sandbox checkouts (default: `/var/nightwatch/workspaces`). |
+| `NIGHTWATCH_DIR` | no | Absolute path to the directory holding all durable state: `nightwatch.db`, `secret.key`, and the per-session GitHub sandbox `workspaces/`. Defaults to `~/.nightwatch`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts. |
+| `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file in `NIGHTWATCH_DIR`, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
 | `LOG_LEVEL` | no | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`). |
 
 ### GitHub integration

@@ -1,4 +1,5 @@
 import { decrypt } from "../../config/crypto.js";
+import { workspacesDir } from "../../config/paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../db/github-integration.js";
 import { getSession } from "../../db/sessions.js";
@@ -81,6 +82,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     },
     limits: { cpus: config.sandboxCpus, memoryMb: config.sandboxMemoryMb },
     idleTimeoutMs: config.sandboxIdleTimeoutMs,
+    workspacesDir: workspacesDir(),
     requireGvisor: config.sandboxRequireGvisor,
     egress: {
       policy: config.sandboxEgressPolicy,

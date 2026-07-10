@@ -1,6 +1,5 @@
 import "dotenv/config";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -133,15 +132,12 @@ async function run(
 }
 
 let cleanupDb: () => void;
-let workspacesDir: string;
 
 beforeAll(() => {
   cleanupDb = useTempDb();
   // Egress enforcement is exercised in sandbox-workspace/egress-proxy tests;
   // keep these tool tests on the open path so no proxy machinery is needed.
   updateConfig({ sandboxEgressPolicy: "open" });
-  workspacesDir = mkdtempSync(join(tmpdir(), "nw-repo-tools-"));
-  vi.stubEnv("NIGHTWATCH_WORKSPACES_DIR", workspacesDir);
   installGitMock();
   installDockerMock();
   saveGitHubIntegration({
@@ -155,7 +151,6 @@ beforeAll(() => {
 afterAll(async () => {
   await teardownAll("test cleanup");
   cleanupDb();
-  rmSync(workspacesDir, { recursive: true, force: true });
   vi.unstubAllEnvs();
 });
 

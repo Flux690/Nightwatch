@@ -1,12 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-
-// Single SQLite source of record. Lazy open so tests can set NIGHTWATCH_DB_PATH before
-// first query; exported so secret-key self-provisioning can place the key file beside the database.
-export function dbPath(): string {
-  return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
-}
+import { dbPath } from "../config/paths.js";
 
 // The schema is the single source of truth - the final desired shape, created
 // directly. There are no upgrade migrations: this is a pre-production project, so
@@ -136,7 +131,7 @@ let _db: Database.Database | undefined;
 export function getDb(): Database.Database {
   if (!_db) {
     const path = dbPath();
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+    mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
     // Enforce the declared foreign keys (off by default in SQLite); this is what

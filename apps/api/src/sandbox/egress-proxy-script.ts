@@ -1,18 +1,6 @@
-// The egress filtering proxy, embedded as a source string so it ships inside
-// our bundle and runs via `node -e` in the shared proxy container - no build
-// copy, no bind mount, identical in dev and prod. It is deliberately
-// self-contained (Node builtins only, its own allow/block checks) because it
-// executes in a separate process with no access to this codebase.
-//
-// Enforcement is the network topology, not this script: sandboxes sit on an
-// Internal Docker network whose only reachable peer is this proxy, so a tool
-// ignoring the proxy env vars simply has nowhere to go. The script adds the
-// hostname allowlist and refuses to connect outward to private/link-local
-// addresses (the cloud-metadata SSRF path) even for an allowlisted name.
-//
-// Config via env: PORT, ALLOW (comma-separated domains), ALLOW_PRIVATE=1 to
-// lift the private-address guard (tests only, never in the container).
-
+// The egress filtering proxy, embedded as a string so it runs via `node -e` in
+// the proxy container (no build copy, no bind mount) and stays self-contained -
+// it executes with no access to this codebase. Env: PORT, ALLOW, ALLOW_PRIVATE.
 export const EGRESS_PROXY_SCRIPT = String.raw`
 const http = require("node:http");
 const net = require("node:net");

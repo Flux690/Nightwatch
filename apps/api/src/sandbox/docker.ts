@@ -71,10 +71,9 @@ export interface SandboxLimits {
   memoryMb: number;
 }
 
-// The sandbox process runs as the API's own uid:gid so files it creates in the
-// bind-mounted workspace match the host-side clone's ownership - no chown, no
-// permission friction - and it is non-root whenever the API is. undefined on
-// platforms without getuid (the container then keeps the image's default user).
+// Run as the API's own uid:gid so workspace files match the host-side clone's
+// owner (no chown friction); non-root whenever the API is. undefined where
+// getuid is absent, keeping the image default.
 function processUser(): string | undefined {
   const uid = typeof process.getuid === "function" ? process.getuid() : null;
   const gid = typeof process.getgid === "function" ? process.getgid() : null;
@@ -86,10 +85,9 @@ export function apiRunsAsRoot(): boolean {
   return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
-// Egress wiring passed in by the host: when enforcing, the sandbox joins only
-// the Internal network (no default bridge, no direct outbound) and is pointed
-// at the shared proxy. When open it keeps the default bridge - today's
-// behavior. The sandbox module never reads config; the host decides.
+// Host-injected egress wiring: enforcing puts the sandbox on the Internal
+// network behind the proxy (no direct outbound); open keeps the default
+// bridge. The sandbox never reads config - the host decides.
 export interface EgressWiring {
   networkName: string;
   proxyUrl: string;
