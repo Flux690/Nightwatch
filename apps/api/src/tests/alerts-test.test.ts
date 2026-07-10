@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";

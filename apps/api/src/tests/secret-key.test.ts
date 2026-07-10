@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, platform } from "node:os";
@@ -23,8 +22,8 @@ describe("resolveSecretKey", () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "nw-secret-key-"));
     vi.stubEnv("NIGHTWATCH_DIR", dir);
-    // dotenv/config may have loaded a real SECRET_KEY from .env; tests that
-    // exercise self-provisioning need it genuinely absent.
+    // setup.ts sets the suite-wide test key; self-provisioning tests need
+    // SECRET_KEY genuinely absent.
     vi.stubEnv("SECRET_KEY", undefined);
   });
 

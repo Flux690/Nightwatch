@@ -1,5 +1,4 @@
 import type { AddressInfo } from "node:net";
-import "dotenv/config";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
