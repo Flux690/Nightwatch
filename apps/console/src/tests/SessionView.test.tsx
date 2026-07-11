@@ -335,8 +335,12 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/nginx.*node|node.*nginx/)).toBeInTheDocument();
-        // tu-1 card OUT is still loading
-        expect(screen.getByTestId("tool-card-out-loading")).toBeInTheDocument();
+        // tu-1 is still running: its card has no output area at all yet.
+        const pending = screen
+          .getAllByTestId("tool-card")
+          .find((card) => card.textContent?.includes("check_service_status"));
+        expect(pending).toBeDefined();
+        expect(pending!.querySelector("pre")).toBeNull();
       });
     });
 
@@ -516,15 +520,16 @@ describe("SessionView", () => {
         ).not.toBeInTheDocument();
       });
 
-      // The paired tool card now appears below the resolved approval card, OUT
-      // still loading until the result (both cards label the tool name).
+      // The paired tool card now appears below the resolved approval card,
+      // header-only until the result arrives (both cards label the tool name).
       expect(screen.getAllByText("RestartService")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
-      const toolCardOut = screen.getByTestId("tool-card-out-loading");
+      const toolCard = screen.getByTestId("tool-card");
       expect(
-        resolvedCard.compareDocumentPosition(toolCardOut) &
+        resolvedCard.compareDocumentPosition(toolCard) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      expect(toolCard.querySelector("pre")).toBeNull();
 
       act(() => {
         MockEventSource.latest?.push({
@@ -539,9 +544,6 @@ describe("SessionView", () => {
       });
 
       await waitFor(() => {
-        expect(
-          screen.queryByTestId("tool-card-out-loading"),
-        ).not.toBeInTheDocument();
         expect(screen.getByText(/restarted/)).toBeInTheDocument();
       });
     });

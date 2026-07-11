@@ -45,14 +45,18 @@ export function DiffCard({
   const lines = change.diff
     .split("\n")
     .filter((l) => !l.startsWith("--- ") && !l.startsWith("+++ "));
+  const added = lines.filter((l) => l.startsWith("+")).length;
+  const removed = lines.filter((l) => l.startsWith("-")).length;
 
   return (
     <div data-testid="diff-card">
       <p className="mb-1.5 font-mono text-xs font-medium">
         {toolName}
         <span className="ml-2 text-muted-foreground">{change.path}</span>
+        <span className="ml-2 text-success">+{added}</span>
+        <span className="ml-1 text-destructive">-{removed}</span>
       </p>
-      <Card size="sm" className="gap-0 py-0">
+      <Card size="sm" className="gap-0 rounded-none py-0">
         <CardContent className="max-h-96 overflow-auto px-0 py-2 font-mono text-sm leading-relaxed">
           {lines.map((line, i) => (
             <div

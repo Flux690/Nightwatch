@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import type { ApprovalCardItem } from "./types.js";
-import { ToolCardPanel } from "./ToolCardPanel.js";
+import { ToolCard } from "./toolPresentation.js";
 import { InterruptCard } from "./InterruptCard.js";
 
 export function ApprovalCardPanel({
@@ -45,10 +45,14 @@ export function ApprovalCardPanel({
         )}
       </InterruptCard>
       {resolved && (
-        <ToolCardPanel
-          toolName={item.toolName}
-          input={item.input}
-          result={item.result}
+        <ToolCard
+          item={{
+            kind: "tool_card",
+            toolUseId: item.toolUseId,
+            toolName: item.toolName,
+            input: item.input,
+            result: item.result,
+          }}
         />
       )}
     </>

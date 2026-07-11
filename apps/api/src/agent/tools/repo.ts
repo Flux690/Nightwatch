@@ -356,11 +356,16 @@ export const REPO_TOOLS: Tool[] = [
         properties: {
           command: {
             type: "string",
-            description: "Shell command line to run.",
+            description: "Bash command line to run.",
           },
           cwd: {
             type: "string",
             description: "Repo-relative working directory (default repo root).",
+          },
+          description: {
+            type: "string",
+            description:
+              'One short sentence describing what this command does, shown to the operator (e.g. "Install dependencies").',
           },
         },
         required: ["command"],

@@ -55,7 +55,7 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
   return (
     <div data-testid="pr-card">
       <p className="mb-1.5 font-mono text-xs font-medium">OpenPullRequest</p>
-      <Card size="sm" className="gap-0 py-0">
+      <Card size="sm" className="gap-0 rounded-none py-0">
         <CardContent className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
           <span className="text-sm font-medium">Pull request #{pr.number}</span>
           <Badge variant={pr.draft ? "secondary" : "success"}>

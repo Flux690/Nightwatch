@@ -134,7 +134,13 @@ function TranscriptColumn({
     () => convertPersistedMessages(persistedMessages),
     [persistedMessages],
   );
-  const allItems = [...persistedItems, ...liveItems];
+  // A live card whose tool_use has since been persisted (e.g. an answered
+  // question after the resumed run flushes) would render twice - drop it.
+  const persistedKeys = new Set(persistedItems.map(itemKey));
+  const allItems = [
+    ...persistedItems,
+    ...liveItems.filter((item) => !persistedKeys.has(itemKey(item))),
+  ];
 
   return (
     <MessageScrollerContent
@@ -385,14 +391,16 @@ export function SessionView({
 
   const handleAnswer = useCallback(
     (toolUseId: string, answer: string | string[]) => {
+      const text = Array.isArray(answer) ? answer.join(", ") : answer;
+      // Stash the answer on the live card so the resolved Q/A view can show it
+      // before the persisted transcript catches up.
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "clarification_card" && item.toolUseId === toolUseId
-            ? { ...item, approval: "pending" }
+            ? { ...item, approval: "pending", result: text }
             : item,
         ),
       );
-      const text = Array.isArray(answer) ? answer.join(", ") : answer;
       respond.mutate({ toolUseId, body: { text, resolvedBy: "console" } });
     },
     [respond],
