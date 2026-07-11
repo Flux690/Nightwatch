@@ -38,8 +38,8 @@ export async function runVerification(
   );
   if (script === undefined) return { ran: false };
 
-  const { rule } = await detectToolchain(ws.dir, pkg);
-  const command = `${rule.runPrefix} run ${script}`;
+  const toolchain = await detectToolchain(ws.dir, pkg);
+  const command = `${toolchain.runPrefix} run ${script}`;
   const result = await ws.exec(command, { timeoutMs });
   return {
     ran: true,

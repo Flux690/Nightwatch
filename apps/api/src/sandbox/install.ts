@@ -1,66 +1,81 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// `frozen` fails rather than re-resolving; `install` is the relaxed fallback.
 // pnpm/yarn>=2 route through corepack since node:24 has no shims and a
 // read-only rootfs that forbids `corepack enable`; its HOME cache keeps working offline.
 export interface InstallRule {
   toolchain: "pnpm" | "yarn-berry" | "yarn-classic" | "npm";
-  runPrefix: string;
+  bin: string;
   lockfile: string;
-  frozen: string;
-  install: string;
+  // `frozenArgs` fails rather than re-resolving; `installArgs` is the relaxed fallback.
+  frozenArgs: string;
+  installArgs: string;
 }
+
+// pnpm 11 hard-fails unapproved dependency build scripts; the sandbox is the
+// isolation boundary, so run them all - npm and yarn already do.
+const PNPM_BUILDS_FLAG = "--config.dangerouslyAllowAllBuilds=true";
 
 export const INSTALL_RULES: readonly InstallRule[] = [
   {
     toolchain: "pnpm",
-    runPrefix: "corepack pnpm",
+    bin: "corepack pnpm",
     lockfile: "pnpm-lock.yaml",
-    // pnpm 11 hard-fails on unapproved dependency build scripts (ERR_PNPM_IGNORED_BUILDS),
-    // and skipped scripts leave native deps broken with no network to recover. The sandbox
-    // is the isolation boundary, so run them all - npm and yarn already do.
-    frozen:
-      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-    install: "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
+    frozenArgs: `install --frozen-lockfile ${PNPM_BUILDS_FLAG}`,
+    installArgs: `install ${PNPM_BUILDS_FLAG}`,
   },
   {
     toolchain: "yarn-berry",
-    runPrefix: "corepack yarn",
+    bin: "corepack yarn",
     lockfile: "yarn.lock",
-    frozen: "corepack yarn install --immutable",
-    install: "corepack yarn install",
+    frozenArgs: "install --immutable",
+    installArgs: "install",
   },
   {
     toolchain: "yarn-classic",
-    runPrefix: "yarn",
+    bin: "yarn",
     lockfile: "yarn.lock",
-    frozen: "yarn install --frozen-lockfile",
-    install: "yarn install",
+    frozenArgs: "install --frozen-lockfile",
+    installArgs: "install",
   },
   {
     toolchain: "npm",
-    runPrefix: "npm",
+    bin: "npm",
     lockfile: "package-lock.json",
-    frozen: "npm ci",
-    install: "npm install",
+    frozenArgs: "ci",
+    installArgs: "install",
   },
 ];
+
+// Without a packageManager pin corepack fetches whatever is "latest" that day;
+// pin a known-good pnpm chosen by the repo's own lockfile format instead.
+const PNPM_FALLBACK_BY_LOCKFILE: Record<string, string> = {
+  "5.4": "7.33.7",
+  "6.0": "8.15.9",
+  "9.0": "10.34.5",
+};
+const PNPM_FALLBACK_DEFAULT = "10.34.5";
 
 export const INSTALL_TIMEOUT_MS = 600_000;
 
 export interface Toolchain {
   rule: InstallRule;
   hasLockfile: boolean;
+  runPrefix: string;
+  frozen: string;
+  install: string;
+}
+
+async function readFileOrNull(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 async function exists(path: string): Promise<boolean> {
-  try {
-    await readFile(path);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readFileOrNull(path)) !== null;
 }
 
 function ruleFor(toolchain: InstallRule["toolchain"]): InstallRule {
@@ -68,6 +83,13 @@ function ruleFor(toolchain: InstallRule["toolchain"]): InstallRule {
   const rule = INSTALL_RULES.find((r) => r.toolchain === toolchain);
   if (rule === undefined) throw new Error(`no install rule for ${toolchain}`);
   return rule;
+}
+
+function pnpmFallbackVersion(lockfile: string | null): string {
+  const version = lockfile?.match(/^lockfileVersion:\s*['"]?([\d.]+)/m)?.[1];
+  if (version === undefined) return PNPM_FALLBACK_DEFAULT;
+  const key = version.includes(".") ? version : `${version}.0`;
+  return PNPM_FALLBACK_BY_LOCKFILE[key] ?? PNPM_FALLBACK_DEFAULT;
 }
 
 // packageManager field wins if declared; otherwise the lockfile is evidence,
@@ -85,13 +107,25 @@ export async function detectToolchain(
       toolchain = major >= 2 ? "yarn-berry" : "yarn-classic";
     } else if (declared.startsWith("npm")) toolchain = "npm";
   }
+  const declaredPin = toolchain !== null;
   if (toolchain === null) {
     if (await exists(join(dir, "pnpm-lock.yaml"))) toolchain = "pnpm";
     else if (await exists(join(dir, "yarn.lock"))) toolchain = "yarn-classic";
     else toolchain = "npm";
   }
   const rule = ruleFor(toolchain);
-  return { rule, hasLockfile: await exists(join(dir, rule.lockfile)) };
+  const lockfileContent = await readFileOrNull(join(dir, rule.lockfile));
+  const bin =
+    toolchain === "pnpm" && !declaredPin
+      ? `${rule.bin}@${pnpmFallbackVersion(lockfileContent)}`
+      : rule.bin;
+  return {
+    rule,
+    hasLockfile: lockfileContent !== null,
+    runPrefix: bin,
+    frozen: `${bin} ${rule.frozenArgs}`,
+    install: `${bin} ${rule.installArgs}`,
+  };
 }
 
 export interface SetupResult {
@@ -133,17 +167,19 @@ export async function runInstall(
 ): Promise<SetupResult | null> {
   const pkg = await readPackageJson(dir);
   if (pkg === null) return null;
-  const { rule, hasLockfile } = await detectToolchain(dir, pkg);
-  const ladder = hasLockfile ? [rule.frozen, rule.install] : [rule.install];
+  const toolchain = await detectToolchain(dir, pkg);
+  const ladder = toolchain.hasLockfile
+    ? [toolchain.frozen, toolchain.install]
+    : [toolchain.install];
   let result: SetupResult | null = null;
   for (const [rung, command] of ladder.entries()) {
     const { exitCode, output } = await exec(command);
     result = {
-      toolchain: rule.toolchain,
+      toolchain: toolchain.rule.toolchain,
       command,
       exitCode,
       outputTail: tail(output),
-      frozen: hasLockfile && rung === 0 && exitCode === 0,
+      frozen: toolchain.hasLockfile && rung === 0 && exitCode === 0,
     };
     if (exitCode === 0) break;
   }

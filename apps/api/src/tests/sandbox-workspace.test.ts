@@ -475,25 +475,39 @@ describe("networkless two-phase setup", () => {
     return captured!;
   }
 
-  // One row per INSTALL_RULES entry: the lockfile (or corepack field) picks
-  // the frozen command. Keep in lockstep with sandbox/install.ts.
+  // One row per detection outcome: pin/lockfile evidence picks the frozen
+  // command. Keep in lockstep with sandbox/install.ts.
   it.each([
     [
       "pnpm-lock.yaml",
+      "lockfileVersion: '9.0'\n",
       PKG,
+      "corepack pnpm@10.34.5 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+    ],
+    [
+      "pnpm-lock.yaml",
+      "lockfileVersion: '6.0'\n",
+      PKG,
+      "corepack pnpm@8.15.9 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+    ],
+    [
+      "pnpm-lock.yaml",
+      "lockfileVersion: '9.0'\n",
+      '{ "name": "fixture", "packageManager": "pnpm@11.0.9" }\n',
       "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
     ],
-    ["yarn.lock", PKG, "yarn install --frozen-lockfile"],
+    ["yarn.lock", "x\n", PKG, "yarn install --frozen-lockfile"],
     [
       "yarn.lock",
+      "x\n",
       '{ "name": "fixture", "packageManager": "yarn@4.5.0" }\n',
       "corepack yarn install --immutable",
     ],
-    ["package-lock.json", PKG, "npm ci"],
+    ["package-lock.json", "x\n", PKG, "npm ci"],
   ])(
-    "installs from %s with the frozen command, then detaches the network",
-    async (lockfile, pkg, frozen) => {
-      gitState.cloneFiles = { "package.json": pkg, [lockfile]: "x\n" };
+    "installs from %s (%s) with the frozen command, then detaches the network",
+    async (lockfile, lockContent, pkg, frozen) => {
+      gitState.cloneFiles = { "package.json": pkg, [lockfile]: lockContent };
       const ws = await createWorkspace();
 
       expect(execEvents()).toEqual([frozen]);
@@ -517,12 +531,14 @@ describe("networkless two-phase setup", () => {
         : { exitCode: 0, output: "done\n" };
 
     const ws = await createWorkspace();
+    // No pin and no readable lockfileVersion: the default pnpm pin applies.
     expect(execEvents()).toEqual([
-      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-      "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
+      "corepack pnpm@10.34.5 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+      "corepack pnpm@10.34.5 install --config.dangerouslyAllowAllBuilds=true",
     ]);
     expect(ws.setup).toMatchObject({
-      command: "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
+      command:
+        "corepack pnpm@10.34.5 install --config.dangerouslyAllowAllBuilds=true",
       exitCode: 0,
       frozen: false,
     });

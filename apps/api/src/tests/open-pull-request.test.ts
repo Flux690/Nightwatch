@@ -284,8 +284,10 @@ describe("open_pull_request", () => {
     expect(outcome.message).toContain("draft PR #42");
 
     // Verification ran via the pnpm lockfile's package manager, in-container
-    // (corepack-prefixed: node:24 ships no pnpm shim).
-    expect(dockerState.execCmds.at(-1)).toContain("corepack pnpm run test");
+    // (corepack-prefixed and pinned: the fixture repo declares no packageManager).
+    expect(dockerState.execCmds.at(-1)).toContain(
+      "corepack pnpm@10.34.5 run test",
+    );
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
 
     const payload = prState.createPayloads.at(-1)!;
@@ -296,7 +298,7 @@ describe("open_pull_request", () => {
     expect(body).toContain("## Incident");
     expect(body).toContain("## Files changed");
     expect(body).toContain("- src/app.ts");
-    expect(body).toContain("`corepack pnpm run test` passed");
+    expect(body).toContain("`corepack pnpm@10.34.5 run test` passed");
     expect(body).toContain(SESSION_WITH_TESTS);
 
     const audit = auditRow(SESSION_WITH_TESTS, "opr-create");
@@ -404,7 +406,7 @@ describe("open_pull_request", () => {
     expect(
       dockerState.execCmds
         .slice(execsBefore)
-        .some((c) => c.includes("corepack pnpm run test")),
+        .some((c) => c.includes("corepack pnpm@10.34.5 run test")),
     ).toBe(false);
   });
 });
