@@ -181,6 +181,7 @@ async function provisionEntry(
     limits: options.limits,
     requireGvisor: options.requireGvisor,
     network,
+    gitIdentity: options.commitAuthor,
   });
 
   const workspace: Workspace = {

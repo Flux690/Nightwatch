@@ -1,7 +1,12 @@
 import { Card, CardContent } from "@/components/ui/card";
 import type { ToolCardItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
-import { TerminalCard } from "./TerminalCard.js";
+import {
+  CARD_PRE_CLASS,
+  firstLines,
+  TerminalCard,
+  TOOL_CARD_CLASS,
+} from "./TerminalCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 
 function inputString(
@@ -32,7 +37,7 @@ export function ToolHeader({
   summary?: string | null;
 }): React.JSX.Element {
   return (
-    <p className="mb-1.5 font-mono text-xs font-medium">
+    <p className="mb-1.5 font-mono text-base font-medium">
       {name}
       {summary ? (
         <span className="ml-2 font-normal text-muted-foreground">
@@ -50,18 +55,16 @@ function resultText(result: unknown): string {
 
 function OutputCard({ result }: { result: unknown }): React.JSX.Element {
   return (
-    <Card size="sm" className="gap-0 rounded-none py-0">
+    <Card size="sm" className={TOOL_CARD_CLASS}>
       <CardContent className="px-3.5 py-2.5">
-        <pre className="m-0 max-h-80 overflow-auto font-mono text-sm break-all whitespace-pre-wrap">
-          {resultText(result)}
-        </pre>
+        <pre className={CARD_PRE_CLASS}>{firstLines(resultText(result))}</pre>
       </CardContent>
     </Card>
   );
 }
 
 /* The single presentation registry: input collapses into the header line and
-   the body exists only once a result does; In/Out chrome is for shell tools. */
+   the body exists only once a result does; IN/OUT chrome is for shell tools. */
 export function ToolCard({ item }: { item: ToolCardItem }): React.JSX.Element {
   const { toolName, input, result } = item;
 
@@ -96,7 +99,6 @@ export function ToolCard({ item }: { item: ToolCardItem }): React.JSX.Element {
         name="Bash"
         description={inputString(input, "description")}
         command={inputString(input, "command") ?? ""}
-        cwd={inputString(input, "cwd")}
         result={result}
       />
     );

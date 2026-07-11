@@ -97,6 +97,7 @@ export async function createSandboxContainer(opts: {
   limits: SandboxLimits;
   requireGvisor: boolean;
   network: SandboxNetworkAttachment;
+  gitIdentity: { name: string; email: string };
 }): Promise<string> {
   await ensureImage();
   const isolation = await detectIsolation();
@@ -118,6 +119,12 @@ export async function createSandboxContainer(opts: {
     Env: [
       "HOME=/home/sandbox",
       "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      // The agent may commit inside the container; without an identity git
+      // refuses (host-side commits pass -c flags and are unaffected).
+      `GIT_AUTHOR_NAME=${opts.gitIdentity.name}`,
+      `GIT_AUTHOR_EMAIL=${opts.gitIdentity.email}`,
+      `GIT_COMMITTER_NAME=${opts.gitIdentity.name}`,
+      `GIT_COMMITTER_EMAIL=${opts.gitIdentity.email}`,
       ...(opts.network.mode === "allowlist" ? opts.network.proxyEnv : []),
     ],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },

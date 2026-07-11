@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { TOOL_CARD_CLASS } from "./TerminalCard.js";
 import { cn } from "@/lib/utils";
 
 export interface FileChange {
@@ -50,14 +51,14 @@ export function DiffCard({
 
   return (
     <div data-testid="diff-card">
-      <p className="mb-1.5 font-mono text-xs font-medium">
+      <p className="mb-1.5 font-mono text-base font-medium">
         {toolName}
         <span className="ml-2 text-muted-foreground">{change.path}</span>
         <span className="ml-2 text-success">+{added}</span>
         <span className="ml-1 text-destructive">-{removed}</span>
       </p>
-      <Card size="sm" className="gap-0 rounded-none py-0">
-        <CardContent className="max-h-96 overflow-auto px-0 py-2 font-mono text-sm leading-relaxed">
+      <Card size="sm" className={TOOL_CARD_CLASS}>
+        <CardContent className="max-h-[360px] overflow-hidden px-0 py-2 font-mono text-base leading-relaxed">
           {lines.map((line, i) => (
             <div
               key={i}

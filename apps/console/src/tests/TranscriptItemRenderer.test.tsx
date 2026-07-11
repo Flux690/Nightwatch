@@ -217,20 +217,26 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
     });
 
-    it("renders Bash results as a terminal card with an exit badge", () => {
+    it("renders Bash results as IN/OUT sections with no exit badge, clamped to 3 lines", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-3",
         toolName: "Bash",
         input: { command: "pnpm test" },
-        result: { exitCode: 1, output: "1 test failed", truncated: true },
+        result: {
+          exitCode: 1,
+          output: "line one\nline two\nline three\nline four",
+        },
       });
 
       expect(screen.getByTestId("terminal-card")).toBeInTheDocument();
+      expect(screen.getByText("IN")).toBeInTheDocument();
+      expect(screen.getByText("OUT")).toBeInTheDocument();
       expect(screen.getByText(/pnpm test/)).toBeInTheDocument();
-      expect(screen.getByText("exit 1")).toBeInTheDocument();
-      expect(screen.getByText("1 test failed")).toBeInTheDocument();
-      expect(screen.getByText(/output truncated/)).toBeInTheDocument();
+      expect(screen.getByText(/line three/)).toBeInTheDocument();
+      // A failing command carries no badge and output clamps at three lines.
+      expect(screen.queryByText(/exit \d/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/line four/)).not.toBeInTheDocument();
     });
 
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
@@ -300,7 +306,7 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.queryByText(/exit \d/)).not.toBeInTheDocument();
     });
 
-    it("a running Bash shows the command with a running indicator, no output area", () => {
+    it("a running Bash shows IN with a running indicator and no OUT section", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-8",
@@ -309,9 +315,8 @@ describe("TranscriptItemRenderer", () => {
         result: null,
       });
       expect(screen.getByTestId("tool-card-pending")).toBeInTheDocument();
-      expect(
-        screen.getByTestId("terminal-card").querySelector("pre"),
-      ).toBeNull();
+      expect(screen.getByText("IN")).toBeInTheDocument();
+      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
     });
 
     it("Read renders as a single header line, never a body", () => {

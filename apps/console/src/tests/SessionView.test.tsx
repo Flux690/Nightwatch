@@ -334,7 +334,9 @@ describe("SessionView", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/nginx.*node|node.*nginx/)).toBeInTheDocument();
+        // The list_processes output landed (clamped to 3 lines, so assert on
+        // the quoted first entry rather than the whole array).
+        expect(screen.getByText(/"nginx"/)).toBeInTheDocument();
         // tu-1 is still running: its card has no output area at all yet.
         const pending = screen
           .getAllByTestId("tool-card")

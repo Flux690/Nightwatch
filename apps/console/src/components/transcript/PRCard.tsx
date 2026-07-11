@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { TOOL_CARD_CLASS } from "./TerminalCard.js";
 import { ICON_UI } from "@/lib/iconProps";
 
 export interface PullRequestResult {
@@ -54,10 +55,10 @@ export function parsePullRequestResult(
 export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
   return (
     <div data-testid="pr-card">
-      <p className="mb-1.5 font-mono text-xs font-medium">OpenPullRequest</p>
-      <Card size="sm" className="gap-0 rounded-none py-0">
+      <p className="mb-1.5 font-mono text-base font-medium">OpenPullRequest</p>
+      <Card size="sm" className={TOOL_CARD_CLASS}>
         <CardContent className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
-          <span className="text-sm font-medium">Pull request #{pr.number}</span>
+          <span className="text-base font-medium">Pull request #{pr.number}</span>
           <Badge variant={pr.draft ? "secondary" : "success"}>
             {pr.draft ? "Draft" : "Open"}
           </Badge>
@@ -66,14 +67,14 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
             href={pr.url}
             target="_blank"
             rel="noreferrer"
-            className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-primary no-underline hover:underline"
+            className="ml-auto inline-flex items-center gap-1 text-base font-medium text-primary no-underline hover:underline"
           >
             View on GitHub
             <ExternalLink {...ICON_UI} />
           </a>
         </CardContent>
         {(pr.message !== undefined || pr.verification?.ran === true) && (
-          <CardContent className="border-t border-border px-3.5 py-2 text-sm text-muted-foreground">
+          <CardContent className="border-t border-border px-3.5 py-2 text-base text-muted-foreground">
             {pr.message !== undefined && <p className="m-0">{pr.message}</p>}
             {pr.verification?.ran === true && (
               <p className="m-0 mt-1 font-mono text-xs">
