@@ -44,7 +44,15 @@ export function convertPersistedMessages(
   const items: TranscriptItem[] = [];
 
   for (const msg of messages) {
-    if (msg.role === "user") {
+    if (msg.role === "error") {
+      if (msg.content) {
+        items.push({
+          kind: "error_text",
+          id: `error-${msg.seq}`,
+          text: msg.content,
+        });
+      }
+    } else if (msg.role === "user") {
       if (isProviderBlockArray(msg.providerContent)) {
         // Walk blocks in order, surfacing text as user turns; tool_result blocks
         // are skipped since pass 1 already collected them (a message may contain both).

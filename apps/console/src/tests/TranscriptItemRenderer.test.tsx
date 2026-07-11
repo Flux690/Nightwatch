@@ -43,6 +43,21 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
+  describe("error_text — a failure note reads like any agent message", () => {
+    it("renders the plain text with no card chrome", () => {
+      wrap({
+        kind: "error_text",
+        id: "e1",
+        text: "The model provider had a server problem - this is upstream, not your setup.",
+      });
+
+      expect(
+        screen.getByText(/The model provider had a server problem/),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    });
+  });
+
   describe("approval_card", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",

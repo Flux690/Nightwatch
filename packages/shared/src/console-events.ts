@@ -101,13 +101,13 @@ export interface ConsoleRunRetrying extends ConsoleEnvelope {
   };
 }
 
-// An investigation threw an unexpected error and ended without finishing. Tells
-// the console to surface the failure instead of leaving the run looking idle.
+// An investigation died unexpectedly. Carries the persisted error row so the
+// console appends it to the transcript exactly like RUN_FINISHED.
 export interface ConsoleRunFailed extends ConsoleEnvelope {
   type: "RUN_FAILED";
   payload: {
     sessionId: string;
-    message: string;
+    message: SessionMessage;
   };
 }
 

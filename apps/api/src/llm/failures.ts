@@ -37,6 +37,51 @@ export function retrySummary(notice: RetryNotice): string {
   return `${cause}. Retrying in ${seconds}s - attempt ${notice.attempt + 1} of ${notice.maxAttempts}.`;
 }
 
+// OpenRouter nests the upstream host's name in error.metadata; surface it so
+// "who actually failed" is readable without server logs.
+function upstreamProvider(body: unknown): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  const metadata = (body as Record<string, unknown>)["metadata"];
+  if (typeof metadata !== "object" || metadata === null) return null;
+  const name = (metadata as Record<string, unknown>)["provider_name"];
+  return typeof name === "string" ? name : null;
+}
+
+// Plain-language failure text persisted into the transcript. One or two
+// sentences a non-expert can act on, with the raw status in parentheses.
+export function describeLLMError(err: unknown): string {
+  if (
+    !(err instanceof OpenAI.APIError) &&
+    !(err instanceof Anthropic.APIError)
+  ) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `The run failed unexpectedly: ${message}`;
+  }
+  const status = err.status;
+  const attempts = LLM_RETRY_DELAYS_MS.length + 1;
+  if (status === undefined) {
+    return "Could not reach the model provider - the connection failed. Check the Base URL in Settings and your network, then send a message to try again.";
+  }
+  const from = upstreamProvider(err.error);
+  const detail = ` (HTTP ${status}${from === null ? "" : ` from ${from}`})`;
+  if (status === 401 || status === 403) {
+    return `The provider rejected the API key. Check the key under Settings, Provider${detail}.`;
+  }
+  if (status === 402) {
+    return `The provider account is out of credits. Top up or switch to another model in Settings${detail}.`;
+  }
+  if (status === 400 || status === 404) {
+    return `The provider did not recognize the request - usually a wrong or unavailable model name. Check the model in Settings${detail}.`;
+  }
+  if (status === 429) {
+    return `The provider rate-limited the request, or a free-tier quota ran out. Nightwatch tried ${attempts} times before giving up; this usually clears on its own${detail}.`;
+  }
+  if (status >= 500) {
+    return `The model provider had a server problem - this is upstream, not your setup. Nightwatch tried ${attempts} times before giving up${detail}.`;
+  }
+  return `The provider returned an unexpected error${detail}.`;
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const done = (): void => {

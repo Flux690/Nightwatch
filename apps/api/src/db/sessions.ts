@@ -58,6 +58,47 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
   insertAll(messages);
 }
 
+export function getNextSeq(sessionId: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COALESCE(MAX(seq), -1) + 1 AS next
+       FROM session_messages WHERE session_id = ?`,
+    )
+    .get(sessionId) as { next: number };
+  return row.next;
+}
+
+// Nightwatch's own failure note, appended after the turn that died. Display
+// and history only; buildSeed keeps it away from the model.
+export function appendErrorMessage(
+  sessionId: string,
+  text: string,
+): SessionMessage {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO session_messages
+       (session_id, seq, role, content, provider_content, created_at)
+     VALUES (@sessionId, @seq, 'error', @content, NULL, @createdAt)`,
+  );
+  const message: SessionMessage = {
+    sessionId,
+    seq: 0,
+    role: "error",
+    content: text,
+    createdAt: new Date().toISOString(),
+  };
+  db.transaction(() => {
+    message.seq = getNextSeq(sessionId);
+    insert.run({
+      sessionId,
+      seq: message.seq,
+      content: text,
+      createdAt: message.createdAt,
+    });
+  })();
+  return message;
+}
+
 // Called when suspending on a gated tool, so the DB is always consistent:
 // both the messages and interrupt row exist, or neither does.
 export function appendMessagesAndInterrupt(

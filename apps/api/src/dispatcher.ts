@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { runInvestigation } from "./agent/loop.js";
 import type { RunInvestigationInput } from "./agent/loop.js";
-import { getSession } from "./db/sessions.js";
+import { appendErrorMessage, getSession } from "./db/sessions.js";
+import { describeLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
 import { publishRunFailed } from "./session/stream.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert, SessionMessage } from "@nightwatch/shared";
 
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
 // concurrency control: a new alert while one is running is injected rather than starting a second.
@@ -77,12 +78,26 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
           { err, sessionId: input.sessionId },
           "investigation failed",
         );
-        // Surfaces the crash to the console so the run shows as failed instead of silently
-        // going idle; the dispatcher is the single chokepoint that sees every run's terminal rejection.
-        publishRunFailed(
-          input.sessionId,
-          err instanceof Error ? err.message : "Investigation failed.",
-        );
+        // The failure becomes a durable transcript row rendered like any other
+        // message; a synthetic row still unsticks the console if persist fails.
+        const text = describeLLMError(err);
+        let row: SessionMessage;
+        try {
+          row = appendErrorMessage(input.sessionId, text);
+        } catch (persistErr: unknown) {
+          logger.warn(
+            { err: persistErr, sessionId: input.sessionId },
+            "run failure row not persisted",
+          );
+          row = {
+            sessionId: input.sessionId,
+            seq: 0,
+            role: "error",
+            content: text,
+            createdAt: new Date().toISOString(),
+          };
+        }
+        publishRunFailed(input.sessionId, row);
       })
       .finally(() => {
         activeSessionIds.delete(input.sessionId);

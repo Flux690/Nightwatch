@@ -1,6 +1,7 @@
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
+  | ErrorTextItem
   | ThinkingItem
   | ToolCardItem
   | ApprovalCardItem
@@ -15,6 +16,13 @@ export interface UserTurnItem {
 
 export interface AgentTextItem {
   kind: "agent_text";
+  id: string;
+  text: string;
+}
+
+// Nightwatch's own failure note (role "error"), rendered exactly like agent text.
+export interface ErrorTextItem {
+  kind: "error_text";
   id: string;
   text: string;
 }

@@ -1,7 +1,9 @@
 // A session is the agent's conversation thread (the durable parent); an incident is an optional
 // artifact referencing it. Sessions live in the API's SQLite, id minted at trigger time, appended per turn.
 
-export type SessionRole = "user" | "assistant";
+// "error" rows are Nightwatch's own failure notes: shown in the transcript,
+// never replayed to the model.
+export type SessionRole = "user" | "assistant" | "error";
 
 export interface SessionMeta {
   sessionId: string;

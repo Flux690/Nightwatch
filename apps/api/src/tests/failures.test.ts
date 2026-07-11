@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import {
+  describeLLMError,
   isTransientLLMError,
   retrySummary,
   withLLMRetries,
@@ -120,6 +121,50 @@ describe("withLLMRetries", () => {
     setTimeout(() => controller.abort(), 20);
     await expect(pending).rejects.toMatchObject({ status: 502 });
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+});
+
+describe("describeLLMError", () => {
+  it("names the upstream host on a 5xx, from OpenRouter's error metadata", () => {
+    // Shape mirrors a real OpenRouter 502: the failing host rides in metadata.
+    const err = OpenAI.APIError.generate(
+      502,
+      {
+        error: {
+          message: "Provider returned error",
+          metadata: { provider_name: "Poolside", is_byok: false },
+        },
+      },
+      "502 Provider returned error",
+      new Headers(),
+    );
+    const text = describeLLMError(err);
+    expect(text).toContain("server problem");
+    expect(text).toContain("not your setup");
+    expect(text).toContain("(HTTP 502 from Poolside)");
+  });
+
+  it.each([
+    [401, "rejected the API key"],
+    [402, "out of credits"],
+    [404, "model name"],
+    [429, "rate-limited"],
+  ])("maps HTTP %d to actionable words", (status, phrase) => {
+    expect(describeLLMError(openAIError(status))).toContain(phrase);
+  });
+
+  it("explains connection failures without a status code", () => {
+    const text = describeLLMError(
+      new OpenAI.APIConnectionError({ message: "down" }),
+    );
+    expect(text).toContain("Could not reach the model provider");
+    expect(text).not.toContain("HTTP");
+  });
+
+  it("falls back to the raw message for non-provider errors", () => {
+    expect(describeLLMError(new Error("db locked"))).toBe(
+      "The run failed unexpectedly: db locked",
+    );
   });
 });
 

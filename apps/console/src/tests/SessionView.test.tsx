@@ -825,11 +825,26 @@ describe("SessionView", () => {
         MockEventSource.latest?.push({
           messageId: "m-fail",
           type: "RUN_FAILED",
-          payload: { sessionId: "s1", message: "runner disconnected" },
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "error",
+              content:
+                "The model provider had a server problem - this is upstream, not your setup.",
+              createdAt: new Date().toISOString(),
+            },
+          },
         });
       });
 
+      // The failure reads like any other message in the conversation and the
+      // composer is usable again.
       await waitFor(() => {
+        expect(
+          screen.getByText(/The model provider had a server problem/),
+        ).toBeInTheDocument();
         expect(screen.getByRole("textbox")).not.toBeDisabled();
         expect(
           screen.getByRole("button", { name: /send/i }),

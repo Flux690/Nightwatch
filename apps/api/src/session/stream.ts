@@ -91,7 +91,10 @@ export function publishRunRetrying(
   publishConsoleEvent(env);
 }
 
-export function publishRunFailed(sessionId: string, message: string): void {
+export function publishRunFailed(
+  sessionId: string,
+  message: SessionMessage,
+): void {
   const env: ConsoleRunFailed = {
     messageId: randomUUID(),
     type: "RUN_FAILED",

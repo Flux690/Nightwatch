@@ -141,6 +141,9 @@ export function TranscriptItemRenderer({
       return <UserTurn text={item.text} />;
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
+    case "error_text":
+      // User's explicit choice: failures read like any other agent message.
+      return <AgentMarkdown text={item.text} />;
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":

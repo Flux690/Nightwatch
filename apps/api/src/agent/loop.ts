@@ -17,6 +17,7 @@ import {
   createSession,
   appendSessionMessages,
   appendMessagesAndInterrupt,
+  getNextSeq,
   getSession,
 } from "../db/sessions.js";
 import {
@@ -43,21 +44,23 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-// sole writer of session_messages; diffs provider snapshot against persisted, writes the diff atomically
+// Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot
+// index so rows the seed skipped (error rows, dead exchanges) never collide.
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
-  fromSeq: number,
+  fromCount: number,
+  seqOffset: number,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
   const newMessages: SessionMessage[] = [];
-  for (let seq = fromSeq; seq < snap.length; seq++) {
-    const m = snap[seq];
+  for (let i = fromCount; i < snap.length; i++) {
+    const m = snap[i];
     if (!m) continue;
     newMessages.push({
       sessionId,
-      seq,
+      seq: seqOffset + i,
       role: m.role,
       content: m.content,
       providerContent: m.providerContent,
@@ -162,6 +165,7 @@ export async function runInvestigation(
     createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
     let persistedCount = 0;
+    const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
     if (input.seed && input.seed.length > 0) {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
@@ -172,7 +176,7 @@ export async function runInvestigation(
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
-    persistNewTurns(provider, sessionId, persistedCount);
+    persistNewTurns(provider, sessionId, persistedCount, seqOffset);
     if (signal?.aborted) {
       publishRunStopped(sessionId);
       log.info("run stopped by user during end wrap-up");
@@ -223,6 +227,7 @@ export async function runInvestigation(
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
   let persistedCount = 0;
+  const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
 
   if (input.resumeToolResults && input.resumeToolResults.length > 0) {
     // Resume from a durable interrupt: seed the prior transcript, then append
@@ -232,7 +237,12 @@ export async function runInvestigation(
       persistedCount = input.seed.length;
     }
     provider.appendToolResults(input.resumeToolResults);
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     persistedCount = input.seed.length;
@@ -240,15 +250,30 @@ export async function runInvestigation(
     // it's sent, instead of waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
       provider.appendUserMessage(input.userMessage);
-      persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+      persistedCount = persistNewTurns(
+        provider,
+        sessionId,
+        persistedCount,
+        seqOffset,
+      );
     }
   } else {
     provider.start(input.userMessage ?? firstUserMessage);
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
   }
 
   const persist = (): void => {
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
   };
 
   let turn = 0;
@@ -345,6 +370,7 @@ export async function runInvestigation(
         provider,
         sessionId,
         persistedCount,
+        seqOffset,
         interrupt,
       );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
@@ -401,6 +427,7 @@ export async function runInvestigation(
     provider,
     sessionId,
     persistedCount,
+    seqOffset,
     continueInterrupt,
   );
   publishInterrupt({
