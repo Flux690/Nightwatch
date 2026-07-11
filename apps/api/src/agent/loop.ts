@@ -9,6 +9,7 @@ import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
 import { currentFleetProviders, currentRemediationEnabled } from "./policy.js";
 import { processToolUses } from "./turn.js";
+import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import { getGitHubIntegration } from "../db/github-integration.js";
@@ -22,6 +23,7 @@ import {
   publishTextMessageContent,
   publishRunFinished,
   publishInterrupt,
+  publishRunRetrying,
   publishRunStopped,
 } from "../session/stream.js";
 import { dispatcher } from "../dispatcher.js";
@@ -37,6 +39,7 @@ import type {
   LLMProvider,
   ProviderMessage,
   ToolResult,
+  ToolSchema,
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
@@ -119,6 +122,37 @@ export async function runInvestigation(
   const config = loadConfig();
   const apiKey = loadApiKey();
 
+  // Transient provider errors are waited out instead of killing the run; each
+  // wait is streamed to the console as live status.
+  const chatWithRetries = (
+    provider: LLMProvider,
+    toolSchemas: ToolSchema[],
+  ): Promise<ChatResponse> =>
+    withLLMRetries(
+      () =>
+        provider.chat(
+          toolSchemas,
+          (d) => publishTextMessageContent(sessionId, d),
+          signal,
+        ),
+      {
+        signal,
+        onRetry: (notice) => {
+          log.warn(
+            { attempt: notice.attempt, delayMs: notice.delayMs },
+            "transient LLM error, retrying",
+          );
+          publishRunRetrying({
+            sessionId,
+            attempt: notice.attempt + 1,
+            maxAttempts: notice.maxAttempts,
+            delaySeconds: Math.round(notice.delayMs / 1000),
+            summary: retrySummary(notice),
+          });
+        },
+      },
+    );
+
   // Operator declined a continue-request: replay the transcript and run one free-form
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
@@ -134,11 +168,7 @@ export async function runInvestigation(
     }
     log.info("time budget ended: operator chose to end, running wrap-up turn");
     try {
-      await provider.chat(
-        [],
-        (d) => publishTextMessageContent(sessionId, d),
-        signal,
-      );
+      await chatWithRetries(provider, []);
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
@@ -240,11 +270,7 @@ export async function runInvestigation(
     const startedAt = Date.now();
     let response: ChatResponse;
     try {
-      response = await provider.chat(
-        toolSchemas,
-        (d) => publishTextMessageContent(sessionId, d),
-        signal,
-      );
+      response = await chatWithRetries(provider, toolSchemas);
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");

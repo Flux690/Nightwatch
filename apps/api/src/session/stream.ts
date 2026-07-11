@@ -6,6 +6,7 @@ import type {
   ConsoleInterruptResolved,
   ConsoleRunFinished,
   ConsoleRunStopped,
+  ConsoleRunRetrying,
   ConsoleRunFailed,
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
@@ -75,6 +76,17 @@ export function publishRunStopped(sessionId: string): void {
     messageId: randomUUID(),
     type: "RUN_STOPPED",
     payload: { sessionId },
+  };
+  publishConsoleEvent(env);
+}
+
+export function publishRunRetrying(
+  payload: ConsoleRunRetrying["payload"],
+): void {
+  const env: ConsoleRunRetrying = {
+    messageId: randomUUID(),
+    type: "RUN_RETRYING",
+    payload,
   };
   publishConsoleEvent(env);
 }

@@ -179,6 +179,8 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  // Live "waiting out a provider error" line; any other run event clears it.
+  const [retryNotice, setRetryNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { phase } = useAuth();
@@ -197,12 +199,14 @@ export function SessionView({
       setActiveSessionId(null);
       setLiveItems([]);
       setIsRunning(false);
+      setRetryNotice(null);
       return;
     }
 
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
+      setRetryNotice(null);
     }
 
     activeSessionIdRef.current = curr;
@@ -263,10 +267,19 @@ export function SessionView({
       const sid = activeSessionIdRef.current;
       if (!sid) return;
 
+      if (env.type === "RUN_RETRYING") {
+        const { sessionId, summary } = env.payload;
+        if (sessionId !== sid) return;
+        setIsRunning(true);
+        setRetryNotice(summary);
+        return;
+      }
+
       if (env.type === "RUN_FINISHED") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
+        setRetryNotice(null);
         setLiveItems([]);
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
@@ -279,6 +292,7 @@ export function SessionView({
         const { sessionId } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
+        setRetryNotice(null);
         setLiveItems([]);
         return;
       }
@@ -287,6 +301,7 @@ export function SessionView({
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
+        setRetryNotice(null);
         setLiveItems([]);
         toast.show({
           title: "Investigation failed",
@@ -297,7 +312,10 @@ export function SessionView({
       }
 
       if (env.type === "TEXT_MESSAGE_CONTENT") {
-        if (env.payload.sessionId === sid) setIsRunning(true);
+        if (env.payload.sessionId === sid) {
+          setIsRunning(true);
+          setRetryNotice(null);
+        }
       }
 
       setLiveItems((prev) => applyLiveEvent(prev, env, sid));
@@ -420,6 +438,14 @@ export function SessionView({
           </MessageScrollerViewport>
           <MessageScrollerButton direction="end" />
         </MessageScroller>
+
+        {retryNotice && (
+          <div className="mx-auto w-full max-w-chat px-6 pb-2">
+            <span className="animate-pulse text-sm text-muted-foreground">
+              {retryNotice}
+            </span>
+          </div>
+        )}
 
         {!composerHidden && (
           <ScrollToEndChatInput

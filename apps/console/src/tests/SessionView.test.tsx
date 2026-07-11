@@ -753,6 +753,54 @@ describe("SessionView", () => {
       });
     });
 
+    it("shows the retry status line on RUN_RETRYING and clears it when streaming resumes", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m-retry",
+          type: "RUN_RETRYING",
+          payload: {
+            sessionId: "s1",
+            attempt: 2,
+            maxAttempts: 4,
+            delaySeconds: 15,
+            summary: "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          ),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m-resume",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "Back online." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(
+            "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          ),
+        ).not.toBeInTheDocument();
+      });
+    });
+
     it("re-enables the composer when RUN_FAILED arrives (run not left spinning)", async () => {
       setup();
 

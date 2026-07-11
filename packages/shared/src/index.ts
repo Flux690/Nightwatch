@@ -58,6 +58,7 @@ export type {
   ConsoleInterrupt,
   ConsoleToolCallEnd,
   ConsoleRunStopped,
+  ConsoleRunRetrying,
   ConsoleRunFailed,
   ConsoleEvent,
 } from "./console-events.js";

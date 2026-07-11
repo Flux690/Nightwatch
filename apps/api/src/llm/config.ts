@@ -6,6 +6,10 @@ export const REQUEST_TIMEOUT_MS = 120_000;
 
 export const MAX_RETRIES = 2;
 
+// Backoff ladder for transient provider errors, on top of the SDK's own quick
+// retries: 4 attempts over ~65s, enough to ride out a typical provider blip.
+export const LLM_RETRY_DELAYS_MS: readonly number[] = [5_000, 15_000, 45_000];
+
 // seeds the global Config row; loop reads effective values from config, not these constants
 export const DEFAULT_HARD_TIMEOUT_MS = 5 * 60_000;
 export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;

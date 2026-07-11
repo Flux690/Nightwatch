@@ -88,6 +88,19 @@ export interface ConsoleRunStopped extends ConsoleEnvelope {
   };
 }
 
+// A transient provider error mid-run: the run is waiting out a backoff delay,
+// not dead. Ephemeral status only - nothing is persisted.
+export interface ConsoleRunRetrying extends ConsoleEnvelope {
+  type: "RUN_RETRYING";
+  payload: {
+    sessionId: string;
+    attempt: number;
+    maxAttempts: number;
+    delaySeconds: number;
+    summary: string;
+  };
+}
+
 // An investigation threw an unexpected error and ended without finishing. Tells
 // the console to surface the failure instead of leaving the run looking idle.
 export interface ConsoleRunFailed extends ConsoleEnvelope {
@@ -108,4 +121,5 @@ export type ConsoleEvent =
   | ConsoleToolCallEnd
   | ConsoleHumanInputResolved
   | ConsoleRunStopped
+  | ConsoleRunRetrying
   | ConsoleRunFailed;
