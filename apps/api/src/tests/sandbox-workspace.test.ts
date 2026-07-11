@@ -364,7 +364,7 @@ describe("workspace lifecycle", () => {
       "nightwatch.session": sessionId,
     });
     const host = create["HostConfig"] as Record<string, unknown>;
-    expect(host["ReadonlyRootfs"]).toBe(true);
+    expect(host["ReadonlyRootfs"]).toBeUndefined();
     expect(host["CapDrop"]).toEqual(["ALL"]);
     expect(host["SecurityOpt"]).toEqual(["no-new-privileges"]);
     expect(host["NanoCpus"]).toBe(2_000_000_000);

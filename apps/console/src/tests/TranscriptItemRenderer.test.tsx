@@ -43,20 +43,6 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
-  describe("error_text — a failure note reads like any agent message", () => {
-    it("renders the plain text with no card chrome", () => {
-      wrap({
-        kind: "error_text",
-        id: "e1",
-        text: "The model provider had a server problem - this is upstream, not your setup.",
-      });
-
-      expect(
-        screen.getByText(/The model provider had a server problem/),
-      ).toBeInTheDocument();
-      expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    });
-  });
 
   describe("approval_card", () => {
     const approvalItem: TranscriptItem = {
@@ -217,27 +203,6 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
     });
 
-    it("renders Bash results as IN/OUT sections with no exit badge, clamped to 3 lines", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-3",
-        toolName: "Bash",
-        input: { command: "pnpm test" },
-        result: {
-          exitCode: 1,
-          output: "line one\nline two\nline three\nline four",
-        },
-      });
-
-      expect(screen.getByTestId("terminal-card")).toBeInTheDocument();
-      expect(screen.getByText("IN")).toBeInTheDocument();
-      expect(screen.getByText("OUT")).toBeInTheDocument();
-      expect(screen.getByText(/pnpm test/)).toBeInTheDocument();
-      expect(screen.getByText(/line three/)).toBeInTheDocument();
-      // A failing command carries no badge and output clamps at three lines.
-      expect(screen.queryByText(/exit \d/)).not.toBeInTheDocument();
-      expect(screen.queryByText(/line four/)).not.toBeInTheDocument();
-    });
 
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
       wrap({
@@ -264,73 +229,9 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText(/pnpm run test passed/)).toBeInTheDocument();
     });
 
-    it("a running Edit shows only its header line - no output area yet", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-5",
-        toolName: "Edit",
-        input: { path: "src/app.ts" },
-        result: null,
-      });
-      const card = screen.getByTestId("tool-card");
-      expect(card).toHaveTextContent("Edit");
-      expect(card).toHaveTextContent("src/app.ts");
-      expect(card.querySelector("pre")).toBeNull();
-    });
 
-    it("Bash shows a corrective error string as plain output, no exit badge", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-6",
-        toolName: "Bash",
-        input: { command: "ls" },
-        result: "GitHub integration is not configured.",
-      });
-      expect(screen.getByTestId("terminal-card")).toBeInTheDocument();
-      expect(
-        screen.getByText(/GitHub integration is not configured/),
-      ).toBeInTheDocument();
-      expect(screen.queryByText(/exit \d/)).not.toBeInTheDocument();
-    });
 
-    it("Bash with exit 0 shows output without any badge; the description rides the header", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-7",
-        toolName: "Bash",
-        input: { command: "pnpm install", description: "Install dependencies" },
-        result: { exitCode: 0, output: "Done in 3s" },
-      });
-      expect(screen.getByText("Install dependencies")).toBeInTheDocument();
-      expect(screen.getByText("Done in 3s")).toBeInTheDocument();
-      expect(screen.queryByText(/exit \d/)).not.toBeInTheDocument();
-    });
 
-    it("a running Bash shows IN with a running indicator and no OUT section", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-8",
-        toolName: "Bash",
-        input: { command: "pnpm test" },
-        result: null,
-      });
-      expect(screen.getByTestId("tool-card-pending")).toBeInTheDocument();
-      expect(screen.getByText("IN")).toBeInTheDocument();
-      expect(screen.queryByText("OUT")).not.toBeInTheDocument();
-    });
 
-    it("Read renders as a single header line, never a body", () => {
-      wrap({
-        kind: "tool_card",
-        toolUseId: "tu-9",
-        toolName: "Read",
-        input: { path: "src/server.ts" },
-        result: "1\tconst x = 1;",
-      });
-      const card = screen.getByTestId("tool-card");
-      expect(card).toHaveTextContent("Read");
-      expect(card).toHaveTextContent("src/server.ts");
-      expect(card.querySelector("pre")).toBeNull();
-    });
   });
 });

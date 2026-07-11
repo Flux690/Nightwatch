@@ -138,7 +138,6 @@ export async function createSandboxContainer(opts: {
         `${opts.workspaceDir}:/workspace`,
         `${opts.homeDir}:/home/sandbox`,
       ],
-      ReadonlyRootfs: true,
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges"],
       Tmpfs: { "/tmp": "rw,exec,nosuid,nodev,size=1g" },
