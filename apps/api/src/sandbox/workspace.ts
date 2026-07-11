@@ -26,6 +26,10 @@ export interface SandboxLog {
   warn(fields: Record<string, unknown>, message: string): void;
 }
 
+// Provisioning progress for the console: creation is slow (clone, image pull,
+// container start) and would otherwise look like a hang on the first repo tool.
+export type SandboxStage = "cloning" | "starting" | "ready" | "failed";
+
 export interface PullRequestRef {
   number: number;
   url: string;
@@ -64,6 +68,7 @@ export interface WorkspaceOptions {
       patch: { title: string; body: string },
     ): Promise<void>;
   };
+  onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
 }
 
@@ -129,6 +134,18 @@ async function createEntry(
   sessionId: string,
   options: WorkspaceOptions,
 ): Promise<Entry> {
+  try {
+    return await provisionEntry(sessionId, options);
+  } catch (err) {
+    options.onStatus?.("failed");
+    throw err;
+  }
+}
+
+async function provisionEntry(
+  sessionId: string,
+  options: WorkspaceOptions,
+): Promise<Entry> {
   const dir = join(options.workspacesDir, sessionId);
   const homeDir = homeDirFor(dir);
   // A leftover dir (crash, reaped container) would break the clone; the branch
@@ -137,6 +154,7 @@ async function createEntry(
   await rm(homeDir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
   await mkdir(homeDir, { recursive: true });
+  options.onStatus?.("cloning");
   const authHeader = await options.authHeader();
   await cloneAndCheckout({
     url: options.cloneUrl,
@@ -144,8 +162,8 @@ async function createEntry(
     dir,
     authHeader,
   });
-  // Local-only ignore: the setup install guarantees node_modules exists, and a
-  // repo without a .gitignore must never get it checkpoint-committed.
+  // Local-only ignore: a repo without a .gitignore must never get an
+  // agent-installed node_modules checkpoint-committed.
   await appendFile(join(dir, ".git", "info", "exclude"), "node_modules/\n");
   if (apiRunsAsRoot() && !warnedRootApi) {
     warnedRootApi = true;
@@ -154,6 +172,7 @@ async function createEntry(
       "API runs as root, so sandbox containers run as root too; run the API as a non-root user for full sandbox hardening",
     );
   }
+  options.onStatus?.("starting");
   const network = await networkAttachment(options);
   const containerId = await createSandboxContainer({
     sessionId,
@@ -188,6 +207,7 @@ async function createEntry(
     options,
   };
   sessions.set(sessionId, entry);
+  options.onStatus?.("ready");
   options.log?.info({ sessionId, branch: options.branch }, "sandbox created");
   return entry;
 }

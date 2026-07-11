@@ -537,9 +537,7 @@ describe("sandbox network modes", () => {
   }
 
   function sandboxCreateArgs(): Record<string, unknown> {
-    const args = dockerState.createArgs.filter(
-      (a) => a["name"] !== PROXY_NAME,
-    );
+    const args = dockerState.createArgs.filter((a) => a["name"] !== PROXY_NAME);
     return args[args.length - 1]!;
   }
 
@@ -565,9 +563,7 @@ describe("sandbox network modes", () => {
 
     // Proxy built locally, dual-homed onto the bridge, filter carries the hosts.
     expect(dockerState.builtImages).toContain("nightwatch-tinyproxy");
-    expect(dockerState.events).toContain(
-      `connect:bridge:${PROXY_NAME}`,
-    );
+    expect(dockerState.events).toContain(`connect:bridge:${PROXY_NAME}`);
     const cfgDir = join(workspacesDir, "proxy-config");
     expect(readFileSync(join(cfgDir, "filter"), "utf8")).toContain(
       "registry.npmjs.org",
@@ -635,5 +631,25 @@ describe("sandbox network modes", () => {
     expect(
       readFileSync(join(ws.dir, ".git", "info", "exclude"), "utf8"),
     ).toContain("node_modules/");
+  });
+
+  it("reports provisioning stages in order: cloning, starting, ready", async () => {
+    const stages: string[] = [];
+    await createWorkspace({ onStatus: (stage) => stages.push(stage) });
+    expect(stages).toEqual(["cloning", "starting", "ready"]);
+  });
+
+  it("a provisioning failure ends the stage stream with failed", async () => {
+    const stages: string[] = [];
+    const sessionId = nextSessionId();
+    await expect(
+      withWorkspace(
+        sessionId,
+        // gVisor required but absent: container creation refuses.
+        options({ requireGvisor: true, onStatus: (s) => stages.push(s) }),
+        () => Promise.resolve(),
+      ),
+    ).rejects.toBeInstanceOf(SandboxUnavailableError);
+    expect(stages).toEqual(["cloning", "starting", "failed"]);
   });
 });

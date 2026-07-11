@@ -6,6 +6,7 @@ import type {
   ConsoleInterruptResolved,
   ConsoleRunFinished,
   ConsoleRunStopped,
+  ConsoleSandboxStatus,
   ConsoleRunRetrying,
   ConsoleRunFailed,
   ConsoleTextMessageContent,
@@ -76,6 +77,17 @@ export function publishRunStopped(sessionId: string): void {
     messageId: randomUUID(),
     type: "RUN_STOPPED",
     payload: { sessionId },
+  };
+  publishConsoleEvent(env);
+}
+
+export function publishSandboxStatus(
+  payload: ConsoleSandboxStatus["payload"],
+): void {
+  const env: ConsoleSandboxStatus = {
+    messageId: randomUUID(),
+    type: "SANDBOX_STATUS",
+    payload,
   };
   publishConsoleEvent(env);
 }

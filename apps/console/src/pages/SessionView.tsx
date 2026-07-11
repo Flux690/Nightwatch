@@ -180,8 +180,9 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  // Live "waiting out a provider error" line; any other run event clears it.
-  const [retryNotice, setRetryNotice] = useState<string | null>(null);
+  // Live status line (provider retries, sandbox provisioning); any other run
+  // event clears it.
+  const [activityNotice, setActivityNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { phase } = useAuth();
@@ -200,14 +201,14 @@ export function SessionView({
       setActiveSessionId(null);
       setLiveItems([]);
       setIsRunning(false);
-      setRetryNotice(null);
+      setActivityNotice(null);
       return;
     }
 
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
-      setRetryNotice(null);
+      setActivityNotice(null);
     }
 
     activeSessionIdRef.current = curr;
@@ -268,11 +269,24 @@ export function SessionView({
       const sid = activeSessionIdRef.current;
       if (!sid) return;
 
+      if (env.type === "SANDBOX_STATUS") {
+        const { sessionId, stage } = env.payload;
+        if (sessionId !== sid) return;
+        setActivityNotice(
+          stage === "cloning"
+            ? "Preparing sandbox - cloning the repository\u2026"
+            : stage === "starting"
+              ? "Preparing sandbox - starting the container\u2026"
+              : null,
+        );
+        return;
+      }
+
       if (env.type === "RUN_RETRYING") {
         const { sessionId, summary } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(true);
-        setRetryNotice(summary);
+        setActivityNotice(summary);
         return;
       }
 
@@ -280,7 +294,7 @@ export function SessionView({
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
-        setRetryNotice(null);
+        setActivityNotice(null);
         setLiveItems([]);
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
@@ -293,7 +307,7 @@ export function SessionView({
         const { sessionId } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
-        setRetryNotice(null);
+        setActivityNotice(null);
         setLiveItems([]);
         return;
       }
@@ -302,7 +316,7 @@ export function SessionView({
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
-        setRetryNotice(null);
+        setActivityNotice(null);
         setLiveItems([]);
         // The failure is a persisted transcript row: append it like RUN_FINISHED
         // does so it renders in the conversation and survives reloads.
@@ -316,7 +330,7 @@ export function SessionView({
       if (env.type === "TEXT_MESSAGE_CONTENT") {
         if (env.payload.sessionId === sid) {
           setIsRunning(true);
-          setRetryNotice(null);
+          setActivityNotice(null);
         }
       }
 
@@ -441,10 +455,10 @@ export function SessionView({
           <MessageScrollerButton direction="end" />
         </MessageScroller>
 
-        {retryNotice && (
+        {activityNotice && (
           <div className="mx-auto w-full max-w-chat px-6 pb-2">
             <span className="animate-pulse text-sm text-muted-foreground">
-              {retryNotice}
+              {activityNotice}
             </span>
           </div>
         )}

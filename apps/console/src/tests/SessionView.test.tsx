@@ -753,6 +753,53 @@ describe("SessionView", () => {
       });
     });
 
+    it("shows sandbox provisioning stages and clears the line when ready", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-1",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "cloning" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - cloning the repository/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-2",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "starting" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - starting the container/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-3",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "ready" },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.queryByText(/Preparing sandbox/)).not.toBeInTheDocument();
+      });
+    });
+
     it("shows the retry status line on RUN_RETRYING and clears it when streaming resumes", async () => {
       setup();
 

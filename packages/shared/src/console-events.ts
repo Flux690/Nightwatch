@@ -88,6 +88,16 @@ export interface ConsoleRunStopped extends ConsoleEnvelope {
   };
 }
 
+// Sandbox provisioning progress (clone, container start) so the first repo
+// tool call never looks hung. Ephemeral status only - nothing is persisted.
+export interface ConsoleSandboxStatus extends ConsoleEnvelope {
+  type: "SANDBOX_STATUS";
+  payload: {
+    sessionId: string;
+    stage: "cloning" | "starting" | "ready" | "failed";
+  };
+}
+
 // A transient provider error mid-run: the run is waiting out a backoff delay,
 // not dead. Ephemeral status only - nothing is persisted.
 export interface ConsoleRunRetrying extends ConsoleEnvelope {
@@ -121,5 +131,6 @@ export type ConsoleEvent =
   | ConsoleToolCallEnd
   | ConsoleHumanInputResolved
   | ConsoleRunStopped
+  | ConsoleSandboxStatus
   | ConsoleRunRetrying
   | ConsoleRunFailed;

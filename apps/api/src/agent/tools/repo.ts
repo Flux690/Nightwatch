@@ -22,6 +22,7 @@ import {
   VerificationFailedError,
 } from "../../sandbox/errors.js";
 import { logger } from "../../logger.js";
+import { publishSandboxStatus } from "../../session/stream.js";
 import {
   withWorkspace,
   type Workspace,
@@ -89,6 +90,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     network: config.sandboxNetwork,
     allowlistHosts: config.sandboxAllowlistHosts,
     proxyConfigDir: proxyDir(),
+    onStatus: (stage) => publishSandboxStatus({ sessionId, stage }),
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
       create: (req) =>
