@@ -62,7 +62,7 @@ describe("TranscriptItemRenderer", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",
       toolUseId: "tu-gate",
-      toolName: "restart_service",
+      toolName: "RestartService",
       input: {
         service: { provider: "docker", project: "web-01", service: "web-01" },
       },
@@ -95,7 +95,7 @@ describe("TranscriptItemRenderer", () => {
     const clarItem: TranscriptItem = {
       kind: "clarification_card",
       toolUseId: "tu-clar",
-      toolName: "request_clarification",
+      toolName: "AskUserQuestion",
       input: {},
       question: "Which service first?",
       options: [
@@ -187,11 +187,11 @@ describe("TranscriptItemRenderer", () => {
       diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n-const a = 1;\n+const a = 42;",
     };
 
-    it("renders repo_edit_file results as a colored diff card", () => {
+    it("renders Edit results as a colored diff card", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-1",
-        toolName: "repo_edit_file",
+        toolName: "Edit",
         input: { path: "src/app.ts" },
         result: DIFF_RESULT,
       });
@@ -208,7 +208,7 @@ describe("TranscriptItemRenderer", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-2",
-        toolName: "repo_write_file",
+        toolName: "Write",
         input: { path: "src/app.ts" },
         result: JSON.stringify(DIFF_RESULT),
       });
@@ -217,11 +217,11 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
     });
 
-    it("renders repo_exec results as a terminal card with an exit badge", () => {
+    it("renders Bash results as a terminal card with an exit badge", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-3",
-        toolName: "repo_exec",
+        toolName: "Bash",
         input: { command: "pnpm test" },
         result: { exitCode: 1, output: "1 test failed", truncated: true },
       });
@@ -233,11 +233,11 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText(/output truncated/)).toBeInTheDocument();
     });
 
-    it("renders open_pull_request results as a PR card with the GitHub link", () => {
+    it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-4",
-        toolName: "open_pull_request",
+        toolName: "OpenPullRequest",
         input: { title: "Fix the leak" },
         result: {
           action: "created",
@@ -262,7 +262,7 @@ describe("TranscriptItemRenderer", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-5",
-        toolName: "repo_edit_file",
+        toolName: "Edit",
         input: { path: "src/app.ts" },
         result: null,
       });
@@ -273,7 +273,7 @@ describe("TranscriptItemRenderer", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-6",
-        toolName: "repo_exec",
+        toolName: "Bash",
         input: { command: "ls" },
         result: "GitHub integration is not configured.",
       });

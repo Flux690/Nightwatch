@@ -72,7 +72,7 @@ describe("clarification interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_service") {
+        if (commandName === "RestartService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -123,14 +123,14 @@ describe("clarification interrupts", () => {
     vi.unstubAllEnvs();
   });
 
-  it("request_clarification suspends: interrupt row kind=clarification, INTERRUPT event has kind+question+options, run exited", async () => {
+  it("AskUserQuestion suspends: interrupt row kind=clarification, INTERRUPT event has kind+question+options, run exited", async () => {
     setScript([
       {
         text: "Need clarification.",
         toolUses: [
           {
             id: "tu-clar-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "What is the likely root cause?",
               options: TEST_OPTIONS,
@@ -177,7 +177,7 @@ describe("clarification interrupts", () => {
       "What is the likely root cause?",
     );
     expect(interrupt.payload["options"]).toEqual(TEST_OPTIONS);
-    expect(interrupt.payload["toolName"]).toBe("request_clarification");
+    expect(interrupt.payload["toolName"]).toBe("AskUserQuestion");
 
     close();
 
@@ -200,7 +200,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-ans-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Which container is affected?",
               options: TEST_OPTIONS,
@@ -273,7 +273,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-ms-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Which factors apply?",
               options: TEST_OPTIONS,
@@ -345,7 +345,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-clar-val-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: { question: "Confirm?", options: TEST_OPTIONS },
           },
         ],
@@ -411,7 +411,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-rr-clar-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: { question: "Is this recurring?", options: TEST_OPTIONS },
           },
         ],
@@ -480,7 +480,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: clarId,
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Confirm restart?",
               options: [{ label: "Yes", description: "Proceed" }],
@@ -488,7 +488,7 @@ describe("clarification interrupts", () => {
           },
           {
             id: restart1Id,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -507,7 +507,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: restart2Id,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -573,7 +573,7 @@ describe("clarification interrupts", () => {
           e.payload["kind"] === "approval",
       ),
     );
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(

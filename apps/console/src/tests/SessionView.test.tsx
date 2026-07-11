@@ -420,7 +420,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
-            toolName: "restart_service",
+            toolName: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -518,7 +518,7 @@ describe("SessionView", () => {
 
       // The paired tool card now appears below the resolved approval card, OUT
       // still loading until the result (both cards label the tool name).
-      expect(screen.getAllByText("restart_service")).toHaveLength(2);
+      expect(screen.getAllByText("RestartService")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
       const toolCardOut = screen.getByTestId("tool-card-out-loading");
       expect(
@@ -555,7 +555,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -573,7 +573,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText("restart_service")).toBeInTheDocument();
+        expect(within(card).getByText("RestartService")).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /approve/i }),
@@ -588,7 +588,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable-clar",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             toolInput: {
               question: "Which service first?",
               options: [{ label: "nginx", description: "The web server" }],
@@ -618,7 +618,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -663,7 +663,7 @@ describe("SessionView", () => {
           {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: { risk: "high" },
             kind: "approval",
             status: "pending",
@@ -909,7 +909,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tu-clar",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             input: {},
             incidentId: "inc-clar",
             kind: "clarification",
@@ -1079,7 +1079,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             input: {},
             incidentId: "inc-other",
             kind: "clarification",

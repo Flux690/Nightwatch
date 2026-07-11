@@ -39,7 +39,7 @@ export class VerificationFailedError extends Error {
 export class ReadRequiredError extends Error {
   constructor(readonly path: string) {
     super(
-      `${path} has not been read this session. Read it with repo_read_file before modifying it.`,
+      `${path} has not been read this session. Read it with Read before modifying it.`,
     );
     this.name = "ReadRequiredError";
   }

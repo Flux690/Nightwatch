@@ -89,7 +89,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-qa-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -131,7 +131,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
     const found = body[0];
-    expect(found.toolName).toBe("restart_service");
+    expect(found.toolName).toBe("RestartService");
     expect(found.status).toBe("pending");
     expect(found.sessionId).toBeTruthy();
 
@@ -166,7 +166,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-sc-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -246,7 +246,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-emp-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",

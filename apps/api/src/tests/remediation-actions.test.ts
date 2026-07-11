@@ -62,7 +62,7 @@ describe("remediation action record", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_service") {
+        if (commandName === "RestartService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -120,7 +120,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -184,7 +184,7 @@ describe("remediation action record", () => {
     const row = findRemediationAction(sessionId, toolUseId);
     expect(row).toBeDefined();
     expect(row!.status).toBe("executed");
-    expect(row!.toolName).toBe("restart_service");
+    expect(row!.toolName).toBe("RestartService");
     expect(row!.sessionId).toBe(sessionId);
     expect(row!.serviceIdentityKey).toBe("docker/svc-01/api");
     expect(row!.resolvedBy).toBe("operator");
@@ -202,7 +202,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -293,7 +293,7 @@ describe("remediation action record", () => {
       sessionId,
       toolUseId,
       kind: "approval",
-      toolName: "restart_service",
+      toolName: "RestartService",
       toolInput: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "wedged",
@@ -310,7 +310,7 @@ describe("remediation action record", () => {
       .prepare(
         `INSERT INTO remediation_actions
            (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at)
-         VALUES (?, ?, 'restart_service', 'docker/svc-01/api', 'executing', '{}', ?)`,
+         VALUES (?, ?, 'RestartService', 'docker/svc-01/api', 'executing', '{}', ?)`,
       )
       .run(toolUseId, sessionId, new Date().toISOString());
 
@@ -367,7 +367,7 @@ describe("remediation action record", () => {
     const params = {
       toolUseId,
       sessionId,
-      toolName: "restart_service",
+      toolName: "RestartService",
       input: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "crash",
@@ -408,7 +408,7 @@ describe("remediation action record", () => {
 
     const baseParams = {
       toolUseId,
-      toolName: "restart_service",
+      toolName: "RestartService",
       input: {
         service: { provider: "docker", project: "svc-01", service: "api" },
         rationale: "cross-session test",
@@ -442,7 +442,7 @@ describe("remediation action record", () => {
         toolUses: [
           {
             id: toolUseId,
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
         ],

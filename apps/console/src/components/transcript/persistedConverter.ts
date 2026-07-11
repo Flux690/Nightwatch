@@ -95,7 +95,7 @@ export function convertPersistedMessages(
               streaming: false,
             });
           } else if (block.type === "tool_use") {
-            if (block.name === "request_clarification") {
+            if (block.name === "AskUserQuestion") {
               // Rebuild the clarification card here once answered so it survives a reload; while
               // pending the live/seeded card already covers it (see SessionView).
               if (!toolResults.has(block.id)) continue;

@@ -45,7 +45,7 @@ const BASE_CONFIG: AgentConfig = {
 };
 
 const READ_TOOL = {
-  name: "list_services",
+  name: "ListServices",
   description: "List containers.",
   input_schema: {
     type: "object" as const,
@@ -127,7 +127,7 @@ describe("OpenAIProvider", () => {
       response_format?: unknown;
     };
     expect((callArgs.tools ?? []).map((t) => t.function.name)).toEqual([
-      "list_services",
+      "ListServices",
     ]);
     expect(callArgs.response_format).toBeUndefined();
   });
@@ -145,7 +145,7 @@ describe("OpenAIProvider", () => {
                 type: "function",
                 id: "call-123",
                 function: {
-                  name: "list_services",
+                  name: "ListServices",
                   arguments: JSON.stringify({ environment: "docker" }),
                 },
               },
@@ -159,7 +159,7 @@ describe("OpenAIProvider", () => {
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("list_services");
+    expect(response.toolUses[0].name).toBe("ListServices");
     expect(response.toolUses[0].id).toBe("call-123");
   });
 
@@ -176,7 +176,7 @@ describe("OpenAIProvider", () => {
                 type: "function",
                 id: "call-bad",
                 function: {
-                  name: "list_services",
+                  name: "ListServices",
                   // The model emitted invalid JSON; this must not throw out of
                   // chat() and crash the whole investigation.
                   arguments: "{ environment: docker",
@@ -194,7 +194,7 @@ describe("OpenAIProvider", () => {
     // validation rejects with a corrective error - not an uncaught exception.
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("list_services");
+    expect(response.toolUses[0].name).toBe("ListServices");
     expect(response.toolUses[0].input).toEqual({});
   });
 

@@ -122,7 +122,7 @@ function correctiveMessage(err: unknown): string {
   if (err instanceof ReadRequiredError) return err.message;
   if (err instanceof VerificationFailedError) {
     const tail = err.output.slice(-2000);
-    return `Verification failed (${err.command}) - the pull request was NOT opened and nothing was pushed:\n${tail}\nFix the failures, then call open_pull_request again.`;
+    return `Verification failed (${err.command}) - the pull request was NOT opened and nothing was pushed:\n${tail}\nFix the failures, then call OpenPullRequest again.`;
   }
   if (err instanceof GitHubApiError) {
     return `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page. Continue the investigation without repo tools.`;
@@ -228,7 +228,7 @@ function composePrBody(
 export const REPO_TOOLS: Tool[] = [
   {
     schema: {
-      name: "repo_read_file",
+      name: "Read",
       description:
         "Read a file from the connected repository's isolated checkout (never the production host). Returns numbered lines. Paths are relative to the repository root.",
       input_schema: {
@@ -273,7 +273,7 @@ export const REPO_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "repo_edit_file",
+      name: "Edit",
       description:
         "Replace an exact string in a repository file. old_string must match the current content exactly and appear exactly once (or pass replace_all: true). The file must have been read this session. Result is a unified diff.",
       input_schema: {
@@ -282,7 +282,7 @@ export const REPO_TOOLS: Tool[] = [
           path: { type: "string", description: "Repo-relative file path." },
           old_string: {
             type: "string",
-            description: "Exact text to replace, copied from repo_read_file.",
+            description: "Exact text to replace, copied from Read.",
           },
           new_string: { type: "string", description: "Replacement text." },
           replace_all: {
@@ -317,9 +317,9 @@ export const REPO_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "repo_write_file",
+      name: "Write",
       description:
-        "Create a new repository file or fully overwrite an existing one (overwriting requires having read it this session). Parent directories are created. Result is a unified diff. Prefer repo_edit_file for targeted changes.",
+        "Create a new repository file or fully overwrite an existing one (overwriting requires having read it this session). Parent directories are created. Result is a unified diff. Prefer Edit for targeted changes.",
       input_schema: {
         type: "object",
         properties: {
@@ -348,7 +348,7 @@ export const REPO_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "repo_exec",
+      name: "Bash",
       description:
         "Run a bash command inside the repository sandbox at the repo root (or cwd): install, build, test, grep, read-only git. This is the isolated checkout, never a production host. Network egress is restricted to package registries through a preconfigured proxy - install dependencies yourself when needed (e.g. pnpm install); a request to a non-allowlisted host fails, so if a legitimately needed host is blocked, name it in your summary and the pull request body. Use structured repo tools for edits; exec is for installing, observing and verifying. Output is capped head+tail.",
       input_schema: {
@@ -386,7 +386,7 @@ export const REPO_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "open_pull_request",
+      name: "OpenPullRequest",
       description:
         "Propose this session's repository changes as a draft pull request. Your verificationCommand runs fresh in the sandbox first - non-zero exit means nothing is pushed and you get the output back. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context, the verification result and a session reference are appended to the body automatically.",
       input_schema: {
@@ -447,7 +447,7 @@ export const REPO_TOOLS: Tool[] = [
               insertExecutingRemediationAction({
                 toolUseId: ctx.toolUseId,
                 sessionId: ctx.sessionId,
-                toolName: "open_pull_request",
+                toolName: "OpenPullRequest",
                 input: { title, body: modelBody },
                 resolvedBy: "agent",
               }),

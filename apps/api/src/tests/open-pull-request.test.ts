@@ -184,8 +184,8 @@ function runOpr(
   sessionId = SESSION_WITH_TESTS,
   toolUseId = `opr-${++toolUseCounter}`,
 ): Promise<ToolExecuteResult> {
-  const entry = findTool("open_pull_request");
-  if (!entry) throw new Error("open_pull_request missing from registry");
+  const entry = findTool("OpenPullRequest");
+  if (!entry) throw new Error("OpenPullRequest missing from registry");
   return executeTool(entry, input, {
     toolTimeoutMs: 15_000,
     sessionId,
@@ -229,7 +229,7 @@ afterAll(async () => {
   vi.unstubAllEnvs();
 });
 
-describe("open_pull_request", () => {
+describe("OpenPullRequest", () => {
   it("verification failure returns the output, pushes nothing, writes no audit row", async () => {
     dockerState.execExit = 1;
     const result = await runOpr(
@@ -347,7 +347,7 @@ describe("open_pull_request", () => {
     insertExecutingRemediationAction({
       toolUseId: "opr-crash",
       sessionId: SESSION_WITH_TESTS,
-      toolName: "open_pull_request",
+      toolName: "OpenPullRequest",
       input: {},
       resolvedBy: "agent",
     });

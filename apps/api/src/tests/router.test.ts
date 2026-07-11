@@ -106,7 +106,7 @@ describe("router", () => {
     const b = connect("db-02", ["postgres"]);
 
     await sendCommand(
-      "get_service_logs",
+      "GetServiceLogs",
       { service: svc("postgres") },
       "service",
     );
@@ -119,7 +119,7 @@ describe("router", () => {
     connect("web-01", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_service_logs", { service: svc("ghost") }, "service"),
+      sendCommand("GetServiceLogs", { service: svc("ghost") }, "service"),
     ).toThrow(/No runner has service/);
   });
 
@@ -128,14 +128,14 @@ describe("router", () => {
     connect("web-02", ["nginx"]);
 
     expect(() =>
-      sendCommand("get_service_logs", { service: svc("nginx") }, "service"),
+      sendCommand("GetServiceLogs", { service: svc("nginx") }, "service"),
     ).toThrow(/Ambiguous service/);
   });
 
   it("rejects a service-routed command that carries no service identity", () => {
     connect("web-01", ["nginx"]);
 
-    expect(() => sendCommand("get_service_logs", {}, "service")).toThrow(
+    expect(() => sendCommand("GetServiceLogs", {}, "service")).toThrow(
       /requires a 'service' identity/,
     );
   });
@@ -145,7 +145,7 @@ describe("router", () => {
     const b = connect("db-02", ["postgres"]);
     const warn = vi.spyOn(logger, "warn");
 
-    await sendCommand("get_host_memory", { server: "db-02" }, "host");
+    await sendCommand("GetHostMemory", { server: "db-02" }, "host");
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
@@ -167,11 +167,11 @@ describe("router", () => {
     );
     setRunnerManifest(runnerId, makeManifest("ubuntu", ["nginx"]));
 
-    await sendCommand("get_host_memory", { server: "prod-1" }, "host");
+    await sendCommand("GetHostMemory", { server: "prod-1" }, "host");
     expect(commands).toHaveLength(1);
 
     expect(() =>
-      sendCommand("get_host_memory", { server: "ubuntu" }, "host"),
+      sendCommand("GetHostMemory", { server: "ubuntu" }, "host"),
     ).toThrow(/No server named 'ubuntu'/);
   });
 
@@ -180,14 +180,14 @@ describe("router", () => {
     connect("db-02", ["postgres"]);
 
     expect(() =>
-      sendCommand("get_host_memory", { server: "ghost-99" }, "host"),
+      sendCommand("GetHostMemory", { server: "ghost-99" }, "host"),
     ).toThrow(/No server named 'ghost-99'/);
   });
 
   it("a host command without a server parameter fails loud even on a single-runner fleet", () => {
     connect("web-01", ["nginx"]);
 
-    expect(() => sendCommand("get_host_memory", {}, "host")).toThrow(
+    expect(() => sendCommand("GetHostMemory", {}, "host")).toThrow(
       /requires a 'server' parameter/,
     );
   });

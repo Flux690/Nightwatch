@@ -25,21 +25,21 @@ import { PRCard, parsePullRequestResult } from "./PRCard.js";
 function renderToolCard(item: ToolCardItem): React.JSX.Element {
   if (item.result !== null) {
     if (
-      item.toolName === "repo_edit_file" ||
-      item.toolName === "repo_write_file"
+      item.toolName === "Edit" ||
+      item.toolName === "Write"
     ) {
       const change = parseFileChange(item.result);
       if (change !== null) {
         return <DiffCard toolName={item.toolName} change={change} />;
       }
     }
-    if (item.toolName === "repo_exec") {
+    if (item.toolName === "Bash") {
       const exec = parseExecResult(item.result);
       if (exec !== null) {
         return <TerminalCard input={item.input} result={exec} />;
       }
     }
-    if (item.toolName === "open_pull_request") {
+    if (item.toolName === "OpenPullRequest") {
       const pr = parsePullRequestResult(item.result);
       if (pr !== null) return <PRCard pr={pr} />;
     }

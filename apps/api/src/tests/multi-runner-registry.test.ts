@@ -306,7 +306,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand(
-        "get_service_logs",
+        "GetServiceLogs",
         {
           service: {
             provider: "docker",
@@ -361,7 +361,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand(
-        "get_service_logs",
+        "GetServiceLogs",
         {
           service: {
             provider: "docker",

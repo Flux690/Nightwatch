@@ -4,7 +4,7 @@ import type { Tool } from "./types.js";
 export const REMEDIATION_TOOLS: Tool[] = [
   {
     schema: {
-      name: "restart_service",
+      name: "RestartService",
       description:
         "WRITE: Restart a service. Requires human approval. Causes brief downtime.",
       input_schema: {
@@ -34,7 +34,7 @@ export const REMEDIATION_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "exec",
+      name: "ServiceBash",
       description:
         "WRITE: Execute a shell command inside the target service's container (docker exec / kubectl exec). Never runs on the host. Requires human approval. Only available when remediation is enabled.",
       input_schema: {

@@ -67,7 +67,7 @@ const READ: ScriptedTurn = {
   toolUses: [
     {
       id: "tu-read",
-      name: "list_services",
+      name: "ListServices",
       input: { environment: "docker" },
     },
   ],
@@ -170,7 +170,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // Inject while parked at turn 1's chat()
     dispatcher.injectAlert(sessionId, alert("injected-mr"));
 
-    // Release turn 1 → loop executes list_services, drains inbox,
+    // Release turn 1 → loop executes ListServices, drains inbox,
     // then calls appendToolResults(results, injectionText)
     gate.releaseNext();
 
@@ -210,7 +210,7 @@ describe("mid-run alert injection (loop seam)", () => {
           toolUses: [
             {
               id: "tu-gate",
-              name: "restart_service",
+              name: "RestartService",
               input: {
                 service: {
                   provider: "docker",
@@ -234,7 +234,7 @@ describe("mid-run alert injection (loop seam)", () => {
       alert: alert("primary-sus"),
     });
 
-    // Release turn 1 → restart_service is gated → run suspends
+    // Release turn 1 → RestartService is gated → run suspends
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
@@ -336,7 +336,7 @@ describe("mid-run alert injection (loop seam)", () => {
           toolUses: [
             {
               id: "tu-gate-resume",
-              name: "restart_service",
+              name: "RestartService",
               input: {
                 service: {
                   provider: "docker",

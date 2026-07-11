@@ -44,7 +44,7 @@ export function TerminalCard({
 
   return (
     <div data-testid="terminal-card">
-      <p className="mb-1.5 font-mono text-xs font-medium">repo_exec</p>
+      <p className="mb-1.5 font-mono text-xs font-medium">Bash</p>
       <Card size="sm" className="gap-0 py-0">
         <CardContent className="flex items-center gap-2 border-b border-border px-3.5 py-2">
           <span className="min-w-0 flex-1 truncate font-mono text-sm">

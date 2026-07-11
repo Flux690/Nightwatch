@@ -22,7 +22,7 @@ export async function readRepoFile(
     raw = await readFile(abs, "utf8");
   } catch {
     throw new Error(
-      `File not found in the repository: ${input.path}. Check the path with repo_exec (ls, git ls-files).`,
+      `File not found in the repository: ${input.path}. Check the path with Bash (ls, git ls-files).`,
     );
   }
 

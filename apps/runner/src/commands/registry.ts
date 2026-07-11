@@ -52,7 +52,7 @@ function byProvider<T>(handlers: {
       : handlers.docker)(input as T);
 }
 
-// list_services carries no service identity (it is the discovery call), so it
+// ListServices carries no service identity (it is the discovery call), so it
 // dispatches on its `environment` input instead of a service provider.
 function byEnvironment<T extends { environment?: string }>(handlers: {
   docker: (input: T) => Promise<unknown>;
@@ -87,66 +87,66 @@ function guardedWrite(handler: Handler): Handler {
 export function createDispatchRegistry(): Map<string, Handler> {
   return new Map<string, Handler>([
     [
-      "list_services",
+      "ListServices",
       byEnvironment({
         docker: dockerGetContainerList,
         kubernetes: k8sGetContainerList,
       }),
     ],
     [
-      "get_service_logs",
+      "GetServiceLogs",
       byProvider({
         docker: dockerGetContainerLogs,
         kubernetes: k8sGetContainerLogs,
       }),
     ],
     [
-      "get_service_config",
+      "GetServiceConfig",
       byProvider({
         docker: dockerGetContainerInspect,
         kubernetes: k8sGetContainerInspect,
       }),
     ],
     [
-      "get_service_stats",
+      "GetServiceStats",
       byProvider({
         docker: dockerGetContainerStats,
         kubernetes: k8sGetContainerStats,
       }),
     ],
     [
-      "get_service_events",
+      "GetServiceEvents",
       byProvider({
         docker: dockerGetContainerEvents,
         kubernetes: k8sGetContainerEvents,
       }),
     ],
     [
-      "get_service_processes",
+      "GetServiceProcesses",
       byProvider({
         docker: dockerGetContainerProcesses,
         kubernetes: k8sGetContainerProcesses,
       }),
     ],
-    ["get_host_memory", () => getHostMemory()],
-    ["get_host_cpu", () => getHostCpu()],
-    ["get_host_disk", () => getHostDisk()],
-    ["get_host_network", () => getHostNetwork()],
-    ["get_host_dmesg", direct(getHostDmesg)],
-    ["read_host_file", direct(readFileCommand)],
+    ["GetHostMemory", () => getHostMemory()],
+    ["GetHostCPU", () => getHostCpu()],
+    ["GetHostDisk", () => getHostDisk()],
+    ["GetHostNetwork", () => getHostNetwork()],
+    ["GetHostDmesg", direct(getHostDmesg)],
+    ["ReadHostFile", direct(readFileCommand)],
     [
-      "restart_service",
+      "RestartService",
       guardedWrite(
         byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
       ),
     ],
     [
-      "exec",
+      "ServiceBash",
       guardedWrite(
         byProvider({ docker: execCommand, kubernetes: k8sExecCommand }),
       ),
     ],
-    ["get_k8s_rollout_status", direct(k8sGetRolloutStatus)],
-    ["get_k8s_node_status", () => k8sGetNodeStatus()],
+    ["GetK8sRolloutStatus", direct(k8sGetRolloutStatus)],
+    ["GetK8sNodeStatus", () => k8sGetNodeStatus()],
   ]);
 }

@@ -175,7 +175,7 @@ describe("repo tools through registry dispatch", () => {
   it("returns a corrective error when the integration is missing", async () => {
     deleteGitHubIntegration();
     try {
-      const result = await run("repo_read_file", { path: "src/app.ts" });
+      const result = await run("Read", { path: "src/app.ts" });
       expect(result.is_error).toBe(true);
       expect(String(result.content)).toContain("Integrations page");
     } finally {
@@ -189,11 +189,11 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("reads a file as numbered lines and unlocks editing it", async () => {
-    const read = await run("repo_read_file", { path: "src/app.ts" });
+    const read = await run("Read", { path: "src/app.ts" });
     expect(read.is_error).toBeUndefined();
     expect(String(read.content)).toContain("1\tconst a = 1;");
 
-    const edit = await run("repo_edit_file", {
+    const edit = await run("Edit", {
       path: "src/app.ts",
       old_string: "const a = 1;",
       new_string: "const a = 42;",
@@ -206,17 +206,17 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("refuses to edit a file that was never read", async () => {
-    const result = await run("repo_edit_file", {
+    const result = await run("Edit", {
       path: "package.json",
       old_string: "fixture",
       new_string: "renamed",
     });
     expect(result.is_error).toBe(true);
-    expect(String(result.content)).toContain("repo_read_file");
+    expect(String(result.content)).toContain("Read");
   });
 
   it("fails loudly on a non-unique old_string and honours replace_all", async () => {
-    const ambiguous = await run("repo_edit_file", {
+    const ambiguous = await run("Edit", {
       path: "src/app.ts",
       old_string: '"OLD"',
       new_string: '"NEW"',
@@ -224,7 +224,7 @@ describe("repo tools through registry dispatch", () => {
     expect(ambiguous.is_error).toBe(true);
     expect(String(ambiguous.content)).toContain("replace_all");
 
-    const all = await run("repo_edit_file", {
+    const all = await run("Edit", {
       path: "src/app.ts",
       old_string: '"OLD"',
       new_string: '"NEW"',
@@ -237,29 +237,29 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("creates new files freely but refuses to overwrite an unread one", async () => {
-    const created = await run("repo_write_file", {
+    const created = await run("Write", {
       path: "docs/new-note.md",
       content: "hello\n",
     });
     expect(created.is_error).toBeUndefined();
     expect((created.content as { diff: string }).diff).toContain("/dev/null");
 
-    const overwrite = await run("repo_write_file", {
+    const overwrite = await run("Write", {
       path: "package.json",
       content: "{}\n",
     });
     expect(overwrite.is_error).toBe(true);
-    expect(String(overwrite.content)).toContain("repo_read_file");
+    expect(String(overwrite.content)).toContain("Read");
   });
 
   it("rejects paths that escape the repository", async () => {
-    const result = await run("repo_read_file", { path: "../../etc/passwd" });
+    const result = await run("Read", { path: "../../etc/passwd" });
     expect(result.is_error).toBe(true);
     expect(String(result.content)).toContain("escapes the repository");
   });
 
   it("execs in the container with the per-tool timeout, not the 15s default", async () => {
-    const result = await run("repo_exec", { command: "pnpm test" });
+    const result = await run("Bash", { command: "pnpm test" });
     expect(result.is_error).toBeUndefined();
     const outcome = result.content as { exitCode: number; output: string };
     expect(outcome.exitCode).toBe(0);
@@ -272,10 +272,10 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("rejects a cwd that escapes and re-roots a valid one at /workspace", async () => {
-    const escape = await run("repo_exec", { command: "ls", cwd: "../.." });
+    const escape = await run("Bash", { command: "ls", cwd: "../.." });
     expect(escape.is_error).toBe(true);
 
-    const scoped = await run("repo_exec", { command: "ls", cwd: "src" });
+    const scoped = await run("Bash", { command: "ls", cwd: "src" });
     expect(scoped.is_error).toBeUndefined();
     expect(dockerState.execCwds.at(-1)).toBe("/workspace/src");
   });
@@ -291,7 +291,7 @@ describe("code-session budget extension", () => {
     scriptRunner.setScript([
       {
         toolUses: [
-          { id: "t1", name: "repo_read_file", input: { path: "src/app.ts" } },
+          { id: "t1", name: "Read", input: { path: "src/app.ts" } },
         ],
         text: "",
       },

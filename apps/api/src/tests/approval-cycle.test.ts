@@ -75,7 +75,7 @@ describe("durable approval interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_service") {
+        if (commandName === "RestartService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -139,7 +139,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-sus-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -186,7 +186,7 @@ describe("durable approval interrupts", () => {
     // Runner must NOT have executed the write yet
     const countBefore = restartCommands.length;
 
-    expect(interrupt.payload["toolName"]).toBe("restart_service");
+    expect(interrupt.payload["toolName"]).toBe("RestartService");
 
     close();
 
@@ -210,7 +210,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-apr-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -292,7 +292,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-rej-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -366,7 +366,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-ctx-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -436,7 +436,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-409-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -510,7 +510,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-h4-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -590,7 +590,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-busy-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -661,7 +661,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-val-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -732,7 +732,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-rr-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -806,12 +806,12 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-mix-read",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
           {
             id: "tu-mix-gate",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -901,7 +901,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: `tu-crit-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -970,7 +970,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-notmo-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",

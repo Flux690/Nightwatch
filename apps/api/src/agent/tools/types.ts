@@ -13,7 +13,7 @@ export interface ToolExecuteContext {
   // Session-scoped: repo tools key their sandbox workspace on it. Tools stay
   // stateless; the sandbox module owns all bookkeeping.
   sessionId: string;
-  // The tool_use id of this call: open_pull_request keys its write-ahead audit row on
+  // The tool_use id of this call: OpenPullRequest keys its write-ahead audit row on
   // (sessionId, toolUseId), the same idempotency the approval path uses.
   toolUseId: string;
 }

@@ -68,7 +68,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result: commandName === "restart_service" ? { restarted: true } : [],
+          result: commandName === "RestartService" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -118,7 +118,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-read-1",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
         ],
@@ -173,7 +173,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-write-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -214,10 +214,10 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
 
     expect(interrupt.payload["kind"]).toBe("approval");
-    expect(interrupt.payload["toolName"]).toBe("restart_service");
+    expect(interrupt.payload["toolName"]).toBe("RestartService");
 
     // Runner must NOT have executed the write yet
-    expect(executedCommands).not.toContain("restart_service");
+    expect(executedCommands).not.toContain("RestartService");
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     close();
@@ -241,7 +241,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-ask-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "What is the most likely root cause?",
               options: CLARIFICATION_OPTIONS,
@@ -305,7 +305,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-read",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
         ],
@@ -315,7 +315,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-ask",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Is this a recurring issue?",
               options: CLARIFICATION_OPTIONS,
@@ -328,7 +328,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-write",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -378,7 +378,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(clarInterrupt.payload["kind"]).toBe("clarification");
-    expect(executedCommands).not.toContain("restart_service");
+    expect(executedCommands).not.toContain("RestartService");
 
     // Answer the clarification
     const answerRes = await fetch(
@@ -407,8 +407,8 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(approvalInterrupt.payload["kind"]).toBe("approval");
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
-    expect(executedCommands).not.toContain("restart_service");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
+    expect(executedCommands).not.toContain("RestartService");
 
     // Approve
     const approveRes = await fetch(
@@ -425,9 +425,9 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(approveRes.status).toBe(200);
 
     // Runner executes restart exactly once, run completes
-    await waitFor(() => executedCommands.includes("restart_service"));
+    await waitFor(() => executedCommands.includes("RestartService"));
     expect(
-      executedCommands.filter((c) => c === "restart_service"),
+      executedCommands.filter((c) => c === "RestartService"),
     ).toHaveLength(1);
 
     await waitFor(() => !hasPendingHumanInput(sessionId));

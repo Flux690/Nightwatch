@@ -3,7 +3,7 @@ import type { Tool } from "./types.js";
 export const INTERRUPT_TOOLS: Tool[] = [
   {
     schema: {
-      name: "request_clarification",
+      name: "AskUserQuestion",
       description:
         "Suspend the investigation and ask the on-call engineer a clarifying question. The UI always offers a free-text 'Other' answer alongside your options, do not add one of your own. List only the specific, named choices.",
       input_schema: {
@@ -41,7 +41,7 @@ export const INTERRUPT_TOOLS: Tool[] = [
     on: "api",
     execute: async () => ({
       content:
-        "request_clarification is an interrupt and cannot be executed directly.",
+        "AskUserQuestion is an interrupt and cannot be executed directly.",
       is_error: true,
     }),
   },
