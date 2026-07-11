@@ -112,9 +112,8 @@ export async function commitAll(
   );
 }
 
-// Anything not on the remote yet counts - checkpoint commits and commits whose
-// earlier push failed alike; a session that changed nothing pushes nothing and
-// litters no remote branch.
+// Counts checkpoint commits and commits whose earlier push failed alike; a
+// session that changed nothing pushes nothing.
 export async function hasUnpushedWork(dir: string): Promise<boolean> {
   const count = await runGit(
     ["rev-list", "--count", "HEAD", "--not", "--remotes=origin"],
@@ -134,8 +133,7 @@ export async function push(
   });
 }
 
-// Files the session's branch changed relative to where it forked from the
-// remote (origin/HEAD is set by clone). Best-effort: a missing symref just
+// Relative to origin/HEAD (set by clone). Best-effort: a missing symref just
 // means an empty list, never a failed PR.
 export async function changedFiles(dir: string): Promise<string[]> {
   try {

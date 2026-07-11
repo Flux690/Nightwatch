@@ -111,9 +111,8 @@ async function probeEndpoint(
 
   const models = extractModels(responseData);
   const target = model ?? config.model;
-  // Only flag unknown_model when the endpoint returned a non-empty list and the
-  // configured model isn't in it. An empty list means the endpoint doesn't
-  // support listing; treat that as a successful connection.
+  // Only flag unknown_model against a non-empty list; an empty list means the
+  // endpoint doesn't support listing, so treat that as a successful connection.
   if (models.length > 0 && !models.includes(target)) {
     return { ok: false, error: "unknown_model" };
   }

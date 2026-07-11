@@ -161,10 +161,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// The shadcn Sidebar exposes its collapsed/expanded state on the container via
-// data-state; text labels hide purely through CSS, which jsdom does not apply,
-// so the collapse contract is asserted through this attribute and the toggle's
-// accessible name rather than label visibility.
+// jsdom doesn't apply CSS, so assert the Sidebar's data-state attribute
+// instead of the visual collapse.
 function sidebarState(): string | null {
   return (
     document

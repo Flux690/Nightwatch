@@ -1,9 +1,7 @@
 import { vi } from "vitest";
 
-// jsdom does not implement EventSource at all, so every test that mounts
-// ConsoleEventsProvider stubs the global with this class. `push` emulates a
-// server-sent `data:` frame; `broadcast` reaches every open instance (StrictMode
-// mounts two providers, so a single-instance push can target the wrong one).
+// jsdom has no EventSource, so tests stub the global with this class.
+// `broadcast` reaches every instance since StrictMode mounts two providers.
 export class MockEventSource {
   static CONNECTING = 0 as const;
   static OPEN = 1 as const;

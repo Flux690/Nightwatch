@@ -1,9 +1,8 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
-// One absolute directory holds all durable machine-local state. A relative
-// NIGHTWATCH_DIR is rejected rather than resolved against the cwd (a hidden
-// guess); unset falls back to a user-writable home default.
+// One absolute directory holds all durable machine-local state. A relative NIGHTWATCH_DIR
+// is rejected rather than resolved against the cwd (a hidden guess).
 export function nightwatchDir(): string {
   const explicit = process.env["NIGHTWATCH_DIR"];
   if (explicit === undefined || explicit === "") {

@@ -32,10 +32,8 @@ export async function registerAlertRoutes(
       return reply.code(400).send({ error: msg });
     }
 
-    // No identity gate: every parsed alert is investigated. The agent locates
-    // the target from the fleet map, and service-routed command validation is
-    // what prevents misrouted actions - a mislabeled alert about a real outage
-    // must reach the agent, not park on a page nobody watches at 3am.
+    // No identity gate - every parsed alert is investigated; service-routed
+    // command validation prevents misrouted actions instead.
     if (getFleetView().length === 0) {
       return reply
         .code(503)
@@ -52,10 +50,8 @@ export async function registerAlertRoutes(
     return reply.code(200).send({ received: parsed.length, enqueued, skipped });
   });
 
-  // Lets an operator dry-run a BYO webhook: same auth/normalizer as ingest but
-  // never routes. The fleet match is advisory only (it does not gate routing) -
-  // it tells the operator whether the agent will find an exact identity match
-  // or have to reason it out from the fleet map.
+  // Same auth/normalizer as ingest but never routes; the fleet match is
+  // advisory, telling the operator whether the agent will find an exact match.
   fastify.post<{ Body: unknown }>(
     "/alerts/validate",
     async (request, reply) => {
@@ -142,9 +138,8 @@ function extractToken(
   return extractBearerToken(headers["authorization"]);
 }
 
-// Source is decided by the body's structure alone - the only authoritative
-// signal. A User-Agent is client-controlled and spoofable, and the shape check
-// is sufficient, so it is not consulted.
+// Source is decided by the body's structure alone - a User-Agent is client-controlled
+// and spoofable, so it is not consulted.
 function parseSource(body: unknown): ParsedAlert[] {
   if (isAlertmanagerShape(body)) {
     return parseAlertmanager(body);

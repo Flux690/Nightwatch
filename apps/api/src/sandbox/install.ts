@@ -1,16 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// THE dependency-install rulebook: one row per toolchain, tried top to bottom.
-// To support a new ecosystem or change a command, edit this table (and the
-// matching rows in sandbox-workspace.test.ts) - nothing else.
-//
-// `frozen` installs exactly what the lockfile records and fails rather than
-// re-resolving; `install` is the relaxed rung for when the frozen one fails
-// (lockfile out of sync) or no lockfile exists. pnpm and yarn>=2 run through
-// corepack because node:24 ships no shims and its read-only rootfs forbids
-// `corepack enable`; corepack caches the manager in HOME during setup, so it
-// keeps working after the network is disconnected.
+// `frozen` fails rather than re-resolving; `install` is the relaxed fallback.
+// pnpm/yarn>=2 route through corepack since node:24 has no shims and a
+// read-only rootfs that forbids `corepack enable`; its HOME cache keeps working offline.
 export interface InstallRule {
   toolchain: "pnpm" | "yarn-berry" | "yarn-classic" | "npm";
   runPrefix: string;
@@ -73,9 +66,8 @@ function ruleFor(toolchain: InstallRule["toolchain"]): InstallRule {
   return rule;
 }
 
-// The packageManager field (corepack convention) is authoritative; otherwise
-// the committed lockfile is the evidence - it is package-manager-specific by
-// construction. Multiple lockfiles resolve pnpm -> yarn -> npm; none means npm.
+// packageManager field wins if declared; otherwise the lockfile is evidence,
+// resolved pnpm -> yarn -> npm when several are present.
 export async function detectToolchain(
   dir: string,
   pkg: Record<string, unknown>,

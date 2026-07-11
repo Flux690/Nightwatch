@@ -40,9 +40,8 @@ export interface WorkspaceOptions {
   authHeader(): Promise<string>;
   limits: SandboxLimits;
   idleTimeoutMs: number;
-  // Absolute host dir the checkout is created under and bind-mounted from.
-  // Host-provided and absolute by contract: the sandbox never guesses a path,
-  // and a Docker bind rejects a relative source.
+  // Host dir the checkout is bind-mounted from; must be absolute since the
+  // sandbox never guesses a path and Docker rejects a relative bind source.
   workspacesDir: string;
   // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
   requireGvisor: boolean;
@@ -78,9 +77,8 @@ export interface Workspace {
   // Backs the read-before-edit guard; per session by construction because the
   // workspace is per session.
   readonly readPaths: Set<string>;
-  // Outcome of the setup-phase dependency install (null: nothing to install).
-  // A non-zero exitCode is survivable - the agent can still read, edit and
-  // open a PR - but it must surface everywhere the result is consumed.
+  // Outcome of the setup-phase install (null: nothing to install). A non-zero
+  // exitCode is survivable but must surface everywhere it's consumed.
   readonly setup: SetupResult | null;
   readonly options: WorkspaceOptions;
   exec(
@@ -97,9 +95,8 @@ interface Entry {
   options: WorkspaceOptions;
 }
 
-// Private to this module by design: tools receive ctx.sessionId and ask for
-// their workspace here - nothing else may hold container references. The run
-// process exits on every gated suspend, so no run-local state is allowed.
+// Private by design: tools receive ctx.sessionId and ask for their workspace
+// here, since the run process exits on every gated suspend.
 const sessions = new Map<string, Entry>();
 const creating = new Map<string, Promise<Entry>>();
 
@@ -148,9 +145,8 @@ async function createEntry(
     requireGvisor: options.requireGvisor,
   });
 
-  // Two phases: the agent-free install runs while the network is attached,
-  // then every network is detached (and verified gone) before any agent
-  // command can run - a failure here must not leak a networked container.
+  // Install runs while networked, then every network is detached before the
+  // agent can run any command - a failure here must not leak a networked container.
   let setup: SetupResult | null = null;
   try {
     setup = await runInstall(dir, async (command) => {
@@ -233,9 +229,8 @@ function armIdleTimer(sessionId: string, entry: Entry): void {
   entry.idleTimer = timer;
 }
 
-// Single-flight acquire: the first tool call of a burst pays clone+start; the
-// idle timer is disarmed while any call is in flight, so teardown can never
-// race live work - the sandbox only ever dies when the agent isn't running.
+// Single-flight acquire: idle timer is disarmed while any call is in flight,
+// so teardown can never race live work.
 export async function withWorkspace<T>(
   sessionId: string,
   options: WorkspaceOptions,
@@ -267,9 +262,8 @@ export async function withWorkspace<T>(
   }
 }
 
-// Lossless teardown: dirty work is checkpoint-committed and pushed before the
-// container and dir go. An idle-path push failure aborts (work is never lost);
-// force (disconnect) proceeds and logs it.
+// Dirty work is checkpoint-committed and pushed before the container and dir go;
+// an idle-path push failure aborts, but a forced teardown proceeds and logs it.
 export async function teardown(
   sessionId: string,
   reason: string,

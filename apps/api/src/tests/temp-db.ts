@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import { resetDb } from "../db/client.js";
 
-// Points the whole state dir (db, secret.key, workspaces) at a throwaway dir for
-// the suite and returns a teardown. Call at the top of beforeAll before anything
-// opens the lazy db; pair the teardown with vi.unstubAllEnvs().
+// Call at the top of beforeAll before anything opens the lazy db; pair the
+// teardown with vi.unstubAllEnvs().
 export function useTempDb(): () => void {
   const dir = mkdtempSync(join(tmpdir(), "nw-api-"));
   vi.stubEnv("NIGHTWATCH_DIR", dir);

@@ -44,8 +44,7 @@ export class AnthropicProvider implements LLMProvider {
     let response: Anthropic.Messages.Message;
     try {
       // Stream and accumulate via finalMessage() so a large response can't trip the single-read
-      // request timeout. The returned Message is identical to a non-streamed one, so everything
-      // downstream is unchanged.
+      // request timeout; the returned Message is identical to a non-streamed one.
       const stream = this.client.messages.stream(
         {
           model: this.model,
@@ -59,9 +58,8 @@ export class AnthropicProvider implements LLMProvider {
               cache_control: { type: "ephemeral" },
             },
           ],
-          // Adaptive thinking lets the model decide when and how deeply to
-          // reason; full response.content (incl. thinking blocks) is preserved
-          // below for multi-turn continuity. Omitted entirely when disabled.
+          // Adaptive thinking lets the model decide when and how deeply to reason; thinking
+          // blocks are preserved in response.content below for multi-turn continuity.
           ...(this.config.thinking === "adaptive" && {
             thinking: { type: "adaptive" as const },
           }),
@@ -125,9 +123,8 @@ export class AnthropicProvider implements LLMProvider {
     };
   }
 
-  // Rolling cache breakpoint on the conversation tail so the growing history caches
-  // incrementally; append-only means each turn's prefix matches last turn's breakpoint. chat()
-  // always has the last message a user turn, so we mark the final tool_result; persisted history stays clean.
+  // Rolling cache breakpoint on the conversation tail so growing history caches incrementally;
+  // marks only the final tool_result in-flight, so persisted history stays clean.
   private messagesWithCacheBreakpoint(): Anthropic.Messages.MessageParam[] {
     const lastIdx = this.messages.length - 1;
     const last = this.messages[lastIdx];

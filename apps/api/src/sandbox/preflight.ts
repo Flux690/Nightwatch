@@ -20,9 +20,8 @@ function gitAvailable(): Promise<boolean> {
   });
 }
 
-// Runs when the operator clicks Connect: fail loud at setup time, never at
-// 3am mid-incident. The image pull is kicked off in the background so the
-// first real code session doesn't pay it either.
+// Fail loud at setup time, never at 3am mid-incident; the image pull runs in
+// the background so the first real session doesn't pay it.
 export async function preflight(): Promise<PreflightResult> {
   if (!(await gitAvailable())) {
     return { ok: false, reason: "git is not installed on the API host" };

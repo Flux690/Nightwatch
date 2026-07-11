@@ -7,9 +7,8 @@ import type {
   ContinueCardItem,
 } from "./types.js";
 
-// Once a non-thinking event arrives, the most recent thinking burst (if still
-// streaming) stops pulsing - it's done. A later thinking delta then opens a
-// fresh, independent item rather than reopening this one.
+// A non-thinking event finalizes the most recent streaming thinking burst;
+// a later thinking delta opens a fresh item rather than reopening this one.
 function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   const last = items[items.length - 1];
   if (last?.kind === "thinking" && last.streaming) {

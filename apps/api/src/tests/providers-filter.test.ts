@@ -236,10 +236,7 @@ describe("providers filter and mismatch rejection", () => {
         { text: "Done.", toolUses: [] },
       ]);
 
-      const { events, close } = await connectConsoleEvents(
-        port,
-        SESSION,
-      );
+      const { events, close } = await connectConsoleEvents(port, SESSION);
 
       const res = await fetch(`http://127.0.0.1:${port}/chat`, {
         method: "POST",
@@ -294,10 +291,7 @@ describe("providers filter and mismatch rejection", () => {
         { text: "Investigation complete.", toolUses: [] },
       ]);
 
-      const { events, close } = await connectConsoleEvents(
-        port,
-        SESSION,
-      );
+      const { events, close } = await connectConsoleEvents(port, SESSION);
 
       const res = await fetch(`http://127.0.0.1:${port}/chat`, {
         method: "POST",
@@ -436,10 +430,7 @@ describe("providers filter and mismatch rejection", () => {
 
         setScript([{ text: "Investigating in read-only mode.", toolUses: [] }]);
 
-        const { events, close } = await connectConsoleEvents(
-          port,
-          SESSION,
-        );
+        const { events, close } = await connectConsoleEvents(port, SESSION);
 
         const res = await fetch(`http://127.0.0.1:${port}/chat`, {
           method: "POST",
@@ -473,12 +464,8 @@ describe("providers filter and mismatch rejection", () => {
 
       it("a write the model emits anyway is unavailable, not an approval card (gate cannot be bypassed)", async () => {
         // Read-only mode strips restart_service from the schema; the model emits it anyway (LLMs
-        // hallucinate stripped names). The loop resolves against the same effective set, so it's
-        // genuinely unavailable - no approval card - and the write switch can't be bypassed.
-        const { events, close } = await connectConsoleEvents(
-          port,
-          SESSION,
-        );
+        // hallucinate stripped names), and the loop resolves against that same effective set.
+        const { events, close } = await connectConsoleEvents(port, SESSION);
 
         setScript([
           {
@@ -595,10 +582,7 @@ describe("providers filter and mismatch rejection", () => {
         const p = (s.server.address() as AddressInfo).port;
         server = s;
 
-        const { events, close } = await connectConsoleEvents(
-          p,
-          SESSION,
-        );
+        const { events, close } = await connectConsoleEvents(p, SESSION);
 
         await fetch(`http://127.0.0.1:${p}/chat`, {
           method: "POST",
@@ -727,10 +711,7 @@ describe("per-target write gating", () => {
     events: ConsoleEventFrame[];
     close: () => void;
   }> {
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

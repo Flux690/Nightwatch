@@ -78,9 +78,9 @@ export interface RepoListResult extends GitHubRepoPage {
   expiresAt: string | null;
 }
 
-// A fine-grained PAT returns only the repositories it was granted, so this list
-// IS the consent the user just gave on GitHub's own token page. per_page 100 +
-// pushed-sort absorbs the classic-PAT escape hatch (everything readable) too.
+// A fine-grained PAT returns only the repos it was granted, so this list IS the
+// consent the user gave on GitHub's token page; per_page 100 + pushed-sort also
+// absorbs the classic-PAT escape hatch (everything readable).
 export async function listRepos(
   token: string,
   page: number,
@@ -162,9 +162,8 @@ export async function ownerIsOrganization(owner: string): Promise<boolean> {
   }
 }
 
-// git speaks Basic auth and GitHub accepts any username with a PAT password.
-// Built here so token-formatting knowledge never enters the sandbox module:
-// the sandbox receives this value opaque and redacts it from all output.
+// Built here so token-formatting knowledge never enters the sandbox module;
+// it receives this value opaque and redacts it from all output.
 export function buildAuthHeader(token: string): string {
   return `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
 }
@@ -232,9 +231,8 @@ function isDraftUnsupported(status: number, bodyText: string): boolean {
   return status === 422 && /draft pull request/i.test(bodyText);
 }
 
-// Draft is a courtesy latch, not the safety mechanism: where the repo's plan
-// rejects drafts (422 on private repos under Free) the PR is created regular,
-// and the returned draft:false lets the caller say so plainly.
+// Not a safety mechanism: where the repo's plan rejects drafts (422 on private
+// repos under Free) the PR is created regular and draft:false reflects that.
 export async function createPullRequest(
   token: string,
   owner: string,

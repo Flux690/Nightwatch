@@ -13,9 +13,8 @@ export interface VerificationResult {
 
 const SCRIPT_PRIORITY = ["test", "typecheck", "build"] as const;
 
-// v1 is Node-first by design: package.json scripts in test -> typecheck ->
-// build priority. No detectable verification is reported honestly, never
-// invented - the PR body states it plainly.
+// package.json scripts tried in test -> typecheck -> build priority; no
+// detectable verification is reported honestly, never invented.
 export async function runVerification(
   ws: Workspace,
   timeoutMs: number,

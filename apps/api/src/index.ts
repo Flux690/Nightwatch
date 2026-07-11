@@ -66,9 +66,8 @@ const start = async (): Promise<void> => {
   try {
     initDb();
     fastify.log.info("SQLite ready");
-    // Sandbox containers are derived state (session map is memory-only), so
-    // every labeled survivor of a restart is an orphan. Best-effort: a host
-    // without Docker just has no sandboxes to reap.
+    // Sandbox containers are derived state (session map is memory-only), so every
+    // labeled survivor of a restart is an orphan; best-effort since a host without Docker has none to reap.
     void reapOrphans()
       .then((n) => {
         if (n > 0) fastify.log.info(`reaped ${n} orphaned sandbox containers`);

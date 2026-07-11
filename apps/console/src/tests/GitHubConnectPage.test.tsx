@@ -113,9 +113,8 @@ function makeFetchMock(state: MockState) {
     });
 }
 
-/* GitHubConnectPage navigates back to /integrations on disconnect and via
-   its back link, so it renders under a memory router with a stub
-   destination - same pattern as AddServerPage.test.tsx for /fleet. */
+/* GitHubConnectPage navigates back to /integrations (disconnect and back
+   link), so it renders under a memory router with a stub destination. */
 function renderConnectRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const connectRoute = createRoute({

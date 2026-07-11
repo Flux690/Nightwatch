@@ -107,9 +107,8 @@ export type ContractFakeProvider = {
 
 const DEFAULT_TURN: ScriptedTurn = { toolUses: [], text: "Done." };
 
-// Core fake builder. `nextTurn` is called once per chat() to get the turn to
-// emit - either an array-backed per-instance source (createContractFakeProvider)
-// or a module-level shared-index source (createScriptRunner).
+// `nextTurn` is called once per chat() to get the turn to emit - either an array-backed
+// per-instance source or a module-level shared-index source.
 function makeProvider(
   nextTurn: () => ScriptedTurn,
   opts?: { gate?: () => Promise<void> },
@@ -143,9 +142,8 @@ function makeProvider(
         _tools: unknown,
         onDelta?: (d: { kind: string; text: string }) => void,
       ): Promise<ChatResponse> => {
-        // Optional gate: park here until the test releases this turn, so timing
-        // tests can act (e.g. inject an alert) while a run is mid-chat. No gate
-        // means immediate resolution (the common case).
+        // Optional gate: park here until the test releases this turn, so timing tests
+        // can act (e.g. inject an alert) mid-chat. No gate means immediate resolution.
         if (opts?.gate) await opts.gate();
         const turn = nextTurn();
         if (onDelta && turn.text) {
@@ -211,9 +209,8 @@ export function createContractFakeProvider(
   );
 }
 
-// Module-level script shared across instances: setScript resets the sequence and successive
-// runs (suspend then resume) continue where the last left off, preserving the per-file
-// setScript([...]) pattern so converting a file needs no per-run rewrites.
+// Module-level script shared across instances: setScript resets the sequence, and successive
+// runs (suspend then resume) continue where the last left off.
 export interface ScriptRunner {
   setScript: (turns: ScriptedTurn[]) => void;
   create: (opts?: { gate?: () => Promise<void> }) => ContractFakeProvider;
@@ -234,8 +231,7 @@ export function createScriptRunner(): ScriptRunner {
 }
 
 // A FIFO gate shared across instances: pass `gate` so each chat() parks until
-// releaseNext()/releaseAll(), the faithful equivalent of the old per-file `gates` arrays for
-// timing tests (e.g. mid-run injection). Non-timing tests omit it and chat() resolves at once.
+// releaseNext()/releaseAll(), for timing tests (e.g. mid-run injection).
 export interface GateController {
   gate: () => Promise<void>;
   releaseNext: () => void;

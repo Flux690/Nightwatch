@@ -3,9 +3,8 @@ import { OpenAIProvider } from "./openai.js";
 import type { Provider } from "./provider.js";
 import type { AgentConfig } from "@nightwatch/shared";
 
-// Both adapters are always compiled in; the global config picks one at runtime.
-// apiKey, when supplied, overrides the env-var fallback in each provider so the
-// DB-stored encrypted key (decrypted by the caller) takes precedence.
+// Both adapters are always compiled in; the global config picks one at runtime. apiKey, when
+// supplied, overrides each provider's env-var fallback so the DB-stored key takes precedence.
 export function createProvider(
   system: string,
   config: AgentConfig,

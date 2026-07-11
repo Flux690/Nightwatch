@@ -93,9 +93,8 @@ describe("console SSE pipeline", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
     expect(typeof sessionId).toBe("string");
 
-    // The POST dispatches in-process; the scripted run publishes deltas then
-    // RUN_FINISHED over the bus. It resolves in microtasks (maybe before this
-    // sessionId), so buffer every event and poll for the match rather than racing.
+    // The scripted run can resolve in microtasks before this sessionId is captured,
+    // so buffer every event and poll for the match rather than racing.
     await waitFor(() =>
       events.some(
         (e) =>
@@ -136,9 +135,8 @@ describe("console SSE pipeline", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    // Each run persists exactly one assistant turn, so counting assistant
-    // RUN_FINISHED events for the session distinguishes the first run (>=1) from
-    // the resumed run (>=2) without racing the captured sessionId.
+    // Each run persists exactly one assistant turn, so counting assistant RUN_FINISHED
+    // events distinguishes the first run (>=1) from the resumed run (>=2).
     const assistantFinishes = (sessionId: string): number =>
       events.filter((e) => {
         const payload = e.payload as {
@@ -191,9 +189,8 @@ describe("console SSE pipeline", () => {
     // createProvider was called once per run.
     expect(mockCreateProvider.mock.calls.length).toBe(2);
 
-    // The second provider (resume run) must have been seeded with the two
-    // messages persisted by the first run (user + assistant), then had the
-    // follow-up appended as a user turn.
+    // The resume provider must be seeded with the first run's persisted messages,
+    // then have the follow-up appended as a user turn.
     const resumeProvider = mockCreateProvider.mock.results[1]
       ?.value as ContractFakeProvider;
     expect(resumeProvider.seed).toHaveBeenCalledOnce();

@@ -40,10 +40,8 @@ import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-/* Pre-filled fine-grained PAT mint page. Repository selection happens on
-   GitHub's own page ("Only select repositories") - that native picker is the
-   user's deliberate consent moment and cannot be pre-filled by design.
-   No `issues` permission: Nightwatch opens PRs, not issues. */
+/* Repo selection stays on GitHub's own picker, the user's deliberate consent
+   moment; no `issues` permission since Nightwatch opens PRs, not issues. */
 const FINE_GRAINED_TOKEN_URL =
   "https://github.com/settings/personal-access-tokens/new" +
   "?name=Nightwatch" +
@@ -65,9 +63,8 @@ class GitHubRequestError extends Error {
   }
 }
 
-/* Shared request helper instead of apiFetch: the error ladder needs the
-   typed `code` / `orgApprovalUrl` fields from the body, which apiFetch
-   discards. */
+/* Shared request helper instead of apiFetch: the error ladder needs the typed
+   `code` / `orgApprovalUrl` body fields, which apiFetch discards. */
 async function githubRequest<T>(
   method: "POST" | "PATCH",
   url: string,

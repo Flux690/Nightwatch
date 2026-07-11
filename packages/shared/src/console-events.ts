@@ -1,8 +1,7 @@
 import type { SessionMessage } from "./sessions.js";
 
-// Common envelope for the API→console event stream (SSE). messageId is a
-// per-event UUID inside the payload JSON; it is not an SSE `id:` field - the
-// feed is deliberately drop-tolerant and has no Last-Event-ID replay.
+// Common envelope for the API→console event stream (SSE). messageId is a per-event UUID
+// inside the payload JSON, not an SSE `id:` field - the feed is drop-tolerant with no Last-Event-ID replay.
 interface ConsoleEnvelope {
   messageId: string;
   type: string;

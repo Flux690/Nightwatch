@@ -40,8 +40,7 @@ export interface StreamDelta {
 export type OnDelta = (delta: StreamDelta) => void;
 
 // One conversation turn, provider-neutral: `content` is the human-readable transcript text;
-// `providerContent` is the native message kept verbatim so a resumed run rebuilds a valid
-// turn (text alone can't restore tool/thinking pairing).
+// `providerContent` is the native message kept verbatim so a resumed run rebuilds a valid turn.
 export interface ProviderMessage {
   role: "user" | "assistant";
   content: string;
@@ -56,9 +55,8 @@ export interface LLMProvider {
   seed(history: ProviderMessage[]): void;
   // Current conversation in neutral form, for incremental persistence.
   snapshot(): ProviderMessage[];
-  // onDelta, when provided, receives live fragments as the turn streams; the
-  // returned ChatResponse is unchanged whether or not it is passed. signal,
-  // when provided, aborts the in-flight request when the run is stopped.
+  // onDelta, when provided, receives live fragments as the turn streams; signal, when
+  // provided, aborts the in-flight request when the run is stopped.
   chat(
     tools: ToolSchema[],
     onDelta?: OnDelta,

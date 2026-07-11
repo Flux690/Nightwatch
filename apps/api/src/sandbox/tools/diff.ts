@@ -1,7 +1,5 @@
-// Minimal unified-diff renderer for tool results: one hunk spanning the
-// changed region with three lines of context. Correct for the localized
-// changes string-anchored edits produce; a multi-region replace_all degrades
-// to one wide hunk, which is still a valid unified diff.
+// Minimal unified-diff renderer: one hunk spanning the changed region with three lines of
+// context. A multi-region replace_all degrades to one wide hunk, still a valid unified diff.
 
 const CONTEXT_LINES = 3;
 

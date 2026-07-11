@@ -229,8 +229,7 @@ export function SettingsModal({
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
   const dirty = configDirty || keyDirty;
 
-  /* Closing with unsaved edits asks first; a discarded form re-syncs to the
-     persisted config so a re-open never shows stale edits. */
+  /* Closing with unsaved edits asks first; a discarded form re-syncs to the persisted config so a re-open never shows stale edits. */
   function handleClose(): void {
     if (dirty) {
       setConfirmDiscard(true);

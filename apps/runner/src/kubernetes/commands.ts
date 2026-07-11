@@ -26,17 +26,15 @@ import {
 } from "./resolve-service.js";
 import { sanitizeExecOutput } from "../safety/allowlist.js";
 
-// kubectl rollout restart sends this Content-Type so the server merges the
-// annotation into spec.template.metadata.annotations instead of interpreting
-// the body as a JSON Patch operation array (the client's default for PATCH).
+// kubectl rollout restart sends this Content-Type so the server merges the annotation into
+// spec.template.metadata.annotations instead of interpreting the body as a JSON Patch operation array (the client's default for PATCH).
 const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
   "Content-Type",
   "application/strategic-merge-patch+json",
 );
 
-// List workloads (Deployments+StatefulSets), not pods, so the identity matches the
-// manifest byte-for-byte; a pod-label identity diverged, so a listed service couldn't
-// be resolved back and the breaker mis-keyed it.
+// List workloads (Deployments+StatefulSets), not pods, so the identity matches the manifest byte-for-byte;
+// a pod-label identity diverged, so a listed service couldn't be resolved back and the breaker mis-keyed it.
 export async function getContainerList(
   input: GetContainerListInput,
 ): Promise<{ containers: ContainerInfo[] }> {
@@ -103,9 +101,8 @@ export async function getContainerLogs(
     namespace: resolved.namespace,
     container: resolved.containerName,
     tailLines: input.tailLines ?? 200,
-    // When the resolved pod is not live we fell back to a terminated instance
-    // (a crash-loop's dead container); its useful output lives in the previous
-    // container, so request that rather than the empty current one (story 14).
+    // When the resolved pod is not live we fell back to a terminated instance (a crash-loop's dead container);
+    // its useful output lives in the previous container, so request that rather than the empty current one.
     previous: !resolved.live,
     // K8s merges stdout and stderr; stderrOnly is not supported by the API.
     ...(input.sinceTimestamp !== undefined && {
@@ -143,9 +140,8 @@ export async function getContainerInspect(
     namespace: resolved.namespace,
   });
 
-  // Shaped, never the raw pod: a pod spec inlines literal env values, which
-  // are secrets and must never reach the model - env var names only, the same
-  // contract the docker handler keeps.
+  // Shaped, never the raw pod: a pod spec inlines literal env values, which are secrets and must never
+  // reach the model - env var names only, the same contract the docker handler keeps.
   return {
     podName: pod.metadata?.name ?? resolved.podName,
     namespace: resolved.namespace,
@@ -261,9 +257,8 @@ export async function getContainerProcesses(
   return { processes };
 }
 
-// Rollout restart via a restartedAt annotation so the controller rolls new pods (not
-// deleting pods directly); the exact kind is resolved first so a Deployment and a
-// StatefulSet sharing a name can't be confused.
+// Rolls via a restartedAt annotation, never deleting pods directly; the exact
+// kind is resolved first so a same-named Deployment/StatefulSet can't be confused.
 export async function restartService(
   input: RestartContainerInput,
 ): Promise<RestartServiceK8sResult | NoRunningInstanceResult> {
@@ -275,9 +270,8 @@ export async function restartService(
     service.namespace,
     service.workload,
   );
-  // Restart is a write on a live target: a missing or scaled-to-0
-  // workload has nothing to roll. A running-but-unhealthy one (replicas > 0,
-  // none ready) is still restartable - that is the case you most want to fix.
+  // A missing or scaled-to-0 workload has nothing to roll; a running-but-unhealthy
+  // one is still restartable - that's the case you most want to fix.
   if (workload === null || workload.replicas === 0) {
     return notRunningResult(input.service);
   }
@@ -343,9 +337,8 @@ export async function execCommand(
   };
 }
 
-// Provider-specific (Kubernetes-only) read tool proving the providers hook:
-// rollout state has no Docker equivalent, so it is never offered
-// to Docker-only fleets.
+// Kubernetes-only: rollout state has no Docker equivalent, so it's never
+// offered to Docker-only fleets.
 export async function getRolloutStatus(
   input: GetK8sRolloutStatusInput,
 ): Promise<unknown | NoRunningInstanceResult> {
@@ -390,9 +383,8 @@ export async function getRolloutStatus(
   }
 }
 
-// Node-level read: an unhealthy pod's cause may be the node. Returns each node's
-// conditions and allocatable vs capacity natively; no service identity,
-// since pressure is a node fact, not a per-workload one.
+// An unhealthy pod's cause may be the node; no service identity here since
+// pressure is a node fact, not a per-workload one.
 export async function getNodeStatus(): Promise<{
   nodes: Array<{
     name: string;
@@ -420,9 +412,8 @@ interface ExecResult {
   exitCode: number;
 }
 
-// One exec primitive for reads and exec_command: a non-zero exit is a normal result
-// carried in details.causes, not a failure; only a real protocol error
-// (no such container, connection error) rejects.
+// A non-zero exit is a normal result carried in details.causes, not a failure;
+// only a real protocol error rejects.
 async function execInPod(
   namespace: string,
   podName: string,

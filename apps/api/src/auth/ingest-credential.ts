@@ -29,16 +29,14 @@ export async function registerIngestCredentialRoutes(
     },
   );
 
-  // Get-or-create for the add-server wizard: the BYO setup needs the credential the
-  // moment the operator reaches it, without depending on an install-script fetch
-  // having minted it first. Idempotent, so it never rotates an existing credential.
+  // Get-or-create for the add-server wizard: the BYO setup needs the credential without
+  // depending on an install-script fetch having minted it first; idempotent, so it never rotates an existing one.
   fastify.post(
     "/ingest-credential/ensure",
     { preHandler: requireSession },
     async (request, reply) => {
-      // The webhook URL is authoritative from the server's own origin (trustProxy
-      // honours the public host), not window.location - the console may be served
-      // from a different origin than the API in dev and split deployments.
+      // Authoritative from the server's own origin (trustProxy honours the public host), not
+      // window.location - console and API can be served from different origins.
       const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
       return reply.code(200).send({
         token: ensureIngestToken(),

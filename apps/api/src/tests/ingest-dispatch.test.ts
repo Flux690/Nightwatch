@@ -55,9 +55,8 @@ function useImmediateProvider(): void {
   );
 }
 
-// One firing alert with a caller-chosen fingerprint (sourceAlertId) and severity, so dedup
-// and rate-limit drive precisely. container defaults to web-01 but each test picks its own
-// so they resolve to distinct runnerIds.
+// One firing alert with a caller-chosen fingerprint (sourceAlertId) and severity, so dedup and
+// rate-limit drive precisely; container defaults to web-01 but each test can pick its own.
 function alertBody(
   fingerprint: string,
   severity = "warning",
@@ -165,9 +164,8 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     );
     expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
 
-    // Fire the batch window timer (90s) and flush any resulting promises so the
-    // run starts and parks. advanceTimersByTimeAsync flushes the microtask queue
-    // at each step, which is required since waitFor itself uses setTimeout.
+    // advanceTimersByTimeAsync flushes the microtask queue at each step, which is required
+    // since waitFor itself uses setTimeout.
     await vi.advanceTimersByTimeAsync(90_001);
     expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(true);
 
@@ -236,9 +234,8 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       skipped: 0,
     });
 
-    // After the hourly window the counter resets and non-critical flows again. Jumping the fake
-    // clock also pushes the runner's liveness past its TTL, so refresh it - a real runner would
-    // still be answering pings.
+    // Jumping the fake clock also pushes the runner's liveness past its TTL, so refresh it -
+    // a real runner would still be answering pings.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
     markRunnerAlive(connB);
     expect(

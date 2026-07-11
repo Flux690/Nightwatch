@@ -2,9 +2,8 @@ import { SERVICE_IDENTITY_SCHEMA } from "./identity-schema.js";
 import type { Provider, Tool } from "./types.js";
 
 const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
-// Host tools are truthful only where runner and host are 1:1 (Docker). A K8s
-// runner is one pod on one arbitrary node, so /proc there describes a random
-// node; get_k8s_node_status is the cluster-level answer instead.
+// Host tools are truthful only where runner and host are 1:1 (Docker). A K8s runner is one
+// pod on one arbitrary node, so get_k8s_node_status is the cluster-level answer instead.
 const DOCKER_ONLY: Provider[] = ["docker"];
 
 // Read tools: run unattended, so each is a narrow typed question - never

@@ -6,9 +6,8 @@ import { logger } from "./logger.js";
 import { publishRunFailed } from "./session/stream.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// Architecture invariant: alert, chat, and resume all funnel through dispatch().
-// Alert injection is the concurrency control: any new alert while one is running
-// is injected rather than starting a second; chat sessions run freely in parallel.
+// Alert, chat, and resume all funnel through dispatch(). Alert injection is the
+// concurrency control: a new alert while one is running is injected rather than starting a second.
 export interface Dispatcher {
   dispatch(input: RunInvestigationInput): void;
   // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
@@ -29,9 +28,8 @@ export interface DispatcherOptions {
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
 }
 
-// (fingerprint, startsAt): re-notifications of a firing alert keep both, so
-// they dedup; a twin incident (same labels on another server's stack) fires
-// independently and gets its own startsAt, so it is investigated.
+// (fingerprint, startsAt): re-notifications of a firing alert keep both, so they dedup;
+// a twin incident (same labels, different startsAt) is investigated independently.
 const KEY_SEP = " ";
 function dedupKey(sourceAlertId: string, firedAt: string): string {
   return `${sourceAlertId}${KEY_SEP}${firedAt}`;
@@ -45,9 +43,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
 
-  // Derive, don't cache. `input.alert` is only present on the original
-  // dispatch - a resume carries no alert, so identity falls back to the
-  // session's durable originating alert.
+  // `input.alert` is only present on the original dispatch; a resume carries no alert,
+  // so identity falls back to the session's durable originating alert.
   function resolveAlert(input: RunInvestigationInput): NormalizedAlert | null {
     return input.alert ?? getAlertForSession(input.sessionId);
   }
@@ -80,9 +77,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
           { err, sessionId: input.sessionId },
           "investigation failed",
         );
-        // Surface the crash to the console so the run shows as failed instead of
-        // silently going idle; the dispatcher is the single chokepoint that sees
-        // every run's terminal rejection.
+        // Surfaces the crash to the console so the run shows as failed instead of silently
+        // going idle; the dispatcher is the single chokepoint that sees every run's terminal rejection.
         publishRunFailed(
           input.sessionId,
           err instanceof Error ? err.message : "Investigation failed.",
@@ -92,9 +88,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         activeSessionIds.delete(input.sessionId);
         controllers.delete(input.sessionId);
         if (alert != null) {
-          // Dispatch inbox leftovers as one new session (leftovers at run end become new sessions).
-          // Multiple leftovers batch as additionalAlerts, so the at-most-one active alert session
-          // invariant holds.
+          // Leftovers at run end become one new session; multiple leftovers batch as
+          // additionalAlerts, preserving the at-most-one active alert session invariant.
           const leftovers = inbox.get(input.sessionId) ?? [];
           inbox.delete(input.sessionId);
           if (leftovers.length > 0) {

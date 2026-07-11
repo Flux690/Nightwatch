@@ -23,9 +23,8 @@ export interface ThinkingItem {
   kind: "thinking";
   id: string;
   text: string;
-  // streaming is true only while live deltas are still arriving for this
-  // burst; reload-path items are never streaming. Always renders collapsed
-  // by default (live and reload alike) - the operator opens it explicitly.
+  // True only while live deltas are still arriving for this burst; reload-path
+  // items are never streaming, and either way it renders collapsed until opened.
   streaming: boolean;
 }
 
@@ -58,9 +57,8 @@ export interface ClarificationCardItem {
   multiSelect?: boolean;
   approval?: "pending" | "answered";
   resolvedBy?: string;
-  // Present when reconstructed from a persisted, already-answered transcript -
-  // the recorded tool_result, shown the same way ApprovalCardPanel nests a
-  // resolved ToolCardPanel.
+  // Present when reconstructed from a persisted, already-answered transcript;
+  // shown the same way ApprovalCardPanel nests a resolved ToolCardPanel.
   result?: unknown;
 }
 

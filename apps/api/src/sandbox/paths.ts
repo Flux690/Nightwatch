@@ -2,9 +2,8 @@ import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { PathEscapeError } from "./errors.js";
 
-// Lexical containment. Security-critical: file handlers run on the API host
-// against the bind-mounted workspace, so an escaping path would reach the
-// host filesystem, not the container's.
+// Security-critical: file handlers run on the API host against the bind-mounted
+// workspace, so an escaping path would reach the host filesystem.
 export function resolveRepoPath(
   workspaceDir: string,
   repoRelative: string,
@@ -20,9 +19,8 @@ export function resolveRepoPath(
   return join(workspaceDir, normalized);
 }
 
-// Symlink containment: a checkout (or a sandboxed process) can plant a
-// symlink pointing anywhere on the host, so lexical checks are not enough.
-// Resolve the deepest existing ancestor and require it inside the workspace.
+// A sandboxed process can plant a symlink anywhere on the host, so lexical
+// checks aren't enough - resolve the deepest existing ancestor instead.
 export async function assertContained(
   workspaceDir: string,
   absolutePath: string,

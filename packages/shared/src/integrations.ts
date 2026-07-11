@@ -29,8 +29,7 @@ export interface GitHubRepoPage {
 export interface GitHubErrorBody {
   error: string;
   code: GitHubErrorCode;
-  // Present on repo_not_found when the owner is an organization: GitHub 404s
-  // existence, visibility, and permission failures alike, so pending org-admin
-  // approval is a plausible cause and this links straight to the approval page.
+  // Present on repo_not_found when the owner is an organization: GitHub 404s existence, visibility,
+  // and permission failures alike, so pending org-admin approval is a plausible cause; this links straight to the approval page.
   orgApprovalUrl?: string;
 }

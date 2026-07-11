@@ -3,9 +3,8 @@ import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
-// EventSource retries network drops itself, but a non-200 response fails the
-// connection permanently (readyState CLOSED). Recreate on a fixed cadence so
-// live updates never silently die while the console stays open.
+// EventSource retries network drops itself, but a non-200 fails permanently
+// (readyState CLOSED); recreate on a fixed cadence so updates never silently die.
 const RECREATE_DELAY_MS = 15000;
 
 type Subscriber = (envelope: ConsoleEvent) => void;
@@ -96,9 +95,8 @@ export function ConsoleEventsProvider({
   );
 }
 
-// Subscribe to the shared console event stream for the component's lifetime. A
-// no-op when no provider is mounted (e.g. before authentication), so callers need
-// no guard of their own.
+// Subscribe to the shared console event stream for the component's lifetime;
+// a no-op before a provider mounts (e.g. pre-auth), so callers need no guard.
 export function useConsoleEvents(onMessage: Subscriber): void {
   const subscribe = useContext(ConsoleEventsContext);
   const handlerRef = useRef(onMessage);

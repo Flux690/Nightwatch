@@ -1,6 +1,5 @@
-// Accepts both Docker and Kubernetes service identities. Echo the identity
-// exactly as given in the alert or a prior list_services result - do not
-// guess. Provider is an opaque part of the handle.
+// Accepts both Docker and Kubernetes service identities. Echo the identity exactly as
+// given in the alert or a prior list_services result - do not guess.
 export const SERVICE_IDENTITY_SCHEMA = {
   oneOf: [
     {

@@ -19,9 +19,8 @@ export function resolveSecretKey(): string {
       logger.info({ path }, "loaded persisted SECRET_KEY file");
       return persisted;
     }
-    // Crash mid-write, full disk, or manual tampering - an empty file has no
-    // recoverable key in it, so treat it the same as absent rather than
-    // handing back "" and letting it fail later as a confusing signing error.
+    // An empty file (crash mid-write, full disk, tampering) has no recoverable key,
+    // so treat it as absent rather than returning "" and failing later as a confusing signing error.
     logger.warn({ path }, "SECRET_KEY file is empty, generating a new one");
   }
 

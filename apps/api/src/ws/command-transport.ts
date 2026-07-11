@@ -8,16 +8,14 @@ import { resolveByHost, resolveByService } from "./router.js";
 import type { CommandRoute } from "./router.js";
 import type { RunnerConnection } from "./fleet.js";
 
-// In-flight request/reply correlation for runner commands. A command is sent with
-// a correlationId; the runner's result is matched back here. This map is owned
-// entirely by this module - the registry knows nothing about pending commands.
+// Request/reply correlation for runner commands, owned entirely by this
+// module - the registry knows nothing about pending commands.
 interface PendingCommand {
   resolve: (result: unknown) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
-  // The exact socket the command went out on; a reply can only ever arrive on
-  // it, so its close settles the command immediately instead of waiting out
-  // the full timeout.
+  // The socket the command went out on, so its close settles the command
+  // immediately instead of waiting out the full timeout.
   conn: RunnerConnection;
   commandName: string;
 }
@@ -27,9 +25,8 @@ const pending = new Map<string, PendingCommand>();
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   const entry = pending.get(payload.correlationId);
   if (!entry) {
-    // The command already timed out (and rejected its caller) or never existed,
-    // so a late result has nowhere to go. Log it instead of dropping silently,
-    // so a consistently-slow runner is diagnosable.
+    // Already timed out or never existed, so this late result has nowhere to
+    // go; log rather than drop silently so a slow runner is diagnosable.
     logger.warn(
       { correlationId: payload.correlationId },
       "late or unknown runner result discarded",
@@ -45,9 +42,8 @@ export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   }
 }
 
-// Settle every command still in flight on this exact socket. Called from the
-// socket's close handler: a reply can never arrive on a closed socket, so
-// waiting out the timeout would only stall the investigation.
+// Called from the socket's close handler: a reply can never arrive on a
+// closed socket, so waiting out the timeout would only stall the investigation.
 export function rejectPendingForConnection(conn: RunnerConnection): void {
   for (const [correlationId, entry] of pending) {
     if (entry.conn !== conn) continue;

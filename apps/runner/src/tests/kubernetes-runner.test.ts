@@ -14,9 +14,8 @@ vi.mock("@kubernetes/client-node", () => ({
   AppsV1Api: class AppsV1Api {},
   Metrics: MockMetrics,
   Exec: MockExec,
-  // setHeaderOptions is used by restartService to pass strategic-merge-patch
-  // Content-Type. The mock just returns its third arg (or {}) since patchNamespacedDeployment
-  // is itself mocked and never inspects the options.
+  // setHeaderOptions is used by restartService to pass strategic-merge-patch Content-Type. The mock just
+  // returns its third arg (or {}) since patchNamespacedDeployment is itself mocked and never inspects the options.
   setHeaderOptions: vi.fn().mockReturnValue({}),
   // Real class (not a vi.fn) so `instanceof ApiException` works in
   // restartService/getRolloutStatus's 404-vs-genuine-error distinction.
@@ -543,9 +542,8 @@ describe("Kubernetes runner command handlers", () => {
     });
 
     it("propagates a genuine error from resolving the kind, without masking it by trying StatefulSet", async () => {
-      // A non-404 error resolving the workload kind must propagate as-is, not be
-      // swallowed and retried as a StatefulSet (which would surface a misleading
-      // "statefulsets.apps not found").
+      // A non-404 error resolving the workload kind must propagate as-is, not be swallowed and retried
+      // as a StatefulSet (which would surface a misleading "statefulsets.apps not found").
       mockAppsApi.readNamespacedDeployment.mockRejectedValue(
         new Error("forbidden: get access denied"),
       );

@@ -6,9 +6,8 @@ import { getFleetView } from "../ws/fleet.js";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
 
-// Rebuild the labels an advertised identity would arrive with, so the verify
-// alert runs through the same deriveServiceIdentity path real alerts do. A
-// verify that skipped the parser would pass even when label parsing is broken.
+// Rebuild the labels an advertised identity would arrive with, so the verify alert runs
+// through the same deriveServiceIdentity path real alerts do (else a broken parser still passes).
 function identityToLabels(identity: ServiceIdentity): Record<string, string> {
   const base = { alertname: "NightwatchVerify", severity: "info" };
   if (identity.provider === "docker") {

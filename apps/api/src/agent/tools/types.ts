@@ -13,18 +13,16 @@ export interface ToolExecuteContext {
   // Session-scoped: repo tools key their sandbox workspace on it. Tools stay
   // stateless; the sandbox module owns all bookkeeping.
   sessionId: string;
-  // The tool_use id of this call: open_pull_request keys its write-ahead
-  // audit row on (sessionId, toolUseId), the same idempotency the approval
-  // path uses.
+  // The tool_use id of this call: open_pull_request keys its write-ahead audit row on
+  // (sessionId, toolUseId), the same idempotency the approval path uses.
   toolUseId: string;
 }
 
 interface ToolCommon {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
-  // A tool that omits `providers` is provider-agnostic: always offered.
-  // Listing providers offers it only while at least one connected runner
-  // runs a listed provider; only genuinely provider-specific tools carry it.
+  // A tool that omits `providers` is provider-agnostic: always offered. Listing providers
+  // offers it only while at least one connected runner runs a listed provider.
   providers?: Provider[];
   // Per-tool override of the global tool timeout: repo tools run clones,
   // installs and test suites, which dwarf the 15s default.

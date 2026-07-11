@@ -23,9 +23,8 @@ export async function pingDocker(): Promise<void> {
 
 export type Isolation = "gvisor" | "standard";
 
-// Whether the Docker host advertises the gVisor (runsc) runtime. Cached per
-// boot: runtimes don't change under a running daemon, and every sandbox
-// creation would otherwise pay an info() round-trip.
+// Cached per boot: runtimes don't change under a running daemon, and every
+// sandbox creation would otherwise pay an info() round-trip.
 let cachedIsolation: Isolation | undefined;
 
 export async function detectIsolation(): Promise<Isolation> {
@@ -71,9 +70,8 @@ export interface SandboxLimits {
   memoryMb: number;
 }
 
-// Run as the API's own uid:gid so workspace files match the host-side clone's
-// owner (no chown friction); non-root whenever the API is. undefined where
-// getuid is absent, keeping the image default.
+// Runs as the API's own uid:gid so workspace files match the host clone's
+// owner; undefined where getuid is absent, keeping the image default.
 function processUser(): string | undefined {
   const uid = typeof process.getuid === "function" ? process.getuid() : null;
   const gid = typeof process.getgid === "function" ? process.getgid() : null;
@@ -107,9 +105,8 @@ export async function createSandboxContainer(opts: {
     name: `nightwatch-sandbox-${opts.sessionId}`,
     Cmd: ["sleep", "infinity"],
     WorkingDir: "/workspace",
-    // HOME is a separate writable mount, NOT the checkout: package-manager
-    // caches under a HOME inside the repo would be swept into checkpoint
-    // commits by `git add -A`. The corepack var suppresses its download prompt.
+    // HOME is a separate mount, not the checkout, so package-manager caches
+    // aren't swept into checkpoint commits by `git add -A`.
     Env: ["HOME=/home/sandbox", "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },
     ...(user !== undefined && { User: user }),
@@ -139,9 +136,8 @@ export async function createSandboxContainer(opts: {
   return container.id;
 }
 
-// The networkless agent guarantee: after the agent-free install, every network
-// is detached and the result is verified by re-inspection. Only loopback
-// remains, so the agent has no egress path but local test servers still work.
+// Detaches every network and verifies via re-inspection; only loopback
+// remains, so the agent has no egress but local test servers still work.
 export async function disconnectAllNetworks(
   containerId: string,
 ): Promise<void> {
@@ -163,9 +159,8 @@ export async function disconnectAllNetworks(
   }
 }
 
-// Docker multiplexes stdout/stderr into 8-byte-framed chunks when the exec
-// has no TTY; frames are concatenated in arrival order so the combined output
-// reads the way a terminal would show it.
+// Docker multiplexes stdout/stderr into 8-byte-framed chunks with no TTY;
+// frames are concatenated in arrival order to read like a terminal would.
 export function demuxOutput(buf: Buffer): string {
   if (buf.length === 0) return "";
   const first = buf[0] ?? 0;

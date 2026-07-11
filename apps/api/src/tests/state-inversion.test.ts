@@ -5,8 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
-// per-turn persistence writes real transcript rows. The script is supplied per
-// test via the hoisted setter.
+// per-turn persistence writes real transcript rows.
 const { mockCreateProvider } = vi.hoisted(() => ({
   mockCreateProvider: vi.fn(),
 }));
@@ -36,10 +35,7 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../agent/context.js";
-import {
-  registerRunner,
-  unregisterRunner,
-} from "../ws/fleet.js";
+import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
@@ -84,10 +80,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Looks healthy.", toolUses: [] }]);
 
     // Deliberately register no runner: the console must work during an outage.
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -127,10 +120,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

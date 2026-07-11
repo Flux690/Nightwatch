@@ -25,9 +25,8 @@ import type {
 
 const CONFIG_ID = "global";
 
-// Shape of the config row as selected (columns aliased to camelCase). The
-// provider/thinking/reasoningEffort columns are plain TEXT, constrained to their
-// enums on write via the route schema. promptCaching is stored as 0/1.
+// Columns aliased to camelCase. provider/thinking/reasoningEffort are plain TEXT,
+// constrained to their enums on write via the route schema.
 type ConfigRow = {
   provider: string;
   model: string;

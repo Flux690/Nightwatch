@@ -6,9 +6,8 @@ import type {
 import { getDb } from "./client.js";
 import type { PendingHumanInput } from "./interrupts.js";
 
-// A session row plus its originating alert (null for chat sessions). The alert is
-// the durable source of severity-dependent behavior on resume, so a run that no
-// longer carries the alert in its job can recover it from here.
+// The alert is the durable source of severity-dependent behavior on resume, so
+// a run that no longer carries it in its job can recover it from here.
 export type StoredSession = SessionMeta & {
   originatingAlert: NormalizedAlert | null;
 };
@@ -59,9 +58,8 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
   insertAll(messages);
 }
 
-// Atomically persist the assistant turn messages AND the interrupt row in one
-// transaction. The loop calls this when suspending on a gated tool so the DB
-// is always in a consistent state: both exist or neither does.
+// Called when suspending on a gated tool, so the DB is always consistent:
+// both the messages and interrupt row exist, or neither does.
 export function appendMessagesAndInterrupt(
   messages: SessionMessage[],
   pendingHumanInput: PendingHumanInput,
@@ -102,9 +100,8 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Deletes the session and, via ON DELETE CASCADE, its transcript and pending approval. The
-// remediation audit log is NOT a child of sessions, so it survives - the record of what
-// changed outlives the conversation.
+// Cascades to the transcript and pending approval; the remediation audit log
+// is not a child of sessions, so it survives.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }

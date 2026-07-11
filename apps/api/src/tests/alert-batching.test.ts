@@ -32,9 +32,8 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
-// Every alertBody() below carries the `container: "web-01"` label (anonymous
-// Docker fallback), so one connected runner advertising that exact identity
-// is enough for every alert in this file to resolve.
+// Every alertBody() below carries the `container: "web-01"` label, so one connected
+// runner advertising that exact identity resolves every alert in this file.
 const WEB_01_MANIFEST = manifest("host-web-01", [dockerService("web-01")]);
 
 // A free-form finish: no tool call ends the run successfully and immediately.

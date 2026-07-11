@@ -29,8 +29,7 @@ const CONFIGURED: GitHubIntegrationStatus = {
 };
 
 /* IntegrationsPage navigates to /integrations/github, so it renders under a
-   memory router with a stub destination route - same pattern as
-   Fleet.test.tsx for /fleet/add. */
+   memory router with a stub destination route, mirroring Fleet.test.tsx. */
 function renderIntegrationsRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const integrationsRoute = createRoute({

@@ -122,11 +122,11 @@ describe("remediation circuit breaker", () => {
   // active request, and leaving one behind would stall server.close().
   const openStreams: Array<() => void> = [];
 
-  async function runChat(): Promise<{ sessionId: string; events: ConsoleEventFrame[] }> {
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+  async function runChat(): Promise<{
+    sessionId: string;
+    events: ConsoleEventFrame[];
+  }> {
+    const { events, close } = await connectConsoleEvents(port, SESSION);
     openStreams.push(close);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
@@ -301,9 +301,8 @@ describe("remediation circuit breaker", () => {
 
   it("does not count failed writes toward the limit (a transient failure must not lock out retries)", async () => {
     const service = { provider: "docker", project: "svc-01", service: "cache" };
-    // DEFAULT_LIMIT failed writes: none actually landed, so the breaker must not
-    // trip. A runner blip or timeout that fails a fix cannot burn the budget and
-    // block the operator from approving a retry of an action that never ran.
+    // None of these failed writes actually landed, so the breaker must not trip - a runner blip
+    // can't burn the budget and block a retry of an action that never ran.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/cache",
       toolName: "restart_service",

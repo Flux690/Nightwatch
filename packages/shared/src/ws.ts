@@ -14,9 +14,8 @@ export interface RunnerCommandMessage extends WsEnvelope {
   };
 }
 
-// API → Runner: update the in-memory remediation mode (fire-and-forget).
-// The runner applies it immediately and reports it in subsequent manifests.
-// Reconciliation: the API pushes this whenever a manifest disagrees with DB.
+// API → Runner: update the in-memory remediation mode (fire-and-forget); applied immediately and
+// reported in subsequent manifests. The API pushes this whenever a manifest disagrees with DB.
 export interface SetRemediationModeMessage extends WsEnvelope {
   type: "set_remediation_mode";
   payload: { enabled: boolean };

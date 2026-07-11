@@ -3,9 +3,8 @@ import { logger } from "../logger.js";
 import type { CommandRoute } from "../ws/router.js";
 import type { ToolExecuteContext, ToolExecuteResult } from "./tools/types.js";
 
-// Single dispatch + error-formatting primitive used by the loop's read path
-// and the resolver's approve path. Keeping both in one place means error
-// message format and logging are never out of sync.
+// Single dispatch + error-formatting primitive shared by the loop's read path and the
+// resolver's approve path, so error format and logging never drift apart.
 export async function executeRunnerTool(
   name: string,
   route: CommandRoute,

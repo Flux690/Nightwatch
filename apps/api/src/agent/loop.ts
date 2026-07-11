@@ -89,9 +89,8 @@ function buildSessionMeta(
 export interface RunInvestigationInput {
   sessionId: string;
   alert?: NormalizedAlert;
-  // Additional alerts that arrived within the 90s batch window alongside the
-  // primary alert. All are included in the opening message for shared root-cause
-  // analysis. Only populated on batch-triggered sessions.
+  // Alerts that arrived within the 90s batch window alongside the primary one;
+  // included in the opening message for shared root-cause analysis (batch-triggered sessions only).
   additionalAlerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
@@ -121,8 +120,7 @@ export async function runInvestigation(
   const apiKey = loadApiKey();
 
   // Operator declined a continue-request: replay the transcript and run one free-form
-  // wrap-up turn (no tools), then finish. The seed already carries the investigation, so
-  // skip the alert/fleet context build below.
+  // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
     const remediationEnabled = currentRemediationEnabled();
     const { systemPrompt } = buildChatContext(remediationEnabled);
@@ -297,18 +295,15 @@ export async function runInvestigation(
       log,
     });
 
-    // Any repo tool call re-extends the deadline to the code-session budget:
-    // clone + install + tests dwarf the investigation default. Extending on
-    // every call, not just the first, is what makes the rule survive resume -
-    // each runInvestigation computes a fresh deadline and re-extends itself.
+    // Repo tools re-extend the deadline to the code-session budget since clone
+    // + install + tests dwarf the investigation default.
     if (response.toolUses.some((t) => REPO_TOOL_NAMES.has(t.name))) {
       deadline = Math.max(deadline, Date.now() + config.codeSessionBudgetMs);
     }
 
     if (gated !== null) {
-      // Durably suspend: persist the assistant turn + interrupt row in one transaction; the run
-      // then exits and frees its slot. Suspended sessions take no injections - the inbox isn't
-      // drained here.
+      // Durably suspend: persist assistant turn + interrupt row in one transaction, then exit and
+      // free the slot. Suspended sessions take no injections, so the inbox isn't drained here.
       const isAskGate = gated.entry.access === "ask";
       const interrupt: PendingHumanInput = {
         sessionId,
@@ -353,9 +348,8 @@ export async function runInvestigation(
       return;
     }
 
-    // Drain mid-run injected alerts at the tool boundary, riding the same user message as the
-    // tool results so the provider never sees two consecutive user turns. The model
-    // judges each as downstream effect or independent incident.
+    // Drain mid-run injected alerts at the tool boundary, riding the tool-results user turn so
+    // the provider never sees two consecutive user turns; the model judges each as downstream vs independent.
     const injected = dispatcher.drainInbox(sessionId);
     const injectionText =
       injected.length > 0 ? formatInjectedAlerts(injected) : undefined;
@@ -364,9 +358,8 @@ export async function runInvestigation(
     persist();
   }
 
-  // Time budget reached: suspend with a continue-request so the operator can resume (fresh
-  // deadline) or end. A continue request has no underlying tool call, so its synthetic
-  // toolUseId only keys the interrupt row - the resolver branches on kind, not the transcript.
+  // No underlying tool call, so the synthetic toolUseId only keys the
+  // interrupt row - the resolver branches on kind, not the transcript.
   const continueId = randomUUID();
   const continueInterrupt: PendingHumanInput = {
     sessionId,

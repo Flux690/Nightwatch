@@ -48,9 +48,8 @@ function webOneManifest() {
 // injected (or state asserted) while a run is parked mid-turn.
 const gate = createGateController();
 
-// Queue one provider per run, in order. A resume / leftover dispatch is a
-// separate run, so chain one script per run (per-instance scriptIndex). All
-// gated, so each chat() parks until releaseNext()/releaseAll().
+// Queue one provider per run, in order - a resume/leftover dispatch is a separate run,
+// so chain one script per run. All gated, so each chat() parks until released.
 function queueRuns(...scripts: ScriptedTurn[][]): void {
   for (const script of scripts) {
     mockCreateProvider.mockImplementationOnce(() =>
@@ -193,9 +192,8 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const runnerId = generateRunnerToken("inject-sus").id;
-    // Write offering is fleet-wide (any connected runner with remediation on),
-    // so a connection with a synced cache is required - mirroring what
-    // ws/server.ts reconciliation does after setRemediationMode.
+    // Write offering is fleet-wide (any connected runner with remediation on), so a
+    // connection with a synced cache is required, mirroring ws/server.ts's reconciliation.
     setRemediationMode(runnerId, true);
     const susConn = registerRunner(
       runnerId,
@@ -308,9 +306,8 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
 
-  // Regression for H3: a resume dispatch carries no `alert` field, so the dispatcher must
-  // recover alert identity from the session itself - else the post-approval phase looks
-  // alert-free, correlated alerts misroute into new sessions, and re-fires aren't deduped.
+  // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
+  // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const { id: runnerId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");

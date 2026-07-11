@@ -6,9 +6,8 @@ export interface FileChange {
   diff: string;
 }
 
-/* Live results arrive as objects; persisted transcripts replay them as the
-   JSON string the tool_result carried. Accept both, reject everything else
-   (error results are plain strings and fall back to the generic panel). */
+/* Live results arrive as objects, persisted ones as the JSON string the
+   tool_result carried; accept both, reject anything else (e.g. plain error strings). */
 export function parseFileChange(result: unknown): FileChange | null {
   let value = result;
   if (typeof value === "string") {

@@ -24,9 +24,8 @@ export interface TurnOutcome {
   gated: GatedTool | null;
 }
 
-// Process a turn's tool calls in two passes: run every non-gated read now and
-// accumulate, and pick the first gated (write/ask) tool for the loop to suspend on. Reads
-// resolve against the effective set, so a stripped tool is reported unavailable.
+// Two passes: run every non-gated read now, and pick the first gated (write/ask) tool for
+// the loop to suspend on. Reads resolve against the effective set, so a stripped tool reports unavailable.
 export async function processToolUses(params: {
   toolUses: ToolUse[];
   toolset: Tool[];
@@ -44,9 +43,8 @@ export async function processToolUses(params: {
   let gatedEntry: Tool | null = null;
 
   for (const tool of toolUses) {
-    // Resolve against the effective set, not the full registry: a tool stripped by remediation
-    // mode or fleet providers is genuinely unavailable, so a model naming it never reaches the
-    // gate. This is what makes the master write switch unbypassable.
+    // Resolve against the effective set, not the full registry, so a tool stripped by remediation
+    // mode or fleet providers never reaches the gate - this makes the master write switch unbypassable.
     const entry = toolset.find((t) => t.schema.name === tool.name);
 
     if (!entry) {
@@ -86,9 +84,8 @@ export async function processToolUses(params: {
       }
 
       if (entry.access === "write") {
-        // Per-target gate: a write against a machine whose remediation is off
-        // is rejected before waking a human - the switch belongs to the
-        // target, not to the session that proposed the write.
+        // Per-target gate: a write against a machine whose remediation is off is rejected
+        // before waking a human - the switch belongs to the target, not the session.
         const disabledOn = targetRemediationDisabled(tool.input);
         if (disabledOn !== null) {
           log.warn(

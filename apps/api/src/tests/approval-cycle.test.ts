@@ -13,9 +13,8 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
-// Stateful scripted provider: snapshot() accumulates messages so persist() in
-// the loop writes real session_messages rows. setScript() configures the turn
-// sequence per test; mockCreateProvider() is called once per run dispatch.
+// Stateful scripted provider: snapshot() accumulates messages so persist() in the loop
+// writes real session_messages rows.
 const { mockCreateProvider } = vi.hoisted(() => ({
   mockCreateProvider: vi.fn(),
 }));
@@ -121,9 +120,8 @@ describe("durable approval interrupts", () => {
   });
 
   afterEach(() => {
-    // Reset the breaker ledger so each case is independent: it counts executed writes per
-    // (service, action) across the shared temp DB, so without this one case's restarts trip it
-    // for a later case.
+    // Breaker counts executed writes across the shared temp DB, so without this
+    // reset one case's restarts trip it for a later case.
     getDb().prepare("DELETE FROM remediation_actions").run();
   });
 
@@ -1001,9 +999,8 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Advance 24 hours, then hand the clock back: the advance is what proves no
-    // timeout reaped the interrupt, while the waits below poll with setTimeout
-    // and SSE delivery needs real event-loop turns - both starve on a fake clock.
+    // Advance proves no timeout reaped the interrupt; real timers are restored
+    // since the waits below need real event-loop turns.
     vi.advanceTimersByTime(24 * 60 * 60 * 1_000);
     vi.useRealTimers();
 

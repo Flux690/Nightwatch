@@ -3,18 +3,14 @@ import * as fastifySSEModule from "@fastify/sse";
 import { requireSession } from "../auth/session.js";
 import { subscribeConsole } from "./bus.js";
 
-// Interop assertion: @fastify/sse is CJS whose module.exports is the fp-wrapped
-// plugin, but its d.ts declares only ESM-style exports, which at runtime are the
-// raw, unwrapped plugin - registering those would encapsulate reply.sse away
-// from every route. Per Node's CJS interop the namespace's `default` IS the
-// wrapped module.exports; only its declared type is wrong, hence the cast.
+// @fastify/sse's types declare ESM exports, but CJS interop puts the runtime
+// fp-wrapped plugin on `default` - only the type is wrong.
 const fastifySSE = fastifySSEModule.default as unknown as FastifyPluginAsync<{
   heartbeatInterval?: number;
 }>;
 
-// The console's real-time feed: relays every bus event as an SSE frame; the client
-// routes by type/sessionId. The bus subscription happens before headers are flushed,
-// so a client that has received headers misses no later event.
+// Relays every bus event as an SSE frame; the client routes by type/sessionId. The bus
+// subscription happens before headers flush, so a client that has received headers misses no event.
 export async function registerConsoleEventRoutes(
   fastify: FastifyInstance,
   opts: { heartbeatInterval?: number } = {},
@@ -36,10 +32,8 @@ export async function registerConsoleEventRoutes(
       reply.sse.onClose(unsubscribe);
 
       reply.sse.sendHeaders();
-      // sendHeaders only records status/headers on the raw response; Node
-      // buffers them until the first body write. Flush explicitly so the
-      // client's open event (= "subscribed, no event can be missed") does not
-      // wait for the first published event or heartbeat.
+      // Flush explicitly so the client's open event isn't buffered until the
+      // first published event or heartbeat.
       reply.raw.flushHeaders();
     },
   );

@@ -36,9 +36,8 @@ function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
   return kind === "approval" || kind === "clarification" || kind === "continue";
 }
 
-// The row is from our own INSERT but still untrusted on read (partial write, hand-edit,
-// schema drift): fail loudly on an unknown kind or bad JSON rather than crashing deep in
-// the resume path.
+// Untrusted on read despite being our own INSERT (partial write, schema drift):
+// fail loudly on a bad kind or JSON rather than crashing deep in the resume path.
 function parseRow(row: RawRow): PendingHumanInput {
   if (!isHumanInputKind(row.kind)) {
     throw new Error(

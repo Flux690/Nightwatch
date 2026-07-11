@@ -45,9 +45,8 @@ import { waitFor } from "./wait.js";
 
 const AUTH_HEADER = "Basic c2VjcmV0dG9rZW4=";
 
-// Scriptable git double honouring the execFile callback contract exactly:
-// (error, stdout, stderr), options argument optional. Clone materializes
-// cloneFiles plus .git/info, matching what a real clone puts on disk.
+// Scriptable git double honouring the execFile callback contract exactly: (error, stdout,
+// stderr). Clone materializes cloneFiles plus .git/info, matching a real clone's disk layout.
 const gitState = {
   remoteBranchExists: false,
   dirty: false,

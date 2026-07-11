@@ -28,9 +28,8 @@ export interface OpenPullRequestHooks {
   composeBody(verification: VerificationResult, filesChanged: string[]): string;
 }
 
-// Deterministic, all platform-side: verify fresh (the agent may have edited
-// since the last green run), commit, push, then create-or-update by branch
-// identity - one open PR per session branch, so the model can call it freely.
+// Verifies fresh (the agent may have edited since the last green run), commits,
+// pushes, then create-or-updates by branch identity - one PR per session.
 export async function openPullRequest(
   ws: Workspace,
   input: { title: string; verificationTimeoutMs: number },

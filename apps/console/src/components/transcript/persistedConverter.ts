@@ -46,9 +46,8 @@ export function convertPersistedMessages(
   for (const msg of messages) {
     if (msg.role === "user") {
       if (isProviderBlockArray(msg.providerContent)) {
-        // Walk blocks in order: surface text as user turns, skip tool_result
-        // blocks (results already collected in pass 1). A message may contain
-        // both (e.g. mid-run alert injected alongside tool results).
+        // Walk blocks in order, surfacing text as user turns; tool_result blocks
+        // are skipped since pass 1 already collected them (a message may contain both).
         let textIdx = 0;
         for (const block of msg.providerContent) {
           if (block.type === "text" && block.text) {

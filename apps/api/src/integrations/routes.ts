@@ -81,9 +81,8 @@ export async function registerIntegrationRoutes(
     async () => preflight(),
   );
 
-  // Picker proxy. During onboarding the token rides the body (nothing stored
-  // yet); afterwards the stored credential is used. POST, never GET: a token
-  // must not appear in a URL.
+  // During onboarding the token rides the body; afterwards the stored
+  // credential is used. POST, never GET, so a token never lands in a URL.
   fastify.post(
     "/integrations/github/repos",
     { preHandler: requireSession },
@@ -151,9 +150,8 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  // Rebind: point the existing credential at a different repo. Never
-  // accepts a token - it only ever uses the one already stored, so the
-  // request itself proves nothing beyond "pick a different repo".
+  // Never accepts a token - only ever uses the one already stored, so the
+  // request proves nothing beyond "pick a different repo".
   fastify.patch(
     "/integrations/github",
     { preHandler: requireSession },
@@ -192,9 +190,8 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  // Disconnect deletes our stored copy only; full invalidation requires
-  // revoking the token on GitHub, and the console says so plainly. Sandboxes
-  // are torn down first, while the token still exists for a final push.
+  // Deletes our stored copy only; full invalidation requires revoking on
+  // GitHub. Sandboxes are torn down first, while the token still works.
   fastify.delete(
     "/integrations/github",
     { preHandler: requireSession },

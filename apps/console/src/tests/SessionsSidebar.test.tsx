@@ -144,9 +144,8 @@ function setup(
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  // Mirrors Shell.tsx: SessionsSidebar is mounted once at the layout level and
-  // stays up across /sessions <-> /sessions/$id, reading the active id via
-  // useParams({ strict: false }) rather than being the route's own component.
+  // Mirrors Shell.tsx: SessionsSidebar mounts once at the layout level, reading
+  // the active id via useParams({ strict: false }) instead of being the route's component.
   const root = createRootRoute({
     component: () => (
       <>

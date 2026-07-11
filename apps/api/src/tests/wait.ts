@@ -1,6 +1,5 @@
 // Poll until `fn` is truthy, then return it - for asserting on asynchronously delivered state
-// (e.g. buffered WS events) without coupling to timing. In-process dispatch resolves in
-// microtasks, so an event may publish before the test captures its session id.
+// without coupling to timing.
 export async function waitFor<T>(
   fn: () =>
     | T

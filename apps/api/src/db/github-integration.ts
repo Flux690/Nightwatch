@@ -68,9 +68,8 @@ export function saveGitHubIntegration(input: {
     });
 }
 
-/* Repo-only rebind: the credential is untouched (never even read here) -
-   only the binding moves. `validatedAt` still bumps because reaching this
-   point means the stored token just proved itself live against GitHub. */
+/* Credential is untouched, only the binding moves; validatedAt still bumps
+   because reaching here means the stored token just proved itself live. */
 export function updateGitHubIntegrationRepo(
   repoOwner: string,
   repoName: string,

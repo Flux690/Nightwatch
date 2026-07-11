@@ -208,9 +208,8 @@ function badInput(message: string): ToolExecuteResult {
   return { content: message, is_error: true };
 }
 
-// The final PR body is host policy: model text first, then incident context,
-// files changed, verification verbatim (or its honest absence), and a
-// plain-text session reference (no PUBLIC_URL exists yet to link to).
+// PR body section order (model text, then incident context, files, verification) is host
+// policy; the session reference is plain text since no PUBLIC_URL exists yet to link to.
 function composePrBody(
   sessionId: string,
   branch: string,
@@ -440,10 +439,8 @@ export const REPO_TOOLS: Tool[] = [
         required: ["title"],
       },
     },
-    // Deliberately read: the PR is a proposal, the merge is the
-    // GitHub-enforced human gate, and gating creation would stall the 3am AFK
-    // flow this product exists for. `access` means "may run unattended", not
-    // "has no external effect" - this is the first externally-visible read.
+    // Deliberately read: the PR is a proposal, the merge is the GitHub-enforced human gate, and
+    // gating creation would stall the 3am AFK flow this product exists for.
     access: "read",
     timeoutMs: 600_000,
     on: "api",

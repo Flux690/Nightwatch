@@ -9,11 +9,8 @@ export interface ConsoleEventsClient<E> {
   close: () => void;
 }
 
-// Streaming SSE client for the console event feed. The route subscribes to the
-// bus before it flushes headers, so once the fetch resolves no later event can
-// be missed - the SSE analogue of the old WS `connected` ack. Always call
-// close() before closing the server: an open stream is an active request and
-// would otherwise stall fastify.close().
+// Once fetch resolves no event can be missed. Always call close() before
+// closing the server, or the open stream stalls fastify.close().
 export async function connectConsoleEvents<
   E extends { type: string } = ConsoleEventFrame,
 >(port: number, session: string): Promise<ConsoleEventsClient<E>> {

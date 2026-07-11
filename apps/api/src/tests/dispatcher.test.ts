@@ -18,10 +18,7 @@ function flush(): Promise<void> {
 
 const FIRED_AT = "2026-07-07T03:00:00.000Z";
 
-function makeAlert(
-  sourceAlertId: string,
-  firedAt = FIRED_AT,
-): NormalizedAlert {
+function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
   return {
     sourceAlertId,
     targetIdentifier: {
@@ -46,9 +43,8 @@ function alertInput(
   };
 }
 
-// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert). Tests
-// register a session's alert here as createSession would have, so a resumed dispatch (no
-// input.alert) still resolves via the fallback.
+// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert), so a
+// resumed dispatch (no input.alert) still resolves via the fallback.
 function fakeAlertLookup(): {
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
   register: (sessionId: string, alert: NormalizedAlert) => void;

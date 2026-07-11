@@ -40,9 +40,8 @@ function serviceProvider(input: unknown): string | undefined {
   return typeof provider === "string" ? provider : undefined;
 }
 
-// A provider-agnostic command dispatches to the docker or kubernetes handler by
-// the service identity's provider. One helper replaces the per-command ternary
-// and localizes the unknown->typed cast at the single dispatch boundary.
+// A provider-agnostic command dispatches to the docker or kubernetes handler by the service identity's
+// provider. One helper replaces the per-command ternary and localizes the unknown->typed cast at the single dispatch boundary.
 function byProvider<T>(handlers: {
   docker: (input: T) => Promise<unknown>;
   kubernetes: (input: T) => Promise<unknown>;
@@ -72,9 +71,8 @@ function direct<T>(fn: (input: T) => Promise<unknown>): Handler {
   return (input) => fn(input as T);
 }
 
-// Defense in depth for writes: the API gates by this runner's mode, but the
-// runner still refuses on its own flag so a control-plane bug can never
-// execute a write the operator turned off here.
+// Defense in depth for writes: the API gates by this runner's mode, but the runner still refuses on its
+// own flag so a control-plane bug can never execute a write the operator turned off here.
 function guardedWrite(handler: Handler): Handler {
   return (input) => {
     if (!isRemediationEnabled()) {

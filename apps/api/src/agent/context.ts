@@ -48,9 +48,8 @@ function repoToolsAddendum(repo: string): string {
 You can work on the connected GitHub repository ${repo} with the repo_* tools (repo_read_file, repo_edit_file, repo_write_file, repo_exec). They operate in an isolated checkout on a dedicated branch - never on any production host; the repo_ prefix marks which world a tool touches. The sandbox has no network access: dependencies were installed during setup, so never attempt installs - if a fix requires a new dependency, state that in your response and the pull request body for a human to add. Read a file before editing it (edits to unread files are refused), keep edits targeted, and verify your change with repo_exec (build, test). When the fix is complete and verified, propose it with open_pull_request - a human reviews and merges on GitHub; you never merge. Use these when the root cause is in the application code itself.`;
 }
 
-// Appended when the runner has remediation off: write tools are already filtered out of
-// the offered schema (agent/tools.ts); this just tells the model why, so it recommends
-// instead of attempting a call that was never on the menu.
+// Write tools are already filtered from the offered schema when remediation is off; this
+// just tells the model why, so it recommends instead of attempting a call never on the menu.
 const READ_ONLY_ADDENDUM = `
 
 You are in READ-ONLY mode: write tools (restart_service, exec) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. The operator can enable remediation from the console.`;
@@ -107,9 +106,8 @@ Begin your investigation. Start with the most targeted read tool given the alert
   };
 }
 
-// Always rendered when any runner is connected, even a single one: the map is
-// what carries the addressable server names the required `server` param needs,
-// and the incident machine's neighbours ride along as ordinary fleet lines.
+// Always rendered when any runner is connected, even a single one: the map carries the
+// addressable server names the required `server` param needs.
 function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   if (!fleetView || fleetView.length === 0) return "";
   const lines = fleetView.map((r) => {
@@ -123,9 +121,8 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
 }
 
 function formatAlert(alert: NormalizedAlert): string {
-  // JSON, not a rendered string: the model echoes this object verbatim into
-  // the `service` parameter of any tool call against this target (PRD
-  // "Further Notes" - the agent echoes the identity, it never reconstructs one).
+  // JSON, not a rendered string: the model echoes this object verbatim into the `service`
+  // parameter of any tool call against this target - it never reconstructs an identity.
   return `Alert ID:     ${alert.sourceAlertId}
 Target:       ${JSON.stringify(alert.targetIdentifier)}
 Alert type:   ${alert.alertType}

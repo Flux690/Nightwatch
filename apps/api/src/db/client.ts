@@ -3,9 +3,8 @@ import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { dbPath } from "../config/paths.js";
 
-// The schema is the single source of truth - the final desired shape, created
-// directly. There are no upgrade migrations: this is a pre-production project, so
-// a schema change is applied by recreating the database, not by migrating data.
+// No upgrade migrations: pre-production, so a schema change is applied by
+// recreating the database, not by migrating data.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runner (
     id                TEXT PRIMARY KEY,

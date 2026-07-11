@@ -5,9 +5,8 @@ import {
 import type { AgentConfig } from "@nightwatch/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
-// Circuit breaker: refuse a write before it suspends when too many writes to the same
-// (identity, action) already landed in the window, so a crash-loop fix can't become a
-// restart storm. Returns a corrective tool_result when tripped, null otherwise.
+// Refuse a write before it suspends when too many writes to the same (identity, action)
+// already landed in the window, so a crash-loop fix can't become a restart storm.
 export function circuitBreakerRejection(
   tool: ToolUse,
   config: AgentConfig,

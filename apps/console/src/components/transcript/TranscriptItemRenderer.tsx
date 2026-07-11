@@ -21,8 +21,7 @@ import { TerminalCard, parseExecResult } from "./TerminalCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 
 /* Repo tools return structured payloads and get bespoke cards; anything that
-   doesn't parse (running, corrective error strings, other tools) falls back
-   to the generic IN/OUT panel. */
+   doesn't parse falls back to the generic IN/OUT panel. */
 function renderToolCard(item: ToolCardItem): React.JSX.Element {
   if (item.result !== null) {
     if (

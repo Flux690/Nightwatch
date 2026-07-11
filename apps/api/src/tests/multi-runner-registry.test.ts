@@ -38,9 +38,8 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
   };
 }
 
-// Connect a fake runner, wait for the server's `connected` ack, then send its
-// manifest. Liveness rides protocol ping/pong, which the ws client answers
-// automatically. Returns the open socket so the test can close it.
+// Connect a fake runner, wait for the server's `connected` ack, then send its manifest.
+// Liveness rides protocol ping/pong, which the ws client answers automatically.
 async function connectRunner(
   port: number,
   token: string,

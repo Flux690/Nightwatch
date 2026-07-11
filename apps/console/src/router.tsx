@@ -30,9 +30,8 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-// Pathless layout: every authenticated page nests here so AuthGate can
-// redirect to /login (and render nothing in between) without each page
-// route needing its own auth check.
+// Pathless layout: nests every authenticated page so AuthGate can redirect
+// to /login once, instead of each page route checking auth itself.
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",

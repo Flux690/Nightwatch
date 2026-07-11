@@ -422,9 +422,8 @@ describe("multi-runner routing", () => {
   });
 
   it("cross-token: routes to a runner connected under a different token by service identity", async () => {
-    // runner-c is registered under runnerId2, separate from runnerIdA and runnerIdB. With
-    // the flat registry, sendCommand routes globally by service identity, so "redis"
-    // (only on runner-c) must still be reached.
+    // runner-c is registered under a separate runnerId. The flat registry routes globally
+    // by service identity, so "redis" (only on runner-c) must still be reached.
     setScript([
       {
         text: "Checking redis.",
@@ -473,8 +472,7 @@ describe("multi-runner routing", () => {
 });
 
 describe("assigned-name server-scoped routing", () => {
-  // Two runners whose manifests carry server-scoped Docker identities — the
-  // shape produced by the runner when NIGHTWATCH_SERVER_NAME is set. Routing
+  // Manifests carry server-scoped Docker identities (NIGHTWATCH_SERVER_NAME set); routing
   // must match exclusively on the full (server, project, service) key.
   let cleanupDb2: () => void;
   let runnerIdS1: string;
