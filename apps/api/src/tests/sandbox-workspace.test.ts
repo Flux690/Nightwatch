@@ -478,7 +478,11 @@ describe("networkless two-phase setup", () => {
   // One row per INSTALL_RULES entry: the lockfile (or corepack field) picks
   // the frozen command. Keep in lockstep with sandbox/install.ts.
   it.each([
-    ["pnpm-lock.yaml", PKG, "corepack pnpm install --frozen-lockfile"],
+    [
+      "pnpm-lock.yaml",
+      PKG,
+      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+    ],
     ["yarn.lock", PKG, "yarn install --frozen-lockfile"],
     [
       "yarn.lock",
@@ -514,11 +518,11 @@ describe("networkless two-phase setup", () => {
 
     const ws = await createWorkspace();
     expect(execEvents()).toEqual([
-      "corepack pnpm install --frozen-lockfile",
-      "corepack pnpm install",
+      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+      "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
     ]);
     expect(ws.setup).toMatchObject({
-      command: "corepack pnpm install",
+      command: "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
       exitCode: 0,
       frozen: false,
     });

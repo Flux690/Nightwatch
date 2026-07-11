@@ -17,8 +17,12 @@ export const INSTALL_RULES: readonly InstallRule[] = [
     toolchain: "pnpm",
     runPrefix: "corepack pnpm",
     lockfile: "pnpm-lock.yaml",
-    frozen: "corepack pnpm install --frozen-lockfile",
-    install: "corepack pnpm install",
+    // pnpm 11 hard-fails on unapproved dependency build scripts (ERR_PNPM_IGNORED_BUILDS),
+    // and skipped scripts leave native deps broken with no network to recover. The sandbox
+    // is the isolation boundary, so run them all - npm and yarn already do.
+    frozen:
+      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
+    install: "corepack pnpm install --config.dangerouslyAllowAllBuilds=true",
   },
   {
     toolchain: "yarn-berry",
