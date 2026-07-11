@@ -4,9 +4,9 @@
 export type LLMProviderName = "anthropic" | "openai";
 export type ThinkingMode = "adaptive" | "off";
 export type ReasoningEffort = "low" | "medium" | "high";
-// "none" disconnects the sandbox from every network after the agent-free dependency
-// install, so a prompt-injected agent has no exfiltration path; "open" leaves the default bridge attached for the whole session.
-export type SandboxNetwork = "none" | "open";
+// "allowlist" routes all sandbox egress through an enforcing proxy that only
+// reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
+export type SandboxNetwork = "allowlist" | "open" | "none";
 
 export interface AgentConfig {
   provider: LLMProviderName;
@@ -31,6 +31,8 @@ export interface AgentConfig {
   // Off by default, gVisor is used automatically wherever present.
   sandboxRequireGvisor: boolean;
   sandboxNetwork: SandboxNetwork;
+  // Domains the allowlist proxy may reach, one hostname per entry.
+  sandboxAllowlistHosts: string[];
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;

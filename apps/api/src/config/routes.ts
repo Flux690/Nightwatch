@@ -22,7 +22,18 @@ const ConfigPatchSchema = z.object({
   sandboxCpus: z.number().int().positive().optional(),
   sandboxMemoryMb: z.number().int().positive().optional(),
   sandboxRequireGvisor: z.boolean().optional(),
-  sandboxNetwork: z.enum(["none", "open"]).optional(),
+  sandboxNetwork: z.enum(["allowlist", "open", "none"]).optional(),
+  sandboxAllowlistHosts: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i,
+          "hostnames only, e.g. registry.npmjs.org",
+        ),
+    )
+    .min(1)
+    .optional(),
   baseUrl: z.string().url().nullable().optional(),
   promptCaching: z.boolean().optional(),
   reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),

@@ -30,6 +30,11 @@ export const DEFAULT_SANDBOX_MEMORY_MB = 4096;
 // controls whether its absence is a hard failure. Off by default.
 export const DEFAULT_SANDBOX_REQUIRE_GVISOR = false;
 
-// Networkless agent by default: dependencies install in an agent-free setup
-// phase, then the sandbox is detached from every network before the agent runs.
-export const DEFAULT_SANDBOX_NETWORK = "none" as const;
+// Allowlist by default: sandbox egress is forced through the shared proxy,
+// which reaches only these hosts - the agent installs dependencies itself.
+export const DEFAULT_SANDBOX_NETWORK = "allowlist" as const;
+export const DEFAULT_SANDBOX_ALLOWLIST_HOSTS: readonly string[] = [
+  "registry.npmjs.org",
+  "registry.yarnpkg.com",
+  "repo.yarnpkg.com",
+];

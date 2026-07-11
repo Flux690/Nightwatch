@@ -33,6 +33,7 @@ const CONFIG: AgentConfig = {
   sandboxMemoryMb: 4096,
   sandboxRequireGvisor: false,
   sandboxNetwork: "none",
+  sandboxAllowlistHosts: ["registry.npmjs.org"],
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,
@@ -512,9 +513,7 @@ describe("SettingsModal", () => {
 
       const select = await screen.findByLabelText(/agent network/i);
       expect(select).toHaveValue("none");
-      expect(
-        screen.getByText(/detached from every network/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/no network at all/i)).toBeInTheDocument();
 
       await user.selectOptions(select, "open");
       expect(
@@ -533,6 +532,42 @@ describe("SettingsModal", () => {
           sandboxNetwork?: string;
         };
         expect(body.sandboxNetwork).toBe("open");
+      });
+    });
+
+    it("allowlist mode shows the editable hosts textarea and saves trimmed lines", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /sandbox/i);
+
+      const select = await screen.findByLabelText(/agent network/i);
+      await user.selectOptions(select, "allowlist");
+      expect(
+        screen.getByText(/enforcing proxy that reaches only the hosts below/i),
+      ).toBeInTheDocument();
+
+      const textarea = screen.getByLabelText(/allowed hosts/i);
+      await user.clear(textarea);
+      await user.type(textarea, "registry.npmjs.org{enter}internal.dev{enter}");
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          (call) =>
+            call[0] === "/api/config" &&
+            (call[1] as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
+          sandboxNetwork?: string;
+          sandboxAllowlistHosts?: string[];
+        };
+        expect(body.sandboxNetwork).toBe("allowlist");
+        // The trailing blank line from typing is dropped on save.
+        expect(body.sandboxAllowlistHosts).toEqual([
+          "registry.npmjs.org",
+          "internal.dev",
+        ]);
       });
     });
   });

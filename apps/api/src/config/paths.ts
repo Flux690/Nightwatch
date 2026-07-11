@@ -29,3 +29,7 @@ export function secretKeyPath(): string {
 export function workspacesDir(): string {
   return join(nightwatchDir(), "workspaces");
 }
+
+export function proxyDir(): string {
+  return join(nightwatchDir(), "proxy");
+}

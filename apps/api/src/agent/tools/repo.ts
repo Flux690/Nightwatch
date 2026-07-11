@@ -1,5 +1,5 @@
 import { decrypt } from "../../config/crypto.js";
-import { workspacesDir } from "../../config/paths.js";
+import { proxyDir, workspacesDir } from "../../config/paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../db/github-integration.js";
 import { getSession } from "../../db/sessions.js";
@@ -31,8 +31,10 @@ import { readRepoFile } from "../../sandbox/tools/read-file.js";
 import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
-import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
-import type { VerificationResult } from "../../sandbox/verification.js";
+import {
+  openPullRequest,
+  type VerificationOutcome,
+} from "../../sandbox/tools/open-pull-request.js";
 import type { ServiceIdentity } from "@nightwatch/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
@@ -85,6 +87,8 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     workspacesDir: workspacesDir(),
     requireGvisor: config.sandboxRequireGvisor,
     network: config.sandboxNetwork,
+    allowlistHosts: config.sandboxAllowlistHosts,
+    proxyConfigDir: proxyDir(),
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {
       create: (req) =>
@@ -130,44 +134,9 @@ function correctiveMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Sessions whose failed-install note has been delivered once; repo_exec
-// repeats it regardless, because that is where missing dependencies bite.
-const setupNotified = new Set<string>();
-
-function setupNote(ws: Workspace): string | null {
-  if (ws.setup === null || ws.setup.exitCode === 0) return null;
-  return (
-    `NOTE: dependency install failed during sandbox setup (\`${ws.setup.command}\` exited ${ws.setup.exitCode}). ` +
-    `You cannot install dependencies (the sandbox has no network), so tests will not run - proceed with read/edit work and state this in any pull request. Install output tail:\n${ws.setup.outputTail}`
-  );
-}
-
-function withSetupNote(
-  ws: Workspace,
-  result: unknown,
-  repeat: boolean,
-): unknown {
-  const note = setupNote(ws);
-  if (note === null) return result;
-  const firstTime = !setupNotified.has(ws.sessionId);
-  if (firstTime) setupNotified.add(ws.sessionId);
-  if (!firstTime && !repeat) return result;
-  if (typeof result === "string") return `${note}\n\n${result}`;
-  if (
-    typeof result === "object" &&
-    result !== null &&
-    typeof (result as { output?: unknown }).output === "string"
-  ) {
-    const r = result as { output: string };
-    return { ...r, output: `${note}\n\n${r.output}` };
-  }
-  return result;
-}
-
 async function runRepoTool(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<unknown>,
-  opts?: { repeatSetupNote?: boolean },
 ): Promise<ToolExecuteResult> {
   const options = workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
@@ -179,9 +148,7 @@ async function runRepoTool(
   }
   try {
     return {
-      content: await withWorkspace(ctx.sessionId, options, async (ws) =>
-        withSetupNote(ws, await fn(ws), opts?.repeatSetupNote === true),
-      ),
+      content: await withWorkspace(ctx.sessionId, options, fn),
     };
   } catch (err) {
     return { content: correctiveMessage(err), is_error: true };
@@ -214,7 +181,7 @@ function composePrBody(
   sessionId: string,
   branch: string,
   modelBody: string,
-  verification: VerificationResult,
+  verification: VerificationOutcome,
   filesChanged: string[],
 ): string {
   const session = getSession(sessionId);
@@ -242,11 +209,11 @@ function composePrBody(
   if (verification.ran) {
     const output = (verification.output ?? "").slice(-2000).trim();
     sections.push(
-      `## Verification\n\n\`${verification.command ?? ""}\` ${verification.passed === true ? "passed" : "failed"}\n\n\`\`\`\n${output}\n\`\`\``,
+      `## Verification\n\n\`${verification.command ?? ""}\` passed (exit 0), run fresh in the sandbox just before this PR was pushed.\n\n\`\`\`\n${output}\n\`\`\``,
     );
   } else {
     sections.push(
-      `## Verification\n\nNo automated verification was run: ${verification.reason ?? "no test, typecheck or build script was detected"}.`,
+      `## Verification\n\nNo automated verification was run: ${verification.reason ?? "unknown"}.`,
     );
   }
 
@@ -381,7 +348,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "repo_exec",
       description:
-        "Run a shell command inside the repository sandbox at the repo root (or cwd): build, test, grep, read-only git. This is the isolated checkout, never a production host. The sandbox has no network access; dependencies were installed during setup, so do not attempt installs - if the fix needs a new dependency, state that in your response and the pull request body for a human to add. Use structured repo tools for edits; exec is for observing and verifying. Output is capped head+tail.",
+        "Run a bash command inside the repository sandbox at the repo root (or cwd): install, build, test, grep, read-only git. This is the isolated checkout, never a production host. Network egress is restricted to package registries through a preconfigured proxy - install dependencies yourself when needed (e.g. pnpm install); a request to a non-allowlisted host fails, so if a legitimately needed host is blocked, name it in your summary and the pull request body. Use structured repo tools for edits; exec is for installing, observing and verifying. Output is capped head+tail.",
       input_schema: {
         type: "object",
         properties: {
@@ -406,15 +373,12 @@ export const REPO_TOOLS: Tool[] = [
         return Promise.resolve(badInput("command (string) is required."));
       }
       const cwd = requireString(input, "cwd");
-      return runRepoTool(
-        ctx,
-        (ws) =>
-          execInRepo(
-            ws,
-            { command, ...(cwd !== null && { cwd }) },
-            ctx.toolTimeoutMs,
-          ),
-        { repeatSetupNote: true },
+      return runRepoTool(ctx, (ws) =>
+        execInRepo(
+          ws,
+          { command, ...(cwd !== null && { cwd }) },
+          ctx.toolTimeoutMs,
+        ),
       );
     },
   },
@@ -422,7 +386,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "open_pull_request",
       description:
-        "Propose this session's repository changes as a draft pull request. Verification (test/typecheck/build) reruns fresh first - on failure nothing is pushed and you get the output. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context, verification result and a session reference are appended to the body automatically.",
+        "Propose this session's repository changes as a draft pull request. Your verificationCommand runs fresh in the sandbox first - non-zero exit means nothing is pushed and you get the output back. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context, the verification result and a session reference are appended to the body automatically.",
       input_schema: {
         type: "object",
         properties: {
@@ -435,8 +399,13 @@ export const REPO_TOOLS: Tool[] = [
             description:
               "Explanation of the root cause and why this change fixes it.",
           },
+          verificationCommand: {
+            type: "string",
+            description:
+              'The repository\'s own check command (e.g. "pnpm test"), which must exit 0 for the PR to open. A single command or && chain; `||`, `;` and background `&` are rejected.',
+          },
         },
-        required: ["title"],
+        required: ["title", "verificationCommand"],
       },
     },
     // Deliberately read: the PR is a proposal, the merge is the GitHub-enforced human gate, and
@@ -450,10 +419,27 @@ export const REPO_TOOLS: Tool[] = [
         return Promise.resolve(badInput("title (string) is required."));
       }
       const modelBody = requireString(input, "body") ?? "";
+      const verificationCommand = requireString(input, "verificationCommand");
+      // `||`, `;` and background `&` can mask a failing exit code; pipes stay
+      // honest because the sandbox shell runs with pipefail.
+      if (
+        verificationCommand !== null &&
+        /\|\||;|(?<!&)&(?!&)/.test(verificationCommand)
+      ) {
+        return Promise.resolve(
+          badInput(
+            "verificationCommand must be a single command or && chain - `||`, `;` and background `&` are not allowed. Pass the repository's real check command.",
+          ),
+        );
+      }
       return runRepoTool(ctx, (ws) =>
         openPullRequest(
           ws,
-          { title, verificationTimeoutMs: ctx.toolTimeoutMs },
+          {
+            title,
+            verificationCommand,
+            verificationTimeoutMs: ctx.toolTimeoutMs,
+          },
           {
             beginAudit: () =>
               insertExecutingRemediationAction({

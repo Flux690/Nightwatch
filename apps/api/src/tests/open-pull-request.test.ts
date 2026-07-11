@@ -21,22 +21,15 @@ import { teardownAll } from "../sandbox/workspace.js";
 import type { ToolExecuteResult } from "../agent/tools/types.js";
 
 const SESSION_WITH_TESTS = "ccccdddd-0000-4000-8000-000000000001";
-const SESSION_NO_SCRIPTS = "ccccdddd-0000-4000-8000-000000000002";
-const SESSION_INSTALL_FAIL = "ccccdddd-0000-4000-8000-000000000003";
+const SESSION_NO_COMMAND = "ccccdddd-0000-4000-8000-000000000002";
+const SESSION_NONE_MODE = "ccccdddd-0000-4000-8000-000000000003";
 
-const FIXTURES: Record<string, Record<string, string>> = {
-  scripts: {
-    "package.json":
-      '{ "name": "fixture", "scripts": { "test": "vitest run" } }\n',
-    "pnpm-lock.yaml": "lockfileVersion: 9\n",
-    "src/app.ts": "export const a = 1;\n",
-  },
-  bare: {
-    "package.json": '{ "name": "fixture" }\n',
-    "src/app.ts": "export const a = 1;\n",
-  },
+const FIXTURE: Record<string, string> = {
+  "package.json":
+    '{ "name": "fixture", "scripts": { "test": "vitest run" } }\n',
+  "pnpm-lock.yaml": "lockfileVersion: 9\n",
+  "src/app.ts": "export const a = 1;\n",
 };
-let currentFixture = "scripts";
 
 const gitState = {
   dirty: true,
@@ -61,9 +54,7 @@ function installGitMock(): void {
         // A real clone always yields .git/info (the local-exclude append
         // depends on it), so the double must too.
         mkdirSync(join(dir, ".git", "info"), { recursive: true });
-        for (const [rel, content] of Object.entries(
-          FIXTURES[currentFixture]!,
-        )) {
+        for (const [rel, content] of Object.entries(FIXTURE)) {
           mkdirSync(join(dir, rel, ".."), { recursive: true });
           writeFileSync(join(dir, rel), content);
         }
@@ -90,9 +81,7 @@ function installGitMock(): void {
   });
 }
 
-// Install and verification share the exec boundary; separate exit codes keep
-// one from poisoning the other (a failed install is its own scenario).
-const dockerState = { execExit: 0, installExit: 0, execCmds: [] as string[][] };
+const dockerState = { execExit: 0, execCmds: [] as string[][] };
 
 function installDockerMock(): void {
   // Function expression: getDocker() constructs with `new`.
@@ -106,10 +95,7 @@ function installDockerMock(): void {
         remove: () => Promise.resolve(),
         exec: (opts: { Cmd: string[] }) => {
           dockerState.execCmds.push(opts.Cmd);
-          const command = opts.Cmd[4] ?? "";
-          const exitCode = command.includes("install")
-            ? dockerState.installExit
-            : dockerState.execExit;
+          const exitCode = dockerState.execExit;
           const stream = new PassThrough();
           process.nextTick(() => {
             stream.write(Buffer.from("verification output line\n"));
@@ -247,7 +233,7 @@ describe("open_pull_request", () => {
   it("verification failure returns the output, pushes nothing, writes no audit row", async () => {
     dockerState.execExit = 1;
     const result = await runOpr(
-      { title: "Fix the leak" },
+      { title: "Fix the leak", verificationCommand: "pnpm test" },
       SESSION_WITH_TESTS,
       "opr-fail",
     );
@@ -262,10 +248,14 @@ describe("open_pull_request", () => {
     expect(auditRow(SESSION_WITH_TESTS, "opr-fail")).toBeUndefined();
   });
 
-  it("verifies with the lockfile's package manager, pushes, creates a draft PR, and settles the audit row", async () => {
+  it("runs the agent's verificationCommand fresh, pushes, creates a draft PR, and settles the audit row", async () => {
     gitState.dirty = true;
     const result = await runOpr(
-      { title: "Fix payments OOM", body: "The cache grew unbounded." },
+      {
+        title: "Fix payments OOM",
+        body: "The cache grew unbounded.",
+        verificationCommand: "pnpm test",
+      },
       SESSION_WITH_TESTS,
       "opr-create",
     );
@@ -283,11 +273,10 @@ describe("open_pull_request", () => {
     expect(outcome.draft).toBe(true);
     expect(outcome.message).toContain("draft PR #42");
 
-    // Verification ran via the pnpm lockfile's package manager, in-container
-    // (corepack-prefixed and pinned: the fixture repo declares no packageManager).
-    expect(dockerState.execCmds.at(-1)).toContain(
-      "corepack pnpm@10.34.5 run test",
-    );
+    // The agent's own command ran in-container, under bash with pipefail.
+    const verifyCmd = dockerState.execCmds.at(-1)!;
+    expect(verifyCmd.at(-1)).toBe("pnpm test");
+    expect(verifyCmd.slice(2, 6)).toEqual(["bash", "-o", "pipefail", "-lc"]);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
 
     const payload = prState.createPayloads.at(-1)!;
@@ -298,7 +287,8 @@ describe("open_pull_request", () => {
     expect(body).toContain("## Incident");
     expect(body).toContain("## Files changed");
     expect(body).toContain("- src/app.ts");
-    expect(body).toContain("`corepack pnpm@10.34.5 run test` passed");
+    expect(body).toContain("`pnpm test` passed (exit 0)");
+    expect(body).toContain("verification output line");
     expect(body).toContain(SESSION_WITH_TESTS);
 
     const audit = auditRow(SESSION_WITH_TESTS, "opr-create");
@@ -318,7 +308,7 @@ describe("open_pull_request", () => {
     const before = prState.createPayloads.length;
 
     const result = await runOpr(
-      { title: "Fix payments OOM (v2)" },
+      { title: "Fix payments OOM (v2)", verificationCommand: "pnpm test" },
       SESSION_WITH_TESTS,
       "opr-update",
     );
@@ -338,7 +328,7 @@ describe("open_pull_request", () => {
     prState.rejectDraft = true;
     gitState.dirty = true;
     const result = await runOpr(
-      { title: "Fix it" },
+      { title: "Fix it", verificationCommand: "pnpm test" },
       SESSION_WITH_TESTS,
       "opr-fallback",
     );
@@ -363,7 +353,7 @@ describe("open_pull_request", () => {
     });
     const before = prState.createPayloads.length;
     const result = await runOpr(
-      { title: "Fix it again" },
+      { title: "Fix it again", verificationCommand: "pnpm test" },
       SESSION_WITH_TESTS,
       "opr-crash",
     );
@@ -372,41 +362,65 @@ describe("open_pull_request", () => {
     expect(prState.createPayloads).toHaveLength(before);
   });
 
-  it("states the absence of verification honestly when no script is detectable", async () => {
-    currentFixture = "bare";
+  it("a missing verificationCommand is refused - nothing pushed", async () => {
     gitState.dirty = true;
+    const before = prState.createPayloads.length;
     const result = await runOpr(
       { title: "Docs-only change" },
-      SESSION_NO_SCRIPTS,
-      "opr-bare",
+      SESSION_NO_COMMAND,
+      "opr-no-command",
     );
 
-    expect(result.is_error).toBeUndefined();
-    const body = String(prState.createPayloads.at(-1)?.["body"]);
-    expect(body).toContain("No automated verification was run");
+    expect(result.is_error).toBe(true);
+    expect(String(result.content)).toContain("verificationCommand is required");
+    expect(prState.createPayloads).toHaveLength(before);
   });
 
-  it("a failed setup install flows into honest absence, never a blocked PR", async () => {
-    currentFixture = "scripts";
-    dockerState.installExit = 1;
+  it("laundering operators in verificationCommand are rejected outright", async () => {
+    const before = prState.createPayloads.length;
+    for (const command of [
+      "pnpm test || echo tests_ok",
+      "true; pnpm test",
+      "pnpm test &",
+    ]) {
+      const result = await runOpr(
+        { title: "Sneaky", verificationCommand: command },
+        SESSION_WITH_TESTS,
+        `opr-lint-${before}-${command.length}`,
+      );
+      expect(result.is_error).toBe(true);
+      expect(String(result.content)).toContain("not allowed");
+    }
+    // An && chain is a legitimate compound check and passes the lint.
+    gitState.dirty = true;
+    const ok = await runOpr(
+      {
+        title: "Chained checks",
+        verificationCommand: "pnpm build && pnpm test",
+      },
+      SESSION_WITH_TESTS,
+      "opr-lint-chain",
+    );
+    expect(ok.is_error).toBeUndefined();
+    expect(prState.createPayloads.length).toBeGreaterThan(before);
+  });
+
+  it("none mode: the PR opens with the honest no-verification note", async () => {
+    updateConfig({ sandboxNetwork: "none" });
     gitState.dirty = true;
     const execsBefore = dockerState.execCmds.length;
     const result = await runOpr(
-      { title: "Config-only fix" },
-      SESSION_INSTALL_FAIL,
-      "opr-install-fail",
+      { title: "Read-only session fix" },
+      SESSION_NONE_MODE,
+      "opr-none-mode",
     );
-    dockerState.installExit = 0;
+    updateConfig({ sandboxNetwork: "open" });
 
     expect(result.is_error).toBeUndefined();
     const body = String(prState.createPayloads.at(-1)?.["body"]);
     expect(body).toContain("No automated verification was run");
-    expect(body).toContain("dependency install failed during sandbox setup");
-    // No verification command ran: the short-circuit is why the PR opened.
-    expect(
-      dockerState.execCmds
-        .slice(execsBefore)
-        .some((c) => c.includes("corepack pnpm@10.34.5 run test")),
-    ).toBe(false);
+    expect(body).toContain("networkless");
+    // Nothing executed in the sandbox: the honest note is the whole story.
+    expect(dockerState.execCmds.length).toBe(execsBefore);
   });
 });

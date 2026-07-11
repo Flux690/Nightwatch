@@ -37,6 +37,7 @@ const BASE_CONFIG: AgentConfig = {
   sandboxMemoryMb: 4096,
   sandboxRequireGvisor: false,
   sandboxNetwork: "none",
+  sandboxAllowlistHosts: ["registry.npmjs.org"],
 };
 
 const READ_TOOL = {

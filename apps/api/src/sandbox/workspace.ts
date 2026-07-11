@@ -4,9 +4,9 @@ import {
   apiRunsAsRoot,
   createSandboxContainer,
   destroyContainer,
-  disconnectAllNetworks,
   execInContainer,
   type SandboxLimits,
+  type SandboxNetworkAttachment,
 } from "./docker.js";
 import {
   cloneAndCheckout,
@@ -16,7 +16,7 @@ import {
   push,
   type CommitAuthor,
 } from "./git.js";
-import { INSTALL_TIMEOUT_MS, runInstall, type SetupResult } from "./install.js";
+import { ensureProxy, proxyEnv } from "./proxy.js";
 import { capOutput } from "./output.js";
 
 // Structural subset of pino so the host injects its logger instead of the
@@ -45,9 +45,12 @@ export interface WorkspaceOptions {
   workspacesDir: string;
   // Fail-loud opt-in: refuse to create a sandbox when the host has no gVisor.
   requireGvisor: boolean;
-  // "none" detaches every network after the agent-free dependency install, so
-  // the agent phase has no egress path; "open" keeps the default bridge.
-  network: "none" | "open";
+  // "allowlist" routes egress through the shared enforcing proxy; "none" gives
+  // no network from birth; "open" keeps the default bridge.
+  network: "allowlist" | "open" | "none";
+  // Hosts the proxy may reach, and where its generated config lives.
+  allowlistHosts: string[];
+  proxyConfigDir: string;
   commitAuthor: CommitAuthor;
   pullRequests: {
     create(req: {
@@ -77,9 +80,6 @@ export interface Workspace {
   // Backs the read-before-edit guard; per session by construction because the
   // workspace is per session.
   readonly readPaths: Set<string>;
-  // Outcome of the setup-phase install (null: nothing to install). A non-zero
-  // exitCode is survivable but must surface everywhere it's consumed.
-  readonly setup: SetupResult | null;
   readonly options: WorkspaceOptions;
   exec(
     command: string,
@@ -106,6 +106,23 @@ let warnedRootApi = false;
 
 function homeDirFor(dir: string): string {
   return `${dir}.home`;
+}
+
+// In allowlist mode the shared proxy (with current config) must exist before
+// the container attaches to its network; other modes need no preparation.
+async function networkAttachment(
+  options: WorkspaceOptions,
+): Promise<SandboxNetworkAttachment> {
+  if (options.network !== "allowlist") return { mode: options.network };
+  const proxy = await ensureProxy({
+    hosts: options.allowlistHosts,
+    configDir: options.proxyConfigDir,
+  });
+  return {
+    mode: "allowlist",
+    networkName: proxy.networkName,
+    proxyEnv: proxyEnv(proxy.proxyUrl),
+  };
 }
 
 async function createEntry(
@@ -137,56 +154,21 @@ async function createEntry(
       "API runs as root, so sandbox containers run as root too; run the API as a non-root user for full sandbox hardening",
     );
   }
+  const network = await networkAttachment(options);
   const containerId = await createSandboxContainer({
     sessionId,
     workspaceDir: dir,
     homeDir,
     limits: options.limits,
     requireGvisor: options.requireGvisor,
+    network,
   });
-
-  // Install runs while networked, then every network is detached before the
-  // agent can run any command - a failure here must not leak a networked container.
-  let setup: SetupResult | null = null;
-  try {
-    setup = await runInstall(dir, async (command) => {
-      const result = await execInContainer(containerId, command, {
-        timeoutMs: INSTALL_TIMEOUT_MS,
-      });
-      return { exitCode: result.exitCode, output: result.output };
-    });
-    if (setup !== null && setup.exitCode !== 0) {
-      options.log?.warn(
-        {
-          sessionId,
-          command: setup.command,
-          exitCode: setup.exitCode,
-          tail: setup.outputTail,
-        },
-        "sandbox dependency install failed; session continues without installed dependencies",
-      );
-    } else if (setup !== null && !setup.frozen) {
-      options.log?.warn(
-        { sessionId, command: setup.command },
-        "sandbox dependencies installed without a frozen lockfile (non-deterministic resolution)",
-      );
-    }
-    if (options.network === "none") {
-      await disconnectAllNetworks(containerId);
-    }
-  } catch (err) {
-    await destroyContainer(containerId).catch(() => undefined);
-    await rm(dir, { recursive: true, force: true });
-    await rm(homeDir, { recursive: true, force: true });
-    throw err;
-  }
 
   const workspace: Workspace = {
     sessionId,
     dir,
     branch: options.branch,
     readPaths: new Set<string>(),
-    setup,
     options,
     async exec(command, opts) {
       const result = await execInContainer(containerId, command, opts);

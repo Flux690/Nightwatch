@@ -119,19 +119,26 @@ const dockerState = {
   createArgs: [] as Array<Record<string, unknown>>,
   removed: [] as string[],
   listResult: [] as Array<{ Id: string }>,
-  // exec:<command> and disconnect:<network> entries in arrival order, so tests
-  // can prove the install ran before the network came off.
+  // exec:<command> entries in arrival order.
   events: [] as string[],
+  execCmds: [] as string[][],
   execHandler: ((_command: string) => ({ exitCode: 0, output: "ok\n" })) as (
     command: string,
   ) => { exitCode: number; output: string },
-  // containerId -> attached networks; every container starts on the bridge.
-  networks: {} as Record<string, Record<string, unknown>>,
-  disconnectNoop: false,
+  // Proxy world: image builds, created networks, and the shared container.
+  builtImages: [] as string[],
+  networksCreated: [] as Array<Record<string, unknown>>,
+  sandboxNetExists: false,
+  proxyInfo: null as null | {
+    running: boolean;
+    labels: Record<string, string>;
+  },
   pingFails: false,
   gvisor: false,
   nextId: 1,
 };
+
+const PROXY_NAME = "nightwatch-sandbox-proxy";
 
 function execEvents(): string[] {
   return dockerState.events
@@ -170,39 +177,90 @@ function dockerFake(): Record<string, unknown> {
       Promise.resolve({
         Runtimes: dockerState.gvisor ? { runc: {}, runsc: {} } : { runc: {} },
       }),
-    getImage: () => ({ inspect: () => Promise.resolve({}) }),
+    getImage: (name: string) => ({
+      inspect: () =>
+        name === "nightwatch-tinyproxy" &&
+        !dockerState.builtImages.includes(name)
+          ? Promise.reject(new Error("no such image"))
+          : Promise.resolve({}),
+    }),
+    buildImage: (_ctx: unknown, opts: { t: string }) => {
+      dockerState.builtImages.push(opts.t);
+      return Promise.resolve({});
+    },
+    modem: {
+      followProgress: (
+        _stream: unknown,
+        cb: (err: Error | null, events: unknown[]) => void,
+      ) => cb(null, []),
+    },
     createContainer: (opts: Record<string, unknown>) => {
       dockerState.createArgs.push(opts);
+      if (opts["name"] === PROXY_NAME) {
+        const labels = opts["Labels"] as Record<string, string>;
+        dockerState.proxyInfo = { running: false, labels };
+        return Promise.resolve({
+          id: PROXY_NAME,
+          start: () => {
+            if (dockerState.proxyInfo) dockerState.proxyInfo.running = true;
+            return Promise.resolve();
+          },
+        });
+      }
       const id = `container-${dockerState.nextId++}`;
-      dockerState.networks[id] = { bridge: {} };
       return Promise.resolve({ id, start: () => Promise.resolve() });
     },
-    getContainer: (id: string) => ({
-      remove: () => {
-        dockerState.removed.push(id);
-        return Promise.resolve();
-      },
-      inspect: () =>
-        Promise.resolve({
-          NetworkSettings: { Networks: { ...dockerState.networks[id] } },
-        }),
-      exec: (opts: { Cmd: string[] }) => {
-        const command = opts.Cmd[4] ?? "";
-        dockerState.events.push(`exec:${command}`);
-        const result = dockerState.execHandler(command);
-        return Promise.resolve({
-          start: () => Promise.resolve(fakeStream(result.output)),
-          inspect: () => Promise.resolve({ ExitCode: result.exitCode }),
-        });
-      },
-    }),
+    getContainer: (id: string) => {
+      if (id === PROXY_NAME) {
+        return {
+          inspect: () =>
+            dockerState.proxyInfo === null
+              ? Promise.reject(new Error("no such container"))
+              : Promise.resolve({
+                  State: { Running: dockerState.proxyInfo.running },
+                  Config: { Labels: dockerState.proxyInfo.labels },
+                }),
+          remove: () => {
+            dockerState.proxyInfo = null;
+            dockerState.removed.push(id);
+            return Promise.resolve();
+          },
+        };
+      }
+      return {
+        remove: () => {
+          dockerState.removed.push(id);
+          return Promise.resolve();
+        },
+        exec: (opts: { Cmd: string[] }) => {
+          const command = String(opts.Cmd[opts.Cmd.length - 1] ?? "");
+          dockerState.events.push(`exec:${command}`);
+          dockerState.execCmds.push(opts.Cmd);
+          const result = dockerState.execHandler(command);
+          return Promise.resolve({
+            start: () => Promise.resolve(fakeStream(result.output)),
+            inspect: () => Promise.resolve({ ExitCode: result.exitCode }),
+          });
+        },
+      };
+    },
     listContainers: () => Promise.resolve(dockerState.listResult),
+    listNetworks: () =>
+      Promise.resolve(
+        dockerState.sandboxNetExists
+          ? [{ Name: "nightwatch-sandbox-net" }]
+          : [],
+      ),
+    createNetwork: (opts: Record<string, unknown>) => {
+      dockerState.networksCreated.push(opts);
+      dockerState.sandboxNetExists = true;
+      return Promise.resolve({});
+    },
     getNetwork: (name: string) => ({
-      disconnect: (opts: { Container: string }) => {
-        dockerState.events.push(`disconnect:${name}`);
-        if (!dockerState.disconnectNoop) {
-          delete dockerState.networks[opts.Container]?.[name];
-        }
+      inspect: () =>
+        Promise.resolve({ IPAM: { Config: [{ Subnet: "172.28.0.0/16" }] } }),
+      connect: (opts: { Container: string }) => {
+        dockerState.events.push(`connect:${name}:${opts.Container}`);
         return Promise.resolve();
       },
     }),
@@ -222,6 +280,8 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     workspacesDir,
     requireGvisor: false,
     network: "none",
+    allowlistHosts: ["registry.npmjs.org"],
+    proxyConfigDir: join(workspacesDir, "proxy-config"),
     commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
@@ -261,9 +321,12 @@ afterEach(async () => {
   dockerState.removed = [];
   dockerState.listResult = [];
   dockerState.events = [];
+  dockerState.execCmds = [];
   dockerState.execHandler = () => ({ exitCode: 0, output: "ok\n" });
-  dockerState.networks = {};
-  dockerState.disconnectNoop = false;
+  dockerState.builtImages = [];
+  dockerState.networksCreated = [];
+  dockerState.sandboxNetExists = false;
+  dockerState.proxyInfo = null;
   dockerState.pingFails = false;
   dockerState.gvisor = false;
   resetIsolationCache();
@@ -460,9 +523,7 @@ describe("workspace lifecycle", () => {
   });
 });
 
-describe("networkless two-phase setup", () => {
-  const PKG = '{ "name": "fixture" }\n';
-
+describe("sandbox network modes", () => {
   async function createWorkspace(
     overrides?: Partial<WorkspaceOptions>,
   ): Promise<Workspace> {
@@ -475,218 +536,104 @@ describe("networkless two-phase setup", () => {
     return captured!;
   }
 
-  // One row per detection outcome: pin/lockfile evidence picks the frozen
-  // command. Keep in lockstep with sandbox/install.ts.
-  it.each([
-    [
-      "pnpm-lock.yaml",
-      "lockfileVersion: '9.0'\n",
-      PKG,
-      "corepack pnpm@10.34.5 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-    ],
-    [
-      "pnpm-lock.yaml",
-      "lockfileVersion: '6.0'\n",
-      PKG,
-      "corepack pnpm@8.15.9 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-    ],
-    [
-      "pnpm-lock.yaml",
-      "lockfileVersion: '9.0'\n",
-      '{ "name": "fixture", "packageManager": "pnpm@11.0.9" }\n',
-      "corepack pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-    ],
-    ["yarn.lock", "x\n", PKG, "yarn install --frozen-lockfile"],
-    [
-      "yarn.lock",
-      "x\n",
-      '{ "name": "fixture", "packageManager": "yarn@4.5.0" }\n',
-      "corepack yarn install --immutable",
-    ],
-    ["package-lock.json", "x\n", PKG, "npm ci"],
-  ])(
-    "installs from %s (%s) with the frozen command, then detaches the network",
-    async (lockfile, lockContent, pkg, frozen) => {
-      gitState.cloneFiles = { "package.json": pkg, [lockfile]: lockContent };
-      const ws = await createWorkspace();
+  function sandboxCreateArgs(): Record<string, unknown> {
+    const args = dockerState.createArgs.filter(
+      (a) => a["name"] !== PROXY_NAME,
+    );
+    return args[args.length - 1]!;
+  }
 
-      expect(execEvents()).toEqual([frozen]);
-      expect(ws.setup).toMatchObject({ command: frozen, exitCode: 0 });
-      expect(ws.setup?.frozen).toBe(true);
-      // The install ran while the network was up; detachment came after.
-      const installAt = dockerState.events.indexOf(`exec:${frozen}`);
-      const disconnectAt = dockerState.events.indexOf("disconnect:bridge");
-      expect(disconnectAt).toBeGreaterThan(installAt);
-      expect(
-        dockerState.networks[`container-${dockerState.nextId - 1}`],
-      ).toEqual({});
-    },
-  );
+  function hostConfig(args: Record<string, unknown>): Record<string, unknown> {
+    return args["HostConfig"] as Record<string, unknown>;
+  }
 
-  it("falls back to the relaxed install when the frozen rung fails, and says so", async () => {
-    gitState.cloneFiles = { "package.json": PKG, "pnpm-lock.yaml": "x\n" };
-    dockerState.execHandler = (command) =>
-      command.includes("--frozen-lockfile")
-        ? { exitCode: 1, output: "ERR_PNPM_OUTDATED_LOCKFILE\n" }
-        : { exitCode: 0, output: "done\n" };
+  it("allowlist: sandbox lives on the internal proxy network with proxy env preset", async () => {
+    await createWorkspace({ network: "allowlist" });
 
-    const ws = await createWorkspace();
-    // No pin and no readable lockfileVersion: the default pnpm pin applies.
-    expect(execEvents()).toEqual([
-      "corepack pnpm@10.34.5 install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true",
-      "corepack pnpm@10.34.5 install --config.dangerouslyAllowAllBuilds=true",
-    ]);
-    expect(ws.setup).toMatchObject({
-      command:
-        "corepack pnpm@10.34.5 install --config.dangerouslyAllowAllBuilds=true",
-      exitCode: 0,
-      frozen: false,
-    });
-  });
-
-  it("a repo with no lockfile gets the best-effort install", async () => {
-    gitState.cloneFiles = { "package.json": PKG };
-    const ws = await createWorkspace();
-    expect(execEvents()).toEqual(["npm install"]);
-    expect(ws.setup?.frozen).toBe(false);
-  });
-
-  it("a repo with no package.json installs nothing and still detaches", async () => {
-    const ws = await createWorkspace();
-    expect(execEvents()).toEqual([]);
-    expect(ws.setup).toBeNull();
-    expect(dockerState.events).toContain("disconnect:bridge");
-  });
-
-  it("a failed install is survivable: recorded, warned, workspace still usable", async () => {
-    const warn = vi.fn();
-    gitState.cloneFiles = { "package.json": PKG, "package-lock.json": "x\n" };
-    dockerState.execHandler = () => ({ exitCode: 1, output: "EAI_AGAIN\n" });
-
-    const ws = await createWorkspace({ log: { info: vi.fn(), warn } });
-    // Both rungs were tried; the failure is on the workspace for every
-    // consumer (exec note, verification honest-absence).
-    expect(execEvents()).toEqual(["npm ci", "npm install"]);
-    expect(ws.setup).toMatchObject({ command: "npm install", exitCode: 1 });
-    expect(ws.setup?.outputTail).toContain("EAI_AGAIN");
+    // The internal network is the enforcement: no route out except the proxy.
     expect(
-      warn.mock.calls.some((args) =>
-        String(args[1]).includes("dependency install failed"),
+      dockerState.networksCreated.some(
+        (n) => n["Name"] === "nightwatch-sandbox-net" && n["Internal"] === true,
       ),
     ).toBe(true);
-    // The network still came off - a broken install never leaves egress open.
-    expect(dockerState.events).toContain("disconnect:bridge");
+    const create = sandboxCreateArgs();
+    expect(hostConfig(create)["NetworkMode"]).toBe("nightwatch-sandbox-net");
+    const env = create["Env"] as string[];
+    expect(env).toContain("HTTP_PROXY=http://nightwatch-sandbox-proxy:8888");
+    expect(env).toContain("HTTPS_PROXY=http://nightwatch-sandbox-proxy:8888");
+    expect(env).toContain("NO_PROXY=localhost,127.0.0.1");
+
+    // Proxy built locally, dual-homed onto the bridge, filter carries the hosts.
+    expect(dockerState.builtImages).toContain("nightwatch-tinyproxy");
+    expect(dockerState.events).toContain(
+      `connect:bridge:${PROXY_NAME}`,
+    );
+    const cfgDir = join(workspacesDir, "proxy-config");
+    expect(readFileSync(join(cfgDir, "filter"), "utf8")).toContain(
+      "registry.npmjs.org",
+    );
+    const conf = readFileSync(join(cfgDir, "tinyproxy.conf"), "utf8");
+    expect(conf).toContain("FilterDefaultDeny Yes");
+    expect(conf).toContain("Allow 172.28.0.0/16");
   });
 
-  it("open mode skips detachment and keeps the bridge attached", async () => {
-    gitState.cloneFiles = { "package.json": PKG };
-    await createWorkspace({ network: "open" });
-    expect(execEvents()).toEqual(["npm install"]);
-    expect(dockerState.events).not.toContain("disconnect:bridge");
+  it("allowlist: a running proxy with matching config is reused; changed hosts recreate it", async () => {
+    await createWorkspace({ network: "allowlist" });
+    const createsAfterFirst = dockerState.createArgs.filter(
+      (a) => a["name"] === PROXY_NAME,
+    ).length;
+    expect(createsAfterFirst).toBe(1);
+
+    await createWorkspace({ network: "allowlist" });
     expect(
-      dockerState.networks[`container-${dockerState.nextId - 1}`],
-    ).toHaveProperty("bridge");
+      dockerState.createArgs.filter((a) => a["name"] === PROXY_NAME),
+    ).toHaveLength(1);
+    expect(dockerState.removed).not.toContain(PROXY_NAME);
+
+    await createWorkspace({
+      network: "allowlist",
+      allowlistHosts: ["registry.npmjs.org", "internal.registry.dev"],
+    });
+    expect(dockerState.removed).toContain(PROXY_NAME);
+    expect(
+      dockerState.createArgs.filter((a) => a["name"] === PROXY_NAME),
+    ).toHaveLength(2);
+    const cfgDir = join(workspacesDir, "proxy-config");
+    expect(readFileSync(join(cfgDir, "filter"), "utf8")).toContain(
+      "internal.registry.dev",
+    );
   });
 
-  it("fails loud and destroys the container when detachment does not stick", async () => {
-    dockerState.disconnectNoop = true;
-    const sessionId = nextSessionId();
-    await expect(
-      withWorkspace(sessionId, options(), () => Promise.resolve()),
-    ).rejects.toBeInstanceOf(SandboxUnavailableError);
-    expect(dockerState.removed).toHaveLength(1);
-    expect(existsSync(join(workspacesDir, sessionId))).toBe(false);
+  it("none: the container is created with no network and no proxy machinery", async () => {
+    await createWorkspace({ network: "none" });
+    expect(hostConfig(sandboxCreateArgs())["NetworkMode"]).toBe("none");
+    expect(dockerState.builtImages).toHaveLength(0);
+    expect(dockerState.proxyInfo).toBeNull();
+    const env = sandboxCreateArgs()["Env"] as string[];
+    expect(env.some((e) => e.startsWith("HTTP_PROXY="))).toBe(false);
+  });
+
+  it("open: default bridge, no proxy env", async () => {
+    await createWorkspace({ network: "open" });
+    expect(hostConfig(sandboxCreateArgs())["NetworkMode"]).toBeUndefined();
+    expect(dockerState.proxyInfo).toBeNull();
+    const env = sandboxCreateArgs()["Env"] as string[];
+    expect(env.some((e) => e.startsWith("HTTPS_PROXY="))).toBe(false);
+  });
+
+  it("commands run under bash with pipefail so piped exit codes stay honest", async () => {
+    const ws = await createWorkspace();
+    await ws.exec("pnpm install", { timeoutMs: 60_000 });
+    const cmd = dockerState.execCmds.at(-1)!;
+    expect(cmd.slice(2, 6)).toEqual(["bash", "-o", "pipefail", "-lc"]);
+    expect(cmd.at(-1)).toBe("pnpm install");
   });
 
   it("locally excludes node_modules so a repo without .gitignore never commits it", async () => {
-    gitState.cloneFiles = { "package.json": PKG };
+    gitState.cloneFiles = { "package.json": '{ "name": "fixture" }\n' };
     const ws = await createWorkspace();
     expect(
       readFileSync(join(ws.dir, ".git", "info", "exclude"), "utf8"),
     ).toContain("node_modules/");
-  });
-});
-
-describe("preflight", () => {
-  it("passes when git and the docker daemon respond, reporting the isolation mode", async () => {
-    await expect(preflight()).resolves.toEqual({
-      ok: true,
-      isolation: "standard",
-    });
-  });
-
-  it("reports gvisor isolation when the host advertises runsc", async () => {
-    dockerState.gvisor = true;
-    await expect(preflight()).resolves.toEqual({
-      ok: true,
-      isolation: "gvisor",
-    });
-  });
-
-  it("reports an unreachable docker daemon", async () => {
-    dockerState.pingFails = true;
-    const result = await preflight();
-    expect(result.ok).toBe(false);
-    expect(result.reason).toContain("Docker daemon is not reachable");
-  });
-});
-
-describe("path containment", () => {
-  const ws = "/work/space";
-
-  it("resolves clean repo-relative paths", () => {
-    expect(resolveRepoPath(ws, "src/app.ts")).toBe("/work/space/src/app.ts");
-    expect(resolveRepoPath(ws, "./src/app.ts")).toBe("/work/space/src/app.ts");
-    expect(resolveRepoPath(ws, "a/b/../c.txt")).toBe("/work/space/a/c.txt");
-  });
-
-  it.each(["../evil", "/etc/passwd", "a/../../evil", "..", "", "a\0b"])(
-    "rejects escaping path %j",
-    (p) => {
-      expect(() => resolveRepoPath(ws, p)).toThrow(PathEscapeError);
-    },
-  );
-
-  it("rejects a symlink that points outside the workspace", async () => {
-    const root = mkdtempSync(join(tmpdir(), "nw-paths-"));
-    try {
-      const inside = join(root, "workspace");
-      mkdirSync(inside);
-      const outside = join(root, "outside.txt");
-      writeFileSync(outside, "secret");
-      symlinkSync(outside, join(inside, "link.txt"));
-
-      await expect(
-        assertContained(inside, join(inside, "link.txt")),
-      ).rejects.toThrow(PathEscapeError);
-      // A not-yet-existing file under the workspace is fine (write path).
-      await expect(
-        assertContained(inside, join(inside, "new/file.txt")),
-      ).resolves.toBeUndefined();
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("output capping", () => {
-  it("returns short output untouched", () => {
-    expect(capOutput("hello")).toEqual({ text: "hello", truncated: false });
-  });
-
-  it("elides the middle of oversized output on UTF-8 boundaries", () => {
-    const big = "é".repeat(50_000); // 100k bytes of two-byte chars
-    const capped = capOutput(big);
-    expect(capped.truncated).toBe(true);
-    expect(capped.text).toContain("bytes elided");
-    expect(capped.text).not.toContain("�");
-    expect(Buffer.byteLength(capped.text, "utf8")).toBeLessThan(70_000);
-  });
-});
-
-describe("errors", () => {
-  it("GitOperationError carries a redacted message", () => {
-    const err = new GitOperationError("git push failed: boom");
-    expect(err.name).toBe("GitOperationError");
   });
 });

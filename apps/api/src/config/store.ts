@@ -4,6 +4,7 @@ import {
   DEFAULT_HARD_TIMEOUT_MS,
   DEFAULT_REMEDIATION_BREAKER_LIMIT,
   DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
+  DEFAULT_SANDBOX_ALLOWLIST_HOSTS,
   DEFAULT_SANDBOX_CPUS,
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
   DEFAULT_SANDBOX_MEMORY_MB,
@@ -44,6 +45,7 @@ type ConfigRow = {
   sandboxMemoryMb: number;
   sandboxRequireGvisor: number;
   sandboxNetwork: string;
+  sandboxAllowlistHosts: string;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -65,6 +67,7 @@ const SELECT_ROW = `
          sandbox_memory_mb       AS sandboxMemoryMb,
          sandbox_require_gvisor  AS sandboxRequireGvisor,
          sandbox_network         AS sandboxNetwork,
+         sandbox_allowlist_hosts AS sandboxAllowlistHosts,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -75,6 +78,14 @@ const SELECT_ROW = `
 function readRow(): ConfigRow | undefined {
   // better-sqlite3 returns untyped rows; the column aliases match ConfigRow.
   return getDb().prepare(SELECT_ROW).get(CONFIG_ID) as ConfigRow | undefined;
+}
+
+// Stored newline-joined (the Settings textarea shape); empty lines dropped.
+function splitHosts(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function defaultConfigFromEnv(): AgentConfig {
@@ -105,6 +116,7 @@ function defaultConfigFromEnv(): AgentConfig {
     sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
     sandboxRequireGvisor: DEFAULT_SANDBOX_REQUIRE_GVISOR,
     sandboxNetwork: DEFAULT_SANDBOX_NETWORK,
+    sandboxAllowlistHosts: [...DEFAULT_SANDBOX_ALLOWLIST_HOSTS],
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -144,6 +156,7 @@ export function loadConfig(): AgentConfig {
     sandboxMemoryMb: row.sandboxMemoryMb,
     sandboxRequireGvisor: row.sandboxRequireGvisor === 1,
     sandboxNetwork: row.sandboxNetwork as SandboxNetwork,
+    sandboxAllowlistHosts: splitHosts(row.sandboxAllowlistHosts),
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -168,14 +181,14 @@ const UPSERT_CONFIG = `
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
     code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
-    sandbox_require_gvisor, sandbox_network,
+    sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
     @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
-    @sandboxRequireGvisor, @sandboxNetwork,
+    @sandboxRequireGvisor, @sandboxNetwork, @sandboxAllowlistHosts,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -195,6 +208,7 @@ const UPSERT_CONFIG = `
     sandbox_memory_mb = excluded.sandbox_memory_mb,
     sandbox_require_gvisor = excluded.sandbox_require_gvisor,
     sandbox_network = excluded.sandbox_network,
+    sandbox_allowlist_hosts = excluded.sandbox_allowlist_hosts,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -225,6 +239,7 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       sandboxMemoryMb: next.sandboxMemoryMb,
       sandboxRequireGvisor: next.sandboxRequireGvisor ? 1 : 0,
       sandboxNetwork: next.sandboxNetwork,
+      sandboxAllowlistHosts: next.sandboxAllowlistHosts.join("\n"),
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,

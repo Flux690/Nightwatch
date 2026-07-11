@@ -70,6 +70,13 @@ export interface SandboxLimits {
   memoryMb: number;
 }
 
+// "open" = default bridge; "none" = no network from birth; "allowlist" = only
+// the internal proxy network, with proxy env preconfigured for tools.
+export type SandboxNetworkAttachment =
+  | { mode: "open" }
+  | { mode: "none" }
+  | { mode: "allowlist"; networkName: string; proxyEnv: string[] };
+
 // Runs as the API's own uid:gid so workspace files match the host clone's
 // owner; undefined where getuid is absent, keeping the image default.
 function processUser(): string | undefined {
@@ -89,6 +96,7 @@ export async function createSandboxContainer(opts: {
   homeDir: string;
   limits: SandboxLimits;
   requireGvisor: boolean;
+  network: SandboxNetworkAttachment;
 }): Promise<string> {
   await ensureImage();
   const isolation = await detectIsolation();
@@ -107,10 +115,18 @@ export async function createSandboxContainer(opts: {
     WorkingDir: "/workspace",
     // HOME is a separate mount, not the checkout, so package-manager caches
     // aren't swept into checkpoint commits by `git add -A`.
-    Env: ["HOME=/home/sandbox", "COREPACK_ENABLE_DOWNLOAD_PROMPT=0"],
+    Env: [
+      "HOME=/home/sandbox",
+      "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      ...(opts.network.mode === "allowlist" ? opts.network.proxyEnv : []),
+    ],
     Labels: { [SANDBOX_LABEL]: "1", [SESSION_LABEL]: opts.sessionId },
     ...(user !== undefined && { User: user }),
     HostConfig: {
+      ...(opts.network.mode === "none" && { NetworkMode: "none" }),
+      ...(opts.network.mode === "allowlist" && {
+        NetworkMode: opts.network.networkName,
+      }),
       Binds: [
         `${opts.workspaceDir}:/workspace`,
         `${opts.homeDir}:/home/sandbox`,
@@ -134,29 +150,6 @@ export async function createSandboxContainer(opts: {
   });
   await container.start();
   return container.id;
-}
-
-// Detaches every network and verifies via re-inspection; only loopback
-// remains, so the agent has no egress but local test servers still work.
-export async function disconnectAllNetworks(
-  containerId: string,
-): Promise<void> {
-  const docker = getDocker();
-  const container = docker.getContainer(containerId);
-  const info = await container.inspect();
-  const networks = Object.keys(info.NetworkSettings.Networks ?? {});
-  for (const name of networks) {
-    await docker
-      .getNetwork(name)
-      .disconnect({ Container: containerId, Force: true });
-  }
-  const after = await container.inspect();
-  const remaining = Object.keys(after.NetworkSettings.Networks ?? {});
-  if (remaining.length > 0) {
-    throw new SandboxUnavailableError(
-      `sandbox network disconnect failed: still attached to ${remaining.join(", ")}`,
-    );
-  }
 }
 
 // Docker multiplexes stdout/stderr into 8-byte-framed chunks with no TTY;
@@ -190,7 +183,8 @@ export async function execInContainer(
   const container = getDocker().getContainer(containerId);
   const seconds = Math.max(1, Math.ceil(opts.timeoutMs / 1000));
   const exec = await container.exec({
-    Cmd: ["timeout", String(seconds), "sh", "-lc", command],
+    // bash, not sh: models emit bashisms; pipefail keeps piped exit codes honest.
+    Cmd: ["timeout", String(seconds), "bash", "-o", "pipefail", "-lc", command],
     AttachStdout: true,
     AttachStderr: true,
     ...(opts.cwd !== undefined && { WorkingDir: opts.cwd }),

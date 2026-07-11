@@ -145,6 +145,12 @@ export function SettingsModal({
     e.preventDefault();
     if (!form || !config) return;
     const delta = buildDelta(form, config);
+    // The textarea keeps raw lines while typing; blanks are dropped on save.
+    if (delta.sandboxAllowlistHosts !== undefined) {
+      delta.sandboxAllowlistHosts = delta.sandboxAllowlistHosts
+        .map((h) => h.trim())
+        .filter((h) => h.length > 0);
+    }
     const keyToSave = newApiKey.trim();
     // A changed key must pass Test connection before it can be saved.
     if (keyToSave && !testResult?.ok) return;
@@ -709,23 +715,48 @@ export function SettingsModal({
                                   "sandboxNetwork",
                                   e.currentTarget.value === "open"
                                     ? "open"
-                                    : "none",
+                                    : e.currentTarget.value === "none"
+                                      ? "none"
+                                      : "allowlist",
                                 )
                               }
                             >
-                              <NativeSelectOption value="none">
-                                None (recommended)
+                              <NativeSelectOption value="allowlist">
+                                Allowlist (recommended)
                               </NativeSelectOption>
                               <NativeSelectOption value="open">
                                 Open (unrestricted)
                               </NativeSelectOption>
+                              <NativeSelectOption value="none">
+                                None (no network)
+                              </NativeSelectOption>
                             </NativeSelect>
                           </Field>
                           <p className="text-sm text-muted-foreground">
-                            {form.sandboxNetwork === "none"
-                              ? "Dependencies install during an agent-free setup phase; the sandbox is then detached from every network before the agent runs."
-                              : "The agent keeps full internet access for the whole session. A prompt-injected agent could exfiltrate repository content."}
+                            {form.sandboxNetwork === "allowlist"
+                              ? "All sandbox traffic is forced through an enforcing proxy that reaches only the hosts below. The agent installs dependencies itself."
+                              : form.sandboxNetwork === "none"
+                                ? "The sandbox gets no network at all: read/edit sessions only - dependencies can never install, so tests will not run."
+                                : "The agent keeps full internet access for the whole session. A prompt-injected agent could exfiltrate repository content."}
                           </p>
+                          {form.sandboxNetwork === "allowlist" && (
+                            <Field>
+                              <FieldLabel htmlFor="settings-sandbox-allowlist">
+                                Allowed hosts (one per line)
+                              </FieldLabel>
+                              <textarea
+                                id="settings-sandbox-allowlist"
+                                className="min-h-24 w-full max-w-96 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+                                value={form.sandboxAllowlistHosts.join("\n")}
+                                onChange={(e) =>
+                                  setField(
+                                    "sandboxAllowlistHosts",
+                                    e.currentTarget.value.split("\n"),
+                                  )
+                                }
+                              />
+                            </Field>
+                          )}
                         </div>
                       </div>
                     )}
