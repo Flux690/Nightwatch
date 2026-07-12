@@ -13,6 +13,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -32,6 +33,7 @@ import {
   type Workspace,
   type WorkspaceOptions,
 } from "../sandbox/workspace.js";
+import { salvageWorkspaces } from "../sandbox/salvage.js";
 import { reapOrphans, resetIsolationCache } from "../sandbox/docker.js";
 import { preflight } from "../sandbox/preflight.js";
 import { resolveRepoPath, assertContained } from "../sandbox/paths.js";
@@ -82,6 +84,11 @@ function installGitMock(): void {
         return ok();
       }
       case "rev-parse":
+        // --abbrev-ref HEAD asks the checkout for its own branch (salvage);
+        // --verify origin/<branch> probes the remote (resume-vs-fresh clone).
+        if (args.includes("--abbrev-ref")) {
+          return ok("nightwatch/fix-oom-12345678\n");
+        }
         return gitState.remoteBranchExists
           ? ok("abc123\n")
           : fail("fatal: Needed a single revision");
@@ -671,6 +678,110 @@ describe("sandbox network modes", () => {
       ),
     ).rejects.toBeInstanceOf(SandboxUnavailableError);
     expect(stages).toEqual(["cloning", "starting", "failed"]);
+  });
+});
+
+describe("boot salvage", () => {
+  // Isolated per-test dir: salvage sweeps everything under it, so sharing the
+  // lifecycle tests' workspacesDir would pick up their leftovers.
+  let salvageDir: string;
+
+  function salvageOpts(): Parameters<typeof salvageWorkspaces>[0] {
+    return {
+      workspacesDir: salvageDir,
+      authHeader: () => Promise.resolve(AUTH_HEADER),
+      commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
+    };
+  }
+
+  function makeWorkspace(name: string): string {
+    const dir = join(salvageDir, name);
+    mkdirSync(join(dir, ".git"), { recursive: true });
+    mkdirSync(join(salvageDir, `${name}.home`), { recursive: true });
+    return dir;
+  }
+
+  beforeEach(() => {
+    salvageDir = mkdtempSync(join(tmpdir(), "nw-salvage-"));
+  });
+
+  afterEach(() => {
+    rmSync(salvageDir, { recursive: true, force: true });
+  });
+
+  it("commits dirty work, pushes to the checkout's own branch, and removes the folder pair", async () => {
+    const dir = makeWorkspace("session-dirty");
+    gitState.dirty = true;
+
+    const result = await salvageWorkspaces(salvageOpts());
+
+    expect(result).toEqual({ pushed: 1, kept: 0 });
+    expect(gitState.calls.some((a) => a.includes("commit"))).toBe(true);
+    const push = gitState.calls.find((a) => a.includes("push"));
+    expect(push).toContain("nightwatch/fix-oom-12345678");
+    expect(push?.[1]).toBe(`http.extraHeader=Authorization: ${AUTH_HEADER}`);
+    expect(existsSync(dir)).toBe(false);
+    expect(existsSync(join(salvageDir, "session-dirty.home"))).toBe(false);
+  });
+
+  it("pushes committed-but-unpushed work without a new commit", async () => {
+    makeWorkspace("session-unpushed");
+    gitState.dirty = false;
+    gitState.unpushed = "1";
+
+    const result = await salvageWorkspaces(salvageOpts());
+
+    expect(result).toEqual({ pushed: 1, kept: 0 });
+    expect(gitState.calls.some((a) => a.includes("commit"))).toBe(false);
+    expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
+  });
+
+  it("removes a clean workspace without pushing anything", async () => {
+    const dir = makeWorkspace("session-clean");
+
+    const result = await salvageWorkspaces(salvageOpts());
+
+    expect(result).toEqual({ pushed: 0, kept: 0 });
+    expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it("keeps the folder for manual recovery when the push fails", async () => {
+    const warn = vi.fn();
+    const dir = makeWorkspace("session-pushfail");
+    gitState.dirty = true;
+    gitState.failPush = true;
+
+    const result = await salvageWorkspaces({
+      ...salvageOpts(),
+      log: { info: vi.fn(), warn },
+    });
+
+    expect(result).toEqual({ pushed: 0, kept: 1 });
+    expect(existsSync(dir)).toBe(true);
+    expect(warn).toHaveBeenCalled();
+    // The auth header never leaks into the logged failure.
+    const fields = warn.mock.calls[0]?.[0] as { err: string };
+    expect(fields.err).toContain("[REDACTED]");
+    expect(fields.err).not.toContain(AUTH_HEADER);
+  });
+
+  it("removes non-git garbage left by a crash mid-clone", async () => {
+    const dir = join(salvageDir, "session-halfclone");
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src", "app.ts"), "half\n");
+
+    const result = await salvageWorkspaces(salvageOpts());
+
+    expect(result).toEqual({ pushed: 0, kept: 0 });
+    expect(existsSync(dir)).toBe(false);
+    expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
+  });
+
+  it("a missing workspaces directory salvages nothing", async () => {
+    rmSync(salvageDir, { recursive: true, force: true });
+    const result = await salvageWorkspaces(salvageOpts());
+    expect(result).toEqual({ pushed: 0, kept: 0 });
   });
 });
 

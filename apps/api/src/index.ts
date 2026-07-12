@@ -17,8 +17,13 @@ import { registerConnectRoutes } from "./runners/connect.js";
 import { registerManifestRoutes } from "./runners/manifest.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
+import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
-import { nightwatchDir } from "./config/paths.js";
+import { salvageWorkspaces } from "./sandbox/salvage.js";
+import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
+import { decrypt } from "./config/crypto.js";
+import { getGitHubIntegration } from "./db/github-integration.js";
+import { nightwatchDir, workspacesDir } from "./config/paths.js";
 import { logger } from "./logger.js";
 
 // Resolve the state directory first so a relative NIGHTWATCH_DIR fails here with
@@ -66,13 +71,37 @@ const start = async (): Promise<void> => {
   try {
     initDb();
     fastify.log.info("SQLite ready");
-    // Sandbox containers are derived state (session map is memory-only), so every
-    // labeled survivor of a restart is an orphan; best-effort since a host without Docker has none to reap.
-    void reapOrphans()
-      .then((n) => {
-        if (n > 0) fastify.log.info(`reaped ${n} orphaned sandbox containers`);
-      })
-      .catch(() => undefined);
+    // Containers first (kills any still-running writer), then salvage: the
+    // checkout is a host bind mount, so work orphaned by any death mode is
+    // committed and pushed here, before listen() lets a session provision over
+    // it. Best-effort throughout - a host without Docker has nothing to reap.
+    try {
+      const reaped = await reapOrphans();
+      if (reaped > 0) {
+        fastify.log.info(`reaped ${reaped} orphaned sandbox containers`);
+      }
+    } catch {
+      // Docker unreachable - salvage below still works, it is host-side git.
+    }
+    const salvaged = await salvageWorkspaces({
+      workspacesDir: workspacesDir(),
+      authHeader: () => {
+        const row = getGitHubIntegration();
+        if (row === null) {
+          return Promise.reject(
+            new Error("GitHub integration is not configured"),
+          );
+        }
+        return Promise.resolve(buildAuthHeader(decrypt(row.tokenEncrypted)));
+      },
+      commitAuthor: COMMIT_AUTHOR,
+      log: logger,
+    });
+    if (salvaged.pushed > 0 || salvaged.kept > 0) {
+      fastify.log.info(
+        `workspace salvage: ${salvaged.pushed} pushed, ${salvaged.kept} kept for manual recovery`,
+      );
+    }
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
     const host = process.env["HOST"] ?? "127.0.0.1";
     await fastify.listen({ port, host });

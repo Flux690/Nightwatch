@@ -35,7 +35,10 @@ import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
 import type { ServiceIdentity } from "@nightwatch/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
-const COMMIT_AUTHOR = { name: "Nightwatch", email: "noreply@nightwatch.local" };
+export const COMMIT_AUTHOR = {
+  name: "Nightwatch",
+  email: "noreply@nightwatch.local",
+};
 
 function slugTarget(identity: ServiceIdentity): string {
   return identity.provider === "docker" ? identity.service : identity.workload;

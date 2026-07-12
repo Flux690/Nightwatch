@@ -86,6 +86,13 @@ export async function isDirty(dir: string): Promise<boolean> {
   return status.trim().length > 0;
 }
 
+// The checkout itself records the session branch, so boot-time salvage needs
+// no database row to know where to push.
+export async function currentBranch(dir: string): Promise<string> {
+  const out = await runGit(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: dir });
+  return out.trim();
+}
+
 export interface CommitAuthor {
   name: string;
   email: string;

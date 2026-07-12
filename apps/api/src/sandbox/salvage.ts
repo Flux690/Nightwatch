@@ -1,0 +1,91 @@
+import { access, readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  commitAll,
+  currentBranch,
+  hasUnpushedWork,
+  isDirty,
+  push,
+  type CommitAuthor,
+} from "./git.js";
+import type { SandboxLog } from "./workspace.js";
+
+export interface SalvageOptions {
+  workspacesDir: string;
+  // Rejects when no GitHub integration is bound; the affected workspace is
+  // then kept on disk rather than silently discarded.
+  authHeader(): Promise<string>;
+  commitAuthor: CommitAuthor;
+  log?: SandboxLog;
+}
+
+export interface SalvageResult {
+  pushed: number;
+  kept: number;
+}
+
+function exists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function removeWithHome(
+  workspacesDir: string,
+  name: string,
+): Promise<void> {
+  await rm(join(workspacesDir, name), { recursive: true, force: true });
+  await rm(join(workspacesDir, `${name}.home`), {
+    recursive: true,
+    force: true,
+  });
+}
+
+// Boot-time recovery of workspaces orphaned by an API death of any kind: the
+// checkout is a host bind mount and git runs host-side, so unpushed work needs
+// nothing from the dead process. Runs after the container reap (no live
+// writers) and before sessions are accepted (no provision race). Fail-open per
+// directory: a failed push keeps the folder for manual recovery, never blocks boot.
+export async function salvageWorkspaces(
+  opts: SalvageOptions,
+): Promise<SalvageResult> {
+  const result: SalvageResult = { pushed: 0, kept: 0 };
+  let entries;
+  try {
+    entries = await readdir(opts.workspacesDir, { withFileTypes: true });
+  } catch {
+    // No workspaces directory yet - nothing was ever provisioned.
+    return result;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.endsWith(".home")) continue;
+    const dir = join(opts.workspacesDir, entry.name);
+    try {
+      if (!(await exists(join(dir, ".git")))) {
+        // A crash mid-clone leaves a non-repo folder; garbage either way.
+        await removeWithHome(opts.workspacesDir, entry.name);
+        continue;
+      }
+      if (await isDirty(dir)) {
+        await commitAll(dir, "nightwatch: salvage at boot", opts.commitAuthor);
+      }
+      if (await hasUnpushedWork(dir)) {
+        await push(dir, await currentBranch(dir), await opts.authHeader());
+        result.pushed++;
+        opts.log?.info({ dir: entry.name }, "salvaged orphaned workspace");
+      }
+      await removeWithHome(opts.workspacesDir, entry.name);
+    } catch (err) {
+      result.kept++;
+      opts.log?.warn(
+        {
+          dir: entry.name,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "workspace salvage failed, keeping the folder for manual recovery",
+      );
+    }
+  }
+  return result;
+}
