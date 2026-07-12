@@ -11,7 +11,6 @@ export interface PullRequestResult {
   url: string;
   draft: boolean;
   message?: string;
-  verification?: { ran: boolean; command?: string; passed?: boolean };
 }
 
 /* Object live, JSON string on transcript reload - see DiffCard.parseFileChange. */
@@ -35,11 +34,6 @@ export function parsePullRequestResult(
   ) {
     return null;
   }
-  const verification =
-    typeof record["verification"] === "object" &&
-    record["verification"] !== null
-      ? (record["verification"] as PullRequestResult["verification"])
-      : undefined;
   return {
     action: record["action"],
     number: record["number"],
@@ -48,7 +42,6 @@ export function parsePullRequestResult(
     ...(typeof record["message"] === "string" && {
       message: record["message"],
     }),
-    ...(verification !== undefined && { verification }),
   };
 }
 
@@ -58,7 +51,9 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
       <p className="mb-1.5 font-mono text-base font-medium">OpenPullRequest</p>
       <Card size="sm" className={TOOL_CARD_CLASS}>
         <CardContent className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
-          <span className="text-base font-medium">Pull request #{pr.number}</span>
+          <span className="text-base font-medium">
+            Pull request #{pr.number}
+          </span>
           <Badge variant={pr.draft ? "secondary" : "success"}>
             {pr.draft ? "Draft" : "Open"}
           </Badge>
@@ -73,15 +68,9 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
             <ExternalLink {...ICON_UI} />
           </a>
         </CardContent>
-        {(pr.message !== undefined || pr.verification?.ran === true) && (
+        {pr.message !== undefined && (
           <CardContent className="border-t border-border px-3.5 py-2 text-base text-muted-foreground">
-            {pr.message !== undefined && <p className="m-0">{pr.message}</p>}
-            {pr.verification?.ran === true && (
-              <p className="m-0 mt-1 font-mono text-xs">
-                {pr.verification.command}{" "}
-                {pr.verification.passed === true ? "passed" : "failed"}
-              </p>
-            )}
+            <p className="m-0">{pr.message}</p>
           </CardContent>
         )}
       </Card>

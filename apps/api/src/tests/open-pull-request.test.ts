@@ -20,9 +20,7 @@ import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import type { ToolExecuteResult } from "../agent/tools/types.js";
 
-const SESSION_WITH_TESTS = "ccccdddd-0000-4000-8000-000000000001";
-const SESSION_NO_COMMAND = "ccccdddd-0000-4000-8000-000000000002";
-const SESSION_NONE_MODE = "ccccdddd-0000-4000-8000-000000000003";
+const SESSION_ID = "ccccdddd-0000-4000-8000-000000000001";
 
 const FIXTURE: Record<string, string> = {
   "package.json":
@@ -122,7 +120,7 @@ function installDockerMock(): void {
           const exitCode = dockerState.execExit;
           const stream = new PassThrough();
           process.nextTick(() => {
-            stream.write(Buffer.from("verification output line\n"));
+            stream.write(Buffer.from("container exec output\n"));
             stream.end();
           });
           return Promise.resolve({
@@ -205,7 +203,7 @@ let toolUseCounter = 0;
 
 function runOpr(
   input: Record<string, unknown>,
-  sessionId = SESSION_WITH_TESTS,
+  sessionId = SESSION_ID,
   toolUseId = `opr-${++toolUseCounter}`,
 ): Promise<ToolExecuteResult> {
   const entry = findTool("OpenPullRequest");
@@ -254,33 +252,11 @@ afterAll(async () => {
 });
 
 describe("OpenPullRequest", () => {
-  it("verification failure returns the output, pushes nothing, writes no audit row", async () => {
-    dockerState.execExit = 1;
-    const result = await runOpr(
-      { title: "Fix the leak", verificationCommand: "pnpm test" },
-      SESSION_WITH_TESTS,
-      "opr-fail",
-    );
-    dockerState.execExit = 0;
-
-    expect(result.is_error).toBe(true);
-    expect(String(result.content)).toContain("Verification failed");
-    expect(String(result.content)).toContain("verification output line");
-    expect(String(result.content)).toContain("NOT opened");
-    expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
-    expect(prState.createPayloads).toHaveLength(0);
-    expect(auditRow(SESSION_WITH_TESTS, "opr-fail")).toBeUndefined();
-  });
-
-  it("runs the agent's verificationCommand fresh, pushes, creates a draft PR, and settles the audit row", async () => {
+  it("pushes, creates a draft PR with the composed body, and settles the audit row", async () => {
     gitState.dirty = true;
     const result = await runOpr(
-      {
-        title: "Fix payments OOM",
-        body: "The cache grew unbounded.",
-        verificationCommand: "pnpm test",
-      },
-      SESSION_WITH_TESTS,
+      { title: "Fix payments OOM", body: "The cache grew unbounded." },
+      SESSION_ID,
       "opr-create",
     );
 
@@ -296,11 +272,6 @@ describe("OpenPullRequest", () => {
     expect(outcome.number).toBe(42);
     expect(outcome.draft).toBe(true);
     expect(outcome.message).toContain("draft PR #42");
-
-    // The agent's own command ran in-container, under bash with pipefail.
-    const verifyCmd = dockerState.execCmds.at(-1)!;
-    expect(verifyCmd.at(-1)).toBe("pnpm test");
-    expect(verifyCmd.slice(2, 6)).toEqual(["bash", "-o", "pipefail", "-lc"]);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
 
     const payload = prState.createPayloads.at(-1)!;
@@ -311,11 +282,11 @@ describe("OpenPullRequest", () => {
     expect(body).toContain("## Incident");
     expect(body).toContain("## Files changed");
     expect(body).toContain("- src/app.ts");
-    expect(body).toContain("`pnpm test` passed (exit 0)");
-    expect(body).toContain("verification output line");
-    expect(body).toContain(SESSION_WITH_TESTS);
+    // The gate is gone by design: the body carries no verification section.
+    expect(body).not.toContain("## Verification");
+    expect(body).toContain(SESSION_ID);
 
-    const audit = auditRow(SESSION_WITH_TESTS, "opr-create");
+    const audit = auditRow(SESSION_ID, "opr-create");
     expect(audit?.status).toBe("executed");
     expect(audit?.result).toContain('"number":42');
   });
@@ -332,8 +303,8 @@ describe("OpenPullRequest", () => {
     const before = prState.createPayloads.length;
 
     const result = await runOpr(
-      { title: "Fix payments OOM (v2)", verificationCommand: "pnpm test" },
-      SESSION_WITH_TESTS,
+      { title: "Fix payments OOM (v2)" },
+      SESSION_ID,
       "opr-update",
     );
     prState.open = [];
@@ -352,8 +323,8 @@ describe("OpenPullRequest", () => {
     prState.rejectDraft = true;
     gitState.dirty = true;
     const result = await runOpr(
-      { title: "Fix it", verificationCommand: "pnpm test" },
-      SESSION_WITH_TESTS,
+      { title: "Fix it" },
+      SESSION_ID,
       "opr-fallback",
     );
     prState.rejectDraft = false;
@@ -370,81 +341,19 @@ describe("OpenPullRequest", () => {
   it("refuses to re-run a tool_use that was already attempted (crash recovery)", async () => {
     insertExecutingRemediationAction({
       toolUseId: "opr-crash",
-      sessionId: SESSION_WITH_TESTS,
+      sessionId: SESSION_ID,
       toolName: "OpenPullRequest",
       input: {},
       resolvedBy: "agent",
     });
     const before = prState.createPayloads.length;
     const result = await runOpr(
-      { title: "Fix it again", verificationCommand: "pnpm test" },
-      SESSION_WITH_TESTS,
+      { title: "Fix it again" },
+      SESSION_ID,
       "opr-crash",
     );
     expect(result.is_error).toBe(true);
     expect(String(result.content)).toContain("already attempted");
     expect(prState.createPayloads).toHaveLength(before);
-  });
-
-  it("a missing verificationCommand is refused - nothing pushed", async () => {
-    gitState.dirty = true;
-    const before = prState.createPayloads.length;
-    const result = await runOpr(
-      { title: "Docs-only change" },
-      SESSION_NO_COMMAND,
-      "opr-no-command",
-    );
-
-    expect(result.is_error).toBe(true);
-    expect(String(result.content)).toContain("verificationCommand is required");
-    expect(prState.createPayloads).toHaveLength(before);
-  });
-
-  it("laundering operators in verificationCommand are rejected outright", async () => {
-    const before = prState.createPayloads.length;
-    for (const command of [
-      "pnpm test || echo tests_ok",
-      "true; pnpm test",
-      "pnpm test &",
-    ]) {
-      const result = await runOpr(
-        { title: "Sneaky", verificationCommand: command },
-        SESSION_WITH_TESTS,
-        `opr-lint-${before}-${command.length}`,
-      );
-      expect(result.is_error).toBe(true);
-      expect(String(result.content)).toContain("not allowed");
-    }
-    // An && chain is a legitimate compound check and passes the lint.
-    gitState.dirty = true;
-    const ok = await runOpr(
-      {
-        title: "Chained checks",
-        verificationCommand: "pnpm build && pnpm test",
-      },
-      SESSION_WITH_TESTS,
-      "opr-lint-chain",
-    );
-    expect(ok.is_error).toBeUndefined();
-    expect(prState.createPayloads.length).toBeGreaterThan(before);
-  });
-
-  it("none mode: the PR opens with the honest no-verification note", async () => {
-    updateConfig({ sandboxNetwork: "none" });
-    gitState.dirty = true;
-    const execsBefore = dockerState.execCmds.length;
-    const result = await runOpr(
-      { title: "Read-only session fix" },
-      SESSION_NONE_MODE,
-      "opr-none-mode",
-    );
-    updateConfig({ sandboxNetwork: "open" });
-
-    expect(result.is_error).toBeUndefined();
-    const body = String(prState.createPayloads.at(-1)?.["body"]);
-    expect(body).toContain("No automated verification was run");
-    expect(body).toContain("networkless");
-    // Nothing executed in the sandbox: the honest note is the whole story.
-    expect(dockerState.execCmds.length).toBe(execsBefore);
   });
 });

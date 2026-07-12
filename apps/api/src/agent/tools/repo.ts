@@ -19,7 +19,6 @@ import {
   PathEscapeError,
   ReadRequiredError,
   SandboxUnavailableError,
-  VerificationFailedError,
 } from "../../sandbox/errors.js";
 import { logger } from "../../logger.js";
 import { publishSandboxStatus } from "../../session/stream.js";
@@ -32,10 +31,7 @@ import { readRepoFile } from "../../sandbox/tools/read-file.js";
 import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
-import {
-  openPullRequest,
-  type VerificationOutcome,
-} from "../../sandbox/tools/open-pull-request.js";
+import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
 import type { ServiceIdentity } from "@nightwatch/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
@@ -120,10 +116,6 @@ function correctiveMessage(err: unknown): string {
     return `${err.message}. Use a path relative to the repository root.`;
   }
   if (err instanceof ReadRequiredError) return err.message;
-  if (err instanceof VerificationFailedError) {
-    const tail = err.output.slice(-2000);
-    return `Verification failed (${err.command}) - the pull request was NOT opened and nothing was pushed:\n${tail}\nFix the failures, then call OpenPullRequest again.`;
-  }
   if (err instanceof GitHubApiError) {
     return `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page. Continue the investigation without repo tools.`;
   }
@@ -177,13 +169,12 @@ function badInput(message: string): ToolExecuteResult {
   return { content: message, is_error: true };
 }
 
-// PR body section order (model text, then incident context, files, verification) is host
+// PR body section order (model text, then incident context, files) is host
 // policy; the session reference is plain text since no PUBLIC_URL exists yet to link to.
 function composePrBody(
   sessionId: string,
   branch: string,
   modelBody: string,
-  verification: VerificationOutcome,
   filesChanged: string[],
 ): string {
   const session = getSession(sessionId);
@@ -205,17 +196,6 @@ function composePrBody(
         : "";
     sections.push(
       `## Files changed\n\n${shown.map((f) => `- ${f}`).join("\n")}${more}`,
-    );
-  }
-
-  if (verification.ran) {
-    const output = (verification.output ?? "").slice(-2000).trim();
-    sections.push(
-      `## Verification\n\n\`${verification.command ?? ""}\` passed (exit 0), run fresh in the sandbox just before this PR was pushed.\n\n\`\`\`\n${output}\n\`\`\``,
-    );
-  } else {
-    sections.push(
-      `## Verification\n\nNo automated verification was run: ${verification.reason ?? "unknown"}.`,
     );
   }
 
@@ -399,7 +379,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "OpenPullRequest",
       description:
-        "Propose this session's repository changes as a draft pull request. Your verificationCommand runs fresh in the sandbox first - non-zero exit means nothing is pushed and you get the output back. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context, the verification result and a session reference are appended to the body automatically.",
+        "Propose this session's repository changes as a draft pull request for human review. Verify your change with Bash first and state in the body what you ran. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context and a session reference are appended to the body automatically.",
       input_schema: {
         type: "object",
         properties: {
@@ -410,15 +390,10 @@ export const REPO_TOOLS: Tool[] = [
           body: {
             type: "string",
             description:
-              "Explanation of the root cause and why this change fixes it.",
-          },
-          verificationCommand: {
-            type: "string",
-            description:
-              'The repository\'s own check command (e.g. "pnpm test"), which must exit 0 for the PR to open. A single command or && chain; `||`, `;` and background `&` are rejected.',
+              "Explanation of the root cause, why this change fixes it, and what you ran to verify it.",
           },
         },
-        required: ["title", "verificationCommand"],
+        required: ["title"],
       },
     },
     // Deliberately read: the PR is a proposal, the merge is the GitHub-enforced human gate, and
@@ -432,27 +407,10 @@ export const REPO_TOOLS: Tool[] = [
         return Promise.resolve(badInput("title (string) is required."));
       }
       const modelBody = requireString(input, "body") ?? "";
-      const verificationCommand = requireString(input, "verificationCommand");
-      // `||`, `;` and background `&` can mask a failing exit code; pipes stay
-      // honest because the sandbox shell runs with pipefail.
-      if (
-        verificationCommand !== null &&
-        /\|\||;|(?<!&)&(?!&)/.test(verificationCommand)
-      ) {
-        return Promise.resolve(
-          badInput(
-            "verificationCommand must be a single command or && chain - `||`, `;` and background `&` are not allowed. Pass the repository's real check command.",
-          ),
-        );
-      }
       return runRepoTool(ctx, (ws) =>
         openPullRequest(
           ws,
-          {
-            title,
-            verificationCommand,
-            verificationTimeoutMs: ctx.toolTimeoutMs,
-          },
+          { title },
           {
             beginAudit: () =>
               insertExecutingRemediationAction({
@@ -470,14 +428,8 @@ export const REPO_TOOLS: Tool[] = [
                 detail,
               );
             },
-            composeBody: (verification, filesChanged) =>
-              composePrBody(
-                ctx.sessionId,
-                ws.branch,
-                modelBody,
-                verification,
-                filesChanged,
-              ),
+            composeBody: (filesChanged) =>
+              composePrBody(ctx.sessionId, ws.branch, modelBody, filesChanged),
           },
         ),
       );

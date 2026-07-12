@@ -43,7 +43,6 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
-
   describe("approval_card", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",
@@ -203,7 +202,6 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
     });
 
-
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
       wrap({
         kind: "tool_card",
@@ -216,7 +214,6 @@ describe("TranscriptItemRenderer", () => {
           url: "https://github.com/acme/api/pull/42",
           draft: true,
           message: "Created draft PR #42.",
-          verification: { ran: true, command: "pnpm run test", passed: true },
         },
       });
 
@@ -226,12 +223,7 @@ describe("TranscriptItemRenderer", () => {
       expect(
         screen.getByRole("link", { name: /view on github/i }),
       ).toHaveAttribute("href", "https://github.com/acme/api/pull/42");
-      expect(screen.getByText(/pnpm run test passed/)).toBeInTheDocument();
+      expect(screen.getByText("Created draft PR #42.")).toBeInTheDocument();
     });
-
-
-
-
-
   });
 });

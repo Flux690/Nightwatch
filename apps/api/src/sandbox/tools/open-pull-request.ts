@@ -1,4 +1,3 @@
-import { VerificationFailedError } from "../errors.js";
 import {
   changedFiles,
   commitAll,
@@ -8,22 +7,12 @@ import {
 } from "../git.js";
 import type { Workspace } from "../workspace.js";
 
-// What actually happened, reported verbatim in the PR body: either the
-// agent-supplied command ran (exit 0, or the PR was refused), or why not.
-export interface VerificationOutcome {
-  ran: boolean;
-  command?: string;
-  output?: string;
-  reason?: string;
-}
-
 export interface OpenPullRequestOutcome {
   action: "created" | "updated";
   number: number;
   url: string;
   draft: boolean;
   message: string;
-  verification: { ran: boolean; command?: string; passed?: boolean };
 }
 
 export interface OpenPullRequestHooks {
@@ -32,61 +21,18 @@ export interface OpenPullRequestHooks {
   beginAudit(): boolean;
   settleAudit(ok: boolean, detail: string): void;
   // Host composes the final PR body: model text + incident context +
-  // verification verbatim + plain-text session reference.
-  composeBody(
-    verification: VerificationOutcome,
-    filesChanged: string[],
-  ): string;
+  // plain-text session reference.
+  composeBody(filesChanged: string[]): string;
 }
 
-// The agent knows the repo's toolchain; Nightwatch only enforces that the
-// supplied command passes in a fresh run at PR time.
-async function runVerification(
-  ws: Workspace,
-  command: string | null,
-  timeoutMs: number,
-): Promise<VerificationOutcome> {
-  if (ws.options.network === "none") {
-    return {
-      ran: false,
-      reason:
-        'the sandbox is networkless (sandboxNetwork "none"), so dependencies cannot be installed to run checks',
-    };
-  }
-  if (command === null) {
-    throw new VerificationFailedError(
-      "verificationCommand",
-      "verificationCommand is required: pass the repository's own check command (e.g. its test script).",
-    );
-  }
-  const result = await ws.exec(command, { timeoutMs });
-  if (result.exitCode !== 0) {
-    const note =
-      result.exitCode === 124
-        ? `\n(command timed out after ${Math.round(timeoutMs / 1000)}s)`
-        : "";
-    throw new VerificationFailedError(command, `${result.output}${note}`);
-  }
-  return { ran: true, command, output: result.output };
-}
-
-// Verifies fresh (the agent may have edited since the last green run), commits,
-// pushes, then create-or-updates by branch identity - one PR per session.
+// Nothing gates creation: the PR is a draft proposal, the repo's own CI and
+// the human merge are the verification layers. Commits, pushes, then
+// create-or-updates by branch identity - one PR per session.
 export async function openPullRequest(
   ws: Workspace,
-  input: {
-    title: string;
-    verificationCommand: string | null;
-    verificationTimeoutMs: number;
-  },
+  input: { title: string },
   hooks: OpenPullRequestHooks,
 ): Promise<OpenPullRequestOutcome> {
-  const verification = await runVerification(
-    ws,
-    input.verificationCommand,
-    input.verificationTimeoutMs,
-  );
-
   if (!hooks.beginAudit()) {
     throw new Error(
       "This pull request action was already attempted (outcome unknown - it may have run). Check GitHub and the Audit Log before retrying with a fresh call.",
@@ -98,7 +44,7 @@ export async function openPullRequest(
       await commitAll(ws.dir, input.title, ws.options.commitAuthor);
     }
     const files = await changedFiles(ws.dir);
-    const body = hooks.composeBody(verification, files);
+    const body = hooks.composeBody(files);
     if (await hasUnpushedWork(ws.dir)) {
       await push(ws.dir, ws.branch, await ws.options.authHeader());
     }
@@ -117,13 +63,6 @@ export async function openPullRequest(
         url: existing.url,
         draft: existing.draft,
         message: `Updated existing PR #${existing.number} with your latest commits.`,
-        verification: {
-          ran: verification.ran,
-          ...(verification.command !== undefined && {
-            command: verification.command,
-          }),
-          ...(verification.ran && { passed: true }),
-        },
       };
     } else {
       const created = await ws.options.pullRequests.create({
@@ -139,13 +78,6 @@ export async function openPullRequest(
         message: created.draft
           ? `Created draft PR #${created.number}. A human reviews and merges on GitHub.`
           : `Created PR #${created.number} (draft mode is unavailable on this repository's GitHub plan). A human reviews and merges on GitHub.`,
-        verification: {
-          ran: verification.ran,
-          ...(verification.command !== undefined && {
-            command: verification.command,
-          }),
-          ...(verification.ran && { passed: true }),
-        },
       };
     }
     hooks.settleAudit(
