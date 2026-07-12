@@ -8,7 +8,9 @@ import {
   push,
   type CommitAuthor,
 } from "./git.js";
-import type { SandboxLog } from "./workspace.js";
+import { homeDirFor, type SandboxLog } from "./workspace.js";
+
+const HOME_SUFFIX = homeDirFor("");
 
 export interface SalvageOptions {
   workspacesDir: string;
@@ -31,15 +33,9 @@ function exists(path: string): Promise<boolean> {
   );
 }
 
-async function removeWithHome(
-  workspacesDir: string,
-  name: string,
-): Promise<void> {
-  await rm(join(workspacesDir, name), { recursive: true, force: true });
-  await rm(join(workspacesDir, `${name}.home`), {
-    recursive: true,
-    force: true,
-  });
+async function removeWithHome(dir: string): Promise<void> {
+  await rm(dir, { recursive: true, force: true });
+  await rm(homeDirFor(dir), { recursive: true, force: true });
 }
 
 // Boot-time recovery of workspaces orphaned by an API death of any kind: the
@@ -59,12 +55,12 @@ export async function salvageWorkspaces(
     return result;
   }
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.endsWith(".home")) continue;
+    if (!entry.isDirectory() || entry.name.endsWith(HOME_SUFFIX)) continue;
     const dir = join(opts.workspacesDir, entry.name);
     try {
       if (!(await exists(join(dir, ".git")))) {
         // A crash mid-clone leaves a non-repo folder; garbage either way.
-        await removeWithHome(opts.workspacesDir, entry.name);
+        await removeWithHome(dir);
         continue;
       }
       if (await isDirty(dir)) {
@@ -75,7 +71,7 @@ export async function salvageWorkspaces(
         result.pushed++;
         opts.log?.info({ dir: entry.name }, "salvaged orphaned workspace");
       }
-      await removeWithHome(opts.workspacesDir, entry.name);
+      await removeWithHome(dir);
     } catch (err) {
       result.kept++;
       opts.log?.warn(

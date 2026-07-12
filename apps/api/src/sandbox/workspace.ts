@@ -119,7 +119,9 @@ const creating = new Map<string, Promise<Entry>>();
 // event, so it is logged once per process rather than on every sandbox.
 let warnedRootApi = false;
 
-function homeDirFor(dir: string): string {
+// Single owner of the "<dir>.home" sibling-mount convention; salvage derives
+// its skip-and-remove logic from this too.
+export function homeDirFor(dir: string): string {
   return `${dir}.home`;
 }
 
