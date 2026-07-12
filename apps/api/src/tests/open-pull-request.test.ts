@@ -81,14 +81,38 @@ function installGitMock(): void {
   });
 }
 
-const dockerState = { execExit: 0, execCmds: [] as string[][] };
+const dockerState = {
+  execExit: 0,
+  execCmds: [] as string[][],
+  imageLabels: {} as Record<string, Record<string, string>>,
+};
 
 function installDockerMock(): void {
   // Function expression: getDocker() constructs with `new`.
   MockDocker.mockImplementation(function () {
     return {
       ping: () => Promise.resolve({}),
-      getImage: () => ({ inspect: () => Promise.resolve({}) }),
+      getImage: (name: string) => ({
+        inspect: () =>
+          dockerState.imageLabels[name]
+            ? Promise.resolve({
+                Config: { Labels: dockerState.imageLabels[name] },
+              })
+            : Promise.reject(new Error("no such image")),
+      }),
+      buildImage: (
+        _ctx: unknown,
+        opts: { t: string; labels?: Record<string, string> },
+      ) => {
+        dockerState.imageLabels[opts.t] = opts.labels ?? {};
+        return Promise.resolve({});
+      },
+      modem: {
+        followProgress: (
+          _stream: unknown,
+          cb: (err: Error | null, events: unknown[]) => void,
+        ) => cb(null, []),
+      },
       createContainer: () =>
         Promise.resolve({ id: "sandbox-opr", start: () => Promise.resolve() }),
       getContainer: () => ({

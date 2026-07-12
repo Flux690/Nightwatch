@@ -283,7 +283,9 @@ export function SessionView({
             ? "Preparing sandbox - cloning the repository\u2026"
             : stage === "starting"
               ? "Preparing sandbox - starting the container\u2026"
-              : null,
+              : stage === "installing"
+                ? "Preparing sandbox - installing dependencies\u2026"
+                : null,
         );
         return;
       }

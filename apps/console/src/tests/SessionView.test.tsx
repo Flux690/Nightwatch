@@ -796,6 +796,19 @@ describe("SessionView", () => {
         MockEventSource.latest?.push({
           messageId: "sb-3",
           type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "installing" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - installing dependencies/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-4",
+          type: "SANDBOX_STATUS",
           payload: { sessionId: "s1", stage: "ready" },
         });
       });

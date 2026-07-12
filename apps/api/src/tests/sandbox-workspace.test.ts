@@ -125,8 +125,10 @@ const dockerState = {
   execHandler: ((_command: string) => ({ exitCode: 0, output: "ok\n" })) as (
     command: string,
   ) => { exitCode: number; output: string },
-  // Proxy world: image builds, created networks, and the shared container.
+  // Image world: local builds (sandbox image + proxy image) with the labels
+  // they were built with, created networks, and the shared proxy container.
   builtImages: [] as string[],
+  imageLabels: {} as Record<string, Record<string, string>>,
   networksCreated: [] as Array<Record<string, unknown>>,
   sandboxNetExists: false,
   proxyInfo: null as null | {
@@ -179,13 +181,18 @@ function dockerFake(): Record<string, unknown> {
       }),
     getImage: (name: string) => ({
       inspect: () =>
-        name === "nightwatch-tinyproxy" &&
-        !dockerState.builtImages.includes(name)
-          ? Promise.reject(new Error("no such image"))
-          : Promise.resolve({}),
+        dockerState.builtImages.includes(name)
+          ? Promise.resolve({
+              Config: { Labels: dockerState.imageLabels[name] ?? {} },
+            })
+          : Promise.reject(new Error("no such image")),
     }),
-    buildImage: (_ctx: unknown, opts: { t: string }) => {
+    buildImage: (
+      _ctx: unknown,
+      opts: { t: string; labels?: Record<string, string> },
+    ) => {
       dockerState.builtImages.push(opts.t);
+      dockerState.imageLabels[opts.t] = opts.labels ?? {};
       return Promise.resolve({});
     },
     modem: {
@@ -324,6 +331,7 @@ afterEach(async () => {
   dockerState.execCmds = [];
   dockerState.execHandler = () => ({ exitCode: 0, output: "ok\n" });
   dockerState.builtImages = [];
+  dockerState.imageLabels = {};
   dockerState.networksCreated = [];
   dockerState.sandboxNetExists = false;
   dockerState.proxyInfo = null;
@@ -353,18 +361,30 @@ describe("workspace lifecycle", () => {
     expect(clone[1]).toBe(`http.extraHeader=Authorization: ${AUTH_HEADER}`);
     expect(clone).toContain("https://github.com/acme/api.git");
 
+    // The locally built image, not stock node - global tooling is baked in.
     const create = dockerState.createArgs[0]!;
-    expect(create["Image"]).toBe("node:24");
+    expect(create["Image"]).toBe("nightwatch-sandbox");
+    expect(dockerState.builtImages).toContain("nightwatch-sandbox");
     // HOME rides its own mount so package-manager caches never land inside
     // the checkout (git add -A would sweep them into checkpoint commits).
     expect(create["Env"]).toContain("HOME=/home/sandbox");
     expect(create["Env"]).toContain("COREPACK_ENABLE_DOWNLOAD_PROMPT=0");
+    // Global installs must resolve into the writable HOME, and its bin must
+    // win the PATH.
+    expect(create["Env"]).toContain(
+      "NPM_CONFIG_PREFIX=/home/sandbox/.npm-global",
+    );
+    expect(
+      (create["Env"] as string[]).some((e) =>
+        e.startsWith("PATH=/home/sandbox/.npm-global/bin:"),
+      ),
+    ).toBe(true);
     expect(create["Labels"]).toMatchObject({
       "nightwatch.sandbox": "1",
       "nightwatch.session": sessionId,
     });
     const host = create["HostConfig"] as Record<string, unknown>;
-    expect(host["ReadonlyRootfs"]).toBeUndefined();
+    expect(host["ReadonlyRootfs"]).toBe(true);
     expect(host["CapDrop"]).toEqual(["ALL"]);
     expect(host["SecurityOpt"]).toEqual(["no-new-privileges"]);
     expect(host["NanoCpus"]).toBe(2_000_000_000);
@@ -603,7 +623,7 @@ describe("sandbox network modes", () => {
   it("none: the container is created with no network and no proxy machinery", async () => {
     await createWorkspace({ network: "none" });
     expect(hostConfig(sandboxCreateArgs())["NetworkMode"]).toBe("none");
-    expect(dockerState.builtImages).toHaveLength(0);
+    expect(dockerState.builtImages).not.toContain("nightwatch-tinyproxy");
     expect(dockerState.proxyInfo).toBeNull();
     const env = sandboxCreateArgs()["Env"] as string[];
     expect(env.some((e) => e.startsWith("HTTP_PROXY="))).toBe(false);
@@ -633,7 +653,7 @@ describe("sandbox network modes", () => {
     ).toContain("node_modules/");
   });
 
-  it("reports provisioning stages in order: cloning, starting, ready", async () => {
+  it("reports provisioning stages in order: cloning, starting, ready (networkless skips installing)", async () => {
     const stages: string[] = [];
     await createWorkspace({ onStatus: (stage) => stages.push(stage) });
     expect(stages).toEqual(["cloning", "starting", "ready"]);
@@ -651,5 +671,85 @@ describe("sandbox network modes", () => {
       ),
     ).rejects.toBeInstanceOf(SandboxUnavailableError);
     expect(stages).toEqual(["cloning", "starting", "failed"]);
+  });
+});
+
+describe("provision-time dependency install", () => {
+  async function provision(
+    overrides?: Partial<WorkspaceOptions>,
+  ): Promise<Workspace> {
+    const sessionId = nextSessionId();
+    let captured: Workspace | undefined;
+    await withWorkspace(
+      sessionId,
+      options({ network: "open", ...overrides }),
+      (ws) => {
+        captured = ws;
+        return Promise.resolve();
+      },
+    );
+    return captured!;
+  }
+
+  it("installs from the lockfile before ready and hands the note to exactly one taker", async () => {
+    gitState.cloneFiles = { "pnpm-lock.yaml": "lockfileVersion: 9\n" };
+    const stages: string[] = [];
+    const ws = await provision({ onStatus: (s) => stages.push(s) });
+    expect(stages).toEqual(["cloning", "starting", "installing", "ready"]);
+    expect(execEvents()).toContain("pnpm install");
+    // coreutils timeout enforces the fixed 10-minute install budget.
+    const cmd = dockerState.execCmds.at(-1)!;
+    expect(cmd.slice(0, 2)).toEqual(["timeout", "600"]);
+    const note = ws.takeInstallNote();
+    expect(note).toContain("pnpm install");
+    expect(note).toContain("exited 0");
+    expect(ws.takeInstallNote()).toBeNull();
+  });
+
+  it("a pinned packageManager routes through corepack; yarn lockfiles always do", async () => {
+    gitState.cloneFiles = {
+      "package.json": '{ "packageManager": "pnpm@9.12.0" }\n',
+      "pnpm-lock.yaml": "lockfileVersion: 9\n",
+    };
+    await provision();
+    expect(execEvents()).toContain("corepack pnpm install");
+
+    gitState.cloneFiles = { "yarn.lock": "# yarn lockfile v1\n" };
+    await provision();
+    expect(execEvents()).toContain("corepack yarn install");
+  });
+
+  it("an npm lockfile installs with npm", async () => {
+    gitState.cloneFiles = { "package-lock.json": "{}\n" };
+    await provision();
+    expect(execEvents()).toContain("npm install");
+  });
+
+  it("fail-open: a failing install still reaches ready, with the failure in the note", async () => {
+    gitState.cloneFiles = { "pnpm-lock.yaml": "lockfileVersion: 9\n" };
+    dockerState.execHandler = (command) =>
+      command === "pnpm install"
+        ? { exitCode: 1, output: "ERR_PNPM_SOMETHING broke\n" }
+        : { exitCode: 0, output: "ok\n" };
+    const stages: string[] = [];
+    const ws = await provision({ onStatus: (s) => stages.push(s) });
+    expect(stages).toEqual(["cloning", "starting", "installing", "ready"]);
+    const note = ws.takeInstallNote();
+    expect(note).toContain("exited 1");
+    expect(note).toContain("ERR_PNPM_SOMETHING");
+  });
+
+  it("no lockfile: nothing runs and the note says so", async () => {
+    gitState.cloneFiles = { "package.json": '{ "name": "fixture" }\n' };
+    const ws = await provision();
+    expect(execEvents()).toHaveLength(0);
+    expect(ws.takeInstallNote()).toContain("No Node lockfile");
+  });
+
+  it("networkless: install is skipped with an explanatory note", async () => {
+    gitState.cloneFiles = { "pnpm-lock.yaml": "lockfileVersion: 9\n" };
+    const ws = await provision({ network: "none" });
+    expect(execEvents()).toHaveLength(0);
+    expect(ws.takeInstallNote()).toContain("networkless");
   });
 });

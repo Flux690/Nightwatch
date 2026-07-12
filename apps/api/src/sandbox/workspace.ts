@@ -16,6 +16,7 @@ import {
   push,
   type CommitAuthor,
 } from "./git.js";
+import { resolveInstallPlan } from "./install.js";
 import { ensureProxy, proxyEnv } from "./proxy.js";
 import { capOutput } from "./output.js";
 
@@ -27,8 +28,14 @@ export interface SandboxLog {
 }
 
 // Provisioning progress for the console: creation is slow (clone, image pull,
-// container start) and would otherwise look like a hang on the first repo tool.
-export type SandboxStage = "cloning" | "starting" | "ready" | "failed";
+// container start, dependency install) and would otherwise look like a hang on
+// the first repo tool.
+export type SandboxStage =
+  | "cloning"
+  | "starting"
+  | "installing"
+  | "ready"
+  | "failed";
 
 export interface PullRequestRef {
   number: number;
@@ -90,6 +97,9 @@ export interface Workspace {
     command: string,
     opts: { cwd?: string; timeoutMs: number },
   ): Promise<ExecOutcome>;
+  // Single-consumption outcome of the provision-time dependency install; the
+  // first Bash result carries it to the model, later calls get null.
+  takeInstallNote(): string | null;
 }
 
 interface Entry {
@@ -128,6 +138,51 @@ async function networkAttachment(
     networkName: proxy.networkName,
     proxyEnv: proxyEnv(proxy.proxyUrl),
   };
+}
+
+const INSTALL_TIMEOUT_MS = 10 * 60_000;
+
+// Deterministic provision-time install, fail-open by contract: every outcome -
+// success, failure, skip - becomes a note for the model, never a dead sandbox.
+async function installDependencies(
+  containerId: string,
+  dir: string,
+  sessionId: string,
+  options: WorkspaceOptions,
+): Promise<string> {
+  if (options.network === "none") {
+    return 'Dependency install was skipped: the sandbox is networkless (operator setting "none").';
+  }
+  const plan = await resolveInstallPlan(dir);
+  if (plan === null) {
+    return "No Node lockfile was found, so no dependencies were pre-installed.";
+  }
+  options.onStatus?.("installing");
+  try {
+    const result = await execInContainer(containerId, plan.command, {
+      timeoutMs: INSTALL_TIMEOUT_MS,
+    });
+    if (result.exitCode === 0) {
+      options.log?.info(
+        { sessionId, command: plan.command },
+        "sandbox dependencies installed",
+      );
+      return `Dependencies were installed when this sandbox was created: \`${plan.command}\` exited 0.`;
+    }
+    options.log?.warn(
+      { sessionId, command: plan.command, exitCode: result.exitCode },
+      "sandbox dependency install failed",
+    );
+    const tail = capOutput(result.output).text.slice(-2000);
+    return `Dependency install failed when this sandbox was created: \`${plan.command}\` exited ${result.exitCode}. Fix or work around this before building or testing. Output tail:\n${tail}`;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    options.log?.warn(
+      { sessionId, command: plan.command, err: message },
+      "sandbox dependency install failed",
+    );
+    return `Dependency install failed when this sandbox was created: \`${plan.command}\` did not complete (${message}). Fix or work around this before building or testing.`;
+  }
 }
 
 async function createEntry(
@@ -184,6 +239,13 @@ async function provisionEntry(
     gitIdentity: options.commitAuthor,
   });
 
+  let installNote: string | null = await installDependencies(
+    containerId,
+    dir,
+    sessionId,
+    options,
+  );
+
   const workspace: Workspace = {
     sessionId,
     dir,
@@ -198,6 +260,11 @@ async function provisionEntry(
         output: capped.text,
         truncated: capped.truncated,
       };
+    },
+    takeInstallNote() {
+      const note = installNote;
+      installNote = null;
+      return note;
     },
   };
   const entry: Entry = {

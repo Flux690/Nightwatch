@@ -88,13 +88,14 @@ export interface ConsoleRunStopped extends ConsoleEnvelope {
   };
 }
 
-// Sandbox provisioning progress (clone, container start) so the first repo
-// tool call never looks hung. Ephemeral status only - nothing is persisted.
+// Sandbox provisioning progress (clone, container start, dependency install)
+// so the first repo tool call never looks hung. Ephemeral status only -
+// nothing is persisted.
 export interface ConsoleSandboxStatus extends ConsoleEnvelope {
   type: "SANDBOX_STATUS";
   payload: {
     sessionId: string;
-    stage: "cloning" | "starting" | "ready" | "failed";
+    stage: "cloning" | "starting" | "installing" | "ready" | "failed";
   };
 }
 

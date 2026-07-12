@@ -1,9 +1,21 @@
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import Dockerode from "dockerode";
 import { SandboxUnavailableError } from "./errors.js";
 
 export const SANDBOX_LABEL = "nightwatch.sandbox";
 export const SESSION_LABEL = "nightwatch.session";
-export const SANDBOX_IMAGE = "node:24";
+export const SANDBOX_IMAGE = "nightwatch-sandbox";
+const IMAGE_HASH_LABEL = "nightwatch.sandbox-image";
+
+// Built locally on top of the official node image: the runtime user is non-root
+// on a read-only rootfs, so global tooling must be baked in at build time (root).
+// Cache cleaned in the same layer - a later RUN cannot shrink an earlier one.
+const SANDBOX_DOCKERFILE = `FROM node:24
+RUN npm install -g pnpm && npm cache clean --force
+`;
 
 // Per-operation factory, mirroring the runner's docker client: no long-lived
 // singleton to go stale across daemon restarts.
@@ -49,20 +61,45 @@ export function resetIsolationCache(): void {
   cachedIsolation = undefined;
 }
 
+// Idempotent per Dockerfile content: the local image is reused while its hash
+// label matches; editing SANDBOX_DOCKERFILE rebuilds on the next call.
 export async function ensureImage(): Promise<void> {
   const docker = getDocker();
+  const hash = createHash("sha256").update(SANDBOX_DOCKERFILE).digest("hex");
   try {
-    await docker.getImage(SANDBOX_IMAGE).inspect();
-    return;
+    const info = await docker.getImage(SANDBOX_IMAGE).inspect();
+    if (info.Config.Labels?.[IMAGE_HASH_LABEL] === hash) return;
   } catch {
-    // Missing locally - pull below and wait for completion.
+    // Missing locally - build below.
   }
-  const stream = await docker.pull(SANDBOX_IMAGE);
-  await new Promise<void>((resolve, reject) => {
-    stream.on("data", () => undefined);
-    stream.on("end", resolve);
-    stream.on("error", reject);
-  });
+  // The build context is throwaway (unlike the proxy's config, which stays
+  // bind-mounted); building FROM node:24 pulls the base as needed.
+  const context = await mkdtemp(join(tmpdir(), "nightwatch-sandbox-image-"));
+  try {
+    await writeFile(join(context, "Dockerfile"), SANDBOX_DOCKERFILE);
+    const stream = await docker.buildImage(
+      { context, src: ["Dockerfile"] },
+      { t: SANDBOX_IMAGE, labels: { [IMAGE_HASH_LABEL]: hash } },
+    );
+    await new Promise<void>((resolve, reject) => {
+      docker.modem.followProgress(stream, (err, events) => {
+        if (err) return reject(err);
+        const failure = events?.find(
+          (e) => typeof (e as { error?: unknown }).error === "string",
+        );
+        if (failure) {
+          return reject(
+            new SandboxUnavailableError(
+              `sandbox image build failed: ${String((failure as { error: string }).error)}`,
+            ),
+          );
+        }
+        resolve();
+      });
+    });
+  } finally {
+    await rm(context, { recursive: true, force: true });
+  }
 }
 
 export interface SandboxLimits {
@@ -119,6 +156,10 @@ export async function createSandboxContainer(opts: {
     Env: [
       "HOME=/home/sandbox",
       "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      // Global installs land in the writable HOME mount: the rootfs is
+      // read-only and /usr/local is root-owned either way.
+      "NPM_CONFIG_PREFIX=/home/sandbox/.npm-global",
+      "PATH=/home/sandbox/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       // The agent may commit inside the container; without an identity git
       // refuses (host-side commits pass -c flags and are unaffected).
       `GIT_AUTHOR_NAME=${opts.gitIdentity.name}`,
@@ -138,6 +179,9 @@ export async function createSandboxContainer(opts: {
         `${opts.workspaceDir}:/workspace`,
         `${opts.homeDir}:/home/sandbox`,
       ],
+      // Tooling is baked into the image; the writable surfaces are exactly
+      // the two bind mounts and /tmp.
+      ReadonlyRootfs: true,
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges"],
       Tmpfs: { "/tmp": "rw,exec,nosuid,nodev,size=1g" },

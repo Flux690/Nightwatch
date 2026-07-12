@@ -81,6 +81,7 @@ function installGitMock(): void {
 const dockerState = {
   execCmds: [] as string[][],
   execCwds: [] as Array<string | undefined>,
+  imageLabels: {} as Record<string, Record<string, string>>,
 };
 
 function installDockerMock(): void {
@@ -89,7 +90,27 @@ function installDockerMock(): void {
   MockDocker.mockImplementation(function () {
     return {
       ping: () => Promise.resolve({}),
-      getImage: () => ({ inspect: () => Promise.resolve({}) }),
+      getImage: (name: string) => ({
+        inspect: () =>
+          dockerState.imageLabels[name]
+            ? Promise.resolve({
+                Config: { Labels: dockerState.imageLabels[name] },
+              })
+            : Promise.reject(new Error("no such image")),
+      }),
+      buildImage: (
+        _ctx: unknown,
+        opts: { t: string; labels?: Record<string, string> },
+      ) => {
+        dockerState.imageLabels[opts.t] = opts.labels ?? {};
+        return Promise.resolve({});
+      },
+      modem: {
+        followProgress: (
+          _stream: unknown,
+          cb: (err: Error | null, events: unknown[]) => void,
+        ) => cb(null, []),
+      },
       createContainer: () =>
         Promise.resolve({ id: "sandbox-1", start: () => Promise.resolve() }),
       getContainer: () => ({
@@ -258,6 +279,20 @@ describe("repo tools through registry dispatch", () => {
     expect(String(result.content)).toContain("escapes the repository");
   });
 
+  it("the first Bash result opens with the provision-time install note, later ones don't", async () => {
+    // This fixture has no lockfile, so the note is the honest skip variant.
+    const first = await run("Bash", { command: "echo one" });
+    expect(first.is_error).toBeUndefined();
+    const firstOut = (first.content as { output: string }).output;
+    expect(firstOut).toContain("No Node lockfile");
+    expect(firstOut).toContain("ok output");
+
+    const second = await run("Bash", { command: "echo two" });
+    expect((second.content as { output: string }).output).not.toContain(
+      "No Node lockfile",
+    );
+  });
+
   it("execs in the container with the per-tool timeout, not the 15s default", async () => {
     const result = await run("Bash", { command: "pnpm test" });
     expect(result.is_error).toBeUndefined();
@@ -290,9 +325,7 @@ describe("code-session budget extension", () => {
     updateConfig({ hardTimeoutMs: 300, codeSessionBudgetMs: 1_200_000 });
     scriptRunner.setScript([
       {
-        toolUses: [
-          { id: "t1", name: "Read", input: { path: "src/app.ts" } },
-        ],
+        toolUses: [{ id: "t1", name: "Read", input: { path: "src/app.ts" } }],
         text: "",
       },
       { toolUses: [], text: "Done." },

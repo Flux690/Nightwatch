@@ -350,7 +350,7 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Bash",
       description:
-        "Run a bash command inside the repository sandbox at the repo root (or cwd): install, build, test, grep, read-only git. This is the isolated checkout, never a production host. Network egress is restricted to package registries through a preconfigured proxy - install dependencies yourself when needed (e.g. pnpm install); a request to a non-allowlisted host fails, so if a legitimately needed host is blocked, name it in your summary and the pull request body. Use structured repo tools for edits; exec is for installing, observing and verifying. Output is capped head+tail.",
+        "Run a bash command inside the repository sandbox at the repo root (or cwd): build, test, grep, read-only git. This is the isolated checkout, never a production host. Use the structured repo tools for edits; Bash is for installing, observing and verifying. Output is capped head+tail.",
       input_schema: {
         type: "object",
         properties: {
@@ -380,13 +380,19 @@ export const REPO_TOOLS: Tool[] = [
         return Promise.resolve(badInput("command (string) is required."));
       }
       const cwd = requireString(input, "cwd");
-      return runRepoTool(ctx, (ws) =>
-        execInRepo(
+      return runRepoTool(ctx, async (ws) => {
+        const result = await execInRepo(
           ws,
           { command, ...(cwd !== null && { cwd }) },
           ctx.toolTimeoutMs,
-        ),
-      );
+        );
+        // The provision-time install outcome rides the first Bash result -
+        // the system prompt is already sent when the sandbox provisions.
+        const note = ws.takeInstallNote();
+        return note === null
+          ? result
+          : { ...result, output: `${note}\n\n${result.output}` };
+      });
     },
   },
   {
