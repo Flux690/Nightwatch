@@ -1,44 +1,86 @@
-// Minimal unified-diff renderer: one hunk spanning the changed region with three lines of
-// context. A multi-region replace_all degrades to one wide hunk, still a valid unified diff.
+import { diffArrays } from "diff";
 
 const CONTEXT_LINES = 3;
 
-export function unifiedDiff(
-  path: string,
+export type DiffLineType = "added" | "removed" | "unchanged";
+export interface DiffLine {
+  type: DiffLineType;
+  oldLineNumber: number | null;
+  newLineNumber: number | null;
+  content: string;
+}
+export interface DiffHunk {
+  lines: DiffLine[];
+}
+
+export function computeDiffHunks(
   before: string | null,
   after: string,
-): string {
-  const a = before === null ? [] : before.split("\n");
-  const b = after.split("\n");
+): DiffHunk[] {
+  const oldLines = before === null ? [] : before.split("\n");
+  const newLines = after.split("\n");
 
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) {
-    start++;
+  const flat: DiffLine[] = [];
+  let oldLineNumber = 0;
+  let newLineNumber = 0;
+  for (const change of diffArrays(oldLines, newLines)) {
+    if (change.added) {
+      for (const content of change.value) {
+        newLineNumber++;
+        flat.push({
+          type: "added",
+          oldLineNumber: null,
+          newLineNumber,
+          content,
+        });
+      }
+    } else if (change.removed) {
+      for (const content of change.value) {
+        oldLineNumber++;
+        flat.push({
+          type: "removed",
+          oldLineNumber,
+          newLineNumber: null,
+          content,
+        });
+      }
+    } else {
+      for (const content of change.value) {
+        oldLineNumber++;
+        newLineNumber++;
+        flat.push({ type: "unchanged", oldLineNumber, newLineNumber, content });
+      }
+    }
   }
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
+
+  return windowHunks(flat);
+}
+
+// Keeps only a few unchanged lines around each change, for orientation. Two
+// changes whose kept windows touch merge into a single hunk automatically -
+// there is nothing left to drop between them.
+function windowHunks(flat: DiffLine[]): DiffHunk[] {
+  const keep = new Array<boolean>(flat.length).fill(false);
+  for (let i = 0; i < flat.length; i++) {
+    if (flat[i].type === "unchanged") continue;
+    const from = Math.max(0, i - CONTEXT_LINES);
+    const to = Math.min(flat.length - 1, i + CONTEXT_LINES);
+    for (let j = from; j <= to; j++) keep[j] = true;
   }
 
-  const preStart = Math.max(0, start - CONTEXT_LINES);
-  const postEndA = Math.min(a.length, endA + CONTEXT_LINES);
+  const hunks: DiffHunk[] = [];
+  let current: DiffLine[] = [];
+  for (let i = 0; i < flat.length; i++) {
+    if (!keep[i]) {
+      if (current.length > 0) {
+        hunks.push({ lines: current });
+        current = [];
+      }
+      continue;
+    }
+    current.push(flat[i]);
+  }
+  if (current.length > 0) hunks.push({ lines: current });
 
-  const lines: string[] = [];
-  for (let i = preStart; i < start; i++) lines.push(` ${a[i] ?? ""}`);
-  for (let i = start; i < endA; i++) lines.push(`-${a[i] ?? ""}`);
-  for (let i = start; i < endB; i++) lines.push(`+${b[i] ?? ""}`);
-  for (let i = endA; i < postEndA; i++) lines.push(` ${a[i] ?? ""}`);
-
-  const oldCount = postEndA - preStart;
-  const newCount = start - preStart + (endB - start) + (postEndA - endA);
-  const oldStart = oldCount === 0 ? 0 : preStart + 1;
-  const newStart = newCount === 0 ? 0 : preStart + 1;
-
-  const header =
-    before === null
-      ? `--- /dev/null\n+++ b/${path}`
-      : `--- a/${path}\n+++ b/${path}`;
-  return `${header}\n@@ -${oldStart},${oldCount} +${newStart},${newCount} @@\n${lines.join("\n")}`;
+  return hunks;
 }

@@ -33,6 +33,7 @@ import {
 import { REPO_TOOL_NAMES } from "../agent/tools/repo.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import type { Tool, ToolExecuteContext } from "../agent/tools/types.js";
+import type { DiffHunk } from "../sandbox/tools/diff.js";
 
 const scriptRunner = createScriptRunner();
 mockCreateProvider.mockImplementation(() => scriptRunner.create());
@@ -220,10 +221,15 @@ describe("repo tools through registry dispatch", () => {
       new_string: "const a = 42;",
     });
     expect(edit.is_error).toBeUndefined();
-    const change = edit.content as { path: string; diff: string };
+    const change = edit.content as { path: string; hunks: DiffHunk[] };
     expect(change.path).toBe("src/app.ts");
-    expect(change.diff).toContain("-const a = 1;");
-    expect(change.diff).toContain("+const a = 42;");
+    const lines = change.hunks.flatMap((h) => h.lines);
+    expect(lines).toContainEqual(
+      expect.objectContaining({ type: "removed", content: "const a = 1;" }),
+    );
+    expect(lines).toContainEqual(
+      expect.objectContaining({ type: "added", content: "const a = 42;" }),
+    );
   });
 
   it("refuses to edit a file that was never read", async () => {
@@ -252,8 +258,14 @@ describe("repo tools through registry dispatch", () => {
       replace_all: true,
     });
     expect(all.is_error).toBeUndefined();
-    expect((all.content as { diff: string }).diff).toContain(
-      '+const target = "NEW";',
+    const allLines = (all.content as { hunks: DiffHunk[] }).hunks.flatMap(
+      (h) => h.lines,
+    );
+    expect(allLines).toContainEqual(
+      expect.objectContaining({
+        type: "added",
+        content: 'const target = "NEW";',
+      }),
     );
   });
 
@@ -263,7 +275,14 @@ describe("repo tools through registry dispatch", () => {
       content: "hello\n",
     });
     expect(created.is_error).toBeUndefined();
-    expect((created.content as { diff: string }).diff).toContain("/dev/null");
+    const createdLines = (
+      created.content as { hunks: DiffHunk[] }
+    ).hunks.flatMap((h) => h.lines);
+    expect(createdLines.length).toBeGreaterThan(0);
+    expect(
+      createdLines.every((l) => l.type === "added" && l.oldLineNumber === null),
+    ).toBe(true);
+    expect(createdLines.some((l) => l.content === "hello")).toBe(true);
 
     const overwrite = await run("Write", {
       path: "package.json",

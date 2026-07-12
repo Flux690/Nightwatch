@@ -169,7 +169,24 @@ describe("TranscriptItemRenderer", () => {
   describe("repo tool cards", () => {
     const DIFF_RESULT = {
       path: "src/app.ts",
-      diff: "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,2 +1,2 @@\n-const a = 1;\n+const a = 42;",
+      hunks: [
+        {
+          lines: [
+            {
+              type: "removed",
+              oldLineNumber: 1,
+              newLineNumber: null,
+              content: "const a = 1;",
+            },
+            {
+              type: "added",
+              oldLineNumber: null,
+              newLineNumber: 1,
+              content: "const a = 42;",
+            },
+          ],
+        },
+      ],
     };
 
     it("renders Edit results as a colored diff card", () => {
@@ -183,10 +200,10 @@ describe("TranscriptItemRenderer", () => {
 
       expect(screen.getByTestId("diff-card")).toBeInTheDocument();
       expect(screen.getByText("src/app.ts")).toBeInTheDocument();
-      expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
-      expect(screen.getByText("-const a = 1;")).toBeInTheDocument();
-      // File-header lines are folded into the card header, not the body.
-      expect(screen.queryByText("--- a/src/app.ts")).not.toBeInTheDocument();
+      expect(screen.getByText("const a = 42;")).toBeInTheDocument();
+      expect(screen.getByText("const a = 1;")).toBeInTheDocument();
+      // No raw unified-diff artifacts leak into the rendered card.
+      expect(screen.queryByText(/@@/)).not.toBeInTheDocument();
     });
 
     it("parses the persisted JSON-string form of a diff result too", () => {
@@ -199,7 +216,7 @@ describe("TranscriptItemRenderer", () => {
       });
 
       expect(screen.getByTestId("diff-card")).toBeInTheDocument();
-      expect(screen.getByText("+const a = 42;")).toBeInTheDocument();
+      expect(screen.getByText("const a = 42;")).toBeInTheDocument();
     });
 
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {

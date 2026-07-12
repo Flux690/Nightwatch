@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { ReadRequiredError } from "../errors.js";
 import { assertContained, resolveRepoPath } from "../paths.js";
 import type { Workspace } from "../workspace.js";
-import { unifiedDiff } from "./diff.js";
+import { computeDiffHunks } from "./diff.js";
 import type { FileChangeResult } from "./edit-file.js";
 
 export interface WriteFileInput {
@@ -34,6 +34,6 @@ export async function writeRepoFile(
   ws.readPaths.add(abs);
   return {
     path: input.path,
-    diff: unifiedDiff(input.path, existing, input.content),
+    hunks: computeDiffHunks(existing, input.content),
   };
 }

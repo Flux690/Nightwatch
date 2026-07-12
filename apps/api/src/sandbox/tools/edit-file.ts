@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { ReadRequiredError } from "../errors.js";
 import { assertContained, resolveRepoPath } from "../paths.js";
 import type { Workspace } from "../workspace.js";
-import { unifiedDiff } from "./diff.js";
+import { computeDiffHunks, type DiffHunk } from "./diff.js";
 
 export interface EditFileInput {
   path: string;
@@ -13,7 +13,7 @@ export interface EditFileInput {
 
 export interface FileChangeResult {
   path: string;
-  diff: string;
+  hunks: DiffHunk[];
 }
 
 function countOccurrences(haystack: string, needle: string): number {
@@ -66,5 +66,5 @@ export async function editRepoFile(
       ? before.split(input.old_string).join(input.new_string)
       : before.replace(input.old_string, input.new_string);
   await writeFile(abs, after, "utf8");
-  return { path: input.path, diff: unifiedDiff(input.path, before, after) };
+  return { path: input.path, hunks: computeDiffHunks(before, after) };
 }
