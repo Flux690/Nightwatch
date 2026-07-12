@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
-import {
-  buildInitialContext,
-  buildChatContext,
-  type PromptOptions,
-} from "./context.js";
+import { buildInitialContext, buildChatContext } from "./context.js";
+import type { PromptOptions } from "./prompts/system.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
