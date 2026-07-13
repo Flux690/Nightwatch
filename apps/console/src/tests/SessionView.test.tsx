@@ -431,12 +431,11 @@ describe("SessionView", () => {
       await user.type(screen.getByRole("textbox"), "check the db");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
-      // The pulse shows the instant the message is sent, before any token.
+      // The pulse and the echoed bubble show the instant the message is sent.
       await waitFor(() => {
         expect(screen.getByText("Thinking")).toBeInTheDocument();
       });
-      // Server-authoritative: the message renders only once persisted.
-      expect(screen.queryByText("check the db")).not.toBeInTheDocument();
+      expect(screen.getAllByText("check the db")).toHaveLength(1);
 
       // Persisting the user's own turn must NOT wipe the pulse.
       act(() => {
@@ -560,6 +559,78 @@ describe("SessionView", () => {
       await waitFor(() => {
         expect(screen.getByText("check_service_status")).toBeInTheDocument();
         expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("optimistic echo", () => {
+    it("echoes the message instantly and keeps exactly one bubble through the persist", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // The bubble is there before any server event, and the box is cleared.
+      expect(screen.getAllByText("check the db")).toHaveLength(1);
+      expect(screen.getByRole("textbox")).toHaveValue("");
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "u1",
+          type: "RUN_FINISHED",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "user",
+              content: "check the db",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      // The persisted row replaces the echo one-for-one, never both.
+      await waitFor(() => {
+        expect(screen.getAllByText("check the db")).toHaveLength(1);
+      });
+    });
+
+    it("rolls back the echo and restores the text when the send never reaches the API", async () => {
+      const { fetchMock } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+        if (String(url).includes("/messages") && init?.method === "POST") {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // Echo and pulse roll back; the composer gets the message back. The
+      // only remaining bubble is the session's original persisted turn.
+      await waitFor(() => {
+        expect(screen.getAllByTestId("user-turn")).toHaveLength(1);
+        expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox")).toHaveValue("check the db");
+        expect(screen.getByRole("textbox")).not.toBeDisabled();
       });
     });
   });

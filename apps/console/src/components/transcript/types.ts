@@ -12,6 +12,9 @@ export interface UserTurnItem {
   kind: "user_turn";
   id: string;
   text: string;
+  // The settled copy of a just-echoed bubble: rendered without the mount fade
+  // so the echo-to-persisted swap is invisible.
+  instant?: boolean;
 }
 
 export interface AgentTextItem {

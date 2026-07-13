@@ -134,23 +134,51 @@ function ScrollToEndChatInput(
 function TranscriptColumn({
   persistedMessages,
   liveItems,
+  pendingEcho,
+  lastEchoText,
   onResolve,
   onAnswer,
 }: {
   persistedMessages: SessionMessage[];
   liveItems: TranscriptItem[];
+  pendingEcho: string | null;
+  lastEchoText: string | null;
   onResolve: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
-  const persistedItems = useMemo(
-    () => convertPersistedMessages(persistedMessages),
-    [persistedMessages],
-  );
+  const persistedItems = useMemo(() => {
+    const items = convertPersistedMessages(persistedMessages);
+    if (lastEchoText === null) return items;
+    // The persisted copy of a just-echoed bubble mounts without the fade so
+    // the echo-to-persisted swap has no visible frame.
+    return items.map((item) =>
+      item.kind === "user_turn" && item.text === lastEchoText
+        ? { ...item, instant: true }
+        : item,
+    );
+  }, [persistedMessages, lastEchoText]);
+
+  // The fetch can return the persisted user turn before any event is heard
+  // for a newly-created session; if the last user turn already carries the
+  // echoed text, the echo would double-render - suppress it.
+  const echoPersisted = (): boolean => {
+    for (let i = persistedItems.length - 1; i >= 0; i--) {
+      const item = persistedItems[i];
+      if (item?.kind === "user_turn") return item.text === pendingEcho;
+    }
+    return false;
+  };
+  const echoItem: TranscriptItem | null =
+    pendingEcho !== null && !echoPersisted()
+      ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
+      : null;
+
   // A live card whose tool_use has since been persisted (e.g. an answered
   // question after the resumed run flushes) would render twice - drop it.
   const persistedKeys = new Set(persistedItems.map(itemKey));
   const allItems = [
     ...persistedItems,
+    ...(echoItem ? [echoItem] : []),
     ...liveItems.filter((item) => !persistedKeys.has(itemKey(item))),
   ];
 
@@ -198,6 +226,10 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  // Optimistic echo of the sent message, shown until its persisted row lands.
+  const [pendingEcho, setPendingEcho] = useState<string | null>(null);
+  // Outlives the echo so the persisted copy can skip its mount fade.
+  const lastEchoRef = useRef<string | null>(null);
   // Live status line (provider retries, sandbox provisioning); any other run
   // event clears it.
   const [activityNotice, setActivityNotice] = useState<string | null>(null);
@@ -219,6 +251,8 @@ export function SessionView({
       setActiveSessionId(null);
       setLiveItems([]);
       setIsRunning(false);
+      setPendingEcho(null);
+      lastEchoRef.current = null;
       setActivityNotice(null);
       return;
     }
@@ -226,6 +260,8 @@ export function SessionView({
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
+      setPendingEcho(null);
+      lastEchoRef.current = null;
       setActivityNotice(null);
     }
 
@@ -313,6 +349,9 @@ export function SessionView({
       if (env.type === "RUN_FINISHED") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
+        // Batched with the cache append below, so the echo-to-persisted swap
+        // is one commit: no duplicate frame, no gap.
+        setPendingEcho(null);
         if (message.role === "user") {
           // Persisting the human's own turn isn't the reply: keep only the
           // seeded pulse (same item reference, so its element never remounts).
@@ -339,6 +378,7 @@ export function SessionView({
         if (sessionId !== sid) return;
         setIsRunning(false);
         setActivityNotice(null);
+        setPendingEcho(null);
         setLiveItems([]);
         return;
       }
@@ -348,6 +388,7 @@ export function SessionView({
         if (sessionId !== sid) return;
         setIsRunning(false);
         setActivityNotice(null);
+        setPendingEcho(null);
         setLiveItems([]);
         // The failure is a persisted transcript row: append it like RUN_FINISHED
         // does so it renders in the conversation and survives reloads.
@@ -433,9 +474,19 @@ export function SessionView({
 
   useConsoleEvents(handleEnvelope);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback((text: string) => {
+    setPendingEcho(text);
+    lastEchoRef.current = text;
     setLiveItems([PENDING_THINKING]);
     setIsRunning(true);
+  }, []);
+
+  // The POST never reached the API, so the server has no record of the
+  // message: undo the echo and the pulse. ChatInput restores the text.
+  const handleSendFailed = useCallback(() => {
+    setPendingEcho(null);
+    setLiveItems([]);
+    setIsRunning(false);
   }, []);
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
@@ -455,6 +506,7 @@ export function SessionView({
             isRunning={false}
             onSessionCreated={handleSessionCreated}
             onSend={handleSend}
+            onSendFailed={handleSendFailed}
           />
         </div>
       </div>
@@ -474,6 +526,8 @@ export function SessionView({
             <TranscriptColumn
               persistedMessages={messages}
               liveItems={liveItems}
+              pendingEcho={pendingEcho}
+              lastEchoText={lastEchoRef.current}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
             />
@@ -495,6 +549,7 @@ export function SessionView({
             isRunning={isRunning}
             disabled={composerDisabled}
             onSend={handleSend}
+            onSendFailed={handleSendFailed}
           />
         )}
       </div>
