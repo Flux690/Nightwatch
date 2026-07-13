@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   Plus,
   Settings,
@@ -34,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
+import { SessionView } from "@/pages/SessionView";
 
 export function Shell({
   children,
@@ -63,6 +69,11 @@ function ShellContent({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Present only on /sessions/$id; Shell owns the one persistent SessionView so
+  // the / -> /sessions/$id transition is a prop change, not a remount.
+  const { id: routeSessionId } = useParams({ strict: false }) as {
+    id?: string;
+  };
   const attentionCount = useAttentionCount();
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -250,7 +261,11 @@ function ShellContent({
             isSessionArea ? "overflow-hidden" : "overflow-auto",
           )}
         >
-          {children}
+          {isSessionArea ? (
+            <SessionView sessionId={routeSessionId ?? null} />
+          ) : (
+            children
+          )}
         </div>
       </SidebarInset>
 

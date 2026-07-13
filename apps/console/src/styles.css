@@ -107,8 +107,6 @@
   --duration-slow: 240ms;
 }
 
-/* Hide the native scrollbar while keeping the element scrollable. Used by the
-   sidebar's scroll regions so long lists scroll without a visible track. */
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar {

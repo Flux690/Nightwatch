@@ -417,6 +417,71 @@ describe("SessionView", () => {
     });
   });
 
+  describe("thinking pulse (immediate affordance)", () => {
+    it("shows the pulse on send and keeps it through the user-turn persist", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // The pulse shows the instant the message is sent, before any token.
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+      });
+      // Server-authoritative: the message renders only once persisted.
+      expect(screen.queryByText("check the db")).not.toBeInTheDocument();
+
+      // Persisting the user's own turn must NOT wipe the pulse.
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "u1",
+          type: "RUN_FINISHED",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "user",
+              content: "check the db",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByText("check the db")).toHaveLength(1);
+      });
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
+
+      // The first assistant token takes over from the pulse.
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "a1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "text",
+            delta: "Checking the database...",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Checking the database..."),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
   describe("approval card (INTERRUPT)", () => {
     function pushGatedStart(): void {
       act(() => {
