@@ -24,9 +24,14 @@ import {
   publishRunRetrying,
   publishRunStopped,
 } from "../session/stream.js";
+import {
+  generateSessionTitle,
+  buildAlertTitleSource,
+} from "../session/title.js";
 import { dispatcher } from "../dispatcher.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
+import { serviceIdentityKey } from "@nightwatch/shared";
 import type {
   NormalizedAlert,
   SessionMessage,
@@ -79,12 +84,13 @@ function buildSessionMeta(
   alert: NormalizedAlert | null,
   userMessage: string | undefined,
 ): SessionMeta {
+  const target = alert ? serviceIdentityKey(alert.targetIdentifier) : "chat";
   return {
     sessionId,
     title:
       alert == null && userMessage
         ? userMessage.slice(0, 80)
-        : `${alert?.alertType ?? "chat"} - ${alert?.targetIdentifier ?? "chat"}`,
+        : `${alert?.alertType ?? "chat"} - ${target}`,
     createdAt: new Date().toISOString(),
   };
 }
@@ -262,6 +268,10 @@ export async function runInvestigation(
       persistedCount,
       seqOffset,
     );
+    // Brand-new session only: refine the title in the background. Chat uses the
+    // message; an alert, a compact summary.
+    const titleSource = input.userMessage ?? buildAlertTitleSource(allAlerts);
+    void generateSessionTitle(sessionId, titleSource, config, apiKey);
   }
 
   const persist = (): void => {

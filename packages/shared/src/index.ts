@@ -61,6 +61,7 @@ export type {
   ConsoleSandboxStatus,
   ConsoleRunRetrying,
   ConsoleRunFailed,
+  ConsoleSessionTitleUpdated,
   ConsoleEvent,
 } from "./console-events.js";
 export type {

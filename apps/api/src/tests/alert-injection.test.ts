@@ -15,11 +15,9 @@ import {
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import Fastify from "fastify";

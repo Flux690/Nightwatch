@@ -5,10 +5,9 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
+
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,

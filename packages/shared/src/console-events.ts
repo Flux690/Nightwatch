@@ -122,6 +122,16 @@ export interface ConsoleRunFailed extends ConsoleEnvelope {
   };
 }
 
+// A concise title generated asynchronously once the run starts; patches the
+// sidebar list in place (the durable title is written to the sessions row).
+export interface ConsoleSessionTitleUpdated extends ConsoleEnvelope {
+  type: "SESSION_TITLE_UPDATED";
+  payload: {
+    sessionId: string;
+    title: string;
+  };
+}
+
 // Discriminated union of all events on the API→console SSE stream.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -134,4 +144,5 @@ export type ConsoleEvent =
   | ConsoleRunStopped
   | ConsoleSandboxStatus
   | ConsoleRunRetrying
-  | ConsoleRunFailed;
+  | ConsoleRunFailed
+  | ConsoleSessionTitleUpdated;

@@ -13,11 +13,9 @@ import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createContractFakeProvider,

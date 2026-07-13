@@ -18,11 +18,9 @@ import type {
 
 // Stateful scripted provider — same pattern as approval-cycle.test.ts so the
 // loop runs against a deterministic turn sequence without a real LLM.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,

@@ -7,11 +7,9 @@ import type { RunnerCommandMessage } from "@nightwatch/shared";
 
 // Scripted provider: drives the loop to a gated tool so the interrupt row is
 // written to the DB, which is what these tests assert against.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,

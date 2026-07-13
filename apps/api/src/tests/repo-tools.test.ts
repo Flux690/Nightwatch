@@ -3,14 +3,15 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const { execFileMock, MockDocker, mockCreateProvider } = vi.hoisted(() => ({
+const { execFileMock, MockDocker } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
   MockDocker: vi.fn(),
-  mockCreateProvider: vi.fn(),
 }));
 vi.mock("node:child_process", () => ({ execFile: execFileMock }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
+
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createGateController,

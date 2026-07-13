@@ -9,6 +9,7 @@ import type {
   ConsoleSandboxStatus,
   ConsoleRunRetrying,
   ConsoleRunFailed,
+  ConsoleSessionTitleUpdated,
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
@@ -122,6 +123,18 @@ export function publishInterruptResolved(
     messageId: randomUUID(),
     type: "HUMAN_INPUT_RESOLVED",
     payload,
+  };
+  publishConsoleEvent(env);
+}
+
+export function publishSessionTitleUpdated(
+  sessionId: string,
+  title: string,
+): void {
+  const env: ConsoleSessionTitleUpdated = {
+    messageId: randomUUID(),
+    type: "SESSION_TITLE_UPDATED",
+    payload: { sessionId, title },
   };
   publishConsoleEvent(env);
 }

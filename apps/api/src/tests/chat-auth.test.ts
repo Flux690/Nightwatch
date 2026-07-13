@@ -5,11 +5,9 @@ import type { FastifyInstance } from "fastify";
 
 // Minimal scripted provider: finishes in one free-form turn so the loop exits
 // without runner tools, letting tests focus on the chat route boundary.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { createContractFakeProvider } from "./contract-fake-provider.js";
 

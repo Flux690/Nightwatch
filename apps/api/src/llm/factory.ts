@@ -21,3 +21,14 @@ export function createProvider(
       );
   }
 }
+
+// Same provider as createProvider, named distinctly so tests can mock the
+// one-shot title call independently; a test that stubs only createProvider
+// leaves title generation a harmless no-op.
+export function createTitleProvider(
+  system: string,
+  config: AgentConfig,
+  apiKey?: string,
+): Provider {
+  return createProvider(system, config, apiKey);
+}

@@ -33,6 +33,14 @@ export function createSession(
     });
 }
 
+// Overwrites unconditionally: the refined title deliberately replaces the
+// temporary first-message title once the run has generated it.
+export function updateSessionTitle(sessionId: string, title: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET title = ? WHERE session_id = ?`)
+    .run(title, sessionId);
+}
+
 // Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
 // the transaction makes the turn all-or-nothing so the transcript checkpoint never holds a hole.
 export function appendSessionMessages(messages: SessionMessage[]): void {

@@ -12,6 +12,7 @@ import {
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -45,6 +46,14 @@ export function SessionsSidebar(): React.JSX.Element {
     },
   });
 
+  useConsoleEvents((env) => {
+    if (env.type !== "SESSION_TITLE_UPDATED") return;
+    const { sessionId, title } = env.payload;
+    queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) =>
+      prev.map((s) => (s.sessionId === sessionId ? { ...s, title } : s)),
+    );
+  });
+
   function handleDelete(sessionId: string): void {
     setConfirmingId(sessionId);
   }
@@ -60,10 +69,8 @@ export function SessionsSidebar(): React.JSX.Element {
         {sessions.map((session) => (
           <SidebarMenuItem key={session.sessionId}>
             <SidebarMenuButton
-              // Reserve the trash-button gutter only while it's revealed
-              // (hover/focus); at rest the title uses the full width. Needs
-              // `!` to beat the variant's always-on pr-8 (Tailwind sorts pr-8
-              // last within the same group-has variant, so a plain override loses).
+              // `!` beats the variant's always-on pr-8: reserve the gutter only
+              // on hover/focus so short titles keep full width.
               className="pr-2! group-hover/menu-item:pr-8! group-focus-within/menu-item:pr-8!"
               isActive={activeSessionId === session.sessionId}
               onClick={() =>
@@ -73,7 +80,14 @@ export function SessionsSidebar(): React.JSX.Element {
                 })
               }
             >
-              <span title={session.title}>{session.title}</span>
+              <span
+                // Remount on title change so the temp -> refined swap slides in.
+                key={session.title}
+                title={session.title}
+                className="animate-in slide-in-from-left-2 fade-in duration-300"
+              >
+                {session.title}
+              </span>
             </SidebarMenuButton>
             <SidebarMenuAction
               showOnHover

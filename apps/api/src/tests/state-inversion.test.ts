@@ -6,11 +6,9 @@ import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
 // per-turn persistence writes real transcript rows.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
