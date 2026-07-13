@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx watch --clear-screen=false --include ../../packages/shared/dist src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
