@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderCallOptions,
   ProviderMessage,
   ToolResult,
   ToolSchema,
@@ -16,11 +17,18 @@ export class AnthropicProvider implements LLMProvider {
   private readonly model: string;
   private readonly system: string;
   private readonly config: AgentConfig;
+  private readonly opts?: ProviderCallOptions;
   private messages: Anthropic.Messages.MessageParam[] = [];
 
-  constructor(system: string, config: AgentConfig, apiKey?: string) {
+  constructor(
+    system: string,
+    config: AgentConfig,
+    apiKey?: string,
+    opts?: ProviderCallOptions,
+  ) {
     this.system = system;
     this.config = config;
+    this.opts = opts;
     // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
     // when set, falling back to the env var for deployments that still use env.
     this.client = new Anthropic({
@@ -60,9 +68,12 @@ export class AnthropicProvider implements LLMProvider {
           ],
           // Adaptive thinking lets the model decide when and how deeply to reason; thinking
           // blocks are preserved in response.content below for multi-turn continuity.
-          ...(this.config.thinking === "adaptive" && {
-            thinking: { type: "adaptive" as const },
-          }),
+          // Omitting the param entirely is Anthropic's "off" - used by calls
+          // flagged reasoning-off (one-shot titles) regardless of config.
+          ...(this.config.thinking === "adaptive" &&
+            this.opts?.reasoning !== "off" && {
+              thinking: { type: "adaptive" as const },
+            }),
           // ToolSchema is structurally compatible with Anthropic.Tool.
           tools: tools as Anthropic.Tool[],
           messages: this.messagesWithCacheBreakpoint(),

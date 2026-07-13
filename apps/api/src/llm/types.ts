@@ -47,6 +47,13 @@ export interface ProviderMessage {
   providerContent: unknown;
 }
 
+// Per-call behavior toggles, provider-neutral: callers state intent and each
+// adapter translates it into its own wire dialect. "off" - Anthropic: omit the
+// thinking param; OpenAI-compatible completions: reasoning_effort "none".
+export interface ProviderCallOptions {
+  reasoning?: "off";
+}
+
 // Implement this interface to add a new provider, then wire it into createProvider.
 export interface LLMProvider {
   start(firstMessage: string): void;

@@ -48,17 +48,15 @@ export async function generateSessionTitle(
   try {
     const trimmed = source.trim();
     if (!trimmed) return;
-    // A one-shot label needs no reasoning budget or long output window.
-    const titleConfig: AgentConfig = {
-      ...config,
-      thinking: "off",
-      reasoningEffort: null,
-      maxOutputTokens: 128,
-    };
+    // reasoning "off": a 4-word label has nothing to think about. The 1024
+    // window is a seatbelt for models that reason regardless - reasoning
+    // shares the output budget, and a starved budget returns empty text.
+    const titleConfig: AgentConfig = { ...config, maxOutputTokens: 1024 };
     const provider = createTitleProvider(
       TITLE_SYSTEM_PROMPT,
       titleConfig,
       apiKey,
+      { reasoning: "off" },
     );
     // Framed as quoted material inside an instruction: a bare conversational
     // message in the user slot pulls the model into answering it instead.
@@ -67,7 +65,13 @@ export async function generateSessionTitle(
     );
     const response = await provider.chat([]);
     const title = refine(response.text);
-    if (!title) return;
+    if (!title) {
+      logger.warn(
+        { sessionId, model: config.model, stopReason: response.stopReason },
+        "session title unusable, keeping the temporary title",
+      );
+      return;
+    }
     updateSessionTitle(sessionId, title);
     publishSessionTitleUpdated(sessionId, title);
   } catch (err) {

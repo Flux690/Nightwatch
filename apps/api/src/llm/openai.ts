@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderCallOptions,
   ProviderMessage,
   ToolResult,
   ToolSchema,
@@ -31,14 +32,21 @@ export class OpenAIProvider implements LLMProvider {
   private readonly model: string;
   private readonly system: string;
   private readonly config: AgentConfig;
+  private readonly opts?: ProviderCallOptions;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   // Reasoning per turn, keyed by message index; finalChatCompletion() drops the
   // streamed OpenRouter reasoning_details, so it's captured separately here.
   private readonly thinkingByIndex = new Map<number, string>();
 
-  constructor(system: string, config: AgentConfig, apiKey?: string) {
+  constructor(
+    system: string,
+    config: AgentConfig,
+    apiKey?: string,
+    opts?: ProviderCallOptions,
+  ) {
     this.system = system;
     this.config = config;
+    this.opts = opts;
     // apiKey falls back to the env var when not passed; config.baseUrl overrides
     // the env var so operators can switch endpoints without a server restart.
     this.client = new OpenAI({
@@ -68,6 +76,7 @@ export class OpenAIProvider implements LLMProvider {
     try {
       // Streamed via finalChatCompletion() so a large response can't trip the single-read
       // timeout; the accumulated result has the same shape as a non-streamed one.
+      const reasoningOff = this.opts?.reasoning === "off";
       const streamParams = {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
@@ -80,10 +89,18 @@ export class OpenAIProvider implements LLMProvider {
             parameters: t.input_schema,
           },
         })),
+        // A call flagged reasoning-off spends its whole budget on visible text;
+        // flat reasoning_effort is OpenAI-standard and OpenRouter accepts it as
+        // an alias. Gated on reasoningEffort so deployments that never speak the
+        // reasoning dialect keep sending nothing.
+        ...(reasoningOff &&
+          this.config.reasoningEffort && {
+            reasoning_effort: "none" as const,
+          }),
       };
       // OpenRouter-only param requesting reasoning_details on the stream; the
       // official SDK types don't know it, hence the cast through unknown.
-      if (this.config.reasoningEffort) {
+      if (!reasoningOff && this.config.reasoningEffort) {
         (streamParams as unknown as Record<string, unknown>)["reasoning"] = {
           effort: this.config.reasoningEffort,
         };

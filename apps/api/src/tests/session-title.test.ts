@@ -79,7 +79,7 @@ describe("session title generation", () => {
     });
   });
 
-  it("sends the message as quoted material with a no-reasoning config, not as a live turn", async () => {
+  it("sends the message as quoted material with reasoning off, not as a live turn", async () => {
     const provider = createContractFakeProvider([
       { toolUses: [], text: "Greeting" },
     ]);
@@ -98,12 +98,9 @@ describe("session title generation", () => {
     expect(framed).toContain("<content>");
     expect(framed).not.toBe("Hey there, how's it going?");
 
-    const config: unknown = mockCreateTitleProvider.mock.calls.at(-1)?.[1];
-    expect(config).toMatchObject({
-      thinking: "off",
-      reasoningEffort: null,
-      maxOutputTokens: 128,
-    });
+    const call = mockCreateTitleProvider.mock.calls.at(-1);
+    expect(call?.[1]).toMatchObject({ maxOutputTokens: 1024 });
+    expect(call?.[3]).toEqual({ reasoning: "off" });
     expect(getSession(sessionId)?.title).toBe("Greeting");
   });
 
