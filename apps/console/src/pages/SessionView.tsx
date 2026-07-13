@@ -25,7 +25,10 @@ import { ChatInput } from "@/components/transcript/ChatInput";
 import { applyLiveEvent } from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
 import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
-import type { TranscriptItem } from "@/components/transcript/types";
+import type {
+  ThinkingItem,
+  TranscriptItem,
+} from "@/components/transcript/types";
 import { apiFetch } from "@/api/client";
 
 interface PendingInterrupt {
@@ -100,6 +103,15 @@ function displayNameFromEmail(email: string): string {
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
+// Seeded into liveItems on send so the reply affordance is the very item the
+// first thinking delta merges into: same key, same element, no remount.
+const PENDING_THINKING: ThinkingItem = {
+  kind: "thinking",
+  id: "pending-thinking",
+  text: "",
+  streaming: true,
+};
+
 function ScrollToEndChatInput(
   props: React.ComponentProps<typeof ChatInput>,
 ): React.JSX.Element {
@@ -122,13 +134,11 @@ function ScrollToEndChatInput(
 function TranscriptColumn({
   persistedMessages,
   liveItems,
-  awaitingReply,
   onResolve,
   onAnswer,
 }: {
   persistedMessages: SessionMessage[];
   liveItems: TranscriptItem[];
-  awaitingReply: boolean;
   onResolve: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
@@ -171,18 +181,6 @@ function TranscriptColumn({
           />
         </MessageScrollerItem>
       ))}
-      {awaitingReply && (
-        <MessageScrollerItem className="mt-2">
-          <TranscriptItemRenderer
-            item={{
-              kind: "thinking",
-              id: "pending-thinking",
-              text: "",
-              streaming: true,
-            }}
-          />
-        </MessageScrollerItem>
-      )}
     </MessageScrollerContent>
   );
 }
@@ -200,7 +198,6 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [awaitingReply, setAwaitingReply] = useState(false);
   // Live status line (provider retries, sandbox provisioning); any other run
   // event clears it.
   const [activityNotice, setActivityNotice] = useState<string | null>(null);
@@ -222,7 +219,6 @@ export function SessionView({
       setActiveSessionId(null);
       setLiveItems([]);
       setIsRunning(false);
-      setAwaitingReply(false);
       setActivityNotice(null);
       return;
     }
@@ -230,7 +226,6 @@ export function SessionView({
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
-      setAwaitingReply(false);
       setActivityNotice(null);
     }
 
@@ -318,12 +313,20 @@ export function SessionView({
       if (env.type === "RUN_FINISHED") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
-        setIsRunning(false);
-        setActivityNotice(null);
-        setLiveItems([]);
-        // Persisting the human's own turn isn't the reply - keep the pulse alive
-        // until the assistant actually starts producing (any non-user message).
-        if (message.role !== "user") setAwaitingReply(false);
+        if (message.role === "user") {
+          // Persisting the human's own turn isn't the reply: keep only the
+          // seeded pulse (same item reference, so its element never remounts).
+          setLiveItems((prev) =>
+            prev.filter(
+              (item) =>
+                item.kind === "thinking" && item.id === PENDING_THINKING.id,
+            ),
+          );
+        } else {
+          setIsRunning(false);
+          setActivityNotice(null);
+          setLiveItems([]);
+        }
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
           (prev = []) => [...prev, message],
@@ -336,7 +339,6 @@ export function SessionView({
         if (sessionId !== sid) return;
         setIsRunning(false);
         setActivityNotice(null);
-        setAwaitingReply(false);
         setLiveItems([]);
         return;
       }
@@ -346,7 +348,6 @@ export function SessionView({
         if (sessionId !== sid) return;
         setIsRunning(false);
         setActivityNotice(null);
-        setAwaitingReply(false);
         setLiveItems([]);
         // The failure is a persisted transcript row: append it like RUN_FINISHED
         // does so it renders in the conversation and survives reloads.
@@ -361,16 +362,7 @@ export function SessionView({
         if (env.payload.sessionId === sid) {
           setIsRunning(true);
           setActivityNotice(null);
-          setAwaitingReply(false);
         }
-      }
-
-      // A tool call or interrupt is also real content taking over from the pulse.
-      if (
-        env.type === "TOOL_CALL_START" ||
-        env.type === "HUMAN_INPUT_REQUIRED"
-      ) {
-        setAwaitingReply(false);
       }
 
       setLiveItems((prev) => applyLiveEvent(prev, env, sid));
@@ -441,11 +433,8 @@ export function SessionView({
 
   useConsoleEvents(handleEnvelope);
 
-  // No optimistic echo: the transcript renders only server-persisted rows (the
-  // API persists the user turn before answering the send), so nothing can
-  // double-render. The pulse is the instant feedback.
   const handleSend = useCallback(() => {
-    setAwaitingReply(true);
+    setLiveItems([PENDING_THINKING]);
     setIsRunning(true);
   }, []);
 
@@ -485,7 +474,6 @@ export function SessionView({
             <TranscriptColumn
               persistedMessages={messages}
               liveItems={liveItems}
-              awaitingReply={awaitingReply}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
             />

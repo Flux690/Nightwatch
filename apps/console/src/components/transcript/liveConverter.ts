@@ -9,9 +9,12 @@ import type {
 
 // A non-thinking event finalizes the most recent streaming thinking burst;
 // a later thinking delta opens a fresh item rather than reopening this one.
+// A burst that never received text (the seeded pre-reply pulse) is dropped
+// outright so no ghost "Thinking" line survives it.
 function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   const last = items[items.length - 1];
   if (last?.kind === "thinking" && last.streaming) {
+    if (!last.text) return items.slice(0, -1);
     const finalized: ThinkingItem = { ...last, streaming: false };
     return [...items.slice(0, -1), finalized];
   }

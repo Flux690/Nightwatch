@@ -480,6 +480,88 @@ describe("SessionView", () => {
         ).toBeInTheDocument();
       });
     });
+
+    it("merges the first thinking delta into the seeded pulse element", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("thinking-block")).toBeInTheDocument();
+      });
+      const pulseNode = screen.getByTestId("thinking-block");
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "t1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "thinking",
+            delta: "Looking at the",
+          },
+        });
+        MockEventSource.latest?.push({
+          messageId: "t2",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: " db metrics" },
+        });
+      });
+
+      // Exactly one thinking block, and it is the same DOM node the pulse
+      // rendered - the takeover is a content change, never a remount.
+      await waitFor(() => {
+        expect(screen.getByText("Looking at the db metrics")).toBeVisible();
+      });
+      const blocks = screen.getAllByTestId("thinking-block");
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toBe(pulseNode);
+    });
+
+    it("drops the empty pulse when the run goes straight to a tool call", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "restart nginx");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Thinking")).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m3",
+          type: "TOOL_CALL_START",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-1",
+            toolName: "check_service_status",
+            input: { service: "nginx" },
+          },
+        });
+      });
+
+      // No ghost "Thinking" line survives a burst that never got text.
+      await waitFor(() => {
+        expect(screen.getByText("check_service_status")).toBeInTheDocument();
+        expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+      });
+    });
   });
 
   describe("approval card (INTERRUPT)", () => {

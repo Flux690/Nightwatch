@@ -59,34 +59,37 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
 
   const trimmed = item.text.trim();
 
+  // One structure for the pre-text pulse and the filled dropdown: the word
+  // never moves, the chevron slot is reserved (invisible) until text exists.
   return (
     <div
       className="animate-in fade-in duration-300"
       data-testid="thinking-block"
       data-streaming={item.streaming}
     >
-      {!trimmed && item.streaming ? (
-        <span className="text-sm text-muted-foreground animate-pulse">
-          Thinking
-        </span>
-      ) : (
-        <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
-            <span className={item.streaming ? "animate-pulse" : undefined}>
-              Thinking
-            </span>
-            <ChevronRight
-              aria-hidden="true"
-              className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
-            />
-          </CollapsibleTrigger>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger
+          disabled={!trimmed}
+          className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none"
+        >
+          <span className={item.streaming ? "animate-pulse" : undefined}>
+            Thinking
+          </span>
+          <ChevronRight
+            aria-hidden="true"
+            className={`size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90 ${
+              trimmed ? "" : "invisible"
+            }`}
+          />
+        </CollapsibleTrigger>
+        {trimmed && (
           <CollapsibleContent>
             <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
               {trimmed}
             </p>
           </CollapsibleContent>
-        </Collapsible>
-      )}
+        )}
+      </Collapsible>
     </div>
   );
 }
