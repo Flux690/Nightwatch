@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { runInvestigation } from "./agent/loop.js";
-import type { RunInvestigationInput } from "./agent/loop.js";
+import type { RunInvestigationInput, RunOutcome } from "./agent/loop.js";
 import { appendErrorMessage, getSession } from "./db/sessions.js";
 import { describeLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
-import { publishRunFailed } from "./session/stream.js";
+import {
+  publishRunFailed,
+  publishRunFinished,
+  publishRunStopped,
+} from "./session/stream.js";
 import type { NormalizedAlert, SessionMessage } from "@nightwatch/shared";
 
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
@@ -24,7 +28,7 @@ export interface Dispatcher {
 }
 
 export interface DispatcherOptions {
-  run: (input: RunInvestigationInput) => Promise<void>;
+  run: (input: RunInvestigationInput) => Promise<RunOutcome>;
   // resume dispatch never carries input.alert; derive alert identity from the session
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
 }
@@ -73,6 +77,14 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     controllers.set(input.sessionId, controller);
 
     void run({ ...input, signal: controller.signal })
+      .then((outcome) => {
+        // Single lifecycle owner: exactly one terminal event per run. A completed
+        // run has none yet (the loop only streamed messages); a stopped run needs
+        // its terminal here too. Suspended runs already ended via the interrupt
+        // event the loop emitted; failed runs terminate in the catch below.
+        if (outcome === "completed") publishRunFinished(input.sessionId);
+        else if (outcome === "stopped") publishRunStopped(input.sessionId);
+      })
       .catch((err: unknown) => {
         logger.error(
           { err, sessionId: input.sessionId },

@@ -61,13 +61,13 @@ describe("state inversion: persistence and reads are API-local", () => {
     vi.unstubAllEnvs();
   });
 
-  function hasAssistantRunFinished(
+  function hasAssistantMessage(
     events: ConsoleEventFrame[],
     sessionId: string,
   ): boolean {
     return events.some(
       (e) =>
-        e.type === "RUN_FINISHED" &&
+        e.type === "MESSAGE" &&
         e.payload["sessionId"] === sessionId &&
         (e.payload["message"] as { role?: string } | undefined)?.role ===
           "assistant",
@@ -91,7 +91,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    await waitFor(() => hasAssistantRunFinished(events, sessionId));
+    await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
     const listRes = await fetch(`http://127.0.0.1:${port}/sessions`, {
@@ -129,7 +129,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    await waitFor(() => hasAssistantRunFinished(events, sessionId));
+    await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
     const stored = getSession(String(sessionId));

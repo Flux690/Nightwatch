@@ -168,3 +168,159 @@
     margin: 0;
   }
 }
+
+/* "Working" loader: three dots morph triangle -> rotation -> ellipsis wave ->
+   triangle on one seamless loop. The container spins during the rotation phase;
+   each dot animates its own translate/scale within that rotating frame, so no
+   per-angle keyframe sampling is needed. Colour is inherited (currentColor). */
+.nw-working {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  animation: nw-working-spin 3s ease-in-out infinite;
+}
+
+.nw-working-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+.nw-working-dot-a {
+  animation: nw-working-a 3s ease-in-out infinite;
+}
+.nw-working-dot-b {
+  animation: nw-working-b 3s ease-in-out infinite;
+}
+.nw-working-dot-c {
+  animation: nw-working-c 3s ease-in-out infinite;
+}
+
+@keyframes nw-working-spin {
+  0%,
+  15% {
+    transform: rotate(0deg);
+  }
+  40%,
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* apex of the triangle -> centre of the line; takes the wave's middle beat */
+@keyframes nw-working-a {
+  0% {
+    transform: translate(-50%, -50%) translate(0, -6px) scale(1);
+  }
+  7% {
+    transform: translate(-50%, -50%) translate(0, -6px) scale(1.25);
+  }
+  15%,
+  40% {
+    transform: translate(-50%, -50%) translate(0, -6px) scale(1);
+  }
+  55% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  65% {
+    transform: translate(-50%, -50%) translate(0, -3px) scale(1);
+  }
+  70%,
+  75% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+  90%,
+  100% {
+    transform: translate(-50%, -50%) translate(0, -6px) scale(1);
+  }
+}
+
+/* bottom-right vertex -> right of the line; takes the wave's last beat */
+@keyframes nw-working-b {
+  0% {
+    transform: translate(-50%, -50%) translate(5.2px, 3px) scale(1);
+  }
+  7% {
+    transform: translate(-50%, -50%) translate(5.2px, 3px) scale(1.25);
+  }
+  15%,
+  40% {
+    transform: translate(-50%, -50%) translate(5.2px, 3px) scale(1);
+  }
+  55% {
+    transform: translate(-50%, -50%) translate(7px, 0) scale(1);
+  }
+  70% {
+    transform: translate(-50%, -50%) translate(7px, -3px) scale(1);
+  }
+  75% {
+    transform: translate(-50%, -50%) translate(7px, 0) scale(1);
+  }
+  90%,
+  100% {
+    transform: translate(-50%, -50%) translate(5.2px, 3px) scale(1);
+  }
+}
+
+/* bottom-left vertex -> left of the line; takes the wave's first beat */
+@keyframes nw-working-c {
+  0% {
+    transform: translate(-50%, -50%) translate(-5.2px, 3px) scale(1);
+  }
+  7% {
+    transform: translate(-50%, -50%) translate(-5.2px, 3px) scale(1.25);
+  }
+  15%,
+  40% {
+    transform: translate(-50%, -50%) translate(-5.2px, 3px) scale(1);
+  }
+  55% {
+    transform: translate(-50%, -50%) translate(-7px, 0) scale(1);
+  }
+  60% {
+    transform: translate(-50%, -50%) translate(-7px, -3px) scale(1);
+  }
+  65%,
+  75% {
+    transform: translate(-50%, -50%) translate(-7px, 0) scale(1);
+  }
+  90%,
+  100% {
+    transform: translate(-50%, -50%) translate(-5.2px, 3px) scale(1);
+  }
+}
+
+/* Reduced motion: hold the triangle, pulse opacity in a staggered ripple. */
+@media (prefers-reduced-motion: reduce) {
+  .nw-working {
+    animation: none;
+  }
+  .nw-working-dot {
+    animation: nw-working-fade 1.4s ease-in-out infinite;
+  }
+  .nw-working-dot-a {
+    transform: translate(-50%, -50%) translate(0, -6px);
+  }
+  .nw-working-dot-b {
+    transform: translate(-50%, -50%) translate(5.2px, 3px);
+    animation-delay: 0.2s;
+  }
+  .nw-working-dot-c {
+    transform: translate(-50%, -50%) translate(-5.2px, 3px);
+    animation-delay: 0.4s;
+  }
+}
+
+@keyframes nw-working-fade {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}

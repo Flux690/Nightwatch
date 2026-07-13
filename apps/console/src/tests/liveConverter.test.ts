@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
 import type { ConsoleEvent } from "@nightwatch/shared";
 
-import { applyLiveEvent } from "@/components/transcript/liveConverter";
-import type { TranscriptItem, ThinkingItem } from "@/components/transcript/types";
+import {
+  applyLiveEvent,
+  hasActiveStream,
+} from "@/components/transcript/liveConverter";
+import type {
+  TranscriptItem,
+  ThinkingItem,
+} from "@/components/transcript/types";
 
 function textDelta(delta: string): ConsoleEvent {
   return {
@@ -77,7 +83,10 @@ describe("applyLiveEvent — continue interrupt", () => {
     const items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
 
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ kind: "continue_card", toolUseId: "ci-1" });
+    expect(items[0]).toMatchObject({
+      kind: "continue_card",
+      toolUseId: "ci-1",
+    });
   });
 
   it("sets approval to 'continued' on HUMAN_INPUT_RESOLVED status=continued", () => {
@@ -116,7 +125,10 @@ describe("applyLiveEvent — continue interrupt", () => {
 
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({ kind: "thinking", streaming: false });
-    expect(items[1]).toMatchObject({ kind: "continue_card", toolUseId: "ci-2" });
+    expect(items[1]).toMatchObject({
+      kind: "continue_card",
+      toolUseId: "ci-2",
+    });
   });
 });
 
@@ -194,5 +206,61 @@ describe("applyLiveEvent — thinking", () => {
     const items = applyLiveEvent([], thinkingDelta("ignored"), "other-session");
 
     expect(items).toHaveLength(0);
+  });
+
+  it("drops a whitespace-only thinking burst instead of leaving a bare item", () => {
+    let items: TranscriptItem[] = [];
+    items = applyLiveEvent(items, thinkingDelta("\n  "), "s1");
+    // Still streaming, so it lingers until finalized.
+    expect(items).toHaveLength(1);
+    // A text delta finalizes the burst; whitespace-only means it is discarded.
+    items = applyLiveEvent(items, textDelta("Answer."), "s1");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "agent_text", text: "Answer." });
+  });
+});
+
+describe("hasActiveStream", () => {
+  it("is false for an empty transcript", () => {
+    expect(hasActiveStream([])).toBe(false);
+  });
+
+  it("is true while a thinking item streams real text", () => {
+    const items = applyLiveEvent([], thinkingDelta("Reasoning"), "s1");
+    expect(hasActiveStream(items)).toBe(true);
+  });
+
+  it("is false while a thinking item has only whitespace", () => {
+    const items = applyLiveEvent([], thinkingDelta("   "), "s1");
+    expect(hasActiveStream(items)).toBe(false);
+  });
+
+  it("is true while answer text streams", () => {
+    const items = applyLiveEvent([], textDelta("Here is"), "s1");
+    expect(hasActiveStream(items)).toBe(true);
+  });
+
+  it("is true while a tool card is in flight, false once it resolves", () => {
+    let items = applyLiveEvent([], toolCallStart("tu-1"), "s1");
+    expect(hasActiveStream(items)).toBe(true);
+    items = applyLiveEvent(
+      items,
+      {
+        messageId: "m1",
+        type: "TOOL_CALL_END",
+        payload: { sessionId: "s1", toolUseId: "tu-1", result: "ok" },
+      },
+      "s1",
+    );
+    expect(hasActiveStream(items)).toBe(false);
+  });
+
+  it("is false when the tail is a settled thinking item", () => {
+    let items = applyLiveEvent([], thinkingDelta("Reasoning"), "s1");
+    items = applyLiveEvent(items, toolCallStart("tu-1"), "s1");
+    // Tail is now an in-flight tool card; drop it to expose the finalized thinking.
+    items = items.slice(0, 1);
+    expect(items[0]).toMatchObject({ kind: "thinking", streaming: false });
+    expect(hasActiveStream(items)).toBe(false);
   });
 });

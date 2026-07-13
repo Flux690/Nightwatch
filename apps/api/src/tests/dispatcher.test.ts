@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
-import type { RunInvestigationInput } from "../agent/loop.js";
+import type { RunInvestigationInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
+// The gate resolves with a run outcome; these tests only exercise dedup/running
+// bookkeeping, so a plain "completed" stands in for every run.
+function deferred(): { promise: Promise<RunOutcome>; resolve: () => void } {
   let resolve!: () => void;
-  const promise = new Promise<void>((r) => {
-    resolve = r;
+  const promise = new Promise<RunOutcome>((r) => {
+    resolve = () => r("completed");
   });
   return { promise, resolve };
 }
@@ -190,7 +192,7 @@ describe("dispatcher", () => {
 
   it("stop returns false for a session that is not running", () => {
     const d = createDispatcher({
-      run: () => Promise.resolve(),
+      run: () => Promise.resolve<RunOutcome>("completed"),
       getAlertForSession: noAlertLookup,
     });
 

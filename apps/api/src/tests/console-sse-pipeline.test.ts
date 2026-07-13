@@ -111,9 +111,16 @@ describe("console SSE pipeline", () => {
     expect(deltas[0]?.payload["delta"]).toBe("All looks well.");
 
     const messages = events.filter(
-      (e) => e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
+      (e) => e.type === "MESSAGE" && e.payload["sessionId"] === sessionId,
     );
     expect(messages.length).toBeGreaterThan(0);
+
+    // The terminal event fires exactly once for the whole run, no matter how many
+    // messages were flushed - this is what keeps the console's run state stable.
+    const finishes = events.filter(
+      (e) => e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
+    );
+    expect(finishes.length).toBe(1);
 
     const transcriptRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}`,
@@ -133,7 +140,7 @@ describe("console SSE pipeline", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    // Each run persists exactly one assistant turn, so counting assistant RUN_FINISHED
+    // Each run persists exactly one assistant turn, so counting assistant MESSAGE
     // events distinguishes the first run (>=1) from the resumed run (>=2).
     const assistantFinishes = (sessionId: string): number =>
       events.filter((e) => {
@@ -142,7 +149,7 @@ describe("console SSE pipeline", () => {
           message?: { role?: string };
         };
         return (
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           payload.sessionId === sessionId &&
           payload.message?.role === "assistant"
         );

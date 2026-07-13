@@ -87,7 +87,7 @@ export function convertPersistedMessages(
               id: `agent-${msg.seq}-${textIdx++}`,
               text: block.text,
             });
-          } else if (block.type === "thinking" && block.thinking) {
+          } else if (block.type === "thinking" && block.thinking.trim()) {
             items.push({
               kind: "thinking",
               id: `thinking-${msg.seq}-${thinkingIdx++}`,

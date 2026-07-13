@@ -52,6 +52,7 @@ export type {
   ConsoleHumanInputResolved,
   ConsoleInterruptResolved,
   ConsoleTextMessageContent,
+  ConsoleMessage,
   ConsoleRunFinished,
   ConsoleToolCallStart,
   ConsoleHumanInputRequired,

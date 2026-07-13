@@ -22,13 +22,14 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { ChatInput } from "@/components/transcript/ChatInput";
-import { applyLiveEvent } from "@/components/transcript/liveConverter";
+import {
+  applyLiveEvent,
+  hasActiveStream,
+} from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
 import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
-import type {
-  ThinkingItem,
-  TranscriptItem,
-} from "@/components/transcript/types";
+import { WorkingIndicator } from "@/components/transcript/WorkingIndicator";
+import type { TranscriptItem } from "@/components/transcript/types";
 import { apiFetch } from "@/api/client";
 
 interface PendingInterrupt {
@@ -103,15 +104,6 @@ function displayNameFromEmail(email: string): string {
   return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
-// Seeded into liveItems on send so the reply affordance is the very item the
-// first thinking delta merges into: same key, same element, no remount.
-const PENDING_THINKING: ThinkingItem = {
-  kind: "thinking",
-  id: "pending-thinking",
-  text: "",
-  streaming: true,
-};
-
 function ScrollToEndChatInput(
   props: React.ComponentProps<typeof ChatInput>,
 ): React.JSX.Element {
@@ -136,6 +128,7 @@ function TranscriptColumn({
   liveItems,
   pendingEcho,
   lastEchoText,
+  showWorking,
   onResolve,
   onAnswer,
 }: {
@@ -143,6 +136,7 @@ function TranscriptColumn({
   liveItems: TranscriptItem[];
   pendingEcho: string | null;
   lastEchoText: string | null;
+  showWorking: boolean;
   onResolve: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
@@ -209,6 +203,13 @@ function TranscriptColumn({
           />
         </MessageScrollerItem>
       ))}
+      {showWorking && (
+        <MessageScrollerItem
+          className={allItems.length === 0 ? "mt-0" : "mt-2"}
+        >
+          <WorkingIndicator />
+        </MessageScrollerItem>
+      )}
     </MessageScrollerContent>
   );
 }
@@ -346,30 +347,34 @@ export function SessionView({
         return;
       }
 
-      if (env.type === "RUN_FINISHED") {
+      if (env.type === "MESSAGE") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
-        // Batched with the cache append below, so the echo-to-persisted swap
-        // is one commit: no duplicate frame, no gap.
+        // A persisted row, not a lifecycle signal - never touch isRunning here.
+        // The optimistic echo clears once its own turn lands.
         setPendingEcho(null);
-        if (message.role === "user") {
-          // Persisting the human's own turn isn't the reply: keep only the
-          // seeded pulse (same item reference, so its element never remounts).
-          setLiveItems((prev) =>
-            prev.filter(
-              (item) =>
-                item.kind === "thinking" && item.id === PENDING_THINKING.id,
-            ),
-          );
-        } else {
-          setIsRunning(false);
-          setActivityNotice(null);
+        // Assistant/error rows replace live streamed items whose ephemeral ids
+        // can't dedup against the persisted copy, so drop them. Tool_result
+        // (user) rows leave live tool cards for the persisted-key filter.
+        if (message.role === "assistant" || message.role === "error") {
           setLiveItems([]);
         }
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
           (prev = []) => [...prev, message],
         );
+        return;
+      }
+
+      if (env.type === "RUN_FINISHED") {
+        // The one terminal event for a self-completed run: settle run state.
+        // The transcript is already whole - every row arrived as a MESSAGE.
+        const { sessionId } = env.payload;
+        if (sessionId !== sid) return;
+        setIsRunning(false);
+        setActivityNotice(null);
+        setPendingEcho(null);
+        setLiveItems([]);
         return;
       }
 
@@ -390,13 +395,22 @@ export function SessionView({
         setActivityNotice(null);
         setPendingEcho(null);
         setLiveItems([]);
-        // The failure is a persisted transcript row: append it like RUN_FINISHED
-        // does so it renders in the conversation and survives reloads.
+        // The failure is a persisted transcript row: append it like a MESSAGE so
+        // it renders in the conversation and survives reloads.
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
           (prev = []) => [...prev, message],
         );
         return;
+      }
+
+      // A gated tool suspends the run for a human: it is terminal for the run
+      // process, so settle run state, then fall through to render the card.
+      if (env.type === "HUMAN_INPUT_REQUIRED") {
+        if (env.payload.sessionId === sid) {
+          setIsRunning(false);
+          setActivityNotice(null);
+        }
       }
 
       if (env.type === "TEXT_MESSAGE_CONTENT") {
@@ -477,20 +491,14 @@ export function SessionView({
   const handleSend = useCallback((text: string) => {
     setPendingEcho(text);
     lastEchoRef.current = text;
-    // Append, don't replace: a just-answered card can still be live (not yet
-    // flushed by the resumed run) and must survive the send.
-    setLiveItems((prev) => [
-      ...prev.filter(
-        (item) =>
-          !(item.kind === "thinking" && item.id === PENDING_THINKING.id),
-      ),
-      PENDING_THINKING,
-    ]);
+    // No transcript item is seeded: the run being active with nothing streaming
+    // is what surfaces the working animation. A just-answered card still live
+    // (not yet flushed by the resumed run) is left untouched so it survives.
     setIsRunning(true);
   }, []);
 
   // The POST never reached the API, so the server has no record of the
-  // message: undo the echo and the pulse. ChatInput restores the text.
+  // message: undo the echo. ChatInput restores the text.
   const handleSendFailed = useCallback(() => {
     setPendingEcho(null);
     setLiveItems([]);
@@ -498,6 +506,9 @@ export function SessionView({
   }, []);
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
+  // The run is working but silent: nothing is streaming into the transcript, so
+  // show the animation in the reply's place. Any live streaming tail hides it.
+  const showWorking = isRunning && !hasActiveStream(liveItems);
 
   if (!activeSessionId) {
     return (
@@ -536,6 +547,7 @@ export function SessionView({
               liveItems={liveItems}
               pendingEcho={pendingEcho}
               lastEchoText={lastEchoRef.current}
+              showWorking={showWorking}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
             />

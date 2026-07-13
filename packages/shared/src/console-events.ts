@@ -36,11 +36,24 @@ export interface ConsoleTextMessageContent extends ConsoleEnvelope {
   };
 }
 
+// A single persisted transcript row landed; the console appends it. Fires once
+// per message, many times per run - purely a content event, never a lifecycle one.
+export interface ConsoleMessage extends ConsoleEnvelope {
+  type: "MESSAGE";
+  payload: {
+    sessionId: string;
+    message: SessionMessage;
+  };
+}
+
+// The one terminal event for a run that finished on its own (the model stopped
+// with no tool call). Exactly one per completed run; stopped/failed/suspended
+// runs end via their own distinct terminal events instead.
 export interface ConsoleRunFinished extends ConsoleEnvelope {
   type: "RUN_FINISHED";
   payload: {
     sessionId: string;
-    message: SessionMessage;
+    reason: "completed";
   };
 }
 
@@ -113,7 +126,7 @@ export interface ConsoleRunRetrying extends ConsoleEnvelope {
 }
 
 // An investigation died unexpectedly. Carries the persisted error row so the
-// console appends it to the transcript exactly like RUN_FINISHED.
+// console appends it to the transcript exactly like a MESSAGE event.
 export interface ConsoleRunFailed extends ConsoleEnvelope {
   type: "RUN_FAILED";
   payload: {
@@ -136,6 +149,7 @@ export interface ConsoleSessionTitleUpdated extends ConsoleEnvelope {
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
   | ConsoleTextMessageContent
+  | ConsoleMessage
   | ConsoleRunFinished
   | ConsoleToolCallStart
   | ConsoleHumanInputRequired

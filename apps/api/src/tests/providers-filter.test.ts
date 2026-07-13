@@ -306,7 +306,7 @@ describe("providers filter and mismatch rejection", () => {
       // suspends and reaches the free-form finish in the scripted second turn.
       await waitFor(() =>
         events.some((e) => {
-          if (e.type !== "RUN_FINISHED") return false;
+          if (e.type !== "MESSAGE") return false;
           const message = e.payload["message"] as { content?: string };
           return message.content === "Investigation complete.";
         }),
@@ -496,7 +496,7 @@ describe("providers filter and mismatch rejection", () => {
 
         await waitFor(() =>
           events.some((e) => {
-            if (e.type !== "RUN_FINISHED") return false;
+            if (e.type !== "MESSAGE") return false;
             const message = e.payload["message"] as { content?: string };
             return message.content === "Investigation complete.";
           }),

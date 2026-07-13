@@ -274,7 +274,7 @@ export class OpenAIProvider implements LLMProvider {
           // ProviderBlock[] for assistant turns.
           const thinking = this.thinkingByIndex.get(i);
           const blocks: ProviderBlock[] = [];
-          if (thinking) blocks.push({ type: "thinking", thinking });
+          if (thinking?.trim()) blocks.push({ type: "thinking", thinking });
           if (content) blocks.push({ type: "text", text: content });
           for (const call of m.tool_calls ?? []) {
             if (call.type !== "function") continue;

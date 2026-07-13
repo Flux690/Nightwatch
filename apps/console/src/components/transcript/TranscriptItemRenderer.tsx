@@ -47,7 +47,11 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
+function ThinkingBlock({
+  item,
+}: {
+  item: ThinkingItem;
+}): React.JSX.Element | null {
   const [open, setOpen] = useState(item.streaming);
   const prevStreaming = useRef(item.streaming);
 
@@ -65,8 +69,11 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
 
   const trimmed = item.text.trim();
 
-  // One structure for the pre-text pulse and the filled dropdown: the word
-  // never moves, the chevron slot is reserved (invisible) until text exists.
+  // Empty reasoning is never a transcript item: the working animation stands in
+  // for "the model is thinking" while nothing is shown. A thinking block renders
+  // only once it has real text - so the chevron and body always exist together.
+  if (!trimmed) return null;
+
   return (
     <div
       className="animate-in fade-in duration-300"
@@ -74,27 +81,20 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
       data-streaming={item.streaming}
     >
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger
-          disabled={!trimmed}
-          className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none"
-        >
+        <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
           <span className={item.streaming ? "animate-pulse" : undefined}>
             Thinking
           </span>
           <ChevronRight
             aria-hidden="true"
-            className={`size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90 ${
-              trimmed ? "" : "invisible"
-            }`}
+            className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
           />
         </CollapsibleTrigger>
-        {trimmed && (
-          <CollapsibleContent>
-            <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
-              {trimmed}
-            </p>
-          </CollapsibleContent>
-        )}
+        <CollapsibleContent>
+          <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
+            {trimmed}
+          </p>
+        </CollapsibleContent>
       </Collapsible>
     </div>
   );

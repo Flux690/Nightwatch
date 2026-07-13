@@ -98,6 +98,19 @@ describe("convertPersistedMessages — thinking", () => {
     expect(items.some((i) => i.kind === "thinking")).toBe(false);
   });
 
+  it("drops a whitespace-only thinking block so no bare item renders", () => {
+    const items = convertPersistedMessages([
+      assistantMessage(1, [
+        { type: "thinking", thinking: "\n  \t" },
+        { type: "text", text: "Done." },
+      ]),
+    ]);
+
+    expect(items.some((i) => i.kind === "thinking")).toBe(false);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "agent_text", text: "Done." });
+  });
+
   it("assigns each thinking block a stable, unique id", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [

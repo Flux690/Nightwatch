@@ -4,6 +4,7 @@ import type { StreamDelta } from "../llm/types.js";
 import type {
   ConsoleInterrupt,
   ConsoleInterruptResolved,
+  ConsoleMessage,
   ConsoleRunFinished,
   ConsoleRunStopped,
   ConsoleSandboxStatus,
@@ -30,14 +31,27 @@ export function publishTextMessageContent(
   publishConsoleEvent(env);
 }
 
-export function publishRunFinished(
+// A persisted transcript row; the console appends it. Fires per message, many
+// times per run - a content event, orthogonal to run lifecycle.
+export function publishMessage(
   sessionId: string,
   message: SessionMessage,
 ): void {
+  const env: ConsoleMessage = {
+    messageId: randomUUID(),
+    type: "MESSAGE",
+    payload: { sessionId, message },
+  };
+  publishConsoleEvent(env);
+}
+
+// The single terminal event for a run that finished on its own. The dispatcher
+// is its sole caller; stopped/failed/suspended runs end via their own events.
+export function publishRunFinished(sessionId: string): void {
   const env: ConsoleRunFinished = {
     messageId: randomUUID(),
     type: "RUN_FINISHED",
-    payload: { sessionId, message },
+    payload: { sessionId, reason: "completed" },
   };
   publishConsoleEvent(env);
 }

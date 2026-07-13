@@ -100,10 +100,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(refusalScript),
     );
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -119,7 +116,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (e.payload["message"] as { role?: string } | undefined)?.role ===
             "assistant",
@@ -144,10 +141,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(finishScript),
     );
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -163,7 +157,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as
@@ -228,10 +222,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       rawPayload: {},
     };
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     dispatcher.dispatch({ alert, sessionId });
 
@@ -263,7 +254,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as

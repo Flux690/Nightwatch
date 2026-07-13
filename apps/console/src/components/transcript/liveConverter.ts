@@ -9,16 +9,29 @@ import type {
 
 // A non-thinking event finalizes the most recent streaming thinking burst;
 // a later thinking delta opens a fresh item rather than reopening this one.
-// A burst that never received text (the seeded pre-reply pulse) is dropped
-// outright so no ghost "Thinking" line survives it.
+// A burst that carried only whitespace (no real reasoning) is dropped outright
+// so no empty "Thinking" line survives it - the working animation covers that gap.
 function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   const last = items[items.length - 1];
   if (last?.kind === "thinking" && last.streaming) {
-    if (!last.text) return items.slice(0, -1);
+    if (!last.text.trim()) return items.slice(0, -1);
     const finalized: ThinkingItem = { ...last, streaming: false };
     return [...items.slice(0, -1), finalized];
   }
   return items;
+}
+
+// Whether the live tail is actively producing output the user can see: streamed
+// reasoning with real text, streamed answer text, or an in-flight tool card. When
+// false during a run, nothing is on screen yet, so the working animation shows.
+export function hasActiveStream(items: TranscriptItem[]): boolean {
+  const last = items[items.length - 1];
+  if (!last) return false;
+  if (last.kind === "thinking")
+    return last.streaming && last.text.trim() !== "";
+  if (last.kind === "agent_text") return true;
+  if (last.kind === "tool_card") return last.result === null;
+  return false;
 }
 
 export function applyLiveEvent(

@@ -19,10 +19,9 @@ import {
 } from "../db/sessions.js";
 import {
   publishTextMessageContent,
-  publishRunFinished,
+  publishMessage,
   publishInterrupt,
   publishRunRetrying,
-  publishRunStopped,
 } from "../session/stream.js";
 import {
   generateSessionTitle,
@@ -74,7 +73,7 @@ function persistNewTurns(
   } else {
     appendSessionMessages(newMessages);
   }
-  for (const message of newMessages) publishRunFinished(sessionId, message);
+  for (const message of newMessages) publishMessage(sessionId, message);
   return snap.length;
 }
 
@@ -94,6 +93,11 @@ function buildSessionMeta(
     createdAt: new Date().toISOString(),
   };
 }
+
+// How a run ended, so the dispatcher (the single lifecycle owner) can emit the
+// one matching terminal event. A thrown error is the 4th state, "failed",
+// handled by the dispatcher's catch - never returned here.
+export type RunOutcome = "completed" | "suspended" | "stopped";
 
 export interface RunInvestigationInput {
   sessionId: string;
@@ -115,7 +119,7 @@ export interface RunInvestigationInput {
 
 export async function runInvestigation(
   input: RunInvestigationInput,
-): Promise<void> {
+): Promise<RunOutcome> {
   const { sessionId, signal } = input;
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
@@ -181,12 +185,11 @@ export async function runInvestigation(
     }
     persistNewTurns(provider, sessionId, persistedCount, seqOffset);
     if (signal?.aborted) {
-      publishRunStopped(sessionId);
       log.info("run stopped by user during end wrap-up");
-      return;
+      return "stopped";
     }
     log.info("investigation ended after operator declined to continue");
-    return;
+    return "completed";
   }
 
   log.info(
@@ -307,16 +310,14 @@ export async function runInvestigation(
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");
         persist();
-        publishRunStopped(sessionId);
-        return;
+        return "stopped";
       }
       throw err;
     }
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user");
       persist();
-      publishRunStopped(sessionId);
-      return;
+      return "stopped";
     }
     log.info(
       {
@@ -331,12 +332,12 @@ export async function runInvestigation(
 
     if (response.stopReason === "refusal") {
       log.warn({ turn }, "model refused to continue");
-      return;
+      return "completed";
     }
 
     if (response.toolUses.length === 0) {
       log.info({ turn }, "investigation finished with free-form response");
-      return;
+      return "completed";
     }
 
     const execCtx: Omit<ToolExecuteContext, "toolUseId"> = {
@@ -404,7 +405,7 @@ export async function runInvestigation(
         { tool: gated.tool.name, kind: interrupt.kind },
         "run suspended: pending human input",
       );
-      return;
+      return "suspended";
     }
 
     // Drain mid-run injected alerts at the tool boundary, riding the tool-results user turn so
@@ -445,6 +446,7 @@ export async function runInvestigation(
     kind: "continue",
   });
   log.info({ turn }, "time budget reached: suspended with continue request");
+  return "suspended";
 }
 
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {

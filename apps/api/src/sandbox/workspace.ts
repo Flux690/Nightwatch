@@ -171,17 +171,20 @@ async function installDependencies(
       );
       return `Dependencies were installed when this sandbox was created: \`${plan.command}\` exited 0.`;
     }
+    const tail = capOutput(result.output).text.slice(-2000);
+    // Log the output tail too, not just the exit code: it names the blocked host
+    // (allowlist) or the failing binary (platform mismatch) so the operator can
+    // tell the two apart. The tail carries merged stdout+stderr.
     options.log?.warn(
-      { sessionId, command: plan.command, exitCode: result.exitCode },
+      { sessionId, command: plan.command, exitCode: result.exitCode, tail },
       "sandbox dependency install failed",
     );
-    const tail = capOutput(result.output).text.slice(-2000);
     return `Dependency install failed when this sandbox was created: \`${plan.command}\` exited ${result.exitCode}. Fix or work around this before building or testing. Output tail:\n${tail}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     options.log?.warn(
       { sessionId, command: plan.command, err: message },
-      "sandbox dependency install failed",
+      "sandbox dependency install did not complete",
     );
     return `Dependency install failed when this sandbox was created: \`${plan.command}\` did not complete (${message}). Fix or work around this before building or testing.`;
   }

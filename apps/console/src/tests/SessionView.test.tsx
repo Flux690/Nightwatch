@@ -163,8 +163,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("RUN_FINISHED flush", () => {
-    it("clears the live buffer when session_message arrives", async () => {
+  describe("MESSAGE flush", () => {
+    it("clears the live buffer when the assistant MESSAGE arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -188,7 +188,7 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m2",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -373,7 +373,7 @@ describe("SessionView", () => {
   });
 
   describe("thinking choreography (TEXT_MESSAGE_CONTENT kind=thinking)", () => {
-    it("clears thinking blocks once RUN_FINISHED flushes the turn", async () => {
+    it("clears thinking blocks once the assistant MESSAGE flushes the turn", async () => {
       setup();
 
       await waitFor(() => {
@@ -396,7 +396,7 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m4",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -417,8 +417,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("thinking pulse (immediate affordance)", () => {
-    it("shows the pulse on send and keeps it through the user-turn persist", async () => {
+  describe("working indicator (immediate affordance)", () => {
+    it("shows the indicator on send and keeps it through the user-turn persist", async () => {
       setup();
 
       await waitFor(() => {
@@ -431,17 +431,20 @@ describe("SessionView", () => {
       await user.type(screen.getByRole("textbox"), "check the db");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
-      // The pulse and the echoed bubble show the instant the message is sent.
+      // The indicator and the echoed bubble show the instant the message is sent,
+      // with no bare "Thinking" line.
       await waitFor(() => {
-        expect(screen.getByText("Thinking")).toBeInTheDocument();
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
       });
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
       expect(screen.getAllByText("check the db")).toHaveLength(1);
 
-      // Persisting the user's own turn must NOT wipe the pulse.
+      // Persisting the user's own turn is a MESSAGE, not a terminal: the run is
+      // still active, so the indicator stays.
       act(() => {
         MockEventSource.latest?.push({
           messageId: "u1",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -458,9 +461,9 @@ describe("SessionView", () => {
       await waitFor(() => {
         expect(screen.getAllByText("check the db")).toHaveLength(1);
       });
-      expect(screen.getByText("Thinking")).toBeInTheDocument();
+      expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
 
-      // The first assistant token takes over from the pulse.
+      // The first assistant token takes over: the indicator gives way to output.
       act(() => {
         MockEventSource.latest?.push({
           messageId: "a1",
@@ -478,9 +481,10 @@ describe("SessionView", () => {
           screen.getByText("Checking the database..."),
         ).toBeInTheDocument();
       });
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
     });
 
-    it("merges the first thinking delta into the seeded pulse element", async () => {
+    it("replaces the indicator with a thinking block once real reasoning streams", async () => {
       setup();
 
       await waitFor(() => {
@@ -494,9 +498,8 @@ describe("SessionView", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       await waitFor(() => {
-        expect(screen.getByTestId("thinking-block")).toBeInTheDocument();
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
       });
-      const pulseNode = screen.getByTestId("thinking-block");
 
       act(() => {
         MockEventSource.latest?.push({
@@ -515,17 +518,16 @@ describe("SessionView", () => {
         });
       });
 
-      // Exactly one thinking block, and it is the same DOM node the pulse
-      // rendered - the takeover is a content change, never a remount.
+      // The reasoning text surfaces as a single thinking block; the indicator,
+      // now that there is something to show, is gone.
       await waitFor(() => {
         expect(screen.getByText("Looking at the db metrics")).toBeVisible();
       });
-      const blocks = screen.getAllByTestId("thinking-block");
-      expect(blocks).toHaveLength(1);
-      expect(blocks[0]).toBe(pulseNode);
+      expect(screen.getAllByTestId("thinking-block")).toHaveLength(1);
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
     });
 
-    it("drops the empty pulse when the run goes straight to a tool call", async () => {
+    it("shows no thinking line when the run goes straight to a tool call", async () => {
       setup();
 
       await waitFor(() => {
@@ -539,7 +541,7 @@ describe("SessionView", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       await waitFor(() => {
-        expect(screen.getByText("Thinking")).toBeInTheDocument();
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
       });
 
       act(() => {
@@ -555,11 +557,13 @@ describe("SessionView", () => {
         });
       });
 
-      // No ghost "Thinking" line survives a burst that never got text.
+      // The in-flight tool card is the thing to show, so the indicator steps
+      // aside and no bare "Thinking" line ever appears.
       await waitFor(() => {
         expect(screen.getByText("check_service_status")).toBeInTheDocument();
         expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
       });
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
     });
   });
 
@@ -584,7 +588,7 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "u1",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -624,11 +628,13 @@ describe("SessionView", () => {
       await user.type(screen.getByRole("textbox"), "check the db");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
-      // Echo and pulse roll back; the composer gets the message back. The
-      // only remaining bubble is the session's original persisted turn.
+      // Echo and working indicator roll back; the composer gets the message
+      // back. The only remaining bubble is the session's original persisted turn.
       await waitFor(() => {
         expect(screen.getAllByTestId("user-turn")).toHaveLength(1);
-        expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+        expect(
+          screen.queryByTestId("working-indicator"),
+        ).not.toBeInTheDocument();
         expect(screen.getByRole("textbox")).toHaveValue("check the db");
         expect(screen.getByRole("textbox")).not.toBeDisabled();
       });
@@ -954,16 +960,7 @@ describe("SessionView", () => {
         MockEventSource.latest?.push({
           messageId: "m2",
           type: "RUN_FINISHED",
-          payload: {
-            sessionId: "s1",
-            message: {
-              sessionId: "s1",
-              seq: 2,
-              role: "assistant",
-              content: "Investigation complete.",
-              createdAt: new Date().toISOString(),
-            },
-          },
+          payload: { sessionId: "s1", reason: "completed" },
         });
       });
 
@@ -1322,7 +1319,7 @@ describe("SessionView", () => {
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
-      expect(screen.getByText("Thinking")).toBeInTheDocument();
+      expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
     });
 
     it("ignores clarification INTERRUPT for a different session", async () => {
