@@ -24,12 +24,16 @@ function refine(raw: string): string {
   const cleaned = raw
     .trim()
     .replace(/^["'`]+/, "")
-    .replace(/["'`.\s]+$/, "");
-  return cleaned
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, MAX_TITLE_WORDS)
-    .join(" ");
+    .replace(/["'`,;:.\s]+$/, "");
+  return (
+    cleaned
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, MAX_TITLE_WORDS)
+      .join(" ")
+      // The word slice can expose punctuation that was mid-string before it.
+      .replace(/["'`,;:.\s]+$/, "")
+  );
 }
 
 // Fire-and-forget on its own provider: never touches the investigation's stream,
@@ -44,8 +48,23 @@ export async function generateSessionTitle(
   try {
     const trimmed = source.trim();
     if (!trimmed) return;
-    const provider = createTitleProvider(TITLE_SYSTEM_PROMPT, config, apiKey);
-    provider.start(trimmed);
+    // A one-shot label needs no reasoning budget or long output window.
+    const titleConfig: AgentConfig = {
+      ...config,
+      thinking: "off",
+      reasoningEffort: null,
+      maxOutputTokens: 128,
+    };
+    const provider = createTitleProvider(
+      TITLE_SYSTEM_PROMPT,
+      titleConfig,
+      apiKey,
+    );
+    // Framed as quoted material inside an instruction: a bare conversational
+    // message in the user slot pulls the model into answering it instead.
+    provider.start(
+      `Title this session. Its opening content:\n<content>\n${trimmed}\n</content>`,
+    );
     const response = await provider.chat([]);
     const title = refine(response.text);
     if (!title) return;

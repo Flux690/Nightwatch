@@ -79,6 +79,48 @@ describe("session title generation", () => {
     });
   });
 
+  it("sends the message as quoted material with a no-reasoning config, not as a live turn", async () => {
+    const provider = createContractFakeProvider([
+      { toolUses: [], text: "Greeting" },
+    ]);
+    mockCreateTitleProvider.mockImplementationOnce(() => provider);
+    const sessionId = "sess-title-framing";
+    seedSession(sessionId, "temp");
+
+    await generateSessionTitle(
+      sessionId,
+      "Hey there, how's it going?",
+      loadConfig(),
+    );
+
+    const framed: unknown = provider.start.mock.calls[0]?.[0];
+    expect(framed).toContain("Hey there, how's it going?");
+    expect(framed).toContain("<content>");
+    expect(framed).not.toBe("Hey there, how's it going?");
+
+    const config: unknown = mockCreateTitleProvider.mock.calls.at(-1)?.[1];
+    expect(config).toMatchObject({
+      thinking: "off",
+      reasoningEffort: null,
+      maxOutputTokens: 128,
+    });
+    expect(getSession(sessionId)?.title).toBe("Greeting");
+  });
+
+  it("strips trailing punctuation, including after the word cap", async () => {
+    scriptTitleOnce("Identity Inquiry,");
+    const sessionId = "sess-title-comma";
+    seedSession(sessionId, "temp");
+    await generateSessionTitle(sessionId, "who are you?", loadConfig());
+    expect(getSession(sessionId)?.title).toBe("Identity Inquiry");
+
+    scriptTitleOnce("One Two Three Four, Five");
+    const sessionId2 = "sess-title-comma-2";
+    seedSession(sessionId2, "temp");
+    await generateSessionTitle(sessionId2, "some question", loadConfig());
+    expect(getSession(sessionId2)?.title).toBe("One Two Three Four");
+  });
+
   it("caps the refined title at four words", async () => {
     scriptTitleOnce("Redis Ran Out Of Memory Again");
     const sessionId = "sess-title-2";
