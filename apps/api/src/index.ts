@@ -46,6 +46,8 @@ const fastify = Fastify({
     ? { transport: { target: "pino-pretty", options: { colorize: true } } }
     : true,
   trustProxy: true,
+  // Long-lived console SSE streams would otherwise hold close() open forever.
+  forceCloseConnections: true,
 });
 
 await fastify.register(FastifyWebSocket);
@@ -112,3 +114,22 @@ const start = async (): Promise<void> => {
 };
 
 await start();
+
+// Without handlers the open SSE/WS connections keep the event loop alive on
+// Ctrl+C until tsx force-kills the process. Exit 0: a signal exit is a normal
+// exit here, so pnpm doesn't report a failed script.
+function shutdown(signal: NodeJS.Signals): void {
+  fastify.log.info({ signal }, "shutting down");
+  const failsafe = setTimeout(() => process.exit(1), 5000);
+  failsafe.unref();
+  fastify.close().then(
+    () => process.exit(0),
+    (err: unknown) => {
+      fastify.log.error(err);
+      process.exit(1);
+    },
+  );
+}
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
