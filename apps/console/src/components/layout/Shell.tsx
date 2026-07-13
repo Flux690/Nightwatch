@@ -188,7 +188,7 @@ function ShellContent({
 
           <SidebarGroup className="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel>Recent sessions</SidebarGroupLabel>
-            <SidebarGroupContent className="flex min-h-0 flex-1 overflow-hidden">
+            <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
               <SessionsSidebar />
             </SidebarGroupContent>
           </SidebarGroup>

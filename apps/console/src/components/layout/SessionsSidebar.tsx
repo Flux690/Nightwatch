@@ -11,7 +11,6 @@ import {
   SidebarMenuButton,
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
@@ -52,41 +51,44 @@ export function SessionsSidebar(): React.JSX.Element {
 
   return (
     <>
-      <ScrollArea className="min-h-0 flex-1">
-        <SidebarMenu className="gap-0.5">
-          {!isLoading && sessions.length === 0 && (
-            <p className="px-2 py-2 text-xs text-muted-foreground">
-              Your sessions will show up here.
-            </p>
-          )}
-          {sessions.map((session) => (
-            <SidebarMenuItem key={session.sessionId}>
-              <SidebarMenuButton
-                isActive={activeSessionId === session.sessionId}
-                onClick={() =>
-                  void navigate({
-                    to: "/sessions/$id",
-                    params: { id: session.sessionId },
-                  })
-                }
-              >
-                <span title={session.title}>{session.title}</span>
-              </SidebarMenuButton>
-              <SidebarMenuAction
-                showOnHover
-                aria-label="Delete session"
-                disabled={
-                  deleteSession.isPending &&
-                  deleteSession.variables === session.sessionId
-                }
-                onClick={() => handleDelete(session.sessionId)}
-              >
-                <Trash2 {...ICON_UI} />
-              </SidebarMenuAction>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </ScrollArea>
+      <SidebarMenu className="gap-0.5">
+        {!isLoading && sessions.length === 0 && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            Your sessions will show up here.
+          </p>
+        )}
+        {sessions.map((session) => (
+          <SidebarMenuItem key={session.sessionId}>
+            <SidebarMenuButton
+              // Reserve the trash-button gutter only while it's revealed
+              // (hover/focus); at rest the title uses the full width. Needs
+              // `!` to beat the variant's always-on pr-8 (Tailwind sorts pr-8
+              // last within the same group-has variant, so a plain override loses).
+              className="pr-2! group-hover/menu-item:pr-8! group-focus-within/menu-item:pr-8!"
+              isActive={activeSessionId === session.sessionId}
+              onClick={() =>
+                void navigate({
+                  to: "/sessions/$id",
+                  params: { id: session.sessionId },
+                })
+              }
+            >
+              <span title={session.title}>{session.title}</span>
+            </SidebarMenuButton>
+            <SidebarMenuAction
+              showOnHover
+              aria-label="Delete session"
+              disabled={
+                deleteSession.isPending &&
+                deleteSession.variables === session.sessionId
+              }
+              onClick={() => handleDelete(session.sessionId)}
+            >
+              <Trash2 {...ICON_UI} />
+            </SidebarMenuAction>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
 
       <ConfirmDialog
         open={confirmingId !== null}
