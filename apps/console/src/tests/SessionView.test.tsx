@@ -1298,6 +1298,33 @@ describe("SessionView", () => {
       });
     });
 
+    it("keeps an answered card visible when a new message is sent before the run flushes it", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification();
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("clarification-card");
+      await user.click(within(card).getByRole("radio", { name: /^nginx$/i }));
+      await user.click(within(card).getByRole("button", { name: /submit/i }));
+
+      // The answered card is still live-only; sending must not wipe it.
+      await user.type(screen.getByRole("textbox"), "also check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      expect(screen.getByText("Thinking")).toBeInTheDocument();
+    });
+
     it("ignores clarification INTERRUPT for a different session", async () => {
       setup();
 

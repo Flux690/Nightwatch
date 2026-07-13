@@ -477,7 +477,15 @@ export function SessionView({
   const handleSend = useCallback((text: string) => {
     setPendingEcho(text);
     lastEchoRef.current = text;
-    setLiveItems([PENDING_THINKING]);
+    // Append, don't replace: a just-answered card can still be live (not yet
+    // flushed by the resumed run) and must survive the send.
+    setLiveItems((prev) => [
+      ...prev.filter(
+        (item) =>
+          !(item.kind === "thinking" && item.id === PENDING_THINKING.id),
+      ),
+      PENDING_THINKING,
+    ]);
     setIsRunning(true);
   }, []);
 
