@@ -3,47 +3,45 @@ import {
   type FleetRunner,
   type NormalizedAlert,
 } from "@nightwatch/shared";
+import {
+  budgetLine,
+  READ_ONLY_INSTRUCTIONS,
+  SYSTEM_PROMPT,
+  type PromptOptions,
+} from "./prompts/system.js";
+import { sandboxInstructions } from "./prompts/sandbox.js";
 
 export interface InitialContext {
   systemPrompt: string;
   firstUserMessage: string;
 }
 
-const SYSTEM_PROMPT = `You are Nightwatch, an autonomous reliability engineer embedded in a production infrastructure platform. You investigate one incident at a time: find the root cause from evidence, then remediate or recommend the minimum-viable fix.
+const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
+  budgetMinutes: 5,
+  codeBudgetMinutes: 20,
+  repo: null,
+};
 
-How you operate:
-- Investigate with the read tools first. Build a hypothesis from concrete evidence (logs, stats, events, history) before acting. Ground every claim in something a tool returned.
-- When the evidence justifies a remediation, CALL the matching write tool (restart_service, exec). Do not describe the action in prose and stop - actually call the tool. Describing a fix you could have invoked is a failure.
-- Write tools require human approval. Calling one pauses you until a human approves or rejects; your hard timeout does not run during that wait. On approval, observe the result and continue. On rejection, do not retry the same action - reassess.
-- Prefer the smallest, most reversible fix. If you cannot find a safe remediation, or critical context is missing, say so plainly.
-- Most tools are provider-agnostic: they work on both Docker and Kubernetes services, dispatching under the hood based on the service identity you pass. A few tools are provider-specific (their description says so, e.g. "KUBERNETES ONLY") and only appear when the fleet has a matching runner; calling one with a service identity from the wrong provider returns a corrective error - do not retry the same call, use an agnostic tool or one matching that provider instead.
-- Host-level tools (get_host_memory, get_host_cpu, get_host_disk, get_host_network, get_host_dmesg, read_host_file, list_services, get_k8s_node_status) require a "server" parameter: the server name exactly as listed in the FLEET SUMMARY.
-- When you are done, reply in plain text: summarize the root cause and the remediation you took or recommend. Stop replying when the investigation is complete.
-
-Budget: 5 minutes of investigation time (human approval wait excluded). When the budget runs out the investigation pauses - the operator can resume it with a fresh budget or end it.`;
-
-// Appended when the runner has remediation off: write tools are already filtered out of
-// the offered schema (agent/tools.ts); this just tells the model why, so it recommends
-// instead of attempting a call that was never on the menu.
-const READ_ONLY_ADDENDUM = `
-
-You are in READ-ONLY mode: write tools (restart_service, exec) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. The operator can enable remediation from the console.`;
-
-function systemPromptFor(remediationEnabled: boolean): string {
-  return remediationEnabled
-    ? SYSTEM_PROMPT
-    : SYSTEM_PROMPT + READ_ONLY_ADDENDUM;
+function systemPromptFor(
+  remediationEnabled: boolean,
+  opts: PromptOptions,
+): string {
+  let prompt = SYSTEM_PROMPT + budgetLine(opts);
+  if (!remediationEnabled) prompt += READ_ONLY_INSTRUCTIONS;
+  if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
+  return prompt;
 }
 
 export function buildChatContext(
   remediationEnabled = false,
   fleetView?: FleetRunner[],
+  opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
 ): InitialContext {
   // Chat has no alert message to carry the fleet map, so it rides the system
   // prompt - the model still needs server names for the required `server` param.
   return {
     systemPrompt:
-      systemPromptFor(remediationEnabled) + buildFleetSummary(fleetView),
+      systemPromptFor(remediationEnabled, opts) + buildFleetSummary(fleetView),
     firstUserMessage: "",
   };
 }
@@ -52,8 +50,9 @@ export function buildInitialContext(
   alerts: NormalizedAlert[],
   remediationEnabled = false,
   fleetView?: FleetRunner[],
+  opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
 ): InitialContext {
-  if (!alerts[0]) return buildChatContext(remediationEnabled, fleetView);
+  if (!alerts[0]) return buildChatContext(remediationEnabled, fleetView, opts);
 
   const alertsSection =
     alerts.length === 1
@@ -70,14 +69,13 @@ ${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
-    systemPrompt: systemPromptFor(remediationEnabled),
+    systemPrompt: systemPromptFor(remediationEnabled, opts),
     firstUserMessage,
   };
 }
 
-// Always rendered when any runner is connected, even a single one: the map is
-// what carries the addressable server names the required `server` param needs,
-// and the incident machine's neighbours ride along as ordinary fleet lines.
+// Always rendered when any runner is connected, even a single one: the map carries the
+// addressable server names the required `server` param needs.
 function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   if (!fleetView || fleetView.length === 0) return "";
   const lines = fleetView.map((r) => {
@@ -91,9 +89,8 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
 }
 
 function formatAlert(alert: NormalizedAlert): string {
-  // JSON, not a rendered string: the model echoes this object verbatim into
-  // the `service` parameter of any tool call against this target (PRD
-  // "Further Notes" - the agent echoes the identity, it never reconstructs one).
+  // JSON, not a rendered string: the model echoes this object verbatim into the `service`
+  // parameter of any tool call against this target - it never reconstructs an identity.
   return `Alert ID:     ${alert.sourceAlertId}
 Target:       ${JSON.stringify(alert.targetIdentifier)}
 Alert type:   ${alert.alertType}

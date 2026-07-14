@@ -1,16 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
+import { dbPath } from "../config/paths.js";
 
-// Single SQLite source of record. Lazy open so tests can set NIGHTWATCH_DB_PATH before
-// first query; exported so secret-key self-provisioning can place the key file beside the database.
-export function dbPath(): string {
-  return process.env["NIGHTWATCH_DB_PATH"] ?? "/var/nightwatch/nightwatch.db";
-}
-
-// The schema is the single source of truth - the final desired shape, created
-// directly. There are no upgrade migrations: this is a pre-production project, so
-// a schema change is applied by recreating the database, not by migrating data.
+// No upgrade migrations: pre-production, so a schema change is applied by
+// recreating the database, not by migrating data.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS runner (
     id                TEXT PRIMARY KEY,
@@ -34,6 +28,15 @@ const SCHEMA = `
     tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
     remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
     remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
+    code_session_budget_ms  INTEGER NOT NULL DEFAULT 1200000,
+    sandbox_idle_timeout_ms INTEGER NOT NULL DEFAULT 3600000,
+    sandbox_cpus            INTEGER NOT NULL DEFAULT 2,
+    sandbox_memory_mb       INTEGER NOT NULL DEFAULT 4096,
+    sandbox_require_gvisor  INTEGER NOT NULL DEFAULT 0,
+    sandbox_network         TEXT NOT NULL DEFAULT 'allowlist',
+    sandbox_allowlist_hosts TEXT NOT NULL DEFAULT 'registry.npmjs.org
+registry.yarnpkg.com
+repo.yarnpkg.com',
     base_url           TEXT,
     api_key_encrypted  TEXT,
     prompt_caching     INTEGER NOT NULL DEFAULT 1,
@@ -109,6 +112,19 @@ const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_remediation_breaker
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
+  -- Single GitHub integration row (id 'github'): one repo bound per integration.
+  -- The token is encrypted at rest and never returned by any endpoint; there is
+  -- no reveal use case - regeneration happens on GitHub via the deep link.
+  CREATE TABLE IF NOT EXISTS github_integration (
+    id               TEXT PRIMARY KEY,
+    token_encrypted  TEXT NOT NULL,
+    repo_owner       TEXT NOT NULL,
+    repo_name        TEXT NOT NULL,
+    token_expires_at TEXT,
+    validated_at     TEXT NOT NULL,
+    created_at       TEXT NOT NULL
+  );
+
 `;
 
 let _db: Database.Database | undefined;
@@ -116,7 +132,7 @@ let _db: Database.Database | undefined;
 export function getDb(): Database.Database {
   if (!_db) {
     const path = dbPath();
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+    mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
     // Enforce the declared foreign keys (off by default in SQLite); this is what

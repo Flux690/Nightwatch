@@ -1,10 +1,7 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
@@ -13,17 +10,16 @@ import {
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
@@ -35,24 +31,6 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMessage = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as WsEvent;
-      if (msg.type === "connected") {
-        ws.off("message", onMessage);
-        resolve();
-      }
-    };
-    ws.on("message", onMessage);
-  });
-}
 
 describe("termination paths: every run ends in model text, no escalation", () => {
   let server: FastifyInstance;
@@ -100,9 +78,8 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -123,15 +100,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(refusalScript),
     );
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -147,13 +116,13 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (e.payload["message"] as { role?: string } | undefined)?.role ===
             "assistant",
       ),
     );
-    ws.close();
+    close();
 
     const messages = getSessionMessages(sessionId);
     const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
@@ -172,15 +141,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       createContractFakeProvider(finishScript),
     );
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -196,7 +157,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as
@@ -205,7 +166,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
           )?.content === "Root cause found. I am done.",
       ),
     );
-    ws.close();
+    close();
 
     const messages = getSessionMessages(sessionId);
     const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
@@ -224,7 +185,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: toolUseId,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -261,15 +222,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       rawPayload: {},
     };
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    await waitForConnected(ws);
-
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     dispatcher.dispatch({ alert, sessionId });
 
@@ -301,7 +254,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     await waitFor(() =>
       events.find(
         (e) =>
-          e.type === "RUN_FINISHED" &&
+          e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as
@@ -311,7 +264,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
             "Understood. The restart was rejected. Here is my analysis.",
       ),
     );
-    ws.close();
+    close();
 
     const messages = getSessionMessages(sessionId);
     expect(

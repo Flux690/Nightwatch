@@ -1,20 +1,14 @@
-import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
-// per-turn persistence writes real transcript rows. The script is supplied per
-// test via the hoisted setter.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+// per-turn persistence writes real transcript rows.
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -30,21 +24,17 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import {
+  connectConsoleEvents,
+  type ConsoleEventFrame,
+} from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../agent/context.js";
-import {
-  registerRunner,
-  unregisterRunner,
-} from "../ws/fleet.js";
+import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
 
 describe("state inversion: persistence and reads are API-local", () => {
   let server: FastifyInstance;
@@ -58,9 +48,8 @@ describe("state inversion: persistence and reads are API-local", () => {
     SESSION = await mintTestSession();
     TEST_TOKEN = generateRunnerToken("state-inversion").id;
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -72,40 +61,13 @@ describe("state inversion: persistence and reads are API-local", () => {
     vi.unstubAllEnvs();
   });
 
-  // Resolve once the console handler has acked its subscription; a fast publish
-  // (e.g. a platform tool's TOOL_CALL_END) otherwise races ahead of the
-  // event-bus subscribe and is missed.
-  function waitForConnected(ws: WebSocket): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const onMessage = (raw: WebSocket.RawData): void => {
-        const msg = JSON.parse(raw.toString()) as { type: string };
-        if (msg.type === "connected") {
-          ws.off("message", onMessage);
-          resolve();
-        }
-      };
-      ws.on("message", onMessage);
-    });
-  }
-
-  // Buffer every event from the socket. The run resolves in microtasks now, so
-  // an assistant RUN_FINISHED can be published before the test has captured the
-  // session id it is keyed by; buffering lets the assertion poll for it after.
-  function collectEvents(ws: WebSocket): WsEvent[] {
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    return events;
-  }
-
-  function hasAssistantRunFinished(
-    events: WsEvent[],
+  function hasAssistantMessage(
+    events: ConsoleEventFrame[],
     sessionId: string,
   ): boolean {
     return events.some(
       (e) =>
-        e.type === "RUN_FINISHED" &&
+        e.type === "MESSAGE" &&
         e.payload["sessionId"] === sessionId &&
         (e.payload["message"] as { role?: string } | undefined)?.role ===
           "assistant",
@@ -116,11 +78,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     setScript([{ text: "Looks healthy.", toolUses: [] }]);
 
     // Deliberately register no runner: the console must work during an outage.
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events = collectEvents(ws);
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -133,8 +91,8 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    await waitFor(() => hasAssistantRunFinished(events, sessionId));
-    ws.close();
+    await waitFor(() => hasAssistantMessage(events, sessionId));
+    close();
 
     const listRes = await fetch(`http://127.0.0.1:${port}/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
@@ -160,11 +118,7 @@ describe("state inversion: persistence and reads are API-local", () => {
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
     setScript([{ text: "Acknowledged.", toolUses: [] }]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events = collectEvents(ws);
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -175,8 +129,8 @@ describe("state inversion: persistence and reads are API-local", () => {
       body: JSON.stringify({ message: "Why did web-01 restart?" }),
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
-    await waitFor(() => hasAssistantRunFinished(events, sessionId));
-    ws.close();
+    await waitFor(() => hasAssistantMessage(events, sessionId));
+    close();
 
     const stored = getSession(String(sessionId));
     // No originating alert is the chat-vs-alert distinction now (trigger is gone).

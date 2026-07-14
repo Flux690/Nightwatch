@@ -10,17 +10,15 @@ export interface KubernetesServiceIdentity {
   namespace: string;
   workload: string;
   cluster?: string;
-  // Optional sub-selector for one container in a multi-container pod. NOT part of the
-  // durable identity (excluded from the key), so calls differing only by container key the
-  // same service; set by the agent, never from an alert.
+  // Optional sub-selector for one container in a multi-container pod. NOT part of the durable
+  // identity (excluded from the key), so calls differing only by container key the same service; set by the agent, never from an alert.
   container?: string;
 }
 
 export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
 
-// Compose re-stamps the project/service labels on every recreate, so they outlive the
-// container name/ID across a redeploy; anonymous `docker run` falls back to
-// the live name. The server scope is added by each caller, never read from labels here.
+// Compose re-stamps the project/service labels on every recreate, so they outlive the container
+// name/ID across a redeploy; anonymous `docker run` falls back to the live name. Server scope is added by each caller, never read from labels here.
 export function deriveDockerServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
   liveName: string,
@@ -35,9 +33,8 @@ export function deriveDockerServiceIdentity(
     : { provider: "docker", project: liveName, service: liveName };
 }
 
-// Parse an alert's labels into a candidate identity to match against the fleet,
-// never trusted alone. `namespace` (which Compose/cAdvisor never carry) signals which of
-// the two provider shapes it is.
+// Parse an alert's labels into a candidate identity to match against the fleet, never trusted alone.
+// `namespace` (which Compose/cAdvisor never carry) signals which of the two provider shapes it is.
 export function deriveServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
 ): ServiceIdentity {
@@ -60,9 +57,8 @@ function deriveDockerAlertIdentity(
     labels["job"] ??
     "unknown";
   const base = deriveDockerServiceIdentity(labels, liveName);
-  // The server scope comes only from the explicit `server` label - the same name
-  // the runner advertises (NIGHTWATCH_SERVER_NAME). `instance` is Prometheus's
-  // built-in target address, never a fleet identity, so it is not consulted.
+  // The server scope comes only from the explicit `server` label - the same name the runner
+  // advertises (NIGHTWATCH_SERVER_NAME); `instance` is Prometheus's built-in target address, never a fleet identity, so it's not consulted.
   const server = labels["server"];
   return server ? { ...base, server } : base;
 }
@@ -71,9 +67,8 @@ function deriveKubernetesAlertIdentity(
   labels: Record<string, string | undefined>,
   namespace: string,
 ): KubernetesServiceIdentity {
-  // Workload comes only from a controller label (the durable handle the manifest advertises).
-  // We don't guess it from a pod name - Deployment and StatefulSet pods are indistinguishable
-  // by shape - so an under-labelled alert matches nothing and is rejected loudly.
+  // Workload comes only from a controller label (the durable handle the manifest advertises); we don't
+  // guess from a pod name since Deployment/StatefulSet pods are indistinguishable by shape - an under-labelled alert is rejected loudly.
   const workload =
     labels["deployment"] ?? labels["statefulset"] ?? labels["pod"] ?? "unknown";
   const cluster = labels["cluster"];
@@ -82,9 +77,8 @@ function deriveKubernetesAlertIdentity(
     : { provider: "kubernetes", namespace, workload };
 }
 
-// Canonical string for equality/dedup/lookup, provider-prefixed so Docker and Kubernetes
-// can't collide. The server/cluster scope, when present, is inserted after the provider so
-// a scoped key always has one more segment than an unscoped one.
+// Canonical string for equality/dedup/lookup, provider-prefixed so Docker and Kubernetes can't collide.
+// The server/cluster scope, when present, is inserted after the provider so a scoped key always has one more segment than an unscoped one.
 export function serviceIdentityKey(id: ServiceIdentity): string {
   if (id.provider === "docker") {
     return id.server

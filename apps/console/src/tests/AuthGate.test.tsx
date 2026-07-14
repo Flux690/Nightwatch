@@ -13,20 +13,7 @@ import {
 
 import { AuthProvider } from "@/auth/AuthContext";
 import { AuthGate } from "../auth/AuthGate.js";
-
-class MockWs {
-  static OPEN = 1;
-  static CONNECTING = 0;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
-  readyState = MockWs.OPEN;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((e: unknown) => void) | null = null;
-  close = vi.fn();
-}
+import { MockEventSource } from "./mockEventSource.js";
 
 function makeRouter() {
   const rootRoute = createRootRoute({ component: Outlet });
@@ -55,7 +42,7 @@ function makeRouter() {
 }
 
 function setup(statusResponse: object) {
-  vi.stubGlobal("WebSocket", MockWs);
+  vi.stubGlobal("EventSource", MockEventSource);
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
     if (url.includes("/auth/status")) {
@@ -132,7 +119,7 @@ describe("AuthGate", () => {
   });
 
   it("shows a loader (not the shell or login) while the status fetch is pending", async () => {
-    vi.stubGlobal("WebSocket", MockWs);
+    vi.stubGlobal("EventSource", MockEventSource);
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
 
     const qc = new QueryClient({
@@ -161,7 +148,7 @@ describe("AuthGate", () => {
   });
 
   it("navigates to /login when a 401 arrives from any fetch mid-session", async () => {
-    vi.stubGlobal("WebSocket", MockWs);
+    vi.stubGlobal("EventSource", MockEventSource);
 
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url.includes("/auth/status")) {

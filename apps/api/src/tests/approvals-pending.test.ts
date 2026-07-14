@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -8,11 +7,9 @@ import type { RunnerCommandMessage } from "@nightwatch/shared";
 
 // Scripted provider: drives the loop to a gated tool so the interrupt row is
 // written to the DB, which is what these tests assert against.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -90,7 +87,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-qa-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -132,7 +129,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
     const found = body[0];
-    expect(found.toolName).toBe("restart_service");
+    expect(found.toolName).toBe("RestartService");
     expect(found.status).toBe("pending");
     expect(found.sessionId).toBeTruthy();
 
@@ -167,7 +164,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-sc-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -247,7 +244,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
         toolUses: [
           {
             id: `tu-emp-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",

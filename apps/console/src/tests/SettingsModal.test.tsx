@@ -27,6 +27,13 @@ const CONFIG: AgentConfig = {
   toolTimeoutMs: 15000,
   remediationBreakerLimit: 5,
   remediationBreakerWindowMs: 600000,
+  codeSessionBudgetMs: 1200000,
+  sandboxIdleTimeoutMs: 3600000,
+  sandboxCpus: 2,
+  sandboxMemoryMb: 4096,
+  sandboxRequireGvisor: false,
+  sandboxNetwork: "none",
+  sandboxAllowlistHosts: ["registry.npmjs.org"],
   baseUrl: undefined,
   apiKeyMasked: null,
   promptCaching: true,
@@ -223,10 +230,10 @@ describe("SettingsModal", () => {
   });
 
   describe("API key", () => {
-    it("POSTs /config/test with the entered key on Test Connection click", async () => {
+    it("lives in the Provider section, and Test Connection sends the entered key plus current provider/baseUrl/model", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
-      await openSection(user, /api key/i);
+      await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
@@ -244,12 +251,16 @@ describe("SettingsModal", () => {
           (testCall?.[1] as RequestInit).body as string,
         ) as {
           apiKey: string;
+          provider: string;
+          model: string;
         };
         expect(body.apiKey).toBe("sk-ant-newkey");
+        expect(body.provider).toBe(CONFIG.provider);
+        expect(body.model).toBe(CONFIG.model);
       });
     });
 
-    it("shows an error badge when Test Connection returns bad_key", async () => {
+    it("shows an error badge when Test Connection returns bad_key, and never PATCHes /config/key", async () => {
       const user = userEvent.setup();
       const fetchMock = vi
         .fn()
@@ -282,7 +293,7 @@ describe("SettingsModal", () => {
           return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         });
       renderModal(fetchMock);
-      await openSection(user, /api key/i);
+      await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-bad");
@@ -292,6 +303,65 @@ describe("SettingsModal", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/invalid api key/i)).toBeInTheDocument();
+      });
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            (url as string).includes("/config/key") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        ),
+      ).toBe(false);
+    });
+
+    it("disables Save for an untested key, and enables it once Test Connection succeeds", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
+      await user.type(keyInput, "sk-ant-newkey");
+
+      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+
+      await user.click(
+        screen.getByRole("button", { name: /test connection/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/connected/i)).toBeInTheDocument();
+      });
+      expect(
+        screen.getByRole("button", { name: /^save$/i }),
+      ).not.toBeDisabled();
+    });
+
+    it("PATCHes /config/key on Save after a successful test", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /provider/i);
+
+      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
+      await user.type(keyInput, "sk-ant-newkey");
+      await user.click(
+        screen.getByRole("button", { name: /test connection/i }),
+      );
+      await waitFor(() => {
+        expect(screen.getByText(/connected/i)).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      await waitFor(() => {
+        const keyCall = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            (url as string).includes("/config/key") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(keyCall).toBeDefined();
+        const body = JSON.parse(
+          (keyCall?.[1] as RequestInit).body as string,
+        ) as { apiKey: string };
+        expect(body.apiKey).toBe("sk-ant-newkey");
       });
     });
   });
@@ -432,6 +502,73 @@ describe("SettingsModal", () => {
 
       await user.click(screen.getByRole("button", { name: /copy/i }));
       expect(clipboardWrite).toHaveBeenCalledWith(INGEST_TOKEN);
+    });
+  });
+
+  describe("sandbox network", () => {
+    it("saves the agent network knob and explains what each mode means", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /sandbox/i);
+
+      const select = await screen.findByLabelText(/agent network/i);
+      expect(select).toHaveValue("none");
+      expect(screen.getByText(/no network at all/i)).toBeInTheDocument();
+
+      await user.selectOptions(select, "open");
+      expect(
+        screen.getByText(/could exfiltrate repository content/i),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          (call) =>
+            call[0] === "/api/config" &&
+            (call[1] as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
+          sandboxNetwork?: string;
+        };
+        expect(body.sandboxNetwork).toBe("open");
+      });
+    });
+
+    it("allowlist mode shows the editable hosts textarea and saves trimmed lines", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /sandbox/i);
+
+      const select = await screen.findByLabelText(/agent network/i);
+      await user.selectOptions(select, "allowlist");
+      expect(
+        screen.getByText(/enforcing proxy that reaches only the hosts below/i),
+      ).toBeInTheDocument();
+
+      const textarea = screen.getByLabelText(/allowed hosts/i);
+      await user.clear(textarea);
+      await user.type(textarea, "registry.npmjs.org{enter}internal.dev{enter}");
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          (call) =>
+            call[0] === "/api/config" &&
+            (call[1] as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
+          sandboxNetwork?: string;
+          sandboxAllowlistHosts?: string[];
+        };
+        expect(body.sandboxNetwork).toBe("allowlist");
+        // The trailing blank line from typing is dropped on save.
+        expect(body.sandboxAllowlistHosts).toEqual([
+          "registry.npmjs.org",
+          "internal.dev",
+        ]);
+      });
     });
   });
 });

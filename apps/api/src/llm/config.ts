@@ -6,6 +6,10 @@ export const REQUEST_TIMEOUT_MS = 120_000;
 
 export const MAX_RETRIES = 2;
 
+// Backoff ladder for transient provider errors, on top of the SDK's own quick
+// retries: 4 attempts over ~65s, enough to ride out a typical provider blip.
+export const LLM_RETRY_DELAYS_MS: readonly number[] = [5_000, 15_000, 45_000];
+
 // seeds the global Config row; loop reads effective values from config, not these constants
 export const DEFAULT_HARD_TIMEOUT_MS = 5 * 60_000;
 export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
@@ -14,3 +18,23 @@ export const DEFAULT_TOOL_TIMEOUT_MS = 15_000;
 // within 10 minutes before further writes are refused.
 export const DEFAULT_REMEDIATION_BREAKER_LIMIT = 5;
 export const DEFAULT_REMEDIATION_BREAKER_WINDOW_MS = 10 * 60_000;
+
+// Code sessions: the budget a session extends to on every repo tool call, since clone +
+// install + tests dwarf the 5-minute investigation default.
+export const DEFAULT_CODE_SESSION_BUDGET_MS = 20 * 60_000;
+export const DEFAULT_SANDBOX_IDLE_TIMEOUT_MS = 60 * 60_000;
+export const DEFAULT_SANDBOX_CPUS = 2;
+export const DEFAULT_SANDBOX_MEMORY_MB = 4096;
+
+// gVisor is used automatically when the host advertises it; this flag only
+// controls whether its absence is a hard failure. Off by default.
+export const DEFAULT_SANDBOX_REQUIRE_GVISOR = false;
+
+// Allowlist by default: sandbox egress is forced through the shared proxy,
+// which reaches only these hosts - the agent installs dependencies itself.
+export const DEFAULT_SANDBOX_NETWORK = "allowlist" as const;
+export const DEFAULT_SANDBOX_ALLOWLIST_HOSTS: readonly string[] = [
+  "registry.npmjs.org",
+  "registry.yarnpkg.com",
+  "repo.yarnpkg.com",
+];

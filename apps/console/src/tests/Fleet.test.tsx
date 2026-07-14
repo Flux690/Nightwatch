@@ -50,8 +50,7 @@ const WEB_RUNNER: RunnerRecord = {
   remediationMode: false,
 };
 
-/* FleetPage navigates to /fleet/add, so it renders under a memory router
-   with a stub destination route. */
+/* FleetPage navigates to /fleet/add, so it renders under a memory router with a stub destination route. */
 function renderFleetRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const fleetRoute = createRoute({

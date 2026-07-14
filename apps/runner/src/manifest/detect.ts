@@ -43,9 +43,8 @@ async function detectDocker(): Promise<{
 }> {
   try {
     const docker = getDocker();
-    // `all: true` so a service whose only container is currently stopped is
-    // still advertised - otherwise routing would reject the call before the
-    // runner ever gets to JIT-resolve it and report a clean finding.
+    // `all: true` so a service whose only container is currently stopped is still advertised - otherwise
+    // routing would reject the call before the runner ever gets to JIT-resolve it and report a clean finding.
     const list = await docker.listContainers({ all: true });
     const server = process.env["NIGHTWATCH_SERVER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
@@ -55,9 +54,8 @@ async function detectDocker(): Promise<{
       const identity = server ? { ...base, server } : base;
       const key = serviceIdentityKey(identity);
       const existing = byKey.get(key);
-      // Prefer "running" over any stopped state when multiple containers share
-      // an identity (e.g. scaled Compose replicas or a restarted container
-      // that left a stopped predecessor in the list).
+      // Prefer "running" over any stopped state when multiple containers share an identity (e.g. scaled
+      // Compose replicas or a restarted container that left a stopped predecessor in the list).
       if (!existing || existing.status !== "running") {
         byKey.set(key, { identity, status: c.State });
       }
@@ -79,9 +77,8 @@ async function detectKubernetes(): Promise<{
       appsApi.listStatefulSetForAllNamespaces(),
     ]);
 
-    // The cluster scope comes only from the operator-assigned env var, never the
-    // kubeconfig context name (which drifts and would not match the `cluster`
-    // label inbound alerts carry). Absent => an unscoped, single-cluster identity.
+    // The cluster scope comes only from the operator-assigned env var, never the kubeconfig context name
+    // (which drifts and wouldn't match the `cluster` label inbound alerts carry). Absent => an unscoped, single-cluster identity.
     const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const item of [...deployments.items, ...statefulSets.items]) {

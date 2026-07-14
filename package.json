@@ -1,6 +1,6 @@
 {
   "name": "nightwatch",
-  "version": "0.2.14",
+  "version": "0.2.15",
   "private": true,
   "engines": {
     "node": ">=20",
@@ -11,12 +11,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev": "pnpm --filter './apps/**' --parallel dev",
+    "dev": "pnpm -r --parallel dev",
     "dev:infra": "docker compose -f apps/runner/docker-compose.dev.yaml up -d"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
-    "prettier": "3.8.3",
-    "typescript": "6.0.3"
+    "@types/dockerode": "4.0.1",
+    "@types/node": "26.1.1",
+    "prettier": "3.9.5",
+    "typescript": "7.0.2"
   }
 }

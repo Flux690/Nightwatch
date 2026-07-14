@@ -9,9 +9,8 @@ import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
 import { targetRemediationDisabled } from "../agent/policy.js";
 
-// Executes an approved write and returns its result to the run. Never throws: once claimed
-// the interrupt can't be re-approved, so any fault (duplicate, missing tool, DB error)
-// becomes an is_error result and the run resumes instead of the card wedging.
+// Never throws: any fault becomes an is_error result so the run resumes
+// instead of the card wedging.
 export async function executeApprovedTool(
   pending: PendingHumanInputWithSession,
   resolvedBy: string,
@@ -75,6 +74,8 @@ export async function executeApprovedTool(
 
     const execResult = await executeTool(toolEntry, toolInput, {
       toolTimeoutMs: loadConfig().toolTimeoutMs,
+      sessionId,
+      toolUseId,
     });
     settleRemediationAction(
       sessionId,

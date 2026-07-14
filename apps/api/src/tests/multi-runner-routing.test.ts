@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import {
@@ -10,9 +9,7 @@ import {
   it,
   vi,
 } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type {
   CapabilityManifest,
@@ -21,11 +18,9 @@ import type {
 
 // Stateful scripted provider — same pattern as approval-cycle.test.ts so the
 // loop runs against a deterministic turn sequence without a real LLM.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -50,7 +45,8 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSessionMessages } from "../db/sessions.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 
@@ -140,19 +136,6 @@ function makeSend(
   };
 }
 
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
-
 describe("multi-runner routing", () => {
   let cleanupDb: () => void;
   let runnerIdA: string;
@@ -210,9 +193,8 @@ describe("multi-runner routing", () => {
       ]),
     );
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -249,7 +231,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-1",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: svc("postgres") },
           },
         ],
@@ -260,7 +242,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsB).toHaveLength(1);
-    expect(commandsB[0].commandName).toBe("get_service_logs");
+    expect(commandsB[0].commandName).toBe("GetServiceLogs");
     expect(commandsA).toHaveLength(0);
   });
 
@@ -271,7 +253,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-2",
-            name: "get_service_stats",
+            name: "GetServiceStats",
             input: { service: svc("nginx") },
           },
         ],
@@ -282,7 +264,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsA).toHaveLength(1);
-    expect(commandsA[0].commandName).toBe("get_service_stats");
+    expect(commandsA[0].commandName).toBe("GetServiceStats");
     expect(commandsB).toHaveLength(0);
   });
 
@@ -293,7 +275,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-3",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: svc("ghost-svc") },
           },
         ],
@@ -324,7 +306,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-4",
-            name: "get_host_memory",
+            name: "GetHostMemory",
             input: { server: "db-02" },
           },
         ],
@@ -335,7 +317,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsB).toHaveLength(1);
-    expect(commandsB[0].commandName).toBe("get_host_memory");
+    expect(commandsB[0].commandName).toBe("GetHostMemory");
     expect(commandsA).toHaveLength(0);
   });
 
@@ -343,7 +325,7 @@ describe("multi-runner routing", () => {
     setScript([
       {
         text: "Checking host memory.",
-        toolUses: [{ id: "tu-5", name: "get_host_memory", input: {} }],
+        toolUses: [{ id: "tu-5", name: "GetHostMemory", input: {} }],
       },
       FINISH_TURN,
     ]);
@@ -370,7 +352,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-restart",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: svc("postgres"),
               rationale: "OOM killed",
@@ -383,20 +365,7 @@ describe("multi-runner routing", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: Array<{ type: string; payload: Record<string, unknown> }> =
-      [];
-    ws.on("message", (raw) => {
-      events.push(
-        JSON.parse(raw.toString()) as {
-          type: string;
-          payload: Record<string, unknown>;
-        },
-      );
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -409,7 +378,7 @@ describe("multi-runner routing", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Wait for the approval interrupt — restart_service is a gated tool.
+    // Wait for the approval interrupt — RestartService is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
         (e) =>
@@ -438,29 +407,28 @@ describe("multi-runner routing", () => {
 
     // runner-b owns "postgres" and must receive the restart command.
     await waitFor(() =>
-      commandsB.some((c) => c.commandName === "restart_service"),
+      commandsB.some((c) => c.commandName === "RestartService"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "restart_service")?.commandInput[
+      commandsB.find((c) => c.commandName === "RestartService")?.commandInput[
         "service"
       ],
     ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 
-    ws.close();
+    close();
   });
 
   it("cross-token: routes to a runner connected under a different token by service identity", async () => {
-    // runner-c is registered under runnerId2, separate from runnerIdA and runnerIdB. With
-    // the flat registry, sendCommand routes globally by service identity, so "redis"
-    // (only on runner-c) must still be reached.
+    // runner-c is registered under a separate runnerId. The flat registry routes globally
+    // by service identity, so "redis" (only on runner-c) must still be reached.
     setScript([
       {
         text: "Checking redis.",
         toolUses: [
           {
             id: "tu-cross",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: svc("redis") },
           },
         ],
@@ -471,7 +439,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsC).toHaveLength(1);
-    expect(commandsC[0].commandName).toBe("get_service_logs");
+    expect(commandsC[0].commandName).toBe("GetServiceLogs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
   });
@@ -483,7 +451,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-k8s",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: k8sSvc("api-server", "production") },
           },
         ],
@@ -494,7 +462,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsK).toHaveLength(1);
-    expect(commandsK[0].commandName).toBe("get_service_logs");
+    expect(commandsK[0].commandName).toBe("GetServiceLogs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
     expect(commandsC).toHaveLength(0);
@@ -502,8 +470,7 @@ describe("multi-runner routing", () => {
 });
 
 describe("assigned-name server-scoped routing", () => {
-  // Two runners whose manifests carry server-scoped Docker identities — the
-  // shape produced by the runner when NIGHTWATCH_SERVER_NAME is set. Routing
+  // Manifests carry server-scoped Docker identities (NIGHTWATCH_SERVER_NAME set); routing
   // must match exclusively on the full (server, project, service) key.
   let cleanupDb2: () => void;
   let runnerIdS1: string;
@@ -589,7 +556,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-1",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: scopedSvc("api", "prod-server-01") },
           },
         ],
@@ -600,7 +567,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS1).toHaveLength(1);
-    expect(commandsS1[0].commandName).toBe("get_service_logs");
+    expect(commandsS1[0].commandName).toBe("GetServiceLogs");
     expect(commandsS2).toHaveLength(0);
   });
 
@@ -611,7 +578,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-2",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: scopedSvc("db", "prod-server-02") },
           },
         ],
@@ -622,7 +589,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("get_service_logs");
+    expect(commandsS2[0].commandName).toBe("GetServiceLogs");
     expect(commandsS1).toHaveLength(0);
   });
 
@@ -635,7 +602,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-3",
-            name: "get_service_logs",
+            name: "GetServiceLogs",
             input: { service: scopedSvc("api", "prod-server-02") },
           },
         ],
@@ -646,7 +613,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("get_service_logs");
+    expect(commandsS2[0].commandName).toBe("GetServiceLogs");
     expect(commandsS1).toHaveLength(0);
   });
 });

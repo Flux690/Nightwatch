@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, platform } from "node:os";
@@ -22,9 +21,9 @@ describe("resolveSecretKey", () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "nw-secret-key-"));
-    vi.stubEnv("NIGHTWATCH_DB_PATH", join(dir, "nightwatch.db"));
-    // dotenv/config may have loaded a real SECRET_KEY from .env; tests that
-    // exercise self-provisioning need it genuinely absent.
+    vi.stubEnv("NIGHTWATCH_DIR", dir);
+    // setup.ts sets the suite-wide test key; self-provisioning tests need
+    // SECRET_KEY genuinely absent.
     vi.stubEnv("SECRET_KEY", undefined);
   });
 
@@ -38,7 +37,7 @@ describe("resolveSecretKey", () => {
     expect(resolveSecretKey()).toBe("an-explicit-secret");
   });
 
-  it("generates a restricted-access key file beside the database when unset", () => {
+  it("generates a restricted-access key file in the state directory when unset", () => {
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);
 
@@ -56,9 +55,9 @@ describe("resolveSecretKey", () => {
     expectRestrictedPermissions(keyFile);
   });
 
-  it("creates the data directory on a truly fresh deploy where it doesn't exist yet", () => {
+  it("creates the state directory on a truly fresh deploy where it doesn't exist yet", () => {
     const freshDir = join(dir, "not-yet-created");
-    vi.stubEnv("NIGHTWATCH_DB_PATH", join(freshDir, "nightwatch.db"));
+    vi.stubEnv("NIGHTWATCH_DIR", freshDir);
 
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);

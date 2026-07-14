@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseAlertmanager } from "../alerts/parsers/alertmanager.js";
 
-// Covers the PARSER's own job: projecting fields, normalizing severity, isolating malformed
-// alerts, handling resolved notifications, synthesizing a stable id. Identity derivation is
-// exercised in service-identity.test.ts; here we only confirm the parser wires labels through.
+// Covers the parser's own job: projecting fields, normalizing severity, isolating malformed
+// alerts. Identity derivation is exercised separately in service-identity.test.ts.
 
 function alert(
   overrides: Record<string, unknown> = {},

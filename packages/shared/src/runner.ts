@@ -32,9 +32,8 @@ export interface RunnerRecord {
   remediationMode: boolean | null;
 }
 
-// Live view of one connected runner for fleet reasoning: enough
-// to match an alert or target identity. Unlike RunnerRecord it has no DB-only fields -
-// derived entirely from WS state.
+// Live view of one connected runner for fleet reasoning: enough to match an alert or target identity.
+// Unlike RunnerRecord it has no DB-only fields - derived entirely from WS state.
 export interface FleetRunner {
   runnerId: string;
   // The model-visible address: operator-assigned server name, or the

@@ -6,9 +6,8 @@ import type {
 import { getDb } from "./client.js";
 import type { PendingHumanInput } from "./interrupts.js";
 
-// A session row plus its originating alert (null for chat sessions). The alert is
-// the durable source of severity-dependent behavior on resume, so a run that no
-// longer carries the alert in its job can recover it from here.
+// The alert is the durable source of severity-dependent behavior on resume, so
+// a run that no longer carries it in its job can recover it from here.
 export type StoredSession = SessionMeta & {
   originatingAlert: NormalizedAlert | null;
 };
@@ -32,6 +31,14 @@ export function createSession(
         originatingAlert != null ? JSON.stringify(originatingAlert) : null,
       createdAt: meta.createdAt,
     });
+}
+
+// Overwrites unconditionally: the refined title deliberately replaces the
+// temporary first-message title once the run has generated it.
+export function updateSessionTitle(sessionId: string, title: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET title = ? WHERE session_id = ?`)
+    .run(title, sessionId);
 }
 
 // Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
@@ -59,9 +66,49 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
   insertAll(messages);
 }
 
-// Atomically persist the assistant turn messages AND the interrupt row in one
-// transaction. The loop calls this when suspending on a gated tool so the DB
-// is always in a consistent state: both exist or neither does.
+export function getNextSeq(sessionId: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COALESCE(MAX(seq), -1) + 1 AS next
+       FROM session_messages WHERE session_id = ?`,
+    )
+    .get(sessionId) as { next: number };
+  return row.next;
+}
+
+// Nightwatch's own failure note, appended after the turn that died. Display
+// and history only; buildSeed keeps it away from the model.
+export function appendErrorMessage(
+  sessionId: string,
+  text: string,
+): SessionMessage {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO session_messages
+       (session_id, seq, role, content, provider_content, created_at)
+     VALUES (@sessionId, @seq, 'error', @content, NULL, @createdAt)`,
+  );
+  const message: SessionMessage = {
+    sessionId,
+    seq: 0,
+    role: "error",
+    content: text,
+    createdAt: new Date().toISOString(),
+  };
+  db.transaction(() => {
+    message.seq = getNextSeq(sessionId);
+    insert.run({
+      sessionId,
+      seq: message.seq,
+      content: text,
+      createdAt: message.createdAt,
+    });
+  })();
+  return message;
+}
+
+// Called when suspending on a gated tool, so the DB is always consistent:
+// both the messages and interrupt row exist, or neither does.
 export function appendMessagesAndInterrupt(
   messages: SessionMessage[],
   pendingHumanInput: PendingHumanInput,
@@ -102,9 +149,8 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Deletes the session and, via ON DELETE CASCADE, its transcript and pending approval. The
-// remediation audit log is NOT a child of sessions, so it survives - the record of what
-// changed outlives the conversation.
+// Cascades to the transcript and pending approval; the remediation audit log
+// is not a child of sessions, so it survives.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }

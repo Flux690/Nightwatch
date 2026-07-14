@@ -1,18 +1,13 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -28,7 +23,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
@@ -40,11 +36,6 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -59,19 +50,6 @@ const TEST_OPTIONS = [
   },
   { label: "Memory leak", description: "Gradual memory growth causing OOM" },
 ];
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 describe("clarification interrupts", () => {
   let server: FastifyInstance;
@@ -92,7 +70,7 @@ describe("clarification interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_service") {
+        if (commandName === "RestartService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -129,9 +107,8 @@ describe("clarification interrupts", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -144,14 +121,14 @@ describe("clarification interrupts", () => {
     vi.unstubAllEnvs();
   });
 
-  it("request_clarification suspends: interrupt row kind=clarification, INTERRUPT event has kind+question+options, run exited", async () => {
+  it("AskUserQuestion suspends: interrupt row kind=clarification, INTERRUPT event has kind+question+options, run exited", async () => {
     setScript([
       {
         text: "Need clarification.",
         toolUses: [
           {
             id: "tu-clar-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "What is the likely root cause?",
               options: TEST_OPTIONS,
@@ -162,14 +139,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -202,9 +175,9 @@ describe("clarification interrupts", () => {
       "What is the likely root cause?",
     );
     expect(interrupt.payload["options"]).toEqual(TEST_OPTIONS);
-    expect(interrupt.payload["toolName"]).toBe("request_clarification");
+    expect(interrupt.payload["toolName"]).toBe("AskUserQuestion");
 
-    ws.close();
+    close();
 
     // cleanup via /respond
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -225,7 +198,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-ans-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Which container is affected?",
               options: TEST_OPTIONS,
@@ -236,14 +209,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -292,7 +261,7 @@ describe("clarification interrupts", () => {
     // Interrupt row gone after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("multiSelect answer: joins selections as comma-separated string in tool result", async () => {
@@ -302,7 +271,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-ms-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Which factors apply?",
               options: TEST_OPTIONS,
@@ -314,14 +283,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -368,7 +333,7 @@ describe("clarification interrupts", () => {
     );
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("clarification with decision body returns 400", async () => {
@@ -378,7 +343,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-clar-val-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: { question: "Confirm?", options: TEST_OPTIONS },
           },
         ],
@@ -386,14 +351,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -427,7 +388,7 @@ describe("clarification interrupts", () => {
     );
     expect(badRes.status).toBe(400);
 
-    ws.close();
+    close();
 
     // cleanup
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -448,7 +409,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: "tu-rr-clar-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: { question: "Is this recurring?", options: TEST_OPTIONS },
           },
         ],
@@ -456,14 +417,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -506,7 +463,7 @@ describe("clarification interrupts", () => {
     await waitFor(() => !hasPendingHumanInput(sessionId));
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("mixed two-gate turn: clarification suspends first, then approval suspends on resume, run completes", async () => {
@@ -521,7 +478,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: clarId,
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Confirm restart?",
               options: [{ label: "Yes", description: "Proceed" }],
@@ -529,7 +486,7 @@ describe("clarification interrupts", () => {
           },
           {
             id: restart1Id,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -548,7 +505,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: restart2Id,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -565,14 +522,10 @@ describe("clarification interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -618,7 +571,7 @@ describe("clarification interrupts", () => {
           e.payload["kind"] === "approval",
       ),
     );
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(
@@ -639,6 +592,6 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(1);
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 });

@@ -60,9 +60,8 @@ export async function registerWsRoutes(
 
       fastify.log.info({ runnerId: runnerId.slice(0, 8) }, "runner connected");
 
-      // Standard ws liveness probe: a peer that misses a whole ping interval
-      // is dead (half-open TCP path), so terminate and let close-side cleanup
-      // settle its commands and registration.
+      // A peer that misses a whole ping interval is dead (half-open TCP path),
+      // so terminate and let close-side cleanup settle its commands.
       let isAlive = true;
       socket.on("pong", () => {
         isAlive = true;
@@ -99,9 +98,8 @@ export async function registerWsRoutes(
             { runnerId: runnerId.slice(0, 8) },
             "manifest stored",
           );
-          // Reconcile remediation mode: re-read from DB each time (the operator may have toggled),
-          // bootstrap from the manifest on first arrival (null DB), then keep DB authoritative. Always
-          // sync the in-memory cache so reads need no DB round-trip.
+          // Re-read from DB each time (operator may have toggled), bootstrap from
+          // the manifest on first arrival, then keep DB authoritative.
           const currentRow = findRunnerById(runnerId);
           const dbMode = currentRow?.remediationMode ?? null;
           const manifestMode = msg.payload.capabilities.remediationEnabled;

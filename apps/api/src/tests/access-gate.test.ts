@@ -1,18 +1,13 @@
-import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { vi } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwatch/shared";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -28,7 +23,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
@@ -38,24 +34,6 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
@@ -88,7 +66,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result: commandName === "restart_service" ? { restarted: true } : [],
+          result: commandName === "RestartService" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -117,9 +95,8 @@ describe("access-gate: gating is driven by tool access level", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
@@ -139,7 +116,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-read-1",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
         ],
@@ -147,14 +124,10 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Investigation complete.", toolUses: [] },
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -186,7 +159,7 @@ describe("access-gate: gating is driven by tool access level", () => {
 
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("write tool suspends with approval card: HUMAN_INPUT_REQUIRED kind=approval, runner not called", async () => {
@@ -198,7 +171,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-write-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -215,14 +188,10 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Done.", toolUses: [] },
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -243,13 +212,13 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
 
     expect(interrupt.payload["kind"]).toBe("approval");
-    expect(interrupt.payload["toolName"]).toBe("restart_service");
+    expect(interrupt.payload["toolName"]).toBe("RestartService");
 
     // Runner must NOT have executed the write yet
-    expect(executedCommands).not.toContain("restart_service");
+    expect(executedCommands).not.toContain("RestartService");
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-    ws.close();
+    close();
 
     // cleanup
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -270,7 +239,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-ask-1",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "What is the most likely root cause?",
               options: CLARIFICATION_OPTIONS,
@@ -281,14 +250,10 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Understood. Investigation complete.", toolUses: [] },
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -315,7 +280,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(interrupt.payload["options"]).toEqual(CLARIFICATION_OPTIONS);
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-    ws.close();
+    close();
 
     // cleanup
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -338,7 +303,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-read",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
         ],
@@ -348,7 +313,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-ask",
-            name: "request_clarification",
+            name: "AskUserQuestion",
             input: {
               question: "Is this a recurring issue?",
               options: CLARIFICATION_OPTIONS,
@@ -361,7 +326,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-write",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -378,14 +343,10 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Complete.", toolUses: [] },
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(
+      port,
+      SESSION,
+    );
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -415,7 +376,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(clarInterrupt.payload["kind"]).toBe("clarification");
-    expect(executedCommands).not.toContain("restart_service");
+    expect(executedCommands).not.toContain("RestartService");
 
     // Answer the clarification
     const answerRes = await fetch(
@@ -444,8 +405,8 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(approvalInterrupt.payload["kind"]).toBe("approval");
-    expect(approvalInterrupt.payload["toolName"]).toBe("restart_service");
-    expect(executedCommands).not.toContain("restart_service");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
+    expect(executedCommands).not.toContain("RestartService");
 
     // Approve
     const approveRes = await fetch(
@@ -462,14 +423,14 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(approveRes.status).toBe(200);
 
     // Runner executes restart exactly once, run completes
-    await waitFor(() => executedCommands.includes("restart_service"));
+    await waitFor(() => executedCommands.includes("RestartService"));
     expect(
-      executedCommands.filter((c) => c === "restart_service"),
+      executedCommands.filter((c) => c === "RestartService"),
     ).toHaveLength(1);
 
     await waitFor(() => !hasPendingHumanInput(sessionId));
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 });

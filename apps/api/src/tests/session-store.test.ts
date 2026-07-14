@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
@@ -168,7 +167,7 @@ describe("API-local session store", () => {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
       kind: "approval",
-      toolName: "restart_service",
+      toolName: "RestartService",
       toolInput: {},
       completedResults: [],
       claimedAt: null,
@@ -192,7 +191,7 @@ describe("API-local session store", () => {
     insertExecutingRemediationAction({
       toolUseId: "tu-audit-survives",
       sessionId: m.sessionId,
-      toolName: "restart_service",
+      toolName: "RestartService",
       input: {
         service: { provider: "docker", project: "web", service: "web" },
       },

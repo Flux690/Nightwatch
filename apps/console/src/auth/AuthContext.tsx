@@ -68,9 +68,8 @@ export function AuthProvider({
         return res.json() as Promise<AuthStatusResponse>;
       })
       .then((data) => setPhase(phaseFromStatus(data)))
-      // A failed/unreachable status check must not leave the app stuck on the
-      // loading screen forever; fall back to the login page (reachable, and it
-      // surfaces its own error if the API is genuinely down).
+      // Fall back to the login page on a failed/unreachable status check,
+      // rather than leaving the app stuck on the loading screen forever.
       .catch(() => setPhase({ kind: "needs-login" }));
   }, []);
 

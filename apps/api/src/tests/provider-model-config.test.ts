@@ -1,4 +1,3 @@
-import "dotenv/config";
 import {
   afterEach,
   beforeAll,
@@ -125,6 +124,54 @@ describe("provider/model config seam", () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ ok: false, error: "unreachable" });
+  });
+
+  it("POST /config/test: never persists the key, even on a successful probe", async () => {
+    stubFetch(() => mockResponse(200, { data: [{ id: "claude-sonnet-4-6" }] }));
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/config/test",
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: {
+        apiKey: "sk-ant-should-not-persist",
+        model: "claude-sonnet-4-6",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ok: true });
+
+    const configRes = await server.inject({
+      method: "GET",
+      url: "/config",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    const body = JSON.parse(configRes.body) as { apiKeyMasked: string | null };
+    expect(body.apiKeyMasked).toBeNull();
+  });
+
+  it("POST /config/test: probes against a provider/baseUrl override instead of the persisted config", async () => {
+    let requestedUrl = "";
+    stubFetch((url) => {
+      requestedUrl = url;
+      return mockResponse(200, { data: [{ id: "some-model" }] });
+    });
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/config/test",
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: {
+        apiKey: "sk-or-key",
+        provider: "openai",
+        baseUrl: "https://openrouter.ai/api/v1",
+        model: "some-model",
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ ok: true });
+    expect(requestedUrl).toBe("https://openrouter.ai/api/v1/models");
   });
 
   // --- GET /config/models ---

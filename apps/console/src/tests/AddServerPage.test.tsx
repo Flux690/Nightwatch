@@ -76,8 +76,7 @@ function textOk(body: string) {
   return Promise.resolve({ ok: true, text: () => Promise.resolve(body) });
 }
 
-/* The page is a routed screen with a navigation guard, so the seam under
-   test is the route: a memory router with a stub /fleet destination. */
+/* The page is a routed screen with a navigation guard, so the seam under test is the route: a memory router with a stub /fleet destination. */
 function renderAddServerRoute() {
   const rootRoute = createRootRoute();
   const addRoute = createRoute({

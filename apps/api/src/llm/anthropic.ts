@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderCallOptions,
   ProviderMessage,
   ToolResult,
   ToolSchema,
@@ -16,11 +17,18 @@ export class AnthropicProvider implements LLMProvider {
   private readonly model: string;
   private readonly system: string;
   private readonly config: AgentConfig;
+  private readonly opts?: ProviderCallOptions;
   private messages: Anthropic.Messages.MessageParam[] = [];
 
-  constructor(system: string, config: AgentConfig, apiKey?: string) {
+  constructor(
+    system: string,
+    config: AgentConfig,
+    apiKey?: string,
+    opts?: ProviderCallOptions,
+  ) {
     this.system = system;
     this.config = config;
+    this.opts = opts;
     // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
     // when set, falling back to the env var for deployments that still use env.
     this.client = new Anthropic({
@@ -44,8 +52,7 @@ export class AnthropicProvider implements LLMProvider {
     let response: Anthropic.Messages.Message;
     try {
       // Stream and accumulate via finalMessage() so a large response can't trip the single-read
-      // request timeout. The returned Message is identical to a non-streamed one, so everything
-      // downstream is unchanged.
+      // request timeout; the returned Message is identical to a non-streamed one.
       const stream = this.client.messages.stream(
         {
           model: this.model,
@@ -59,12 +66,14 @@ export class AnthropicProvider implements LLMProvider {
               cache_control: { type: "ephemeral" },
             },
           ],
-          // Adaptive thinking lets the model decide when and how deeply to
-          // reason; full response.content (incl. thinking blocks) is preserved
-          // below for multi-turn continuity. Omitted entirely when disabled.
-          ...(this.config.thinking === "adaptive" && {
-            thinking: { type: "adaptive" as const },
-          }),
+          // Adaptive thinking lets the model decide when and how deeply to reason; thinking
+          // blocks are preserved in response.content below for multi-turn continuity.
+          // Omitting the param entirely is Anthropic's "off" - used by calls
+          // flagged reasoning-off (one-shot titles) regardless of config.
+          ...(this.config.thinking === "adaptive" &&
+            this.opts?.reasoning !== "off" && {
+              thinking: { type: "adaptive" as const },
+            }),
           // ToolSchema is structurally compatible with Anthropic.Tool.
           tools: tools as Anthropic.Tool[],
           messages: this.messagesWithCacheBreakpoint(),
@@ -125,9 +134,8 @@ export class AnthropicProvider implements LLMProvider {
     };
   }
 
-  // Rolling cache breakpoint on the conversation tail so the growing history caches
-  // incrementally; append-only means each turn's prefix matches last turn's breakpoint. chat()
-  // always has the last message a user turn, so we mark the final tool_result; persisted history stays clean.
+  // Rolling cache breakpoint on the conversation tail so growing history caches incrementally;
+  // marks only the final tool_result in-flight, so persisted history stays clean.
   private messagesWithCacheBreakpoint(): Anthropic.Messages.MessageParam[] {
     const lastIdx = this.messages.length - 1;
     const last = this.messages[lastIdx];

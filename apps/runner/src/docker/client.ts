@@ -4,9 +4,8 @@ export function getDocker(): Dockerode {
   return new Dockerode();
 }
 
-// Parse Docker's multiplexed stream: 8-byte header (byte 0 = type, 4-7 = BE size) +
-// payload; type 2 is stderr, else stdout. TTY containers emit raw bytes, detected when
-// the first byte isn't a valid mux type.
+// Parse Docker's multiplexed stream: 8-byte header (byte 0 = type, 4-7 = BE size) + payload; type 2
+// is stderr, else stdout. TTY containers emit raw bytes, detected when the first byte isn't a valid mux type.
 export function parseDockerMux(buf: Buffer): {
   stdout: string;
   stderr: string;

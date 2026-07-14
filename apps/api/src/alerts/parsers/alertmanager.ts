@@ -58,9 +58,8 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
   return parsed;
 }
 
-// Alertmanager usually supplies a stable `fingerprint`; when a BYO sender omits it, derive
-// a stable id from labels so re-fires dedup and two alerts never collide on an undefined id
-// (which would drop one and overwrite the other).
+// Alertmanager usually supplies a stable `fingerprint`; when a BYO sender omits it, derive one
+// from labels so re-fires dedup and two alerts never collide on an undefined id.
 function synthesizeFingerprint(labels: Record<string, string>): string {
   const canonical = Object.keys(labels)
     .sort()

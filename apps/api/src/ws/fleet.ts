@@ -52,9 +52,8 @@ export function registerRunner(
   close: () => void,
   serverName: string | null = null,
 ): RunnerConnection {
-  // A reconnect can beat the old socket's close event (NAT drop, cloned VM
-  // sharing a token); displace the stale socket loudly instead of trusting
-  // close ordering.
+  // A reconnect can beat the old socket's close event; displace the stale
+  // socket loudly instead of trusting close ordering.
   connectionsByRunnerId.get(runnerId)?.close();
   const conn: RunnerConnection = {
     runnerId,
@@ -70,9 +69,8 @@ export function registerRunner(
   return conn;
 }
 
-// Identity-checked: a displaced socket's late close event must not delete the
-// replacement connection registered under the same runnerId. Returns whether
-// this connection was actually removed.
+// A displaced socket's late close event must not delete the replacement
+// connection registered under the same runnerId.
 export function unregisterRunner(conn: RunnerConnection): boolean {
   if (connectionsByRunnerId.get(conn.runnerId) !== conn) return false;
   connectionsByRunnerId.delete(conn.runnerId);
@@ -119,9 +117,8 @@ export function listRunners(): RunnerView[] {
   return views;
 }
 
-// The live read-only fleet picture: every runner whose manifest
-// arrived, with its advertised service identities. Used by the agent, the ingest resolver,
-// and the console fleet page.
+// Every runner whose manifest arrived, with its advertised service identities.
+// Used by the agent, the ingest resolver, and the console fleet page.
 export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];
@@ -150,9 +147,8 @@ export function getRunnerManifestForAlert(
   return connectionsByRunnerId.get(runnerId)?.manifest ?? null;
 }
 
-// Sync the in-memory remediation mode for a connected runner without pushing
-// to the runner (used by server.ts reconciliation for the bootstrap and
-// agree-in-place cases where no push is needed).
+// Syncs without pushing to the runner - used by server.ts reconciliation for
+// bootstrap and agree-in-place cases where no push is needed.
 export function setRunnerRemediationMode(
   runnerId: string,
   mode: boolean,
@@ -166,9 +162,8 @@ export function getRunnerRemediationMode(runnerId: string): boolean | null {
   return connectionsByRunnerId.get(runnerId)?.remediationMode ?? null;
 }
 
-// Fire-and-forget push of remediation mode to a connected runner. Also
-// updates the in-memory cache so the next reconciliation sees the new value
-// and doesn't push again unnecessarily.
+// Fire-and-forget push; also updates the in-memory cache so the next
+// reconciliation doesn't push again unnecessarily.
 export function pushRemediationMode(runnerId: string, enabled: boolean): void {
   const conn = connectionsByRunnerId.get(runnerId);
   if (!conn) return;

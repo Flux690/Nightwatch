@@ -1,12 +1,13 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { ClarificationCardItem } from "./types.js";
-import { ToolCardPanel } from "./ToolCardPanel.js";
 import { InterruptCard } from "./InterruptCard.js";
+import { firstLines, IO_LABEL_CLASS, TOOL_CARD_CLASS } from "./TerminalCard.js";
 
 export function ClarificationCardPanel({
   item,
@@ -66,92 +67,117 @@ export function ClarificationCardPanel({
     ? selected.length > 0 || (otherChecked && otherText.trim().length > 0)
     : (otherChecked && otherText.trim().length > 0) || selected.length > 0;
 
-  return (
-    <>
-      <InterruptCard data-testid="clarification-card" resolved={resolved}>
-        <p className="text-sm">{item.question}</p>
-        {resolved ? (
-          <p className="text-sm" data-testid="clarification-resolution">
-            Answered{item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {item.multiSelect ? (
-              <>
-                {options.map((opt) => (
-                  <label
-                    key={opt.label}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <Checkbox
-                      checked={selected.includes(opt.label)}
-                      disabled={disabled}
-                      onCheckedChange={() => toggleOption(opt.label)}
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={otherChecked}
-                    disabled={disabled}
-                    onCheckedChange={toggleOther}
-                  />
-                  Other
-                </label>
-              </>
-            ) : (
-              <RadioGroup
-                value={otherChecked ? "__other__" : (selected[0] ?? "")}
-                onValueChange={(value) => {
-                  if (value === "__other__") {
-                    toggleOther();
-                  } else {
-                    toggleOption(value as string);
-                  }
-                }}
-              >
-                {options.map((opt) => (
-                  <label
-                    key={opt.label}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <RadioGroupItem value={opt.label} disabled={disabled} />
-                    {opt.label}
-                  </label>
-                ))}
-                <label className="flex items-center gap-2 text-sm">
-                  <RadioGroupItem value="__other__" disabled={disabled} />
-                  Other
-                </label>
-              </RadioGroup>
-            )}
-            {otherChecked && (
-              <Textarea
-                placeholder="Type your answer…"
-                value={otherText}
-                onChange={(e) => setOtherText(e.currentTarget.value)}
-                disabled={disabled}
-                className="max-h-32 min-h-9"
-              />
-            )}
-            <Button
-              size="sm"
-              disabled={disabled || !canSubmit}
-              onClick={handleSubmit}
+  // Once answered, the interactive card collapses into one compact Q/A card:
+  // the question in, the human's answer out, nothing else.
+  if (resolved) {
+    const answer =
+      typeof item.result === "string"
+        ? item.result
+        : item.result !== undefined
+          ? JSON.stringify(item.result)
+          : null;
+    return (
+      <div data-testid="clarification-card" data-resolved="true">
+        <p className="mb-1.5 font-mono text-base font-medium">
+          AskUserQuestion
+          {item.resolvedBy ? (
+            <span
+              className="ml-2 font-normal text-muted-foreground"
+              data-testid="clarification-resolution"
             >
-              Submit
-            </Button>
-          </div>
+              answered by {item.resolvedBy}
+            </span>
+          ) : null}
+        </p>
+        <Card size="sm" className={TOOL_CARD_CLASS}>
+          <CardContent className="px-3.5 py-2.5">
+            <p className={IO_LABEL_CLASS}>IN</p>
+            <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
+              {firstLines(item.question ?? "")}
+            </p>
+          </CardContent>
+          <CardContent className="border-t border-border px-3.5 py-2.5">
+            <p className={IO_LABEL_CLASS}>OUT</p>
+            <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
+              {answer === null ? "Answered" : firstLines(answer)}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <InterruptCard data-testid="clarification-card" resolved={resolved}>
+      <p className="text-sm">{item.question}</p>
+      <div className="flex flex-col gap-2">
+        {item.multiSelect ? (
+          <>
+            {options.map((opt) => (
+              <label
+                key={opt.label}
+                className="flex items-center gap-2 text-sm"
+              >
+                <Checkbox
+                  checked={selected.includes(opt.label)}
+                  disabled={disabled}
+                  onCheckedChange={() => toggleOption(opt.label)}
+                />
+                {opt.label}
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={otherChecked}
+                disabled={disabled}
+                onCheckedChange={toggleOther}
+              />
+              Other
+            </label>
+          </>
+        ) : (
+          <RadioGroup
+            value={otherChecked ? "__other__" : (selected[0] ?? "")}
+            onValueChange={(value) => {
+              if (value === "__other__") {
+                toggleOther();
+              } else {
+                toggleOption(value as string);
+              }
+            }}
+          >
+            {options.map((opt) => (
+              <label
+                key={opt.label}
+                className="flex items-center gap-2 text-sm"
+              >
+                <RadioGroupItem value={opt.label} disabled={disabled} />
+                {opt.label}
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="__other__" disabled={disabled} />
+              Other
+            </label>
+          </RadioGroup>
         )}
-      </InterruptCard>
-      {resolved && item.result !== undefined && (
-        <ToolCardPanel
-          toolName={item.toolName}
-          input={item.input}
-          result={item.result}
-        />
-      )}
-    </>
+        {otherChecked && (
+          <Textarea
+            placeholder="Type your answer…"
+            value={otherText}
+            onChange={(e) => setOtherText(e.currentTarget.value)}
+            disabled={disabled}
+            className="max-h-32 min-h-9"
+          />
+        )}
+        <Button
+          size="sm"
+          disabled={disabled || !canSubmit}
+          onClick={handleSubmit}
+        >
+          Submit
+        </Button>
+      </div>
+    </InterruptCard>
   );
 }

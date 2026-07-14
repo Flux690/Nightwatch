@@ -11,8 +11,8 @@ import {
   SidebarMenuButton,
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -46,47 +46,63 @@ export function SessionsSidebar(): React.JSX.Element {
     },
   });
 
+  useConsoleEvents((env) => {
+    if (env.type !== "SESSION_TITLE_UPDATED") return;
+    const { sessionId, title } = env.payload;
+    queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) =>
+      prev.map((s) => (s.sessionId === sessionId ? { ...s, title } : s)),
+    );
+  });
+
   function handleDelete(sessionId: string): void {
     setConfirmingId(sessionId);
   }
 
   return (
     <>
-      <ScrollArea className="min-h-0 flex-1">
-        <SidebarMenu className="gap-0.5">
-          {!isLoading && sessions.length === 0 && (
-            <p className="px-2 py-2 text-xs text-muted-foreground">
-              Your sessions will show up here.
-            </p>
-          )}
-          {sessions.map((session) => (
-            <SidebarMenuItem key={session.sessionId}>
-              <SidebarMenuButton
-                isActive={activeSessionId === session.sessionId}
-                onClick={() =>
-                  void navigate({
-                    to: "/sessions/$id",
-                    params: { id: session.sessionId },
-                  })
-                }
+      <SidebarMenu className="gap-0.5">
+        {!isLoading && sessions.length === 0 && (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            Your sessions will show up here.
+          </p>
+        )}
+        {sessions.map((session) => (
+          <SidebarMenuItem key={session.sessionId}>
+            <SidebarMenuButton
+              // `!` beats the variant's always-on pr-8: reserve the gutter only
+              // on hover/focus so short titles keep full width.
+              className="pr-2! group-hover/menu-item:pr-8! group-focus-within/menu-item:pr-8!"
+              isActive={activeSessionId === session.sessionId}
+              onClick={() =>
+                void navigate({
+                  to: "/sessions/$id",
+                  params: { id: session.sessionId },
+                })
+              }
+            >
+              <span
+                // Remount on title change so the temp -> refined swap slides in.
+                key={session.title}
+                title={session.title}
+                className="animate-in slide-in-from-left-2 fade-in duration-300"
               >
-                <span title={session.title}>{session.title}</span>
-              </SidebarMenuButton>
-              <SidebarMenuAction
-                showOnHover
-                aria-label="Delete session"
-                disabled={
-                  deleteSession.isPending &&
-                  deleteSession.variables === session.sessionId
-                }
-                onClick={() => handleDelete(session.sessionId)}
-              >
-                <Trash2 {...ICON_UI} />
-              </SidebarMenuAction>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </ScrollArea>
+                {session.title}
+              </span>
+            </SidebarMenuButton>
+            <SidebarMenuAction
+              showOnHover
+              aria-label="Delete session"
+              disabled={
+                deleteSession.isPending &&
+                deleteSession.variables === session.sessionId
+              }
+              onClick={() => handleDelete(session.sessionId)}
+            >
+              <Trash2 {...ICON_UI} />
+            </SidebarMenuAction>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
 
       <ConfirmDialog
         open={confirmingId !== null}

@@ -7,8 +7,7 @@ import type { TranscriptItem } from "@/components/transcript/types";
 
 const SESSION_ID = "s1";
 
-/* Strip ephemeral fields (id, streaming) so the same logical content
-   produced via live deltas vs persisted messages compares equal. */
+/* Strip ephemeral fields (id, streaming) so the same logical content produced via live deltas vs persisted messages compares equal. */
 function comparable(items: TranscriptItem[]): unknown[] {
   return items.map((item) => {
     const copy: Record<string, unknown> = { ...item };
@@ -73,10 +72,7 @@ function toolCallStart(
   };
 }
 
-function toolCallEnd(
-  toolUseId: string,
-  result: unknown,
-): ConsoleEvent {
+function toolCallEnd(toolUseId: string, result: unknown): ConsoleEvent {
   return {
     messageId: "m2",
     type: "TOOL_CALL_END",
@@ -88,24 +84,41 @@ describe("live vs persisted converter consistency", () => {
   it("produces the same thinking + agent text + tool card (with result) for an equivalent run", () => {
     // Live path: streaming deltas and tool events
     let live: TranscriptItem[] = [];
-    live = applyLiveEvent(live, thinkingDelta("Let me check the logs."), SESSION_ID);
+    live = applyLiveEvent(
+      live,
+      thinkingDelta("Let me check the logs."),
+      SESSION_ID,
+    );
     live = applyLiveEvent(live, textDelta("The service is down."), SESSION_ID);
     live = applyLiveEvent(
       live,
       toolCallStart("tu-1", "check_service_status", { service: "web" }),
       SESSION_ID,
     );
-    live = applyLiveEvent(live, toolCallEnd("tu-1", { status: "down" }), SESSION_ID);
+    live = applyLiveEvent(
+      live,
+      toolCallEnd("tu-1", { status: "down" }),
+      SESSION_ID,
+    );
 
     // Persisted path: the same run saved as provider messages
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
         { type: "thinking", thinking: "Let me check the logs." },
         { type: "text", text: "The service is down." },
-        { type: "tool_use", id: "tu-1", name: "check_service_status", input: { service: "web" } },
+        {
+          type: "tool_use",
+          id: "tu-1",
+          name: "check_service_status",
+          input: { service: "web" },
+        },
       ]),
       userMessage(2, [
-        { type: "tool_result", tool_use_id: "tu-1", content: { status: "down" } },
+        {
+          type: "tool_result",
+          tool_use_id: "tu-1",
+          content: { status: "down" },
+        },
       ]),
     ]);
 
@@ -127,7 +140,12 @@ describe("live vs persisted converter consistency", () => {
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
         { type: "thinking", thinking: "First burst" },
-        { type: "tool_use", id: "tu-1", name: "check_service_status", input: {} },
+        {
+          type: "tool_use",
+          id: "tu-1",
+          name: "check_service_status",
+          input: {},
+        },
       ]),
       userMessage(2, [
         { type: "tool_result", tool_use_id: "tu-1", content: { ok: true } },
@@ -145,14 +163,19 @@ describe("live vs persisted converter consistency", () => {
     let live: TranscriptItem[] = [];
     live = applyLiveEvent(
       live,
-      toolCallStart("tu-2", "restart_service", { service: "db" }),
+      toolCallStart("tu-2", "RestartService", { service: "db" }),
       SESSION_ID,
     );
     // No TOOL_CALL_END — tool is still in flight
 
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "tool_use", id: "tu-2", name: "restart_service", input: { service: "db" } },
+        {
+          type: "tool_use",
+          id: "tu-2",
+          name: "RestartService",
+          input: { service: "db" },
+        },
       ]),
       // No user message with a tool_result
     ]);

@@ -1,8 +1,7 @@
 import { cn } from "@/lib/utils";
 
-/* Step progress header for the add-server wizard: caption, title, and a
-   segmented progress track. Segments left of (and including) the active step
-   read as done. */
+/* Step progress header for the add-server wizard: segments left of (and
+   including) the active step read as done. */
 export function WizardStepper({
   step,
   total,

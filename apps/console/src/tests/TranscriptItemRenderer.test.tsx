@@ -47,7 +47,7 @@ describe("TranscriptItemRenderer", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",
       toolUseId: "tu-gate",
-      toolName: "restart_service",
+      toolName: "RestartService",
       input: {
         service: { provider: "docker", project: "web-01", service: "web-01" },
       },
@@ -80,7 +80,7 @@ describe("TranscriptItemRenderer", () => {
     const clarItem: TranscriptItem = {
       kind: "clarification_card",
       toolUseId: "tu-clar",
-      toolName: "request_clarification",
+      toolName: "AskUserQuestion",
       input: {},
       question: "Which service first?",
       options: [
@@ -163,6 +163,84 @@ describe("TranscriptItemRenderer", () => {
       await user.click(screen.getByRole("button", { name: /cancel/i }));
 
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
+    });
+  });
+
+  describe("repo tool cards", () => {
+    const DIFF_RESULT = {
+      path: "src/app.ts",
+      hunks: [
+        {
+          lines: [
+            {
+              type: "removed",
+              oldLineNumber: 1,
+              newLineNumber: null,
+              content: "const a = 1;",
+            },
+            {
+              type: "added",
+              oldLineNumber: null,
+              newLineNumber: 1,
+              content: "const a = 42;",
+            },
+          ],
+        },
+      ],
+    };
+
+    it("renders Edit results as a colored diff card", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-1",
+        toolName: "Edit",
+        input: { path: "src/app.ts" },
+        result: DIFF_RESULT,
+      });
+
+      expect(screen.getByTestId("diff-card")).toBeInTheDocument();
+      expect(screen.getByText("src/app.ts")).toBeInTheDocument();
+      expect(screen.getByText("const a = 42;")).toBeInTheDocument();
+      expect(screen.getByText("const a = 1;")).toBeInTheDocument();
+      // No raw unified-diff artifacts leak into the rendered card.
+      expect(screen.queryByText(/@@/)).not.toBeInTheDocument();
+    });
+
+    it("parses the persisted JSON-string form of a diff result too", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-2",
+        toolName: "Write",
+        input: { path: "src/app.ts" },
+        result: JSON.stringify(DIFF_RESULT),
+      });
+
+      expect(screen.getByTestId("diff-card")).toBeInTheDocument();
+      expect(screen.getByText("const a = 42;")).toBeInTheDocument();
+    });
+
+    it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-4",
+        toolName: "OpenPullRequest",
+        input: { title: "Fix the leak" },
+        result: {
+          action: "created",
+          number: 42,
+          url: "https://github.com/acme/api/pull/42",
+          draft: true,
+          message: "Created draft PR #42.",
+        },
+      });
+
+      expect(screen.getByTestId("pr-card")).toBeInTheDocument();
+      expect(screen.getByText("Pull request #42")).toBeInTheDocument();
+      expect(screen.getByText("Draft")).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /view on github/i }),
+      ).toHaveAttribute("href", "https://github.com/acme/api/pull/42");
+      expect(screen.getByText("Created draft PR #42.")).toBeInTheDocument();
     });
   });
 });

@@ -11,7 +11,8 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
-import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
+import { MockEventSource } from "./mockEventSource.js";
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
@@ -22,30 +23,6 @@ vi.mock("@/auth/AuthContext", () => ({
     logoutAll: vi.fn(),
   }),
 }));
-
-let latestWs: MockWs | null = null;
-
-class MockWs {
-  static OPEN = 1;
-  static CONNECTING = 0;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
-  readyState = MockWs.OPEN;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((e: unknown) => void) | null = null;
-  close = vi.fn();
-
-  constructor(_url: string) {
-    latestWs = this;
-  }
-
-  push(envelope: object): void {
-    this.onmessage?.({ data: JSON.stringify(envelope) });
-  }
-}
 
 const SESSION_MESSAGE_1 = {
   sessionId: "s1",
@@ -59,27 +36,25 @@ function setup(
   messages: object[] = [SESSION_MESSAGE_1],
   pendingHumanInput: object[] = [],
 ) {
-  latestWs = null;
+  MockEventSource.reset();
 
-  vi.stubGlobal("WebSocket", MockWs);
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((url: string) => {
-      if (url.includes("pending-human-input")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(pendingHumanInput),
-        });
-      }
-      if (url.includes("/sessions/s1")) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(messages),
-        });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    }),
-  );
+  vi.stubGlobal("EventSource", MockEventSource);
+  const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("pending-human-input")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(pendingHumanInput),
+      });
+    }
+    if (url.includes("/sessions/s1")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(messages),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
+  vi.stubGlobal("fetch", fetchMock);
 
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -97,14 +72,14 @@ function setup(
   render(
     <TestProviders>
       <QueryClientProvider client={qc}>
-        <ConsoleWsProvider>
+        <ConsoleEventsProvider>
           <RouterProvider router={router} />
-        </ConsoleWsProvider>
+        </ConsoleEventsProvider>
       </QueryClientProvider>
     </TestProviders>,
   );
 
-  return { qc };
+  return { qc, fetchMock };
 }
 
 afterEach(() => {
@@ -124,7 +99,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -146,12 +121,12 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing" },
         });
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: " the logs..." },
@@ -173,7 +148,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: {
@@ -188,8 +163,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("RUN_FINISHED flush", () => {
-    it("clears the live buffer when session_message arrives", async () => {
+  describe("MESSAGE flush", () => {
+    it("clears the live buffer when the assistant MESSAGE arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -199,7 +174,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -211,9 +186,9 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -245,7 +220,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -273,7 +248,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -290,7 +265,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m4",
           type: "TOOL_CALL_END",
           payload: {
@@ -319,7 +294,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -329,7 +304,7 @@ describe("SessionView", () => {
             input: { service: "nginx" },
           },
         });
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m5",
           type: "TOOL_CALL_START",
           payload: {
@@ -347,7 +322,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m6",
           type: "TOOL_CALL_END",
           payload: {
@@ -359,9 +334,15 @@ describe("SessionView", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/nginx.*node|node.*nginx/)).toBeInTheDocument();
-        // tu-1 card OUT is still loading
-        expect(screen.getByTestId("tool-card-out-loading")).toBeInTheDocument();
+        // The list_processes output landed (clamped to 3 lines, so assert on
+        // the quoted first entry rather than the whole array).
+        expect(screen.getByText(/"nginx"/)).toBeInTheDocument();
+        // tu-1 is still running: its card has no output area at all yet.
+        const pending = screen
+          .getAllByTestId("tool-card")
+          .find((card) => card.textContent?.includes("check_service_status"));
+        expect(pending).toBeDefined();
+        expect(pending!.querySelector("pre")).toBeNull();
       });
     });
 
@@ -375,7 +356,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TOOL_CALL_START",
           payload: {
@@ -392,7 +373,7 @@ describe("SessionView", () => {
   });
 
   describe("thinking choreography (TEXT_MESSAGE_CONTENT kind=thinking)", () => {
-    it("clears thinking blocks once RUN_FINISHED flushes the turn", async () => {
+    it("clears thinking blocks once the assistant MESSAGE flushes the turn", async () => {
       setup();
 
       await waitFor(() => {
@@ -402,7 +383,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m3",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "thinking", delta: "Reasoning" },
@@ -413,9 +394,9 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m4",
-          type: "RUN_FINISHED",
+          type: "MESSAGE",
           payload: {
             sessionId: "s1",
             message: {
@@ -436,16 +417,240 @@ describe("SessionView", () => {
     });
   });
 
+  describe("working indicator (immediate affordance)", () => {
+    it("shows the indicator on send and keeps it through the user-turn persist", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // The indicator and the echoed bubble show the instant the message is sent,
+      // with no bare "Thinking" line.
+      await waitFor(() => {
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+      expect(screen.getAllByText("check the db")).toHaveLength(1);
+
+      // Persisting the user's own turn is a MESSAGE, not a terminal: the run is
+      // still active, so the indicator stays.
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "u1",
+          type: "MESSAGE",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "user",
+              content: "check the db",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByText("check the db")).toHaveLength(1);
+      });
+      expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
+
+      // The first assistant token takes over: the indicator gives way to output.
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "a1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "text",
+            delta: "Checking the database...",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Checking the database..."),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
+    });
+
+    it("replaces the indicator with a thinking block once real reasoning streams", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "t1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "thinking",
+            delta: "Looking at the",
+          },
+        });
+        MockEventSource.latest?.push({
+          messageId: "t2",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "thinking", delta: " db metrics" },
+        });
+      });
+
+      // The reasoning text surfaces as a single thinking block; the indicator,
+      // now that there is something to show, is gone.
+      await waitFor(() => {
+        expect(screen.getByText("Looking at the db metrics")).toBeVisible();
+      });
+      expect(screen.getAllByTestId("thinking-block")).toHaveLength(1);
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
+    });
+
+    it("shows no thinking line when the run goes straight to a tool call", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "restart nginx");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m3",
+          type: "TOOL_CALL_START",
+          payload: {
+            sessionId: "s1",
+            toolUseId: "tu-1",
+            toolName: "check_service_status",
+            input: { service: "nginx" },
+          },
+        });
+      });
+
+      // The in-flight tool card is the thing to show, so the indicator steps
+      // aside and no bare "Thinking" line ever appears.
+      await waitFor(() => {
+        expect(screen.getByText("check_service_status")).toBeInTheDocument();
+        expect(screen.queryByText("Thinking")).not.toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("working-indicator")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("optimistic echo", () => {
+    it("echoes the message instantly and keeps exactly one bubble through the persist", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // The bubble is there before any server event, and the box is cleared.
+      expect(screen.getAllByText("check the db")).toHaveLength(1);
+      expect(screen.getByRole("textbox")).toHaveValue("");
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "u1",
+          type: "MESSAGE",
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "user",
+              content: "check the db",
+              createdAt: new Date().toISOString(),
+            },
+          },
+        });
+      });
+
+      // The persisted row replaces the echo one-for-one, never both.
+      await waitFor(() => {
+        expect(screen.getAllByText("check the db")).toHaveLength(1);
+      });
+    });
+
+    it("rolls back the echo and restores the text when the send never reaches the API", async () => {
+      const { fetchMock } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+        if (String(url).includes("/messages") && init?.method === "POST") {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      });
+
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("textbox"), "check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      // Echo and working indicator roll back; the composer gets the message
+      // back. The only remaining bubble is the session's original persisted turn.
+      await waitFor(() => {
+        expect(screen.getAllByTestId("user-turn")).toHaveLength(1);
+        expect(
+          screen.queryByTestId("working-indicator"),
+        ).not.toBeInTheDocument();
+        expect(screen.getByRole("textbox")).toHaveValue("check the db");
+        expect(screen.getByRole("textbox")).not.toBeDisabled();
+      });
+    });
+  });
+
   describe("approval card (INTERRUPT)", () => {
     function pushGatedStart(): void {
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a1",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
-            toolName: "restart_service",
+            toolName: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -515,7 +720,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a2",
           type: "HUMAN_INPUT_RESOLVED",
           payload: {
@@ -541,18 +746,19 @@ describe("SessionView", () => {
         ).not.toBeInTheDocument();
       });
 
-      // The paired tool card now appears below the resolved approval card, OUT
-      // still loading until the result (both cards label the tool name).
-      expect(screen.getAllByText("restart_service")).toHaveLength(2);
+      // The paired tool card now appears below the resolved approval card,
+      // header-only until the result arrives (both cards label the tool name).
+      expect(screen.getAllByText("RestartService")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
-      const toolCardOut = screen.getByTestId("tool-card-out-loading");
+      const toolCard = screen.getByTestId("tool-card");
       expect(
-        resolvedCard.compareDocumentPosition(toolCardOut) &
+        resolvedCard.compareDocumentPosition(toolCard) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      expect(toolCard.querySelector("pre")).toBeNull();
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "a3",
           type: "TOOL_CALL_END",
           payload: {
@@ -564,9 +770,6 @@ describe("SessionView", () => {
       });
 
       await waitFor(() => {
-        expect(
-          screen.queryByTestId("tool-card-out-loading"),
-        ).not.toBeInTheDocument();
         expect(screen.getByText(/restarted/)).toBeInTheDocument();
       });
     });
@@ -580,7 +783,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -598,7 +801,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText("restart_service")).toBeInTheDocument();
+        expect(within(card).getByText("RestartService")).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /approve/i }),
@@ -613,7 +816,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable-clar",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             toolInput: {
               question: "Which service first?",
               options: [{ label: "nginx", description: "The web server" }],
@@ -643,7 +846,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -688,7 +891,7 @@ describe("SessionView", () => {
           {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "restart_service",
+            toolName: "RestartService",
             toolInput: { risk: "high" },
             kind: "approval",
             status: "pending",
@@ -717,7 +920,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -742,7 +945,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -754,19 +957,10 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m2",
           type: "RUN_FINISHED",
-          payload: {
-            sessionId: "s1",
-            message: {
-              sessionId: "s1",
-              seq: 2,
-              role: "assistant",
-              content: "Investigation complete.",
-              createdAt: new Date().toISOString(),
-            },
-          },
+          payload: { sessionId: "s1", reason: "completed" },
         });
       });
 
@@ -775,6 +969,114 @@ describe("SessionView", () => {
         expect(
           screen.getByRole("button", { name: /send/i }),
         ).toBeInTheDocument();
+      });
+    });
+
+    it("shows sandbox provisioning stages and clears the line when ready", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-1",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "cloning" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - cloning the repository/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-2",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "starting" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - starting the container/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-3",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "installing" },
+        });
+      });
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Preparing sandbox - installing dependencies/),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "sb-4",
+          type: "SANDBOX_STATUS",
+          payload: { sessionId: "s1", stage: "ready" },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.queryByText(/Preparing sandbox/)).not.toBeInTheDocument();
+      });
+    });
+
+    it("shows the retry status line on RUN_RETRYING and clears it when streaming resumes", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m-retry",
+          type: "RUN_RETRYING",
+          payload: {
+            sessionId: "s1",
+            attempt: 2,
+            maxAttempts: 4,
+            delaySeconds: 15,
+            summary: "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          ),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "m-resume",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: { sessionId: "s1", kind: "text", delta: "Back online." },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(
+            "Provider error (502). Retrying in 15s - attempt 2 of 4.",
+          ),
+        ).not.toBeInTheDocument();
       });
     });
 
@@ -788,7 +1090,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: { sessionId: "s1", kind: "text", delta: "Analyzing..." },
@@ -799,14 +1101,29 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "m-fail",
           type: "RUN_FAILED",
-          payload: { sessionId: "s1", message: "runner disconnected" },
+          payload: {
+            sessionId: "s1",
+            message: {
+              sessionId: "s1",
+              seq: 2,
+              role: "error",
+              content:
+                "The model provider had a server problem - this is upstream, not your setup.",
+              createdAt: new Date().toISOString(),
+            },
+          },
         });
       });
 
+      // The failure reads like any other message in the conversation and the
+      // composer is usable again.
       await waitFor(() => {
+        expect(
+          screen.getByText(/The model provider had a server problem/),
+        ).toBeInTheDocument();
         expect(screen.getByRole("textbox")).not.toBeDisabled();
         expect(
           screen.getByRole("button", { name: /send/i }),
@@ -818,13 +1135,13 @@ describe("SessionView", () => {
   describe("clarification card (INTERRUPT kind=clarification)", () => {
     function pushClarification(extra: object = {}): void {
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c1",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tu-clar",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             input: {},
             incidentId: "inc-clar",
             kind: "clarification",
@@ -916,7 +1233,7 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c2",
           type: "HUMAN_INPUT_RESOLVED",
           payload: {
@@ -978,6 +1295,33 @@ describe("SessionView", () => {
       });
     });
 
+    it("keeps an answered card visible when a new message is sent before the run flushes it", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      pushClarification();
+      await waitFor(() => {
+        expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      });
+
+      const user = userEvent.setup();
+      const card = screen.getByTestId("clarification-card");
+      await user.click(within(card).getByRole("radio", { name: /^nginx$/i }));
+      await user.click(within(card).getByRole("button", { name: /submit/i }));
+
+      // The answered card is still live-only; sending must not wipe it.
+      await user.type(screen.getByRole("textbox"), "also check the db");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(screen.getByTestId("clarification-card")).toBeInTheDocument();
+      expect(screen.getByTestId("working-indicator")).toBeInTheDocument();
+    });
+
     it("ignores clarification INTERRUPT for a different session", async () => {
       setup();
 
@@ -988,13 +1332,13 @@ describe("SessionView", () => {
       });
 
       act(() => {
-        latestWs?.push({
+        MockEventSource.latest?.push({
           messageId: "c-other",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "request_clarification",
+            toolName: "AskUserQuestion",
             input: {},
             incidentId: "inc-other",
             kind: "clarification",
@@ -1008,6 +1352,37 @@ describe("SessionView", () => {
         screen.queryByTestId("clarification-card"),
       ).not.toBeInTheDocument();
       expect(screen.queryByText("Should not appear")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("stream reconnect", () => {
+    it("refetches active queries after the event stream reconnects", async () => {
+      const { fetchMock } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      const transcriptFetches = (): number =>
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).includes("/sessions/s1"),
+        ).length;
+      const before = transcriptFetches();
+
+      // A drop then reopen: events published during the gap are lost (the feed
+      // has no replay), so the provider must invalidate queries to catch up.
+      act(() => {
+        const es = MockEventSource.latest;
+        if (es) es.readyState = MockEventSource.CONNECTING;
+        MockEventSource.latest?.onerror?.();
+        MockEventSource.latest?.onopen?.();
+      });
+
+      await waitFor(() => {
+        expect(transcriptFetches()).toBeGreaterThan(before);
+      });
     });
   });
 });

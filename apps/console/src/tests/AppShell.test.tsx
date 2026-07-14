@@ -13,9 +13,10 @@ import {
 import { RouterProvider } from "@tanstack/react-router";
 
 import { AuthProvider } from "@/auth/AuthContext";
-import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
 import { Shell } from "@/components/layout/Shell";
 import { SessionView } from "@/pages/SessionView";
+import { MockEventSource } from "./mockEventSource.js";
 
 function ShellLayout(): React.JSX.Element {
   return (
@@ -27,36 +28,6 @@ function ShellLayout(): React.JSX.Element {
 
 const OWNER_EMAIL = "admin@example.com";
 
-let latestWs: MockWs | null = null;
-const allWsInstances: MockWs[] = [];
-
-class MockWs {
-  static OPEN = 1;
-  static CONNECTING = 0;
-  static CLOSING = 2;
-  static CLOSED = 3;
-
-  readyState = MockWs.OPEN;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: ((e: unknown) => void) | null = null;
-  close = vi.fn();
-
-  constructor(_url: string) {
-    latestWs = this;
-    allWsInstances.push(this);
-  }
-
-  push(envelope: object): void {
-    this.onmessage?.({ data: JSON.stringify(envelope) });
-  }
-}
-
-function broadcast(envelope: object): void {
-  allWsInstances.forEach((ws) => ws.push(envelope));
-}
-
 const SESSION_1 = {
   sessionId: "s1",
   token: "tok-1",
@@ -65,10 +36,9 @@ const SESSION_1 = {
 };
 
 function setup(pendingCount = 0) {
-  latestWs = null;
-  allWsInstances.length = 0;
+  MockEventSource.reset();
 
-  vi.stubGlobal("WebSocket", MockWs);
+  vi.stubGlobal("EventSource", MockEventSource);
 
   const makePending = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
@@ -76,7 +46,7 @@ function setup(pendingCount = 0) {
       incidentId: `inc-${i}`,
       sessionId: `s-${i}`,
       token: "tok-1",
-      toolName: "restart_service",
+      toolName: "RestartService",
       toolInput: {},
       toolUseId: `tool-${i}`,
       status: "pending",
@@ -174,9 +144,9 @@ function setup(pendingCount = 0) {
     <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
-          <ConsoleWsProvider>
+          <ConsoleEventsProvider>
             <RouterProvider router={router} />
-          </ConsoleWsProvider>
+          </ConsoleEventsProvider>
         </AuthProvider>
       </QueryClientProvider>
     </TestProviders>,
@@ -191,10 +161,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// The shadcn Sidebar exposes its collapsed/expanded state on the container via
-// data-state; text labels hide purely through CSS, which jsdom does not apply,
-// so the collapse contract is asserted through this attribute and the toggle's
-// accessible name rather than label visibility.
+// jsdom doesn't apply CSS, so assert the Sidebar's data-state attribute
+// instead of the visual collapse.
 function sidebarState(): string | null {
   return (
     document
@@ -321,13 +289,13 @@ describe("Shell", () => {
       });
     });
 
-    it("does not create a new WS connection on navigation (no remount)", async () => {
+    it("does not create a new event stream on navigation (no remount)", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
       await screen.findByRole("textbox");
-      const wsAtHome = latestWs;
-      expect(wsAtHome).not.toBeNull();
+      const streamAtHome = MockEventSource.latest;
+      expect(streamAtHome).not.toBeNull();
 
       await user.type(screen.getByRole("textbox"), "Check disk");
       await user.click(screen.getByRole("button", { name: /send/i }));
@@ -336,13 +304,13 @@ describe("Shell", () => {
         expect(router.state.location.pathname).toBe("/sessions/new-s1");
       });
 
-      // Same WS instance = no remount of the session view
-      expect(latestWs).toBe(wsAtHome);
+      // Same stream instance = no remount of the session view
+      expect(MockEventSource.latest).toBe(streamAtHome);
       // Chat input still present
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    it("captures WS deltas arriving after session creation", async () => {
+    it("captures deltas arriving after session creation", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
@@ -356,7 +324,7 @@ describe("Shell", () => {
       });
 
       act(() => {
-        broadcast({
+        MockEventSource.broadcast({
           messageId: "m1",
           type: "TEXT_MESSAGE_CONTENT",
           payload: {
@@ -386,13 +354,13 @@ describe("Shell", () => {
       // of the authoritative pending list rather than a local +1.
       setPendingCount(2);
       act(() => {
-        broadcast({
+        MockEventSource.broadcast({
           messageId: "m-int",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
-            toolName: "restart_service",
+            toolName: "RestartService",
             input: {},
             incidentId: "inc-99",
           },
@@ -416,7 +384,7 @@ describe("Shell", () => {
 
       setPendingCount(0);
       act(() => {
-        broadcast({
+        MockEventSource.broadcast({
           messageId: "m-res",
           type: "HUMAN_INPUT_RESOLVED",
           payload: {
@@ -445,13 +413,13 @@ describe("Shell", () => {
       // Server count grows to 2; the event refreshes the list to 2.
       setPendingCount(2);
       act(() => {
-        broadcast({
+        MockEventSource.broadcast({
           messageId: "m-int",
           type: "HUMAN_INPUT_REQUIRED",
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
-            toolName: "restart_service",
+            toolName: "RestartService",
             input: {},
             incidentId: "inc-99",
           },

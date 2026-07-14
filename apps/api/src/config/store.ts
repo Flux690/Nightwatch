@@ -1,8 +1,15 @@
 import { getDb } from "../db/client.js";
 import {
+  DEFAULT_CODE_SESSION_BUDGET_MS,
   DEFAULT_HARD_TIMEOUT_MS,
   DEFAULT_REMEDIATION_BREAKER_LIMIT,
   DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
+  DEFAULT_SANDBOX_ALLOWLIST_HOSTS,
+  DEFAULT_SANDBOX_CPUS,
+  DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
+  DEFAULT_SANDBOX_MEMORY_MB,
+  DEFAULT_SANDBOX_NETWORK,
+  DEFAULT_SANDBOX_REQUIRE_GVISOR,
   DEFAULT_TOOL_TIMEOUT_MS,
   MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
@@ -13,14 +20,14 @@ import type {
   AgentConfig,
   LLMProviderName,
   ReasoningEffort,
+  SandboxNetwork,
   ThinkingMode,
 } from "@nightwatch/shared";
 
 const CONFIG_ID = "global";
 
-// Shape of the config row as selected (columns aliased to camelCase). The
-// provider/thinking/reasoningEffort columns are plain TEXT, constrained to their
-// enums on write via the route schema. promptCaching is stored as 0/1.
+// Columns aliased to camelCase. provider/thinking/reasoningEffort are plain TEXT,
+// constrained to their enums on write via the route schema.
 type ConfigRow = {
   provider: string;
   model: string;
@@ -32,6 +39,13 @@ type ConfigRow = {
   toolTimeoutMs: number;
   remediationBreakerLimit: number;
   remediationBreakerWindowMs: number;
+  codeSessionBudgetMs: number;
+  sandboxIdleTimeoutMs: number;
+  sandboxCpus: number;
+  sandboxMemoryMb: number;
+  sandboxRequireGvisor: number;
+  sandboxNetwork: string;
+  sandboxAllowlistHosts: string;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
   promptCaching: number;
@@ -47,6 +61,13 @@ const SELECT_ROW = `
          tool_timeout_ms    AS toolTimeoutMs,
          remediation_breaker_limit     AS remediationBreakerLimit,
          remediation_breaker_window_ms AS remediationBreakerWindowMs,
+         code_session_budget_ms  AS codeSessionBudgetMs,
+         sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
+         sandbox_cpus            AS sandboxCpus,
+         sandbox_memory_mb       AS sandboxMemoryMb,
+         sandbox_require_gvisor  AS sandboxRequireGvisor,
+         sandbox_network         AS sandboxNetwork,
+         sandbox_allowlist_hosts AS sandboxAllowlistHosts,
          base_url           AS baseUrl,
          api_key_encrypted  AS apiKeyEncrypted,
          prompt_caching     AS promptCaching,
@@ -57,6 +78,14 @@ const SELECT_ROW = `
 function readRow(): ConfigRow | undefined {
   // better-sqlite3 returns untyped rows; the column aliases match ConfigRow.
   return getDb().prepare(SELECT_ROW).get(CONFIG_ID) as ConfigRow | undefined;
+}
+
+// Stored newline-joined (the Settings textarea shape); empty lines dropped.
+function splitHosts(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function defaultConfigFromEnv(): AgentConfig {
@@ -81,6 +110,13 @@ function defaultConfigFromEnv(): AgentConfig {
     toolTimeoutMs: DEFAULT_TOOL_TIMEOUT_MS,
     remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
     remediationBreakerWindowMs: DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
+    codeSessionBudgetMs: DEFAULT_CODE_SESSION_BUDGET_MS,
+    sandboxIdleTimeoutMs: DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
+    sandboxCpus: DEFAULT_SANDBOX_CPUS,
+    sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
+    sandboxRequireGvisor: DEFAULT_SANDBOX_REQUIRE_GVISOR,
+    sandboxNetwork: DEFAULT_SANDBOX_NETWORK,
+    sandboxAllowlistHosts: [...DEFAULT_SANDBOX_ALLOWLIST_HOSTS],
     baseUrl,
     apiKeyMasked: null,
     promptCaching: true,
@@ -114,6 +150,13 @@ export function loadConfig(): AgentConfig {
     toolTimeoutMs: row.toolTimeoutMs,
     remediationBreakerLimit: row.remediationBreakerLimit,
     remediationBreakerWindowMs: row.remediationBreakerWindowMs,
+    codeSessionBudgetMs: row.codeSessionBudgetMs,
+    sandboxIdleTimeoutMs: row.sandboxIdleTimeoutMs,
+    sandboxCpus: row.sandboxCpus,
+    sandboxMemoryMb: row.sandboxMemoryMb,
+    sandboxRequireGvisor: row.sandboxRequireGvisor === 1,
+    sandboxNetwork: row.sandboxNetwork as SandboxNetwork,
+    sandboxAllowlistHosts: splitHosts(row.sandboxAllowlistHosts),
     baseUrl: row.baseUrl ?? undefined,
     apiKeyMasked,
     promptCaching: row.promptCaching === 1,
@@ -137,11 +180,15 @@ const UPSERT_CONFIG = `
     id, provider, model, thinking, max_output_tokens, max_retries,
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
+    code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
+    sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts,
     base_url, prompt_caching, reasoning_effort, updated_at
   ) VALUES (
     @id, @provider, @model, @thinking, @maxOutputTokens, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
+    @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
+    @sandboxRequireGvisor, @sandboxNetwork, @sandboxAllowlistHosts,
     @baseUrl, @promptCaching, @reasoningEffort, @updatedAt
   )
   ON CONFLICT(id) DO UPDATE SET
@@ -155,6 +202,13 @@ const UPSERT_CONFIG = `
     tool_timeout_ms = excluded.tool_timeout_ms,
     remediation_breaker_limit = excluded.remediation_breaker_limit,
     remediation_breaker_window_ms = excluded.remediation_breaker_window_ms,
+    code_session_budget_ms = excluded.code_session_budget_ms,
+    sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
+    sandbox_cpus = excluded.sandbox_cpus,
+    sandbox_memory_mb = excluded.sandbox_memory_mb,
+    sandbox_require_gvisor = excluded.sandbox_require_gvisor,
+    sandbox_network = excluded.sandbox_network,
+    sandbox_allowlist_hosts = excluded.sandbox_allowlist_hosts,
     base_url = excluded.base_url,
     prompt_caching = excluded.prompt_caching,
     reasoning_effort = excluded.reasoning_effort,
@@ -179,6 +233,13 @@ export function updateConfig(patch: Partial<AgentConfig>): AgentConfig {
       toolTimeoutMs: next.toolTimeoutMs,
       remediationBreakerLimit: next.remediationBreakerLimit,
       remediationBreakerWindowMs: next.remediationBreakerWindowMs,
+      codeSessionBudgetMs: next.codeSessionBudgetMs,
+      sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,
+      sandboxCpus: next.sandboxCpus,
+      sandboxMemoryMb: next.sandboxMemoryMb,
+      sandboxRequireGvisor: next.sandboxRequireGvisor ? 1 : 0,
+      sandboxNetwork: next.sandboxNetwork,
+      sandboxAllowlistHosts: next.sandboxAllowlistHosts.join("\n"),
       baseUrl: next.baseUrl ?? null,
       promptCaching: next.promptCaching ? 1 : 0,
       reasoningEffort: next.reasoningEffort ?? null,

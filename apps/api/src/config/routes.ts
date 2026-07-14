@@ -17,6 +17,23 @@ const ConfigPatchSchema = z.object({
   toolTimeoutMs: z.number().int().positive().optional(),
   remediationBreakerLimit: z.number().int().positive().optional(),
   remediationBreakerWindowMs: z.number().int().positive().optional(),
+  codeSessionBudgetMs: z.number().int().positive().optional(),
+  sandboxIdleTimeoutMs: z.number().int().positive().optional(),
+  sandboxCpus: z.number().int().positive().optional(),
+  sandboxMemoryMb: z.number().int().positive().optional(),
+  sandboxRequireGvisor: z.boolean().optional(),
+  sandboxNetwork: z.enum(["allowlist", "open", "none"]).optional(),
+  sandboxAllowlistHosts: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i,
+          "hostnames only, e.g. registry.npmjs.org",
+        ),
+    )
+    .min(1)
+    .optional(),
   baseUrl: z.string().url().nullable().optional(),
   promptCaching: z.boolean().optional(),
   reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
@@ -25,6 +42,8 @@ const ConfigPatchSchema = z.object({
 const TestBodySchema = z.object({
   apiKey: z.string().min(1),
   model: z.string().optional(),
+  provider: z.enum(["anthropic", "openai"]).optional(),
+  baseUrl: z.string().url().optional(),
 });
 
 const KeyBodySchema = z.object({
@@ -103,9 +122,8 @@ async function probeEndpoint(
 
   const models = extractModels(responseData);
   const target = model ?? config.model;
-  // Only flag unknown_model when the endpoint returned a non-empty list and the
-  // configured model isn't in it. An empty list means the endpoint doesn't
-  // support listing; treat that as a successful connection.
+  // Only flag unknown_model against a non-empty list; an empty list means the
+  // endpoint doesn't support listing, so treat that as a successful connection.
   if (models.length > 0 && !models.includes(target)) {
     return { ok: false, error: "unknown_model" };
   }
@@ -164,6 +182,8 @@ export async function registerConfigRoutes(
     }
   });
 
+  // Tests only - never persists. Provider/baseUrl overrides let the caller
+  // probe against unsaved form edits instead of whatever is on disk.
   fastify.post(
     "/config/test",
     { preHandler: requireSession },
@@ -172,12 +192,13 @@ export async function registerConfigRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const { apiKey, model } = parsed.data;
+      const { apiKey, model, provider, baseUrl } = parsed.data;
 
-      const encrypted = encrypt(apiKey);
-      saveApiKey(encrypted);
-
-      const config = loadConfig();
+      const config: AgentConfig = {
+        ...loadConfig(),
+        ...(provider !== undefined && { provider }),
+        ...(baseUrl !== undefined && { baseUrl }),
+      };
       const result = await probeEndpoint(config, apiKey, model);
       logger.info({ ok: result.ok }, "config/test probe completed");
       return result;

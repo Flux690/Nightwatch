@@ -1,4 +1,3 @@
-import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
@@ -70,7 +69,7 @@ describe("GET /remediation-actions", () => {
     seedRemediationAction({
       toolUseId: "tu-list-older",
       sessionId: "sess-list-1",
-      toolName: "restart_service",
+      toolName: "RestartService",
       serviceIdentityKey: "docker/proj/web",
       status: "executed",
       resolvedBy: "operator",
@@ -80,7 +79,7 @@ describe("GET /remediation-actions", () => {
     seedRemediationAction({
       toolUseId: "tu-list-newer",
       sessionId: "sess-list-1",
-      toolName: "exec",
+      toolName: "ServiceBash",
       serviceIdentityKey: "kubernetes/ns/api",
       status: "rejected",
       resolvedBy: "console",
@@ -104,7 +103,7 @@ describe("GET /remediation-actions", () => {
       sessionId: "sess-list-1",
       toolUseId: "tu-list-newer",
       serviceIdentityKey: "kubernetes/ns/api",
-      toolName: "exec",
+      toolName: "ServiceBash",
       status: "rejected",
       resolvedBy: "console",
       createdAt: "2024-06-01T00:00:00.000Z",

@@ -31,10 +31,17 @@ const BASE_CONFIG: AgentConfig = {
   toolTimeoutMs: 15_000,
   remediationBreakerLimit: 5,
   remediationBreakerWindowMs: 600_000,
+  codeSessionBudgetMs: 1_200_000,
+  sandboxIdleTimeoutMs: 3_600_000,
+  sandboxCpus: 2,
+  sandboxMemoryMb: 4096,
+  sandboxRequireGvisor: false,
+  sandboxNetwork: "none",
+  sandboxAllowlistHosts: ["registry.npmjs.org"],
 };
 
 const READ_TOOL = {
-  name: "list_services",
+  name: "ListServices",
   description: "List containers.",
   input_schema: {
     type: "object" as const,
@@ -97,7 +104,7 @@ describe("AnthropicProvider", () => {
       output_config?: unknown;
     };
     expect((callArgs.tools ?? []).map((t) => t.name)).toEqual([
-      "list_services",
+      "ListServices",
     ]);
     expect(callArgs.output_config).toBeUndefined();
   });
@@ -109,7 +116,7 @@ describe("AnthropicProvider", () => {
         {
           type: "tool_use",
           id: "tu-1",
-          name: "list_services",
+          name: "ListServices",
           input: { environment: "docker" },
         },
       ],
@@ -120,7 +127,7 @@ describe("AnthropicProvider", () => {
 
     expect(response.stopReason).toBe("tool_use");
     expect(response.toolUses).toHaveLength(1);
-    expect(response.toolUses[0].name).toBe("list_services");
+    expect(response.toolUses[0].name).toBe("ListServices");
     expect(response.toolUses[0].id).toBe("tu-1");
   });
 });

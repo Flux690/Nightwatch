@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import {
@@ -10,20 +9,15 @@ import {
   it,
   vi,
 } from "vitest";
-import WebSocket from "ws";
 import Fastify from "fastify";
-import FastifyWebSocket from "@fastify/websocket";
 import type { FastifyInstance } from "fastify";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 
-// Stateful scripted provider: snapshot() accumulates messages so persist() in
-// the loop writes real session_messages rows. setScript() configures the turn
-// sequence per test; mockCreateProvider() is called once per run dispatch.
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+// Stateful scripted provider: snapshot() accumulates messages so persist() in the loop
+// writes real session_messages rows.
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
   createScriptRunner,
@@ -39,7 +33,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
-import { registerConsoleWsRoutes } from "../ws/console.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
@@ -53,29 +48,11 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 
-interface WsEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
   text: "Fixed. Investigation complete.",
   toolUses: [],
 };
-
-function waitForConnected(ws: WebSocket): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onMsg = (raw: WebSocket.RawData): void => {
-      const msg = JSON.parse(raw.toString()) as { type: string };
-      if (msg.type === "connected") {
-        ws.off("message", onMsg);
-        resolve();
-      }
-    };
-    ws.on("message", onMsg);
-  });
-}
 
 describe("durable approval interrupts", () => {
   let server: FastifyInstance;
@@ -96,7 +73,7 @@ describe("durable approval interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "restart_service") {
+        if (commandName === "RestartService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -133,18 +110,16 @@ describe("durable approval interrupts", () => {
       },
     });
 
-    server = Fastify({ logger: false });
-    await server.register(FastifyWebSocket);
-    await registerConsoleWsRoutes(server);
+    server = Fastify({ logger: false, forceCloseConnections: true });
+    await registerConsoleEventRoutes(server);
     await registerSessionRoutes(server);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
 
   afterEach(() => {
-    // Reset the breaker ledger so each case is independent: it counts executed writes per
-    // (service, action) across the shared temp DB, so without this one case's restarts trip it
-    // for a later case.
+    // Breaker counts executed writes across the shared temp DB, so without this
+    // reset one case's restarts trip it for a later case.
     getDb().prepare("DELETE FROM remediation_actions").run();
   });
 
@@ -162,7 +137,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-sus-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -179,14 +154,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -216,9 +184,9 @@ describe("durable approval interrupts", () => {
     // Runner must NOT have executed the write yet
     const countBefore = restartCommands.length;
 
-    expect(interrupt.payload["toolName"]).toBe("restart_service");
+    expect(interrupt.payload["toolName"]).toBe("RestartService");
 
-    ws.close();
+    close();
 
     // cleanup: approve via /respond to prevent leaking into later tests
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -240,7 +208,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-apr-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -257,14 +225,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -319,7 +280,7 @@ describe("durable approval interrupts", () => {
     // Interrupt row is gone from DB after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
 
-    ws.close();
+    close();
   });
 
   it("reject: feeds rejection result with is_error, run resumes with model adapting", async () => {
@@ -329,7 +290,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-rej-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -346,14 +307,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -400,7 +354,7 @@ describe("durable approval interrupts", () => {
     );
 
     expect(hasPendingHumanInput(sessionId)).toBe(false);
-    ws.close();
+    close();
   });
 
   it("add-context: text without decision feeds context, run resumes and model continues", async () => {
@@ -410,7 +364,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-ctx-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -427,14 +381,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -477,7 +424,7 @@ describe("durable approval interrupts", () => {
     );
 
     expect(hasPendingHumanInput(sessionId)).toBe(false);
-    ws.close();
+    close();
   });
 
   it("second resolution of same interrupt returns 409", async () => {
@@ -487,7 +434,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-409-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -504,14 +451,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -556,7 +496,7 @@ describe("durable approval interrupts", () => {
     );
     expect(second.status).toBe(409);
 
-    ws.close();
+    close();
   });
 
   // H4: concurrent approve+reject — only one wins, tool runs at most once
@@ -568,7 +508,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-h4-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -585,14 +525,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -645,7 +578,7 @@ describe("durable approval interrupts", () => {
     }
 
     expect(hasPendingHumanInput(sessionId)).toBe(false);
-    ws.close();
+    close();
   });
 
   it("message to a suspended session returns 409", async () => {
@@ -655,7 +588,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-busy-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -672,14 +605,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -713,7 +639,7 @@ describe("durable approval interrupts", () => {
     );
     expect(msgRes.status).toBe(409);
 
-    ws.close();
+    close();
 
     // cleanup
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
@@ -733,7 +659,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-val-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -750,14 +676,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -792,7 +711,7 @@ describe("durable approval interrupts", () => {
     expect(validationRes.status).toBe(400);
 
     // Cleanup
-    ws.close();
+    close();
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -811,7 +730,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-rr-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -828,14 +747,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -881,7 +793,7 @@ describe("durable approval interrupts", () => {
     await waitFor(() => restartCommands.length > 0);
     expect(restartCommands).toHaveLength(1);
 
-    ws.close();
+    close();
   });
 
   it("mixed parallel turn: non-gated tools execute first, resume covers all tool_uses", async () => {
@@ -892,12 +804,12 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-mix-read",
-            name: "list_services",
+            name: "ListServices",
             input: { environment: "docker" },
           },
           {
             id: "tu-mix-gate",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -914,14 +826,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -970,7 +875,7 @@ describe("durable approval interrupts", () => {
     await waitFor(() => restartCommands.length > 0);
     expect(restartCommands).toHaveLength(1);
 
-    ws.close();
+    close();
   });
 
   it("critical rejection resumes with rejection result: no escalation, model finishes", async () => {
@@ -994,7 +899,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: `tu-crit-${randomUUID()}`,
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -1011,14 +916,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-    await waitForConnected(ws);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     dispatcher.dispatch({ alert, sessionId });
 
@@ -1050,7 +948,7 @@ describe("durable approval interrupts", () => {
           e.payload["status"] === "rejected",
       ),
     );
-    ws.close();
+    close();
 
     expect(hasPendingHumanInput(sessionId)).toBe(false);
     expect(
@@ -1070,7 +968,7 @@ describe("durable approval interrupts", () => {
         toolUses: [
           {
             id: "tu-notmo-1",
-            name: "restart_service",
+            name: "RestartService",
             input: {
               service: {
                 provider: "docker",
@@ -1087,18 +985,7 @@ describe("durable approval interrupts", () => {
       FINISH_TURN,
     ]);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/console/connect`, {
-      headers: { Cookie: `nw_auth=${SESSION}`, Origin: "http://localhost" },
-    });
-    const events: WsEvent[] = [];
-    ws.on("message", (raw) => {
-      events.push(JSON.parse(raw.toString()) as WsEvent);
-    });
-
-    // Can't use waitForConnected with fake timers and real setTimeout; connect directly
-    await new Promise<void>((resolve) => {
-      ws.once("open", resolve);
-    });
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -1110,8 +997,10 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Advance 24 hours
+    // Advance proves no timeout reaped the interrupt; real timers are restored
+    // since the waits below need real event-loop turns.
     vi.advanceTimersByTime(24 * 60 * 60 * 1_000);
+    vi.useRealTimers();
 
     // The interrupt row must still be there (no timeout deleted it)
     await waitFor(() => hasPendingHumanInput(sessionId), { timeout: 5_000 });
@@ -1127,7 +1016,6 @@ describe("durable approval interrupts", () => {
         ),
       { timeout: 5_000 },
     );
-    vi.useRealTimers();
 
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
@@ -1148,6 +1036,6 @@ describe("durable approval interrupts", () => {
     await waitFor(() => restartCommands.length > 0);
     expect(restartCommands).toHaveLength(1);
 
-    ws.close();
+    close();
   });
 });

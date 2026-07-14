@@ -19,9 +19,8 @@ export interface RemediationAction {
   resolvedAt: string | null;
 }
 
-// Derives the canonical identity key from a tool input's `service`, or null when it carries
-// none. The single place input becomes a key, shared by the record write and the breaker
-// count so both key the same shape.
+// The single place a tool input becomes a key, shared by the record write and
+// the breaker count so both key the same shape.
 export function serviceIdentityKeyFromInput(
   input: Record<string, unknown>,
 ): string | null {
@@ -37,9 +36,8 @@ export function serviceIdentityKeyFromInput(
   return serviceIdentityKey(service as ServiceIdentity);
 }
 
-// Audit-log retention ceiling: the breaker reads only a recent window and the list shows
-// 100, but this is the durable record, so the ceiling is high and eviction only drops rows
-// far older than any breaker window.
+// Durable audit record, so the ceiling is high; eviction only drops rows far
+// older than any breaker window.
 const MAX_REMEDIATION_ACTIONS = 10000;
 
 function pruneRemediationActions(): void {
@@ -51,9 +49,8 @@ function pruneRemediationActions(): void {
     .run({ cap: MAX_REMEDIATION_ACTIONS });
 }
 
-// Write-ahead insert for an approved action. Returns false when the UNIQUE
-// constraint fires — meaning the action was already attempted (crash-recovery
-// scenario) and must not run again.
+// Returns false when the UNIQUE constraint fires, meaning the action was
+// already attempted (crash recovery) and must not run again.
 export function insertExecutingRemediationAction(params: {
   toolUseId: string;
   sessionId: string;
@@ -115,9 +112,8 @@ export function settleRemediationAction(
     });
 }
 
-// One-shot, idempotent rejection insert: a re-rejected interrupt after a crash is ignored,
-// not a constraint error. Returns false when OR IGNORE fired (the caller warns on the
-// executing-row zombie case).
+// Idempotent: a re-rejected interrupt after a crash is ignored, not a constraint
+// error. Returns false when OR IGNORE fired.
 export function insertRejectedRemediationAction(params: {
   toolUseId: string;
   sessionId: string;
@@ -184,9 +180,8 @@ export function listRemediationActions(): RemediationAction[] {
     .all() as RemediationAction[];
 }
 
-// Counts SUCCEEDED writes (status 'executed') to the same (identity, action) since `since`,
-// for the breaker. A 'failed' write doesn't count - a transient failure must not burn the
-// budget; 'rejected'/'executing' aren't successes either.
+// For the breaker: counts only 'executed' writes, since a transient failure
+// must not burn the budget, and 'rejected'/'executing' aren't successes.
 export function countExecutedRemediations(params: {
   serviceIdentityKey: string;
   toolName: string;

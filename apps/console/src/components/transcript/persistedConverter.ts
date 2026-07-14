@@ -44,11 +44,18 @@ export function convertPersistedMessages(
   const items: TranscriptItem[] = [];
 
   for (const msg of messages) {
-    if (msg.role === "user") {
+    if (msg.role === "error") {
+      if (msg.content) {
+        items.push({
+          kind: "error_text",
+          id: `error-${msg.seq}`,
+          text: msg.content,
+        });
+      }
+    } else if (msg.role === "user") {
       if (isProviderBlockArray(msg.providerContent)) {
-        // Walk blocks in order: surface text as user turns, skip tool_result
-        // blocks (results already collected in pass 1). A message may contain
-        // both (e.g. mid-run alert injected alongside tool results).
+        // Walk blocks in order, surfacing text as user turns; tool_result blocks
+        // are skipped since pass 1 already collected them (a message may contain both).
         let textIdx = 0;
         for (const block of msg.providerContent) {
           if (block.type === "text" && block.text) {
@@ -80,7 +87,7 @@ export function convertPersistedMessages(
               id: `agent-${msg.seq}-${textIdx++}`,
               text: block.text,
             });
-          } else if (block.type === "thinking" && block.thinking) {
+          } else if (block.type === "thinking" && block.thinking.trim()) {
             items.push({
               kind: "thinking",
               id: `thinking-${msg.seq}-${thinkingIdx++}`,
@@ -88,7 +95,7 @@ export function convertPersistedMessages(
               streaming: false,
             });
           } else if (block.type === "tool_use") {
-            if (block.name === "request_clarification") {
+            if (block.name === "AskUserQuestion") {
               // Rebuild the clarification card here once answered so it survives a reload; while
               // pending the live/seeded card already covers it (see SessionView).
               if (!toolResults.has(block.id)) continue;

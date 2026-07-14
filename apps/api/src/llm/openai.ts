@@ -5,15 +5,15 @@ import type {
   ChatResponse,
   LLMProvider,
   OnDelta,
+  ProviderCallOptions,
   ProviderMessage,
   ToolResult,
   ToolSchema,
   ToolUse,
 } from "./types.js";
 
-// Neutral content-block shape the console's persistedConverter already reads (mirrors
-// Anthropic's blocks). OpenAI has no field for reasoning, so a thinking turn is reassembled
-// into this before persisting - else the reasoning is lost the moment the turn is written.
+// Mirrors Anthropic's blocks so persistedConverter reads both providers the same way;
+// OpenAI has no reasoning field, so a thinking turn is reassembled into this before persisting.
 type ProviderBlock =
   | { type: "text"; text: string }
   | { type: "thinking"; thinking: string }
@@ -32,18 +32,23 @@ export class OpenAIProvider implements LLMProvider {
   private readonly model: string;
   private readonly system: string;
   private readonly config: AgentConfig;
+  private readonly opts?: ProviderCallOptions;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
-  // Reasoning text per assistant turn, keyed by message index. Captured from streamed
-  // reasoning_details (an OpenRouter extension) that finalChatCompletion() drops, so it's
-  // tracked separately here.
+  // Reasoning per turn, keyed by message index; finalChatCompletion() drops the
+  // streamed OpenRouter reasoning_details, so it's captured separately here.
   private readonly thinkingByIndex = new Map<number, string>();
 
-  constructor(system: string, config: AgentConfig, apiKey?: string) {
+  constructor(
+    system: string,
+    config: AgentConfig,
+    apiKey?: string,
+    opts?: ProviderCallOptions,
+  ) {
     this.system = system;
     this.config = config;
-    // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
-    // when set, falling back to the env var. baseUrl from config overrides the
-    // env var so operators can change endpoints without a server restart.
+    this.opts = opts;
+    // apiKey falls back to the env var when not passed; config.baseUrl overrides
+    // the env var so operators can switch endpoints without a server restart.
     this.client = new OpenAI({
       apiKey: apiKey ?? process.env["OPENAI_API_KEY"],
       baseURL: config.baseUrl ?? process.env["OPENAI_BASE_URL"],
@@ -69,9 +74,9 @@ export class OpenAIProvider implements LLMProvider {
     let response: OpenAI.Chat.Completions.ChatCompletion;
     let thinking = "";
     try {
-      // Stream and accumulate via finalChatCompletion() so a large response can't trip the
-      // single-read request timeout; the accumulated completion has the same shape as a
-      // non-streamed one, so everything downstream is unchanged.
+      // Streamed via finalChatCompletion() so a large response can't trip the single-read
+      // timeout; the accumulated result has the same shape as a non-streamed one.
+      const reasoningOff = this.opts?.reasoning === "off";
       const streamParams = {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
@@ -84,10 +89,18 @@ export class OpenAIProvider implements LLMProvider {
             parameters: t.input_schema,
           },
         })),
+        // A call flagged reasoning-off spends its whole budget on visible text;
+        // flat reasoning_effort is OpenAI-standard and OpenRouter accepts it as
+        // an alias. Gated on reasoningEffort so deployments that never speak the
+        // reasoning dialect keep sending nothing.
+        ...(reasoningOff &&
+          this.config.reasoningEffort && {
+            reasoning_effort: "none" as const,
+          }),
       };
       // OpenRouter-only param requesting reasoning_details on the stream; the
       // official SDK types don't know it, hence the cast through unknown.
-      if (this.config.reasoningEffort) {
+      if (!reasoningOff && this.config.reasoningEffort) {
         (streamParams as unknown as Record<string, unknown>)["reasoning"] = {
           effort: this.config.reasoningEffort,
         };
@@ -95,9 +108,8 @@ export class OpenAIProvider implements LLMProvider {
       const stream = this.client.chat.completions.stream(streamParams, {
         signal,
       });
-      // OpenRouter extends the delta with reasoning_details; the SDK types omit it, so the cast
-      // goes via unknown. Listened for unconditionally so the accumulated text survives even the
-      // no-callback wrap-up turn.
+      // SDK types omit OpenRouter's reasoning_details, hence the cast via unknown; listened
+      // for unconditionally so accumulated text survives the no-callback wrap-up turn.
       stream.on("chunk", (chunk) => {
         const rawDelta = (
           chunk as unknown as {
@@ -178,18 +190,16 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   seed(history: ProviderMessage[]): void {
-    // OpenAI keeps the system prompt in the message array, so it's re-prepended here, not
-    // restored from the transcript. Messages persisted without providerContent fall back to
-    // plain role/content, matching Anthropic.
+    // System prompt lives in the message array, not the transcript, so it's re-prepended
+    // here; messages without providerContent fall back to plain role/content.
     this.messages = [
       { role: "system", content: this.system },
       ...history.map((m) => this.toNativeMessage(m)),
     ];
   }
 
-  // A turn that thought is persisted as ProviderBlock[] (see snapshot()) that OpenAI won't
-  // accept back; the reasoning isn't needed to replay context, so only text/tool_calls
-  // round-trip into a native message.
+  // Persisted ProviderBlock[] reasoning isn't needed to replay context, so only
+  // text/tool_calls round-trip back into a native message.
   private toNativeMessage(
     m: ProviderMessage,
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam {
@@ -199,9 +209,8 @@ export class OpenAIProvider implements LLMProvider {
         (b): b is ProviderBlock & { type: "tool_result" } =>
           b.type === "tool_result",
       );
-      // A tool's output round-trips as its own native "tool" message, not an
-      // assistant turn - the console persists it under role "user" (see
-      // snapshot()) purely for display grouping.
+      // Round-trips as a native "tool" message; the console persists it under
+      // role "user" purely for display grouping.
       if (toolResult) {
         return {
           role: "tool",
@@ -241,9 +250,8 @@ export class OpenAIProvider implements LLMProvider {
       .map((m, i) => ({ m, i }))
       .filter(({ m }) => m.role !== "system")
       .map(({ m, i }) => {
-        // A tool's output is always reconstructed as the same ProviderBlock[]
-        // shape the console reads for Anthropic, regardless of which provider
-        // ran - persisted under role "user" purely for display grouping.
+        // Reconstructed as the same ProviderBlock[] shape the console reads for
+        // Anthropic, persisted under role "user" purely for display grouping.
         if (m.role === "tool") {
           const blocks: ProviderBlock[] = [
             {
@@ -262,12 +270,11 @@ export class OpenAIProvider implements LLMProvider {
         const content = typeof m.content === "string" ? m.content : "";
 
         if (m.role === "assistant") {
-          // Always build the block shape (even with no thinking and no tool
-          // calls) so the console's persistedConverter, which only recognizes
-          // ProviderBlock[] for assistant turns, renders every turn the same way.
+          // Built even when empty, since persistedConverter only recognizes
+          // ProviderBlock[] for assistant turns.
           const thinking = this.thinkingByIndex.get(i);
           const blocks: ProviderBlock[] = [];
-          if (thinking) blocks.push({ type: "thinking", thinking });
+          if (thinking?.trim()) blocks.push({ type: "thinking", thinking });
           if (content) blocks.push({ type: "text", text: content });
           for (const call of m.tool_calls ?? []) {
             if (call.type !== "function") continue;
@@ -297,9 +304,8 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
-// OpenAI returns tool-call arguments as a model-generated JSON string, so it can be
-// malformed. Parse defensively: a bad payload becomes empty input, which per-tool
-// validation rejects with a corrective error, rather than crashing the run.
+// Model-generated JSON can be malformed; a bad payload becomes empty input,
+// which per-tool validation rejects with a corrective error instead of crashing.
 function parseToolArguments(
   raw: string,
   toolName: string,

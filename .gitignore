@@ -9,17 +9,9 @@ node_modules/
 # Build output
 dist/
 
-# Runtime data (API SQLite db; runner identity file)
-apps/api/data
-apps/runner/data
-
-# Claude Code — personal/generated only; settings.json, hooks/, rules/, agents/ are committed
-.claude/settings.local.json
-.claude/worktrees/
-.claude/logs/
-
-# Fetched skill content — regenerable from skills-lock.json (committed)
-.claude/skills/
+# Claude Code
+.claude
+CLAUDE.md
 
 # OS files
 .DS_Store
@@ -29,10 +21,7 @@ Desktop.ini
 # Local doc/reference dumps used while designing — not source
 *.txt
 
-# Local work tracking — issues stay untracked
-issues
-
-# Per-feature PRDs — local working docs, not published
-.claude/*-prd.md
+# Per-feature PRDs, docs and issue for tracking — local working docs, not published
 docs
 CONTEXT.md
+issues

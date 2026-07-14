@@ -31,9 +31,8 @@ export function requireK8sIdentity(
   return service;
 }
 
-// Distinguishes "not this kind, try the next" from a genuine failure
-// (permissions, network) that must propagate as-is rather than be masked by the
-// next attempt's unrelated 404.
+// Distinguishes "not this kind, try the next" from a genuine failure (permissions, network) that
+// must propagate as-is rather than be masked by the next attempt's unrelated 404.
 export function isNotFoundError(err: unknown): boolean {
   return err instanceof ApiException && err.code === 404;
 }
@@ -45,9 +44,8 @@ export interface ResolvedWorkloadKind {
   replicas: number;
 }
 
-// Resolve Deployment vs StatefulSet (or neither) in one set of reads, returning
-// kind+replicas, so the caller patches the exact resource instead of trying Deployment
-// first and rolling the wrong one on a name clash.
+// Resolve Deployment vs StatefulSet (or neither) in one set of reads, returning kind+replicas, so the
+// caller patches the exact resource instead of trying Deployment first and rolling the wrong one on a name clash.
 export async function resolveWorkloadKind(
   appsApi: k8s.AppsV1Api,
   namespace: string,
@@ -74,9 +72,8 @@ export async function resolveWorkloadKind(
   return null;
 }
 
-// Resolve a durable workload identity to the live pod and container at exec time,
-// fail-fast: writes/exec require a Running pod; a multi-container pod needs
-// the caller's `container`, else a not-running result lists the choices, never guessing.
+// Resolve a durable workload identity to the live pod and container at exec time, fail-fast: writes/exec
+// require a Running pod; a multi-container pod needs the caller's `container`, else a not-running result lists the choices, never guessing.
 export async function resolveWorkload(
   coreApi: k8s.CoreV1Api,
   appsApi: k8s.AppsV1Api,

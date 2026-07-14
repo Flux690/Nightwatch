@@ -1,10 +1,12 @@
-// Global agent config: how the one brain reasons (no per-runner dimension). The API
-// stores one row seeded from env; secrets stay in env, so this shape is safe to send
-// to the console.
+// Global agent config: how the one brain reasons (no per-runner dimension). Secrets
+// stay in env, so this API-seeded shape is safe to send to the console.
 
 export type LLMProviderName = "anthropic" | "openai";
 export type ThinkingMode = "adaptive" | "off";
 export type ReasoningEffort = "low" | "medium" | "high";
+// "allowlist" routes all sandbox egress through an enforcing proxy that only
+// reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
+export type SandboxNetwork = "allowlist" | "open" | "none";
 
 export interface AgentConfig {
   provider: LLMProviderName;
@@ -15,11 +17,22 @@ export interface AgentConfig {
   requestTimeoutMs: number;
   hardTimeoutMs: number;
   toolTimeoutMs: number;
-  // Remediation circuit breaker: at proposal time the loop refuses a write once
-  // this many executed/failed writes to the same (service identity, action) have
-  // landed within the window, so a crash-loop fix cannot become a restart storm.
+  // Remediation circuit breaker: refuses a write once this many executed/failed writes to
+  // the same (service identity, action) landed within the window, so a crash-loop fix cannot become a restart storm.
   remediationBreakerLimit: number;
   remediationBreakerWindowMs: number;
+  // Code sessions: any repo tool call re-extends the session deadline to
+  // codeSessionBudgetMs; the sandbox knobs bound the per-session container.
+  codeSessionBudgetMs: number;
+  sandboxIdleTimeoutMs: number;
+  sandboxCpus: number;
+  sandboxMemoryMb: number;
+  // Fail-loud: refuses to start unless the Docker host has gVisor (runsc).
+  // Off by default, gVisor is used automatically wherever present.
+  sandboxRequireGvisor: boolean;
+  sandboxNetwork: SandboxNetwork;
+  // Domains the allowlist proxy may reach, one hostname per entry.
+  sandboxAllowlistHosts: string[];
   // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
   // is computed server-side (never stored) and shows the configured key hint.
   baseUrl?: string;

@@ -16,9 +16,8 @@ interface RedactionRule {
   preserve?: "key";
 }
 
-// Gitleaks-derived ruleset expressed as rules-as-data for extensibility.
-// Order matters: more specific rules (JWT, PEM) run before the broad key-value
-// sweep so a secret that matches both is counted only once.
+// Gitleaks-derived ruleset expressed as rules-as-data for extensibility. Order matters: more specific
+// rules (JWT, PEM) run before the broad key-value sweep so a secret that matches both is counted only once.
 const RULES: RedactionRule[] = [
   {
     name: "jwt",
@@ -59,9 +58,8 @@ const RULES: RedactionRule[] = [
       /(postgresql|postgres|mysql|mongodb|redis|amqp|jdbc):\/\/[^\s"'`\n]+/gi,
   },
   {
-    // Quoted values capture to the closing quote (spaces and all); unquoted run to the next
-    // delimiter. The old pattern stopped at the first space and required >=4 chars, leaking
-    // spaced secrets and missing short ones.
+    // Quoted values capture to the closing quote (spaces and all); unquoted run to the next delimiter. The
+    // old pattern stopped at the first space and required >=4 chars, leaking spaced secrets and missing short ones.
     name: "key-value",
     pattern:
       /"?(password|passwd|token|secret|api_key|apikey|private_key|auth|credential|access_key|auth_token|access_token|client_secret)"?\s*[=:]\s*("[^"\n]*"|'[^'\n]*'|[^\s,\[\]\n]+)/gi,
@@ -116,9 +114,8 @@ function buildAllowlist(): string[] {
     : DEFAULT_ALLOWLIST;
 }
 
-// Open-then-validate, closing the check/open TOCTOU: open the fd once (pinned to the
-// resolved inode), then prove that inode is reachable via an allowlisted canonical path.
-// Reads come from the handle, never the name; O_NONBLOCK stops a planted FIFO hanging open.
+// Open-then-validate, closing the check/open TOCTOU: open the fd once (pinned to the resolved inode), then
+// prove that inode is reachable via an allowlisted canonical path. Reads come from the handle, never the name; O_NONBLOCK stops a planted FIFO hanging open.
 export async function openAllowedFile(
   requestedPath: string,
 ): Promise<fs.promises.FileHandle> {
@@ -137,9 +134,8 @@ export async function openAllowedFile(
         `Path not in allowlist: ${requestedPath}. Add to FILE_ALLOWLIST env var to enable.`,
       );
     }
-    // Bind the allowlisted name to the opened inode: if a symlink was swapped
-    // between open and realpath, the canonical name now resolves to a different
-    // inode than the fd holds, so we refuse rather than read the wrong file.
+    // Bind the allowlisted name to the opened inode: if a symlink was swapped between open and realpath,
+    // the canonical name now resolves to a different inode than the fd holds, so we refuse rather than read the wrong file.
     const nameStat = await fs.promises.stat(canonical, { bigint: true });
     if (nameStat.ino !== fdStat.ino || nameStat.dev !== fdStat.dev) {
       throw new Error(

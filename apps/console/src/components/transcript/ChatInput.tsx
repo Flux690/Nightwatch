@@ -19,6 +19,8 @@ export interface ChatInputProps {
   disabled?: boolean;
   onSessionCreated?: (sessionId: string, firstMessage: string) => void;
   onSend?: (text: string) => void;
+  // The POST never reached the API: the view rolls back its optimistic state.
+  onSendFailed?: () => void;
 }
 
 export function ChatInput({
@@ -27,6 +29,7 @@ export function ChatInput({
   disabled,
   onSessionCreated,
   onSend,
+  onSendFailed,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -52,7 +55,6 @@ export function ChatInput({
       return null;
     },
     onSuccess: async (createdSessionId) => {
-      setText("");
       if (createdSessionId !== null) {
         await navigate({
           to: "/sessions/$id",
@@ -62,7 +64,10 @@ export function ChatInput({
       }
       textareaRef.current?.focus();
     },
-    onError: (err) => {
+    onError: (err, failedText) => {
+      // Restore the message unless the user already typed something new.
+      setText((current) => (current === "" ? failedText : current));
+      onSendFailed?.();
       toast.show({
         title: "Message not sent",
         message: err instanceof Error ? err.message : "Try again.",
@@ -86,6 +91,8 @@ export function ChatInput({
   const handleSubmit = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed || isRunning || disabled || submit.isPending) return;
+    // Cleared at submit, not on success: the echoed bubble is the message now.
+    setText("");
     onSend?.(trimmed);
     submit.mutate(trimmed);
   }, [text, isRunning, disabled, submit, onSend]);

@@ -20,11 +20,15 @@ import {
 } from "@/components/ui/message-scroller";
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
-import { useConsoleWs } from "@/hooks/ConsoleWsProvider";
+import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { ChatInput } from "@/components/transcript/ChatInput";
-import { applyLiveEvent } from "@/components/transcript/liveConverter";
+import {
+  applyLiveEvent,
+  hasActiveStream,
+} from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
 import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
+import { WorkingIndicator } from "@/components/transcript/WorkingIndicator";
 import type { TranscriptItem } from "@/components/transcript/types";
 import { apiFetch } from "@/api/client";
 
@@ -88,6 +92,7 @@ function itemKey(item: TranscriptItem): string {
   if (
     item.kind === "user_turn" ||
     item.kind === "agent_text" ||
+    item.kind === "error_text" ||
     item.kind === "thinking"
   )
     return item.id;
@@ -121,19 +126,55 @@ function ScrollToEndChatInput(
 function TranscriptColumn({
   persistedMessages,
   liveItems,
+  pendingEcho,
+  lastEchoText,
+  showWorking,
   onResolve,
   onAnswer,
 }: {
   persistedMessages: SessionMessage[];
   liveItems: TranscriptItem[];
+  pendingEcho: string | null;
+  lastEchoText: string | null;
+  showWorking: boolean;
   onResolve: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
-  const persistedItems = useMemo(
-    () => convertPersistedMessages(persistedMessages),
-    [persistedMessages],
-  );
-  const allItems = [...persistedItems, ...liveItems];
+  const persistedItems = useMemo(() => {
+    const items = convertPersistedMessages(persistedMessages);
+    if (lastEchoText === null) return items;
+    // The persisted copy of a just-echoed bubble mounts without the fade so
+    // the echo-to-persisted swap has no visible frame.
+    return items.map((item) =>
+      item.kind === "user_turn" && item.text === lastEchoText
+        ? { ...item, instant: true }
+        : item,
+    );
+  }, [persistedMessages, lastEchoText]);
+
+  // The fetch can return the persisted user turn before any event is heard
+  // for a newly-created session; if the last user turn already carries the
+  // echoed text, the echo would double-render - suppress it.
+  const echoPersisted = (): boolean => {
+    for (let i = persistedItems.length - 1; i >= 0; i--) {
+      const item = persistedItems[i];
+      if (item?.kind === "user_turn") return item.text === pendingEcho;
+    }
+    return false;
+  };
+  const echoItem: TranscriptItem | null =
+    pendingEcho !== null && !echoPersisted()
+      ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
+      : null;
+
+  // A live card whose tool_use has since been persisted (e.g. an answered
+  // question after the resumed run flushes) would render twice - drop it.
+  const persistedKeys = new Set(persistedItems.map(itemKey));
+  const allItems = [
+    ...persistedItems,
+    ...(echoItem ? [echoItem] : []),
+    ...liveItems.filter((item) => !persistedKeys.has(itemKey(item))),
+  ];
 
   return (
     <MessageScrollerContent
@@ -162,6 +203,13 @@ function TranscriptColumn({
           />
         </MessageScrollerItem>
       ))}
+      {showWorking && (
+        <MessageScrollerItem
+          className={allItems.length === 0 ? "mt-0" : "mt-2"}
+        >
+          <WorkingIndicator />
+        </MessageScrollerItem>
+      )}
     </MessageScrollerContent>
   );
 }
@@ -179,6 +227,13 @@ export function SessionView({
 
   const [liveItems, setLiveItems] = useState<TranscriptItem[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  // Optimistic echo of the sent message, shown until its persisted row lands.
+  const [pendingEcho, setPendingEcho] = useState<string | null>(null);
+  // Outlives the echo so the persisted copy can skip its mount fade.
+  const lastEchoRef = useRef<string | null>(null);
+  // Live status line (provider retries, sandbox provisioning); any other run
+  // event clears it.
+  const [activityNotice, setActivityNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { phase } = useAuth();
@@ -197,12 +252,18 @@ export function SessionView({
       setActiveSessionId(null);
       setLiveItems([]);
       setIsRunning(false);
+      setPendingEcho(null);
+      lastEchoRef.current = null;
+      setActivityNotice(null);
       return;
     }
 
     if (prev !== null && prev !== curr) {
       setLiveItems([]);
       setIsRunning(false);
+      setPendingEcho(null);
+      lastEchoRef.current = null;
+      setActivityNotice(null);
     }
 
     activeSessionIdRef.current = curr;
@@ -263,11 +324,41 @@ export function SessionView({
       const sid = activeSessionIdRef.current;
       if (!sid) return;
 
-      if (env.type === "RUN_FINISHED") {
+      if (env.type === "SANDBOX_STATUS") {
+        const { sessionId, stage } = env.payload;
+        if (sessionId !== sid) return;
+        setActivityNotice(
+          stage === "cloning"
+            ? "Preparing sandbox - cloning the repository\u2026"
+            : stage === "starting"
+              ? "Preparing sandbox - starting the container\u2026"
+              : stage === "installing"
+                ? "Preparing sandbox - installing dependencies\u2026"
+                : null,
+        );
+        return;
+      }
+
+      if (env.type === "RUN_RETRYING") {
+        const { sessionId, summary } = env.payload;
+        if (sessionId !== sid) return;
+        setIsRunning(true);
+        setActivityNotice(summary);
+        return;
+      }
+
+      if (env.type === "MESSAGE") {
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
-        setIsRunning(false);
-        setLiveItems([]);
+        // A persisted row, not a lifecycle signal - never touch isRunning here.
+        // The optimistic echo clears once its own turn lands.
+        setPendingEcho(null);
+        // Assistant/error rows replace live streamed items whose ephemeral ids
+        // can't dedup against the persisted copy, so drop them. Tool_result
+        // (user) rows leave live tool cards for the persisted-key filter.
+        if (message.role === "assistant" || message.role === "error") {
+          setLiveItems([]);
+        }
         queryClient.setQueryData<SessionMessage[]>(
           ["session", sid],
           (prev = []) => [...prev, message],
@@ -275,10 +366,24 @@ export function SessionView({
         return;
       }
 
+      if (env.type === "RUN_FINISHED") {
+        // The one terminal event for a self-completed run: settle run state.
+        // The transcript is already whole - every row arrived as a MESSAGE.
+        const { sessionId } = env.payload;
+        if (sessionId !== sid) return;
+        setIsRunning(false);
+        setActivityNotice(null);
+        setPendingEcho(null);
+        setLiveItems([]);
+        return;
+      }
+
       if (env.type === "RUN_STOPPED") {
         const { sessionId } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
+        setActivityNotice(null);
+        setPendingEcho(null);
         setLiveItems([]);
         return;
       }
@@ -287,17 +392,32 @@ export function SessionView({
         const { sessionId, message } = env.payload;
         if (sessionId !== sid) return;
         setIsRunning(false);
+        setActivityNotice(null);
+        setPendingEcho(null);
         setLiveItems([]);
-        toast.show({
-          title: "Investigation failed",
-          message,
-          variant: "error",
-        });
+        // The failure is a persisted transcript row: append it like a MESSAGE so
+        // it renders in the conversation and survives reloads.
+        queryClient.setQueryData<SessionMessage[]>(
+          ["session", sid],
+          (prev = []) => [...prev, message],
+        );
         return;
       }
 
+      // A gated tool suspends the run for a human: it is terminal for the run
+      // process, so settle run state, then fall through to render the card.
+      if (env.type === "HUMAN_INPUT_REQUIRED") {
+        if (env.payload.sessionId === sid) {
+          setIsRunning(false);
+          setActivityNotice(null);
+        }
+      }
+
       if (env.type === "TEXT_MESSAGE_CONTENT") {
-        if (env.payload.sessionId === sid) setIsRunning(true);
+        if (env.payload.sessionId === sid) {
+          setIsRunning(true);
+          setActivityNotice(null);
+        }
       }
 
       setLiveItems((prev) => applyLiveEvent(prev, env, sid));
@@ -351,35 +471,44 @@ export function SessionView({
 
   const handleAnswer = useCallback(
     (toolUseId: string, answer: string | string[]) => {
+      const text = Array.isArray(answer) ? answer.join(", ") : answer;
+      // Stash the answer on the live card so the resolved Q/A view can show it
+      // before the persisted transcript catches up.
       setLiveItems((prev) =>
         prev.map((item) =>
           item.kind === "clarification_card" && item.toolUseId === toolUseId
-            ? { ...item, approval: "pending" }
+            ? { ...item, approval: "pending", result: text }
             : item,
         ),
       );
-      const text = Array.isArray(answer) ? answer.join(", ") : answer;
       respond.mutate({ toolUseId, body: { text, resolvedBy: "console" } });
     },
     [respond],
   );
 
-  useConsoleWs(handleEnvelope);
+  useConsoleEvents(handleEnvelope);
 
   const handleSend = useCallback((text: string) => {
-    setLiveItems((prev) => [
-      ...prev,
-      { kind: "user_turn", id: `optimistic-user-${Date.now()}`, text },
-      {
-        kind: "thinking",
-        id: `optimistic-thinking-${Date.now()}`,
-        text: "",
-        streaming: true,
-      },
-    ]);
+    setPendingEcho(text);
+    lastEchoRef.current = text;
+    // No transcript item is seeded: the run being active with nothing streaming
+    // is what surfaces the working animation. A just-answered card still live
+    // (not yet flushed by the resumed run) is left untouched so it survives.
+    setIsRunning(true);
+  }, []);
+
+  // The POST never reached the API, so the server has no record of the
+  // message: undo the echo. ChatInput restores the text.
+  const handleSendFailed = useCallback(() => {
+    setPendingEcho(null);
+    setLiveItems([]);
+    setIsRunning(false);
   }, []);
 
   const pendingInterrupt = pendingInterruptFromItems(liveItems);
+  // The run is working but silent: nothing is streaming into the transcript, so
+  // show the animation in the reply's place. Any live streaming tail hides it.
+  const showWorking = isRunning && !hasActiveStream(liveItems);
 
   if (!activeSessionId) {
     return (
@@ -395,6 +524,8 @@ export function SessionView({
             sessionId={null}
             isRunning={false}
             onSessionCreated={handleSessionCreated}
+            onSend={handleSend}
+            onSendFailed={handleSendFailed}
           />
         </div>
       </div>
@@ -414,6 +545,9 @@ export function SessionView({
             <TranscriptColumn
               persistedMessages={messages}
               liveItems={liveItems}
+              pendingEcho={pendingEcho}
+              lastEchoText={lastEchoRef.current}
+              showWorking={showWorking}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
             />
@@ -421,12 +555,21 @@ export function SessionView({
           <MessageScrollerButton direction="end" />
         </MessageScroller>
 
+        {activityNotice && (
+          <div className="mx-auto w-full max-w-chat px-6 pb-2">
+            <span className="animate-pulse text-sm text-muted-foreground">
+              {activityNotice}
+            </span>
+          </div>
+        )}
+
         {!composerHidden && (
           <ScrollToEndChatInput
             sessionId={activeSessionId}
             isRunning={isRunning}
             disabled={composerDisabled}
             onSend={handleSend}
+            onSendFailed={handleSendFailed}
           />
         )}
       </div>

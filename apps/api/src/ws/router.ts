@@ -18,9 +18,8 @@ function isServiceIdentity(value: unknown): value is ServiceIdentity {
   return false;
 }
 
-// How a runner command is addressed: by the service identity in its input, or
-// by server (the required `server` param naming the target machine). Declared
-// per tool in the registry, never inferred from input shape.
+// How a runner command is addressed: by service identity, or by server name.
+// Declared per tool in the registry, never inferred from input shape.
 export type CommandRoute = "service" | "host";
 
 // Service-routed (validate-and-route): the identity the model echoed
@@ -35,7 +34,7 @@ export function resolveByService(
     : null;
   if (service === null) {
     throw new Error(
-      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior list_services result.",
+      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior ListServices result.",
     );
   }
 
@@ -65,9 +64,8 @@ export function resolveByService(
   );
 }
 
-// Host-routed: the required `server` param is the operator-assigned server
-// name shown in the fleet map. Name or loud error - no fallback target, so a
-// command can never land on a machine the model did not name.
+// The required `server` param is the operator-assigned name shown in the fleet
+// map; name or loud error, never a fallback target.
 export function resolveByHost(
   commandInput: Record<string, unknown>,
 ): RunnerConnection {

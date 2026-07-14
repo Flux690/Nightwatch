@@ -1,6 +1,7 @@
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
+  | ErrorTextItem
   | ThinkingItem
   | ToolCardItem
   | ApprovalCardItem
@@ -11,6 +12,9 @@ export interface UserTurnItem {
   kind: "user_turn";
   id: string;
   text: string;
+  // The settled copy of a just-echoed bubble: rendered without the mount fade
+  // so the echo-to-persisted swap is invisible.
+  instant?: boolean;
 }
 
 export interface AgentTextItem {
@@ -19,13 +23,19 @@ export interface AgentTextItem {
   text: string;
 }
 
+// Nightwatch's own failure note (role "error"), rendered exactly like agent text.
+export interface ErrorTextItem {
+  kind: "error_text";
+  id: string;
+  text: string;
+}
+
 export interface ThinkingItem {
   kind: "thinking";
   id: string;
   text: string;
-  // streaming is true only while live deltas are still arriving for this
-  // burst; reload-path items are never streaming. Always renders collapsed
-  // by default (live and reload alike) - the operator opens it explicitly.
+  // True only while live deltas are still arriving for this burst; reload-path
+  // items are never streaming, and either way it renders collapsed until opened.
   streaming: boolean;
 }
 
@@ -58,9 +68,8 @@ export interface ClarificationCardItem {
   multiSelect?: boolean;
   approval?: "pending" | "answered";
   resolvedBy?: string;
-  // Present when reconstructed from a persisted, already-answered transcript -
-  // the recorded tool_result, shown the same way ApprovalCardPanel nests a
-  // resolved ToolCardPanel.
+  // The human's answer: stashed live at submit time, reconstructed from the
+  // persisted tool_result on reload.
   result?: unknown;
 }
 

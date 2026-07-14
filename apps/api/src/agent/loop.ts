@@ -1,26 +1,36 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
+import type { PromptOptions } from "./prompts/system.js";
 import { effectiveToolset } from "./tools/toolset.js";
+import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
 import { currentFleetProviders, currentRemediationEnabled } from "./policy.js";
 import { processToolUses } from "./turn.js";
+import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
+import { getGitHubIntegration } from "../db/github-integration.js";
 import {
   createSession,
   appendSessionMessages,
   appendMessagesAndInterrupt,
+  getNextSeq,
   getSession,
 } from "../db/sessions.js";
 import {
   publishTextMessageContent,
-  publishRunFinished,
+  publishMessage,
   publishInterrupt,
-  publishRunStopped,
+  publishRunRetrying,
 } from "../session/stream.js";
+import {
+  generateSessionTitle,
+  buildAlertTitleSource,
+} from "../session/title.js";
 import { dispatcher } from "../dispatcher.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
+import { serviceIdentityKey } from "@nightwatch/shared";
 import type {
   NormalizedAlert,
   SessionMessage,
@@ -31,24 +41,27 @@ import type {
   LLMProvider,
   ProviderMessage,
   ToolResult,
+  ToolSchema,
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-// sole writer of session_messages; diffs provider snapshot against persisted, writes the diff atomically
+// Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot
+// index so rows the seed skipped (error rows, dead exchanges) never collide.
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
-  fromSeq: number,
+  fromCount: number,
+  seqOffset: number,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
   const newMessages: SessionMessage[] = [];
-  for (let seq = fromSeq; seq < snap.length; seq++) {
-    const m = snap[seq];
+  for (let i = fromCount; i < snap.length; i++) {
+    const m = snap[i];
     if (!m) continue;
     newMessages.push({
       sessionId,
-      seq,
+      seq: seqOffset + i,
       role: m.role,
       content: m.content,
       providerContent: m.providerContent,
@@ -60,7 +73,7 @@ function persistNewTurns(
   } else {
     appendSessionMessages(newMessages);
   }
-  for (const message of newMessages) publishRunFinished(sessionId, message);
+  for (const message of newMessages) publishMessage(sessionId, message);
   return snap.length;
 }
 
@@ -70,22 +83,27 @@ function buildSessionMeta(
   alert: NormalizedAlert | null,
   userMessage: string | undefined,
 ): SessionMeta {
+  const target = alert ? serviceIdentityKey(alert.targetIdentifier) : "chat";
   return {
     sessionId,
     title:
       alert == null && userMessage
         ? userMessage.slice(0, 80)
-        : `${alert?.alertType ?? "chat"} - ${alert?.targetIdentifier ?? "chat"}`,
+        : `${alert?.alertType ?? "chat"} - ${target}`,
     createdAt: new Date().toISOString(),
   };
 }
 
+// How a run ended, so the dispatcher (the single lifecycle owner) can emit the
+// one matching terminal event. A thrown error is the 4th state, "failed",
+// handled by the dispatcher's catch - never returned here.
+export type RunOutcome = "completed" | "suspended" | "stopped";
+
 export interface RunInvestigationInput {
   sessionId: string;
   alert?: NormalizedAlert;
-  // Additional alerts that arrived within the 90s batch window alongside the
-  // primary alert. All are included in the opening message for shared root-cause
-  // analysis. Only populated on batch-triggered sessions.
+  // Alerts that arrived within the 90s batch window alongside the primary one;
+  // included in the opening message for shared root-cause analysis (batch-triggered sessions only).
   additionalAlerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
@@ -101,7 +119,7 @@ export interface RunInvestigationInput {
 
 export async function runInvestigation(
   input: RunInvestigationInput,
-): Promise<void> {
+): Promise<RunOutcome> {
   const { sessionId, signal } = input;
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
@@ -114,9 +132,39 @@ export async function runInvestigation(
   const config = loadConfig();
   const apiKey = loadApiKey();
 
+  // Transient provider errors are waited out instead of killing the run; each
+  // wait is streamed to the console as live status.
+  const chatWithRetries = (
+    provider: LLMProvider,
+    toolSchemas: ToolSchema[],
+  ): Promise<ChatResponse> =>
+    withLLMRetries(
+      () =>
+        provider.chat(
+          toolSchemas,
+          (d) => publishTextMessageContent(sessionId, d),
+          signal,
+        ),
+      {
+        signal,
+        onRetry: (notice) => {
+          log.warn(
+            { attempt: notice.attempt, delayMs: notice.delayMs },
+            "transient LLM error, retrying",
+          );
+          publishRunRetrying({
+            sessionId,
+            attempt: notice.attempt + 1,
+            maxAttempts: notice.maxAttempts,
+            delaySeconds: Math.round(notice.delayMs / 1000),
+            summary: retrySummary(notice),
+          });
+        },
+      },
+    );
+
   // Operator declined a continue-request: replay the transcript and run one free-form
-  // wrap-up turn (no tools), then finish. The seed already carries the investigation, so
-  // skip the alert/fleet context build below.
+  // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
     const remediationEnabled = currentRemediationEnabled();
     const { systemPrompt } = buildChatContext(remediationEnabled);
@@ -124,28 +172,24 @@ export async function runInvestigation(
     createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
     let persistedCount = 0;
+    const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
     if (input.seed && input.seed.length > 0) {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
     }
     log.info("time budget ended: operator chose to end, running wrap-up turn");
     try {
-      await provider.chat(
-        [],
-        (d) => publishTextMessageContent(sessionId, d),
-        signal,
-      );
+      await chatWithRetries(provider, []);
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
-    persistNewTurns(provider, sessionId, persistedCount);
+    persistNewTurns(provider, sessionId, persistedCount, seqOffset);
     if (signal?.aborted) {
-      publishRunStopped(sessionId);
       log.info("run stopped by user during end wrap-up");
-      return;
+      return "stopped";
     }
     log.info("investigation ended after operator declined to continue");
-    return;
+    return "completed";
   }
 
   log.info(
@@ -163,15 +207,33 @@ export async function runInvestigation(
   ];
   const remediationEnabled = currentRemediationEnabled();
   const fleetView = getFleetView();
+  const integration = getGitHubIntegration();
+  const promptOptions: PromptOptions = {
+    budgetMinutes: Math.max(1, Math.round(config.hardTimeoutMs / 60_000)),
+    codeBudgetMinutes: Math.max(
+      1,
+      Math.round(config.codeSessionBudgetMs / 60_000),
+    ),
+    repo:
+      integration === null
+        ? null
+        : `${integration.repoOwner}/${integration.repoName}`,
+  };
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(allAlerts, remediationEnabled, fleetView)
-      : buildChatContext(remediationEnabled, fleetView);
+      ? buildInitialContext(
+          allAlerts,
+          remediationEnabled,
+          fleetView,
+          promptOptions,
+        )
+      : buildChatContext(remediationEnabled, fleetView, promptOptions);
   const provider = createProvider(systemPrompt, config, apiKey);
 
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
   let persistedCount = 0;
+  const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
 
   if (input.resumeToolResults && input.resumeToolResults.length > 0) {
     // Resume from a durable interrupt: seed the prior transcript, then append
@@ -181,7 +243,12 @@ export async function runInvestigation(
       persistedCount = input.seed.length;
     }
     provider.appendToolResults(input.resumeToolResults);
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
     persistedCount = input.seed.length;
@@ -189,52 +256,68 @@ export async function runInvestigation(
     // it's sent, instead of waiting for the assistant's reply to flush both at once.
     if (input.userMessage) {
       provider.appendUserMessage(input.userMessage);
-      persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+      persistedCount = persistNewTurns(
+        provider,
+        sessionId,
+        persistedCount,
+        seqOffset,
+      );
     }
   } else {
     provider.start(input.userMessage ?? firstUserMessage);
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
+    // Brand-new session only: refine the title in the background. Chat uses the
+    // message; an alert, a compact summary.
+    const titleSource = input.userMessage ?? buildAlertTitleSource(allAlerts);
+    void generateSessionTitle(sessionId, titleSource, config, apiKey);
   }
 
   const persist = (): void => {
-    persistedCount = persistNewTurns(provider, sessionId, persistedCount);
+    persistedCount = persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+    );
   };
 
   let turn = 0;
-  const deadline = Date.now() + config.hardTimeoutMs;
+  let deadline = Date.now() + config.hardTimeoutMs;
 
   while (Date.now() < deadline) {
     turn++;
 
     const fleetProviders = currentFleetProviders();
+    // Re-read per turn like the remediation switch: disconnecting the GitHub
+    // integration strips the repo tools from the very next turn.
     const toolset = effectiveToolset(
       fleetProviders,
       currentRemediationEnabled(),
+      getGitHubIntegration() !== null,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
     const startedAt = Date.now();
     let response: ChatResponse;
     try {
-      response = await provider.chat(
-        toolSchemas,
-        (d) => publishTextMessageContent(sessionId, d),
-        signal,
-      );
+      response = await chatWithRetries(provider, toolSchemas);
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");
         persist();
-        publishRunStopped(sessionId);
-        return;
+        return "stopped";
       }
       throw err;
     }
     if (signal?.aborted) {
       log.info({ turn }, "run stopped by user");
       persist();
-      publishRunStopped(sessionId);
-      return;
+      return "stopped";
     }
     log.info(
       {
@@ -249,16 +332,17 @@ export async function runInvestigation(
 
     if (response.stopReason === "refusal") {
       log.warn({ turn }, "model refused to continue");
-      return;
+      return "completed";
     }
 
     if (response.toolUses.length === 0) {
       log.info({ turn }, "investigation finished with free-form response");
-      return;
+      return "completed";
     }
 
-    const execCtx: ToolExecuteContext = {
+    const execCtx: Omit<ToolExecuteContext, "toolUseId"> = {
       toolTimeoutMs: config.toolTimeoutMs,
+      sessionId,
     };
 
     const { toolResults, gated } = await processToolUses({
@@ -270,10 +354,15 @@ export async function runInvestigation(
       log,
     });
 
+    // Repo tools re-extend the deadline to the code-session budget since clone
+    // + install + tests dwarf the investigation default.
+    if (response.toolUses.some((t) => REPO_TOOL_NAMES.has(t.name))) {
+      deadline = Math.max(deadline, Date.now() + config.codeSessionBudgetMs);
+    }
+
     if (gated !== null) {
-      // Durably suspend: persist the assistant turn + interrupt row in one transaction; the run
-      // then exits and frees its slot. Suspended sessions take no injections - the inbox isn't
-      // drained here.
+      // Durably suspend: persist assistant turn + interrupt row in one transaction, then exit and
+      // free the slot. Suspended sessions take no injections, so the inbox isn't drained here.
       const isAskGate = gated.entry.access === "ask";
       const interrupt: PendingHumanInput = {
         sessionId,
@@ -289,6 +378,7 @@ export async function runInvestigation(
         provider,
         sessionId,
         persistedCount,
+        seqOffset,
         interrupt,
       );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
@@ -315,12 +405,11 @@ export async function runInvestigation(
         { tool: gated.tool.name, kind: interrupt.kind },
         "run suspended: pending human input",
       );
-      return;
+      return "suspended";
     }
 
-    // Drain mid-run injected alerts at the tool boundary, riding the same user message as the
-    // tool results so the provider never sees two consecutive user turns. The model
-    // judges each as downstream effect or independent incident.
+    // Drain mid-run injected alerts at the tool boundary, riding the tool-results user turn so
+    // the provider never sees two consecutive user turns; the model judges each as downstream vs independent.
     const injected = dispatcher.drainInbox(sessionId);
     const injectionText =
       injected.length > 0 ? formatInjectedAlerts(injected) : undefined;
@@ -329,9 +418,8 @@ export async function runInvestigation(
     persist();
   }
 
-  // Time budget reached: suspend with a continue-request so the operator can resume (fresh
-  // deadline) or end. A continue request has no underlying tool call, so its synthetic
-  // toolUseId only keys the interrupt row - the resolver branches on kind, not the transcript.
+  // No underlying tool call, so the synthetic toolUseId only keys the
+  // interrupt row - the resolver branches on kind, not the transcript.
   const continueId = randomUUID();
   const continueInterrupt: PendingHumanInput = {
     sessionId,
@@ -347,6 +435,7 @@ export async function runInvestigation(
     provider,
     sessionId,
     persistedCount,
+    seqOffset,
     continueInterrupt,
   );
   publishInterrupt({
@@ -357,6 +446,7 @@ export async function runInvestigation(
     kind: "continue",
   });
   log.info({ turn }, "time budget reached: suspended with continue request");
+  return "suspended";
 }
 
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {

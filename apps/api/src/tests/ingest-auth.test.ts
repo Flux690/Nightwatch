@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import {
   afterAll,
@@ -62,9 +61,8 @@ describe("POST /alerts/ingest auth", () => {
     cleanupDb = useTempDb();
     VALID_TOKEN = generateRunnerToken("test-ingest-runner").plaintext;
 
-    // Resolution now matches the alert's labels against the fleet,
-    // so a runner advertising the matching service must be connected for the
-    // 200-path tests below to mean anything.
+    // Resolution matches the alert's labels against the fleet, so a runner advertising
+    // the matching service must be connected for the 200-path tests to mean anything.
     connAuth = registerRunner(
       "auth-test-runner-token",
       () => {},
@@ -236,9 +234,8 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.received).toBe(1);
   });
 
-  // A multi-runner fleet used to be rejected outright (no label resolution yet); now the
-  // alert's labels are matched against the fleet, so the right runner among several is found
-  // deterministically.
+  // The alert's labels are matched against the fleet, so the right runner among
+  // several is found deterministically.
   it("resolves correctly among multiple connected runners by matching the advertised service", async () => {
     connA = registerRunner(
       "runner-a-token",
@@ -331,9 +328,8 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
   it("nwr_ tokens resolve by fleet match too - the token authenticates, labels route", async () => {
     const runnerToken = generateRunnerToken("nwr-still-works").plaintext;
-    // The nwr_ token is never a WS connection; a separate runner advertises the matching service.
-    // Under the old token-implies-runner model this would fail; succeeding proves routing no
-    // longer reads the token at all.
+    // The nwr_ token is never a WS connection; a separate runner advertises the matching
+    // service, proving routing doesn't read the token at all.
     connA = registerRunner(
       "runner-a-token",
       () => {},

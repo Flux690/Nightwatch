@@ -42,7 +42,6 @@ export type {
   GetK8sRolloutStatusInput,
 } from "./tools.js";
 export type {
-  MessageDirection,
   WsEnvelope,
   RunnerCommandMessage,
   SetRemediationModeMessage,
@@ -53,13 +52,17 @@ export type {
   ConsoleHumanInputResolved,
   ConsoleInterruptResolved,
   ConsoleTextMessageContent,
+  ConsoleMessage,
   ConsoleRunFinished,
   ConsoleToolCallStart,
   ConsoleHumanInputRequired,
   ConsoleInterrupt,
   ConsoleToolCallEnd,
   ConsoleRunStopped,
+  ConsoleSandboxStatus,
+  ConsoleRunRetrying,
   ConsoleRunFailed,
+  ConsoleSessionTitleUpdated,
   ConsoleEvent,
 } from "./console-events.js";
 export type {
@@ -83,5 +86,13 @@ export type {
   LLMProviderName,
   ThinkingMode,
   ReasoningEffort,
+  SandboxNetwork,
   AgentConfig,
 } from "./config.js";
+export type {
+  GitHubErrorCode,
+  GitHubIntegrationStatus,
+  GitHubRepoSummary,
+  GitHubRepoPage,
+  GitHubErrorBody,
+} from "./integrations.js";

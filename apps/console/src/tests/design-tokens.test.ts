@@ -2,15 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 
-/* Pins the Nightwatch accessibility contract. All hex values live in the
-   @theme block of styles.css. The test reads them from there and verifies
-   contrast ratios against WCAG 2.1 criteria:
-   - Body ink at 12:1+ on primary surfaces (well above AAA)
-   - Muted text at AA (4.5:1+) on every text-bearing surface
-   - Status colors at AAA (7:1+) on card and canvas
-   - Border-strong at 3:1+ non-text contrast (WCAG 1.4.11)
-   - Accent (cobalt) at AA for links and focus rings
-   - White labels at AA on accent fill states */
+/* Verifies each color pairing in styles.css meets the WCAG 2.1 contrast
+   level (AA or AAA) that surface actually needs. */
 
 /** Parse hex tokens from the @theme block in styles.css.
  *  Matches patterns like `--color-background: #f6f9fc;` */

@@ -39,9 +39,8 @@ export function generateRunnerToken(
   const db = getDb();
 
   const mint = db.transaction(() => {
-    // Reclaim an abandoned name: a row with this server_name that never connected
-    // (last_used_at IS NULL) is an orphan from an aborted setup, so free it. A row
-    // that has connected is a real server, left untouched so the UNIQUE insert 409s.
+    // A row with this server_name that never connected is an orphan from an
+    // aborted setup - free it. A connected row is real, left for the UNIQUE 409.
     if (serverName !== undefined) {
       db.prepare(
         `DELETE FROM runner WHERE server_name = ? AND last_used_at IS NULL`,
@@ -115,9 +114,8 @@ export function findRunnerById(id: string): RunnerRow | undefined {
   return raw ? mapRow(raw) : undefined;
 }
 
-// Effective remediation mode for an alert's runner, from the DB (system of record).
-// Match on id only. null means bootstrap from the manifest. Reading the DB lets a
-// post-restart resume see it pre-reconnect.
+// null means bootstrap from the manifest; reading the DB (system of record)
+// lets a post-restart resume see it pre-reconnect.
 export function getRemediationModeByRunnerRef(ref: string): boolean | null {
   const raw = getDb()
     .prepare(`SELECT remediation_mode AS m FROM runner WHERE id = ? LIMIT 1`)

@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   Plus,
   Settings,
@@ -8,6 +13,7 @@ import {
   Network,
   PanelLeft,
   Menu,
+  Plug,
 } from "lucide-react";
 
 import {
@@ -33,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
+import { SessionView } from "@/pages/SessionView";
 
 export function Shell({
   children,
@@ -62,6 +69,11 @@ function ShellContent({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Present only on /sessions/$id; Shell owns the one persistent SessionView so
+  // the / -> /sessions/$id transition is a prop change, not a remount.
+  const { id: routeSessionId } = useParams({ strict: false }) as {
+    id?: string;
+  };
   const attentionCount = useAttentionCount();
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -153,6 +165,18 @@ function ShellContent({
                   <span>Audit log</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip="Integrations"
+                  aria-label="Integrations"
+                  isActive={isActive("/integrations")}
+                  onClick={dismissMobile}
+                  render={<Link to="/integrations" />}
+                >
+                  <Plug {...ICON_NAV} />
+                  <span>Integrations</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
 
@@ -175,7 +199,7 @@ function ShellContent({
 
           <SidebarGroup className="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
             <SidebarGroupLabel>Recent sessions</SidebarGroupLabel>
-            <SidebarGroupContent className="flex min-h-0 flex-1 overflow-hidden">
+            <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
               <SessionsSidebar />
             </SidebarGroupContent>
           </SidebarGroup>
@@ -237,7 +261,11 @@ function ShellContent({
             isSessionArea ? "overflow-hidden" : "overflow-auto",
           )}
         >
-          {children}
+          {isSessionArea ? (
+            <SessionView sessionId={routeSessionId ?? null} />
+          ) : (
+            children
+          )}
         </div>
       </SidebarInset>
 

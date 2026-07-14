@@ -1,9 +1,7 @@
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-// Fleet-wide alert budget, in memory (no Redis). Every non-critical alert now
-// reaches an LLM session, so this single counter is the storm cap: distinct
-// fingerprints get separate keys nowhere - one global budget bounds spend.
-// Critical severity always bypasses: a page at 3am must never be dropped.
+// Fleet-wide alert budget, in memory (no Redis): one global counter is the storm cap since
+// every non-critical alert now reaches an LLM session. Critical severity always bypasses.
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 30;
 

@@ -1,4 +1,3 @@
-import "dotenv/config";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
@@ -39,9 +38,8 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
   };
 }
 
-// Connect a fake runner, wait for the server's `connected` ack, then send its
-// manifest. Liveness rides protocol ping/pong, which the ws client answers
-// automatically. Returns the open socket so the test can close it.
+// Connect a fake runner, wait for the server's `connected` ack, then send its manifest.
+// Liveness rides protocol ping/pong, which the ws client answers automatically.
 async function connectRunner(
   port: number,
   token: string,
@@ -308,7 +306,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand(
-        "get_service_logs",
+        "GetServiceLogs",
         {
           service: {
             provider: "docker",
@@ -363,7 +361,7 @@ describe("flat runner registry", () => {
       });
 
       const settled = sendCommand(
-        "get_service_logs",
+        "GetServiceLogs",
         {
           service: {
             provider: "docker",

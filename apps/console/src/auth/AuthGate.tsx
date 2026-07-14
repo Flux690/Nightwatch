@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from "@tanstack/react-router";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "./AuthContext.js";
-import { ConsoleWsProvider } from "@/hooks/ConsoleWsProvider";
+import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
 import { Shell } from "@/components/layout/Shell";
 
 export function AuthGate(): React.JSX.Element | null {
@@ -29,10 +29,10 @@ export function AuthGate(): React.JSX.Element | null {
   }
   if (phase.kind !== "authenticated") return null;
   return (
-    <ConsoleWsProvider>
+    <ConsoleEventsProvider>
       <Shell>
         <Outlet />
       </Shell>
-    </ConsoleWsProvider>
+    </ConsoleEventsProvider>
   );
 }

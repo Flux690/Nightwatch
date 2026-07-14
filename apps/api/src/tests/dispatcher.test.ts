@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
-import type { RunInvestigationInput } from "../agent/loop.js";
+import type { RunInvestigationInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwatch/shared";
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
+// The gate resolves with a run outcome; these tests only exercise dedup/running
+// bookkeeping, so a plain "completed" stands in for every run.
+function deferred(): { promise: Promise<RunOutcome>; resolve: () => void } {
   let resolve!: () => void;
-  const promise = new Promise<void>((r) => {
-    resolve = r;
+  const promise = new Promise<RunOutcome>((r) => {
+    resolve = () => r("completed");
   });
   return { promise, resolve };
 }
@@ -18,10 +20,7 @@ function flush(): Promise<void> {
 
 const FIRED_AT = "2026-07-07T03:00:00.000Z";
 
-function makeAlert(
-  sourceAlertId: string,
-  firedAt = FIRED_AT,
-): NormalizedAlert {
+function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
   return {
     sourceAlertId,
     targetIdentifier: {
@@ -46,9 +45,8 @@ function alertInput(
   };
 }
 
-// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert). Tests
-// register a session's alert here as createSession would have, so a resumed dispatch (no
-// input.alert) still resolves via the fallback.
+// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert), so a
+// resumed dispatch (no input.alert) still resolves via the fallback.
 function fakeAlertLookup(): {
   getAlertForSession: (sessionId: string) => NormalizedAlert | null;
   register: (sessionId: string, alert: NormalizedAlert) => void;
@@ -194,7 +192,7 @@ describe("dispatcher", () => {
 
   it("stop returns false for a session that is not running", () => {
     const d = createDispatcher({
-      run: () => Promise.resolve(),
+      run: () => Promise.resolve<RunOutcome>("completed"),
       getAlertForSession: noAlertLookup,
     });
 

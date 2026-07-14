@@ -12,16 +12,22 @@ import {
 import { Message } from "@/components/ui/message";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import type { TranscriptItem, ThinkingItem } from "./types.js";
-import { ToolCardPanel } from "./ToolCardPanel.js";
+import { ToolCard } from "./toolPresentation.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
 
-function UserTurn({ text }: { text: string }): React.JSX.Element {
+function UserTurn({
+  text,
+  instant,
+}: {
+  text: string;
+  instant?: boolean;
+}): React.JSX.Element {
   return (
     <Message
       align="end"
-      className="animate-in fade-in duration-300"
+      className={instant ? undefined : "animate-in fade-in duration-300"}
       data-testid="user-turn"
     >
       <Bubble variant="secondary">
@@ -41,7 +47,11 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   );
 }
 
-function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
+function ThinkingBlock({
+  item,
+}: {
+  item: ThinkingItem;
+}): React.JSX.Element | null {
   const [open, setOpen] = useState(item.streaming);
   const prevStreaming = useRef(item.streaming);
 
@@ -59,34 +69,33 @@ function ThinkingBlock({ item }: { item: ThinkingItem }): React.JSX.Element {
 
   const trimmed = item.text.trim();
 
+  // Empty reasoning is never a transcript item: the working animation stands in
+  // for "the model is thinking" while nothing is shown. A thinking block renders
+  // only once it has real text - so the chevron and body always exist together.
+  if (!trimmed) return null;
+
   return (
     <div
       className="animate-in fade-in duration-300"
       data-testid="thinking-block"
       data-streaming={item.streaming}
     >
-      {!trimmed && item.streaming ? (
-        <span className="text-sm text-muted-foreground animate-pulse">
-          Thinking
-        </span>
-      ) : (
-        <Collapsible open={open} onOpenChange={setOpen}>
-          <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
-            <span className={item.streaming ? "animate-pulse" : undefined}>
-              Thinking
-            </span>
-            <ChevronRight
-              aria-hidden="true"
-              className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
-              {trimmed}
-            </p>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
+          <span className={item.streaming ? "animate-pulse" : undefined}>
+            Thinking
+          </span>
+          <ChevronRight
+            aria-hidden="true"
+            className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
+            {trimmed}
+          </p>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
@@ -102,19 +111,16 @@ export function TranscriptItemRenderer({
 }): React.JSX.Element {
   switch (item.kind) {
     case "user_turn":
-      return <UserTurn text={item.text} />;
+      return <UserTurn text={item.text} instant={item.instant} />;
     case "agent_text":
+      return <AgentMarkdown text={item.text} />;
+    case "error_text":
+      // User's explicit choice: failures read like any other agent message.
       return <AgentMarkdown text={item.text} />;
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":
-      return (
-        <ToolCardPanel
-          toolName={item.toolName}
-          input={item.input}
-          result={item.result}
-        />
-      );
+      return <ToolCard item={item} />;
     case "approval_card":
       return (
         <ApprovalCardPanel

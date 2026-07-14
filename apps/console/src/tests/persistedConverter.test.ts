@@ -19,6 +19,33 @@ function assistantMessage(
   } as unknown as SessionMessage;
 }
 
+describe("convertPersistedMessages — error rows", () => {
+  it("maps a role 'error' row to an error_text item in order", () => {
+    const userRow: SessionMessage = {
+      sessionId: "s1",
+      seq: 0,
+      role: "user",
+      content: "hello",
+      createdAt: new Date().toISOString(),
+    };
+    const errorRow: SessionMessage = {
+      sessionId: "s1",
+      seq: 1,
+      role: "error",
+      content: "The provider rejected the API key.",
+      createdAt: new Date().toISOString(),
+    };
+
+    const items = convertPersistedMessages([userRow, errorRow]);
+
+    expect(items.map((i) => i.kind)).toEqual(["user_turn", "error_text"]);
+    expect(items[1]).toMatchObject({
+      id: "error-1",
+      text: "The provider rejected the API key.",
+    });
+  });
+});
+
 describe("convertPersistedMessages — thinking", () => {
   it("extracts a thinking block as a non-streaming item", () => {
     const items = convertPersistedMessages([
@@ -69,6 +96,19 @@ describe("convertPersistedMessages — thinking", () => {
     ]);
 
     expect(items.some((i) => i.kind === "thinking")).toBe(false);
+  });
+
+  it("drops a whitespace-only thinking block so no bare item renders", () => {
+    const items = convertPersistedMessages([
+      assistantMessage(1, [
+        { type: "thinking", thinking: "\n  \t" },
+        { type: "text", text: "Done." },
+      ]),
+    ]);
+
+    expect(items.some((i) => i.kind === "thinking")).toBe(false);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "agent_text", text: "Done." });
   });
 
   it("assigns each thinking block a stable, unique id", () => {

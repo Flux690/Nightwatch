@@ -6,11 +6,12 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "6.0.3",
-    "vitest": "4.1.9"
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }
 }

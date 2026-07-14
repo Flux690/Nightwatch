@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApprovalRequest, ConsoleEvent } from "@nightwatch/shared";
 import { apiFetch } from "@/api/client";
-import { useConsoleWs } from "./ConsoleWsProvider.js";
+import { useConsoleEvents } from "./ConsoleEventsProvider.js";
 
 export function useAttentionCount(): number {
   const queryClient = useQueryClient();
@@ -29,7 +29,7 @@ export function useAttentionCount(): number {
     [queryClient],
   );
 
-  useConsoleWs(handleEnvelope);
+  useConsoleEvents(handleEnvelope);
 
   return pending.length;
 }

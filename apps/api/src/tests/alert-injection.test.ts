@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import {
   afterAll,
@@ -16,11 +15,9 @@ import {
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
 
-const { mockCreateProvider } = vi.hoisted(() => ({
-  mockCreateProvider: vi.fn(),
-}));
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
-vi.mock("../llm/factory.js", () => ({ createProvider: mockCreateProvider }));
+import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import Fastify from "fastify";
@@ -49,9 +46,8 @@ function webOneManifest() {
 // injected (or state asserted) while a run is parked mid-turn.
 const gate = createGateController();
 
-// Queue one provider per run, in order. A resume / leftover dispatch is a
-// separate run, so chain one script per run (per-instance scriptIndex). All
-// gated, so each chat() parks until releaseNext()/releaseAll().
+// Queue one provider per run, in order - a resume/leftover dispatch is a separate run,
+// so chain one script per run. All gated, so each chat() parks until released.
 function queueRuns(...scripts: ScriptedTurn[][]): void {
   for (const script of scripts) {
     mockCreateProvider.mockImplementationOnce(() =>
@@ -69,7 +65,7 @@ const READ: ScriptedTurn = {
   toolUses: [
     {
       id: "tu-read",
-      name: "list_services",
+      name: "ListServices",
       input: { environment: "docker" },
     },
   ],
@@ -172,7 +168,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // Inject while parked at turn 1's chat()
     dispatcher.injectAlert(sessionId, alert("injected-mr"));
 
-    // Release turn 1 → loop executes list_services, drains inbox,
+    // Release turn 1 → loop executes ListServices, drains inbox,
     // then calls appendToolResults(results, injectionText)
     gate.releaseNext();
 
@@ -194,9 +190,8 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const runnerId = generateRunnerToken("inject-sus").id;
-    // Write offering is fleet-wide (any connected runner with remediation on),
-    // so a connection with a synced cache is required - mirroring what
-    // ws/server.ts reconciliation does after setRemediationMode.
+    // Write offering is fleet-wide (any connected runner with remediation on), so a
+    // connection with a synced cache is required, mirroring ws/server.ts's reconciliation.
     setRemediationMode(runnerId, true);
     const susConn = registerRunner(
       runnerId,
@@ -213,7 +208,7 @@ describe("mid-run alert injection (loop seam)", () => {
           toolUses: [
             {
               id: "tu-gate",
-              name: "restart_service",
+              name: "RestartService",
               input: {
                 service: {
                   provider: "docker",
@@ -237,7 +232,7 @@ describe("mid-run alert injection (loop seam)", () => {
       alert: alert("primary-sus"),
     });
 
-    // Release turn 1 → restart_service is gated → run suspends
+    // Release turn 1 → RestartService is gated → run suspends
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
@@ -309,9 +304,8 @@ describe("mid-run alert injection (loop seam)", () => {
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
 
-  // Regression for H3: a resume dispatch carries no `alert` field, so the dispatcher must
-  // recover alert identity from the session itself - else the post-approval phase looks
-  // alert-free, correlated alerts misroute into new sessions, and re-fires aren't deduped.
+  // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
+  // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const { id: runnerId, plaintext: tokenPlaintext } =
       generateRunnerToken("inject-resume");
@@ -340,7 +334,7 @@ describe("mid-run alert injection (loop seam)", () => {
           toolUses: [
             {
               id: "tu-gate-resume",
-              name: "restart_service",
+              name: "RestartService",
               input: {
                 service: {
                   provider: "docker",

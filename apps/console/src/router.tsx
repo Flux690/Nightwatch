@@ -8,9 +8,10 @@ import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
+import { IntegrationsPage } from "./pages/IntegrationsPage.js";
+import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { FleetPage } from "./pages/Fleet.js";
-import { SessionView } from "./pages/SessionView.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -28,42 +29,52 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-// Pathless layout: every authenticated page nests here so AuthGate can
-// redirect to /login (and render nothing in between) without each page
-// route needing its own auth check.
+// Pathless layout: nests every authenticated page so AuthGate can redirect
+// to /login once, instead of each page route checking auth itself.
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
   component: AuthGate,
 });
 
+// Inert: Shell owns the one persistent SessionView (id from the URL). These
+// routes exist only for URL matching, so / -> /sessions/$id is a prop change.
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
-  component: () => <SessionView />,
+  component: () => null,
 });
 
 const sessionIdRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/sessions/$id",
-  component: function SessionRoute() {
-    const { id } = sessionIdRoute.useParams();
-    return <SessionView sessionId={id} />;
-  },
+  component: () => null,
 });
 
-/* Alias only: Shell detects /settings and opens the settings modal over the
-   session area. Renders SessionView underneath so the chat is still visible. */
+// Alias only: Shell detects /settings and opens the settings modal over the
+// session area, with the persistent SessionView still visible underneath.
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
-  component: () => <SessionView />,
+  component: () => null,
 });
 
 const auditRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/audit",
   component: AuditLogPage,
+});
+
+const integrationsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations",
+  component: IntegrationsPage,
+});
+
+const githubConnectRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/github",
+  component: GitHubConnectPage,
 });
 
 const fleetRoute = createRoute({
@@ -87,6 +98,8 @@ const routeTree = rootRoute.addChildren([
     addServerRoute,
     settingsRoute,
     auditRoute,
+    integrationsRoute,
+    githubConnectRoute,
   ]),
 ]);
 
