@@ -1,10 +1,10 @@
 import React from "react";
 
 // Shown when a run is active but nothing is streaming into the transcript yet -
-// right after send, and in the gaps between turns. Three dots morph on a seamless
-// loop (equilateral triangle pulse -> rotation -> ellipsis wave -> back) as a
-// content-free "assistant is working" affordance, distinct from a thinking block.
-// The motion lives in styles.css; reduced-motion falls back to an opacity pulse.
+// right after send, and in the gaps between turns. Three dots hop in sequence (a
+// "typing"-style affordance) as a content-free "assistant is working" signal,
+// distinct from a thinking block. The motion lives in styles.css; reduced-motion
+// holds the dots static.
 export function WorkingIndicator(): React.JSX.Element {
   return (
     <div
