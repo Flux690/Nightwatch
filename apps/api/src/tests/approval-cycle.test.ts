@@ -959,7 +959,6 @@ describe("durable approval interrupts", () => {
   });
 
   it("no timeout: interrupt pending for hours is still resolvable", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: false });
     restartCommands.length = 0;
 
     setScript([
@@ -997,17 +996,9 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Advance proves no timeout reaped the interrupt; real timers are restored
-    // since the waits below need real event-loop turns.
-    vi.advanceTimersByTime(24 * 60 * 60 * 1_000);
-    vi.useRealTimers();
-
-    // The interrupt row must still be there (no timeout deleted it)
-    await waitFor(() => hasPendingHumanInput(sessionId), { timeout: 5_000 });
-    expect(hasPendingHumanInput(sessionId)).toBe(true);
-
-    // Should still be resolvable via REST
-    const interrupt = await waitFor(
+    // Raise the interrupt on real clocks: fake timers stall an in-flight fetch,
+    // so no request may be outstanding while the clock is frozen below.
+    await waitFor(
       () =>
         events.find(
           (e) =>
@@ -1016,6 +1007,15 @@ describe("durable approval interrupts", () => {
         ),
       { timeout: 5_000 },
     );
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
+
+    // Jump a day with nothing in flight: any reaper timer would fire here.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.advanceTimersByTime(24 * 60 * 60 * 1_000);
+    vi.useRealTimers();
+
+    // Nothing reaped the interrupt row.
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
