@@ -2,8 +2,9 @@
 
 import type { ServiceIdentity } from "./service-identity.js";
 
+// The wire command name (ListDockerServices vs ListK8sWorkloads) selects the
+// provider; namespace applies only to the Kubernetes list.
 export interface GetContainerListInput {
-  environment: "docker" | "kubernetes";
   namespace?: string;
 }
 export interface ContainerInfo {

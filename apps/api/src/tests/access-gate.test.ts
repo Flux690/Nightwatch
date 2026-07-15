@@ -66,7 +66,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result: commandName === "RestartService" ? { restarted: true } : [],
+          result: commandName === "RestartDockerService" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -116,8 +116,8 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-read-1",
-            name: "ListServices",
-            input: { environment: "docker" },
+            name: "ListDockerServices",
+            input: {},
           },
         ],
       },
@@ -171,7 +171,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-write-1",
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",
@@ -212,10 +212,10 @@ describe("access-gate: gating is driven by tool access level", () => {
     );
 
     expect(interrupt.payload["kind"]).toBe("approval");
-    expect(interrupt.payload["toolName"]).toBe("RestartService");
+    expect(interrupt.payload["toolName"]).toBe("RestartDockerService");
 
     // Runner must NOT have executed the write yet
-    expect(executedCommands).not.toContain("RestartService");
+    expect(executedCommands).not.toContain("RestartDockerService");
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     close();
@@ -303,8 +303,8 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-read",
-            name: "ListServices",
-            input: { environment: "docker" },
+            name: "ListDockerServices",
+            input: {},
           },
         ],
       },
@@ -326,7 +326,7 @@ describe("access-gate: gating is driven by tool access level", () => {
         toolUses: [
           {
             id: "tu-c-write",
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",
@@ -376,7 +376,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(clarInterrupt.payload["kind"]).toBe("clarification");
-    expect(executedCommands).not.toContain("RestartService");
+    expect(executedCommands).not.toContain("RestartDockerService");
 
     // Answer the clarification
     const answerRes = await fetch(
@@ -405,8 +405,8 @@ describe("access-gate: gating is driven by tool access level", () => {
       ),
     );
     expect(approvalInterrupt.payload["kind"]).toBe("approval");
-    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
-    expect(executedCommands).not.toContain("RestartService");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartDockerService");
+    expect(executedCommands).not.toContain("RestartDockerService");
 
     // Approve
     const approveRes = await fetch(
@@ -423,9 +423,9 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(approveRes.status).toBe(200);
 
     // Runner executes restart exactly once, run completes
-    await waitFor(() => executedCommands.includes("RestartService"));
+    await waitFor(() => executedCommands.includes("RestartDockerService"));
     expect(
-      executedCommands.filter((c) => c === "RestartService"),
+      executedCommands.filter((c) => c === "RestartDockerService"),
     ).toHaveLength(1);
 
     await waitFor(() => !hasPendingHumanInput(sessionId));

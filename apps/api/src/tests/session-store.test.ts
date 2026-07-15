@@ -167,7 +167,7 @@ describe("API-local session store", () => {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
       kind: "approval",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       toolInput: {},
       completedResults: [],
       claimedAt: null,
@@ -191,7 +191,7 @@ describe("API-local session store", () => {
     insertExecutingRemediationAction({
       toolUseId: "tu-audit-survives",
       sessionId: m.sessionId,
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       input: {
         service: { provider: "docker", project: "web", service: "web" },
       },

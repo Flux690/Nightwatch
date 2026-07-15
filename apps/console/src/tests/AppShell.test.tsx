@@ -46,7 +46,7 @@ function setup(pendingCount = 0) {
       incidentId: `inc-${i}`,
       sessionId: `s-${i}`,
       token: "tok-1",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       toolInput: {},
       toolUseId: `tool-${i}`,
       status: "pending",
@@ -360,7 +360,7 @@ describe("Shell", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             input: {},
             incidentId: "inc-99",
           },
@@ -419,7 +419,7 @@ describe("Shell", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tool-99",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             input: {},
             incidentId: "inc-99",
           },

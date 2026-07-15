@@ -650,7 +650,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             toolUseId: "tu-gated",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",
@@ -748,7 +748,7 @@ describe("SessionView", () => {
 
       // The paired tool card now appears below the resolved approval card,
       // header-only until the result arrives (both cards label the tool name).
-      expect(screen.getAllByText("RestartService")).toHaveLength(2);
+      expect(screen.getAllByText("RestartDockerService")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
       const toolCard = screen.getByTestId("tool-card");
       expect(
@@ -783,7 +783,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -801,7 +801,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText("RestartService")).toBeInTheDocument();
+        expect(within(card).getByText("RestartDockerService")).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /approve/i }),
@@ -846,7 +846,7 @@ describe("SessionView", () => {
           {
             sessionId: "s1",
             toolUseId: "tu-durable",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             toolInput: {
               service: {
                 provider: "docker",
@@ -891,7 +891,7 @@ describe("SessionView", () => {
           {
             sessionId: "other-session",
             toolUseId: "tu-other",
-            toolName: "RestartService",
+            toolName: "RestartDockerService",
             toolInput: { risk: "high" },
             kind: "approval",
             status: "pending",

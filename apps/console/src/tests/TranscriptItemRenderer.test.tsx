@@ -47,7 +47,7 @@ describe("TranscriptItemRenderer", () => {
     const approvalItem: TranscriptItem = {
       kind: "approval_card",
       toolUseId: "tu-gate",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       input: {
         service: { provider: "docker", project: "web-01", service: "web-01" },
       },

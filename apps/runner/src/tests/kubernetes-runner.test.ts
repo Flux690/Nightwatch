@@ -324,7 +324,6 @@ describe("Kubernetes runner command handlers", () => {
       });
 
       const result = await getContainerList({
-        environment: "kubernetes",
         namespace: "production",
       });
 

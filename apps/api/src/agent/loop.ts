@@ -4,7 +4,10 @@ import type { PromptOptions } from "./prompts/system.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
-import { currentFleetProviders, currentRemediationEnabled } from "./policy.js";
+import {
+  currentFleetCapabilities,
+  currentRemediationEnabled,
+} from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
@@ -292,11 +295,11 @@ export async function runInvestigation(
   while (Date.now() < deadline) {
     turn++;
 
-    const fleetProviders = currentFleetProviders();
+    const fleetCapabilities = currentFleetCapabilities();
     // Re-read per turn like the remediation switch: disconnecting the GitHub
     // integration strips the repo tools from the very next turn.
     const toolset = effectiveToolset(
-      fleetProviders,
+      fleetCapabilities,
       currentRemediationEnabled(),
       getGitHubIntegration() !== null,
     );

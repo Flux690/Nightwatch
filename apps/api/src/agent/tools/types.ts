@@ -1,7 +1,12 @@
 import type { ToolSchema } from "../../llm/types.js";
 import type { CommandRoute } from "../../ws/router.js";
 
-export type Provider = "docker" | "kubernetes";
+// What the connected fleet can do, derived from runner manifests. Drives which
+// provider libraries the toolset offers; a false substrate is never offered.
+export interface FleetCapabilities {
+  docker: boolean;
+  kubernetes: boolean;
+}
 
 export interface ToolExecuteResult {
   content: unknown;
@@ -21,9 +26,6 @@ export interface ToolExecuteContext {
 interface ToolCommon {
   schema: ToolSchema;
   access: "read" | "write" | "ask";
-  // A tool that omits `providers` is provider-agnostic: always offered. Listing providers
-  // offers it only while at least one connected runner runs a listed provider.
-  providers?: Provider[];
   // Per-tool override of the global tool timeout: repo tools run clones,
   // installs and test suites, which dwarf the 15s default.
   timeoutMs?: number;
