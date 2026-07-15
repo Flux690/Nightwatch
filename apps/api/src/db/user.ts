@@ -83,9 +83,3 @@ export function generateIngestToken(): string {
   saveIngestToken(hashToken(plaintext), encrypt(plaintext));
   return plaintext;
 }
-
-// Idempotent get-or-create, so the install script and the wizard both obtain
-// the same token regardless of which ran first.
-export function ensureIngestToken(): string {
-  return getIngestTokenPlaintext() ?? generateIngestToken();
-}

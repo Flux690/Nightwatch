@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import {
-  ensureIngestToken,
   generateIngestToken,
   getIngestTokenHash,
   getIngestTokenPlaintext,
@@ -19,29 +18,18 @@ export async function registerIngestCredentialRoutes(
     },
   );
 
-  // Status only - the token is never handed out on this idempotent read, so it
-  // stays out of routine page-load traffic, logs, and query caches.
+  // Status and destination only - the token never rides this idempotent read, so it
+  // stays out of page-load traffic, logs, and caches. The URL is the server's own
+  // origin, never window.location: console and API can be served from different hosts.
   fastify.get(
     "/ingest-credential",
     { preHandler: requireSession },
-    async () => {
-      return { configured: getIngestTokenHash() !== null };
-    },
-  );
-
-  // Get-or-create for the add-server wizard: the BYO setup needs the credential without
-  // depending on an install-script fetch having minted it first; idempotent, so it never rotates an existing one.
-  fastify.post(
-    "/ingest-credential/ensure",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      // Authoritative from the server's own origin (trustProxy honours the public host), not
-      // window.location - console and API can be served from different origins.
+    async (request) => {
       const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
-      return reply.code(200).send({
-        token: ensureIngestToken(),
+      return {
+        configured: getIngestTokenHash() !== null,
         ingestUrl: `${origin}/alerts/ingest`,
-      });
+      };
     },
   );
 

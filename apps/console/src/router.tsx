@@ -12,7 +12,7 @@ import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { RunnerServersPage } from "./pages/RunnerServers.js";
-import { AlertIngestPage } from "./pages/AlertIngestPage.js";
+import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -92,10 +92,10 @@ const addServerRoute = createRoute({
   component: AddServerPage,
 });
 
-const alertIngestRoute = createRoute({
+const alertmanagerRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/integrations/alert-ingest",
-  component: AlertIngestPage,
+  path: "/integrations/alertmanager",
+  component: AlertmanagerPage,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -109,7 +109,7 @@ const routeTree = rootRoute.addChildren([
     githubConnectRoute,
     runnerServersRoute,
     addServerRoute,
-    alertIngestRoute,
+    alertmanagerRoute,
   ]),
 ]);
 

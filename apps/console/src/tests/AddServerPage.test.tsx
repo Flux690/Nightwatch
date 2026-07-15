@@ -74,8 +74,17 @@ function renderAddServerRoute() {
     path: "/integrations/runner",
     component: () => <div>Runner servers destination</div>,
   });
+  const integrationsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations",
+    component: () => <div>Integrations destination</div>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([addRoute, runnerServersRoute]),
+    routeTree: rootRoute.addChildren([
+      addRoute,
+      runnerServersRoute,
+      integrationsRoute,
+    ]),
     history: createMemoryHistory({
       initialEntries: ["/integrations/runner/add"],
     }),
@@ -278,7 +287,7 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /runner servers/i }));
+      await user.click(screen.getByRole("link", { name: /integrations/i }));
 
       const dialog = await screen.findByRole("alertdialog");
       await user.click(
@@ -292,7 +301,7 @@ describe("AddServerPage", () => {
         );
       });
       expect(
-        await screen.findByText(/runner servers destination/i),
+        await screen.findByText(/integrations destination/i),
       ).toBeInTheDocument();
     });
 
@@ -305,7 +314,7 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /runner servers/i }));
+      await user.click(screen.getByRole("link", { name: /integrations/i }));
 
       const dialog = await screen.findByRole("alertdialog");
       await user.click(
@@ -330,10 +339,10 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /runner servers/i }));
+      await user.click(screen.getByRole("link", { name: /integrations/i }));
 
       expect(
-        await screen.findByText(/runner servers destination/i),
+        await screen.findByText(/integrations destination/i),
       ).toBeInTheDocument();
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalledWith(

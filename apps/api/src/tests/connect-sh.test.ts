@@ -127,7 +127,7 @@ describe("GET /connect.sh", () => {
       },
     });
     // No sidecar ports, no monitoring env, no ingest credential - alert wiring
-    // now lives entirely on the console's Alert ingest page.
+    // now lives entirely on the console's Alertmanager page.
     for (const token of [
       "9090",
       "9093",

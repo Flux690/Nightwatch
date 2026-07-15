@@ -102,7 +102,9 @@ describe("Fleet-wide ingest credential", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ configured: false });
+      const body = JSON.parse(res.body) as Record<string, unknown>;
+      expect(body.configured).toBe(false);
+      expect(body.ingestUrl).toMatch(/\/alerts\/ingest$/);
     });
 
     it("reports configured: true after a credential exists, without leaking the token", async () => {
@@ -118,7 +120,8 @@ describe("Fleet-wide ingest credential", () => {
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body) as Record<string, unknown>;
-      expect(body).toEqual({ configured: true });
+      expect(body.configured).toBe(true);
+      expect(body.ingestUrl).toMatch(/\/alerts\/ingest$/);
       expect(body).not.toHaveProperty("token");
     });
 
@@ -171,48 +174,4 @@ describe("Fleet-wide ingest credential", () => {
     });
   });
 
-  describe("POST /ingest-credential/ensure", () => {
-    it("mints and returns a credential when none is configured", async () => {
-      cleanupDb();
-      cleanupDb = useTempDb();
-      const res = await server.inject({
-        method: "POST",
-        url: "/ingest-credential/ensure",
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.body) as {
-        token: string;
-        ingestUrl: string;
-      };
-      expect(body.token).toMatch(/^nwi_[A-Za-z0-9_-]{43}$/);
-      expect(body.ingestUrl).toMatch(/\/alerts\/ingest$/);
-    });
-
-    it("returns the existing credential without rotating it", async () => {
-      cleanupDb();
-      cleanupDb = useTempDb();
-      const first = await server.inject({
-        method: "POST",
-        url: "/ingest-credential/ensure",
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      const second = await server.inject({
-        method: "POST",
-        url: "/ingest-credential/ensure",
-        headers: { cookie: `nw_auth=${SESSION}` },
-      });
-      const { token: a } = JSON.parse(first.body) as { token: string };
-      const { token: b } = JSON.parse(second.body) as { token: string };
-      expect(b).toBe(a);
-    });
-
-    it("requires a session", async () => {
-      const res = await server.inject({
-        method: "POST",
-        url: "/ingest-credential/ensure",
-      });
-      expect(res.statusCode).toBe(401);
-    });
-  });
 });

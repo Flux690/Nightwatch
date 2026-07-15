@@ -111,12 +111,12 @@ export function IntegrationsPage(): React.JSX.Element {
         />
 
         <IntegrationCard
-          title="Alert ingest"
-          description="Where your Prometheus and Alertmanager send alerts. One credential for the whole fleet, set up once."
+          title="Alertmanager"
+          description="Forward alerts from the Alertmanager you already run. One credential for the whole fleet, set up once - Nightwatch ships no monitoring of its own."
           isLoading={ingestLoading}
           status={ingest?.configured === true ? "Configured" : null}
           connectLabel="Set up"
-          onOpen={() => void navigate({ to: "/integrations/alert-ingest" })}
+          onOpen={() => void navigate({ to: "/integrations/alertmanager" })}
         />
 
         <IntegrationCard

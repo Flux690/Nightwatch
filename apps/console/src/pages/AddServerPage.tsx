@@ -173,9 +173,9 @@ export function AddServerPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations/runner" className={backLinkClass}>
+      <Link to="/integrations" className={backLinkClass}>
         <ArrowLeft {...ICON_INLINE} />
-        Runner servers
+        Integrations
       </Link>
       <PageHeader>
         <PageTitle>Add a server</PageTitle>

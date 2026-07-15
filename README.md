@@ -99,7 +99,7 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**. Two plugs matter here: the **Runner** (an executor on your hosts) and **Alert ingest** (where your monitoring sends alerts). Neither is strictly required to start a chat investigation, but together they are what lets Nightwatch investigate an alert on its own.
+In the console go to **Integrations**. Two plugs matter here: the **Runner** (an executor on your hosts) and **Alertmanager** (where your alerts come from). Neither is strictly required to start a chat investigation, but together they are what lets Nightwatch investigate an alert on its own.
 
 **Add a runner.** From the Runner card, choose **Add a server**. The wizard is three steps and needs no manual config editing:
 
@@ -107,7 +107,7 @@ In the console go to **Integrations**. Two plugs matter here: the **Runner** (an
 2. **Install the runner** - Nightwatch mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target server or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
 3. **Verify the pipeline** - send a synthetic alert through the full path and confirm it reaches the runner.
 
-**Wire your alerts.** Nightwatch does not ship a monitoring stack - point your own at it. The **Alert ingest** card gives you the webhook URL, a bearer token you can generate, reveal, or rotate, and a ready-made Alertmanager receiver snippet, plus a **Test webhook** button to confirm it before you rely on it. This ingest credential is one fleet-wide secret, not one per server; when you run more than one server, stamp each Prometheus with a distinct `server` external label so Nightwatch can tell them apart. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+**Wire your alerts.** Nightwatch does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card gives you the webhook URL, a bearer token you can generate, reveal, or rotate, and a ready-made Alertmanager receiver snippet, plus a **Test webhook** button to confirm it before you rely on it. This ingest credential is one fleet-wide secret, not one per server; when you run more than one server, stamp each Prometheus with a distinct `server` external label so Nightwatch can tell them apart. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
 
 ## Configuration
 
@@ -222,7 +222,7 @@ Kubernetes access comes from the runner's kubeconfig or in-cluster service accou
 
 `pnpm dev` is all you need for day-to-day work; it runs every app from source with live reload, so there is no build step involved.
 
-To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/alerts/ingest` endpoint (or use the console's **Test webhook** button on the Alert ingest page), which drives an investigation end to end on your machine.
+To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/alerts/ingest` endpoint (or use the console's **Test webhook** button on the Alertmanager page), which drives an investigation end to end on your machine.
 
 Type-check and run the test suites across every package:
 

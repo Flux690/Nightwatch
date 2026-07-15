@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { ArrowLeft, ChevronDown, ChevronUp, Network, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,16 +17,8 @@ import {
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { statusVariant } from "@/lib/statusVariants";
-import { ICON_INLINE, ICON_DISPLAY } from "@/lib/iconProps";
+import { ICON_INLINE } from "@/lib/iconProps";
 import {
   Table,
   TableHeader,
@@ -176,8 +168,6 @@ export function RunnerServersPage(): React.JSX.Element {
     }
   }
 
-  const isEmpty = !isLoading && !isError && connectedRunners.length === 0;
-
   return (
     <Page>
       <Link to="/integrations" className={backLinkClass}>
@@ -186,15 +176,13 @@ export function RunnerServersPage(): React.JSX.Element {
       </Link>
       <PageHeader>
         <PageTitle>Runner servers</PageTitle>
-        {!isEmpty && (
-          <Button
-            size="sm"
-            onClick={() => void navigate({ to: "/integrations/runner/add" })}
-          >
-            <Plus {...ICON_INLINE} />
-            Add a server
-          </Button>
-        )}
+        <Button
+          size="sm"
+          onClick={() => void navigate({ to: "/integrations/runner/add" })}
+        >
+          <Plus {...ICON_INLINE} />
+          Add a server
+        </Button>
       </PageHeader>
 
       {removeError !== null && (
@@ -231,30 +219,6 @@ export function RunnerServersPage(): React.JSX.Element {
             automatically.
           </AlertDescription>
         </Alert>
-      )}
-
-      {isEmpty && (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Network {...ICON_DISPLAY} />
-            </EmptyMedia>
-            <EmptyTitle>No servers yet</EmptyTitle>
-            <EmptyDescription>
-              Servers you add will appear here with their status, services, and
-              last check-in time so you can monitor your infrastructure at a
-              glance.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button
-              onClick={() => void navigate({ to: "/integrations/runner/add" })}
-            >
-              <Plus {...ICON_INLINE} />
-              Add your first server
-            </Button>
-          </EmptyContent>
-        </Empty>
       )}
 
       {!isLoading && !isError && connectedRunners.length > 0 && (

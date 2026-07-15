@@ -152,11 +152,11 @@ describe("RunnerServersPage", () => {
   });
 
   describe("Add a server", () => {
-    it("navigates to the add-server page when the empty-state action is clicked", async () => {
+    it("navigates to the add-server page from the header action", async () => {
       const user = userEvent.setup();
       setup([]);
       await user.click(
-        await screen.findByRole("button", { name: /add your first server/i }),
+        await screen.findByRole("button", { name: /add a server/i }),
       );
       expect(
         await screen.findByText(/add server destination/i),

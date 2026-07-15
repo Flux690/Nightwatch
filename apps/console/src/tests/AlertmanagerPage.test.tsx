@@ -12,9 +12,10 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
-import { AlertIngestPage } from "../pages/AlertIngestPage.js";
+import { AlertmanagerPage } from "../pages/AlertmanagerPage.js";
 
 const INGEST_TOKEN = "nwi_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345";
+const ROTATED_TOKEN = "nwi_rotated999999999999999999999999";
 const INGEST_URL = "http://api.test/alerts/ingest";
 
 const CONNECTED_RUNNER: RunnerRecord = {
@@ -51,12 +52,12 @@ function jsonOk(body: unknown, status = 200) {
   });
 }
 
-function renderAlertIngestRoute() {
+function renderAlertmanagerRoute() {
   const rootRoute = createRootRoute();
-  const alertIngestRoute = createRoute({
+  const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/alert-ingest",
-    component: AlertIngestPage,
+    path: "/integrations/alertmanager",
+    component: AlertmanagerPage,
   });
   const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -64,9 +65,9 @@ function renderAlertIngestRoute() {
     component: () => <div>Integrations destination</div>,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([alertIngestRoute, integrationsRoute]),
+    routeTree: rootRoute.addChildren([alertmanagerRoute, integrationsRoute]),
     history: createMemoryHistory({
-      initialEntries: ["/integrations/alert-ingest"],
+      initialEntries: ["/integrations/alertmanager"],
     }),
   });
 
@@ -85,6 +86,7 @@ function renderAlertIngestRoute() {
 
 function setup(opts: { configured?: boolean; validate?: unknown } = {}) {
   const { configured = false, validate = RESOLVED_VALIDATE } = opts;
+  let rotated = false;
 
   const clipboardWrite = vi.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", {
@@ -96,20 +98,21 @@ function setup(opts: { configured?: boolean; validate?: unknown } = {}) {
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/runners") return jsonOk([CONNECTED_RUNNER]);
-      if (url === "/api/ingest-credential/ensure" && init?.method === "POST")
-        return jsonOk({ token: INGEST_TOKEN, ingestUrl: INGEST_URL });
+      if (url === "/api/ingest-credential" && init?.method === "POST") {
+        rotated = true;
+        return jsonOk({ token: ROTATED_TOKEN }, 201);
+      }
       if (url === "/api/ingest-credential/reveal" && init?.method === "POST")
         return jsonOk({ token: INGEST_TOKEN });
-      if (url === "/api/ingest-credential" && init?.method === "POST")
-        return jsonOk({ token: INGEST_TOKEN }, 201);
-      if (url === "/api/ingest-credential") return jsonOk({ configured });
+      if (url === "/api/ingest-credential")
+        return jsonOk({ configured: configured || rotated, ingestUrl: INGEST_URL });
       if (url === "/api/alerts/validate" && init?.method === "POST")
         return jsonOk(validate);
       return jsonOk({});
     });
   vi.stubGlobal("fetch", fetchMock);
 
-  renderAlertIngestRoute();
+  renderAlertmanagerRoute();
   return { fetchMock, clipboardWrite };
 }
 
@@ -118,27 +121,34 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AlertIngestPage", () => {
+describe("AlertmanagerPage", () => {
   describe("webhook wiring", () => {
-    it("shows the webhook URL and a ready-to-paste Alertmanager receiver", async () => {
-      const { fetchMock } = setup();
+    it("shows the server-provided webhook URL without minting a credential", async () => {
+      const { fetchMock } = setup({ configured: false });
 
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/ingest-credential/ensure",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
-      // The server-provided webhook URL is shown plainly, not window.location.
       await waitFor(() => {
         expect(
           screen.getAllByText(new RegExp(INGEST_URL.replace(/\//g, "\\/")))
             .length,
         ).toBeGreaterThan(0);
       });
+      // Viewing the page must never create a secret.
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/ingest-credential",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(await screen.findByText(/not configured/i)).toBeInTheDocument();
+    });
+
+    it("withholds the receiver snippet until the credential is in hand", async () => {
+      setup({ configured: true });
+
+      await waitFor(() => {
+        expect(screen.getByText(/reveal the credential/i)).toBeInTheDocument();
+      });
       expect(
-        screen.getByRole("button", { name: /copy alertmanager receiver/i }),
-      ).toBeInTheDocument();
+        screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
+      ).not.toBeInTheDocument();
     });
 
     it("offers the server-label snippet prefilled from a connected server", async () => {
@@ -152,15 +162,8 @@ describe("AlertIngestPage", () => {
     });
   });
 
-  describe("ingest credential", () => {
-    it("fetches the credential status on load", async () => {
-      const { fetchMock } = setup();
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith("/api/ingest-credential");
-      });
-    });
-
-    it("POSTs the credential and shows the plaintext once on Generate", async () => {
+  describe("credential", () => {
+    it("generates on demand and fills the receiver with the new token", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ configured: false });
 
@@ -174,10 +177,15 @@ describe("AlertIngestPage", () => {
           expect.objectContaining({ method: "POST" }),
         );
       });
-      expect(screen.getByText(/no longer works/i)).toBeInTheDocument();
+      expect(await screen.findByText(/no longer works/i)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
+        ).toBeGreaterThan(0);
+      });
     });
 
-    it("reveals the credential on demand via POST /reveal when configured", async () => {
+    it("reveals on demand without claiming the old credential is dead", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ configured: true });
 
@@ -191,16 +199,50 @@ describe("AlertIngestPage", () => {
           expect.objectContaining({ method: "POST" }),
         );
       });
-      // A revealed (not freshly minted) token does not claim the old one is dead.
       expect(screen.queryByText(/no longer works/i)).not.toBeInTheDocument();
+    });
+
+    it("rotating replaces the token in the receiver snippet, never leaving the dead one", async () => {
+      const user = userEvent.setup();
+      setup({ configured: true });
+
+      await user.click(
+        await screen.findByRole("button", { name: /reveal credential/i }),
+      );
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
+        ).toBeGreaterThan(0);
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: /rotate credential/i }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
+        ).toBeGreaterThan(0);
+      });
+      expect(screen.queryByText(new RegExp(INGEST_TOKEN))).not.toBeInTheDocument();
     });
   });
 
   describe("test webhook", () => {
-    it("posts a sample alert with the ingest credential and shows the resolution", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup();
+    it("is unavailable until the credential is in hand", async () => {
+      setup({ configured: true });
+      expect(
+        await screen.findByRole("button", { name: /test webhook/i }),
+      ).toBeDisabled();
+    });
 
+    it("posts a sample alert with the credential and shows the resolution", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup({ configured: true });
+
+      await user.click(
+        await screen.findByRole("button", { name: /reveal credential/i }),
+      );
       await user.click(
         await screen.findByRole("button", { name: /test webhook/i }),
       );
@@ -216,14 +258,13 @@ describe("AlertIngestPage", () => {
           }),
         );
       });
-      await waitFor(() => {
-        expect(screen.getByText(/resolved/i)).toBeInTheDocument();
-      });
+      expect(await screen.findByText(/resolved/i)).toBeInTheDocument();
     });
 
     it("shows the rejection reason when the sample does not match the fleet", async () => {
       const user = userEvent.setup();
       setup({
+        configured: true,
         validate: {
           alerts: [
             {
@@ -239,6 +280,9 @@ describe("AlertIngestPage", () => {
         },
       });
 
+      await user.click(
+        await screen.findByRole("button", { name: /reveal credential/i }),
+      );
       await user.click(
         await screen.findByRole("button", { name: /test webhook/i }),
       );

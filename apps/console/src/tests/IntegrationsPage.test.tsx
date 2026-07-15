@@ -64,10 +64,10 @@ function renderIntegrationsRoute(qc: QueryClient) {
     path: "/integrations/runner/add",
     component: () => <div>Add server destination</div>,
   });
-  const alertIngestRoute = createRoute({
+  const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/alert-ingest",
-    component: () => <div>Alert ingest destination</div>,
+    path: "/integrations/alertmanager",
+    component: () => <div>Alertmanager destination</div>,
   });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
@@ -75,7 +75,7 @@ function renderIntegrationsRoute(qc: QueryClient) {
       connectRoute,
       runnerRoute,
       addServerRoute,
-      alertIngestRoute,
+      alertmanagerRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
   });
@@ -198,15 +198,15 @@ describe("IntegrationsPage", () => {
     });
   });
 
-  describe("Alert ingest", () => {
-    it("offers setup when no credential exists and opens the alert ingest page", async () => {
+  describe("Alertmanager", () => {
+    it("offers setup when no credential exists and opens the Alertmanager page", async () => {
       const user = userEvent.setup();
       setup({ ingestConfigured: false });
 
       await user.click(await screen.findByRole("button", { name: /set up/i }));
 
       expect(
-        await screen.findByText(/alert ingest destination/i),
+        await screen.findByText(/alertmanager destination/i),
       ).toBeInTheDocument();
     });
 
