@@ -106,7 +106,7 @@ describe("router", () => {
     const b = connect("db-02", ["postgres"]);
 
     await sendCommand(
-      "GetServiceLogs",
+      "GetDockerLogs",
       { service: svc("postgres") },
       "service",
     );
@@ -119,7 +119,7 @@ describe("router", () => {
     connect("web-01", ["nginx"]);
 
     expect(() =>
-      sendCommand("GetServiceLogs", { service: svc("ghost") }, "service"),
+      sendCommand("GetDockerLogs", { service: svc("ghost") }, "service"),
     ).toThrow(/No runner has service/);
   });
 
@@ -128,14 +128,14 @@ describe("router", () => {
     connect("web-02", ["nginx"]);
 
     expect(() =>
-      sendCommand("GetServiceLogs", { service: svc("nginx") }, "service"),
+      sendCommand("GetDockerLogs", { service: svc("nginx") }, "service"),
     ).toThrow(/Ambiguous service/);
   });
 
   it("rejects a service-routed command that carries no service identity", () => {
     connect("web-01", ["nginx"]);
 
-    expect(() => sendCommand("GetServiceLogs", {}, "service")).toThrow(
+    expect(() => sendCommand("GetDockerLogs", {}, "service")).toThrow(
       /requires a 'service' identity/,
     );
   });

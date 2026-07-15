@@ -185,7 +185,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         toolUses: [
           {
             id: toolUseId,
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",

@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { ChevronDown, ChevronUp, Network, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Page,
   PageHeader,
@@ -14,19 +13,12 @@ import {
   PageTableWrap,
   TABLE_HEAD,
   SkeletonRows,
+  backLinkClass,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { statusVariant } from "@/lib/statusVariants";
-import { ICON_INLINE, ICON_DISPLAY } from "@/lib/iconProps";
+import { ICON_INLINE } from "@/lib/iconProps";
 import {
   Table,
   TableHeader,
@@ -129,7 +121,7 @@ function SortableHeader({
   );
 }
 
-export function FleetPage(): React.JSX.Element {
+export function RunnerServersPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [removing, setRemoving] = useState<string | null>(null);
@@ -176,18 +168,21 @@ export function FleetPage(): React.JSX.Element {
     }
   }
 
-  const isEmpty = !isLoading && !isError && connectedRunners.length === 0;
-
   return (
     <Page>
+      <Link to="/integrations" className={backLinkClass}>
+        <ArrowLeft {...ICON_INLINE} />
+        Integrations
+      </Link>
       <PageHeader>
-        <PageTitle>Fleet</PageTitle>
-        {!isEmpty && (
-          <Button size="sm" onClick={() => void navigate({ to: "/fleet/add" })}>
-            <Plus {...ICON_INLINE} />
-            Add a server
-          </Button>
-        )}
+        <PageTitle>Runner servers</PageTitle>
+        <Button
+          size="sm"
+          onClick={() => void navigate({ to: "/integrations/runner/add" })}
+        >
+          <Plus {...ICON_INLINE} />
+          Add a server
+        </Button>
       </PageHeader>
 
       {removeError !== null && (
@@ -198,7 +193,7 @@ export function FleetPage(): React.JSX.Element {
       )}
 
       {isLoading && (
-        <PageTableWrap role="status" aria-label="Loading fleet">
+        <PageTableWrap role="status" aria-label="Loading servers">
           <Table className={TABLE_HEAD}>
             <TableHeader>
               <TableRow>
@@ -218,33 +213,12 @@ export function FleetPage(): React.JSX.Element {
 
       {isError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertTitle>Failed to load fleet</AlertTitle>
+          <AlertTitle>Failed to load servers</AlertTitle>
           <AlertDescription>
-            Something went wrong loading the fleet. It will retry automatically.
+            Something went wrong loading your servers. It will retry
+            automatically.
           </AlertDescription>
         </Alert>
-      )}
-
-      {isEmpty && (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Network {...ICON_DISPLAY} />
-            </EmptyMedia>
-            <EmptyTitle>Your fleet is empty</EmptyTitle>
-            <EmptyDescription>
-              Servers you add will appear here with their status, services, and
-              last check-in time so you can monitor your infrastructure at a
-              glance.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button onClick={() => void navigate({ to: "/fleet/add" })}>
-              <Plus {...ICON_INLINE} />
-              Add your first server
-            </Button>
-          </EmptyContent>
-        </Empty>
       )}
 
       {!isLoading && !isError && connectedRunners.length > 0 && (

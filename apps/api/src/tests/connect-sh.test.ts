@@ -78,19 +78,6 @@ describe("GET /connect.sh", () => {
     expect(res.headers["content-type"]).toMatch(/text\/x-shellscript/);
   });
 
-  it("script contains the baked-in platform origin", async () => {
-    const res = await server.inject({
-      method: "GET",
-      url: "/connect.sh",
-      headers: {
-        cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${TOKEN}`,
-        host: "control.example.com:3000",
-      },
-    });
-    expect(res.body).toContain("http://control.example.com:3000");
-  });
-
   it("script contains the ws:// runner WS URL", async () => {
     const res = await server.inject({
       method: "GET",
@@ -115,7 +102,6 @@ describe("GET /connect.sh", () => {
         "x-forwarded-proto": "https",
       },
     });
-    expect(res.body).toContain("https://my-host.example.com");
     expect(res.body).toContain("wss://my-host.example.com/clients/connect");
   });
 
@@ -131,7 +117,7 @@ describe("GET /connect.sh", () => {
     expect(res.body).toContain(TOKEN);
   });
 
-  it("script prints header-based Alertmanager config instead of a token query parameter", async () => {
+  it("carries no bundled-monitoring plumbing (unbundled runner)", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/connect.sh",
@@ -140,57 +126,24 @@ describe("GET /connect.sh", () => {
         authorization: `Bearer ${TOKEN}`,
       },
     });
-
-    expect(res.body).not.toContain("/alerts/ingest?token=");
-    expect(res.body).toContain("authorization:");
-    expect(res.body).toContain("credentials: '${NIGHTWATCH_INGEST_TOKEN}'");
-  });
-
-  it("bakes in the fleet ingest token and passes it to the container", async () => {
-    const res = await server.inject({
-      method: "GET",
-      url: "/connect.sh",
-      headers: {
-        cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${TOKEN}`,
-      },
-    });
-    expect(res.body).toMatch(/NIGHTWATCH_INGEST_TOKEN="nwi_[^"]+"/);
-    expect(res.body).toContain(
-      "NIGHTWATCH_INGEST_TOKEN=${NIGHTWATCH_INGEST_TOKEN}",
-    );
-  });
-
-  it("reuses one fleet ingest token across servers", async () => {
-    const ingestOf = async (token: string): Promise<string> => {
-      const res = await server.inject({
-        method: "GET",
-        url: "/connect.sh",
-        headers: {
-          cookie: `nw_auth=${SESSION}`,
-          authorization: `Bearer ${token}`,
-        },
-      });
-      const match = /NIGHTWATCH_INGEST_TOKEN="(nwi_[^"]+)"/.exec(res.body);
-      if (match === null) throw new Error("ingest token not baked into script");
-      return match[1];
-    };
-
-    const second = generateRunnerToken("second-server").plaintext;
-    expect(await ingestOf(TOKEN)).toBe(await ingestOf(second));
-  });
-
-  it("script contains neither nightwatch.sh nor inst_", async () => {
-    const res = await server.inject({
-      method: "GET",
-      url: "/connect.sh",
-      headers: {
-        cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${TOKEN}`,
-      },
-    });
-    expect(res.body).not.toContain("nightwatch.sh");
-    expect(res.body).not.toContain("inst_");
+    // No sidecar ports, no monitoring env, no ingest credential - alert wiring
+    // now lives entirely on the console's Alertmanager page.
+    for (const token of [
+      "9090",
+      "9093",
+      "8080",
+      "prometheus",
+      "alertmanager",
+      "cadvisor",
+      "PROMETHEUS_URL",
+      "ALERTMANAGER_URL",
+      "NIGHTWATCH_INGEST_TOKEN",
+      "PLATFORM_URL",
+      "nightwatch.sh",
+      "inst_",
+    ]) {
+      expect(res.body).not.toContain(token);
+    }
   });
 
   it("script contains NIGHTWATCH_SERVER_NAME baked in from the token's server name", async () => {

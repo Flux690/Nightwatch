@@ -34,7 +34,7 @@ export function deriveDockerServiceIdentity(
 }
 
 // Parse an alert's labels into a candidate identity to match against the fleet, never trusted alone.
-// `namespace` (which Compose/cAdvisor never carry) signals which of the two provider shapes it is.
+// `namespace` (which Docker/Compose alerts never carry) signals which of the two provider shapes it is.
 export function deriveServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
 ): ServiceIdentity {
@@ -48,8 +48,8 @@ export function deriveServiceIdentity(
 function deriveDockerAlertIdentity(
   labels: Record<string, string | undefined>,
 ): DockerServiceIdentity {
-  // `name` is what cAdvisor sets and what our shipped rules.yml alerts carry
-  // ({{ $labels.name }}); the rest are fallbacks for other alert sources.
+  // `name` is what cAdvisor sets (the common source for container alerts); the
+  // rest are fallbacks for other alert sources.
   const liveName =
     labels["name"] ??
     labels["container"] ??

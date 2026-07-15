@@ -11,7 +11,8 @@ import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
-import { FleetPage } from "./pages/Fleet.js";
+import { RunnerServersPage } from "./pages/RunnerServers.js";
+import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -77,16 +78,24 @@ const githubConnectRoute = createRoute({
   component: GitHubConnectPage,
 });
 
-const fleetRoute = createRoute({
+// The runner is one integration among several, so its server list and install
+// wizard live under /integrations rather than as a top-level fleet section.
+const runnerServersRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/fleet",
-  component: FleetPage,
+  path: "/integrations/runner",
+  component: RunnerServersPage,
 });
 
 const addServerRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/fleet/add",
+  path: "/integrations/runner/add",
   component: AddServerPage,
+});
+
+const alertmanagerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/alertmanager",
+  component: AlertmanagerPage,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -94,12 +103,13 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     indexRoute,
     sessionIdRoute,
-    fleetRoute,
-    addServerRoute,
     settingsRoute,
     auditRoute,
     integrationsRoute,
     githubConnectRoute,
+    runnerServersRoute,
+    addServerRoute,
+    alertmanagerRoute,
   ]),
 ]);
 

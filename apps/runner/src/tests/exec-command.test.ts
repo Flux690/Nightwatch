@@ -209,7 +209,7 @@ describe("execCommand handler", () => {
 describe("write dispatch guarded by the runner's own remediation flag", () => {
   // Defense in depth: even if the control plane sends a write, this runner
   // refuses while its own remediation flag is off.
-  it("refuses RestartService and exec while remediation is disabled", async () => {
+  it("refuses RestartDockerService and exec while remediation is disabled", async () => {
     const { createDispatchRegistry } = await import("../commands/registry.js");
     const { setRemediationEnabled } = await import("../remediation-state.js");
 
@@ -217,7 +217,7 @@ describe("write dispatch guarded by the runner's own remediation flag", () => {
     setRemediationEnabled(false);
     try {
       await expect(
-        registry.get("ServiceBash")!({
+        registry.get("DockerBash")!({
           service: SERVICE,
           command: ["ls"],
           reason: "test",
@@ -225,7 +225,7 @@ describe("write dispatch guarded by the runner's own remediation flag", () => {
         }),
       ).rejects.toThrow(/Remediation is disabled on this runner/);
       await expect(
-        registry.get("RestartService")!({
+        registry.get("RestartDockerService")!({
           service: SERVICE,
           rationale: "test",
           risk: "low",
@@ -245,7 +245,7 @@ describe("write dispatch guarded by the runner's own remediation flag", () => {
     const registry = createDispatchRegistry();
     setRemediationEnabled(true);
 
-    const result = await registry.get("ServiceBash")!({
+    const result = await registry.get("DockerBash")!({
       service: SERVICE,
       command: ["ls"],
       reason: "test",

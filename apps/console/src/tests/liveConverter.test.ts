@@ -47,7 +47,7 @@ function interrupt(toolUseId: string): ConsoleEvent {
       sessionId: "s1",
       kind: "approval",
       toolUseId,
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       input: { risk: "high" },
     },
   };

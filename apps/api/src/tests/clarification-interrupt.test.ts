@@ -70,7 +70,7 @@ describe("clarification interrupts", () => {
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
-        if (commandName === "RestartService") {
+        if (commandName === "RestartDockerService") {
           restartCommands.push(commandInput);
           resolveCommand({
             correlationId,
@@ -486,7 +486,7 @@ describe("clarification interrupts", () => {
           },
           {
             id: restart1Id,
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",
@@ -505,7 +505,7 @@ describe("clarification interrupts", () => {
         toolUses: [
           {
             id: restart2Id,
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: {
                 provider: "docker",
@@ -571,7 +571,7 @@ describe("clarification interrupts", () => {
           e.payload["kind"] === "approval",
       ),
     );
-    expect(approvalInterrupt.payload["toolName"]).toBe("RestartService");
+    expect(approvalInterrupt.payload["toolName"]).toBe("RestartDockerService");
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(

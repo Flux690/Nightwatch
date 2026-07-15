@@ -31,10 +31,8 @@ import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { ApiError, apiFetch } from "@/api/client";
-import { WizardMonitoringStep } from "@/pages/WizardMonitoringStep";
 
 export type Provider = "docker" | "kubernetes";
-type Monitoring = "bundled" | "byo";
 
 interface MintedToken {
   id: string;
@@ -61,12 +59,9 @@ export function AddServerPage(): React.JSX.Element {
   const [provider, setProvider] = useState<Provider | null>(null);
   const [serverName, setServerName] = useState("");
   const [serverNameTouched, setServerNameTouched] = useState(false);
-  const [monitoring, setMonitoring] = useState<Monitoring | null>(null);
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
-  const [ingestToken, setIngestToken] = useState<string | null>(null);
-  const [ingestUrl, setIngestUrl] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [committed, setCommitted] = useState(false);
   const [verifyResult, setVerifyResult] = useState<
@@ -79,9 +74,7 @@ export function AddServerPage(): React.JSX.Element {
       ? "Server name is required"
       : null;
   const canContinueFromServer =
-    provider !== null &&
-    monitoring !== null &&
-    validateServerName(serverName) === null;
+    provider !== null && validateServerName(serverName) === null;
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
@@ -134,25 +127,11 @@ export function AddServerPage(): React.JSX.Element {
 
       const installUrl =
         provider === "docker" ? "/api/connect.sh" : "/api/manifest.yaml";
-      const [scriptText, ingest] = await Promise.all([
-        fetch(installUrl, {
-          headers: { Authorization: `Bearer ${minted.token}` },
-        }).then(async (res) => {
-          if (!res.ok) throw new Error(`${installUrl} ${res.status}`);
-          return res.text();
-        }),
-        monitoring === "byo"
-          ? apiFetch<{ token: string; ingestUrl: string }>(
-              "/api/ingest-credential/ensure",
-              { method: "POST" },
-            )
-          : Promise.resolve(null),
-      ]);
-      setInstallText(scriptText);
-      if (ingest) {
-        setIngestToken(ingest.token);
-        setIngestUrl(ingest.ingestUrl);
-      }
+      const res = await fetch(installUrl, {
+        headers: { Authorization: `Bearer ${minted.token}` },
+      });
+      if (!res.ok) throw new Error(`${installUrl} ${res.status}`);
+      setInstallText(await res.text());
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setInstallError(err.message);
@@ -194,9 +173,9 @@ export function AddServerPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/fleet" className={backLinkClass}>
+      <Link to="/integrations" className={backLinkClass}>
         <ArrowLeft {...ICON_INLINE} />
-        Fleet
+        Integrations
       </Link>
       <PageHeader>
         <PageTitle>Add a server</PageTitle>
@@ -250,31 +229,6 @@ export function AddServerPage(): React.JSX.Element {
             )}
           </Field>
 
-          <Field>
-            <FieldLabel>Monitoring</FieldLabel>
-            <FieldDescription>
-              Nightwatch needs Prometheus and Alertmanager to receive alerts.
-            </FieldDescription>
-            <RadioGroup
-              className="mt-2 gap-2"
-              value={monitoring ?? ""}
-              onValueChange={(v) => setMonitoring(v as Monitoring)}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="bundled" id="monitoring-bundled" />
-                <Label htmlFor="monitoring-bundled" className="font-normal">
-                  Bundle Prometheus + Alertmanager for me
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="byo" id="monitoring-byo" />
-                <Label htmlFor="monitoring-byo" className="font-normal">
-                  I already run my own monitoring
-                </Label>
-              </div>
-            </RadioGroup>
-          </Field>
-
           {installError !== null && (
             <FieldError>
               <AlertCircle {...ICON_INLINE} />
@@ -323,29 +277,6 @@ export function AddServerPage(): React.JSX.Element {
                   label="Copy install command"
                 />
               </div>
-
-              {monitoring === "bundled" && (
-                <Alert>
-                  <AlertTitle>Monitoring bundled</AlertTitle>
-                  <AlertDescription>
-                    Prometheus, Alertmanager and cAdvisor ship inside the runner
-                    and are wired to Nightwatch automatically. Nothing else to
-                    configure.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {monitoring === "byo" &&
-                provider &&
-                ingestToken !== null &&
-                ingestUrl !== null && (
-                  <WizardMonitoringStep
-                    provider={provider}
-                    trimmedServerName={trimmedServerName}
-                    ingestToken={ingestToken}
-                    ingestUrl={ingestUrl}
-                  />
-                )}
 
               <div className="flex items-center gap-2">
                 {connectedRunner ? (
@@ -412,7 +343,7 @@ export function AddServerPage(): React.JSX.Element {
             </Button>
             <Button
               variant="secondary"
-              onClick={() => void navigate({ to: "/fleet" })}
+              onClick={() => void navigate({ to: "/integrations/runner" })}
             >
               Done
             </Button>

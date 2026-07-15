@@ -231,7 +231,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-1",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: svc("postgres") },
           },
         ],
@@ -242,7 +242,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsB).toHaveLength(1);
-    expect(commandsB[0].commandName).toBe("GetServiceLogs");
+    expect(commandsB[0].commandName).toBe("GetDockerLogs");
     expect(commandsA).toHaveLength(0);
   });
 
@@ -253,7 +253,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-2",
-            name: "GetServiceStats",
+            name: "GetDockerStats",
             input: { service: svc("nginx") },
           },
         ],
@@ -264,7 +264,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsA).toHaveLength(1);
-    expect(commandsA[0].commandName).toBe("GetServiceStats");
+    expect(commandsA[0].commandName).toBe("GetDockerStats");
     expect(commandsB).toHaveLength(0);
   });
 
@@ -275,7 +275,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-3",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: svc("ghost-svc") },
           },
         ],
@@ -352,7 +352,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-restart",
-            name: "RestartService",
+            name: "RestartDockerService",
             input: {
               service: svc("postgres"),
               rationale: "OOM killed",
@@ -378,7 +378,7 @@ describe("multi-runner routing", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Wait for the approval interrupt — RestartService is a gated tool.
+    // Wait for the approval interrupt — RestartDockerService is a gated tool.
     const interrupt = await waitFor(() =>
       events.find(
         (e) =>
@@ -407,10 +407,10 @@ describe("multi-runner routing", () => {
 
     // runner-b owns "postgres" and must receive the restart command.
     await waitFor(() =>
-      commandsB.some((c) => c.commandName === "RestartService"),
+      commandsB.some((c) => c.commandName === "RestartDockerService"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "RestartService")?.commandInput[
+      commandsB.find((c) => c.commandName === "RestartDockerService")?.commandInput[
         "service"
       ],
     ).toEqual(svc("postgres"));
@@ -428,7 +428,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-cross",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: svc("redis") },
           },
         ],
@@ -439,7 +439,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsC).toHaveLength(1);
-    expect(commandsC[0].commandName).toBe("GetServiceLogs");
+    expect(commandsC[0].commandName).toBe("GetDockerLogs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
   });
@@ -451,7 +451,7 @@ describe("multi-runner routing", () => {
         toolUses: [
           {
             id: "tu-k8s",
-            name: "GetServiceLogs",
+            name: "GetK8sLogs",
             input: { service: k8sSvc("api-server", "production") },
           },
         ],
@@ -462,7 +462,7 @@ describe("multi-runner routing", () => {
     await runSession();
 
     expect(commandsK).toHaveLength(1);
-    expect(commandsK[0].commandName).toBe("GetServiceLogs");
+    expect(commandsK[0].commandName).toBe("GetK8sLogs");
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
     expect(commandsC).toHaveLength(0);
@@ -556,7 +556,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-1",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: scopedSvc("api", "prod-server-01") },
           },
         ],
@@ -567,7 +567,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS1).toHaveLength(1);
-    expect(commandsS1[0].commandName).toBe("GetServiceLogs");
+    expect(commandsS1[0].commandName).toBe("GetDockerLogs");
     expect(commandsS2).toHaveLength(0);
   });
 
@@ -578,7 +578,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-2",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: scopedSvc("db", "prod-server-02") },
           },
         ],
@@ -589,7 +589,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("GetServiceLogs");
+    expect(commandsS2[0].commandName).toBe("GetDockerLogs");
     expect(commandsS1).toHaveLength(0);
   });
 
@@ -602,7 +602,7 @@ describe("assigned-name server-scoped routing", () => {
         toolUses: [
           {
             id: "tu-scoped-3",
-            name: "GetServiceLogs",
+            name: "GetDockerLogs",
             input: { service: scopedSvc("api", "prod-server-02") },
           },
         ],
@@ -613,7 +613,7 @@ describe("assigned-name server-scoped routing", () => {
     await runScopedSession();
 
     expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("GetServiceLogs");
+    expect(commandsS2[0].commandName).toBe("GetDockerLogs");
     expect(commandsS1).toHaveLength(0);
   });
 });

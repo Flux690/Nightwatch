@@ -34,7 +34,7 @@ export function resolveByService(
     : null;
   if (service === null) {
     throw new Error(
-      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior ListServices result.",
+      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior list result.",
     );
   }
 

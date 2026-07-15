@@ -2,22 +2,24 @@ import { addressName, listRunners } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveByService } from "../ws/router.js";
 import { getRemediationModeByRunnerRef } from "../db/runner.js";
-import { toolSupportsProvider } from "./tools/toolset.js";
-import type { Provider, Tool } from "./tools/types.js";
+import type { FleetCapabilities } from "./tools/types.js";
 
 // Run policy: which tools an investigation may use and on which providers, derived
 // from the connected fleet and DB-stored remediation mode; pure reads, recomputed each turn.
 
-// Keyed on the whole fleet, not just the alerting runner - a mixed-fleet run may call
-// agnostic tools on a sibling. Returns undefined (no filter) when no manifest has arrived.
-export function currentFleetProviders(): ReadonlySet<Provider> | undefined {
-  const providers = new Set<Provider>();
+// Keyed on the whole fleet, not just the alerting runner - a mixed-fleet run may reach a
+// sibling. Returns undefined (offer everything) when no manifest has arrived yet.
+export function currentFleetCapabilities(): FleetCapabilities | undefined {
+  let docker = false;
+  let kubernetes = false;
+  let anyManifest = false;
   for (const runner of listRunners()) {
     if (!runner.manifest) continue;
-    if (runner.manifest.capabilities.docker) providers.add("docker");
-    if (runner.manifest.capabilities.kubernetes) providers.add("kubernetes");
+    anyManifest = true;
+    if (runner.manifest.capabilities.docker) docker = true;
+    if (runner.manifest.capabilities.kubernetes) kubernetes = true;
   }
-  return providers.size > 0 ? providers : undefined;
+  return anyManifest ? { docker, kubernetes } : undefined;
 }
 
 // Offering rule: write tools appear when ANY connected runner has remediation on.
@@ -50,17 +52,4 @@ export function targetRemediationDisabled(
   const enabled =
     dbMode ?? conn.manifest?.capabilities.remediationEnabled ?? false;
   return enabled ? null : (addressName(conn) ?? conn.runnerId);
-}
-
-// Returns the service's provider when it doesn't match the tool's declared providers, so the
-// model gets a corrective error instead of acting on the wrong provider.
-export function mismatchedServiceProvider(
-  input: Record<string, unknown>,
-  entry: Tool,
-): string | null {
-  const service = input["service"];
-  if (typeof service !== "object" || service === null) return null;
-  const provider = (service as Record<string, unknown>)["provider"]; // typeof guard above confirms object shape
-  if (typeof provider !== "string") return null;
-  return toolSupportsProvider(entry, provider) ? null : provider;
 }

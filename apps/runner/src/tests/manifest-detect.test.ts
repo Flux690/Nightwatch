@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import type Dockerode from "dockerode";
 
-// Mock system boundaries: Docker client, Kubernetes client, and Prometheus network probe (global fetch).
+// Mock system boundaries: the Docker client and the Kubernetes client.
 // NIGHTWATCH_SERVER_NAME env var controls the Docker server dimension; tests stub it explicitly via vi.stubEnv.
 
 const { mockListContainers, mockListDeployments, mockListStatefulSets } =

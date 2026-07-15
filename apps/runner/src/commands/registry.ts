@@ -32,41 +32,8 @@ import { isRemediationEnabled } from "../remediation-state.js";
 
 type Handler = (input: unknown) => Promise<unknown>;
 
-function serviceProvider(input: unknown): string | undefined {
-  if (typeof input !== "object" || input === null) return undefined;
-  const svc = (input as Record<string, unknown>)["service"]; // typeof guard above confirms object shape
-  if (typeof svc !== "object" || svc === null) return undefined;
-  const provider = (svc as Record<string, unknown>)["provider"]; // same reason
-  return typeof provider === "string" ? provider : undefined;
-}
-
-// A provider-agnostic command dispatches to the docker or kubernetes handler by the service identity's
-// provider. One helper replaces the per-command ternary and localizes the unknown->typed cast at the single dispatch boundary.
-function byProvider<T>(handlers: {
-  docker: (input: T) => Promise<unknown>;
-  kubernetes: (input: T) => Promise<unknown>;
-}): Handler {
-  return (input) =>
-    (serviceProvider(input) === "kubernetes"
-      ? handlers.kubernetes
-      : handlers.docker)(input as T);
-}
-
-// ListServices carries no service identity (it is the discovery call), so it
-// dispatches on its `environment` input instead of a service provider.
-function byEnvironment<T extends { environment?: string }>(handlers: {
-  docker: (input: T) => Promise<unknown>;
-  kubernetes: (input: T) => Promise<unknown>;
-}): Handler {
-  return (input) => {
-    const i = input as T;
-    return (
-      i.environment === "kubernetes" ? handlers.kubernetes : handlers.docker
-    )(i);
-  };
-}
-
-// A single-provider or provider-less command: cast once and call.
+// Each command name maps 1:1 to a provider handler - the LLM tool name already
+// carries the substrate, so there is no runtime provider dispatch to do.
 function direct<T>(fn: (input: T) => Promise<unknown>): Handler {
   return (input) => fn(input as T);
 }
@@ -86,67 +53,29 @@ function guardedWrite(handler: Handler): Handler {
 
 export function createDispatchRegistry(): Map<string, Handler> {
   return new Map<string, Handler>([
-    [
-      "ListServices",
-      byEnvironment({
-        docker: dockerGetContainerList,
-        kubernetes: k8sGetContainerList,
-      }),
-    ],
-    [
-      "GetServiceLogs",
-      byProvider({
-        docker: dockerGetContainerLogs,
-        kubernetes: k8sGetContainerLogs,
-      }),
-    ],
-    [
-      "GetServiceConfig",
-      byProvider({
-        docker: dockerGetContainerInspect,
-        kubernetes: k8sGetContainerInspect,
-      }),
-    ],
-    [
-      "GetServiceStats",
-      byProvider({
-        docker: dockerGetContainerStats,
-        kubernetes: k8sGetContainerStats,
-      }),
-    ],
-    [
-      "GetServiceEvents",
-      byProvider({
-        docker: dockerGetContainerEvents,
-        kubernetes: k8sGetContainerEvents,
-      }),
-    ],
-    [
-      "GetServiceProcesses",
-      byProvider({
-        docker: dockerGetContainerProcesses,
-        kubernetes: k8sGetContainerProcesses,
-      }),
-    ],
+    ["ListDockerServices", direct(dockerGetContainerList)],
+    ["GetDockerLogs", direct(dockerGetContainerLogs)],
+    ["GetDockerConfig", direct(dockerGetContainerInspect)],
+    ["GetDockerStats", direct(dockerGetContainerStats)],
+    ["GetDockerEvents", direct(dockerGetContainerEvents)],
+    ["GetDockerProcesses", direct(dockerGetContainerProcesses)],
+    ["RestartDockerService", guardedWrite(direct(restartContainer))],
+    ["DockerBash", guardedWrite(direct(execCommand))],
+    ["ListK8sWorkloads", direct(k8sGetContainerList)],
+    ["GetK8sLogs", direct(k8sGetContainerLogs)],
+    ["GetK8sConfig", direct(k8sGetContainerInspect)],
+    ["GetK8sStats", direct(k8sGetContainerStats)],
+    ["GetK8sEvents", direct(k8sGetContainerEvents)],
+    ["GetK8sProcesses", direct(k8sGetContainerProcesses)],
+    ["RestartK8sWorkload", guardedWrite(direct(k8sRestartService))],
+    ["K8sBash", guardedWrite(direct(k8sExecCommand))],
+    ["GetK8sRolloutStatus", direct(k8sGetRolloutStatus)],
+    ["GetK8sNodeStatus", () => k8sGetNodeStatus()],
     ["GetHostMemory", () => getHostMemory()],
     ["GetHostCPU", () => getHostCpu()],
     ["GetHostDisk", () => getHostDisk()],
     ["GetHostNetwork", () => getHostNetwork()],
     ["GetHostDmesg", direct(getHostDmesg)],
     ["ReadHostFile", direct(readFileCommand)],
-    [
-      "RestartService",
-      guardedWrite(
-        byProvider({ docker: restartContainer, kubernetes: k8sRestartService }),
-      ),
-    ],
-    [
-      "ServiceBash",
-      guardedWrite(
-        byProvider({ docker: execCommand, kubernetes: k8sExecCommand }),
-      ),
-    ],
-    ["GetK8sRolloutStatus", direct(k8sGetRolloutStatus)],
-    ["GetK8sNodeStatus", () => k8sGetNodeStatus()],
   ]);
 }

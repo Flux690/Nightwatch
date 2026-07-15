@@ -163,7 +163,7 @@ describe("live vs persisted converter consistency", () => {
     let live: TranscriptItem[] = [];
     live = applyLiveEvent(
       live,
-      toolCallStart("tu-2", "RestartService", { service: "db" }),
+      toolCallStart("tu-2", "RestartDockerService", { service: "db" }),
       SESSION_ID,
     );
     // No TOOL_CALL_END — tool is still in flight
@@ -173,7 +173,7 @@ describe("live vs persisted converter consistency", () => {
         {
           type: "tool_use",
           id: "tu-2",
-          name: "RestartService",
+          name: "RestartDockerService",
           input: { service: "db" },
         },
       ]),

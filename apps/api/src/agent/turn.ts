@@ -1,9 +1,6 @@
 import { executeTool } from "./tools/toolset.js";
 import type { Tool, ToolExecuteContext } from "./tools/types.js";
-import {
-  mismatchedServiceProvider,
-  targetRemediationDisabled,
-} from "./policy.js";
+import { targetRemediationDisabled } from "./policy.js";
 import { circuitBreakerRejection } from "./breaker.js";
 import { publishToolCallStart, publishToolCallEnd } from "../session/stream.js";
 import type { logger } from "../logger.js";
@@ -52,20 +49,6 @@ export async function processToolUses(params: {
       toolResults.push({
         tool_use_id: tool.id,
         content: `Tool "${tool.name}" is not available in this investigation. Do not retry.`,
-        is_error: true,
-      });
-      continue;
-    }
-
-    const mismatchedProvider = mismatchedServiceProvider(tool.input, entry);
-    if (mismatchedProvider) {
-      log.warn(
-        { tool: tool.name, provider: mismatchedProvider },
-        "provider-specific tool called with mismatched service identity",
-      );
-      toolResults.push({
-        tool_use_id: tool.id,
-        content: `Provider mismatch: "${tool.name}" only supports [${(entry.providers ?? []).join(", ")}], but was called with a "${mismatchedProvider}" service identity. Echo the service identity as received; use an agnostic tool, or a tool matching that provider, instead. Do not retry this call as-is.`,
         is_error: true,
       });
       continue;

@@ -12,7 +12,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwatch/shared";
 
-import { FleetPage } from "../pages/Fleet.js";
+import { RunnerServersPage } from "../pages/RunnerServers.js";
 
 const NOW = new Date("2024-01-01T12:00:00Z").getTime();
 
@@ -50,22 +50,32 @@ const WEB_RUNNER: RunnerRecord = {
   remediationMode: false,
 };
 
-/* FleetPage navigates to /fleet/add, so it renders under a memory router with a stub destination route. */
-function renderFleetRoute(qc: QueryClient) {
+/* The page navigates to the add-server route and back to Integrations, so it renders
+   under a memory router with stub destination routes. */
+function renderRunnerServersRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
-  const fleetRoute = createRoute({
+  const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/fleet",
-    component: FleetPage,
+    path: "/integrations",
+    component: () => <div>Integrations destination</div>,
+  });
+  const runnerRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/runner",
+    component: RunnerServersPage,
   });
   const addServerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/fleet/add",
+    path: "/integrations/runner/add",
     component: () => <div>Add server destination</div>,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([fleetRoute, addServerRoute]),
-    history: createMemoryHistory({ initialEntries: ["/fleet"] }),
+    routeTree: rootRoute.addChildren([
+      integrationsRoute,
+      runnerRoute,
+      addServerRoute,
+    ]),
+    history: createMemoryHistory({ initialEntries: ["/integrations/runner"] }),
   });
   return render(
     <TestProviders>
@@ -101,7 +111,7 @@ function setup(runners: RunnerRecord[] = []) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  renderFleetRoute(qc);
+  renderRunnerServersRoute(qc);
 
   return { fetchMock, qc };
 }
@@ -112,8 +122,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("FleetPage", () => {
-  describe("fleet list", () => {
+describe("RunnerServersPage", () => {
+  describe("server list", () => {
     it("fetches GET /api/runners on mount", async () => {
       const { fetchMock } = setup();
       await waitFor(() => {
@@ -133,20 +143,20 @@ describe("FleetPage", () => {
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
 
-      renderFleetRoute(qc);
+      renderRunnerServersRoute(qc);
 
       await waitFor(() => {
-        expect(screen.getByText(/failed to load fleet/i)).toBeInTheDocument();
+        expect(screen.getByText(/failed to load servers/i)).toBeInTheDocument();
       });
     });
   });
 
   describe("Add a server", () => {
-    it("navigates to the add-server page when the empty-state action is clicked", async () => {
+    it("navigates to the add-server page from the header action", async () => {
       const user = userEvent.setup();
       setup([]);
       await user.click(
-        await screen.findByRole("button", { name: /add your first server/i }),
+        await screen.findByRole("button", { name: /add a server/i }),
       );
       expect(
         await screen.findByText(/add server destination/i),
@@ -191,7 +201,7 @@ describe("FleetPage", () => {
       const qc = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
       });
-      renderFleetRoute(qc);
+      renderRunnerServersRoute(qc);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);

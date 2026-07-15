@@ -1,56 +1,63 @@
-import { SERVICE_IDENTITY_SCHEMA } from "./identity-schema.js";
-import type { Provider, Tool } from "./types.js";
+import type { Tool } from "./types.js";
 
-const KUBERNETES_ONLY: Provider[] = ["kubernetes"];
-// Host tools are truthful only where runner and host are 1:1 (Docker). A K8s runner is one
-// pod on one arbitrary node, so GetK8sNodeStatus is the cluster-level answer instead.
-const DOCKER_ONLY: Provider[] = ["docker"];
+// Echo the identity exactly as given in the alert or a prior ListDockerServices
+// result - do not guess. provider is a single-value enum so the wire payload
+// still carries the discriminant the runner dispatches on.
+const DOCKER_SERVICE_IDENTITY_SCHEMA = {
+  type: "object",
+  properties: {
+    provider: { type: "string", enum: ["docker"] },
+    project: {
+      type: "string",
+      description:
+        "Compose project name (or the container's own name if it has no Compose labels).",
+    },
+    service: {
+      type: "string",
+      description:
+        "Compose service name (or the container's own name if it has no Compose labels).",
+    },
+  },
+  required: ["provider", "project", "service"],
+} as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
 // arbitrary shell. Safety comes from the shape, not from review.
-export const OBSERVABILITY_TOOLS: Tool[] = [
+//
+// Host tools live in this library because a Docker runner is 1:1 with its
+// host, so "the host" is a truthful concept. A Kubernetes runner is one pod
+// on one arbitrary node; GetK8sNodeStatus is the cluster-level answer there.
+export const DOCKER_TOOLS: Tool[] = [
   {
     schema: {
-      name: "ListServices",
+      name: "ListDockerServices",
       description:
-        "List all services on the host (running and stopped) with status, image, uptime, and health.",
+        "List all Docker services on the host (running and stopped) with status, image, uptime, and health.",
       input_schema: {
         type: "object",
         properties: {
-          environment: {
-            type: "string",
-            enum: ["docker", "kubernetes"],
-            description: "Container runtime to query.",
-          },
-          namespace: {
-            type: "string",
-            description:
-              "Kubernetes namespace (optional, docker ignores this).",
-          },
           server: {
             type: "string",
             description:
               "Server name exactly as shown in the FLEET SUMMARY. Required.",
           },
         },
-        required: ["environment", "server"],
+        required: ["server"],
       },
     },
     access: "read",
-    // Discovery call with no service identity: `server` targets the runner,
-    // `environment` picks the provider handler on it.
     on: "runner",
     route: "host",
   },
   {
     schema: {
-      name: "GetServiceLogs",
+      name: "GetDockerLogs",
       description:
-        "Fetch recent logs for a service, pre-filtered to error/warn lines and lines near the alert timestamp.",
+        "Fetch recent logs (the container's stdout/stderr) for a Docker service, pre-filtered to error/warn lines and lines near the alert timestamp.",
       input_schema: {
         type: "object",
         properties: {
-          service: SERVICE_IDENTITY_SCHEMA,
+          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
           tailLines: {
             type: "number",
             description:
@@ -72,12 +79,12 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "GetServiceConfig",
+      name: "GetDockerConfig",
       description:
-        "Get service configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
+        "Get a Docker service's configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
-        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
         required: ["service"],
       },
     },
@@ -87,12 +94,12 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "GetServiceStats",
+      name: "GetDockerStats",
       description:
-        "Get real-time resource usage for a service: CPU, memory, network I/O, and block I/O. Docker returns percentages; Kubernetes returns raw quantified values (e.g. 100m cores, 128Mi).",
+        "Get real-time resource usage for a Docker service: CPU %, memory used/limit/%, network I/O, and block I/O.",
       input_schema: {
         type: "object",
-        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
         required: ["service"],
       },
     },
@@ -102,13 +109,13 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "GetServiceEvents",
+      name: "GetDockerEvents",
       description:
-        "Get lifecycle events for a service. Docker returns daemon events (start, stop, oom, die). Kubernetes returns cluster events (Pulled, BackOff, OOMKilling, etc.).",
+        "Get Docker daemon lifecycle events for a service (start, stop, oom, die).",
       input_schema: {
         type: "object",
         properties: {
-          service: SERVICE_IDENTITY_SCHEMA,
+          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
@@ -123,11 +130,12 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
   },
   {
     schema: {
-      name: "GetServiceProcesses",
-      description: "List processes running inside a service (like docker top).",
+      name: "GetDockerProcesses",
+      description:
+        "List processes running inside a Docker service (like docker top).",
       input_schema: {
         type: "object",
-        properties: { service: SERVICE_IDENTITY_SCHEMA },
+        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
         required: ["service"],
       },
     },
@@ -153,7 +161,6 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       },
     },
     access: "read",
-    providers: DOCKER_ONLY,
     on: "runner",
     route: "host",
   },
@@ -175,7 +182,6 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       },
     },
     access: "read",
-    providers: DOCKER_ONLY,
     on: "runner",
     route: "host",
   },
@@ -197,7 +203,6 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       },
     },
     access: "read",
-    providers: DOCKER_ONLY,
     on: "runner",
     route: "host",
   },
@@ -219,7 +224,6 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       },
     },
     access: "read",
-    providers: DOCKER_ONLY,
     on: "runner",
     route: "host",
   },
@@ -250,62 +254,6 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
       },
     },
     access: "read",
-    providers: DOCKER_ONLY,
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "GetK8sRolloutStatus",
-      description:
-        "KUBERNETES ONLY: get the rollout status of a Deployment or StatefulSet - desired/ready/updated replica counts and conditions. Has no Docker equivalent; do not call with a docker service identity.",
-      input_schema: {
-        type: "object",
-        properties: {
-          service: {
-            type: "object",
-            properties: {
-              provider: { type: "string", enum: ["kubernetes"] },
-              namespace: {
-                type: "string",
-                description: "Kubernetes namespace the workload runs in.",
-              },
-              workload: {
-                type: "string",
-                description:
-                  "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
-              },
-            },
-            required: ["provider", "namespace", "workload"],
-          },
-        },
-        required: ["service"],
-      },
-    },
-    access: "read",
-    providers: KUBERNETES_ONLY,
-    on: "runner",
-    route: "service",
-  },
-  {
-    schema: {
-      name: "GetK8sNodeStatus",
-      description:
-        "KUBERNETES ONLY: get per-node health - Ready plus MemoryPressure/DiskPressure/PIDPressure conditions and allocatable-vs-capacity resources. Use to tell whether the node, not the pod, is the cause of an unhealthy workload. Reports every node; no service identity needed.",
-      input_schema: {
-        type: "object",
-        properties: {
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    providers: KUBERNETES_ONLY,
     on: "runner",
     route: "host",
   },
@@ -334,5 +282,59 @@ export const OBSERVABILITY_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     route: "host",
+  },
+  {
+    schema: {
+      name: "RestartDockerService",
+      description:
+        "WRITE: Restart a Docker service (container restart). Requires human approval. Causes brief downtime.",
+      input_schema: {
+        type: "object",
+        properties: {
+          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          delaySeconds: {
+            type: "number",
+            description: "Delay before restart (default 0).",
+          },
+          rationale: {
+            type: "string",
+            description: "Why this restart is the correct remediation.",
+          },
+          risk: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+          },
+          estimatedDowntimeSeconds: { type: "number" },
+        },
+        required: ["service", "rationale", "risk", "estimatedDowntimeSeconds"],
+      },
+    },
+    access: "write",
+    on: "runner",
+    route: "service",
+  },
+  {
+    schema: {
+      name: "DockerBash",
+      description:
+        "WRITE: Execute a shell command inside the target Docker container (docker exec). Never runs on the host. Requires human approval. Only available when remediation is enabled.",
+      input_schema: {
+        type: "object",
+        properties: {
+          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          command: {
+            type: "array",
+            items: { type: "string" },
+            description: "Command and arguments as an array.",
+          },
+          reason: { type: "string" },
+          risk: { type: "string", enum: ["low", "medium", "high"] },
+        },
+        required: ["service", "command", "reason", "risk"],
+      },
+    },
+    access: "write",
+    on: "runner",
+    route: "service",
   },
 ];

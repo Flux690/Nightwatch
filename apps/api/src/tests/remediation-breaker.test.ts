@@ -105,7 +105,7 @@ describe("remediation circuit breaker", () => {
       toolUses: [
         {
           id: `tu-${randomUUID()}`,
-          name: "RestartService",
+          name: "RestartDockerService",
           input: {
             service,
             rationale: "crash loop",
@@ -161,13 +161,13 @@ describe("remediation circuit breaker", () => {
       ),
     ).toBe(false);
     expect(hasPendingHumanInput(sessionId)).toBe(false);
-    expect(executedCommands).not.toContain("RestartService");
+    expect(executedCommands).not.toContain("RestartDockerService");
 
     const corrective = getSessionMessages(sessionId).find(
       (m) =>
         m.role === "user" &&
         m.content.includes("Circuit breaker") &&
-        m.content.includes("RestartService"),
+        m.content.includes("RestartDockerService"),
     );
     expect(corrective).toBeDefined();
   }
@@ -186,8 +186,8 @@ describe("remediation circuit breaker", () => {
       ),
     );
     expect(interrupt.payload["kind"]).toBe("approval");
-    expect(interrupt.payload["toolName"]).toBe("RestartService");
-    expect(executedCommands).not.toContain("RestartService");
+    expect(interrupt.payload["toolName"]).toBe("RestartDockerService");
+    expect(executedCommands).not.toContain("RestartDockerService");
 
     await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
       method: "POST",
@@ -272,7 +272,7 @@ describe("remediation circuit breaker", () => {
     const service = { provider: "docker", project: "svc-01", service: "api" };
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/api",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executed",
       count: DEFAULT_LIMIT,
     });
@@ -287,7 +287,7 @@ describe("remediation circuit breaker", () => {
     const service = { provider: "docker", project: "svc-01", service: "web" };
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/web",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executed",
       count: DEFAULT_LIMIT - 1,
     });
@@ -304,7 +304,7 @@ describe("remediation circuit breaker", () => {
     // can't burn the budget and block a retry of an action that never ran.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/cache",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "failed",
       count: DEFAULT_LIMIT,
     });
@@ -321,13 +321,13 @@ describe("remediation circuit breaker", () => {
     // an 'executing' row is a crash with unknown outcome.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/queue",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "rejected",
       count: DEFAULT_LIMIT * 2,
     });
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/queue",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executing",
       count: DEFAULT_LIMIT * 2,
     });
@@ -343,13 +343,13 @@ describe("remediation circuit breaker", () => {
     // on the target service - neither should count against this write.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/other",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executed",
       count: DEFAULT_LIMIT,
     });
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/worker",
-      toolName: "ServiceBash",
+      toolName: "DockerBash",
       status: "executed",
       count: DEFAULT_LIMIT,
     });
@@ -370,7 +370,7 @@ describe("remediation circuit breaker", () => {
     const service = { provider: "docker", project: "svc-01", service: "db" };
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/db",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executed",
       count: 2,
     });
@@ -389,7 +389,7 @@ describe("remediation circuit breaker", () => {
     // Far past the limit, but all older than the window - so none count.
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/mail",
-      toolName: "RestartService",
+      toolName: "RestartDockerService",
       status: "executed",
       count: DEFAULT_LIMIT * 2,
       createdAt: beforeWindow,

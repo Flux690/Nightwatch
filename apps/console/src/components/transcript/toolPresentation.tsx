@@ -104,13 +104,13 @@ export function ToolCard({ item }: { item: ToolCardItem }): React.JSX.Element {
     );
   }
 
-  if (toolName === "ServiceBash") {
+  if (toolName === "DockerBash" || toolName === "K8sBash") {
     const argv = Array.isArray(input["command"])
       ? (input["command"] as unknown[]).map(String).join(" ")
       : "";
     return (
       <TerminalCard
-        name="ServiceBash"
+        name={toolName}
         target={targetOf(input)}
         description={inputString(input, "reason")}
         command={argv}
