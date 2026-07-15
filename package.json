@@ -11,8 +11,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev",
-    "dev:infra": "docker compose -f apps/runner/docker-compose.dev.yaml up -d"
+    "dev": "pnpm -r --parallel dev"
   },
   "devDependencies": {
     "@types/dockerode": "4.0.1",

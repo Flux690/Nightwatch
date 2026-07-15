@@ -20,9 +20,7 @@ The important part is what it will not do. Nightwatch never changes anything on 
 flowchart LR
 
 %% Infrastructure
-cadvisor["cAdvisor"]
-prometheus["Prometheus"]
-alertmanager["Alertmanager"]
+monitoring["Your monitoring<br/>Prometheus · Alertmanager<br/>(or any webhook source)"]
 runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 
 %% Brain
@@ -34,10 +32,7 @@ console["Console<br/>Chat · Live Transcript<br/>Approval Cards · Fleet · Sett
 %% Code
 github["GitHub<br/>Draft Pull Requests"]
 
-cadvisor --> prometheus
-prometheus --> alertmanager
-
-alertmanager -- POST /alerts/ingest --> api
+monitoring -- POST /alerts/ingest --> api
 console -- Start investigation --> api
 api -- WebSocket --> runner
 api -- REST + SSE --> console
@@ -47,34 +42,34 @@ classDef infra fill:#1b2430,stroke:#4f9cf9,color:#fff,stroke-width:1.5;
 classDef api fill:#1d3027,stroke:#4ade80,color:#fff,stroke-width:1.8;
 classDef ui fill:#2b243d,stroke:#c084fc,color:#fff,stroke-width:1.5;
 
-class cadvisor,prometheus,alertmanager,runner,github infra;
+class monitoring,runner,github infra;
 class api api;
 class console ui;
 
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
 
-When an alert fires, Alertmanager posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (service logs, process lists, metrics), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the root cause is in the application code itself, the same loop can check the code out into an isolated sandbox on the API host, build and test a fix there, and leave a draft pull request for human review.
+When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (service logs, process lists, metrics), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the root cause is in the application code itself, the same loop can check the code out into an isolated sandbox on the API host, build and test a fix there, and leave a draft pull request for human review.
 
 ### The three pieces
 
 **API** is the brain, and the only place an LLM ever runs. It owns all durable state (a single SQLite file as the system of record, plus sandbox workspaces and generated proxy config in the same state directory), drives the agentic loop, gates every server write behind human approval, and talks to runners exclusively over an outbound-initiated WSS connection. When a GitHub repository is connected it is also the piece that provisions the per-session code sandbox - a hardened Docker container on its own host - and opens draft pull requests.
 
-**Runner** is a stateless executor you install on each server or cluster you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do (Docker containers, Kubernetes workloads, or both), and executes the commands the API sends against whichever provider a service actually runs on. It also bundles its own Prometheus, Alertmanager, and cAdvisor as sidecar processes for host and container metrics, so a single install command gives you both the executor and the monitoring stack. It keeps no local state of its own - identity and configuration come entirely from its token and environment.
+**Runner** is a stateless executor you install on each server or cluster you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do (Docker containers, Kubernetes workloads, or both), and executes the read and approval-gated write commands the API sends against whichever substrate a service runs on. It reads freely and keeps no local state of its own - identity and configuration come entirely from its token and environment. It is optional: a fully read-only investigation can run on your metrics and connected repository alone, and the runner adds container/host evidence and approved remediation when installed.
 
 **Console** is the operator UI: a live, streaming session transcript, approval and clarification cards, the runner fleet view, and settings.
 
 ## Features
 
-- **Docker and Kubernetes.** A runner detects and advertises both providers on connect. Tools that are provider-agnostic (logs, restart, exec) work against either; a handful of Kubernetes-only tools (rollout status, node status) show up automatically when a cluster is available.
-- **Human-in-the-loop by default.** Write actions like `RestartService` and `ServiceBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
+- **Docker and Kubernetes.** A runner detects and advertises the substrates it runs on connect. The agent is offered a dedicated toolset per substrate - Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a Docker host, Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster - so it only ever sees the tools its fleet can actually run.
+- **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - Nightwatch never merges.
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits.
 - **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
 - **Bring your own key.** Use Anthropic, OpenAI, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama). Inference goes straight to your provider and your key never leaves your network.
 - **Multi-server.** One API coordinates as many runners as you have servers or clusters, and a single investigation can span more than one runner.
 - **No external infrastructure.** State lives in one SQLite file. There is no Redis, no Postgres, and no message queue to run.
-- **Self-contained runner.** Each runner ships with Prometheus, Alertmanager, and cAdvisor built in, so the target server needs nothing installed beyond the one-liner.
+- **Bring your own monitoring.** Point your existing Prometheus and Alertmanager (or any Alertmanager-format webhook source) at the ingest endpoint. Nothing to rip out - Nightwatch plugs into the stack you already run.
 
 ## Getting started
 
@@ -104,17 +99,15 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-### 4. Connect a runner
+In the console go to **Integrations**. Two plugs matter here: the **Runner** (an executor on your hosts) and **Alert ingest** (where your monitoring sends alerts). Neither is strictly required to start a chat investigation, but together they are what lets Nightwatch investigate an alert on its own.
 
-In the console go to **Fleet**, then **Add a server**. The wizard walks you through three steps and needs no manual config editing:
+**Add a runner.** From the Runner card, choose **Add a server**. The wizard is three steps and needs no manual config editing:
 
-1. **Server details** - pick the substrate (Docker or Kubernetes), name the server, and choose how it gets monitored: **"Bundle Prometheus + Alertmanager for me"**, or **"I already run my own monitoring"**.
-2. **Install the runner** - Nightwatch mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target server or cluster.
-   - If you chose bundled monitoring, that's it - Prometheus, Alertmanager, and cAdvisor ship inside the runner and are wired up automatically.
-   - If you chose bring-your-own, the wizard also shows the webhook URL, bearer token, and Alertmanager receiver snippet to wire your own stack (generated for you, not something you write by hand), plus a **Test webhook** button to confirm it's wired correctly before moving on. This ingest credential is one fleet-wide secret, not one per server - it's minted the first time any server needs it and every bring-your-own server after that reuses the same one; the wizard's per-server snippet only changes the Prometheus `server` external label so Nightwatch can tell your servers apart.
+1. **Server details** - pick the substrate (Docker or Kubernetes) and name the server.
+2. **Install the runner** - Nightwatch mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target server or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
 3. **Verify the pipeline** - send a synthetic alert through the full path and confirm it reaches the runner.
 
-The runner appears in your fleet within seconds of the install command running. If you ever need the ingest credential again outside the wizard - say, to point a pre-existing Alertmanager at Nightwatch directly - **Settings** has a section to reveal or rotate it. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+**Wire your alerts.** Nightwatch does not ship a monitoring stack - point your own at it. The **Alert ingest** card gives you the webhook URL, a bearer token you can generate, reveal, or rotate, and a ready-made Alertmanager receiver snippet, plus a **Test webhook** button to confirm it before you rely on it. This ingest credential is one fleet-wide secret, not one per server; when you run more than one server, stamp each Prometheus with a distinct `server` external label so Nightwatch can tell them apart. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
 
 ## Configuration
 
@@ -223,17 +216,13 @@ merges. Requirements and properties:
 | `FILE_ALLOWLIST` | no | Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool. |
 | `LOG_LEVEL` | no | Pino log level for the runner process (default: `info`). |
 
-Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`) - there is no Kubernetes-specific env var beyond the two identity labels above. `POSTGRES_URL` and `REDIS_URL`, if present on the host, are only probed to advertise availability to the agent as investigation context; they are unrelated to Nightwatch's own storage, which is always the API's single SQLite file. Remediation mode (whether write tools like `restart_service`/`exec_command` are available) has no runner env var at all - it is stored per runner in the API's database and pushed live to the runner over its WebSocket connection whenever you toggle it from the console.
+Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`) - there is no Kubernetes-specific env var beyond the two identity labels above. `POSTGRES_URL` and `REDIS_URL`, if present on the host, are only probed to advertise availability to the agent as investigation context; they are unrelated to Nightwatch's own storage, which is always the API's single SQLite file. Remediation mode (whether write tools like `RestartDockerService`/`DockerBash` are available) has no runner env var at all - it is stored per runner in the API's database and pushed live to the runner over its WebSocket connection whenever you toggle it from the console.
 
 ## Development
 
 `pnpm dev` is all you need for day-to-day work; it runs every app from source with live reload, so there is no build step involved.
 
-To exercise the alert pipeline locally without deploying a runner, start the bundled monitoring stack. It runs cAdvisor, Prometheus, and Alertmanager in Docker and points them at your local API, so a real alert can flow end to end on your machine:
-
-```bash
-pnpm dev:infra
-```
+To exercise the alert pipeline locally without a monitoring stack, POST an Alertmanager-format body to the API's `/alerts/ingest` endpoint (or use the console's **Test webhook** button on the Alert ingest page), which drives an investigation end to end on your machine.
 
 Type-check and run the test suites across every package:
 
@@ -271,7 +260,7 @@ apps/
       dispatcher.ts     single entry point for every investigation
   runner/               Stateless executor: the hands
     src/
-      commands/         provider-agnostic dispatch (registry.ts) + host, file tools
+      commands/         command dispatch (registry.ts) + host, file tools
       docker/           dockerode client, container commands, service resolution
       kubernetes/       @kubernetes/client-node client, workload commands, service resolution
       manifest/         capability advertisement to the API (docker, kubernetes, host metrics)

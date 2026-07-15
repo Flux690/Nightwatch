@@ -5,34 +5,21 @@ import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
-import { ensureIngestToken } from "../db/user.js";
 
 const TEMPLATE = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
   "utf8",
 );
 
-function buildOrigin(protocol: string, host: string): string {
-  return `${protocol}://${host}`;
+function buildWsUrl(protocol: string, host: string): string {
+  const wsProto = protocol === "https" ? "wss" : "ws";
+  return `${wsProto}://${host}/clients/connect`;
 }
 
-function buildWsUrl(origin: string): string {
-  const wsProto = origin.startsWith("https://") ? "wss" : "ws";
-  return `${wsProto}://${origin.replace(/^https?:\/\//, "")}/clients/connect`;
-}
-
-function buildScript(
-  platformUrl: string,
-  wsUrl: string,
-  token: string,
-  serverName: string,
-  ingestToken: string,
-): string {
-  return TEMPLATE.replaceAll("{{PLATFORM_URL}}", platformUrl)
-    .replaceAll("{{WS_URL}}", wsUrl)
+function buildScript(wsUrl: string, token: string, serverName: string): string {
+  return TEMPLATE.replaceAll("{{WS_URL}}", wsUrl)
     .replaceAll("{{NIGHTWATCH_TOKEN}}", token)
-    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName)
-    .replaceAll("{{NIGHTWATCH_INGEST_TOKEN}}", ingestToken);
+    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
 }
 
 export async function registerConnectRoutes(
@@ -54,21 +41,11 @@ export async function registerConnectRoutes(
         return reply.code(404).send({ error: "token not found" });
       }
 
-      const origin = buildOrigin(
+      const wsUrl = buildWsUrl(
         request.protocol,
         request.headers.host ?? "localhost",
       );
-      const wsUrl = buildWsUrl(origin);
-      // The first install establishes the fleet-wide ingest token; later installs
-      // reuse it so every server's Alertmanager authenticates with one credential.
-      const ingestToken = ensureIngestToken();
-      const script = buildScript(
-        origin,
-        wsUrl,
-        token,
-        record.serverName ?? "",
-        ingestToken,
-      );
+      const script = buildScript(wsUrl, token, record.serverName ?? "");
 
       reply.header("Content-Type", "text/x-shellscript");
       return reply.code(200).send(script);
