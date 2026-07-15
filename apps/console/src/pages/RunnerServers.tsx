@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { ChevronDown, ChevronUp, Network, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Network, Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Page,
   PageHeader,
@@ -14,6 +13,7 @@ import {
   PageTableWrap,
   TABLE_HEAD,
   SkeletonRows,
+  backLinkClass,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -129,7 +129,7 @@ function SortableHeader({
   );
 }
 
-export function FleetPage(): React.JSX.Element {
+export function RunnerServersPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [removing, setRemoving] = useState<string | null>(null);
@@ -180,10 +180,17 @@ export function FleetPage(): React.JSX.Element {
 
   return (
     <Page>
+      <Link to="/integrations" className={backLinkClass}>
+        <ArrowLeft {...ICON_INLINE} />
+        Integrations
+      </Link>
       <PageHeader>
-        <PageTitle>Fleet</PageTitle>
+        <PageTitle>Runner servers</PageTitle>
         {!isEmpty && (
-          <Button size="sm" onClick={() => void navigate({ to: "/fleet/add" })}>
+          <Button
+            size="sm"
+            onClick={() => void navigate({ to: "/integrations/runner/add" })}
+          >
             <Plus {...ICON_INLINE} />
             Add a server
           </Button>
@@ -198,7 +205,7 @@ export function FleetPage(): React.JSX.Element {
       )}
 
       {isLoading && (
-        <PageTableWrap role="status" aria-label="Loading fleet">
+        <PageTableWrap role="status" aria-label="Loading servers">
           <Table className={TABLE_HEAD}>
             <TableHeader>
               <TableRow>
@@ -218,9 +225,10 @@ export function FleetPage(): React.JSX.Element {
 
       {isError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertTitle>Failed to load fleet</AlertTitle>
+          <AlertTitle>Failed to load servers</AlertTitle>
           <AlertDescription>
-            Something went wrong loading the fleet. It will retry automatically.
+            Something went wrong loading your servers. It will retry
+            automatically.
           </AlertDescription>
         </Alert>
       )}
@@ -231,7 +239,7 @@ export function FleetPage(): React.JSX.Element {
             <EmptyMedia variant="icon">
               <Network {...ICON_DISPLAY} />
             </EmptyMedia>
-            <EmptyTitle>Your fleet is empty</EmptyTitle>
+            <EmptyTitle>No servers yet</EmptyTitle>
             <EmptyDescription>
               Servers you add will appear here with their status, services, and
               last check-in time so you can monitor your infrastructure at a
@@ -239,7 +247,9 @@ export function FleetPage(): React.JSX.Element {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={() => void navigate({ to: "/fleet/add" })}>
+            <Button
+              onClick={() => void navigate({ to: "/integrations/runner/add" })}
+            >
               <Plus {...ICON_INLINE} />
               Add your first server
             </Button>

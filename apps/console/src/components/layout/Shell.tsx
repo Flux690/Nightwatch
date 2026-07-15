@@ -10,7 +10,6 @@ import {
   Settings,
   LogOut,
   ScrollText,
-  Network,
   PanelLeft,
   Menu,
   Plug,
@@ -139,18 +138,6 @@ function ShellContent({
                 >
                   <Plus {...ICON_NAV} />
                   <span>New session</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  tooltip="Fleet"
-                  aria-label="Fleet"
-                  isActive={isActive("/fleet")}
-                  onClick={dismissMobile}
-                  render={<Link to="/fleet" />}
-                >
-                  <Network {...ICON_NAV} />
-                  <span>Fleet</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>

@@ -25,7 +25,6 @@ import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import { IngestCredentialSection } from "./IngestCredentialSection.js";
 import { useAuth } from "@/auth/AuthContext";
 
 type TestResult =
@@ -38,7 +37,7 @@ const ERROR_LABELS: Record<string, string> = {
   unknown_model: "Model not found on endpoint",
 };
 
-type SectionId = "model" | "loop" | "sandbox" | "alerting" | "account";
+type SectionId = "model" | "loop" | "sandbox" | "account";
 
 const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   {
@@ -57,12 +56,6 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
     label: "Sandbox",
     description:
       "Lifecycle and resource limits for per-session code sandboxes.",
-  },
-  {
-    id: "alerting",
-    label: "Alerting",
-    description:
-      "Credential your Alertmanager uses to push alerts into Nightwatch.",
   },
   {
     id: "account",
@@ -270,7 +263,7 @@ export function SettingsModal({
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
           Configure the investigation agent's provider, API key, loop budgets,
-          sandbox, alerting and account.
+          sandbox and account.
         </DialogDescription>
 
         <Tabs
@@ -760,10 +753,6 @@ export function SettingsModal({
                         </div>
                       </div>
                     )}
-                  </TabsContent>
-
-                  <TabsContent value="alerting">
-                    <IngestCredentialSection />
                   </TabsContent>
 
                   <TabsContent value="account">

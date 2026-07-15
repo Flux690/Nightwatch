@@ -23,8 +23,6 @@ const GENERATED_TOKEN = {
 
 const CONNECT_SCRIPT = "#!/bin/sh\necho install-docker";
 const MANIFEST_YAML = "kind: Deployment\nname: nightwatch-runner";
-const INGEST_TOKEN = "nwi_fleettoken456";
-const INGEST_URL = "http://api.test/alerts/ingest";
 
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
@@ -50,20 +48,6 @@ const CONNECTED_RUNNER: RunnerRecord = {
   remediationMode: false,
 };
 
-const RESOLVED_VALIDATE = {
-  alerts: [
-    {
-      sourceAlertId: "sample",
-      identityKey: "docker/sample-service/sample-service",
-      resolution: {
-        status: "resolved",
-        runnerId: "runner-web-01",
-        hostname: "web-01",
-      },
-    },
-  ],
-};
-
 function jsonOk(body: unknown, status = 200) {
   return Promise.resolve({
     ok: true,
@@ -76,22 +60,25 @@ function textOk(body: string) {
   return Promise.resolve({ ok: true, text: () => Promise.resolve(body) });
 }
 
-/* The page is a routed screen with a navigation guard, so the seam under test is the route: a memory router with a stub /fleet destination. */
+/* The page is a routed screen with a navigation guard, so the seam under test is the route:
+   a memory router with a stub runner-servers destination. */
 function renderAddServerRoute() {
   const rootRoute = createRootRoute();
   const addRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/fleet/add",
+    path: "/integrations/runner/add",
     component: AddServerPage,
   });
-  const fleetRoute = createRoute({
+  const runnerServersRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/fleet",
-    component: () => <div>Fleet destination</div>,
+    path: "/integrations/runner",
+    component: () => <div>Runner servers destination</div>,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([addRoute, fleetRoute]),
-    history: createMemoryHistory({ initialEntries: ["/fleet/add"] }),
+    routeTree: rootRoute.addChildren([addRoute, runnerServersRoute]),
+    history: createMemoryHistory({
+      initialEntries: ["/integrations/runner/add"],
+    }),
   });
 
   const qc = new QueryClient({
@@ -128,16 +115,12 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
         return jsonOk({}, 204);
       if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
       if (url === "/api/manifest.yaml") return textOk(MANIFEST_YAML);
-      if (url === "/api/ingest-credential/ensure" && init?.method === "POST")
-        return jsonOk({ token: INGEST_TOKEN, ingestUrl: INGEST_URL });
       if (url === "/api/alerts/test" && init?.method === "POST")
         return jsonOk({
           ok: true,
           runnerId: "runner-web-01",
           server: "web-01",
         });
-      if (url === "/api/alerts/validate" && init?.method === "POST")
-        return jsonOk(RESOLVED_VALIDATE);
       return jsonOk({});
     });
   vi.stubGlobal("fetch", fetchMock);
@@ -145,42 +128,22 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
   return { fetchMock, ...renderAddServerRoute() };
 }
 
-type Monitoring = "bundled" | "byo";
-
 async function fillServerStep(
   user: ReturnType<typeof userEvent.setup>,
-  opts: {
-    provider?: "docker" | "kubernetes";
-    name?: string;
-    monitoring?: Monitoring;
-  } = {},
+  opts: { provider?: "docker" | "kubernetes"; name?: string } = {},
 ): Promise<void> {
-  const {
-    provider = "docker",
-    name = "test-server",
-    monitoring = "bundled",
-  } = opts;
+  const { provider = "docker", name = "test-server" } = opts;
   await user.click(
     await screen.findByRole("radio", {
       name: provider === "docker" ? /docker/i : /kubernetes/i,
     }),
   );
   await user.type(screen.getByRole("textbox", { name: /server name/i }), name);
-  await user.click(
-    screen.getByRole("radio", {
-      name:
-        monitoring === "bundled" ? /bundle prometheus/i : /my own monitoring/i,
-    }),
-  );
 }
 
 async function startInstall(
   user: ReturnType<typeof userEvent.setup>,
-  opts?: {
-    provider?: "docker" | "kubernetes";
-    name?: string;
-    monitoring?: Monitoring;
-  },
+  opts?: { provider?: "docker" | "kubernetes"; name?: string },
 ): Promise<void> {
   await fillServerStep(user, opts);
   await user.click(screen.getByRole("button", { name: /continue/i }));
@@ -189,7 +152,7 @@ async function startInstall(
 async function advanceToVerify(
   user: ReturnType<typeof userEvent.setup>,
 ): Promise<void> {
-  await startInstall(user, { monitoring: "bundled" });
+  await startInstall(user);
   await waitFor(() => {
     expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
   });
@@ -238,112 +201,17 @@ describe("AddServerPage", () => {
     });
   });
 
-  describe("bring-your-own monitoring", () => {
-    it("shows the fleet ingest credential and webhook config inline, no reveal step", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { monitoring: "byo" });
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/ingest-credential/ensure",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
-        ).toBeGreaterThan(0);
-      });
-      // The server-provided webhook URL is shown plainly, not window.location.
-      expect(
-        screen.getAllByText(new RegExp(INGEST_URL.replace(/\//g, "\\/")))
-          .length,
-      ).toBeGreaterThan(0);
-      expect(
-        screen.queryByRole("button", { name: /reveal/i }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("tests the webhook with the inline credential and shows the resolved result", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
-
-      await startInstall(user, { monitoring: "byo" });
-      await user.click(
-        await screen.findByRole("button", { name: /test webhook/i }),
-      );
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/alerts/validate",
-          expect.objectContaining({
-            method: "POST",
-            headers: expect.objectContaining({
-              Authorization: `Bearer ${INGEST_TOKEN}`,
-            }),
-          }),
-        );
-      });
-      await waitFor(() => {
-        expect(screen.getByText(/resolved/i)).toBeInTheDocument();
-      });
-    });
-
-    it("shows the rejection reason when the test payload doesn't match the fleet", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-          if (url === "/api/runners") return jsonOk([CONNECTED_RUNNER]);
-          if (url === "/api/tokens" && init?.method === "POST")
-            return jsonOk(GENERATED_TOKEN, 201);
-          if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
-          if (
-            url === "/api/ingest-credential/ensure" &&
-            init?.method === "POST"
-          )
-            return jsonOk({ token: INGEST_TOKEN, ingestUrl: INGEST_URL });
-          if (url === "/api/alerts/validate")
-            return jsonOk({
-              alerts: [
-                {
-                  sourceAlertId: "sample",
-                  identityKey: "docker/sample-service/sample-service",
-                  resolution: {
-                    status: "rejected",
-                    reason:
-                      "No runner advertises service 'docker/sample-service/sample-service'.",
-                  },
-                },
-              ],
-            });
-          return jsonOk({});
-        }),
-      );
-
-      await startInstall(user, { monitoring: "byo" });
-      await user.click(
-        await screen.findByRole("button", { name: /test webhook/i }),
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/no runner advertises/i)).toBeInTheDocument();
-      });
-    });
-  });
-
   describe("verify step", () => {
-    it("navigates back to the fleet via the Done button", async () => {
+    it("navigates back to the runner servers list via the Done button", async () => {
       const user = userEvent.setup();
       setup({ runners: [CONNECTED_RUNNER] });
       await advanceToVerify(user);
 
       await user.click(screen.getByRole("button", { name: /done/i }));
 
-      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/runner servers destination/i),
+      ).toBeInTheDocument();
     });
 
     it("sends a test alert and reports success once the pipeline confirms", async () => {
@@ -410,7 +278,7 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
+      await user.click(screen.getByRole("link", { name: /runner servers/i }));
 
       const dialog = await screen.findByRole("alertdialog");
       await user.click(
@@ -423,7 +291,9 @@ describe("AddServerPage", () => {
           expect.objectContaining({ method: "DELETE" }),
         );
       });
-      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/runner servers destination/i),
+      ).toBeInTheDocument();
     });
 
     it("stays on the page and keeps the token when the leave prompt is declined", async () => {
@@ -435,7 +305,7 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/install-docker/)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
+      await user.click(screen.getByRole("link", { name: /runner servers/i }));
 
       const dialog = await screen.findByRole("alertdialog");
       await user.click(
@@ -460,9 +330,11 @@ describe("AddServerPage", () => {
         expect(screen.getByText(/runner connected/i)).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
+      await user.click(screen.getByRole("link", { name: /runner servers/i }));
 
-      expect(await screen.findByText(/fleet destination/i)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/runner servers destination/i),
+      ).toBeInTheDocument();
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalledWith(
         expect.stringContaining("/api/tokens/"),

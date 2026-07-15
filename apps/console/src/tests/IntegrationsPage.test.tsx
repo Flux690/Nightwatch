@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,7 +9,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus } from "@nightwatch/shared";
+import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwatch/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
@@ -28,8 +28,20 @@ const CONFIGURED: GitHubIntegrationStatus = {
   validatedAt: new Date().toISOString(),
 };
 
-/* IntegrationsPage navigates to /integrations/github, so it renders under a
-   memory router with a stub destination route, mirroring Fleet.test.tsx. */
+const CONNECTED_RUNNER: RunnerRecord = {
+  id: "runner-1",
+  token: "runner-1",
+  serverName: "prod-web-01",
+  hostname: "web-01",
+  createdAt: "2024-01-01T00:00:00Z",
+  online: true,
+  lastSeen: new Date().toISOString(),
+  manifest: null,
+  remediationMode: false,
+};
+
+/* The page navigates to each integration's own route, so it renders under a
+   memory router with stub destinations. */
 function renderIntegrationsRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const integrationsRoute = createRoute({
@@ -42,8 +54,29 @@ function renderIntegrationsRoute(qc: QueryClient) {
     path: "/integrations/github",
     component: () => <div>GitHub connect destination</div>,
   });
+  const runnerRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/runner",
+    component: () => <div>Runner servers destination</div>,
+  });
+  const addServerRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/runner/add",
+    component: () => <div>Add server destination</div>,
+  });
+  const alertIngestRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/alert-ingest",
+    component: () => <div>Alert ingest destination</div>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([integrationsRoute, connectRoute]),
+    routeTree: rootRoute.addChildren([
+      integrationsRoute,
+      connectRoute,
+      runnerRoute,
+      addServerRoute,
+      alertIngestRoute,
+    ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
   });
   return render(
@@ -55,16 +88,34 @@ function renderIntegrationsRoute(qc: QueryClient) {
   );
 }
 
-function setup(status: GitHubIntegrationStatus = NOT_CONFIGURED) {
+function setup(
+  opts: {
+    github?: GitHubIntegrationStatus;
+    runners?: RunnerRecord[];
+    ingestConfigured?: boolean;
+  } = {},
+) {
+  const {
+    github = NOT_CONFIGURED,
+    runners = [],
+    ingestConfigured = false,
+  } = opts;
+
   const fetchMock = vi
     .fn<(url: string, init?: RequestInit) => Promise<unknown>>()
-    .mockImplementation(() =>
-      Promise.resolve({
+    .mockImplementation((url: string) => {
+      const body =
+        url === "/api/runners"
+          ? runners
+          : url === "/api/ingest-credential"
+            ? { configured: ingestConfigured }
+            : github;
+      return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(status),
-      }),
-    );
+        json: () => Promise.resolve(body),
+      });
+    });
   vi.stubGlobal("fetch", fetchMock);
 
   const qc = new QueryClient({
@@ -74,37 +125,94 @@ function setup(status: GitHubIntegrationStatus = NOT_CONFIGURED) {
   return { fetchMock, qc };
 }
 
+function cardFor(title: string): HTMLElement {
+  return screen.getByText(title).closest("[data-slot=card]") as HTMLElement;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("IntegrationsPage", () => {
-  it("shows a Connect button and navigates to the GitHub connect route", async () => {
-    const user = userEvent.setup();
-    setup();
+  describe("GitHub", () => {
+    it("shows a Connect button and navigates to the GitHub connect route", async () => {
+      const user = userEvent.setup();
+      setup();
 
-    await user.click(
-      await screen.findByRole("button", { name: /connect github/i }),
-    );
+      await user.click(
+        await screen.findByRole("button", { name: /connect github/i }),
+      );
 
-    expect(
-      await screen.findByText(/github connect destination/i),
-    ).toBeInTheDocument();
+      expect(
+        await screen.findByText(/github connect destination/i),
+      ).toBeInTheDocument();
+    });
+
+    it("shows plain connected text and a Manage button once configured", async () => {
+      const user = userEvent.setup();
+      setup({ github: CONFIGURED });
+
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+      await user.click(
+        within(cardFor("GitHub")).getByRole("button", { name: "Manage" }),
+      );
+
+      expect(
+        await screen.findByText(/github connect destination/i),
+      ).toBeInTheDocument();
+    });
   });
 
-  it("shows plain connected text and a Manage button once configured", async () => {
-    const user = userEvent.setup();
-    setup(CONFIGURED);
+  describe("Nightwatch Runner", () => {
+    it("routes an empty fleet straight to the add-server wizard", async () => {
+      const user = userEvent.setup();
+      setup({ runners: [] });
 
-    const connected = await screen.findByText("Connected");
-    expect(connected).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      await user.click(
+        await screen.findByRole("button", { name: /add a server/i }),
+      );
 
-    await user.click(screen.getByRole("button", { name: "Manage" }));
+      expect(
+        await screen.findByText(/add server destination/i),
+      ).toBeInTheDocument();
+    });
 
-    expect(
-      await screen.findByText(/github connect destination/i),
-    ).toBeInTheDocument();
+    it("shows the connected server count and opens the server list", async () => {
+      const user = userEvent.setup();
+      setup({ runners: [CONNECTED_RUNNER] });
+
+      expect(await screen.findByText("1 server")).toBeInTheDocument();
+
+      await user.click(
+        within(cardFor("Nightwatch Runner")).getByRole("button", {
+          name: "Manage",
+        }),
+      );
+
+      expect(
+        await screen.findByText(/runner servers destination/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("Alert ingest", () => {
+    it("offers setup when no credential exists and opens the alert ingest page", async () => {
+      const user = userEvent.setup();
+      setup({ ingestConfigured: false });
+
+      await user.click(await screen.findByRole("button", { name: /set up/i }));
+
+      expect(
+        await screen.findByText(/alert ingest destination/i),
+      ).toBeInTheDocument();
+    });
+
+    it("reports configured once a credential exists", async () => {
+      setup({ ingestConfigured: true });
+      expect(await screen.findByText("Configured")).toBeInTheDocument();
+    });
   });
 });

@@ -119,10 +119,10 @@ function setup(pendingCount = 0) {
       return <SessionView sessionId={id} />;
     },
   });
-  const fleetRoute = createRoute({
+  const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/fleet",
-    component: () => <div>Fleet Page</div>,
+    path: "/integrations",
+    component: () => <div>Integrations Page</div>,
   });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -134,7 +134,7 @@ function setup(pendingCount = 0) {
     routeTree: rootRoute.addChildren([
       indexRoute,
       sessionIdRoute,
-      fleetRoute,
+      integrationsRoute,
       settingsRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -223,7 +223,7 @@ describe("Shell", () => {
           screen.getByRole("button", { name: /expand sidebar/i }),
         ).toBeInTheDocument();
         expect(
-          screen.getByRole("link", { name: /fleet/i }),
+          screen.getByRole("link", { name: /integrations/i }),
         ).toBeInTheDocument();
       });
     });
@@ -232,11 +232,11 @@ describe("Shell", () => {
       const user = userEvent.setup();
       const { router } = setup();
 
-      // Navigate away to /fleet first
-      await waitFor(() => screen.getByRole("link", { name: /fleet/i }));
-      await user.click(screen.getByRole("link", { name: /fleet/i }));
+      // Navigate away to /integrations first
+      await waitFor(() => screen.getByRole("link", { name: /integrations/i }));
+      await user.click(screen.getByRole("link", { name: /integrations/i }));
       await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/fleet"),
+        expect(router.state.location.pathname).toBe("/integrations"),
       );
 
       // Click New session
