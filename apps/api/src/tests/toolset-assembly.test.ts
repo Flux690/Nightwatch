@@ -113,6 +113,31 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       expect(names).toContain("GetDockerLogs");
       expect(names).toContain("GetK8sLogs");
     });
+
+    it("the GitHub gate controls both the repo tools and GetRecentChanges", () => {
+      const connected = getToolSchemas(undefined, true, true).map(
+        (s) => s.name,
+      );
+      expect(connected).toContain("GetRecentChanges");
+      expect(connected).toContain("OpenPullRequest");
+      const disconnected = getToolSchemas(undefined, true, false).map(
+        (s) => s.name,
+      );
+      expect(disconnected).not.toContain("GetRecentChanges");
+      expect(disconnected).not.toContain("OpenPullRequest");
+      expect(disconnected).not.toContain("Read");
+    });
+
+    it("GetRecentChanges is offered with no runner substrate at all", () => {
+      const names = getToolSchemas(
+        { docker: false, kubernetes: false },
+        true,
+        true,
+      ).map((s) => s.name);
+      expect(names).toContain("GetRecentChanges");
+      expect(names).not.toContain("GetDockerLogs");
+      expect(names).not.toContain("GetK8sLogs");
+    });
   });
 
   describe("remediation-mode filter (unit)", () => {

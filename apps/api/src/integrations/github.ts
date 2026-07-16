@@ -207,7 +207,7 @@ export async function findOpenPullRequestByBranch(
   return pr === undefined ? null : toPullRequestInfo(pr);
 }
 
-async function defaultBranch(
+export async function defaultBranch(
   token: string,
   owner: string,
   name: string,
@@ -296,4 +296,142 @@ export async function updatePullRequest(
       `GitHub returned ${res.status} updating pull request #${prNumber}`,
     );
   }
+}
+
+export interface CommitInfo {
+  sha: string;
+  message: string;
+  author: string;
+  committedAt: string;
+  parentCount: number;
+}
+
+// One page of 100, newest first (the API's default order); a window busier
+// than that is beyond what change correlation needs, so no pagination.
+export async function listCommits(
+  token: string,
+  owner: string,
+  name: string,
+  branch: string,
+  since: string,
+  until: string,
+): Promise<CommitInfo[]> {
+  const res = await githubFetch(
+    token,
+    `/repos/${owner}/${name}/commits?sha=${encodeURIComponent(branch)}&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&per_page=100`,
+  );
+  // An empty repository 409s on the commits listing; that is "no commits",
+  // not a failure.
+  if (res.status === 409) return [];
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} listing commits`,
+    );
+  }
+  // Narrowed field-by-field, same policy as listRepos.
+  const body = (await res.json()) as Array<Record<string, unknown>>;
+  return body.map((c) => {
+    const commit = c["commit"] as Record<string, unknown> | undefined;
+    const commitAuthor = commit?.["author"] as
+      | Record<string, unknown>
+      | undefined;
+    const parents = c["parents"];
+    return {
+      sha: typeof c["sha"] === "string" ? c["sha"] : "",
+      message: typeof commit?.["message"] === "string" ? commit["message"] : "",
+      author:
+        typeof commitAuthor?.["name"] === "string" ? commitAuthor["name"] : "",
+      committedAt:
+        typeof commitAuthor?.["date"] === "string" ? commitAuthor["date"] : "",
+      parentCount: Array.isArray(parents) ? parents.length : 0,
+    };
+  });
+}
+
+export interface MergedPullRequestInfo {
+  number: number;
+  title: string;
+  author: string;
+  mergedAt: string;
+  url: string;
+  mergeCommitSha: string;
+}
+
+// state=closed sorted by updated desc: merging updates a PR, so once a row's
+// updated_at precedes the window there can be no later in-window merge and the
+// scan stops - one page usually suffices without a merged-state filter upstream.
+export async function listMergedPullRequests(
+  token: string,
+  owner: string,
+  name: string,
+  branch: string,
+  since: string,
+  until: string,
+): Promise<MergedPullRequestInfo[]> {
+  const res = await githubFetch(
+    token,
+    `/repos/${owner}/${name}/pulls?state=closed&base=${encodeURIComponent(branch)}&sort=updated&direction=desc&per_page=100`,
+  );
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} listing pull requests`,
+    );
+  }
+  // Epoch comparisons, never string ones: GitHub omits milliseconds while
+  // toISOString keeps them, so lexicographic order lies at window boundaries.
+  const sinceMs = Date.parse(since);
+  const untilMs = Date.parse(until);
+  // Narrowed field-by-field, same policy as listRepos.
+  const body = (await res.json()) as Array<Record<string, unknown>>;
+  const merged: MergedPullRequestInfo[] = [];
+  for (const pr of body) {
+    const updatedAt =
+      typeof pr["updated_at"] === "string" ? Date.parse(pr["updated_at"]) : NaN;
+    if (!Number.isNaN(updatedAt) && updatedAt < sinceMs) break;
+    const mergedAt = pr["merged_at"];
+    if (typeof mergedAt !== "string") continue;
+    const mergedMs = Date.parse(mergedAt);
+    if (Number.isNaN(mergedMs) || mergedMs < sinceMs || mergedMs > untilMs) {
+      continue;
+    }
+    const user = pr["user"] as Record<string, unknown> | undefined;
+    merged.push({
+      number: typeof pr["number"] === "number" ? pr["number"] : 0,
+      title: typeof pr["title"] === "string" ? pr["title"] : "",
+      author: typeof user?.["login"] === "string" ? user["login"] : "",
+      mergedAt,
+      url: typeof pr["html_url"] === "string" ? pr["html_url"] : "",
+      mergeCommitSha:
+        typeof pr["merge_commit_sha"] === "string" ? pr["merge_commit_sha"] : "",
+    });
+  }
+  return merged;
+}
+
+export async function listPullRequestFiles(
+  token: string,
+  owner: string,
+  name: string,
+  prNumber: number,
+): Promise<string[]> {
+  const res = await githubFetch(
+    token,
+    `/repos/${owner}/${name}/pulls/${prNumber}/files?per_page=100`,
+  );
+  if (!res.ok) {
+    throw new GitHubApiError(
+      "network",
+      res.status,
+      `GitHub returned ${res.status} listing files for pull request #${prNumber}`,
+    );
+  }
+  // Narrowed field-by-field, same policy as listRepos.
+  const body = (await res.json()) as Array<Record<string, unknown>>;
+  return body.flatMap((f) =>
+    typeof f["filename"] === "string" ? [f["filename"]] : [],
+  );
 }

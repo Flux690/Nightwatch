@@ -297,7 +297,7 @@ export async function runInvestigation(
 
     const fleetCapabilities = currentFleetCapabilities();
     // Re-read per turn like the remediation switch: disconnecting the GitHub
-    // integration strips the repo tools from the very next turn.
+    // integration strips the repo and GitHub tools from the very next turn.
     const toolset = effectiveToolset(
       fleetCapabilities,
       currentRemediationEnabled(),
