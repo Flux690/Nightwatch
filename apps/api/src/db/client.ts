@@ -51,6 +51,9 @@ repo.yarnpkg.com',
     login_version     INTEGER NOT NULL DEFAULT 0,
     ingest_token_hash      TEXT,
     ingest_token_encrypted TEXT,
+    -- Stamped on every authenticated, well-formed POST to /alerts/ingest;
+    -- reset to NULL on credential rotation so status regresses to waiting.
+    last_alert_received_at TEXT,
     updated_at             TEXT NOT NULL
   );
 

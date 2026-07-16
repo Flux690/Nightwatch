@@ -3,6 +3,7 @@ import {
   generateIngestToken,
   getIngestTokenHash,
   getIngestTokenPlaintext,
+  getLastAlertReceivedAt,
 } from "../db/user.js";
 import { requireSession } from "./session.js";
 
@@ -29,6 +30,9 @@ export async function registerIngestCredentialRoutes(
       return {
         configured: getIngestTokenHash() !== null,
         ingestUrl: `${origin}/alerts/ingest`,
+        // Delivery proof, not configuration state: null until the user's
+        // Alertmanager actually posts, and again after a rotation.
+        lastReceivedAt: getLastAlertReceivedAt(),
       };
     },
   );

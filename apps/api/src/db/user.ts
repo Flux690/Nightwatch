@@ -52,6 +52,8 @@ export function getIngestTokenHash(): string | null {
   return row?.ingest_token_hash ?? null;
 }
 
+// Rotation resets last_alert_received_at: deliveries made with the previous
+// credential prove nothing about the new one, so status regresses to waiting.
 function saveIngestToken(hash: string, encrypted: string): void {
   getDb()
     .prepare(
@@ -60,6 +62,7 @@ function saveIngestToken(hash: string, encrypted: string): void {
        ON CONFLICT(id) DO UPDATE SET
          ingest_token_hash = excluded.ingest_token_hash,
          ingest_token_encrypted = excluded.ingest_token_encrypted,
+         last_alert_received_at = NULL,
          updated_at = excluded.updated_at`,
     )
     .run({
@@ -68,6 +71,25 @@ function saveIngestToken(hash: string, encrypted: string): void {
       encrypted,
       updatedAt: new Date().toISOString(),
     });
+}
+
+export function getLastAlertReceivedAt(): string | null {
+  const row = getDb()
+    .prepare("SELECT last_alert_received_at FROM user WHERE id = ?")
+    .get(USER_ID) as { last_alert_received_at: string | null } | undefined;
+  return row?.last_alert_received_at ?? null;
+}
+
+export function setLastAlertReceived(receivedAt: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO user (id, last_alert_received_at, updated_at)
+       VALUES (@id, @receivedAt, @receivedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         last_alert_received_at = @receivedAt,
+         updated_at = @receivedAt`,
+    )
+    .run({ id: USER_ID, receivedAt });
 }
 
 export function getIngestTokenPlaintext(): string | null {

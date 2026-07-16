@@ -11,7 +11,7 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { generateRunnerToken } from "../db/runner.js";
-import { generateIngestToken } from "../db/user.js";
+import { generateIngestToken, getLastAlertReceivedAt } from "../db/user.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
@@ -95,6 +95,8 @@ describe("POST /alerts/ingest auth", () => {
     expect(res.statusCode).toBe(401);
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/token/i);
+    // A rejected request proves nothing about the pipe - no delivery stamp.
+    expect(getLastAlertReceivedAt()).toBeNull();
   });
 
   it("rejects missing token with 401", async () => {
@@ -117,6 +119,9 @@ describe("POST /alerts/ingest auth", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { received: number };
     expect(body.received).toBe(1);
+    // Authenticated, well-formed delivery stamps the pipe as proven - even if
+    // this particular alert dedups against an earlier test's routing.
+    expect(getLastAlertReceivedAt()).not.toBeNull();
   });
 
   it("accepts a valid Authorization bearer token and processes the alert", async () => {
@@ -213,6 +218,9 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(res.statusCode).toBe(503);
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/runner/i);
+    // The webhook DID deliver: the stamp lands before the evidence gate, so the
+    // page shows "receiving" even while investigation is blocked.
+    expect(getLastAlertReceivedAt()).not.toBeNull();
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {

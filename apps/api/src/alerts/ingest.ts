@@ -4,7 +4,7 @@ import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
 import { findRunnerByToken, hashToken } from "../db/runner.js";
-import { getIngestTokenHash } from "../db/user.js";
+import { getIngestTokenHash, setLastAlertReceived } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
 
@@ -31,6 +31,10 @@ export async function registerAlertRoutes(
       const msg = err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: msg });
     }
+
+    // Delivery is proven by an authenticated, well-formed webhook - stamped
+    // before the evidence gate below, and even when every alert dedups away.
+    setLastAlertReceived(new Date().toISOString());
 
     // No identity gate - every parsed alert is investigated; service-routed
     // command validation prevents misrouted actions instead.

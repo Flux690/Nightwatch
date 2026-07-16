@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerIngestCredentialRoutes } from "../auth/ingest-credential.js";
+import { setLastAlertReceived } from "../db/user.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
@@ -65,6 +66,8 @@ describe("Fleet-wide ingest credential", () => {
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token: oldToken } = JSON.parse(first.body) as { token: string };
+      // Deliveries under the old credential prove nothing about the new one.
+      setLastAlertReceived("2026-07-17T03:12:00.000Z");
 
       const second = await server.inject({
         method: "POST",
@@ -77,10 +80,16 @@ describe("Fleet-wide ingest credential", () => {
 
       expect(newToken).not.toBe(oldToken);
       const row = getDb()
-        .prepare("SELECT ingest_token_hash FROM user WHERE id = 'global'")
-        .get() as { ingest_token_hash: string };
+        .prepare(
+          "SELECT ingest_token_hash, last_alert_received_at FROM user WHERE id = 'global'",
+        )
+        .get() as {
+        ingest_token_hash: string;
+        last_alert_received_at: string | null;
+      };
       expect(row.ingest_token_hash).toBe(sha256hex(newToken));
       expect(row.ingest_token_hash).not.toBe(sha256hex(oldToken));
+      expect(row.last_alert_received_at).toBeNull();
     });
 
     it("requires a session", async () => {
@@ -123,6 +132,20 @@ describe("Fleet-wide ingest credential", () => {
       expect(body.configured).toBe(true);
       expect(body.ingestUrl).toMatch(/\/alerts\/ingest$/);
       expect(body).not.toHaveProperty("token");
+      // Configured is not delivered: lastReceivedAt stays null until a real
+      // webhook lands, then the GET reports the stamp.
+      expect(body.lastReceivedAt).toBeNull();
+      const stamp = "2026-07-17T03:12:00.000Z";
+      setLastAlertReceived(stamp);
+      const after = await server.inject({
+        method: "GET",
+        url: "/ingest-credential",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      expect(
+        (JSON.parse(after.body) as { lastReceivedAt: string | null })
+          .lastReceivedAt,
+      ).toBe(stamp);
     });
 
     it("requires a session", async () => {
