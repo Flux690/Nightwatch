@@ -11,8 +11,15 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
+import { deletePrometheusIntegration } from "../db/prometheus-integration.js";
+import {
+  registerRunner,
+  setRunnerManifest,
+  unregisterRunner,
+} from "../ws/fleet.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
+import { manifest } from "./manifest-helper.js";
 import { getDb } from "../db/client.js";
 import { decrypt } from "../config/crypto.js";
 
@@ -402,5 +409,237 @@ describe("GitHub integration routes", () => {
       });
       expect(res.statusCode).toBe(401);
     });
+  });
+});
+
+describe("Prometheus integration routes", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  const PROM_OK = {
+    status: "success",
+    data: { resultType: "vector", result: [] },
+  };
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await registerIntegrationRoutes(server);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    deletePrometheusIntegration();
+  });
+
+  function authed(opts: {
+    method: "GET" | "POST" | "DELETE";
+    url: string;
+    payload?: Record<string, unknown>;
+  }) {
+    return server.inject({
+      method: opts.method,
+      url: opts.url,
+      ...(opts.payload !== undefined && { payload: opts.payload }),
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+  }
+
+  it("reports not configured before onboarding and requires a session", async () => {
+    const unauthed = await server.inject({
+      method: "GET",
+      url: "/integrations/prometheus",
+    });
+    expect(unauthed.statusCode).toBe(401);
+
+    const res = await authed({ method: "GET", url: "/integrations/prometheus" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: false,
+      url: null,
+      hasAuth: false,
+      validatedAt: null,
+    });
+  });
+
+  it("connects after a successful probe: slash-tolerant URL, form body, verbatim auth, encrypted storage", async () => {
+    const mock = stubFetch((url, init) => {
+      expect(url).toBe("http://prom.internal:9090/api/v1/query");
+      expect(init?.method).toBe("POST");
+      expect(String(init?.body)).toContain("query=up");
+      expect(
+        (init?.headers as Record<string, string>)["Authorization"],
+      ).toBe("Bearer secret-123");
+      return jsonResponse(PROM_OK);
+    });
+
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: {
+        url: "http://prom.internal:9090/",
+        authHeader: "Bearer secret-123",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: true,
+      url: "http://prom.internal:9090/",
+      hasAuth: true,
+      validatedAt: expect.any(String),
+    });
+    expect(mock).toHaveBeenCalledTimes(1);
+
+    const row = getDb()
+      .prepare(
+        "SELECT auth_header_encrypted FROM prometheus_integration WHERE id = 'prometheus'",
+      )
+      .get() as { auth_header_encrypted: string };
+    expect(decrypt(row.auth_header_encrypted)).toBe("Bearer secret-123");
+    expect(row.auth_header_encrypted).not.toContain("secret-123");
+  });
+
+  it("connects without an auth header, sending none and reporting hasAuth: false", async () => {
+    stubFetch((_url, init) => {
+      expect(
+        (init?.headers as Record<string, string>)["Authorization"],
+      ).toBeUndefined();
+      return jsonResponse(PROM_OK);
+    });
+
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: { url: "http://prom.internal:9090" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body)).toMatchObject({
+      configured: true,
+      hasAuth: false,
+    });
+  });
+
+  it("refuses to save when the probe fails - envelope error maps to 400, unreachable to 502", async () => {
+    stubFetch(() =>
+      jsonResponse(
+        { status: "error", errorType: "bad_data", error: "unknown function" },
+        { status: 400 },
+      ),
+    );
+    const badQuery = await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: { url: "http://prom.internal:9090" },
+    });
+    expect(badQuery.statusCode).toBe(400);
+    expect(JSON.parse(badQuery.body).code).toBe("bad_query");
+
+    stubFetch(() => {
+      throw new Error("ECONNREFUSED");
+    });
+    const unreachable = await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: { url: "http://prom.internal:9090" },
+    });
+    expect(unreachable.statusCode).toBe(502);
+    expect(JSON.parse(unreachable.body).code).toBe("network");
+
+    const status = await authed({
+      method: "GET",
+      url: "/integrations/prometheus",
+    });
+    expect(JSON.parse(status.body).configured).toBe(false);
+  });
+
+  it("test endpoint is 400 unconfigured, then re-probes the stored config with the decrypted header", async () => {
+    const before = await authed({
+      method: "POST",
+      url: "/integrations/prometheus/test",
+    });
+    expect(before.statusCode).toBe(400);
+
+    stubFetch(() => jsonResponse(PROM_OK));
+    await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: { url: "http://prom.internal:9090", authHeader: "Basic dXNlcg==" },
+    });
+
+    const mock = stubFetch((url, init) => {
+      expect(url).toBe("http://prom.internal:9090/api/v1/query");
+      expect(
+        (init?.headers as Record<string, string>)["Authorization"],
+      ).toBe("Basic dXNlcg==");
+      return jsonResponse(PROM_OK);
+    });
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/prometheus/test",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mock).toHaveBeenCalledTimes(1);
+  });
+
+  it("validate-labels compares observed nw_server values against the fleet", async () => {
+    const before = await authed({
+      method: "POST",
+      url: "/integrations/prometheus/validate-labels",
+    });
+    expect(before.statusCode).toBe(400);
+
+    stubFetch((url) => {
+      if (url.includes("/api/v1/label/nw_server/values")) {
+        return jsonResponse({
+          status: "success",
+          data: ["host-a", "prod-web-99"],
+        });
+      }
+      return jsonResponse(PROM_OK);
+    });
+    await authed({
+      method: "POST",
+      url: "/integrations/prometheus",
+      payload: { url: "http://prom.internal:9090" },
+    });
+
+    const connA = registerRunner(
+      "prom-validate-a",
+      () => {},
+      () => {},
+    );
+    setRunnerManifest("prom-validate-a", manifest("host-a"));
+    const connB = registerRunner(
+      "prom-validate-b",
+      () => {},
+      () => {},
+    );
+    setRunnerManifest("prom-validate-b", manifest("host-b"));
+
+    try {
+      const res = await authed({
+        method: "POST",
+        url: "/integrations/prometheus/validate-labels",
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({
+        observed: ["host-a", "prod-web-99"],
+        matched: ["host-a"],
+        missing: ["host-b"],
+        unknown: ["prod-web-99"],
+      });
+    } finally {
+      unregisterRunner(connA);
+      unregisterRunner(connB);
+    }
   });
 });

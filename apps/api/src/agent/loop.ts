@@ -13,6 +13,7 @@ import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
 import { getGitHubIntegration } from "../db/github-integration.js";
+import { getPrometheusIntegration } from "../db/prometheus-integration.js";
 import {
   createSession,
   appendSessionMessages,
@@ -296,12 +297,13 @@ export async function runInvestigation(
     turn++;
 
     const fleetCapabilities = currentFleetCapabilities();
-    // Re-read per turn like the remediation switch: disconnecting the GitHub
-    // integration strips the repo and GitHub tools from the very next turn.
+    // Re-read per turn like the remediation switch: disconnecting an
+    // integration strips its tools from the very next turn.
     const toolset = effectiveToolset(
       fleetCapabilities,
       currentRemediationEnabled(),
       getGitHubIntegration() !== null,
+      getPrometheusIntegration() !== null,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 

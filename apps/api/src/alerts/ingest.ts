@@ -4,6 +4,7 @@ import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
 import { findRunnerByToken, hashToken } from "../db/runner.js";
+import { getPrometheusIntegration } from "../db/prometheus-integration.js";
 import { getIngestTokenHash, setLastAlertReceived } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
@@ -36,12 +37,13 @@ export async function registerAlertRoutes(
     // before the evidence gate below, and even when every alert dedups away.
     setLastAlertReceived(new Date().toISOString());
 
-    // No identity gate - every parsed alert is investigated; service-routed
-    // command validation prevents misrouted actions instead.
-    if (getFleetView().length === 0) {
-      return reply
-        .code(503)
-        .send({ error: "no runner connected to investigate alerts" });
+    // Evidence gate, not identity gate: a runner OR the Prometheus integration
+    // makes an investigation worth starting; misroute protection is downstream.
+    if (getFleetView().length === 0 && getPrometheusIntegration() === null) {
+      return reply.code(503).send({
+        error:
+          "no evidence source available - connect a runner or the Prometheus integration to investigate alerts",
+      });
     }
 
     let enqueued = 0;

@@ -128,6 +128,16 @@ repo.yarnpkg.com',
     created_at       TEXT NOT NULL
   );
 
+  -- Single Prometheus integration row (id 'prometheus'): auth_header_encrypted is the
+  -- verbatim Authorization value (NULL = no auth), encrypted at rest, never returned.
+  CREATE TABLE IF NOT EXISTS prometheus_integration (
+    id                    TEXT PRIMARY KEY,
+    base_url              TEXT NOT NULL,
+    auth_header_encrypted TEXT,
+    validated_at          TEXT NOT NULL,
+    created_at            TEXT NOT NULL
+  );
+
 `;
 
 let _db: Database.Database | undefined;

@@ -11,6 +11,10 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { generateRunnerToken } from "../db/runner.js";
+import {
+  deletePrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/prometheus-integration.js";
 import { generateIngestToken, getLastAlertReceivedAt } from "../db/user.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
@@ -208,19 +212,36 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rejects with no runner connected", async () => {
+  it("rejects only when neither a runner nor Prometheus can supply evidence", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
       headers: { "x-nightwatch-token": INGEST_TOKEN },
-      payload: alertmanagerBody("nwi-no-runner"),
+      payload: alertmanagerBody("nwi-no-evidence"),
     });
     expect(res.statusCode).toBe(503);
     const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/runner/i);
+    expect(body.error).toMatch(/runner|prometheus/i);
     // The webhook DID deliver: the stamp lands before the evidence gate, so the
     // page shows "receiving" even while investigation is blocked.
     expect(getLastAlertReceivedAt()).not.toBeNull();
+
+    // Prometheus alone is a sufficient evidence source - the agentless path.
+    savePrometheusIntegration({
+      baseUrl: "http://prom.internal:9090",
+      authHeaderEncrypted: null,
+    });
+    const agentless = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      payload: alertmanagerBody("nwi-prometheus-only"),
+    });
+    expect(agentless.statusCode).toBe(200);
+    expect(
+      (JSON.parse(agentless.body) as { enqueued: number }).enqueued,
+    ).toBe(1);
+    deletePrometheusIntegration();
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {
