@@ -1,12 +1,10 @@
 import type Dockerode from "dockerode";
-import type {
-  DockerServiceIdentity,
-  ServiceIdentity,
-} from "@nightwatch/shared";
 import {
   notRunningResult,
+  type DockerServiceIdentity,
   type NoRunningInstanceResult,
-} from "../resolve-result.js";
+  type ServiceIdentity,
+} from "@nightwatch/shared";
 
 export interface ResolvedContainer {
   container: Dockerode.Container;

@@ -1,22 +1,24 @@
 import type Dockerode from "dockerode";
 import {
   deriveDockerServiceIdentity,
-  type ContainerEvent,
-  type ContainerInfo,
-  type ContainerInspectResult,
-  type ContainerLogsResult,
-  type ContainerProcess,
-  type ContainerStatsResult,
-  type ExecCommandInput,
-  type ExecCommandResult,
-  type GetContainerEventsInput,
-  type GetContainerInspectInput,
-  type GetContainerListInput,
-  type GetContainerLogsInput,
-  type GetContainerProcessesInput,
-  type GetContainerStatsInput,
-  type RestartContainerInput,
-  type RestartContainerResult,
+  type DockerRestartResult,
+  type ServiceBashInput,
+  type ServiceBashResult,
+  type ServiceConfigInput,
+  type ServiceConfigResult,
+  type ServiceEvent,
+  type ServiceEventsInput,
+  type ServiceEventsResult,
+  type ServiceListInput,
+  type ServiceListResult,
+  type ServiceLogsInput,
+  type ServiceLogsResult,
+  type ServiceProcess,
+  type ServiceProcessesInput,
+  type ServiceProcessesResult,
+  type ServiceRestartInput,
+  type ServiceStatsInput,
+  type ServiceStatsResult,
 } from "@nightwatch/shared";
 import { getDocker, parseDockerMux } from "./client.js";
 import {
@@ -27,8 +29,8 @@ import {
 import { sanitizeExecOutput } from "../safety/allowlist.js";
 
 export async function getContainerList(
-  _input: GetContainerListInput,
-): Promise<{ containers: ContainerInfo[] }> {
+  _input: ServiceListInput,
+): Promise<ServiceListResult> {
   const docker = getDocker();
   const raw = await docker.listContainers({ all: true });
   const containers = raw.map((c) => {
@@ -57,8 +59,8 @@ export async function getContainerList(
 }
 
 export async function getContainerLogs(
-  input: GetContainerLogsInput,
-): Promise<ContainerLogsResult | NoRunningInstanceResult> {
+  input: ServiceLogsInput,
+): Promise<ServiceLogsResult | NoRunningInstanceResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
@@ -106,8 +108,8 @@ export async function getContainerLogs(
 }
 
 export async function getContainerInspect(
-  input: GetContainerInspectInput,
-): Promise<ContainerInspectResult | NoRunningInstanceResult> {
+  input: ServiceConfigInput,
+): Promise<ServiceConfigResult | NoRunningInstanceResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
@@ -135,8 +137,8 @@ export async function getContainerInspect(
 }
 
 export async function getContainerStats(
-  input: GetContainerStatsInput,
-): Promise<ContainerStatsResult | NoRunningInstanceResult> {
+  input: ServiceStatsInput,
+): Promise<ServiceStatsResult | NoRunningInstanceResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved || !resolved.live) return notRunningResult(input.service);
@@ -191,8 +193,8 @@ export async function getContainerStats(
 }
 
 export async function getContainerEvents(
-  input: GetContainerEventsInput,
-): Promise<{ events: ContainerEvent[] } | NoRunningInstanceResult> {
+  input: ServiceEventsInput,
+): Promise<ServiceEventsResult | NoRunningInstanceResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved) return notRunningResult(input.service);
@@ -214,7 +216,7 @@ export async function getContainerEvents(
   });
 
   const text = Buffer.concat(chunks).toString("utf8");
-  const events: ContainerEvent[] = text
+  const events: ServiceEvent[] = text
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -234,8 +236,8 @@ export async function getContainerEvents(
 }
 
 export async function getContainerProcesses(
-  input: GetContainerProcessesInput,
-): Promise<{ processes: ContainerProcess[] } | NoRunningInstanceResult> {
+  input: ServiceProcessesInput,
+): Promise<ServiceProcessesResult | NoRunningInstanceResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
   if (!resolved || !resolved.live) return notRunningResult(input.service);
@@ -251,7 +253,7 @@ export async function getContainerProcesses(
   const cIdx = titles.indexOf("C");
   const cmdIdx = titles.indexOf("CMD");
 
-  const processes: ContainerProcess[] = (top.Processes ?? []).map((row) => ({
+  const processes: ServiceProcess[] = (top.Processes ?? []).map((row) => ({
     pid: parseInt(row[pidIdx] ?? "0", 10),
     ppid: parseInt(row[ppidIdx] ?? "0", 10),
     user: row[uidIdx] ?? "unknown",
@@ -264,8 +266,8 @@ export async function getContainerProcesses(
 }
 
 export async function restartContainer(
-  input: RestartContainerInput,
-): Promise<RestartContainerResult | NoRunningInstanceResult> {
+  input: ServiceRestartInput,
+): Promise<DockerRestartResult | NoRunningInstanceResult> {
   const startedAt = new Date().toISOString();
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
@@ -311,8 +313,8 @@ async function waitForSettledStatus(
 }
 
 export async function execCommand(
-  input: ExecCommandInput,
-): Promise<ExecCommandResult | NoRunningInstanceResult> {
+  input: ServiceBashInput,
+): Promise<ServiceBashResult | NoRunningInstanceResult> {
   const executedAt = new Date().toISOString();
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");
