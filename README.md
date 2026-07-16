@@ -99,7 +99,7 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**. Two plugs matter here: the **Runner** (an executor on your hosts) and **Alertmanager** (where your alerts come from). Neither is strictly required to start a chat investigation, but together they are what lets Nightwatch investigate an alert on its own.
+In the console go to **Integrations**. Three plugs matter here: the **Runner** (an executor on your hosts), **Alertmanager** (where your alerts come from), and **Prometheus** (metric evidence for investigations). None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner or Prometheus).
 
 **Add a runner.** From the Runner card, choose **Add a server**. The wizard is three steps and needs no manual config editing:
 
@@ -107,7 +107,9 @@ In the console go to **Integrations**. Two plugs matter here: the **Runner** (an
 2. **Install the runner** - Nightwatch mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target server or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
 3. **Verify the pipeline** - send a synthetic alert through the full path and confirm it reaches the runner.
 
-**Wire your alerts.** Nightwatch does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card gives you the webhook URL, a bearer token you can generate, reveal, or rotate, and a ready-made Alertmanager receiver snippet, plus a **Test webhook** button to confirm it before you rely on it. This ingest credential is one fleet-wide secret, not one per server; when you run more than one server, stamp each Prometheus with a distinct `server` external label so Nightwatch can tell them apart. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+**Wire your alerts.** Nightwatch does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card hands you one ready-made receiver snippet (URL and bearer credential baked in) to paste into your `alertmanager.yml`, plus a **Test webhook** button; its status reflects delivery, not configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". The credential is one fleet-wide secret, not one per server. When you run more than one Docker server, the same page dispenses per-scrape-target `nw_server` labels for your Prometheus (with a `global.external_labels` shortcut when a Prometheus monitors only one server), so every alert says which server it is about. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-Nightwatch-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+
+**Connect Prometheus.** The **Prometheus** card takes the base URL of the Prometheus you already run (and, only if yours sits behind auth, a verbatim `Authorization` header value, stored encrypted). Nightwatch only ever reads: the agent gains two query tools - an instant lookup and a range query windowed around the alert - so it can tell whether a metric climbed for hours or spiked at deploy time, with zero runners installed. The connection is probed with a real query before it saves, a **Test query** button re-proves it any time, and once runners exist a **Check labels** button compares the `nw_server` values observed in your metrics against your runner names to catch typos. Keep Prometheus off the public internet; Nightwatch needs to reach it over your private network.
 
 ## Configuration
 
@@ -211,7 +213,7 @@ merges. Requirements and properties:
 | `NIGHTWATCH_TOKEN` | yes | Runner credential minted from the console |
 | `WS_URL` | yes | API WebSocket endpoint, e.g. `wss://your-api/clients/connect` |
 | `HOST_PROC` | no | `/proc` mount path when running inside a container (default: `/proc`) |
-| `NIGHTWATCH_SERVER_NAME` | no | Server label attached to Docker service identities on this host, so alerts and tool calls can disambiguate the same container name across servers. |
+| `NIGHTWATCH_SERVER_NAME` | no | Server scope attached to Docker service identities on this host - the same name alerts carry in their `nw_server` label - so alerts and tool calls can disambiguate the same container name across servers. |
 | `NIGHTWATCH_CLUSTER_NAME` | no | Cluster label attached to Kubernetes service identities, so alerts and tool calls can disambiguate the same namespace/workload across clusters. Unset means a single, unscoped cluster identity. |
 | `FILE_ALLOWLIST` | no | Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool. |
 | `LOG_LEVEL` | no | Pino log level for the runner process (default: `info`). |
