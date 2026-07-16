@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -69,6 +69,11 @@ function renderIntegrationsRoute(qc: QueryClient) {
     path: "/integrations/alertmanager",
     component: () => <div>Alertmanager destination</div>,
   });
+  const prometheusRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/prometheus",
+    component: () => <div>Prometheus destination</div>,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       integrationsRoute,
@@ -76,6 +81,7 @@ function renderIntegrationsRoute(qc: QueryClient) {
       runnerRoute,
       addServerRoute,
       alertmanagerRoute,
+      prometheusRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
   });
@@ -93,12 +99,16 @@ function setup(
     github?: GitHubIntegrationStatus;
     runners?: RunnerRecord[];
     ingestConfigured?: boolean;
+    lastReceivedAt?: string | null;
+    prometheusConfigured?: boolean;
   } = {},
 ) {
   const {
     github = NOT_CONFIGURED,
     runners = [],
     ingestConfigured = false,
+    lastReceivedAt = null,
+    prometheusConfigured = false,
   } = opts;
 
   const fetchMock = vi
@@ -108,8 +118,15 @@ function setup(
         url === "/api/runners"
           ? runners
           : url === "/api/ingest-credential"
-            ? { configured: ingestConfigured }
-            : github;
+            ? { configured: ingestConfigured, lastReceivedAt }
+            : url === "/api/integrations/prometheus"
+              ? {
+                  configured: prometheusConfigured,
+                  url: prometheusConfigured ? "http://prom:9090" : null,
+                  hasAuth: false,
+                  validatedAt: null,
+                }
+              : github;
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -121,8 +138,8 @@ function setup(
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  renderIntegrationsRoute(qc);
-  return { fetchMock, qc };
+  const view = renderIntegrationsRoute(qc);
+  return { fetchMock, qc, view };
 }
 
 function cardFor(title: string): HTMLElement {
@@ -210,9 +227,45 @@ describe("IntegrationsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("reports configured once a credential exists", async () => {
-      setup({ ingestConfigured: true });
-      expect(await screen.findByText("Configured")).toBeInTheDocument();
+    it("reports delivery state, not credential existence: waiting is muted, receiving is green", async () => {
+      const { view } = setup({ ingestConfigured: true });
+      const waiting = await screen.findByText("Waiting for first alert");
+      expect(waiting).toHaveClass("text-muted-foreground");
+      expect(screen.queryByText("Configured")).not.toBeInTheDocument();
+      view.unmount();
+      vi.unstubAllGlobals();
+
+      setup({
+        ingestConfigured: true,
+        lastReceivedAt: new Date().toISOString(),
+      });
+      const receiving = await screen.findByText("Receiving");
+      expect(receiving).toHaveClass("text-success");
+    });
+  });
+
+  describe("Prometheus", () => {
+    it("offers connect and navigates to the Prometheus page", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await user.click(
+        await screen.findByRole("button", { name: /connect prometheus/i }),
+      );
+
+      expect(
+        await screen.findByText(/prometheus destination/i),
+      ).toBeInTheDocument();
+    });
+
+    it("reports connected once configured", async () => {
+      setup({ prometheusConfigured: true });
+      await screen.findByText("Prometheus");
+      await waitFor(() => {
+        expect(
+          within(cardFor("Prometheus")).getByText("Connected"),
+        ).toBeInTheDocument();
+      });
     });
   });
 });

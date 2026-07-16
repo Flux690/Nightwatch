@@ -2,17 +2,24 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 
 import {
   Alert,
   AlertTitle,
   AlertDescription,
-  AlertAction,
 } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -22,22 +29,25 @@ import {
   backLinkClass,
 } from "@/components/layout/Page";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
-import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
+import { ICON_INLINE } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
 interface CredentialStatus {
   configured: boolean;
   ingestUrl: string;
+  lastReceivedAt: string | null;
 }
 
+// The API's real /alerts/validate shape: an advisory fleet match per alert.
 interface ValidateAlertResult {
   sourceAlertId: string;
   identityKey: string;
-  resolution:
-    | { status: "resolved"; runnerId: string; hostname: string }
-    | { status: "rejected"; reason: string };
+  advertisedOn: string[];
+  exactMatch: boolean;
 }
+
+const MASKED_TOKEN = "nwi_ ••••••••";
 
 function sampleWebhookPayload(serverName: string): unknown {
   return {
@@ -48,7 +58,7 @@ function sampleWebhookPayload(serverName: string): unknown {
           alertname: "TestAlert",
           severity: "warning",
           container: "sample-service",
-          ...(serverName && { server: serverName }),
+          ...(serverName && { nw_server: serverName }),
         },
         annotations: { summary: "Sample alert from the Alertmanager page" },
         startsAt: new Date().toISOString(),
@@ -72,11 +82,37 @@ function receiverSnippet(ingestUrl: string, token: string): string {
   ].join("\n");
 }
 
+function perTargetSnippet(name: string): string {
+  return [
+    "scrape_configs:",
+    `  - job_name: node               # each job that scrapes ${name}`,
+    "    static_configs:",
+    '      - targets: ["10.0.0.5:9100"]   # your existing target line',
+    "        labels:",
+    `          nw_server: "${name}"`,
+  ].join("\n");
+}
+
+function externalLabelsSnippet(name: string): string {
+  return ["global:", "  external_labels:", `    nw_server: "${name}"`].join(
+    "\n",
+  );
+}
+
+function relativeTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 export function AlertmanagerPage(): React.JSX.Element {
   const queryClient = useQueryClient();
-  const [serverLabel, setServerLabel] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [tokenFresh, setTokenFresh] = useState(false);
+  const [selectedServer, setSelectedServer] = useState("");
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
     | { ok: false; error: string }
@@ -93,17 +129,32 @@ export function AlertmanagerPage(): React.JSX.Element {
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
   });
 
-  const firstServerName =
-    runners?.find((r) => r.serverName !== null)?.serverName ?? "";
-  const effectiveServer = serverLabel.trim() || firstServerName;
+  const connected = (runners ?? []).filter(
+    (r) => r.online && r.hostname !== null,
+  );
+  const dockerServers = connected
+    .filter((r) => r.manifest?.capabilities.docker === true)
+    .map((r) => r.serverName ?? r.hostname ?? r.id);
+  const k8sRunnerCount = connected.filter(
+    (r) => r.manifest?.capabilities.kubernetes === true,
+  ).length;
+  const effectiveServer = selectedServer || (dockerServers[0] ?? "");
 
   const generate = useMutation({
     mutationFn: () =>
       apiFetch<{ token: string }>("/api/ingest-credential", { method: "POST" }),
-    onSuccess: async ({ token: minted }) => {
+    onSuccess: async ({ token: minted }, _vars, _ctx) => {
+      const rotating = status?.configured === true;
       setToken(minted);
-      setTokenFresh(true);
       setWebhookTestResult(null);
+      if (rotating) {
+        toast.show({
+          title: "New credential issued",
+          message:
+            "The previous one no longer works - paste the updated receiver into your Alertmanager.",
+          variant: "info",
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
     },
     onError: (err) =>
@@ -119,13 +170,10 @@ export function AlertmanagerPage(): React.JSX.Element {
       apiFetch<{ token: string }>("/api/ingest-credential/reveal", {
         method: "POST",
       }),
-    onSuccess: ({ token: revealed }) => {
-      setToken(revealed);
-      setTokenFresh(false);
-    },
+    onSuccess: ({ token: revealed }) => setToken(revealed),
     onError: (err) =>
       toast.show({
-        title: "Could not reveal credential",
+        title: "Could not show the token",
         message: err instanceof Error ? err.message : "Try again.",
         variant: "error",
       }),
@@ -133,7 +181,7 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const testWebhook = useMutation({
     mutationFn: async (): Promise<ValidateAlertResult[]> => {
-      if (token === null) throw new Error("Reveal the credential first");
+      if (token === null) throw new Error("Show the token first");
       const body = await apiFetch<{
         alerts?: ValidateAlertResult[];
         error?: string;
@@ -172,9 +220,8 @@ export function AlertmanagerPage(): React.JSX.Element {
       <div className="flex flex-col gap-8">
         <p className="max-w-2xl text-sm text-muted-foreground">
           Nightwatch does not ship a monitoring stack - forward alerts from the
-          Alertmanager you already run. Set this up once for the whole fleet:
-          every server shares one credential, and a per-server label tells
-          Nightwatch which server an alert is about.
+          Alertmanager you already run. One credential for the whole fleet, set
+          up once.
         </p>
 
         {isLoading && (
@@ -184,18 +231,67 @@ export function AlertmanagerPage(): React.JSX.Element {
           </div>
         )}
 
-        {status && (
+        {status && !status.configured && (
+          <section className="flex flex-col gap-3">
+            <Button
+              className="self-start"
+              disabled={busy}
+              onClick={() => generate.mutate()}
+            >
+              {generate.isPending && <Spinner className="size-4" />}
+              Set up alert forwarding
+            </Button>
+          </section>
+        )}
+
+        {status?.configured === true && (
           <>
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">Ingest credential</p>
-                {status.configured ? (
-                  <Badge variant="success">Configured</Badge>
-                ) : (
-                  <Badge variant="secondary">Not configured</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
+            <section className="flex items-center gap-2">
+              {status.lastReceivedAt !== null ? (
+                <>
+                  <Badge variant="success">Receiving</Badge>
+                  <p className="text-sm text-muted-foreground">
+                    last alert {relativeTime(status.lastReceivedAt)}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Badge variant="secondary">Waiting for first alert</Badge>
+                  <p className="text-sm text-muted-foreground">
+                    Paste the receiver below, then let a real alert (or the
+                    test webhook) prove the pipe.
+                  </p>
+                </>
+              )}
+            </section>
+
+            <section className="flex flex-col gap-2">
+              <p className="text-sm font-semibold">
+                In your alertmanager.yml - forward alerts to Nightwatch
+              </p>
+              {token !== null ? (
+                <CopyableSnippet
+                  label="Copy Alertmanager receiver"
+                  text={receiverSnippet(status.ingestUrl, token)}
+                />
+              ) : (
+                <>
+                  <pre className="max-h-60 overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
+                    {receiverSnippet(status.ingestUrl, MASKED_TOKEN)}
+                  </pre>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    className="self-start"
+                    disabled={busy}
+                    onClick={() => reveal.mutate()}
+                  >
+                    {reveal.isPending && <Spinner className="size-3" />}
+                    Show token
+                  </Button>
+                </>
+              )}
+              <div className="mt-2 flex items-center gap-2">
                 <Button
                   size="xs"
                   variant="secondary"
@@ -203,106 +299,13 @@ export function AlertmanagerPage(): React.JSX.Element {
                   onClick={() => generate.mutate()}
                 >
                   {generate.isPending && <Spinner className="size-3" />}
-                  {status.configured
-                    ? "Rotate credential"
-                    : "Generate credential"}
+                  Rotate credential
                 </Button>
-                {status.configured && (
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => reveal.mutate()}
-                  >
-                    {reveal.isPending && <Spinner className="size-3" />}
-                    Reveal credential
-                  </Button>
-                )}
-              </div>
-              {token !== null && (
-                <Alert>
-                  <AlertTitle>
-                    {tokenFresh
-                      ? "New credential issued - the previous one no longer works"
-                      : "Ingest credential"}
-                  </AlertTitle>
-                  <AlertDescription>
-                    <CopyableSnippet
-                      text={token}
-                      label="Copy ingest credential"
-                    />
-                  </AlertDescription>
-                  <AlertAction>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Dismiss"
-                      onClick={() => setToken(null)}
-                    >
-                      <X {...ICON_UI} />
-                    </Button>
-                  </AlertAction>
-                </Alert>
-              )}
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <p className="text-sm font-semibold">
-                In your Alertmanager - forward alerts to Nightwatch
-              </p>
-
-              <p className="text-xs text-muted-foreground">Webhook URL</p>
-              <CopyableSnippet
-                label="Copy webhook URL"
-                text={status.ingestUrl}
-              />
-
-              {token === null ? (
                 <p className="text-xs text-muted-foreground">
-                  {status.configured
-                    ? "Reveal the credential to fill in the receiver below."
-                    : "Generate the credential to fill in the receiver below."}
+                  Your Alertmanager stops delivering until you paste the new
+                  config.
                 </p>
-              ) : (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    Or paste this receiver directly:
-                  </p>
-                  <CopyableSnippet
-                    label="Copy Alertmanager receiver"
-                    text={receiverSnippet(status.ingestUrl, token)}
-                  />
-                </>
-              )}
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <p className="text-sm font-semibold">
-                In your Prometheus - stamp the server label
-              </p>
-              <Field className="max-w-80">
-                <FieldLabel htmlFor="server-label">Server</FieldLabel>
-                <FieldDescription>
-                  The name of the server this Prometheus scrapes, exactly as it
-                  appears in your runner servers list.
-                </FieldDescription>
-                <Input
-                  id="server-label"
-                  placeholder={firstServerName || "e.g. prod-web-01"}
-                  value={serverLabel}
-                  onChange={(e) => setServerLabel(e.currentTarget.value)}
-                />
-              </Field>
-              {effectiveServer && (
-                <CopyableSnippet
-                  label="Copy Prometheus config"
-                  text={[
-                    "global:",
-                    "  external_labels:",
-                    `    server: "${effectiveServer}"`,
-                  ].join("\n")}
-                />
-              )}
+              </div>
             </section>
 
             <section className="flex flex-col gap-2">
@@ -316,31 +319,27 @@ export function AlertmanagerPage(): React.JSX.Element {
                 {testWebhook.isPending && <Spinner className="size-3" />}
                 Test webhook
               </Button>
+              {token === null && (
+                <p className="text-xs text-muted-foreground">
+                  Show the token to enable the test.
+                </p>
+              )}
 
               {webhookTestResult?.ok === true &&
                 webhookTestResult.results.map((result) => (
-                  <Alert
-                    key={result.sourceAlertId}
-                    variant={
-                      result.resolution.status === "resolved"
-                        ? undefined
-                        : "destructive"
-                    }
-                  >
+                  <Alert key={result.sourceAlertId}>
                     <AlertTitle>
-                      {result.resolution.status === "resolved"
-                        ? "Resolved"
-                        : "Rejected"}
+                      {result.exactMatch
+                        ? "Resolved to one server"
+                        : "No exact match"}
                     </AlertTitle>
                     <AlertDescription>
                       <span className="block">{result.identityKey}</span>
-                      {result.resolution.status === "resolved" ? (
-                        <span className="block">
-                          Would route to {result.resolution.hostname}.
-                        </span>
-                      ) : (
-                        <span className="block">{result.resolution.reason}</span>
-                      )}
+                      <span className="block">
+                        {result.advertisedOn.length > 0
+                          ? `Advertised on ${result.advertisedOn.join(", ")}.`
+                          : "No runner advertises this identity - the agent triages it from the fleet map."}
+                      </span>
                     </AlertDescription>
                   </Alert>
                 ))}
@@ -351,6 +350,84 @@ export function AlertmanagerPage(): React.JSX.Element {
                 </Alert>
               )}
             </section>
+
+            {dockerServers.length === 1 && (
+              <p className="max-w-2xl text-xs text-muted-foreground">
+                One server - alerts resolve to it automatically. When you add a
+                second, come back here to label which server each alert is
+                about.
+              </p>
+            )}
+
+            {dockerServers.length >= 2 && (
+              <section className="flex flex-col gap-2">
+                <p className="text-sm font-semibold">
+                  Make your alerts say which server they&apos;re about
+                </p>
+                <p className="max-w-2xl text-xs text-muted-foreground">
+                  With {dockerServers.length} servers, the same service can run
+                  in two places. Add an nw_server label per scrape target in
+                  your Prometheus so every alert carries its server.
+                </p>
+                <Field className="max-w-80">
+                  <FieldLabel htmlFor="server-select">Server</FieldLabel>
+                  <FieldDescription>
+                    Names come from your connected runners.
+                  </FieldDescription>
+                  <NativeSelect
+                    id="server-select"
+                    value={effectiveServer}
+                    onChange={(e) => setSelectedServer(e.currentTarget.value)}
+                  >
+                    {dockerServers.map((name) => (
+                      <NativeSelectOption key={name} value={name}>
+                        {name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <CopyableSnippet
+                  label="Copy Prometheus labels"
+                  text={perTargetSnippet(effectiveServer)}
+                />
+                <Collapsible>
+                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <ChevronDown {...ICON_INLINE} />
+                    This Prometheus only monitors {effectiveServer}? Set it
+                    once instead
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="pt-2">
+                      <CopyableSnippet
+                        label="Copy external_labels"
+                        text={externalLabelsSnippet(effectiveServer)}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </section>
+            )}
+
+            {k8sRunnerCount >= 2 && (
+              <section className="flex flex-col gap-2">
+                <p className="text-sm font-semibold">
+                  Multiple Kubernetes clusters
+                </p>
+                <p className="max-w-2xl text-xs text-muted-foreground">
+                  Give each cluster&apos;s alerts a cluster label (in that
+                  cluster&apos;s Prometheus external_labels) and set
+                  NIGHTWATCH_CLUSTER_NAME to the same value on its runner.
+                </p>
+                <CopyableSnippet
+                  label="Copy cluster external_labels"
+                  text={[
+                    "global:",
+                    "  external_labels:",
+                    '    cluster: "prod-cluster"',
+                  ].join("\n")}
+                />
+              </section>
+            )}
           </>
         )}
       </div>

@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwatch/shared";
+import type {
+  GitHubIntegrationStatus,
+  PrometheusIntegrationStatus,
+  RunnerRecord,
+} from "@nightwatch/shared";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +25,7 @@ function IntegrationCard({
   description,
   isLoading,
   status,
+  statusVariant = "success",
   connectLabel,
   onOpen,
 }: {
@@ -29,6 +34,8 @@ function IntegrationCard({
   isLoading: boolean;
   // null when the integration is not set up yet.
   status: string | null;
+  // "muted" for in-between states that are configured but not yet proven.
+  statusVariant?: "success" | "muted";
   connectLabel: string;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -42,7 +49,15 @@ function IntegrationCard({
             <Spinner className="size-4" />
           ) : status !== null ? (
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-success">{status}</span>
+              <span
+                className={
+                  statusVariant === "success"
+                    ? "text-sm font-medium text-success"
+                    : "text-sm font-medium text-muted-foreground"
+                }
+              >
+                {status}
+              </span>
               <Button size="sm" variant="secondary" onClick={onOpen}>
                 Manage
               </Button>
@@ -77,10 +92,21 @@ export function IntegrationsPage(): React.JSX.Element {
 
   const { data: ingest, isLoading: ingestLoading } = useQuery<{
     configured: boolean;
+    lastReceivedAt: string | null;
   }>({
     queryKey: ["ingest-credential"],
-    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
+    queryFn: () =>
+      apiFetch<{ configured: boolean; lastReceivedAt: string | null }>(
+        "/api/ingest-credential",
+      ),
   });
+
+  const { data: prometheus, isLoading: prometheusLoading } =
+    useQuery<PrometheusIntegrationStatus>({
+      queryKey: ["prometheus-integration"],
+      queryFn: () =>
+        apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
+    });
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
@@ -114,9 +140,25 @@ export function IntegrationsPage(): React.JSX.Element {
           title="Alertmanager"
           description="Forward alerts from the Alertmanager you already run. One credential for the whole fleet, set up once - Nightwatch ships no monitoring of its own."
           isLoading={ingestLoading}
-          status={ingest?.configured === true ? "Configured" : null}
+          status={
+            ingest?.configured !== true
+              ? null
+              : ingest.lastReceivedAt !== null
+                ? "Receiving"
+                : "Waiting for first alert"
+          }
+          statusVariant={ingest?.lastReceivedAt !== null ? "success" : "muted"}
           connectLabel="Set up"
           onOpen={() => void navigate({ to: "/integrations/alertmanager" })}
+        />
+
+        <IntegrationCard
+          title="Prometheus"
+          description="Let investigations query your metrics - was it climbing for hours or did it spike? Works with zero runners installed."
+          isLoading={prometheusLoading}
+          status={prometheus?.configured === true ? "Connected" : null}
+          connectLabel="Connect Prometheus"
+          onOpen={() => void navigate({ to: "/integrations/prometheus" })}
         />
 
         <IntegrationCard

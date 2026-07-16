@@ -18,28 +18,40 @@ const INGEST_TOKEN = "nwi_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345";
 const ROTATED_TOKEN = "nwi_rotated999999999999999999999999";
 const INGEST_URL = "http://api.test/alerts/ingest";
 
-const CONNECTED_RUNNER: RunnerRecord = {
-  id: "runner-1",
-  token: "runner-1",
-  serverName: "prod-web-01",
-  hostname: "web-01",
-  createdAt: "2024-01-01T00:00:00Z",
-  online: true,
-  lastSeen: new Date().toISOString(),
-  manifest: null,
-  remediationMode: false,
-};
+function dockerRunner(name: string): RunnerRecord {
+  return {
+    id: name,
+    token: name,
+    serverName: name,
+    hostname: `${name}-host`,
+    createdAt: "2024-01-01T00:00:00Z",
+    online: true,
+    lastSeen: new Date().toISOString(),
+    manifest: {
+      hostname: `${name}-host`,
+      runnerVersion: "2.0.0",
+      capabilities: {
+        docker: true,
+        kubernetes: false,
+        services: [],
+        postgres: { available: false },
+        redis: { available: false },
+        hostMetrics: true,
+        fileRead: true,
+        remediationEnabled: false,
+      },
+    },
+    remediationMode: false,
+  };
+}
 
-const RESOLVED_VALIDATE = {
+const MATCHED_VALIDATE = {
   alerts: [
     {
       sourceAlertId: "sample",
-      identityKey: "docker/sample-service/sample-service",
-      resolution: {
-        status: "resolved",
-        runnerId: "runner-1",
-        hostname: "web-01",
-      },
+      identityKey: "docker/prod-web-01/sample-service/sample-service",
+      advertisedOn: ["prod-web-01"],
+      exactMatch: true,
     },
   ],
 };
@@ -84,8 +96,20 @@ function renderAlertmanagerRoute() {
   );
 }
 
-function setup(opts: { configured?: boolean; validate?: unknown } = {}) {
-  const { configured = false, validate = RESOLVED_VALIDATE } = opts;
+function setup(
+  opts: {
+    configured?: boolean;
+    lastReceivedAt?: string | null;
+    runners?: RunnerRecord[];
+    validate?: unknown;
+  } = {},
+) {
+  const {
+    configured = false,
+    lastReceivedAt = null,
+    runners = [dockerRunner("prod-web-01")],
+    validate = MATCHED_VALIDATE,
+  } = opts;
   let rotated = false;
 
   const clipboardWrite = vi.fn().mockResolvedValue(undefined);
@@ -97,7 +121,7 @@ function setup(opts: { configured?: boolean; validate?: unknown } = {}) {
   const fetchMock = vi
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
-      if (url === "/api/runners") return jsonOk([CONNECTED_RUNNER]);
+      if (url === "/api/runners") return jsonOk(runners);
       if (url === "/api/ingest-credential" && init?.method === "POST") {
         rotated = true;
         return jsonOk({ token: ROTATED_TOKEN }, 201);
@@ -105,15 +129,19 @@ function setup(opts: { configured?: boolean; validate?: unknown } = {}) {
       if (url === "/api/ingest-credential/reveal" && init?.method === "POST")
         return jsonOk({ token: INGEST_TOKEN });
       if (url === "/api/ingest-credential")
-        return jsonOk({ configured: configured || rotated, ingestUrl: INGEST_URL });
+        return jsonOk({
+          configured: configured || rotated,
+          ingestUrl: INGEST_URL,
+          lastReceivedAt: rotated ? null : lastReceivedAt,
+        });
       if (url === "/api/alerts/validate" && init?.method === "POST")
         return jsonOk(validate);
       return jsonOk({});
     });
   vi.stubGlobal("fetch", fetchMock);
 
-  renderAlertmanagerRoute();
-  return { fetchMock, clipboardWrite };
+  const view = renderAlertmanagerRoute();
+  return { fetchMock, clipboardWrite, view };
 }
 
 afterEach(() => {
@@ -122,174 +150,198 @@ afterEach(() => {
 });
 
 describe("AlertmanagerPage", () => {
-  describe("webhook wiring", () => {
-    it("shows the server-provided webhook URL without minting a credential", async () => {
-      const { fetchMock } = setup({ configured: false });
+  it("unconfigured: mints only on demand, then shows the receiver with the real token", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ configured: false });
 
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(new RegExp(INGEST_URL.replace(/\//g, "\\/")))
-            .length,
-        ).toBeGreaterThan(0);
-      });
-      // Viewing the page must never create a secret.
-      expect(fetchMock).not.toHaveBeenCalledWith(
-        "/api/ingest-credential",
+    const setUpButton = await screen.findByRole("button", {
+      name: /set up alert forwarding/i,
+    });
+    // Viewing the page must never create a secret.
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/ingest-credential",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.queryByText(/receivers:/)).not.toBeInTheDocument();
+
+    await user.click(setUpButton);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(
+      screen.getByRole("button", { name: /copy alertmanager receiver/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("configured: receiver stays visible with a masked token until Show token, which also enables the test", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ configured: true });
+
+    await screen.findByText(/waiting for first alert/i);
+    // The YAML structure is always on the page; only the secret is masked.
+    expect(screen.getByText(/receivers:/)).toBeInTheDocument();
+    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /test webhook/i }),
+    ).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /show token/i }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/ingest-credential/reveal",
         expect.objectContaining({ method: "POST" }),
       );
-      expect(await screen.findByText(/not configured/i)).toBeInTheDocument();
     });
-
-    it("withholds the receiver snippet until the credential is in hand", async () => {
-      setup({ configured: true });
-
-      await waitFor(() => {
-        expect(screen.getByText(/reveal the credential/i)).toBeInTheDocument();
-      });
-      expect(
-        screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("offers the server-label snippet prefilled from a connected server", async () => {
-      setup();
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: /copy prometheus config/i }),
-        ).toBeInTheDocument();
-      });
-      expect(screen.getByText(/server: "prod-web-01"/)).toBeInTheDocument();
-    });
+    expect(
+      screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: /copy alertmanager receiver/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /test webhook/i }),
+    ).toBeEnabled();
   });
 
-  describe("credential", () => {
-    it("generates on demand and fills the receiver with the new token", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ configured: false });
-
-      await user.click(
-        await screen.findByRole("button", { name: /generate credential/i }),
-      );
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/ingest-credential",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
-      expect(await screen.findByText(/no longer works/i)).toBeInTheDocument();
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
-        ).toBeGreaterThan(0);
-      });
+  it("delivery state: Receiving with a relative time once an alert has landed", async () => {
+    setup({
+      configured: true,
+      lastReceivedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
     });
 
-    it("reveals on demand without claiming the old credential is dead", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ configured: true });
-
-      await user.click(
-        await screen.findByRole("button", { name: /reveal credential/i }),
-      );
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/ingest-credential/reveal",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
-      expect(screen.queryByText(/no longer works/i)).not.toBeInTheDocument();
-    });
-
-    it("rotating replaces the token in the receiver snippet, never leaving the dead one", async () => {
-      const user = userEvent.setup();
-      setup({ configured: true });
-
-      await user.click(
-        await screen.findByRole("button", { name: /reveal credential/i }),
-      );
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
-        ).toBeGreaterThan(0);
-      });
-
-      await user.click(
-        screen.getByRole("button", { name: /rotate credential/i }),
-      );
-
-      await waitFor(() => {
-        expect(
-          screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
-        ).toBeGreaterThan(0);
-      });
-      expect(screen.queryByText(new RegExp(INGEST_TOKEN))).not.toBeInTheDocument();
-    });
+    expect(await screen.findByText(/receiving/i)).toBeInTheDocument();
+    expect(screen.getByText(/last alert 2h ago/i)).toBeInTheDocument();
   });
 
-  describe("test webhook", () => {
-    it("is unavailable until the credential is in hand", async () => {
-      setup({ configured: true });
-      expect(
-        await screen.findByRole("button", { name: /test webhook/i }),
-      ).toBeDisabled();
+  it("rotating swaps the new token into the receiver and regresses status to waiting", async () => {
+    const user = userEvent.setup();
+    setup({
+      configured: true,
+      lastReceivedAt: "2026-07-17T01:00:00.000Z",
     });
 
-    it("posts a sample alert with the credential and shows the resolution", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup({ configured: true });
+    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
+      ).toBeGreaterThan(0);
+    });
 
-      await user.click(
-        await screen.findByRole("button", { name: /reveal credential/i }),
-      );
-      await user.click(
-        await screen.findByRole("button", { name: /test webhook/i }),
-      );
+    await user.click(
+      screen.getByRole("button", { name: /rotate credential/i }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
+      ).toBeGreaterThan(0);
+    });
+    expect(
+      screen.queryByText(new RegExp(INGEST_TOKEN)),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/waiting for first alert/i),
+    ).toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/alerts/validate",
-          expect.objectContaining({
-            method: "POST",
-            headers: expect.objectContaining({
-              Authorization: `Bearer ${INGEST_TOKEN}`,
-            }),
+  it("test webhook posts the nw_server-labelled sample with the credential and shows the fleet match", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ configured: true });
+
+    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /test webhook/i }),
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/alerts/validate",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${INGEST_TOKEN}`,
           }),
-        );
-      });
-      expect(await screen.findByText(/resolved/i)).toBeInTheDocument();
+        }),
+      );
+    });
+    const validateCall = fetchMock.mock.calls.find(
+      (call) => call[0] === "/api/alerts/validate",
+    )!;
+    expect(String((validateCall[1] as RequestInit).body)).toContain(
+      '"nw_server":"prod-web-01"',
+    );
+    expect(
+      await screen.findByText(/resolved to one server/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/advertised on prod-web-01/i)).toBeInTheDocument();
+  });
+
+  it("an unmatched sample explains the fleet-map triage instead of claiming failure", async () => {
+    const user = userEvent.setup();
+    setup({
+      configured: true,
+      validate: {
+        alerts: [
+          {
+            sourceAlertId: "sample",
+            identityKey: "docker/sample-service/sample-service",
+            advertisedOn: [],
+            exactMatch: false,
+          },
+        ],
+      },
     });
 
-    it("shows the rejection reason when the sample does not match the fleet", async () => {
-      const user = userEvent.setup();
-      setup({
-        configured: true,
-        validate: {
-          alerts: [
-            {
-              sourceAlertId: "sample",
-              identityKey: "docker/sample-service/sample-service",
-              resolution: {
-                status: "rejected",
-                reason:
-                  "No runner advertises service 'docker/sample-service/sample-service'.",
-              },
-            },
-          ],
-        },
-      });
+    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /test webhook/i }),
+    );
 
-      await user.click(
-        await screen.findByRole("button", { name: /reveal credential/i }),
-      );
-      await user.click(
-        await screen.findByRole("button", { name: /test webhook/i }),
-      );
+    expect(await screen.findByText(/no exact match/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/the agent triages it from the fleet map/i),
+    ).toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(screen.getByText(/no runner advertises/i)).toBeInTheDocument();
-      });
+  it("routing section is hidden with no docker servers and a one-liner with one", async () => {
+    const { view } = setup({ configured: true, runners: [] });
+    await screen.findByText(/waiting for first alert/i);
+    expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^server$/i)).not.toBeInTheDocument();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    setup({ configured: true, runners: [dockerRunner("prod-web-01")] });
+    expect(
+      await screen.findByText(/alerts resolve to it automatically/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^server$/i)).not.toBeInTheDocument();
+  });
+
+  it("with two servers: dropdown of runner names drives the per-target snippet, external_labels as the aside", async () => {
+    const user = userEvent.setup();
+    setup({
+      configured: true,
+      runners: [dockerRunner("prod-web-01"), dockerRunner("prod-web-02")],
     });
+
+    expect(
+      await screen.findByText(/say which server they're about/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/nw_server: "prod-web-01"/)).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText(/^server$/i),
+      "prod-web-02",
+    );
+    expect(screen.getByText(/nw_server: "prod-web-02"/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /copy prometheus labels/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/set it once instead/i)).toBeInTheDocument();
   });
 });

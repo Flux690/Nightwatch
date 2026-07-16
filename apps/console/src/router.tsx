@@ -13,6 +13,7 @@ import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddServerPage } from "./pages/AddServerPage.js";
 import { RunnerServersPage } from "./pages/RunnerServers.js";
 import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
+import { PrometheusPage } from "./pages/PrometheusPage.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -98,6 +99,12 @@ const alertmanagerRoute = createRoute({
   component: AlertmanagerPage,
 });
 
+const prometheusRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/prometheus",
+  component: PrometheusPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -110,6 +117,7 @@ const routeTree = rootRoute.addChildren([
     runnerServersRoute,
     addServerRoute,
     alertmanagerRoute,
+    prometheusRoute,
   ]),
 ]);
 
