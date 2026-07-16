@@ -20,9 +20,12 @@ fi
 # Read-only host access for evidence collection: the Docker socket, host /proc
 # and /sys for metrics (iostat reads sysfs block stats), and the root filesystem
 # for allowlisted file reads. No inbound ports - the runner dials out over WSS.
+# --hostname passes the host's real name through, so the runner never
+# advertises a container id as its hostname.
 docker run -d \
   --name "$CONTAINER_NAME" \
   --restart unless-stopped \
+  --hostname "$(hostname)" \
   --pid=host \
   --security-opt=no-new-privileges \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
