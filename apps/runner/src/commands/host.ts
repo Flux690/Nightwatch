@@ -2,18 +2,18 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import type {
-  GetHostCpuResult,
-  GetHostDiskResult,
-  GetHostDmesgInput,
-  GetHostDmesgResult,
-  GetHostMemoryResult,
-  GetHostNetworkResult,
+  HostCpuResult,
+  HostDiskResult,
+  HostDmesgInput,
+  HostDmesgResult,
+  HostMemoryResult,
+  HostNetworkResult,
 } from "@nightwatch/shared";
 
 const exec = promisify(execFile);
 const PROC_PATH = process.env["HOST_PROC"] ?? "/proc";
 
-export async function getHostMemory(): Promise<GetHostMemoryResult> {
+export async function getHostMemory(): Promise<HostMemoryResult> {
   const [meminfo, dmesgOut] = await Promise.all([
     readFile(`${PROC_PATH}/meminfo`, "utf8"),
     exec("dmesg", ["-T"])
@@ -55,7 +55,7 @@ export async function getHostMemory(): Promise<GetHostMemoryResult> {
   };
 }
 
-export async function getHostCpu(): Promise<GetHostCpuResult> {
+export async function getHostCpu(): Promise<HostCpuResult> {
   const [stat1, loadavgStr] = await Promise.all([
     readFile(`${PROC_PATH}/stat`, "utf8"),
     readFile(`${PROC_PATH}/loadavg`, "utf8"),
@@ -115,7 +115,7 @@ export async function getHostCpu(): Promise<GetHostCpuResult> {
   };
 }
 
-export async function getHostDisk(): Promise<GetHostDiskResult> {
+export async function getHostDisk(): Promise<HostDiskResult> {
   const [dfOut, iostatOut] = await Promise.all([
     exec("df", ["-Bk"]).then((r) => r.stdout),
     exec("iostat", ["-x", "1", "1"])
@@ -123,7 +123,7 @@ export async function getHostDisk(): Promise<GetHostDiskResult> {
       .catch(() => ""),
   ]);
 
-  const filesystems: GetHostDiskResult["filesystems"] = dfOut
+  const filesystems: HostDiskResult["filesystems"] = dfOut
     .trim()
     .split("\n")
     .slice(1)
@@ -141,7 +141,7 @@ export async function getHostDisk(): Promise<GetHostDiskResult> {
       };
     });
 
-  const diskIO: GetHostDiskResult["diskIO"] = [];
+  const diskIO: HostDiskResult["diskIO"] = [];
   if (iostatOut) {
     const lines = iostatOut.split("\n");
     const headerIdx = lines.findIndex((l) => l.includes("Device"));
@@ -166,11 +166,11 @@ export async function getHostDisk(): Promise<GetHostDiskResult> {
   return { filesystems, diskIO };
 }
 
-export async function getHostNetwork(): Promise<GetHostNetworkResult> {
+export async function getHostNetwork(): Promise<HostNetworkResult> {
   const { stdout } = await exec("ss", ["-tunapl"]);
   const lines = stdout.trim().split("\n").filter(Boolean);
 
-  const listeningPorts: GetHostNetworkResult["listeningPorts"] = [];
+  const listeningPorts: HostNetworkResult["listeningPorts"] = [];
   const stateCounts: Record<string, number> = {};
   let totalConnections = 0;
 
@@ -207,8 +207,8 @@ export async function getHostNetwork(): Promise<GetHostNetworkResult> {
 }
 
 export async function getHostDmesg(
-  input: GetHostDmesgInput,
-): Promise<GetHostDmesgResult> {
+  input: HostDmesgInput,
+): Promise<HostDmesgResult> {
   const tailLines = input.tailLines ?? 100;
   const levelArg = input.filterLevel === "all" ? [] : ["--level", "err,warn"];
 

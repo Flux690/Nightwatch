@@ -1,19 +1,23 @@
 import { PassThrough } from "node:stream";
 import { setHeaderOptions } from "@kubernetes/client-node";
 import type {
-  ContainerInfo,
-  ContainerProcess,
-  ExecCommandInput,
-  ExecCommandResult,
-  GetContainerEventsInput,
-  GetContainerInspectInput,
-  GetContainerListInput,
-  GetContainerLogsInput,
-  GetContainerProcessesInput,
-  GetContainerStatsInput,
-  GetK8sRolloutStatusInput,
-  RestartContainerInput,
-  RestartServiceK8sResult,
+  K8sNodeStatusResult,
+  K8sRestartResult,
+  K8sRolloutStatusInput,
+  ServiceBashInput,
+  ServiceBashResult,
+  ServiceConfigInput,
+  ServiceEventsInput,
+  ServiceInstance,
+  ServiceListInput,
+  ServiceListResult,
+  ServiceLogsInput,
+  ServiceLogsResult,
+  ServiceProcess,
+  ServiceProcessesInput,
+  ServiceProcessesResult,
+  ServiceRestartInput,
+  ServiceStatsInput,
 } from "@nightwatch/shared";
 import { getCoreV1Api, getAppsV1Api, getMetrics, getExec } from "./client.js";
 import {
@@ -36,8 +40,8 @@ const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
 // List workloads (Deployments+StatefulSets), not pods, so the identity matches the manifest byte-for-byte;
 // a pod-label identity diverged, so a listed service couldn't be resolved back and the breaker mis-keyed it.
 export async function getContainerList(
-  input: GetContainerListInput,
-): Promise<{ containers: ContainerInfo[] }> {
+  input: ServiceListInput,
+): Promise<ServiceListResult> {
   const namespace = input.namespace ?? "default";
   const appsApi = getAppsV1Api();
   // Env-only, identical to the manifest (detect.ts): the kubeconfig context name
@@ -49,7 +53,7 @@ export async function getContainerList(
     appsApi.listNamespacedStatefulSet({ namespace }),
   ]);
 
-  const containers: ContainerInfo[] = [
+  const containers: ServiceInstance[] = [
     ...deployments.items,
     ...statefulSets.items,
   ].map((w) => {
@@ -81,8 +85,8 @@ export async function getContainerList(
 }
 
 export async function getContainerLogs(
-  input: GetContainerLogsInput,
-): Promise<{ lines: string[] } | NoRunningInstanceResult> {
+  input: ServiceLogsInput,
+): Promise<ServiceLogsResult | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
@@ -116,11 +120,18 @@ export async function getContainerLogs(
   });
 
   const lines = log.split("\n").filter(Boolean);
-  return { lines };
+  // Kubernetes reads are already tail-scoped server-side, so nothing is
+  // filtered here; the count fields keep the shared logs shape honest.
+  return {
+    lines,
+    totalLines: lines.length,
+    droppedLines: 0,
+    compressionNote: "",
+  };
 }
 
 export async function getContainerInspect(
-  input: GetContainerInspectInput,
+  input: ServiceConfigInput,
 ): Promise<unknown | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
@@ -175,7 +186,7 @@ export async function getContainerInspect(
 }
 
 export async function getContainerStats(
-  input: GetContainerStatsInput,
+  input: ServiceStatsInput,
 ): Promise<unknown | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
@@ -201,7 +212,7 @@ export async function getContainerStats(
 }
 
 export async function getContainerEvents(
-  input: GetContainerEventsInput,
+  input: ServiceEventsInput,
 ): Promise<unknown | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
@@ -226,8 +237,8 @@ export async function getContainerEvents(
 }
 
 export async function getContainerProcesses(
-  input: GetContainerProcessesInput,
-): Promise<{ processes: ContainerProcess[] } | NoRunningInstanceResult> {
+  input: ServiceProcessesInput,
+): Promise<ServiceProcessesResult | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
@@ -248,7 +259,7 @@ export async function getContainerProcesses(
     ["ps", "-eo", "pid,ppid,user,pcpu,pmem,comm", "--no-headers"],
   );
 
-  const processes: ContainerProcess[] = stdout
+  const processes: ServiceProcess[] = stdout
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -260,8 +271,8 @@ export async function getContainerProcesses(
 // Rolls via a restartedAt annotation, never deleting pods directly; the exact
 // kind is resolved first so a same-named Deployment/StatefulSet can't be confused.
 export async function restartService(
-  input: RestartContainerInput,
-): Promise<RestartServiceK8sResult | NoRunningInstanceResult> {
+  input: ServiceRestartInput,
+): Promise<K8sRestartResult | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const appsApi = getAppsV1Api();
 
@@ -303,8 +314,8 @@ export async function restartService(
 }
 
 export async function execCommand(
-  input: ExecCommandInput,
-): Promise<ExecCommandResult | NoRunningInstanceResult> {
+  input: ServiceBashInput,
+): Promise<ServiceBashResult | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
@@ -340,7 +351,7 @@ export async function execCommand(
 // Kubernetes-only: rollout state has no Docker equivalent, so it's never
 // offered to Docker-only fleets.
 export async function getRolloutStatus(
-  input: GetK8sRolloutStatusInput,
+  input: K8sRolloutStatusInput,
 ): Promise<unknown | NoRunningInstanceResult> {
   const service = requireK8sIdentity(input.service);
   const appsApi = getAppsV1Api();
@@ -385,14 +396,7 @@ export async function getRolloutStatus(
 
 // An unhealthy pod's cause may be the node; no service identity here since
 // pressure is a node fact, not a per-workload one.
-export async function getNodeStatus(): Promise<{
-  nodes: Array<{
-    name: string;
-    conditions: unknown;
-    allocatable: unknown;
-    capacity: unknown;
-  }>;
-}> {
+export async function getNodeStatus(): Promise<K8sNodeStatusResult> {
   const coreApi = getCoreV1Api();
   const nodeList = await coreApi.listNode();
 
@@ -473,7 +477,7 @@ function parseImageTag(image: string): string {
   return image.includes(":") ? (image.split(":")[1] ?? "latest") : "latest";
 }
 
-function parsePsLine(line: string): ContainerProcess {
+function parsePsLine(line: string): ServiceProcess {
   const parts = line.trim().split(/\s+/);
   return {
     pid: parseInt(parts[0] ?? "0", 10),

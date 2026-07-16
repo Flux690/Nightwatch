@@ -1,13 +1,11 @@
 import { ApiException } from "@kubernetes/client-node";
 import type * as k8s from "@kubernetes/client-node";
-import type {
-  KubernetesServiceIdentity,
-  ServiceIdentity,
-} from "@nightwatch/shared";
 import {
   notRunningResult,
+  type KubernetesServiceIdentity,
   type NoRunningInstanceResult,
-} from "../resolve-result.js";
+  type ServiceIdentity,
+} from "@nightwatch/shared";
 
 export interface ResolvedK8sPod {
   podName: string;
