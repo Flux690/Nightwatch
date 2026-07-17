@@ -2,14 +2,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronDown, Eye, EyeOff } from "lucide-react";
 
-import {
-  Alert,
-  AlertTitle,
-  AlertDescription,
-} from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -28,8 +23,9 @@ import {
   PageTitle,
   backLinkClass,
 } from "@/components/layout/Page";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
-import { ICON_INLINE } from "@/lib/iconProps";
+import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -113,6 +109,7 @@ export function AlertmanagerPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
   const [selectedServer, setSelectedServer] = useState("");
+  const [confirmRotate, setConfirmRotate] = useState(false);
   const [webhookTestResult, setWebhookTestResult] = useState<
     | { ok: true; results: ValidateAlertResult[] }
     | { ok: false; error: string }
@@ -143,17 +140,14 @@ export function AlertmanagerPage(): React.JSX.Element {
   const generate = useMutation({
     mutationFn: () =>
       apiFetch<{ token: string }>("/api/ingest-credential", { method: "POST" }),
-    onSuccess: async ({ token: minted }, _vars, _ctx) => {
+    onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
       setWebhookTestResult(null);
       if (rotating) {
-        toast.show({
-          title: "New credential issued",
-          message:
-            "The previous one no longer works - paste the updated receiver into your Alertmanager.",
-          variant: "info",
-        });
+        toast.success(
+          "Credential rotated - paste the updated receiver into your Alertmanager",
+        );
       }
       await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
     },
@@ -206,6 +200,36 @@ export function AlertmanagerPage(): React.JSX.Element {
   });
 
   const busy = generate.isPending || reveal.isPending;
+  const configured = status?.configured === true;
+  // Minting in this visit (setup or rotation) means the user is mid-setup: the
+  // page reads as steps to finish, not as a status report on unfinished work.
+  const showStatus = configured && !generate.isSuccess;
+
+  const snippetActions = !configured ? (
+    <Button size="xs" disabled={busy} onClick={() => generate.mutate()}>
+      {generate.isPending && <Spinner className="size-3" />}
+      Generate credential
+    </Button>
+  ) : token === null ? (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Show token"
+      disabled={busy}
+      onClick={() => reveal.mutate()}
+    >
+      <Eye {...ICON_UI} />
+    </Button>
+  ) : (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Hide token"
+      onClick={() => setToken(null)}
+    >
+      <EyeOff {...ICON_UI} />
+    </Button>
+  );
 
   return (
     <Page>
@@ -215,13 +239,27 @@ export function AlertmanagerPage(): React.JSX.Element {
       </Link>
       <PageHeader>
         <PageTitle>Alertmanager</PageTitle>
+        {showStatus && status && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className={
+                status.lastReceivedAt !== null
+                  ? "size-1.5 rounded-full bg-success"
+                  : "size-1.5 rounded-full bg-muted-foreground"
+              }
+            />
+            {status.lastReceivedAt !== null
+              ? `Receiving - last alert ${relativeTime(status.lastReceivedAt)}`
+              : "Waiting for first alert"}
+          </div>
+        )}
       </PageHeader>
 
       <div className="flex flex-col gap-8">
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Nightwatch does not ship a monitoring stack - forward alerts from the
-          Alertmanager you already run. One credential for the whole fleet, set
-          up once.
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Forward alerts from the Alertmanager you already run. One credential
+          covers the whole fleet.
         </p>
 
         {isLoading && (
@@ -231,140 +269,93 @@ export function AlertmanagerPage(): React.JSX.Element {
           </div>
         )}
 
-        {status && !status.configured && (
-          <section className="flex flex-col gap-3">
-            <Button
-              className="self-start"
-              disabled={busy}
-              onClick={() => generate.mutate()}
-            >
-              {generate.isPending && <Spinner className="size-4" />}
-              Set up alert forwarding
-            </Button>
-          </section>
-        )}
-
-        {status?.configured === true && (
+        {status && (
           <>
-            <section className="flex items-center gap-2">
-              {status.lastReceivedAt !== null ? (
-                <>
-                  <Badge variant="success">Receiving</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    last alert {relativeTime(status.lastReceivedAt)}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Badge variant="secondary">Waiting for first alert</Badge>
-                  <p className="text-sm text-muted-foreground">
-                    Paste the receiver below, then let a real alert (or the
-                    test webhook) prove the pipe.
-                  </p>
-                </>
-              )}
-            </section>
-
             <section className="flex flex-col gap-2">
               <p className="text-sm font-semibold">
-                In your alertmanager.yml - forward alerts to Nightwatch
+                1. Paste this receiver into your alertmanager.yml
               </p>
-              {token !== null ? (
-                <CopyableSnippet
-                  label="Copy Alertmanager receiver"
-                  text={receiverSnippet(status.ingestUrl, token)}
-                />
-              ) : (
-                <>
-                  <pre className="max-h-60 overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
-                    {receiverSnippet(status.ingestUrl, MASKED_TOKEN)}
-                  </pre>
+              <CopyableSnippet
+                label="Copy Alertmanager receiver"
+                text={receiverSnippet(status.ingestUrl, token ?? MASKED_TOKEN)}
+                actions={snippetActions}
+                copyable={token !== null}
+              />
+            </section>
+
+            {configured && (
+              <section className="flex flex-col gap-2">
+                <p className="text-sm font-semibold">
+                  2. Reload Alertmanager, then prove the pipe
+                </p>
+                <div className="flex items-center gap-2">
                   <Button
                     size="xs"
                     variant="secondary"
-                    className="self-start"
-                    disabled={busy}
-                    onClick={() => reveal.mutate()}
+                    disabled={token === null || testWebhook.isPending}
+                    onClick={() => testWebhook.mutate()}
                   >
-                    {reveal.isPending && <Spinner className="size-3" />}
-                    Show token
+                    {testWebhook.isPending && <Spinner className="size-3" />}
+                    Test webhook
                   </Button>
-                </>
-              )}
-              <div className="mt-2 flex items-center gap-2">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => generate.mutate()}
-                >
-                  {generate.isPending && <Spinner className="size-3" />}
-                  Rotate credential
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Your Alertmanager stops delivering until you paste the new
-                  config.
-                </p>
-              </div>
-            </section>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => setConfirmRotate(true)}
+                  >
+                    Rotate credential
+                  </Button>
+                </div>
+                {token === null && (
+                  <p className="text-xs text-muted-foreground">
+                    Show the token to enable the test.
+                  </p>
+                )}
 
-            <section className="flex flex-col gap-2">
-              <Button
-                size="xs"
-                variant="secondary"
-                className="self-start"
-                disabled={token === null || testWebhook.isPending}
-                onClick={() => testWebhook.mutate()}
-              >
-                {testWebhook.isPending && <Spinner className="size-3" />}
-                Test webhook
-              </Button>
-              {token === null && (
-                <p className="text-xs text-muted-foreground">
-                  Show the token to enable the test.
-                </p>
-              )}
-
-              {webhookTestResult?.ok === true &&
-                webhookTestResult.results.map((result) => (
-                  <Alert key={result.sourceAlertId}>
-                    <AlertTitle>
-                      {result.exactMatch
-                        ? "Resolved to one server"
-                        : "No exact match"}
-                    </AlertTitle>
+                {webhookTestResult?.ok === true &&
+                  webhookTestResult.results.map((result) => (
+                    <Alert key={result.sourceAlertId}>
+                      <AlertTitle>
+                        {result.exactMatch
+                          ? "Resolved to one server"
+                          : "No exact match"}
+                      </AlertTitle>
+                      <AlertDescription>
+                        <span className="block">{result.identityKey}</span>
+                        <span className="block">
+                          {result.advertisedOn.length > 0
+                            ? `Advertised on ${result.advertisedOn.join(", ")}.`
+                            : "No runner advertises this identity - the agent triages it from the fleet map."}
+                        </span>
+                      </AlertDescription>
+                    </Alert>
+                  ))}
+                {webhookTestResult?.ok === false && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Test webhook failed</AlertTitle>
                     <AlertDescription>
-                      <span className="block">{result.identityKey}</span>
-                      <span className="block">
-                        {result.advertisedOn.length > 0
-                          ? `Advertised on ${result.advertisedOn.join(", ")}.`
-                          : "No runner advertises this identity - the agent triages it from the fleet map."}
-                      </span>
+                      {webhookTestResult.error}
                     </AlertDescription>
                   </Alert>
-                ))}
-              {webhookTestResult?.ok === false && (
-                <Alert variant="destructive">
-                  <AlertTitle>Test webhook failed</AlertTitle>
-                  <AlertDescription>{webhookTestResult.error}</AlertDescription>
-                </Alert>
-              )}
-            </section>
+                )}
+              </section>
+            )}
 
-            {dockerServers.length === 1 && (
-              <p className="max-w-2xl text-xs text-muted-foreground">
+            {configured && dockerServers.length === 1 && (
+              <p className="max-w-3xl text-xs text-muted-foreground">
                 One server - alerts resolve to it automatically. When you add a
                 second, come back here to label which server each alert is
                 about.
               </p>
             )}
 
-            {dockerServers.length >= 2 && (
+            {configured && dockerServers.length >= 2 && (
               <section className="flex flex-col gap-2">
                 <p className="text-sm font-semibold">
                   Make your alerts say which server they&apos;re about
                 </p>
-                <p className="max-w-2xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-xs text-muted-foreground">
                   With {dockerServers.length} servers, the same service can run
                   in two places. Add an nw_server label per scrape target in
                   your Prometheus so every alert carries its server.
@@ -408,12 +399,12 @@ export function AlertmanagerPage(): React.JSX.Element {
               </section>
             )}
 
-            {k8sRunnerCount >= 2 && (
+            {configured && k8sRunnerCount >= 2 && (
               <section className="flex flex-col gap-2">
                 <p className="text-sm font-semibold">
                   Multiple Kubernetes clusters
                 </p>
-                <p className="max-w-2xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-xs text-muted-foreground">
                   Give each cluster&apos;s alerts a cluster label (in that
                   cluster&apos;s Prometheus external_labels) and set
                   NIGHTWATCH_CLUSTER_NAME to the same value on its runner.
@@ -431,6 +422,16 @@ export function AlertmanagerPage(): React.JSX.Element {
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmRotate}
+        onOpenChange={setConfirmRotate}
+        title="Rotate credential?"
+        description="The current credential stops working immediately, and your Alertmanager stops delivering until you paste the updated receiver."
+        confirmLabel="Rotate"
+        destructive
+        onConfirm={() => generate.mutate()}
+      />
     </Page>
   );
 }

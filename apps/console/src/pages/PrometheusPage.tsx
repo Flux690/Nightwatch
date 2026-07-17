@@ -140,11 +140,9 @@ export function PrometheusPage(): React.JSX.Element {
       </PageHeader>
 
       <div className="flex flex-col gap-8">
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Let investigations query your metrics: whether memory was climbing
-          for hours or spiked at 14:02 is often the whole diagnosis, and it
-          works with zero runners installed. Nightwatch only ever reads -
-          point it at the same Prometheus that feeds your Alertmanager.
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Connect the Prometheus you already run so investigations can query
+          your metrics. Read-only, and works with zero runners installed.
         </p>
 
         {isLoading && (
@@ -242,7 +240,7 @@ export function PrometheusPage(): React.JSX.Element {
                 <p className="text-sm font-semibold">
                   Check alert routing labels
                 </p>
-                <p className="max-w-2xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-xs text-muted-foreground">
                   Compares the nw_server label values in your metrics against
                   your runner server names - catches a typo before it costs an
                   investigation.
@@ -259,7 +257,7 @@ export function PrometheusPage(): React.JSX.Element {
                 </Button>
 
                 {validation !== null && (
-                  <div className="flex max-w-2xl flex-col gap-2">
+                  <div className="flex max-w-3xl flex-col gap-2">
                     {validation.matched.length > 0 && (
                       <Alert>
                         <AlertTitle>Labelled correctly</AlertTitle>

@@ -625,7 +625,8 @@ export function SettingsModal({
 
                   <TabsContent value="sandbox">
                     {form && (
-                      <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
+                      <div className="flex flex-col gap-3">
+                        <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
                         <Field>
                           <FieldLabel htmlFor="settings-sandbox-idle">
                             Idle cleanup (ms)
@@ -677,7 +678,8 @@ export function SettingsModal({
                             }
                           />
                         </Field>
-                        <label className="col-span-2 flex items-start gap-2 text-sm">
+                        </div>
+                        <label className="flex items-start gap-2 text-sm">
                           <Checkbox
                             className="mt-0.5"
                             checked={form.sandboxRequireGvisor === true}
@@ -695,7 +697,7 @@ export function SettingsModal({
                             </span>
                           </span>
                         </label>
-                        <div className="col-span-2 mt-2 flex flex-col gap-3">
+                        <div className="mt-2 flex flex-col gap-3">
                           <Field className="max-w-52">
                             <FieldLabel htmlFor="settings-sandbox-network">
                               Agent network

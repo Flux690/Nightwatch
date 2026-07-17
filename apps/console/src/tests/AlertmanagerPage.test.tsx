@@ -150,21 +150,28 @@ afterEach(() => {
 });
 
 describe("AlertmanagerPage", () => {
-  it("unconfigured: mints only on demand, then shows the receiver with the real token", async () => {
+  it("unconfigured: previews the masked receiver, mints only on demand, then fills in the real token", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ configured: false });
 
-    const setUpButton = await screen.findByRole("button", {
-      name: /set up alert forwarding/i,
+    const generateButton = await screen.findByRole("button", {
+      name: /generate credential/i,
     });
-    // Viewing the page must never create a secret.
+    // The full setup layout is visible up front; viewing it never creates a secret.
+    expect(screen.getByText(/receivers:/)).toBeInTheDocument();
+    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/ingest-credential",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(screen.queryByText(/receivers:/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /test webhook/i }),
+    ).not.toBeInTheDocument();
 
-    await user.click(setUpButton);
+    await user.click(generateButton);
     await waitFor(() => {
       expect(
         screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
@@ -173,6 +180,10 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.getByRole("button", { name: /copy alertmanager receiver/i }),
     ).toBeInTheDocument();
+    // Mid-setup is steps, not a status report: no waiting badge yet.
+    expect(
+      screen.queryByText(/waiting for first alert/i),
+    ).not.toBeInTheDocument();
   });
 
   it("configured: receiver stays visible with a masked token until Show token, which also enables the test", async () => {
@@ -206,6 +217,14 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.getByRole("button", { name: /test webhook/i }),
     ).toBeEnabled();
+    // Revealing is not setup: the status line stays put, no layout jump.
+    expect(screen.getByText(/waiting for first alert/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /hide token/i }));
+    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("delivery state: Receiving with a relative time once an alert has landed", async () => {
@@ -218,7 +237,7 @@ describe("AlertmanagerPage", () => {
     expect(screen.getByText(/last alert 2h ago/i)).toBeInTheDocument();
   });
 
-  it("rotating swaps the new token into the receiver and regresses status to waiting", async () => {
+  it("rotating confirms in a dialog, swaps the new token in place, and drops back to setup mode", async () => {
     const user = userEvent.setup();
     setup({
       configured: true,
@@ -232,9 +251,18 @@ describe("AlertmanagerPage", () => {
       ).toBeGreaterThan(0);
     });
 
+    // The consequence lives in the dialog, not inline; nothing mints until confirmed.
     await user.click(
       screen.getByRole("button", { name: /rotate credential/i }),
     );
+    expect(
+      await screen.findByText(/stops delivering until you paste/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
+    ).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /^rotate$/i }));
     await waitFor(() => {
       expect(
         screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
@@ -243,9 +271,11 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.queryByText(new RegExp(INGEST_TOKEN)),
     ).not.toBeInTheDocument();
+    // Post-rotate the user is mid-setup again: steps, no status line.
     expect(
-      await screen.findByText(/waiting for first alert/i),
-    ).toBeInTheDocument();
+      screen.queryByText(/waiting for first alert/i),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/receiving/i)).not.toBeInTheDocument();
   });
 
   it("test webhook posts the nw_server-labelled sample with the credential and shows the fleet match", async () => {
