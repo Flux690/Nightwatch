@@ -211,7 +211,7 @@ export function PrometheusPage(): React.JSX.Element {
                 {status.hasAuth && <Badge variant="secondary">Auth</Badge>}
               </div>
               {status.validatedAt !== null && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Last verified {new Date(status.validatedAt).toLocaleString()}
                 </p>
               )}
@@ -240,7 +240,7 @@ export function PrometheusPage(): React.JSX.Element {
                 <p className="text-sm font-semibold">
                   Check alert routing labels
                 </p>
-                <p className="max-w-3xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-sm text-muted-foreground">
                   Compares the nw_server label values in your metrics against
                   your runner server names - catches a typo before it costs an
                   investigation.

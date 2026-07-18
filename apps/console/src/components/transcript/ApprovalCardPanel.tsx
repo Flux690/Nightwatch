@@ -16,7 +16,7 @@ export function ApprovalCardPanel({
     <>
       <InterruptCard data-testid="approval-card" resolved={resolved}>
         <p className="font-mono text-sm font-medium">{item.toolName}</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Risk: {item.risk ?? "unknown"}
         </p>
         {resolved ? (

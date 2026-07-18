@@ -308,7 +308,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                   </Button>
                 </div>
                 {token === null && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Show the token to enable the test.
                   </p>
                 )}
@@ -343,7 +343,7 @@ export function AlertmanagerPage(): React.JSX.Element {
             )}
 
             {configured && dockerServers.length === 1 && (
-              <p className="max-w-3xl text-xs text-muted-foreground">
+              <p className="max-w-3xl text-sm text-muted-foreground">
                 One server - alerts resolve to it automatically. When you add a
                 second, come back here to label which server each alert is
                 about.
@@ -355,7 +355,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                 <p className="text-sm font-semibold">
                   Make your alerts say which server they&apos;re about
                 </p>
-                <p className="max-w-3xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-sm text-muted-foreground">
                   With {dockerServers.length} servers, the same service can run
                   in two places. Add an nw_server label per scrape target in
                   your Prometheus so every alert carries its server.
@@ -382,7 +382,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                   text={perTargetSnippet(effectiveServer)}
                 />
                 <Collapsible>
-                  <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                     <ChevronDown {...ICON_INLINE} />
                     This Prometheus only monitors {effectiveServer}? Set it
                     once instead
@@ -404,7 +404,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                 <p className="text-sm font-semibold">
                   Multiple Kubernetes clusters
                 </p>
-                <p className="max-w-3xl text-xs text-muted-foreground">
+                <p className="max-w-3xl text-sm text-muted-foreground">
                   Give each cluster&apos;s alerts a cluster label (in that
                   cluster&apos;s Prometheus external_labels) and set
                   NIGHTWATCH_CLUSTER_NAME to the same value on its runner.

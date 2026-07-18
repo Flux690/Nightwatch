@@ -166,16 +166,14 @@ describe("IntegrationsPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows plain connected text and a Manage button once configured", async () => {
+    it("shows plain connected text and opens the page from the card once configured", async () => {
       const user = userEvent.setup();
       setup({ github: CONFIGURED });
 
       expect(await screen.findByText("Connected")).toBeInTheDocument();
       expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-      await user.click(
-        within(cardFor("GitHub")).getByRole("button", { name: "Manage" }),
-      );
+      await user.click(screen.getByRole("button", { name: "GitHub" }));
 
       expect(
         await screen.findByText(/github connect destination/i),
@@ -204,9 +202,7 @@ describe("IntegrationsPage", () => {
       expect(await screen.findByText("1 server")).toBeInTheDocument();
 
       await user.click(
-        within(cardFor("Nightwatch Runner")).getByRole("button", {
-          name: "Manage",
-        }),
+        screen.getByRole("button", { name: "Nightwatch Runner" }),
       );
 
       expect(
