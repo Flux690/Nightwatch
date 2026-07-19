@@ -117,8 +117,8 @@ export function AlertmanagerPage(): React.JSX.Element {
   >(null);
 
   const { data: status, isLoading } = useQuery<CredentialStatus>({
-    queryKey: ["ingest-credential"],
-    queryFn: () => apiFetch<CredentialStatus>("/api/ingest-credential"),
+    queryKey: ["alertmanager-integration"],
+    queryFn: () => apiFetch<CredentialStatus>("/api/integrations/alertmanager"),
   });
 
   const { data: runners } = useQuery<RunnerRecord[]>({
@@ -139,7 +139,7 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const generate = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>("/api/ingest-credential", { method: "POST" }),
+      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential", { method: "POST" }),
     onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
@@ -149,7 +149,7 @@ export function AlertmanagerPage(): React.JSX.Element {
           "Credential rotated - paste the updated receiver into your Alertmanager",
         );
       }
-      await queryClient.invalidateQueries({ queryKey: ["ingest-credential"] });
+      await queryClient.invalidateQueries({ queryKey: ["alertmanager-integration"] });
     },
     onError: (err) =>
       toast.show({
@@ -161,7 +161,7 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const reveal = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>("/api/ingest-credential/reveal", {
+      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential/reveal", {
         method: "POST",
       }),
     onSuccess: ({ token: revealed }) => setToken(revealed),

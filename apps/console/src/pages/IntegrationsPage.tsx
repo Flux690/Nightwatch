@@ -5,7 +5,7 @@ import type {
   PrometheusIntegrationStatus,
   RunnerRecord,
 } from "@nightwatch/shared";
-import { BellRing, Server } from "lucide-react";
+import { Server } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,15 +13,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { apiFetch } from "@/api/client";
 
-// One card per plug: logo, name, and either the connect action or the live
-// status - everything else lives on the integration's own page.
+// One card per plug: logo, name, a quiet status line, and an always-present
+// action - everything else lives on the integration's own page.
 function IntegrationCard({
   title,
   logo,
   isLoading,
   status,
   statusVariant = "success",
-  connectLabel,
   onOpen,
 }: {
   title: string;
@@ -31,9 +30,9 @@ function IntegrationCard({
   status: string | null;
   // "muted" for in-between states that are configured but not yet proven.
   statusVariant?: "success" | "muted";
-  connectLabel: string;
   onOpen: () => void;
 }): React.JSX.Element {
+  const configured = status !== null;
   return (
     <Card
       role="button"
@@ -46,32 +45,37 @@ function IntegrationCard({
           onOpen();
         }
       }}
-      className="cursor-pointer items-center gap-3 px-4 py-6 text-center transition-colors hover:ring-ring/60"
+      className="cursor-pointer items-center gap-2 px-4 py-6 text-center transition-colors hover:ring-ring/60"
     >
       <span className="flex h-10 items-center">{logo}</span>
       <span className="text-sm font-medium">{title}</span>
       {isLoading ? (
         <Spinner className="size-4" />
-      ) : status !== null ? (
-        <span
-          className={
-            statusVariant === "success"
-              ? "text-sm font-medium text-success"
-              : "text-sm font-medium text-muted-foreground"
-          }
-        >
-          {status}
-        </span>
       ) : (
-        <Button
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpen();
-          }}
-        >
-          {connectLabel}
-        </Button>
+        <>
+          {configured && (
+            <span
+              className={
+                statusVariant === "success"
+                  ? "text-sm text-success"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {status}
+            </span>
+          )}
+          <Button
+            size="sm"
+            variant={configured ? "secondary" : "default"}
+            className="mt-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+          >
+            {configured ? "Manage" : "Connect"}
+          </Button>
+        </>
       )}
     </Card>
   );
@@ -98,10 +102,10 @@ export function IntegrationsPage(): React.JSX.Element {
     configured: boolean;
     lastReceivedAt: string | null;
   }>({
-    queryKey: ["ingest-credential"],
+    queryKey: ["alertmanager-integration"],
     queryFn: () =>
       apiFetch<{ configured: boolean; lastReceivedAt: string | null }>(
-        "/api/ingest-credential",
+        "/api/integrations/alertmanager",
       ),
   });
 
@@ -132,7 +136,6 @@ export function IntegrationsPage(): React.JSX.Element {
               ? `${connectedRunners.length} ${connectedRunners.length === 1 ? "server" : "servers"}`
               : null
           }
-          connectLabel="Add a server"
           onOpen={() =>
             void navigate({
               to:
@@ -145,7 +148,7 @@ export function IntegrationsPage(): React.JSX.Element {
 
         <IntegrationCard
           title="Alertmanager"
-          logo={<BellRing className="size-9 text-muted-foreground" />}
+          logo={<img src="/logos/alertmanager.svg" alt="" className="size-9" />}
           isLoading={ingestLoading}
           status={
             ingest?.configured !== true
@@ -155,7 +158,6 @@ export function IntegrationsPage(): React.JSX.Element {
                 : "Waiting for first alert"
           }
           statusVariant={ingest?.lastReceivedAt !== null ? "success" : "muted"}
-          connectLabel="Set up"
           onOpen={() => void navigate({ to: "/integrations/alertmanager" })}
         />
 
@@ -164,7 +166,6 @@ export function IntegrationsPage(): React.JSX.Element {
           logo={<img src="/logos/prometheus.svg" alt="" className="size-9" />}
           isLoading={prometheusLoading}
           status={prometheus?.configured === true ? "Connected" : null}
-          connectLabel="Connect Prometheus"
           onOpen={() => void navigate({ to: "/integrations/prometheus" })}
         />
 
@@ -173,7 +174,6 @@ export function IntegrationsPage(): React.JSX.Element {
           logo={<img src="/logos/github.svg" alt="" className="size-9" />}
           isLoading={githubLoading}
           status={github?.configured === true ? "Connected" : null}
-          connectLabel="Connect GitHub"
           onOpen={() => void navigate({ to: "/integrations/github" })}
         />
       </div>

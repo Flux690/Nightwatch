@@ -49,12 +49,18 @@ repo.yarnpkg.com',
     email             TEXT,
     hash              TEXT,
     login_version     INTEGER NOT NULL DEFAULT 0,
-    ingest_token_hash      TEXT,
-    ingest_token_encrypted TEXT,
-    -- Stamped on every authenticated, well-formed POST to /alerts/ingest;
-    -- reset to NULL on credential rotation so status regresses to waiting.
-    last_alert_received_at TEXT,
-    updated_at             TEXT NOT NULL
+    updated_at        TEXT NOT NULL
+  );
+
+  -- One row per alert-source card ('alertmanager', 'grafana', ...), each owning
+  -- its own inbound nwi_ credential: rotation affects one source, and
+  -- last_received_at makes per-source delivery status authoritative.
+  CREATE TABLE IF NOT EXISTS alert_sources (
+    kind             TEXT PRIMARY KEY,
+    token_hash       TEXT NOT NULL UNIQUE,
+    token_encrypted  TEXT NOT NULL,
+    last_received_at TEXT,
+    created_at       TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sessions (

@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { generateIngestToken } from "../db/user.js";
+import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
@@ -52,7 +52,7 @@ describe("POST /alerts/validate", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    INGEST_TOKEN = generateIngestToken();
+    INGEST_TOKEN = generateAlertSourceToken("alertmanager");
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
     await server.ready();

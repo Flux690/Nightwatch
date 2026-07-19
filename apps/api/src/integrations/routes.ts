@@ -14,6 +14,11 @@ import {
   savePrometheusIntegration,
 } from "../db/prometheus-integration.js";
 import {
+  generateAlertSourceToken,
+  getAlertSource,
+  getAlertSourcePlaintext,
+} from "../db/alert-sources.js";
+import {
   GitHubApiError,
   listRepos,
   ownerIsOrganization,
@@ -319,6 +324,49 @@ export async function registerIntegrationRoutes(
       } catch (err) {
         return sendPrometheusError(reply, err);
       }
+    },
+  );
+
+  // Alertmanager is a push source: its credential is minted here (the config
+  // plane); deliveries hit /alerts/ingest (the data plane) with that token.
+  fastify.get(
+    "/integrations/alertmanager",
+    { preHandler: requireSession },
+    async (request) => {
+      const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
+      const source = getAlertSource("alertmanager");
+      return {
+        configured: source !== null,
+        ingestUrl: `${origin}/alerts/ingest`,
+        // Delivery proof, not configuration state: null until the user's
+        // Alertmanager actually posts, and again after a rotation.
+        lastReceivedAt: source?.lastReceivedAt ?? null,
+      };
+    },
+  );
+
+  fastify.post(
+    "/integrations/alertmanager/credential",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      const token = generateAlertSourceToken("alertmanager");
+      return reply.code(201).send({ token });
+    },
+  );
+
+  // Reveal is a deliberate, non-idempotent action: the plaintext only crosses
+  // the wire when the operator explicitly asks for it.
+  fastify.post(
+    "/integrations/alertmanager/credential/reveal",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      const token = getAlertSourcePlaintext("alertmanager");
+      if (token === null) {
+        return reply
+          .code(404)
+          .send({ error: "No ingest credential configured" });
+      }
+      return { token };
     },
   );
 

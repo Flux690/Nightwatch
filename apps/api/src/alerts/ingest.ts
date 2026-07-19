@@ -1,11 +1,12 @@
-import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
-import { findRunnerByToken, hashToken } from "../db/runner.js";
+import {
+  findAlertSourceKindByToken,
+  setAlertSourceReceived,
+} from "../db/alert-sources.js";
 import { getPrometheusIntegration } from "../db/prometheus-integration.js";
-import { getIngestTokenHash, setLastAlertReceived } from "../db/user.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
 
@@ -21,7 +22,8 @@ export async function registerAlertRoutes(
       });
     }
 
-    if (!authenticate(plaintext)) {
+    const sourceKind = findAlertSourceKindByToken(plaintext);
+    if (sourceKind === null) {
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
 
@@ -33,9 +35,9 @@ export async function registerAlertRoutes(
       return reply.code(400).send({ error: msg });
     }
 
-    // Delivery is proven by an authenticated, well-formed webhook - stamped
-    // before the evidence gate below, and even when every alert dedups away.
-    setLastAlertReceived(new Date().toISOString());
+    // Delivery is proven by an authenticated, well-formed webhook - stamped on
+    // the matched source, before the evidence gate, even when everything dedups.
+    setAlertSourceReceived(sourceKind, new Date().toISOString());
 
     // Evidence gate, not identity gate: a runner OR the Prometheus integration
     // makes an investigation worth starting; misroute protection is downstream.
@@ -67,7 +69,7 @@ export async function registerAlertRoutes(
           error: "X-Nightwatch-Token or Authorization: Bearer token required",
         });
       }
-      if (!authenticate(plaintext)) {
+      if (findAlertSourceKindByToken(plaintext) === null) {
         return reply.code(401).send({ error: "unknown or revoked token" });
       }
 
@@ -110,30 +112,6 @@ export async function registerAlertRoutes(
       return reply.code(200).send({ alerts });
     },
   );
-}
-
-// Authenticates only - grants no routing. `nwi_` (fleet) and `nwr_` (per-runner) both just
-// prove the request may submit; the agent decides what the alert is about.
-function authenticate(plaintext: string): boolean {
-  if (plaintext.startsWith("nwi_")) {
-    const ingestHash = getIngestTokenHash();
-    return (
-      ingestHash !== null &&
-      timingSafeHexEqual(hashToken(plaintext), ingestHash)
-    );
-  }
-
-  const tokenRecord = findRunnerByToken(plaintext);
-  if (!tokenRecord) return false;
-  return true;
-}
-
-// Constant-time compare of two hex digests so token validation leaks no timing
-// information, consistent with the rest of the token-handling posture.
-function timingSafeHexEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "hex");
-  const bb = Buffer.from(b, "hex");
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
 function extractToken(

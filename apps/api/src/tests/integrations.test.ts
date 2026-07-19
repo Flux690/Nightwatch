@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   afterAll,
   afterEach,
@@ -12,6 +13,7 @@ import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
 import { deletePrometheusIntegration } from "../db/prometheus-integration.js";
+import { setAlertSourceReceived } from "../db/alert-sources.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -641,5 +643,122 @@ describe("Prometheus integration routes", () => {
       unregisterRunner(connA);
       unregisterRunner(connB);
     }
+  });
+});
+
+describe("Alertmanager integration routes", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await registerIntegrationRoutes(server);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  function authed(opts: { method: "GET" | "POST"; url: string }) {
+    return server.inject({
+      method: opts.method,
+      url: opts.url,
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+  }
+
+  function sha256hex(s: string): string {
+    return createHash("sha256").update(s).digest("hex");
+  }
+
+  it("reports not configured with the ingest URL; reveal 404s; a session is required", async () => {
+    const unauthed = await server.inject({
+      method: "GET",
+      url: "/integrations/alertmanager",
+    });
+    expect(unauthed.statusCode).toBe(401);
+
+    const res = await authed({ method: "GET", url: "/integrations/alertmanager" });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as Record<string, unknown>;
+    expect(body.configured).toBe(false);
+    expect(body.ingestUrl).toMatch(/\/alerts\/ingest$/);
+    expect(body.lastReceivedAt).toBeNull();
+
+    const reveal = await authed({
+      method: "POST",
+      url: "/integrations/alertmanager/credential/reveal",
+    });
+    expect(reveal.statusCode).toBe(404);
+  });
+
+  it("mints an nwi_ credential storing only the hash; reveal returns the plaintext", async () => {
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/alertmanager/credential",
+    });
+    expect(res.statusCode).toBe(201);
+    const { token } = JSON.parse(res.body) as { token: string };
+    expect(token).toMatch(/^nwi_[A-Za-z0-9_-]{43}$/);
+
+    const row = getDb()
+      .prepare(
+        "SELECT token_hash FROM alert_sources WHERE kind = 'alertmanager'",
+      )
+      .get() as { token_hash: string };
+    expect(row.token_hash).toBe(sha256hex(token));
+    expect(row.token_hash).not.toContain("nwi_");
+
+    const reveal = await authed({
+      method: "POST",
+      url: "/integrations/alertmanager/credential/reveal",
+    });
+    expect(JSON.parse(reveal.body)).toEqual({ token });
+
+    const status = await authed({
+      method: "GET",
+      url: "/integrations/alertmanager",
+    });
+    expect(JSON.parse(status.body)).toMatchObject({ configured: true });
+  });
+
+  it("rotation replaces the hash and resets the delivery stamp", async () => {
+    const first = await authed({
+      method: "POST",
+      url: "/integrations/alertmanager/credential",
+    });
+    const { token: oldToken } = JSON.parse(first.body) as { token: string };
+    setAlertSourceReceived("alertmanager", "2026-07-18T03:12:00.000Z");
+
+    const before = await authed({
+      method: "GET",
+      url: "/integrations/alertmanager",
+    });
+    expect(
+      (JSON.parse(before.body) as { lastReceivedAt: string | null })
+        .lastReceivedAt,
+    ).toBe("2026-07-18T03:12:00.000Z");
+
+    const second = await authed({
+      method: "POST",
+      url: "/integrations/alertmanager/credential",
+    });
+    const { token: newToken } = JSON.parse(second.body) as { token: string };
+    expect(newToken).not.toBe(oldToken);
+
+    const row = getDb()
+      .prepare(
+        "SELECT token_hash, last_received_at FROM alert_sources WHERE kind = 'alertmanager'",
+      )
+      .get() as { token_hash: string; last_received_at: string | null };
+    expect(row.token_hash).toBe(sha256hex(newToken));
+    expect(row.token_hash).not.toBe(sha256hex(oldToken));
+    expect(row.last_received_at).toBeNull();
   });
 });

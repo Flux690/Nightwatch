@@ -19,7 +19,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import { generateRunnerToken } from "../db/runner.js";
+import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
@@ -148,7 +148,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   }
 
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
-    const { plaintext: token } = generateRunnerToken("dedup");
+    const token = generateAlertSourceToken("dedup");
     // A re-notification carries the SAME startsAt - that pairing is the dedup key.
     const firedAt = "2026-07-07T03:00:00.000Z";
     // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
@@ -198,7 +198,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("rate-limits past 30 non-critical alerts fleet-wide per hour; critical bypasses; resets after the window", async () => {
-    const { plaintext: token } = generateRunnerToken("ratelimit");
+    const token = generateAlertSourceToken("ratelimit");
     useImmediateProvider(); // runs complete at once; rate-limit is independent of them
     // Fake only Date - the rate-limit window is Date.now()-based. Faking
     // setImmediate/setTimeout too would hang Fastify's async internals.
@@ -245,7 +245,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   });
 
   it("dispatches matched and unmatched alerts alike - no identity gate at ingest", async () => {
-    const { plaintext: token } = generateRunnerToken("mixed-batch");
+    const token = generateAlertSourceToken("mixed-batch");
     useImmediateProvider();
 
     const res = await server.inject({

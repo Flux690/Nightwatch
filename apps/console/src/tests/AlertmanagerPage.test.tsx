@@ -122,13 +122,19 @@ function setup(
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/runners") return jsonOk(runners);
-      if (url === "/api/ingest-credential" && init?.method === "POST") {
+      if (
+        url === "/api/integrations/alertmanager/credential" &&
+        init?.method === "POST"
+      ) {
         rotated = true;
         return jsonOk({ token: ROTATED_TOKEN }, 201);
       }
-      if (url === "/api/ingest-credential/reveal" && init?.method === "POST")
+      if (
+        url === "/api/integrations/alertmanager/credential/reveal" &&
+        init?.method === "POST"
+      )
         return jsonOk({ token: INGEST_TOKEN });
-      if (url === "/api/ingest-credential")
+      if (url === "/api/integrations/alertmanager")
         return jsonOk({
           configured: configured || rotated,
           ingestUrl: INGEST_URL,
@@ -161,7 +167,7 @@ describe("AlertmanagerPage", () => {
     expect(screen.getByText(/receivers:/)).toBeInTheDocument();
     expect(screen.getByText(/••••••••/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/ingest-credential",
+      "/api/integrations/alertmanager/credential",
       expect.objectContaining({ method: "POST" }),
     );
     expect(
@@ -204,7 +210,7 @@ describe("AlertmanagerPage", () => {
     await user.click(screen.getByRole("button", { name: /show token/i }));
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/api/ingest-credential/reveal",
+        "/api/integrations/alertmanager/credential/reveal",
         expect.objectContaining({ method: "POST" }),
       );
     });

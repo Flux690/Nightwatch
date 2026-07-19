@@ -117,7 +117,7 @@ function setup(
       const body =
         url === "/api/runners"
           ? runners
-          : url === "/api/ingest-credential"
+          : url === "/api/integrations/alertmanager"
             ? { configured: ingestConfigured, lastReceivedAt }
             : url === "/api/integrations/prometheus"
               ? {
@@ -157,8 +157,11 @@ describe("IntegrationsPage", () => {
       const user = userEvent.setup();
       setup();
 
+      await screen.findByText("GitHub");
       await user.click(
-        await screen.findByRole("button", { name: /connect github/i }),
+        await within(cardFor("GitHub")).findByRole("button", {
+          name: "Connect",
+        }),
       );
 
       expect(
@@ -186,8 +189,11 @@ describe("IntegrationsPage", () => {
       const user = userEvent.setup();
       setup({ runners: [] });
 
+      await screen.findByText("Nightwatch Runner");
       await user.click(
-        await screen.findByRole("button", { name: /add a server/i }),
+        await within(cardFor("Nightwatch Runner")).findByRole("button", {
+          name: "Connect",
+        }),
       );
 
       expect(
@@ -216,7 +222,12 @@ describe("IntegrationsPage", () => {
       const user = userEvent.setup();
       setup({ ingestConfigured: false });
 
-      await user.click(await screen.findByRole("button", { name: /set up/i }));
+      await screen.findByText("Alertmanager");
+      await user.click(
+        await within(cardFor("Alertmanager")).findByRole("button", {
+          name: "Connect",
+        }),
+      );
 
       expect(
         await screen.findByText(/alertmanager destination/i),
@@ -245,8 +256,11 @@ describe("IntegrationsPage", () => {
       const user = userEvent.setup();
       setup();
 
+      await screen.findByText("Prometheus");
       await user.click(
-        await screen.findByRole("button", { name: /connect prometheus/i }),
+        await within(cardFor("Prometheus")).findByRole("button", {
+          name: "Connect",
+        }),
       );
 
       expect(
