@@ -138,6 +138,22 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       expect(names).not.toContain("GetDockerLogs");
       expect(names).not.toContain("GetK8sLogs");
     });
+
+    it("the Prometheus gate controls the metrics tools, independent of substrate", () => {
+      const connected = getToolSchemas(
+        { docker: false, kubernetes: false },
+        true,
+        false,
+        true,
+      ).map((s) => s.name);
+      expect(connected).toContain("QueryMetrics");
+      expect(connected).toContain("QueryMetricsRange");
+      const disconnected = getToolSchemas(undefined, true, true, false).map(
+        (s) => s.name,
+      );
+      expect(disconnected).not.toContain("QueryMetrics");
+      expect(disconnected).not.toContain("QueryMetricsRange");
+    });
   });
 
   describe("remediation-mode filter (unit)", () => {

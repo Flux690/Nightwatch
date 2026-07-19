@@ -49,9 +49,18 @@ repo.yarnpkg.com',
     email             TEXT,
     hash              TEXT,
     login_version     INTEGER NOT NULL DEFAULT 0,
-    ingest_token_hash      TEXT,
-    ingest_token_encrypted TEXT,
-    updated_at             TEXT NOT NULL
+    updated_at        TEXT NOT NULL
+  );
+
+  -- One row per alert-source card ('alertmanager', 'grafana', ...), each owning
+  -- its own inbound nwi_ credential: rotation affects one source, and
+  -- last_received_at makes per-source delivery status authoritative.
+  CREATE TABLE IF NOT EXISTS alert_sources (
+    kind             TEXT PRIMARY KEY,
+    token_hash       TEXT NOT NULL UNIQUE,
+    token_encrypted  TEXT NOT NULL,
+    last_received_at TEXT,
+    created_at       TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS sessions (
@@ -123,6 +132,16 @@ repo.yarnpkg.com',
     token_expires_at TEXT,
     validated_at     TEXT NOT NULL,
     created_at       TEXT NOT NULL
+  );
+
+  -- Single Prometheus integration row (id 'prometheus'): auth_header_encrypted is the
+  -- verbatim Authorization value (NULL = no auth), encrypted at rest, never returned.
+  CREATE TABLE IF NOT EXISTS prometheus_integration (
+    id                    TEXT PRIMARY KEY,
+    base_url              TEXT NOT NULL,
+    auth_header_encrypted TEXT,
+    validated_at          TEXT NOT NULL,
+    created_at            TEXT NOT NULL
   );
 
 `;

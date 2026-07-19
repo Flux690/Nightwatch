@@ -1,6 +1,6 @@
 import { decrypt } from "../../config/crypto.js";
 import { getGitHubIntegration } from "../../db/github-integration.js";
-import { getSession } from "../../db/sessions.js";
+import { alertAnchorFor } from "./alert-anchor.js";
 import {
   defaultBranch,
   listCommits,
@@ -50,17 +50,6 @@ function windowHoursFrom(input: Record<string, unknown>): number {
     return DEFAULT_WINDOW_HOURS;
   }
   return Math.min(raw, MAX_WINDOW_HOURS);
-}
-
-// The window ends at the alert, never at the query time: a change after the
-// alert fired cannot have caused it. Chat sessions have no alert, so "now".
-function windowEndFor(sessionId: string): Date {
-  const firedAt = getSession(sessionId)?.originatingAlert?.firedAt;
-  if (firedAt !== undefined) {
-    const parsed = new Date(firedAt);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return new Date();
 }
 
 function isPermissionStatus(err: unknown): boolean {
@@ -162,7 +151,8 @@ export const GITHUB_TOOLS: Tool[] = [
       }
       const { repoOwner, repoName } = integration;
 
-      const windowEnd = windowEndFor(ctx.sessionId);
+      // The window ends at the alert: a change merged after it fired cannot have caused it.
+      const windowEnd = alertAnchorFor(ctx.sessionId);
       const windowStart = new Date(
         windowEnd.getTime() - windowHoursFrom(input) * 3_600_000,
       );

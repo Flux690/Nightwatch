@@ -87,6 +87,13 @@ export function AddServerPage(): React.JSX.Element {
     (r) => r.token === mintedToken?.id && r.online && r.hostname !== null,
   );
 
+  // Snippets live only on the Alertmanager page (one owner); the wizard just
+  // points there the moment routing ambiguity becomes possible.
+  const connectedDockerServers = (runners ?? []).filter(
+    (r) =>
+      r.online && r.hostname !== null && r.manifest?.capabilities.docker === true,
+  ).length;
+
   useEffect(() => {
     if (connectedRunner) setCommitted(true);
   }, [connectedRunner]);
@@ -335,6 +342,17 @@ export function AddServerPage(): React.JSX.Element {
               <AlertTitle>Verification failed</AlertTitle>
               <AlertDescription>{verifyResult.error}</AlertDescription>
             </Alert>
+          )}
+
+          {connectedDockerServers >= 2 && (
+            <p className="text-sm text-muted-foreground">
+              You now have {connectedDockerServers} servers - finish alert
+              routing on the{" "}
+              <Link to="/integrations/alertmanager" className="underline">
+                Alertmanager page
+              </Link>
+              .
+            </p>
           )}
 
           <WizardActions>

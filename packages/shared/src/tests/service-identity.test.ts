@@ -106,12 +106,12 @@ describe("deriveServiceIdentity", () => {
       });
     });
 
-    it("takes the server dimension from the server label", () => {
+    it("takes the server dimension from the nw_server label", () => {
       const identity = deriveServiceIdentity({
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
-        server: "server-a",
+        nw_server: "server-a",
       });
       expect(identity).toEqual({
         provider: "docker",
@@ -121,13 +121,16 @@ describe("deriveServiceIdentity", () => {
       });
     });
 
-    it("ignores instance and hostname labels - only the server label scopes the identity", () => {
+    it("ignores instance, hostname, and foreign server labels - only nw_server scopes the identity", () => {
+      // `server` belongs to foreign tools (postgres_exporter stamps a db
+      // address on it); treating it as fleet scope would misroute the alert.
       const identity = deriveServiceIdentity({
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "postgres",
         instance: "localhost:8080",
         hostname: "some-host",
+        server: "db-host:5432",
       });
       expect(identity).toEqual({
         provider: "docker",
@@ -197,9 +200,9 @@ describe("deriveServiceIdentity", () => {
 });
 
 // Both sides of the fleet match: the runner stamps the assigned name onto its manifest, the alert
-// carries it in the `server` label, so resolve-or-reject produces the same key deterministically.
+// carries it in the `nw_server` label, so resolve-or-reject produces the same key deterministically.
 describe("assigned-name round-trip: manifest key === alert-derived key", () => {
-  it("Docker: manifest entry with server matches alert with server label", () => {
+  it("Docker: manifest entry with server matches alert with nw_server label", () => {
     const assignedName = "prod-server-01";
 
     const manifestKey = serviceIdentityKey({
@@ -214,7 +217,7 @@ describe("assigned-name round-trip: manifest key === alert-derived key", () => {
         alertname: "ContainerDown",
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "api",
-        server: assignedName,
+        nw_server: assignedName,
       }),
     );
 

@@ -15,7 +15,7 @@ const MIN_PASSWORD = 12;
 function ValidationError({ message }: { message: string }): React.JSX.Element {
   return (
     <div
-      className="flex min-h-[18px] items-start gap-1 text-xs text-destructive"
+      className="flex min-h-[18px] items-start gap-1 text-sm text-destructive"
       role="alert"
     >
       {message && (

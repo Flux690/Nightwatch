@@ -13,7 +13,7 @@ export function WizardStepper({
 }): React.JSX.Element {
   return (
     <div className="mb-8">
-      <div className="mb-1 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+      <div className="mb-1 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground">
         Step {step + 1} of {total}
       </div>
       <div className="mb-4 text-lg font-semibold tracking-[-0.2px] text-foreground">

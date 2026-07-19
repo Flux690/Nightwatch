@@ -22,6 +22,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
 import Fastify from "fastify";
 import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
+import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
@@ -307,8 +308,8 @@ describe("mid-run alert injection (loop seam)", () => {
   // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
   // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
-    const { id: runnerId, plaintext: tokenPlaintext } =
-      generateRunnerToken("inject-resume");
+    const runnerId = generateRunnerToken("inject-resume").id;
+    const tokenPlaintext = generateAlertSourceToken("inject-resume");
     setRemediationMode(runnerId, true);
     const conn = registerRunner(
       runnerId,

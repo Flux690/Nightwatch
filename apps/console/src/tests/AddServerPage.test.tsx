@@ -79,11 +79,17 @@ function renderAddServerRoute() {
     path: "/integrations",
     component: () => <div>Integrations destination</div>,
   });
+  const alertmanagerRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/alertmanager",
+    component: () => <div>Alertmanager destination</div>,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       addRoute,
       runnerServersRoute,
       integrationsRoute,
+      alertmanagerRoute,
     ]),
     history: createMemoryHistory({
       initialEntries: ["/integrations/runner/add"],
@@ -244,6 +250,49 @@ describe("AddServerPage", () => {
       await waitFor(() => {
         expect(screen.getByText(/pipeline verified/i)).toBeInTheDocument();
       });
+      // A lone server needs no routing labels, so no signpost.
+      expect(
+        screen.queryByText(/finish alert routing/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it("points to the Alertmanager page once a second docker server exists - a link, never a snippet", async () => {
+      const user = userEvent.setup();
+      const dockerManifest = {
+        hostname: "web-host",
+        runnerVersion: "2.0.0",
+        capabilities: {
+          docker: true,
+          kubernetes: false,
+          services: [],
+          postgres: { available: false },
+          redis: { available: false },
+          hostMetrics: true,
+          fileRead: true,
+          remediationEnabled: false,
+        },
+      };
+      setup({
+        runners: [
+          { ...CONNECTED_RUNNER, manifest: dockerManifest },
+          {
+            ...CONNECTED_RUNNER,
+            id: "older-runner",
+            token: "older-runner",
+            serverName: "prod-web-01",
+            manifest: dockerManifest,
+          },
+        ],
+      });
+      await advanceToVerify(user);
+
+      const signpost = await screen.findByText(/finish alert routing/i);
+      expect(signpost).toHaveTextContent(/2 servers/);
+      expect(
+        screen.getByRole("link", { name: /alertmanager page/i }),
+      ).toBeInTheDocument();
+      // One-owner rule: the wizard never dispenses the yaml itself.
+      expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
     });
 
     it("shows an error when the test alert fails", async () => {

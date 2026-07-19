@@ -103,4 +103,6 @@ export type {
   GitHubRepoSummary,
   GitHubRepoPage,
   GitHubErrorBody,
+  PrometheusIntegrationStatus,
+  PrometheusLabelValidation,
 } from "./integrations.js";

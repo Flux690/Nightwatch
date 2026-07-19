@@ -15,7 +15,7 @@ function identityToLabels(identity: ServiceIdentity): Record<string, string> {
       ...base,
       "com.docker.compose.project": identity.project,
       "com.docker.compose.service": identity.service,
-      ...(identity.server ? { server: identity.server } : {}),
+      ...(identity.server ? { nw_server: identity.server } : {}),
     };
   }
   return {

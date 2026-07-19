@@ -178,5 +178,7 @@ describe("GET /connect.sh", () => {
     expect(res.body).toContain(
       "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}",
     );
+    // The container reports the host's real name, never its container id.
+    expect(res.body).toContain('--hostname "$(hostname)"');
   });
 });

@@ -11,7 +11,18 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { generateRunnerToken } from "../db/runner.js";
-import { generateIngestToken } from "../db/user.js";
+import {
+  deletePrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/prometheus-integration.js";
+import {
+  generateAlertSourceToken,
+  getAlertSource,
+} from "../db/alert-sources.js";
+
+function lastReceived(): string | null {
+  return getAlertSource("alertmanager")?.lastReceivedAt ?? null;
+}
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
@@ -59,7 +70,7 @@ describe("POST /alerts/ingest auth", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    VALID_TOKEN = generateRunnerToken("test-ingest-runner").plaintext;
+    VALID_TOKEN = generateAlertSourceToken("alertmanager");
 
     // Resolution matches the alert's labels against the fleet, so a runner advertising
     // the matching service must be connected for the 200-path tests to mean anything.
@@ -89,12 +100,26 @@ describe("POST /alerts/ingest auth", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": `nwr_unknown-${randomUUID()}` },
+      headers: { "x-nightwatch-token": `nwi_unknown-${randomUUID()}` },
       payload: ALERTMANAGER_BODY,
     });
     expect(res.statusCode).toBe(401);
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/token/i);
+    // A rejected request proves nothing about the pipe - no delivery stamp.
+    expect(lastReceived()).toBeNull();
+  });
+
+  it("rejects runner tokens - a runner credential grants runner things, never ingest", async () => {
+    const runnerToken = generateRunnerToken("not-an-alert-source").plaintext;
+    const res = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": runnerToken },
+      payload: ALERTMANAGER_BODY,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(lastReceived()).toBeNull();
   });
 
   it("rejects missing token with 401", async () => {
@@ -117,6 +142,9 @@ describe("POST /alerts/ingest auth", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { received: number };
     expect(body.received).toBe(1);
+    // Authenticated, well-formed delivery stamps the pipe as proven - even if
+    // this particular alert dedups against an earlier test's routing.
+    expect(lastReceived()).not.toBeNull();
   });
 
   it("accepts a valid Authorization bearer token and processes the alert", async () => {
@@ -169,7 +197,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    INGEST_TOKEN = generateIngestToken();
+    INGEST_TOKEN = generateAlertSourceToken("alertmanager");
 
     server = Fastify({ logger: false });
     await registerAlertRoutes(server);
@@ -203,16 +231,36 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rejects with no runner connected", async () => {
+  it("rejects only when neither a runner nor Prometheus can supply evidence", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
       headers: { "x-nightwatch-token": INGEST_TOKEN },
-      payload: alertmanagerBody("nwi-no-runner"),
+      payload: alertmanagerBody("nwi-no-evidence"),
     });
     expect(res.statusCode).toBe(503);
     const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/runner/i);
+    expect(body.error).toMatch(/runner|prometheus/i);
+    // The webhook DID deliver: the stamp lands before the evidence gate, so the
+    // page shows "receiving" even while investigation is blocked.
+    expect(lastReceived()).not.toBeNull();
+
+    // Prometheus alone is a sufficient evidence source - the agentless path.
+    savePrometheusIntegration({
+      baseUrl: "http://prom.internal:9090",
+      authHeaderEncrypted: null,
+    });
+    const agentless = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      payload: alertmanagerBody("nwi-prometheus-only"),
+    });
+    expect(agentless.statusCode).toBe(200);
+    expect(
+      (JSON.parse(agentless.body) as { enqueued: number }).enqueued,
+    ).toBe(1);
+    deletePrometheusIntegration();
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {
@@ -326,25 +374,4 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(body.error).toMatch(/unrecognized payload/i);
   });
 
-  it("nwr_ tokens resolve by fleet match too - the token authenticates, labels route", async () => {
-    const runnerToken = generateRunnerToken("nwr-still-works").plaintext;
-    // The nwr_ token is never a WS connection; a separate runner advertises the matching
-    // service, proving routing doesn't read the token at all.
-    connA = registerRunner(
-      "runner-a-token",
-      () => {},
-      () => {},
-    );
-    setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
-
-    const res = await server.inject({
-      method: "POST",
-      url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": runnerToken },
-      payload: alertmanagerBody("nwi-coexist-nwr"),
-    });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { enqueued: number };
-    expect(body.enqueued).toBe(1);
-  });
 });

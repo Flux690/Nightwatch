@@ -6,6 +6,7 @@ import type { SessionMeta } from "@nightwatch/shared";
 import { ICON_UI } from "@/lib/iconProps";
 
 import {
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
@@ -60,9 +61,16 @@ export function SessionsSidebar(): React.JSX.Element {
 
   return (
     <>
+      {/* The heading and the empty state never show together: a list of zero
+          sessions needs no title, and the hint says it all. */}
+      {sessions.length > 0 && (
+        <SidebarGroupLabel className="text-sm">
+          Recent sessions
+        </SidebarGroupLabel>
+      )}
       <SidebarMenu className="gap-0.5">
         {!isLoading && sessions.length === 0 && (
-          <p className="px-2 py-2 text-xs text-muted-foreground">
+          <p className="px-2 py-2 text-sm text-muted-foreground">
             Your sessions will show up here.
           </p>
         )}

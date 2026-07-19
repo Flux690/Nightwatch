@@ -1,59 +1,82 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwatch/shared";
+import type {
+  GitHubIntegrationStatus,
+  PrometheusIntegrationStatus,
+  RunnerRecord,
+} from "@nightwatch/shared";
+import { Server } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { apiFetch } from "@/api/client";
 
-// One card per plug: an integration is either connected (show its state and a
-// way in) or not (show the action that connects it).
+// One card per plug: logo, name, a quiet status line, and an always-present
+// action - everything else lives on the integration's own page.
 function IntegrationCard({
   title,
-  description,
+  logo,
   isLoading,
   status,
-  connectLabel,
+  statusVariant = "success",
   onOpen,
 }: {
   title: string;
-  description: string;
+  logo: React.ReactNode;
   isLoading: boolean;
   // null when the integration is not set up yet.
   status: string | null;
-  connectLabel: string;
+  // "muted" for in-between states that are configured but not yet proven.
+  statusVariant?: "success" | "muted";
   onOpen: () => void;
 }): React.JSX.Element {
+  const configured = status !== null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-        <CardAction className="self-center">
-          {isLoading ? (
-            <Spinner className="size-4" />
-          ) : status !== null ? (
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-success">{status}</span>
-              <Button size="sm" variant="secondary" onClick={onOpen}>
-                Manage
-              </Button>
-            </div>
-          ) : (
-            <Button size="sm" onClick={onOpen}>
-              {connectLabel}
-            </Button>
+    <Card
+      role="button"
+      tabIndex={0}
+      aria-label={title}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="cursor-pointer items-center gap-2 px-4 py-6 text-center transition-colors hover:ring-ring/60"
+    >
+      <span className="flex h-10 items-center">{logo}</span>
+      <span className="text-sm font-medium">{title}</span>
+      {isLoading ? (
+        <Spinner className="size-4" />
+      ) : (
+        <>
+          {configured && (
+            <span
+              className={
+                statusVariant === "success"
+                  ? "text-sm text-success"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {status}
+            </span>
           )}
-        </CardAction>
-      </CardHeader>
+          <Button
+            size="sm"
+            variant={configured ? "secondary" : "default"}
+            className="mt-1"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen();
+            }}
+          >
+            {configured ? "Manage" : "Connect"}
+          </Button>
+        </>
+      )}
     </Card>
   );
 }
@@ -77,10 +100,21 @@ export function IntegrationsPage(): React.JSX.Element {
 
   const { data: ingest, isLoading: ingestLoading } = useQuery<{
     configured: boolean;
+    lastReceivedAt: string | null;
   }>({
-    queryKey: ["ingest-credential"],
-    queryFn: () => apiFetch<{ configured: boolean }>("/api/ingest-credential"),
+    queryKey: ["alertmanager-integration"],
+    queryFn: () =>
+      apiFetch<{ configured: boolean; lastReceivedAt: string | null }>(
+        "/api/integrations/alertmanager",
+      ),
   });
+
+  const { data: prometheus, isLoading: prometheusLoading } =
+    useQuery<PrometheusIntegrationStatus>({
+      queryKey: ["prometheus-integration"],
+      queryFn: () =>
+        apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
+    });
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
@@ -89,17 +123,19 @@ export function IntegrationsPage(): React.JSX.Element {
       <PageHeader>
         <PageTitle>Integrations</PageTitle>
       </PageHeader>
-      <div className="flex flex-col gap-4">
+      <p className="-mt-2 mb-6 text-sm text-muted-foreground">
+        Plug Nightwatch into the stack you already run.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <IntegrationCard
           title="Nightwatch Runner"
-          description="Sits on your own hosts. Collects container and host evidence for investigations, and executes remediation you approve. Read-only by default; remediation is enabled per server."
+          logo={<Server className="size-9 text-muted-foreground" />}
           isLoading={runnersLoading}
           status={
             connectedRunners.length > 0
               ? `${connectedRunners.length} ${connectedRunners.length === 1 ? "server" : "servers"}`
               : null
           }
-          connectLabel="Add a server"
           onOpen={() =>
             void navigate({
               to:
@@ -112,19 +148,32 @@ export function IntegrationsPage(): React.JSX.Element {
 
         <IntegrationCard
           title="Alertmanager"
-          description="Forward alerts from the Alertmanager you already run. One credential for the whole fleet, set up once - Nightwatch ships no monitoring of its own."
+          logo={<img src="/logos/alertmanager.svg" alt="" className="size-9" />}
           isLoading={ingestLoading}
-          status={ingest?.configured === true ? "Configured" : null}
-          connectLabel="Set up"
+          status={
+            ingest?.configured !== true
+              ? null
+              : ingest.lastReceivedAt !== null
+                ? "Receiving"
+                : "Waiting for first alert"
+          }
+          statusVariant={ingest?.lastReceivedAt !== null ? "success" : "muted"}
           onOpen={() => void navigate({ to: "/integrations/alertmanager" })}
         />
 
         <IntegrationCard
+          title="Prometheus"
+          logo={<img src="/logos/prometheus.svg" alt="" className="size-9" />}
+          isLoading={prometheusLoading}
+          status={prometheus?.configured === true ? "Connected" : null}
+          onOpen={() => void navigate({ to: "/integrations/prometheus" })}
+        />
+
+        <IntegrationCard
           title="GitHub"
-          description="Let investigations read the bound repository, verify a fix, and propose it as a draft pull request. Nightwatch never merges."
+          logo={<img src="/logos/github.svg" alt="" className="size-9" />}
           isLoading={githubLoading}
           status={github?.configured === true ? "Connected" : null}
-          connectLabel="Connect GitHub"
           onOpen={() => void navigate({ to: "/integrations/github" })}
         />
       </div>

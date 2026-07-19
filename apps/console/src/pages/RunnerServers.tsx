@@ -108,7 +108,7 @@ function SortableHeader({
       >
         {label}
         {active && (
-          <span className="text-xs" aria-hidden="true">
+          <span className="text-sm" aria-hidden="true">
             {activeDir === "asc" ? (
               <ChevronUp {...ICON_INLINE} />
             ) : (
@@ -184,6 +184,11 @@ export function RunnerServersPage(): React.JSX.Element {
           Add a server
         </Button>
       </PageHeader>
+
+      <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
+        Runners sit on your own hosts and collect the evidence investigations
+        need. Read-only by default; remediation is enabled per server.
+      </p>
 
       {removeError !== null && (
         <Alert variant="destructive" className="mb-4">
@@ -283,13 +288,13 @@ export function RunnerServersPage(): React.JSX.Element {
                       {runner.serverName !== null &&
                         runner.hostname !== null &&
                         runner.hostname !== runner.serverName && (
-                          <span className="mt-0.5 block max-w-60 truncate text-xs text-muted-foreground">
+                          <span className="mt-0.5 block max-w-60 truncate text-sm text-muted-foreground">
                             host: {runner.hostname}
                           </span>
                         )}
                       {services.length > 0 && (
                         <span
-                          className="mt-0.5 block max-w-60 truncate font-mono text-xs text-muted-foreground"
+                          className="mt-0.5 block max-w-60 truncate font-mono text-sm text-muted-foreground"
                           title={services
                             .map((s) => serviceIdentityKey(s.identity))
                             .join(", ")}

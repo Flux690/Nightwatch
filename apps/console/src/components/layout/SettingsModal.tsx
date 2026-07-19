@@ -273,7 +273,7 @@ export function SettingsModal({
           className="grid h-[min(640px,85vh)] grid-cols-1 grid-rows-[auto_1fr] gap-0 sm:grid-cols-[210px_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)]"
         >
           <div className="flex flex-col border-b border-border bg-surface p-2 max-sm:flex-row max-sm:overflow-x-auto sm:border-b-0 sm:border-r sm:px-2 sm:py-4">
-            <h2 className="mb-3 px-2.5 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground max-sm:hidden">
+            <h2 className="mb-3 px-2.5 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground max-sm:hidden">
               Settings
             </h2>
             <TabsList
@@ -313,7 +313,7 @@ export function SettingsModal({
                   <h3 className="mb-1 text-lg font-semibold tracking-[-0.2px] text-foreground">
                     {active.label}
                   </h3>
-                  <p className="mb-5 text-xs text-muted-foreground">
+                  <p className="mb-5 text-sm text-muted-foreground">
                     {active.description}
                   </p>
 
@@ -367,7 +367,7 @@ export function SettingsModal({
                         </Field>
 
                         <div className="w-full">
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Current key
                           </p>
                           <p className="mt-0.5 text-sm">
@@ -415,7 +415,7 @@ export function SettingsModal({
                           )}
                         </div>
                         {keyUntested && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             Test connection before you can save this key.
                           </p>
                         )}
@@ -625,7 +625,8 @@ export function SettingsModal({
 
                   <TabsContent value="sandbox">
                     {form && (
-                      <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
+                      <div className="flex flex-col gap-3">
+                        <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
                         <Field>
                           <FieldLabel htmlFor="settings-sandbox-idle">
                             Idle cleanup (ms)
@@ -677,7 +678,8 @@ export function SettingsModal({
                             }
                           />
                         </Field>
-                        <label className="col-span-2 flex items-start gap-2 text-sm">
+                        </div>
+                        <label className="flex items-start gap-2 text-sm">
                           <Checkbox
                             className="mt-0.5"
                             checked={form.sandboxRequireGvisor === true}
@@ -695,7 +697,7 @@ export function SettingsModal({
                             </span>
                           </span>
                         </label>
-                        <div className="col-span-2 mt-2 flex flex-col gap-3">
+                        <div className="mt-2 flex flex-col gap-3">
                           <Field className="max-w-52">
                             <FieldLabel htmlFor="settings-sandbox-network">
                               Agent network

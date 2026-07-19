@@ -407,6 +407,10 @@ export function GitHubConnectPage(): React.JSX.Element {
       </PageHeader>
 
       <div className="flex flex-col gap-6">
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Let investigations read the bound repository, verify a fix, and
+          propose it as a draft pull request. Nightwatch never merges.
+        </p>
         {preflightIssue !== null && (
           <Alert variant="destructive">
             <AlertTitle>Code sandbox prerequisites missing</AlertTitle>

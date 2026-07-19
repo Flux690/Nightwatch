@@ -3,6 +3,7 @@ import { DOCKER_TOOLS } from "./docker.js";
 import { GITHUB_TOOLS } from "./github.js";
 import { K8S_TOOLS } from "./kubernetes.js";
 import { INTERRUPT_TOOLS } from "./interrupts.js";
+import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
 import type {
   FleetCapabilities,
@@ -20,6 +21,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...INTERRUPT_TOOLS,
   ...REPO_TOOLS,
   ...GITHUB_TOOLS,
+  ...PROMETHEUS_TOOLS,
 ];
 
 // Single dispatch chokepoint that both the live loop and the approval resume path pass
@@ -46,18 +48,20 @@ export function findTool(toolName: string): Tool | undefined {
 // Single source of truth for both the offered schemas and the names the loop resolves,
 // so hiding a tool and gating it are one op. Each provider library is injected whole when
 // the fleet advertises that provider; a tool cannot be offered for a substrate no runner runs.
-// The GitHub integration gates two libraries the same way: repo tools (sandbox
-// checkout) and the GitHub evidence tools, both meaningless without it.
+// Integrations gate their own libraries the same way: GitHub gates the repo tools (sandbox
+// checkout) plus the GitHub evidence tools, Prometheus gates the metrics tools.
 export function effectiveToolset(
   caps: FleetCapabilities | undefined,
   remediationEnabled: boolean,
   githubConnected = true,
+  prometheusConnected = true,
 ): Tool[] {
   const libraries: Tool[] = [
     ...(caps === undefined || caps.docker ? DOCKER_TOOLS : []),
     ...(caps === undefined || caps.kubernetes ? K8S_TOOLS : []),
     ...INTERRUPT_TOOLS,
     ...(githubConnected ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
+    ...(prometheusConnected ? PROMETHEUS_TOOLS : []),
   ];
   return remediationEnabled
     ? libraries
@@ -70,10 +74,12 @@ export function getToolSchemas(
   caps?: FleetCapabilities,
   remediationEnabled?: boolean,
   githubConnected?: boolean,
+  prometheusConnected?: boolean,
 ): ToolSchema[] {
   return effectiveToolset(
     caps,
     remediationEnabled ?? true,
     githubConnected ?? true,
+    prometheusConnected ?? true,
   ).map((t) => t.schema);
 }

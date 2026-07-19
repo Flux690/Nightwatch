@@ -20,7 +20,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -172,7 +171,7 @@ function ShellContent({
               <div
                 role="status"
                 aria-label="awaiting approval"
-                className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-xs font-semibold text-warning"
+                className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning"
               >
                 <span className="flex h-full w-10 shrink-0 items-center justify-center">
                   {attentionCount > 99 ? "99+" : attentionCount}
@@ -185,7 +184,6 @@ function ShellContent({
           )}
 
           <SidebarGroup className="min-h-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <SidebarGroupLabel>Recent sessions</SidebarGroupLabel>
             <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
               <SessionsSidebar />
             </SidebarGroupContent>

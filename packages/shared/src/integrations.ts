@@ -1,5 +1,5 @@
-// Console <-> API payloads for the integrations surface. GitHub-prefixed so a
-// future second integration adds its own types beside these.
+// Console <-> API payloads for the integrations surface. Provider-prefixed so
+// each integration's types sit beside the others without colliding.
 
 export type GitHubErrorCode =
   | "invalid_token"
@@ -32,4 +32,21 @@ export interface GitHubErrorBody {
   // Present on repo_not_found when the owner is an organization: GitHub 404s existence, visibility,
   // and permission failures alike, so pending org-admin approval is a plausible cause; this links straight to the approval page.
   orgApprovalUrl?: string;
+}
+
+export interface PrometheusIntegrationStatus {
+  configured: boolean;
+  url: string | null;
+  // Whether an Authorization header is stored - the value itself never leaves the API.
+  hasAuth: boolean;
+  validatedAt: string | null;
+}
+
+// Declared runner names vs the nw_server label values observed in Prometheus -
+// the pull-side proof that the routing stamp took effect.
+export interface PrometheusLabelValidation {
+  observed: string[];
+  matched: string[];
+  missing: string[];
+  unknown: string[];
 }
