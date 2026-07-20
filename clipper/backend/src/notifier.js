@@ -14,7 +14,7 @@ function createTransporter() {
   return nodemailer.createTransport({
     host,
     port,
-    secure: false
+    secure: false,
   });
 }
 
@@ -35,7 +35,7 @@ async function processNotification(notification) {
       from: "clipper@example.com",
       to: "user@example.com",
       subject,
-      text
+      text,
     });
 
     await updateJobStatus(job.id, "completed");
@@ -45,7 +45,7 @@ async function processNotification(notification) {
     log("error", {
       error_code: "NOTIFICATION_FAILED",
       message: err.message,
-      videoId
+      videoId,
     });
   }
 }

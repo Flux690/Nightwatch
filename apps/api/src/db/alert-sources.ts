@@ -72,7 +72,10 @@ export function findAlertSourceKindByToken(plaintext: string): string | null {
     .all() as Array<{ kind: string; token_hash: string }>;
   for (const row of rows) {
     const stored = Buffer.from(row.token_hash, "hex");
-    if (stored.length === presented.length && timingSafeEqual(stored, presented)) {
+    if (
+      stored.length === presented.length &&
+      timingSafeEqual(stored, presented)
+    ) {
       return row.kind;
     }
   }

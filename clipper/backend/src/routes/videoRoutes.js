@@ -1,6 +1,10 @@
 import { Router } from "express";
 import multer from "multer";
-import { uploadVideo, getVideoById, listVideos } from "../controllers/videoController.js";
+import {
+  uploadVideo,
+  getVideoById,
+  listVideos,
+} from "../controllers/videoController.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });

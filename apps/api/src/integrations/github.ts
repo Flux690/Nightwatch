@@ -335,8 +335,7 @@ export async function listCommits(
   return body.map((c) => {
     const commit = c["commit"] as Record<string, unknown> | undefined;
     const commitAuthor = commit?.["author"] as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     const parents = c["parents"];
     return {
       sha: typeof c["sha"] === "string" ? c["sha"] : "",
@@ -406,7 +405,9 @@ export async function listMergedPullRequests(
       mergedAt,
       url: typeof pr["html_url"] === "string" ? pr["html_url"] : "",
       mergeCommitSha:
-        typeof pr["merge_commit_sha"] === "string" ? pr["merge_commit_sha"] : "",
+        typeof pr["merge_commit_sha"] === "string"
+          ? pr["merge_commit_sha"]
+          : "",
     });
   }
   return merged;

@@ -117,8 +117,7 @@ export class OpenAIProvider implements LLMProvider {
           }
         ).choices?.[0]?.delta;
         const entries = rawDelta?.["reasoning_details"] as
-          | Array<{ type: string; text?: string }>
-          | undefined;
+          Array<{ type: string; text?: string }> | undefined;
         for (const entry of entries ?? []) {
           if (
             (entry.type === "reasoning.text" ||

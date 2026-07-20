@@ -627,57 +627,57 @@ export function SettingsModal({
                     {form && (
                       <div className="flex flex-col gap-3">
                         <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
-                        <Field>
-                          <FieldLabel htmlFor="settings-sandbox-idle">
-                            Idle cleanup (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-sandbox-idle"
-                            type="number"
-                            step={60000}
-                            value={form.sandboxIdleTimeoutMs}
-                            onChange={(e) =>
-                              setField(
-                                "sandboxIdleTimeoutMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-sandbox-cpus">
-                            CPU limit (cores)
-                          </FieldLabel>
-                          <Input
-                            id="settings-sandbox-cpus"
-                            type="number"
-                            step={1}
-                            value={form.sandboxCpus}
-                            onChange={(e) =>
-                              setField(
-                                "sandboxCpus",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-sandbox-memory">
-                            Memory limit (MB)
-                          </FieldLabel>
-                          <Input
-                            id="settings-sandbox-memory"
-                            type="number"
-                            step={256}
-                            value={form.sandboxMemoryMb}
-                            onChange={(e) =>
-                              setField(
-                                "sandboxMemoryMb",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
+                          <Field>
+                            <FieldLabel htmlFor="settings-sandbox-idle">
+                              Idle cleanup (ms)
+                            </FieldLabel>
+                            <Input
+                              id="settings-sandbox-idle"
+                              type="number"
+                              step={60000}
+                              value={form.sandboxIdleTimeoutMs}
+                              onChange={(e) =>
+                                setField(
+                                  "sandboxIdleTimeoutMs",
+                                  numberValue(e.currentTarget.value),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabel htmlFor="settings-sandbox-cpus">
+                              CPU limit (cores)
+                            </FieldLabel>
+                            <Input
+                              id="settings-sandbox-cpus"
+                              type="number"
+                              step={1}
+                              value={form.sandboxCpus}
+                              onChange={(e) =>
+                                setField(
+                                  "sandboxCpus",
+                                  numberValue(e.currentTarget.value),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field>
+                            <FieldLabel htmlFor="settings-sandbox-memory">
+                              Memory limit (MB)
+                            </FieldLabel>
+                            <Input
+                              id="settings-sandbox-memory"
+                              type="number"
+                              step={256}
+                              value={form.sandboxMemoryMb}
+                              onChange={(e) =>
+                                setField(
+                                  "sandboxMemoryMb",
+                                  numberValue(e.currentTarget.value),
+                                )
+                              }
+                            />
+                          </Field>
                         </div>
                         <label className="flex items-start gap-2 text-sm">
                           <Checkbox

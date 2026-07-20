@@ -410,9 +410,8 @@ describe("multi-runner routing", () => {
       commandsB.some((c) => c.commandName === "RestartDockerService"),
     );
     expect(
-      commandsB.find((c) => c.commandName === "RestartDockerService")?.commandInput[
-        "service"
-      ],
+      commandsB.find((c) => c.commandName === "RestartDockerService")
+        ?.commandInput["service"],
     ).toEqual(svc("postgres"));
     expect(commandsA).toHaveLength(0);
 

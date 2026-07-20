@@ -136,10 +136,7 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -218,10 +215,7 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -316,10 +310,7 @@ describe("remediation action record", () => {
     // LLM resumes with a single finish turn (no further tool calls)
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     // Approve — should detect the conflict and skip execution
     const approveRes = await fetch(
@@ -449,10 +440,7 @@ describe("remediation action record", () => {
       FINISH_TURN,
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

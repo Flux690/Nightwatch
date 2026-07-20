@@ -14,7 +14,7 @@ async function processJob(job) {
 
     const videoStream = await downloadFile(key);
 
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const transcodedKey = key.replace("uploads/", "transcoded/");
     const chunks = [];
@@ -33,14 +33,14 @@ async function processJob(job) {
       await queueJob("notification_jobs", {
         type: "transcode_complete",
         videoId,
-        filename: key.split("/").pop()
+        filename: key.split("/").pop(),
       });
     } catch (notifyErr) {
       log("error", {
         error_code: "NOTIFICATION_QUEUE_FAILED",
         message: notifyErr.message,
         jobId,
-        videoId
+        videoId,
       });
     }
 
@@ -50,7 +50,7 @@ async function processJob(job) {
       error_code: "TRANSCODE_FAILED",
       message: err.message,
       jobId,
-      videoId
+      videoId,
     });
 
     try {
@@ -59,7 +59,7 @@ async function processJob(job) {
     } catch (updateErr) {
       log("error", {
         error_code: "STATUS_UPDATE_FAILED",
-        message: updateErr.message
+        message: updateErr.message,
       });
     }
   }

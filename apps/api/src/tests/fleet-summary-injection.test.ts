@@ -76,8 +76,7 @@ function captureStartMessage(): string | undefined {
   const idx = mockCreateProvider.mock.results.length - 1;
   // Vitest types mock.results[n].value as unknown; narrow to the actual mock shape.
   const provider = mockCreateProvider.mock.results[idx]?.value as
-    | { start: ReturnType<typeof vi.fn> }
-    | undefined;
+    { start: ReturnType<typeof vi.fn> } | undefined;
   // mock.calls[n][m] is unknown; the first argument to start() is always the firstUserMessage string.
   return provider?.start.mock.calls[0]?.[0] as string | undefined;
 }

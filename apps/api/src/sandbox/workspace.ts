@@ -31,11 +31,7 @@ export interface SandboxLog {
 // container start, dependency install) and would otherwise look like a hang on
 // the first repo tool.
 export type SandboxStage =
-  | "cloning"
-  | "starting"
-  | "installing"
-  | "ready"
-  | "failed";
+  "cloning" | "starting" | "installing" | "ready" | "failed";
 
 export interface PullRequestRef {
   number: number;

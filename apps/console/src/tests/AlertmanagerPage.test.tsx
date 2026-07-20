@@ -220,9 +220,7 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.getByRole("button", { name: /copy alertmanager receiver/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /test webhook/i }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: /test webhook/i })).toBeEnabled();
     // Revealing is not setup: the status line stays put, no layout jump.
     expect(screen.getByText(/waiting for first alert/i)).toBeInTheDocument();
 
@@ -250,7 +248,9 @@ describe("AlertmanagerPage", () => {
       lastReceivedAt: "2026-07-17T01:00:00.000Z",
     });
 
-    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /show token/i }),
+    );
     await waitFor(() => {
       expect(
         screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
@@ -288,7 +288,9 @@ describe("AlertmanagerPage", () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ configured: true });
 
-    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /show token/i }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /test webhook/i }),
     );
@@ -332,7 +334,9 @@ describe("AlertmanagerPage", () => {
       },
     });
 
-    await user.click(await screen.findByRole("button", { name: /show token/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /show token/i }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /test webhook/i }),
     );
@@ -370,10 +374,7 @@ describe("AlertmanagerPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/nw_server: "prod-web-01"/)).toBeInTheDocument();
 
-    await user.selectOptions(
-      screen.getByLabelText(/^server$/i),
-      "prod-web-02",
-    );
+    await user.selectOptions(screen.getByLabelText(/^server$/i), "prod-web-02");
     expect(screen.getByText(/nw_server: "prod-web-02"/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /copy prometheus labels/i }),

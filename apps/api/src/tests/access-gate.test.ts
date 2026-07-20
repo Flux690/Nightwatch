@@ -66,7 +66,8 @@ describe("access-gate: gating is driven by tool access level", () => {
         resolveCommand({
           correlationId,
           success: true,
-          result: commandName === "RestartDockerService" ? { restarted: true } : [],
+          result:
+            commandName === "RestartDockerService" ? { restarted: true } : [],
         });
       },
       () => {},
@@ -124,10 +125,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Investigation complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -188,10 +186,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Done.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -250,10 +245,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Understood. Investigation complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -343,10 +335,7 @@ describe("access-gate: gating is driven by tool access level", () => {
       { text: "Complete.", toolUses: [] },
     ]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

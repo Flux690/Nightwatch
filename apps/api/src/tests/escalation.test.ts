@@ -161,8 +161,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as
-              | { role?: string; content?: string }
-              | undefined
+              { role?: string; content?: string } | undefined
           )?.content === "Root cause found. I am done.",
       ),
     );
@@ -258,8 +257,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
           e.payload["sessionId"] === sessionId &&
           (
             e.payload["message"] as
-              | { role?: string; content?: string }
-              | undefined
+              { role?: string; content?: string } | undefined
           )?.content ===
             "Understood. The restart was rejected. Here is my analysis.",
       ),

@@ -296,8 +296,7 @@ describe("mid-run alert injection (loop seam)", () => {
       mockCreateProvider.mock.calls.length - 1
     ]!.value as { start: ReturnType<typeof vi.fn> };
     const openingMsg = newProvider.start.mock.calls[0]?.[0] as
-      | string
-      | undefined;
+      string | undefined;
     expect(openingMsg).toBeDefined();
 
     // The leftover session's opening message is for the leftover alert

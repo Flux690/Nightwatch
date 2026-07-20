@@ -46,7 +46,10 @@ async function recoverOrphanedJobs() {
 }
 
 export function startOrphanRecovery() {
-  log("info", { event: "orphan_recovery_started", intervalMs: RECOVERY_INTERVAL_MS });
+  log("info", {
+    event: "orphan_recovery_started",
+    intervalMs: RECOVERY_INTERVAL_MS,
+  });
 
   // Run immediately on startup
   recoverOrphanedJobs();

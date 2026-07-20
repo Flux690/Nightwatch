@@ -111,10 +111,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -164,10 +161,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -232,10 +226,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",
@@ -294,10 +285,7 @@ describe("continue-request interrupts", () => {
     updateConfig({ hardTimeoutMs: 0 });
     setScript([FINISH_TURN]);
 
-    const { events, close } = await connectConsoleEvents(
-      port,
-      SESSION,
-    );
+    const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const res = await fetch(`http://127.0.0.1:${port}/chat`, {
       method: "POST",

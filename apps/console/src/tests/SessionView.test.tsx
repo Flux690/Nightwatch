@@ -801,7 +801,9 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText("RestartDockerService")).toBeInTheDocument();
+        expect(
+          within(card).getByText("RestartDockerService"),
+        ).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
           within(card).getByRole("button", { name: /approve/i }),

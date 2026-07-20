@@ -2,11 +2,7 @@
 // without coupling to timing.
 export async function waitFor<T>(
   fn: () =>
-    | T
-    | undefined
-    | false
-    | null
-    | Promise<T | undefined | false | null>,
+    T | undefined | false | null | Promise<T | undefined | false | null>,
   opts: { timeout?: number; interval?: number } = {},
 ): Promise<T> {
   const timeout = opts.timeout ?? 10_000;

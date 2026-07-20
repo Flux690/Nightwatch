@@ -1,6 +1,6 @@
 {
   "name": "nightwatch",
-  "version": "0.2.20",
+  "version": "0.2.21",
   "private": true,
   "engines": {
     "node": ">=20",
@@ -11,7 +11,9 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/dockerode": "4.0.1",

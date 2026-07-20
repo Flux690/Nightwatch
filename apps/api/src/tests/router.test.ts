@@ -105,11 +105,7 @@ describe("router", () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
 
-    await sendCommand(
-      "GetDockerLogs",
-      { service: svc("postgres") },
-      "service",
-    );
+    await sendCommand("GetDockerLogs", { service: svc("postgres") }, "service");
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);

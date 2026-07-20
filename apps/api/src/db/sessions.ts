@@ -172,8 +172,7 @@ export function getSession(sessionId: string): StoredSession | undefined {
        FROM sessions WHERE session_id = ?`,
     )
     .get(sessionId) as
-    | (StoredSession & { originatingAlert: string | null })
-    | undefined;
+    (StoredSession & { originatingAlert: string | null }) | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,

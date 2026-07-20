@@ -1,10 +1,10 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - "apps/*"
+  - "packages/*"
 injectWorkspacePackages: true
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
+  "@prisma/client": true
+  "@prisma/engines": true
   argon2: true
   better-sqlite3: true
   cpu-features: true
@@ -15,6 +15,6 @@ allowBuilds:
   ssh2: true
 minimumReleaseAgeExclude:
   - openai@6.46.0
-  - '@tanstack/react-router@1.170.18'
-  - '@tanstack/router-core@1.171.15'
+  - "@tanstack/react-router@1.170.18"
+  - "@tanstack/router-core@1.171.15"
   - ws@8.21.1

@@ -1,8 +1,5 @@
 export type RemediationStatus =
-  | "executing"
-  | "executed"
-  | "failed"
-  | "rejected";
+  "executing" | "executed" | "failed" | "rejected";
 
 // Wire shape for the audit log: one row per write the agent attempted, with the
 // operator's decision and its outcome.

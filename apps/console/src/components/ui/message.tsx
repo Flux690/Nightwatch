@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 function Message({
   className,
@@ -13,11 +13,11 @@ function Message({
       data-align={align}
       className={cn(
         "group/message relative flex w-full min-w-0 gap-2 text-sm data-[align=end]:flex-row-reverse",
-        className
+        className,
       )}
       {...props}
     />
-  )
+  );
 }
 
-export { Message }
+export { Message };

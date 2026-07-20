@@ -95,7 +95,9 @@ describe("AuthGate", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /integrations/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /integrations/i }),
+      ).toBeInTheDocument();
     });
     expect(router.state.location.pathname).toBe("/");
   });
@@ -196,7 +198,9 @@ describe("AuthGate", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("link", { name: /integrations/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /integrations/i }),
+      ).toBeInTheDocument();
     });
 
     await fetch("/trigger-401");

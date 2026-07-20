@@ -139,7 +139,9 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const generate = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential", { method: "POST" }),
+      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential", {
+        method: "POST",
+      }),
     onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
@@ -149,7 +151,9 @@ export function AlertmanagerPage(): React.JSX.Element {
           "Credential rotated - paste the updated receiver into your Alertmanager",
         );
       }
-      await queryClient.invalidateQueries({ queryKey: ["alertmanager-integration"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["alertmanager-integration"],
+      });
     },
     onError: (err) =>
       toast.show({
@@ -161,9 +165,12 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const reveal = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential/reveal", {
-        method: "POST",
-      }),
+      apiFetch<{ token: string }>(
+        "/api/integrations/alertmanager/credential/reveal",
+        {
+          method: "POST",
+        },
+      ),
     onSuccess: ({ token: revealed }) => setToken(revealed),
     onError: (err) =>
       toast.show({
@@ -384,8 +391,8 @@ export function AlertmanagerPage(): React.JSX.Element {
                 <Collapsible>
                   <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                     <ChevronDown {...ICON_INLINE} />
-                    This Prometheus only monitors {effectiveServer}? Set it
-                    once instead
+                    This Prometheus only monitors {effectiveServer}? Set it once
+                    instead
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="pt-2">

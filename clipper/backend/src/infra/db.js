@@ -24,7 +24,7 @@ export async function query(text, params) {
     log("error", {
       error_code: "DATABASE_QUERY_FAILED",
       message: err.message,
-      query: text
+      query: text,
     });
     throw err;
   }
@@ -36,7 +36,7 @@ export async function getClient() {
   } catch (err) {
     log("error", {
       error_code: "DATABASE_CONNECTION_FAILED",
-      message: err.message
+      message: err.message,
     });
     throw err;
   }

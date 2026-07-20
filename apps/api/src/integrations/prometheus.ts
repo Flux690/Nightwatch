@@ -1,8 +1,5 @@
 export type PrometheusErrorCode =
-  | "network"
-  | "unauthorized"
-  | "bad_query"
-  | "bad_response";
+  "network" | "unauthorized" | "bad_query" | "bad_response";
 
 export class PrometheusApiError extends Error {
   constructor(
@@ -98,7 +95,8 @@ async function parseEnvelope(res: Response): Promise<PrometheusQueryData> {
     );
   }
   const data = body["data"] as Record<string, unknown> | undefined;
-  const resultType = typeof data?.["resultType"] === "string" ? data["resultType"] : "";
+  const resultType =
+    typeof data?.["resultType"] === "string" ? data["resultType"] : "";
   const raw = Array.isArray(data?.["result"]) ? data["result"] : [];
   return { resultType, series: raw.map(narrowSeries) };
 }
@@ -148,13 +146,18 @@ export async function rangeQuery(
   endIso: string,
   stepSeconds: number,
 ): Promise<PrometheusQueryData> {
-  const res = await prometheusFetch(baseUrl, authHeader, "/api/v1/query_range", {
-    query,
-    start: startIso,
-    end: endIso,
-    step: String(stepSeconds),
-    timeout: QUERY_TIMEOUT,
-  });
+  const res = await prometheusFetch(
+    baseUrl,
+    authHeader,
+    "/api/v1/query_range",
+    {
+      query,
+      start: startIso,
+      end: endIso,
+      step: String(stepSeconds),
+      timeout: QUERY_TIMEOUT,
+    },
+  );
   return parseEnvelope(res);
 }
 

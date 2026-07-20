@@ -15,7 +15,7 @@ function getClient() {
         // Linear backoff: wait 200ms, 400ms... capped at 2 seconds.
         return Math.min(times * 200, 2000);
       },
-      lazyConnect: true
+      lazyConnect: true,
     });
 
     // Suppress unhandled error logs during reconnection
@@ -31,7 +31,7 @@ export async function queueJob(queueName, data) {
     log("error", {
       error_code: "REDIS_QUEUE_FAILED",
       message: err.message,
-      queue: queueName
+      queue: queueName,
     });
     throw err;
   }
@@ -48,7 +48,7 @@ export async function dequeueJob(queueName, timeout = 5) {
     log("error", {
       error_code: "REDIS_DEQUEUE_FAILED",
       message: err.message,
-      queue: queueName
+      queue: queueName,
     });
     throw err;
   }
@@ -77,7 +77,7 @@ export async function dequeueJobSilent(queueName, timeout = 5) {
       log("error", {
         error_code: "REDIS_CONNECTION_LOST",
         message: err.message,
-        queue: queueName
+        queue: queueName,
       });
       connectionErrorLogged = true;
     }
@@ -92,7 +92,7 @@ export async function publishEvent(channel, data) {
     log("error", {
       error_code: "REDIS_PUBLISH_FAILED",
       message: err.message,
-      channel
+      channel,
     });
     throw err;
   }

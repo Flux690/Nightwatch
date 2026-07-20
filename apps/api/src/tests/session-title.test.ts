@@ -139,21 +139,18 @@ describe("session title generation", () => {
   });
 
   it("builds an alert title source capped to the first ten alerts", () => {
-    const alerts = Array.from(
-      { length: 14 },
-      (_, i): NormalizedAlert => ({
-        sourceAlertId: `a-${i}`,
-        targetIdentifier: {
-          provider: "docker",
-          project: "web",
-          service: `svc-${i}`,
-        },
-        alertType: "cpu_high",
-        severity: "critical",
-        firedAt: "2024-01-01T00:00:00Z",
-        rawPayload: {},
-      }),
-    );
+    const alerts = Array.from({ length: 14 }, (_, i): NormalizedAlert => ({
+      sourceAlertId: `a-${i}`,
+      targetIdentifier: {
+        provider: "docker",
+        project: "web",
+        service: `svc-${i}`,
+      },
+      alertType: "cpu_high",
+      severity: "critical",
+      firedAt: "2024-01-01T00:00:00Z",
+      rawPayload: {},
+    }));
 
     const lines = buildAlertTitleSource(alerts).split("\n");
 

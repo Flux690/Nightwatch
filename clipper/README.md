@@ -4,16 +4,16 @@ Clipper is a video upload and transcoding platform built as a microservices demo
 
 ## Stack
 
-| Service | Purpose | Port |
-|---|---|---|
-| `frontend` | React upload UI | 5173 |
-| `api` | Express REST API | 4000 |
-| `transcoder` | Video transcoding worker | — |
-| `notifier` | Email notification worker | — |
-| `db` | PostgreSQL | 5432 |
-| `cache` | Redis | 6379 |
-| `storage` | LocalStack (S3 mock) | 4566 |
-| `mailhog` | Email capture (SMTP + Web UI) | 1025 / 8025 |
+| Service      | Purpose                       | Port        |
+| ------------ | ----------------------------- | ----------- |
+| `frontend`   | React upload UI               | 5173        |
+| `api`        | Express REST API              | 4000        |
+| `transcoder` | Video transcoding worker      | —           |
+| `notifier`   | Email notification worker     | —           |
+| `db`         | PostgreSQL                    | 5432        |
+| `cache`      | Redis                         | 6379        |
+| `storage`    | LocalStack (S3 mock)          | 4566        |
+| `mailhog`    | Email capture (SMTP + Web UI) | 1025 / 8025 |
 
 ## Running Clipper
 

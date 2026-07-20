@@ -3,7 +3,7 @@ import { query } from "../infra/db.js";
 export async function createVideo(filename, originalKey) {
   const result = await query(
     "INSERT INTO videos (filename, original_key, status) VALUES ($1, $2, $3) RETURNING *",
-    [filename, originalKey, "pending"]
+    [filename, originalKey, "pending"],
   );
   return result.rows[0];
 }
@@ -16,7 +16,7 @@ export async function getVideo(id) {
 export async function updateVideoStatus(id, status) {
   const result = await query(
     "UPDATE videos SET status = $1 WHERE id = $2 RETURNING *",
-    [status, id]
+    [status, id],
   );
   return result.rows[0];
 }
@@ -29,7 +29,7 @@ export async function getAllVideos() {
 export async function createJob(videoId, type) {
   const result = await query(
     "INSERT INTO jobs (video_id, type, status) VALUES ($1, $2, $3) RETURNING *",
-    [videoId, type, "queued"]
+    [videoId, type, "queued"],
   );
   return result.rows[0];
 }
@@ -37,7 +37,7 @@ export async function createJob(videoId, type) {
 export async function updateJobStatus(id, status, errorMessage = null) {
   const result = await query(
     "UPDATE jobs SET status = $1, error_message = $2 WHERE id = $3 RETURNING *",
-    [status, errorMessage, id]
+    [status, errorMessage, id],
   );
   return result.rows[0];
 }
@@ -45,7 +45,7 @@ export async function updateJobStatus(id, status, errorMessage = null) {
 export async function getJobsByVideoId(videoId) {
   const result = await query(
     "SELECT * FROM jobs WHERE video_id = $1 ORDER BY created_at",
-    [videoId]
+    [videoId],
   );
   return result.rows;
 }
@@ -54,8 +54,7 @@ export async function getJobsByVideoId(videoId) {
 export async function getOrphanedJobs() {
   const result = await query(
     "SELECT j.*, v.original_key FROM jobs j JOIN videos v ON j.video_id = v.id WHERE j.status = 'queued' AND j.created_at < NOW() - INTERVAL '1 minute'",
-    []
+    [],
   );
   return result.rows;
 }
-

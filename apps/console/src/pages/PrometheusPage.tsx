@@ -172,8 +172,8 @@ export function PrometheusPage(): React.JSX.Element {
                 Authorization header (optional)
               </FieldLabel>
               <FieldDescription>
-                Only if your Prometheus sits behind auth: the full header
-                value, sent as-is and stored encrypted.
+                Only if your Prometheus sits behind auth: the full header value,
+                sent as-is and stored encrypted.
               </FieldDescription>
               <Input
                 id="prometheus-auth"

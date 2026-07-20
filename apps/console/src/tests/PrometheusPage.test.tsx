@@ -119,10 +119,17 @@ function setup(
         init?.method === "POST"
       )
         return jsonOk(validateBody);
-      if (url === "/api/integrations/prometheus/test" && init?.method === "POST")
+      if (
+        url === "/api/integrations/prometheus/test" &&
+        init?.method === "POST"
+      )
         return jsonOk(CONFIGURED);
       if (url === "/api/integrations/prometheus" && init?.method === "DELETE")
-        return Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve(undefined) });
+        return Promise.resolve({
+          ok: true,
+          status: 204,
+          json: () => Promise.resolve(undefined),
+        });
       if (url === "/api/integrations/prometheus")
         return jsonOk(connected ? CONFIGURED : NOT_CONFIGURED);
       return jsonOk({});
@@ -176,9 +183,7 @@ describe("PrometheusPage", () => {
     await user.click(screen.getByRole("button", { name: /^connect$/i }));
 
     expect(await screen.findByText(/could not connect/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/could not reach prometheus/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/could not reach prometheus/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/prometheus url/i)).toBeInTheDocument();
   });
 
@@ -193,7 +198,9 @@ describe("PrometheusPage", () => {
     expect(
       screen.getByRole("button", { name: /disconnect/i }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/check alert routing labels/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/check alert routing labels/i),
+    ).not.toBeInTheDocument();
   });
 
   it("label check renders matched, missing, and unknown against the fleet", async () => {

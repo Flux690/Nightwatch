@@ -41,4 +41,3 @@ export function bumpLoginVersion(): void {
     )
     .run({ id: USER_ID, updatedAt: new Date().toISOString() });
 }
-

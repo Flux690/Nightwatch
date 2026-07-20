@@ -54,13 +54,16 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
-        body: formData
+        body: formData,
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        setMessage({ type: "success", text: `Video uploaded successfully. ID: ${data.video.id}` });
+        setMessage({
+          type: "success",
+          text: `Video uploaded successfully. ID: ${data.video.id}`,
+        });
         setFile(null);
         setError(null);
         fetchVideos();
@@ -103,9 +106,7 @@ function App() {
             {uploading ? "Uploading..." : "Upload"}
           </button>
         </form>
-        {message && (
-          <div className={message.type}>{message.text}</div>
-        )}
+        {message && <div className={message.type}>{message.text}</div>}
       </section>
 
       <section className="videos-section">
@@ -125,7 +126,9 @@ function App() {
               <li key={video.id} className="video-item">
                 <div className="video-info">
                   <div className="video-filename">{video.filename}</div>
-                  <div className="video-date">{formatDate(video.created_at)}</div>
+                  <div className="video-date">
+                    {formatDate(video.created_at)}
+                  </div>
                 </div>
                 <span className={`video-status ${video.status}`}>
                   {video.status}

@@ -91,7 +91,9 @@ export function AddServerPage(): React.JSX.Element {
   // points there the moment routing ambiguity becomes possible.
   const connectedDockerServers = (runners ?? []).filter(
     (r) =>
-      r.online && r.hostname !== null && r.manifest?.capabilities.docker === true,
+      r.online &&
+      r.hostname !== null &&
+      r.manifest?.capabilities.docker === true,
   ).length;
 
   useEffect(() => {
