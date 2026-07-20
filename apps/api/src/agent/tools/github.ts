@@ -1,5 +1,5 @@
 import { decrypt } from "../../config/crypto.js";
-import { getGitHubIntegration } from "../../db/github-integration.js";
+import { getGitHubIntegration } from "../../db/integrations.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import {
   defaultBranch,

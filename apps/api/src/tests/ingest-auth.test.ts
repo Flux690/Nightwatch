@@ -14,7 +14,7 @@ import { generateRunnerToken } from "../db/runner.js";
 import {
   deletePrometheusIntegration,
   savePrometheusIntegration,
-} from "../db/prometheus-integration.js";
+} from "../db/integrations.js";
 import {
   generateAlertSourceToken,
   getAlertSource,
@@ -257,9 +257,9 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       payload: alertmanagerBody("nwi-prometheus-only"),
     });
     expect(agentless.statusCode).toBe(200);
-    expect(
-      (JSON.parse(agentless.body) as { enqueued: number }).enqueued,
-    ).toBe(1);
+    expect((JSON.parse(agentless.body) as { enqueued: number }).enqueued).toBe(
+      1,
+    );
     deletePrometheusIntegration();
   });
 
@@ -373,5 +373,4 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/unrecognized payload/i);
   });
-
 });

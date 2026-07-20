@@ -12,7 +12,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
-import { deletePrometheusIntegration } from "../db/prometheus-integration.js";
+import { deletePrometheusIntegration } from "../db/integrations.js";
 import { setAlertSourceReceived } from "../db/alert-sources.js";
 import {
   registerRunner,
@@ -262,11 +262,11 @@ describe("GitHub integration routes", () => {
 
       const row = getDb()
         .prepare(
-          "SELECT token_encrypted FROM github_integration WHERE id = 'github'",
+          "SELECT secret_encrypted FROM integrations WHERE kind = 'github'",
         )
-        .get() as { token_encrypted: string };
-      expect(row.token_encrypted).not.toContain(TOKEN);
-      expect(decrypt(row.token_encrypted)).toBe(TOKEN);
+        .get() as { secret_encrypted: string };
+      expect(row.secret_encrypted).not.toContain(TOKEN);
+      expect(decrypt(row.secret_encrypted)).toBe(TOKEN);
     });
 
     it("uses the stored token for the picker proxy after binding", async () => {
@@ -357,10 +357,10 @@ describe("GitHub integration routes", () => {
 
       const row = getDb()
         .prepare(
-          "SELECT token_encrypted FROM github_integration WHERE id = 'github'",
+          "SELECT secret_encrypted FROM integrations WHERE kind = 'github'",
         )
-        .get() as { token_encrypted: string };
-      expect(decrypt(row.token_encrypted)).toBe(TOKEN);
+        .get() as { secret_encrypted: string };
+      expect(decrypt(row.secret_encrypted)).toBe(TOKEN);
     });
 
     it("surfaces repo_not_found the same way bind does, without accepting a token", async () => {
@@ -463,7 +463,10 @@ describe("Prometheus integration routes", () => {
     });
     expect(unauthed.statusCode).toBe(401);
 
-    const res = await authed({ method: "GET", url: "/integrations/prometheus" });
+    const res = await authed({
+      method: "GET",
+      url: "/integrations/prometheus",
+    });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
       configured: false,
@@ -478,9 +481,9 @@ describe("Prometheus integration routes", () => {
       expect(url).toBe("http://prom.internal:9090/api/v1/query");
       expect(init?.method).toBe("POST");
       expect(String(init?.body)).toContain("query=up");
-      expect(
-        (init?.headers as Record<string, string>)["Authorization"],
-      ).toBe("Bearer secret-123");
+      expect((init?.headers as Record<string, string>)["Authorization"]).toBe(
+        "Bearer secret-123",
+      );
       return jsonResponse(PROM_OK);
     });
 
@@ -503,11 +506,11 @@ describe("Prometheus integration routes", () => {
 
     const row = getDb()
       .prepare(
-        "SELECT auth_header_encrypted FROM prometheus_integration WHERE id = 'prometheus'",
+        "SELECT secret_encrypted FROM integrations WHERE kind = 'prometheus'",
       )
-      .get() as { auth_header_encrypted: string };
-    expect(decrypt(row.auth_header_encrypted)).toBe("Bearer secret-123");
-    expect(row.auth_header_encrypted).not.toContain("secret-123");
+      .get() as { secret_encrypted: string };
+    expect(decrypt(row.secret_encrypted)).toBe("Bearer secret-123");
+    expect(row.secret_encrypted).not.toContain("secret-123");
   });
 
   it("connects without an auth header, sending none and reporting hasAuth: false", async () => {
@@ -574,14 +577,17 @@ describe("Prometheus integration routes", () => {
     await authed({
       method: "POST",
       url: "/integrations/prometheus",
-      payload: { url: "http://prom.internal:9090", authHeader: "Basic dXNlcg==" },
+      payload: {
+        url: "http://prom.internal:9090",
+        authHeader: "Basic dXNlcg==",
+      },
     });
 
     const mock = stubFetch((url, init) => {
       expect(url).toBe("http://prom.internal:9090/api/v1/query");
-      expect(
-        (init?.headers as Record<string, string>)["Authorization"],
-      ).toBe("Basic dXNlcg==");
+      expect((init?.headers as Record<string, string>)["Authorization"]).toBe(
+        "Basic dXNlcg==",
+      );
       return jsonResponse(PROM_OK);
     });
     const res = await authed({
@@ -684,7 +690,10 @@ describe("Alertmanager integration routes", () => {
     });
     expect(unauthed.statusCode).toBe(401);
 
-    const res = await authed({ method: "GET", url: "/integrations/alertmanager" });
+    const res = await authed({
+      method: "GET",
+      url: "/integrations/alertmanager",
+    });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
     expect(body.configured).toBe(false);

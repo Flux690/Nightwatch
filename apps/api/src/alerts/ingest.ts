@@ -6,7 +6,7 @@ import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
 } from "../db/alert-sources.js";
-import { getPrometheusIntegration } from "../db/prometheus-integration.js";
+import { getPrometheusIntegration } from "../db/integrations.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
 

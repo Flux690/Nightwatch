@@ -1,5 +1,5 @@
 import { decrypt } from "../../config/crypto.js";
-import { getPrometheusIntegration } from "../../db/prometheus-integration.js";
+import { getPrometheusIntegration } from "../../db/integrations.js";
 import {
   PrometheusApiError,
   instantQuery,

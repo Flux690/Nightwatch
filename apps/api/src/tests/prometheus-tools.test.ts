@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwatch/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../config/crypto.js";
-import { savePrometheusIntegration } from "../db/prometheus-integration.js";
+import { savePrometheusIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import type { MetricsRangeResult } from "../agent/tools/prometheus.js";
@@ -146,7 +146,11 @@ describe("Prometheus tools through the tool dispatch", () => {
 
   it("range query windows around firedAt with an auto step, echoing the window in the result", async () => {
     connect();
-    const result = await executeTool(range, { query: "up" }, mintSession(ALERT));
+    const result = await executeTool(
+      range,
+      { query: "up" },
+      mintSession(ALERT),
+    );
     expect(result.is_error).toBeUndefined();
 
     const params = mock.requests[0]!.params;

@@ -121,27 +121,17 @@ repo.yarnpkg.com',
   CREATE INDEX IF NOT EXISTS idx_remediation_breaker
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
-  -- Single GitHub integration row (id 'github'): one repo bound per integration.
-  -- The token is encrypted at rest and never returned by any endpoint; there is
-  -- no reveal use case - regeneration happens on GitHub via the deep link.
-  CREATE TABLE IF NOT EXISTS github_integration (
-    id               TEXT PRIMARY KEY,
-    token_encrypted  TEXT NOT NULL,
-    repo_owner       TEXT NOT NULL,
-    repo_name        TEXT NOT NULL,
-    token_expires_at TEXT,
+  -- One row per pull-integration ('github', 'prometheus', 'loki', ...): config is
+  -- per-kind JSON, secret_encrypted is the encrypted credential (NULL when the
+  -- kind has none, e.g. an auth-less Prometheus). Neither is ever returned by an
+  -- endpoint. A new integration is a row, never a table; config is validated
+  -- per-kind in app code since rows are only ever read whole by kind.
+  CREATE TABLE IF NOT EXISTS integrations (
+    kind             TEXT PRIMARY KEY,
+    config           TEXT NOT NULL,
+    secret_encrypted TEXT,
     validated_at     TEXT NOT NULL,
     created_at       TEXT NOT NULL
-  );
-
-  -- Single Prometheus integration row (id 'prometheus'): auth_header_encrypted is the
-  -- verbatim Authorization value (NULL = no auth), encrypted at rest, never returned.
-  CREATE TABLE IF NOT EXISTS prometheus_integration (
-    id                    TEXT PRIMARY KEY,
-    base_url              TEXT NOT NULL,
-    auth_header_encrypted TEXT,
-    validated_at          TEXT NOT NULL,
-    created_at            TEXT NOT NULL
   );
 
 `;

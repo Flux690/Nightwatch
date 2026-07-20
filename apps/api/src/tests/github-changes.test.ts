@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwatch/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../config/crypto.js";
-import { saveGitHubIntegration } from "../db/github-integration.js";
+import { saveGitHubIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import type { GetRecentChangesResult } from "../agent/tools/github.js";

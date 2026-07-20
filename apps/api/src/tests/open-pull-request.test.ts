@@ -14,7 +14,7 @@ import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../config/crypto.js";
 import { updateConfig } from "../config/store.js";
 import { getDb } from "../db/client.js";
-import { saveGitHubIntegration } from "../db/github-integration.js";
+import { saveGitHubIntegration } from "../db/integrations.js";
 import { insertExecutingRemediationAction } from "../db/remediation-actions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { teardownAll } from "../sandbox/workspace.js";
@@ -224,8 +224,7 @@ function auditRow(
       "SELECT status, result FROM remediation_actions WHERE session_id = ? AND tool_use_id = ?",
     )
     .get(sessionId, toolUseId) as
-    | { status: string; result: string | null }
-    | undefined;
+    { status: string; result: string | null } | undefined;
 }
 
 beforeAll(() => {

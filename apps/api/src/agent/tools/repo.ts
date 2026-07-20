@@ -1,7 +1,7 @@
 import { decrypt } from "../../config/crypto.js";
 import { proxyDir, workspacesDir } from "../../config/paths.js";
 import { loadConfig } from "../../config/store.js";
-import { getGitHubIntegration } from "../../db/github-integration.js";
+import { getGitHubIntegration } from "../../db/integrations.js";
 import { getSession } from "../../db/sessions.js";
 import {
   buildAuthHeader,

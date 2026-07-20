@@ -21,7 +21,7 @@ import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
 import { decrypt } from "./config/crypto.js";
-import { getGitHubIntegration } from "./db/github-integration.js";
+import { getGitHubIntegration } from "./db/integrations.js";
 import { nightwatchDir, workspacesDir } from "./config/paths.js";
 import { logger } from "./logger.js";
 

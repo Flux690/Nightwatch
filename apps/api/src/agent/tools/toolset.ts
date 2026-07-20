@@ -45,6 +45,15 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
+// Which pull-integrations are connected this turn. Each field defaults to true
+// so a caller that only cares about fleet capabilities still gets every library;
+// the loop passes the live connection state so a disconnected integration strips
+// its tools from the very next turn.
+export interface IntegrationConnections {
+  github?: boolean;
+  prometheus?: boolean;
+}
+
 // Single source of truth for both the offered schemas and the names the loop resolves,
 // so hiding a tool and gating it are one op. Each provider library is injected whole when
 // the fleet advertises that provider; a tool cannot be offered for a substrate no runner runs.
@@ -53,15 +62,15 @@ export function findTool(toolName: string): Tool | undefined {
 export function effectiveToolset(
   caps: FleetCapabilities | undefined,
   remediationEnabled: boolean,
-  githubConnected = true,
-  prometheusConnected = true,
+  connections: IntegrationConnections = {},
 ): Tool[] {
+  const { github = true, prometheus = true } = connections;
   const libraries: Tool[] = [
     ...(caps === undefined || caps.docker ? DOCKER_TOOLS : []),
     ...(caps === undefined || caps.kubernetes ? K8S_TOOLS : []),
     ...INTERRUPT_TOOLS,
-    ...(githubConnected ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
-    ...(prometheusConnected ? PROMETHEUS_TOOLS : []),
+    ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
+    ...(prometheus ? PROMETHEUS_TOOLS : []),
   ];
   return remediationEnabled
     ? libraries
@@ -73,13 +82,11 @@ export function effectiveToolset(
 export function getToolSchemas(
   caps?: FleetCapabilities,
   remediationEnabled?: boolean,
-  githubConnected?: boolean,
-  prometheusConnected?: boolean,
+  connections?: IntegrationConnections,
 ): ToolSchema[] {
   return effectiveToolset(
     caps,
     remediationEnabled ?? true,
-    githubConnected ?? true,
-    prometheusConnected ?? true,
+    connections ?? {},
   ).map((t) => t.schema);
 }

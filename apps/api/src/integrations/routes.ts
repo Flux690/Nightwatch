@@ -7,12 +7,10 @@ import {
   getGitHubIntegration,
   saveGitHubIntegration,
   updateGitHubIntegrationRepo,
-} from "../db/github-integration.js";
-import {
   deletePrometheusIntegration,
   getPrometheusIntegration,
   savePrometheusIntegration,
-} from "../db/prometheus-integration.js";
+} from "../db/integrations.js";
 import {
   generateAlertSourceToken,
   getAlertSource,
@@ -24,11 +22,7 @@ import {
   ownerIsOrganization,
   validateRepoAccess,
 } from "./github.js";
-import {
-  PrometheusApiError,
-  instantQuery,
-  labelValues,
-} from "./prometheus.js";
+import { PrometheusApiError, instantQuery, labelValues } from "./prometheus.js";
 import { getFleetView } from "../ws/fleet.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
@@ -313,7 +307,9 @@ export async function registerIntegrationRoutes(
       try {
         await instantQuery(
           stored.baseUrl,
-          stored.authHeaderEncrypted ? decrypt(stored.authHeaderEncrypted) : null,
+          stored.authHeaderEncrypted
+            ? decrypt(stored.authHeaderEncrypted)
+            : null,
           "up",
         );
         savePrometheusIntegration({
@@ -383,7 +379,9 @@ export async function registerIntegrationRoutes(
       try {
         const observed = await labelValues(
           stored.baseUrl,
-          stored.authHeaderEncrypted ? decrypt(stored.authHeaderEncrypted) : null,
+          stored.authHeaderEncrypted
+            ? decrypt(stored.authHeaderEncrypted)
+            : null,
           "nw_server",
         );
         const declared = getFleetView().map((r) => r.serverName ?? r.hostname);

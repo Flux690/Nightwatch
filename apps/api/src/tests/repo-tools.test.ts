@@ -23,7 +23,7 @@ import { updateConfig } from "../config/store.js";
 import {
   deleteGitHubIntegration,
   saveGitHubIntegration,
-} from "../db/github-integration.js";
+} from "../db/integrations.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { runInvestigation } from "../agent/loop.js";
 import {
@@ -181,12 +181,12 @@ afterAll(async () => {
 
 describe("offering gate", () => {
   it("strips every repo tool when no integration is configured", () => {
-    const withRepo = effectiveToolset(undefined, true, true).map(
+    const withRepo = effectiveToolset(undefined, true, { github: true }).map(
       (t) => t.schema.name,
     );
-    const withoutRepo = effectiveToolset(undefined, true, false).map(
-      (t) => t.schema.name,
-    );
+    const withoutRepo = effectiveToolset(undefined, true, {
+      github: false,
+    }).map((t) => t.schema.name);
     for (const name of REPO_TOOL_NAMES) {
       expect(withRepo).toContain(name);
       expect(withoutRepo).not.toContain(name);

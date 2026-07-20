@@ -12,8 +12,10 @@ import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
 import { loadConfig, loadApiKey } from "../config/store.js";
-import { getGitHubIntegration } from "../db/github-integration.js";
-import { getPrometheusIntegration } from "../db/prometheus-integration.js";
+import {
+  getGitHubIntegration,
+  getPrometheusIntegration,
+} from "../db/integrations.js";
 import {
   createSession,
   appendSessionMessages,
@@ -302,8 +304,10 @@ export async function runInvestigation(
     const toolset = effectiveToolset(
       fleetCapabilities,
       currentRemediationEnabled(),
-      getGitHubIntegration() !== null,
-      getPrometheusIntegration() !== null,
+      {
+        github: getGitHubIntegration() !== null,
+        prometheus: getPrometheusIntegration() !== null,
+      },
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
