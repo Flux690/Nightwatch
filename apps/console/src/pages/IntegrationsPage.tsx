@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type {
   GitHubIntegrationStatus,
   PrometheusIntegrationStatus,
+  LokiIntegrationStatus,
   RunnerRecord,
 } from "@nightwatch/shared";
 import { Server } from "lucide-react";
@@ -116,6 +117,12 @@ export function IntegrationsPage(): React.JSX.Element {
         apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
     });
 
+  const { data: loki, isLoading: lokiLoading } =
+    useQuery<LokiIntegrationStatus>({
+      queryKey: ["loki-integration"],
+      queryFn: () => apiFetch<LokiIntegrationStatus>("/api/integrations/loki"),
+    });
+
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
   return (
@@ -167,6 +174,14 @@ export function IntegrationsPage(): React.JSX.Element {
           isLoading={prometheusLoading}
           status={prometheus?.configured === true ? "Connected" : null}
           onOpen={() => void navigate({ to: "/integrations/prometheus" })}
+        />
+
+        <IntegrationCard
+          title="Loki"
+          logo={<img src="/logos/loki.svg" alt="" className="size-9" />}
+          isLoading={lokiLoading}
+          status={loki?.configured === true ? "Connected" : null}
+          onOpen={() => void navigate({ to: "/integrations/loki" })}
         />
 
         <IntegrationCard

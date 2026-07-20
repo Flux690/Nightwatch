@@ -20,7 +20,7 @@ The important part is what it will not do. Nightwatch never changes anything on 
 flowchart LR
 
 %% Infrastructure
-monitoring["Your monitoring<br/>Prometheus · Alertmanager<br/>(or any webhook source)"]
+monitoring["Your monitoring<br/>Prometheus · Loki · Alertmanager<br/>(or any webhook source)"]
 runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 
 %% Brain
@@ -55,7 +55,7 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 
 **API** is the brain, and the only place an LLM ever runs. It owns all durable state (a single SQLite file as the system of record, plus sandbox workspaces and generated proxy config in the same state directory), drives the agentic loop, gates every server write behind human approval, and talks to runners exclusively over an outbound-initiated WSS connection. When a GitHub repository is connected it is also the piece that provisions the per-session code sandbox - a hardened Docker container on its own host - and opens draft pull requests.
 
-**Runner** is a stateless executor you install on each server or cluster you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do (Docker containers, Kubernetes workloads, or both), and executes the read and approval-gated write commands the API sends against whichever substrate a service runs on. It reads freely and keeps no local state of its own - identity and configuration come entirely from its token and environment. It is optional: a fully read-only investigation can run on your metrics and connected repository alone, and the runner adds container/host evidence and approved remediation when installed.
+**Runner** is a stateless executor you install on each server or cluster you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do (Docker containers, Kubernetes workloads, or both), and executes the read and approval-gated write commands the API sends against whichever substrate a service runs on. It reads freely and keeps no local state of its own - identity and configuration come entirely from its token and environment. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and the runner adds container/host evidence and approved remediation when installed.
 
 **Console** is the operator UI: a live, streaming session transcript, approval and clarification cards, the runner fleet view, and settings.
 
@@ -69,7 +69,7 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 - **Bring your own key.** Use Anthropic, OpenAI, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama). Inference goes straight to your provider and your key never leaves your network.
 - **Multi-server.** One API coordinates as many runners as you have servers or clusters, and a single investigation can span more than one runner.
 - **No external infrastructure.** State lives in one SQLite file. There is no Redis, no Postgres, and no message queue to run.
-- **Bring your own monitoring.** Point your existing Prometheus and Alertmanager (or any Alertmanager-format webhook source) at the ingest endpoint. Nothing to rip out - Nightwatch plugs into the stack you already run.
+- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager (or any Alertmanager-format webhook source) at the ingest endpoint. Nothing to rip out - Nightwatch plugs into the stack you already run.
 
 ## Getting started
 
@@ -99,7 +99,7 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**. Three plugs matter here: the **Runner** (an executor on your hosts), **Alertmanager** (where your alerts come from), and **Prometheus** (metric evidence for investigations). None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner or Prometheus).
+In the console go to **Integrations**. Four plugs matter here: the **Runner** (an executor on your hosts), **Alertmanager** (where your alerts come from), **Prometheus** (metric evidence), and **Loki** (log evidence). None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, Prometheus, or Loki).
 
 **Add a runner.** From the Runner card, choose **Add a server**. The wizard is three steps and needs no manual config editing:
 
@@ -111,23 +111,25 @@ In the console go to **Integrations**. Three plugs matter here: the **Runner** (
 
 **Connect Prometheus.** The **Prometheus** card takes the base URL of the Prometheus you already run (and, only if yours sits behind auth, a verbatim `Authorization` header value, stored encrypted). Nightwatch only ever reads: the agent gains two query tools - an instant lookup and a range query windowed around the alert - so it can tell whether a metric climbed for hours or spiked at deploy time, with zero runners installed. The connection is probed with a real query before it saves, a **Test query** button re-proves it any time, and once runners exist a **Check labels** button compares the `nw_server` values observed in your metrics against your runner names to catch typos. Keep Prometheus off the public internet; Nightwatch needs to reach it over your private network.
 
+**Connect Loki.** The **Loki** card takes the base URL of the Loki you already run (and, only if yours needs them, a verbatim `Authorization` header value and a tenant `X-Scope-OrgID` for multi-tenant Loki - both optional, the header stored encrypted). Nightwatch only ever reads: the agent gains three log tools - one for log lines (newest first, filtered in LogQL), one for log-derived metrics (rate/count over logs), and a label-discovery tool it uses to learn which labels select a service's logs, since log labels are not a fixed convention. All three window on the alert. The connection is probed against the labels endpoint before it saves, and a **Test query** button re-proves it any time. Loki alone is a sufficient evidence source, so a logs-first fleet with no metrics can still be investigated. Keep Loki off the public internet; Nightwatch needs to reach it over your private network.
+
 ## Configuration
 
 ### API (`apps/api/.env`)
 
-| Variable | Required | Description |
-|---|---|---|
-| `LLM_PROVIDER` | no | `anthropic` or `openai`. Any value other than `openai` resolves to `anthropic` (default: `anthropic`). |
-| `ANTHROPIC_API_KEY` | one of | Anthropic API key, used when the provider is `anthropic`. A key saved from console Settings (stored encrypted) takes precedence. |
-| `OPENAI_API_KEY` | one of | OpenAI or OpenAI-compatible key, used when the provider is `openai`. A key saved from console Settings (stored encrypted) takes precedence. |
-| `OPENAI_BASE_URL` | no | Base URL for OpenAI-compatible providers, e.g. `https://openrouter.ai/api/v1`. |
-| `ANTHROPIC_MODEL` | no | Model id for the Anthropic provider (default: `claude-sonnet-4-6`). |
-| `OPENAI_MODEL` | no | Model id for the OpenAI provider (default: `openai/gpt-oss-120b:free`). |
-| `PORT` | no | HTTP port the API listens on (default: `3000`). |
-| `HOST` | no | Bind address (default: `127.0.0.1`). |
-| `NIGHTWATCH_DIR` | no | Absolute path to the directory holding all durable state: `nightwatch.db`, `secret.key`, the per-session GitHub sandbox `workspaces/`, and the generated egress-proxy config `proxy/`. Defaults to `~/.nightwatch`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts. |
-| `SECRET_KEY` | no | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file in `NIGHTWATCH_DIR`, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
-| `LOG_LEVEL` | no | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`). |
+| Variable            | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LLM_PROVIDER`      | no       | `anthropic` or `openai`. Any value other than `openai` resolves to `anthropic` (default: `anthropic`).                                                                                                                                                                                                                                                                                                                                                 |
+| `ANTHROPIC_API_KEY` | one of   | Anthropic API key, used when the provider is `anthropic`. A key saved from console Settings (stored encrypted) takes precedence.                                                                                                                                                                                                                                                                                                                       |
+| `OPENAI_API_KEY`    | one of   | OpenAI or OpenAI-compatible key, used when the provider is `openai`. A key saved from console Settings (stored encrypted) takes precedence.                                                                                                                                                                                                                                                                                                            |
+| `OPENAI_BASE_URL`   | no       | Base URL for OpenAI-compatible providers, e.g. `https://openrouter.ai/api/v1`.                                                                                                                                                                                                                                                                                                                                                                         |
+| `ANTHROPIC_MODEL`   | no       | Model id for the Anthropic provider (default: `claude-sonnet-4-6`).                                                                                                                                                                                                                                                                                                                                                                                    |
+| `OPENAI_MODEL`      | no       | Model id for the OpenAI provider (default: `openai/gpt-oss-120b:free`).                                                                                                                                                                                                                                                                                                                                                                                |
+| `PORT`              | no       | HTTP port the API listens on (default: `3000`).                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `HOST`              | no       | Bind address (default: `127.0.0.1`).                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `NIGHTWATCH_DIR`    | no       | Absolute path to the directory holding all durable state: `nightwatch.db`, `secret.key`, the per-session GitHub sandbox `workspaces/`, and the generated egress-proxy config `proxy/`. Defaults to `~/.nightwatch`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts.                                                        |
+| `SECRET_KEY`        | no       | AES-256-GCM key that signs owner sessions and encrypts the stored LLM key. If unset, the API generates one on first boot and writes it to a `0600` `secret.key` file in `NIGHTWATCH_DIR`, then reuses it on every restart. Deleting that file is the same as rotating the key: it invalidates every owner session and makes the stored LLM key unrecoverable, so it reads back as unset. Set this explicitly if you want to manage the value yourself. |
+| `LOG_LEVEL`         | no       | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`).                                                                                                                                                                                                                                                                                                                                                           |
 
 ### GitHub integration
 
@@ -208,15 +210,15 @@ merges. Requirements and properties:
 
 ### Runner (`apps/runner/.env`)
 
-| Variable | Required | Description |
-|---|---|---|
-| `NIGHTWATCH_TOKEN` | yes | Runner credential minted from the console |
-| `WS_URL` | yes | API WebSocket endpoint, e.g. `wss://your-api/clients/connect` |
-| `HOST_PROC` | no | `/proc` mount path when running inside a container (default: `/proc`) |
-| `NIGHTWATCH_SERVER_NAME` | no | Server scope attached to Docker service identities on this host - the same name alerts carry in their `nw_server` label - so alerts and tool calls can disambiguate the same container name across servers. |
-| `NIGHTWATCH_CLUSTER_NAME` | no | Cluster label attached to Kubernetes service identities, so alerts and tool calls can disambiguate the same namespace/workload across clusters. Unset means a single, unscoped cluster identity. |
-| `FILE_ALLOWLIST` | no | Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool. |
-| `LOG_LEVEL` | no | Pino log level for the runner process (default: `info`). |
+| Variable                  | Required | Description                                                                                                                                                                                                 |
+| ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NIGHTWATCH_TOKEN`        | yes      | Runner credential minted from the console                                                                                                                                                                   |
+| `WS_URL`                  | yes      | API WebSocket endpoint, e.g. `wss://your-api/clients/connect`                                                                                                                                               |
+| `HOST_PROC`               | no       | `/proc` mount path when running inside a container (default: `/proc`)                                                                                                                                       |
+| `NIGHTWATCH_SERVER_NAME`  | no       | Server scope attached to Docker service identities on this host - the same name alerts carry in their `nw_server` label - so alerts and tool calls can disambiguate the same container name across servers. |
+| `NIGHTWATCH_CLUSTER_NAME` | no       | Cluster label attached to Kubernetes service identities, so alerts and tool calls can disambiguate the same namespace/workload across clusters. Unset means a single, unscoped cluster identity.            |
+| `FILE_ALLOWLIST`          | no       | Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool.                                                                                                                       |
+| `LOG_LEVEL`               | no       | Pino log level for the runner process (default: `info`).                                                                                                                                                    |
 
 Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`) - there is no Kubernetes-specific env var beyond the two identity labels above. `POSTGRES_URL` and `REDIS_URL`, if present on the host, are only probed to advertise availability to the agent as investigation context; they are unrelated to Nightwatch's own storage, which is always the API's single SQLite file. Remediation mode (whether write tools like `RestartDockerService`/`DockerBash` are available) has no runner env var at all - it is stored per runner in the API's database and pushed live to the runner over its WebSocket connection whenever you toggle it from the console.
 
@@ -252,7 +254,7 @@ apps/
       auth/             owner password, runner token minting, fleet ingest credential
       config/           settings routes, LLM config, state-directory paths
       db/               SQLite schema and table modules (FKs on, no migrations)
-      integrations/     GitHub client and connect/status routes
+      integrations/     GitHub / Prometheus / Loki clients and connect/status routes
       llm/              provider factory (Anthropic / OpenAI)
       remediation/      remediation-mode toggle routes
       runners/          runner registry, connect.sh handler
@@ -289,7 +291,7 @@ packages/
       sessions.ts       session and message shapes
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
-      integrations.ts   GitHub integration payloads
+      integrations.ts   integration payloads (GitHub, Prometheus, Loki)
       alerts.ts         normalized alert shapes
       auth.ts           owner auth payloads
       remediation.ts    remediation status + audit shapes

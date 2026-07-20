@@ -14,6 +14,8 @@ import { generateRunnerToken } from "../db/runner.js";
 import {
   deletePrometheusIntegration,
   savePrometheusIntegration,
+  deleteLokiIntegration,
+  saveLokiIntegration,
 } from "../db/integrations.js";
 import {
   generateAlertSourceToken,
@@ -231,7 +233,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rejects only when neither a runner nor Prometheus can supply evidence", async () => {
+  it("rejects only when neither a runner nor a pull-integration can supply evidence", async () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
@@ -240,7 +242,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     expect(res.statusCode).toBe(503);
     const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/runner|prometheus/i);
+    expect(body.error).toMatch(/runner|prometheus|loki/i);
     // The webhook DID deliver: the stamp lands before the evidence gate, so the
     // page shows "receiving" even while investigation is blocked.
     expect(lastReceived()).not.toBeNull();
@@ -250,17 +252,35 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
       baseUrl: "http://prom.internal:9090",
       authHeaderEncrypted: null,
     });
-    const agentless = await server.inject({
+    const promOnly = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
       headers: { "x-nightwatch-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-prometheus-only"),
     });
-    expect(agentless.statusCode).toBe(200);
-    expect((JSON.parse(agentless.body) as { enqueued: number }).enqueued).toBe(
+    expect(promOnly.statusCode).toBe(200);
+    expect((JSON.parse(promOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
     deletePrometheusIntegration();
+
+    // Loki alone is likewise sufficient - a logs-first, no-metrics fleet.
+    saveLokiIntegration({
+      baseUrl: "http://loki.internal:3100",
+      orgId: null,
+      authHeaderEncrypted: null,
+    });
+    const lokiOnly = await server.inject({
+      method: "POST",
+      url: "/alerts/ingest",
+      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      payload: alertmanagerBody("nwi-loki-only"),
+    });
+    expect(lokiOnly.statusCode).toBe(200);
+    expect((JSON.parse(lokiOnly.body) as { enqueued: number }).enqueued).toBe(
+      1,
+    );
+    deleteLokiIntegration();
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {

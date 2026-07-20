@@ -177,3 +177,49 @@ export function savePrometheusIntegration(input: {
 export function deletePrometheusIntegration(): void {
   deleteIntegration(PROMETHEUS);
 }
+
+/* --------------------------------- Loki ---------------------------------- */
+
+const LOKI = "loki";
+
+interface LokiConfig {
+  baseUrl: string;
+  // Tenant for multi-tenant Loki (X-Scope-OrgID); null for single-binary Loki.
+  orgId: string | null;
+}
+
+export interface LokiIntegrationRow {
+  baseUrl: string;
+  orgId: string | null;
+  authHeaderEncrypted: string | null;
+  validatedAt: string;
+  createdAt: string;
+}
+
+export function getLokiIntegration(): LokiIntegrationRow | null {
+  const row = getIntegration(LOKI);
+  if (!row) return null;
+  const config = JSON.parse(row.config) as LokiConfig;
+  return {
+    baseUrl: config.baseUrl,
+    orgId: config.orgId,
+    authHeaderEncrypted: row.secretEncrypted,
+    validatedAt: row.validatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+export function saveLokiIntegration(input: {
+  baseUrl: string;
+  orgId: string | null;
+  authHeaderEncrypted: string | null;
+}): void {
+  saveIntegration(LOKI, {
+    config: { baseUrl: input.baseUrl, orgId: input.orgId } satisfies LokiConfig,
+    secretEncrypted: input.authHeaderEncrypted,
+  });
+}
+
+export function deleteLokiIntegration(): void {
+  deleteIntegration(LOKI);
+}

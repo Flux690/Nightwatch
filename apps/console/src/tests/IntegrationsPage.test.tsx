@@ -74,6 +74,11 @@ function renderIntegrationsRoute(qc: QueryClient) {
     path: "/integrations/prometheus",
     component: () => <div>Prometheus destination</div>,
   });
+  const lokiRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/loki",
+    component: () => <div>Loki destination</div>,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([
       integrationsRoute,
@@ -82,6 +87,7 @@ function renderIntegrationsRoute(qc: QueryClient) {
       addServerRoute,
       alertmanagerRoute,
       prometheusRoute,
+      lokiRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
   });
@@ -101,6 +107,7 @@ function setup(
     ingestConfigured?: boolean;
     lastReceivedAt?: string | null;
     prometheusConfigured?: boolean;
+    lokiConfigured?: boolean;
   } = {},
 ) {
   const {
@@ -109,6 +116,7 @@ function setup(
     ingestConfigured = false,
     lastReceivedAt = null,
     prometheusConfigured = false,
+    lokiConfigured = false,
   } = opts;
 
   const fetchMock = vi
@@ -126,7 +134,15 @@ function setup(
                   hasAuth: false,
                   validatedAt: null,
                 }
-              : github;
+              : url === "/api/integrations/loki"
+                ? {
+                    configured: lokiConfigured,
+                    url: lokiConfigured ? "http://loki:3100" : null,
+                    hasAuth: false,
+                    hasOrgId: false,
+                    validatedAt: null,
+                  }
+                : github;
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -274,6 +290,32 @@ describe("IntegrationsPage", () => {
       await waitFor(() => {
         expect(
           within(cardFor("Prometheus")).getByText("Connected"),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe("Loki", () => {
+    it("offers connect and navigates to the Loki page", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await screen.findByText("Loki");
+      await user.click(
+        await within(cardFor("Loki")).findByRole("button", {
+          name: "Connect",
+        }),
+      );
+
+      expect(await screen.findByText(/loki destination/i)).toBeInTheDocument();
+    });
+
+    it("reports connected once configured", async () => {
+      setup({ lokiConfigured: true });
+      await screen.findByText("Loki");
+      await waitFor(() => {
+        expect(
+          within(cardFor("Loki")).getByText("Connected"),
         ).toBeInTheDocument();
       });
     });

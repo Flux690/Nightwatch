@@ -2,10 +2,7 @@
 // each integration's types sit beside the others without colliding.
 
 export type GitHubErrorCode =
-  | "invalid_token"
-  | "sso_required"
-  | "repo_not_found"
-  | "network";
+  "invalid_token" | "sso_required" | "repo_not_found" | "network";
 
 export interface GitHubIntegrationStatus {
   configured: boolean;
@@ -49,4 +46,17 @@ export interface PrometheusLabelValidation {
   matched: string[];
   missing: string[];
   unknown: string[];
+}
+
+export type LokiErrorCode =
+  "network" | "unauthorized" | "bad_query" | "bad_response";
+
+export interface LokiIntegrationStatus {
+  configured: boolean;
+  url: string | null;
+  // Whether an Authorization header is stored - the value itself never leaves the API.
+  hasAuth: boolean;
+  // Whether a multi-tenant X-Scope-OrgID tenant is stored.
+  hasOrgId: boolean;
+  validatedAt: string | null;
 }

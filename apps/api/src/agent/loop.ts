@@ -15,6 +15,7 @@ import { loadConfig, loadApiKey } from "../config/store.js";
 import {
   getGitHubIntegration,
   getPrometheusIntegration,
+  getLokiIntegration,
 } from "../db/integrations.js";
 import {
   createSession,
@@ -307,6 +308,7 @@ export async function runInvestigation(
       {
         github: getGitHubIntegration() !== null,
         prometheus: getPrometheusIntegration() !== null,
+        loki: getLokiIntegration() !== null,
       },
     );
     const toolSchemas = toolset.map((t) => t.schema);

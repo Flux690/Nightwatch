@@ -14,6 +14,7 @@ import { AddServerPage } from "./pages/AddServerPage.js";
 import { RunnerServersPage } from "./pages/RunnerServers.js";
 import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 import { PrometheusPage } from "./pages/PrometheusPage.js";
+import { LokiPage } from "./pages/LokiPage.js";
 
 function RootLayout(): React.JSX.Element {
   return (
@@ -105,6 +106,12 @@ const prometheusRoute = createRoute({
   component: PrometheusPage,
 });
 
+const lokiRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/loki",
+  component: LokiPage,
+});
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
@@ -118,6 +125,7 @@ const routeTree = rootRoute.addChildren([
     addServerRoute,
     alertmanagerRoute,
     prometheusRoute,
+    lokiRoute,
   ]),
 ]);
 

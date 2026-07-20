@@ -12,7 +12,10 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
-import { deletePrometheusIntegration } from "../db/integrations.js";
+import {
+  deletePrometheusIntegration,
+  deleteLokiIntegration,
+} from "../db/integrations.js";
 import { setAlertSourceReceived } from "../db/alert-sources.js";
 import {
   registerRunner,
@@ -769,5 +772,184 @@ describe("Alertmanager integration routes", () => {
     expect(row.token_hash).toBe(sha256hex(newToken));
     expect(row.token_hash).not.toBe(sha256hex(oldToken));
     expect(row.last_received_at).toBeNull();
+  });
+});
+
+describe("Loki integration routes", () => {
+  let server: FastifyInstance;
+  let cleanupDb: () => void;
+  let SESSION: string;
+
+  const LOKI_LABELS = { status: "success", data: ["app", "namespace"] };
+
+  beforeAll(async () => {
+    cleanupDb = useTempDb();
+    SESSION = await mintTestSession();
+    server = Fastify({ logger: false });
+    await registerIntegrationRoutes(server);
+    await server.ready();
+  });
+
+  afterAll(async () => {
+    await server.close();
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    deleteLokiIntegration();
+  });
+
+  function authed(opts: {
+    method: "GET" | "POST" | "DELETE";
+    url: string;
+    payload?: Record<string, unknown>;
+  }) {
+    return server.inject({
+      method: opts.method,
+      url: opts.url,
+      ...(opts.payload !== undefined && { payload: opts.payload }),
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+  }
+
+  it("reports not configured before onboarding and requires a session", async () => {
+    const unauthed = await server.inject({
+      method: "GET",
+      url: "/integrations/loki",
+    });
+    expect(unauthed.statusCode).toBe(401);
+
+    const res = await authed({ method: "GET", url: "/integrations/loki" });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: false,
+      url: null,
+      hasAuth: false,
+      hasOrgId: false,
+      validatedAt: null,
+    });
+  });
+
+  it("connects after a labels probe: verbatim auth, tenant header, encrypted storage", async () => {
+    const mock = stubFetch((url, init) => {
+      expect(url).toContain("/loki/api/v1/labels");
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Bearer secret-123");
+      expect(headers["X-Scope-OrgID"]).toBe("team-a");
+      return jsonResponse(LOKI_LABELS);
+    });
+
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/loki",
+      payload: {
+        url: "http://loki.internal:3100/",
+        authHeader: "Bearer secret-123",
+        orgId: "team-a",
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body)).toEqual({
+      configured: true,
+      url: "http://loki.internal:3100/",
+      hasAuth: true,
+      hasOrgId: true,
+      validatedAt: expect.any(String),
+    });
+    // The probe URL must not carry the credential.
+    expect(String(mock.mock.calls[0]?.[0])).not.toContain("secret-123");
+
+    const row = getDb()
+      .prepare(
+        "SELECT config, secret_encrypted FROM integrations WHERE kind = 'loki'",
+      )
+      .get() as { config: string; secret_encrypted: string };
+    expect(decrypt(row.secret_encrypted)).toBe("Bearer secret-123");
+    expect(row.secret_encrypted).not.toContain("secret-123");
+    expect(JSON.parse(row.config)).toEqual({
+      baseUrl: "http://loki.internal:3100/",
+      orgId: "team-a",
+    });
+  });
+
+  it("connects without auth or tenant, sending neither header", async () => {
+    stubFetch((_url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBeUndefined();
+      expect(headers["X-Scope-OrgID"]).toBeUndefined();
+      return jsonResponse(LOKI_LABELS);
+    });
+
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/loki",
+      payload: { url: "http://loki.internal:3100" },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(JSON.parse(res.body)).toMatchObject({
+      configured: true,
+      hasAuth: false,
+      hasOrgId: false,
+    });
+  });
+
+  it("refuses to save when the probe fails - unreachable to 502, rejected credential to 401", async () => {
+    stubFetch(() => {
+      throw new Error("ECONNREFUSED");
+    });
+    const unreachable = await authed({
+      method: "POST",
+      url: "/integrations/loki",
+      payload: { url: "http://loki.internal:3100" },
+    });
+    expect(unreachable.statusCode).toBe(502);
+    expect(JSON.parse(unreachable.body).code).toBe("network");
+
+    stubFetch(() => jsonResponse({ message: "no org id" }, { status: 401 }));
+    const unauthorized = await authed({
+      method: "POST",
+      url: "/integrations/loki",
+      payload: { url: "http://loki.internal:3100" },
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    expect(JSON.parse(unauthorized.body).code).toBe("unauthorized");
+
+    const status = await authed({ method: "GET", url: "/integrations/loki" });
+    expect(JSON.parse(status.body).configured).toBe(false);
+  });
+
+  it("test endpoint is 400 unconfigured, then re-probes stored config with header + tenant", async () => {
+    const before = await authed({
+      method: "POST",
+      url: "/integrations/loki/test",
+    });
+    expect(before.statusCode).toBe(400);
+
+    stubFetch(() => jsonResponse(LOKI_LABELS));
+    await authed({
+      method: "POST",
+      url: "/integrations/loki",
+      payload: {
+        url: "http://loki.internal:3100",
+        authHeader: "Basic dXNlcg==",
+        orgId: "team-b",
+      },
+    });
+
+    const mock = stubFetch((url, init) => {
+      expect(url).toContain("/loki/api/v1/labels");
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers["Authorization"]).toBe("Basic dXNlcg==");
+      expect(headers["X-Scope-OrgID"]).toBe("team-b");
+      return jsonResponse(LOKI_LABELS);
+    });
+    const res = await authed({
+      method: "POST",
+      url: "/integrations/loki/test",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(mock).toHaveBeenCalledTimes(1);
   });
 });

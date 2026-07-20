@@ -6,7 +6,10 @@ import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
 } from "../db/alert-sources.js";
-import { getPrometheusIntegration } from "../db/integrations.js";
+import {
+  getLokiIntegration,
+  getPrometheusIntegration,
+} from "../db/integrations.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
 
@@ -39,12 +42,16 @@ export async function registerAlertRoutes(
     // the matched source, before the evidence gate, even when everything dedups.
     setAlertSourceReceived(sourceKind, new Date().toISOString());
 
-    // Evidence gate, not identity gate: a runner OR the Prometheus integration
-    // makes an investigation worth starting; misroute protection is downstream.
-    if (getFleetView().length === 0 && getPrometheusIntegration() === null) {
+    // Evidence gate, not identity gate: a runner OR a pull-integration (metrics or
+    // logs) makes an investigation worth starting; misroute protection is downstream.
+    if (
+      getFleetView().length === 0 &&
+      getPrometheusIntegration() === null &&
+      getLokiIntegration() === null
+    ) {
       return reply.code(503).send({
         error:
-          "no evidence source available - connect a runner or the Prometheus integration to investigate alerts",
+          "no evidence source available - connect a runner or the Prometheus or Loki integration to investigate alerts",
       });
     }
 

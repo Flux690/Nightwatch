@@ -10,6 +10,9 @@ import {
   deletePrometheusIntegration,
   getPrometheusIntegration,
   savePrometheusIntegration,
+  deleteLokiIntegration,
+  getLokiIntegration,
+  saveLokiIntegration,
 } from "../db/integrations.js";
 import {
   generateAlertSourceToken,
@@ -23,6 +26,7 @@ import {
   validateRepoAccess,
 } from "./github.js";
 import { PrometheusApiError, instantQuery, labelValues } from "./prometheus.js";
+import { LokiApiError, labelNames } from "./loki.js";
 import { getFleetView } from "../ws/fleet.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
@@ -31,6 +35,7 @@ import type {
   GitHubIntegrationStatus,
   PrometheusIntegrationStatus,
   PrometheusLabelValidation,
+  LokiIntegrationStatus,
 } from "@nightwatch/shared";
 
 const ReposBodySchema = z.object({
@@ -41,6 +46,12 @@ const ReposBodySchema = z.object({
 const PrometheusConnectSchema = z.object({
   url: z.string().min(1),
   authHeader: z.string().min(1).optional(),
+});
+
+const LokiConnectSchema = z.object({
+  url: z.string().min(1),
+  authHeader: z.string().min(1).optional(),
+  orgId: z.string().min(1).optional(),
 });
 
 const ConnectBodySchema = z.object({
@@ -110,6 +121,55 @@ async function sendPrometheusError(
     return reply.code(status).send({ error: err.message, code: err.code });
   }
   throw err;
+}
+
+function lokiStatusPayload(): LokiIntegrationStatus {
+  const row = getLokiIntegration();
+  if (!row) {
+    return {
+      configured: false,
+      url: null,
+      hasAuth: false,
+      hasOrgId: false,
+      validatedAt: null,
+    };
+  }
+  return {
+    configured: true,
+    url: row.baseUrl,
+    hasAuth: row.authHeaderEncrypted !== null,
+    hasOrgId: row.orgId !== null,
+    validatedAt: row.validatedAt,
+  };
+}
+
+async function sendLokiError(
+  reply: FastifyReply,
+  err: unknown,
+): Promise<FastifyReply> {
+  if (err instanceof LokiApiError) {
+    const status =
+      err.code === "unauthorized"
+        ? err.status
+        : err.code === "bad_query"
+          ? 400
+          : 502;
+    return reply.code(status).send({ error: err.message, code: err.code });
+  }
+  throw err;
+}
+
+// Cheap, auth- and tenant-exercising probe used at connect and test time: a
+// recent-window label listing proves the URL, credential, and X-Scope-OrgID all
+// work and that discovery will function.
+async function probeLoki(
+  url: string,
+  authHeader: string | null,
+  orgId: string | null,
+): Promise<void> {
+  const end = new Date();
+  const start = new Date(end.getTime() - 60 * 60 * 1000);
+  await labelNames(url, authHeader, orgId, start, end);
 }
 
 export async function registerIntegrationRoutes(
@@ -319,6 +379,76 @@ export async function registerIntegrationRoutes(
         return await reply.code(200).send(prometheusStatusPayload());
       } catch (err) {
         return sendPrometheusError(reply, err);
+      }
+    },
+  );
+
+  fastify.get("/integrations/loki", { preHandler: requireSession }, async () =>
+    lokiStatusPayload(),
+  );
+
+  // Connect: probe the labels endpoint before saving - it is cheap, exercises
+  // auth AND the tenant header, and proves discovery will work; a bad URL,
+  // credential, or tenant fails loud at setup, never at 3am mid-incident.
+  fastify.post(
+    "/integrations/loki",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const parsed = LokiConnectSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: parsed.error.message });
+      }
+      const { url, authHeader, orgId } = parsed.data;
+      try {
+        await probeLoki(url, authHeader ?? null, orgId ?? null);
+        saveLokiIntegration({
+          baseUrl: url,
+          orgId: orgId ?? null,
+          authHeaderEncrypted: authHeader ? encrypt(authHeader) : null,
+        });
+        logger.info({ url }, "loki integration configured");
+        return await reply.code(201).send(lokiStatusPayload());
+      } catch (err) {
+        return sendLokiError(reply, err);
+      }
+    },
+  );
+
+  fastify.delete(
+    "/integrations/loki",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      deleteLokiIntegration();
+      logger.info("loki integration disconnected");
+      return reply.code(204).send();
+    },
+  );
+
+  // Re-probes the stored config; success bumps validated_at via re-save.
+  fastify.post(
+    "/integrations/loki/test",
+    { preHandler: requireSession },
+    async (_request, reply) => {
+      const stored = getLokiIntegration();
+      if (!stored) {
+        return reply.code(400).send({ error: "Loki is not connected" });
+      }
+      try {
+        await probeLoki(
+          stored.baseUrl,
+          stored.authHeaderEncrypted
+            ? decrypt(stored.authHeaderEncrypted)
+            : null,
+          stored.orgId,
+        );
+        saveLokiIntegration({
+          baseUrl: stored.baseUrl,
+          orgId: stored.orgId,
+          authHeaderEncrypted: stored.authHeaderEncrypted,
+        });
+        return await reply.code(200).send(lokiStatusPayload());
+      } catch (err) {
+        return sendLokiError(reply, err);
       }
     },
   );

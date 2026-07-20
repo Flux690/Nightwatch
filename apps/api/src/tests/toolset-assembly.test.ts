@@ -154,6 +154,27 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       expect(disconnected).not.toContain("QueryMetrics");
       expect(disconnected).not.toContain("QueryMetricsRange");
     });
+
+    it("the Loki gate controls the log tools, independent of substrate", () => {
+      const connected = getToolSchemas(
+        { docker: false, kubernetes: false },
+        true,
+        {
+          github: false,
+          prometheus: false,
+          loki: true,
+        },
+      ).map((s) => s.name);
+      expect(connected).toContain("QueryLogs");
+      expect(connected).toContain("QueryLogMetrics");
+      expect(connected).toContain("DiscoverLogLabels");
+      const disconnected = getToolSchemas(undefined, true, { loki: false }).map(
+        (s) => s.name,
+      );
+      expect(disconnected).not.toContain("QueryLogs");
+      expect(disconnected).not.toContain("QueryLogMetrics");
+      expect(disconnected).not.toContain("DiscoverLogLabels");
+    });
   });
 
   describe("remediation-mode filter (unit)", () => {
