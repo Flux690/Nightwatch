@@ -12,11 +12,11 @@ import {
 } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import {
-  listAllSessions,
   getSessionMessages,
   getSession,
   deleteSession,
 } from "../db/sessions.js";
+import { listSessionRows } from "./list.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
@@ -59,7 +59,7 @@ export async function registerSessionRoutes(
   );
 
   fastify.get("/sessions", { preHandler: requireSession }, async () =>
-    listAllSessions(),
+    listSessionRows(),
   );
 
   fastify.get<{ Params: { id: string } }>(

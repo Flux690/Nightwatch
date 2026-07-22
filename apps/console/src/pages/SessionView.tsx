@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type {
-  SessionMeta,
+  SessionListRow,
   SessionMessage,
   ConsoleEvent,
   ConsoleHumanInputRequired,
@@ -307,11 +307,17 @@ export function SessionView({
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      queryClient.setQueryData<SessionMeta[]>(["sessions"], (prev = []) => [
+      queryClient.setQueryData<SessionListRow[]>(["sessions"], (prev = []) => [
         {
           sessionId: newId,
           title: firstMessage.slice(0, 60),
           createdAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          investigation: false,
+          severity: null,
+          target: null,
+          status: null,
+          rootCauseLine: null,
         },
         ...prev,
       ]);

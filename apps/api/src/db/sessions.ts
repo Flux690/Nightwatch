@@ -1,5 +1,6 @@
 import type {
   NormalizedAlert,
+  Report,
   SessionMessage,
   SessionMeta,
 } from "@nightwatch/shared";
@@ -155,13 +156,54 @@ export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
 
-export function listAllSessions(): SessionMeta[] {
-  return getDb()
+// Raw material for the sessions queue: one row per session joined with its
+// report and the transcript's tail. Derivation into queue fields (status,
+// title precedence) lives in session/list.ts, which also knows the dispatcher.
+export interface SessionListSource {
+  sessionId: string;
+  title: string;
+  createdAt: string;
+  lastActivityAt: string;
+  originatingAlert: NormalizedAlert | null;
+  report: Report | null;
+  lastRole: string | null;
+}
+
+export function listSessionSources(): SessionListSource[] {
+  const rows = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, title, created_at AS createdAt
-       FROM sessions ORDER BY created_at DESC LIMIT 100`,
+      `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
+              s.originating_alert AS originatingAlert, r.report,
+              (SELECT m.role FROM session_messages m
+                WHERE m.session_id = s.session_id
+                ORDER BY m.seq DESC LIMIT 1) AS lastRole,
+              COALESCE((SELECT MAX(m.created_at) FROM session_messages m
+                WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt
+       FROM sessions s
+       LEFT JOIN reports r ON r.session_id = s.session_id
+       ORDER BY lastActivityAt DESC LIMIT 100`,
     )
-    .all() as SessionMeta[];
+    .all() as Array<{
+    sessionId: string;
+    title: string;
+    createdAt: string;
+    lastActivityAt: string;
+    originatingAlert: string | null;
+    report: string | null;
+    lastRole: string | null;
+  }>;
+  return rows.map((r) => ({
+    sessionId: r.sessionId,
+    title: r.title,
+    createdAt: r.createdAt,
+    lastActivityAt: r.lastActivityAt,
+    originatingAlert:
+      r.originatingAlert !== null
+        ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
+        : null,
+    report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
+    lastRole: r.lastRole,
+  }));
 }
 
 export function getSession(sessionId: string): StoredSession | undefined {

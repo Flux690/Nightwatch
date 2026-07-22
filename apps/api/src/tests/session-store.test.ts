@@ -11,7 +11,7 @@ import {
   createSession,
   appendSessionMessages,
   appendMessagesAndInterrupt,
-  listAllSessions,
+  listSessionSources,
   getSession,
   getSessionMessages,
   deleteSession,
@@ -147,7 +147,7 @@ describe("API-local session store", () => {
     createSession(newer, alert);
     createSession(other, alert);
 
-    const list = listAllSessions().filter((session) =>
+    const list = listSessionSources().filter((session) =>
       [other.sessionId, newer.sessionId, older.sessionId].includes(
         session.sessionId,
       ),

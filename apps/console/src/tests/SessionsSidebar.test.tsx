@@ -22,11 +22,18 @@ const RUNNER = {
   createdAt: "2024-01-01T00:00:00Z",
 };
 
+// Investigation rows show on the default tab; conversations on the other.
 const SESSION_1 = {
   sessionId: "s1",
   token: "tok-1",
   title: "CPU spike on web-01",
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
+  lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+  investigation: true,
+  severity: "warning",
+  target: "docker:web-01",
+  status: "resolved",
+  rootCauseLine: "OOM after deploy",
 };
 
 const SESSION_2 = {
@@ -34,6 +41,25 @@ const SESSION_2 = {
   token: "tok-1",
   title: "Disk full on db-02",
   createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
+  lastActivityAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+  investigation: true,
+  severity: "critical",
+  target: "docker:db-02",
+  status: "action_required",
+  rootCauseLine: null,
+};
+
+const CHAT_1 = {
+  sessionId: "c1",
+  token: "tok-1",
+  title: "What does OOM mean?",
+  createdAt: new Date(Date.now() - 60 * 1000).toISOString(),
+  lastActivityAt: new Date(Date.now() - 60 * 1000).toISOString(),
+  investigation: false,
+  severity: null,
+  target: null,
+  status: null,
+  rootCauseLine: null,
 };
 
 function setupWithSessionsError() {
@@ -261,6 +287,39 @@ describe("SessionsSidebar", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/sessions/s1");
       });
+    });
+  });
+
+  describe("tabs", () => {
+    it("partitions investigations and conversations across the two tabs", async () => {
+      const user = userEvent.setup();
+      setup([SESSION_1, CHAT_1]);
+
+      // Default tab: investigations only.
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("What does OOM mean?")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("tab", { name: /conversations/i }));
+      expect(screen.getByText("What does OOM mean?")).toBeInTheDocument();
+      expect(screen.queryByText("CPU spike on web-01")).not.toBeInTheDocument();
+    });
+
+    it("floats action-required rows above newer activity and shows status chips", async () => {
+      // SESSION_2 (action_required) is OLDER than SESSION_1 but must lead.
+      setup([SESSION_1, SESSION_2]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Disk full on db-02")).toBeInTheDocument();
+      });
+      const rows = screen.getAllByRole("listitem");
+      expect(rows[0]).toHaveTextContent("Disk full on db-02");
+      expect(rows[0]).toHaveTextContent("Action required");
+      expect(rows[1]).toHaveTextContent("CPU spike on web-01");
+      expect(rows[1]).toHaveTextContent("Resolved");
+      // Resolved rows lead with the root-cause line.
+      expect(rows[1]).toHaveTextContent("OOM after deploy");
     });
   });
 });

@@ -91,6 +91,8 @@ export type {
   SessionMeta,
   SessionMessage,
   RunMode,
+  SessionRunStatus,
+  SessionListRow,
 } from "./sessions.js";
 export type {
   ReportStatus,
