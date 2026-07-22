@@ -5,16 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nightwatch</title>
     <script>
-      // Apply the stored theme before first paint so a dark session never
+      // Apply the stored theme before first paint so the dark default never
       // flashes light. Mirrors lib/theme.tsx (key "nw-theme", default dark).
       (function () {
-        var pref = localStorage.getItem("nw-theme");
-        var dark =
-          pref === "dark" ||
-          pref === null ||
-          (pref === "system" &&
-            window.matchMedia("(prefers-color-scheme: dark)").matches);
-        if (dark) document.documentElement.classList.add("dark");
+        if (localStorage.getItem("nw-theme") !== "light")
+          document.documentElement.classList.add("dark");
       })();
     </script>
   </head>

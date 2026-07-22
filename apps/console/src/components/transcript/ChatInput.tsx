@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, ChevronDown, Square } from "lucide-react";
 import type { RunMode } from "@nightwatch/shared";
 import {
   InputGroup,
@@ -9,8 +9,14 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
@@ -32,8 +38,13 @@ export interface ChatInputProps {
   onSendFailed?: () => void;
 }
 
-/* Ask | Investigate segmented picker. On an existing conversation, choosing
-   Investigate escalates it on the next send. */
+const MODE_LABEL: Record<RunMode, string> = {
+  ask: "Ask",
+  investigate: "Investigate",
+};
+
+/* Composer mode dropdown. On an existing conversation, choosing Investigate
+   escalates it on the next send; descriptions explain what each mode does. */
 function ModePicker({
   mode,
   onChange,
@@ -43,34 +54,44 @@ function ModePicker({
   onChange: (mode: RunMode) => void;
   disabled: boolean;
 }): React.JSX.Element {
-  const options: { value: RunMode; label: string }[] = [
-    { value: "ask", label: "Ask" },
-    { value: "investigate", label: "Investigate" },
-  ];
   return (
-    <div
-      role="group"
-      aria-label="Session mode"
-      className="flex items-center gap-0.5 rounded-full bg-surface p-0.5"
-    >
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          aria-pressed={mode === opt.value}
-          disabled={disabled}
-          className={cn(
-            "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-            mode === opt.value
-              ? "bg-card text-foreground shadow-raised"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          onClick={() => onChange(opt.value)}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Session mode"
+        disabled={disabled}
+        className="group/mode inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:border-ring disabled:pointer-events-none disabled:opacity-50 data-popup-open:text-foreground"
+      >
+        {MODE_LABEL[mode]}
+        <ChevronDown
+          className="size-3.5 text-muted-foreground transition-transform group-data-popup-open/mode:rotate-180"
+          aria-hidden="true"
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup
+          value={mode}
+          onValueChange={(value) => onChange(value as RunMode)}
         >
-          {opt.label}
-        </button>
-      ))}
-    </div>
+          <DropdownMenuRadioItem value="ask">
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium text-foreground">Ask</span>
+              <span className="text-xs text-muted-foreground">
+                Chat with the agent. It can look things up, but writes no
+                report.
+              </span>
+            </span>
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="investigate">
+            <span className="flex flex-col gap-0.5">
+              <span className="font-medium text-foreground">Investigate</span>
+              <span className="text-xs text-muted-foreground">
+                Run a full investigation with a live root-cause report.
+              </span>
+            </span>
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

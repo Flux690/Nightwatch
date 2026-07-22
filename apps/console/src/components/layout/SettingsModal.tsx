@@ -22,7 +22,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ICON_UI } from "@/lib/iconProps";
-import { useTheme, type ThemePreference } from "@/lib/theme";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -38,7 +37,7 @@ const ERROR_LABELS: Record<string, string> = {
   unknown_model: "Model not found on endpoint",
 };
 
-type SectionId = "model" | "loop" | "sandbox" | "appearance" | "account";
+type SectionId = "model" | "loop" | "sandbox" | "account";
 
 const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   {
@@ -57,11 +56,6 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
     label: "Sandbox",
     description:
       "Lifecycle and resource limits for per-session code sandboxes.",
-  },
-  {
-    id: "appearance",
-    label: "Appearance",
-    description: "Console theme for this device.",
   },
   {
     id: "account",
@@ -92,7 +86,6 @@ export function SettingsModal({
   onClose: () => void;
 }): React.JSX.Element {
   const { logoutAll } = useAuth();
-  const { preference, setPreference } = useTheme();
   const [section, setSection] = useState<SectionId>("model");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
@@ -762,34 +755,6 @@ export function SettingsModal({
                         </div>
                       </div>
                     )}
-                  </TabsContent>
-
-                  <TabsContent value="appearance">
-                    {/* Applies instantly and persists per device - deliberately
-                        outside the form's save/dirty flow. */}
-                    <Field className="max-w-52">
-                      <FieldLabel htmlFor="settings-theme">Theme</FieldLabel>
-                      <NativeSelect
-                        id="settings-theme"
-                        className="w-full"
-                        value={preference}
-                        onChange={(e) =>
-                          setPreference(
-                            e.currentTarget.value as ThemePreference,
-                          )
-                        }
-                      >
-                        <NativeSelectOption value="system">
-                          System
-                        </NativeSelectOption>
-                        <NativeSelectOption value="dark">
-                          Dark
-                        </NativeSelectOption>
-                        <NativeSelectOption value="light">
-                          Light
-                        </NativeSelectOption>
-                      </NativeSelect>
-                    </Field>
                   </TabsContent>
 
                   <TabsContent value="account">

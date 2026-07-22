@@ -15,6 +15,8 @@ import {
   Menu,
   Plug,
   MessagesSquare,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import {
@@ -40,6 +42,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
 import { useSessionReport } from "@/hooks/useSessionReport";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
+import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { AuditRail } from "./AuditRail.js";
@@ -168,6 +171,7 @@ function ShellContent({
   };
   const attentionCount = useAttentionCount();
   const { logout } = useAuth();
+  const { preference, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   // The morph: a session with a report is an investigation - chat moves to the
@@ -266,6 +270,16 @@ function ShellContent({
         </RailItem>
 
         <div className="mt-auto flex flex-col items-center gap-1">
+          <RailItem
+            label={preference === "dark" ? "Switch to light" : "Switch to dark"}
+            onClick={toggleTheme}
+          >
+            {preference === "dark" ? (
+              <Sun {...ICON_NAV} />
+            ) : (
+              <Moon {...ICON_NAV} />
+            )}
+          </RailItem>
           <RailItem label="Settings" onClick={() => setSettingsOpen(true)}>
             <Settings {...ICON_NAV} />
           </RailItem>

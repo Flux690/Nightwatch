@@ -204,9 +204,9 @@ export function SessionsSidebar(): React.JSX.Element {
       <Tabs
         value={tab}
         onValueChange={(v) => setTab(v as Tab)}
-        className="mb-2 px-1"
+        className="mb-3 px-2"
       >
-        <TabsList className="w-full">
+        <TabsList variant="line" className="w-full">
           <TabsTrigger value="investigations" className="flex-1">
             Investigations
           </TabsTrigger>

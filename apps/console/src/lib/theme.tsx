@@ -6,31 +6,24 @@ import {
   useState,
 } from "react";
 
-// Client-side preference, deliberately not part of AgentConfig: the theme
-// belongs to the device, applies instantly, and never round-trips the API.
-export type ThemePreference = "light" | "dark" | "system";
+// Client-side preference, per device: applies instantly and never round-trips
+// the API. Two states only - dark (the default look) and light.
+export type ThemePreference = "light" | "dark";
 
 export const THEME_STORAGE_KEY = "nw-theme";
 
 function storedPreference(): ThemePreference {
-  const raw = localStorage.getItem(THEME_STORAGE_KEY);
-  // Dark is the default look; light and system are opt-in per device.
-  return raw === "light" || raw === "dark" || raw === "system" ? raw : "dark";
-}
-
-function systemPrefersDark(): boolean {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  // Dark is the default; light is opt-in per device.
+  return localStorage.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
 }
 
 function applyTheme(preference: ThemePreference): void {
-  const dark =
-    preference === "dark" || (preference === "system" && systemPrefersDark());
-  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("dark", preference === "dark");
 }
 
 interface ThemeContextValue {
   preference: ThemePreference;
-  setPreference: (preference: ThemePreference) => void;
+  toggle: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -40,26 +33,23 @@ export function ThemeProvider({
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const [preference, setPreferenceState] =
+  const [preference, setPreference] =
     useState<ThemePreference>(storedPreference);
 
   useEffect(() => {
     applyTheme(preference);
-    if (preference !== "system") return;
-    // Follow live OS theme changes only while the preference is "system".
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (): void => applyTheme("system");
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
   }, [preference]);
 
-  const setPreference = useCallback((next: ThemePreference): void => {
-    localStorage.setItem(THEME_STORAGE_KEY, next);
-    setPreferenceState(next);
+  const toggle = useCallback((): void => {
+    setPreference((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+      return next;
+    });
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ preference, setPreference }}>
+    <ThemeContext.Provider value={{ preference, toggle }}>
       {children}
     </ThemeContext.Provider>
   );

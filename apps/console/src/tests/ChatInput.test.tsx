@@ -156,7 +156,10 @@ describe("ChatInput", () => {
       const { fetchMock } = setup({ sessionId: null, isRunning: false });
 
       await screen.findByRole("textbox");
-      await user.click(screen.getByRole("button", { name: /investigate/i }));
+      await user.click(screen.getByRole("button", { name: /session mode/i }));
+      await user.click(
+        await screen.findByRole("menuitemradio", { name: /investigate/i }),
+      );
       await user.type(screen.getByRole("textbox"), "web-01 is failing");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
@@ -202,7 +205,10 @@ describe("ChatInput", () => {
       );
 
       await screen.findByRole("textbox");
-      await user.click(screen.getByRole("button", { name: /investigate/i }));
+      await user.click(screen.getByRole("button", { name: /session mode/i }));
+      await user.click(
+        await screen.findByRole("menuitemradio", { name: /investigate/i }),
+      );
       await user.type(screen.getByRole("textbox"), "dig into this");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
@@ -226,7 +232,7 @@ describe("ChatInput", () => {
 
       await screen.findByRole("textbox");
       expect(
-        screen.queryByRole("group", { name: /session mode/i }),
+        screen.queryByRole("button", { name: /session mode/i }),
       ).not.toBeInTheDocument();
     });
   });
