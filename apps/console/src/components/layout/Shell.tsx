@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Link,
   useNavigate,
@@ -37,11 +38,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
+import { useSessionReport } from "@/hooks/useSessionReport";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
 import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
+import { ReportPanel } from "@/components/report/ReportPanel";
 import { SessionView } from "@/pages/SessionView";
 
 export function Shell({
@@ -61,6 +64,29 @@ export function Shell({
       <ShellContent>{children}</ShellContent>
     </SidebarProvider>
   );
+}
+
+/* Attaches a stable, externally-owned DOM node as this element's child. The
+   chat is portaled ONCE into that node; moving the node between slots is a
+   plain DOM re-parent, so the chat component never unmounts (a portal whose
+   container changes would remount it and drop live streams mid-run). */
+function ChatSlot({
+  node,
+  className,
+}: {
+  node: HTMLElement;
+  className?: string;
+}): React.JSX.Element {
+  const hostRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (host === null) return;
+    host.appendChild(node);
+    return () => {
+      if (node.parentElement === host) host.removeChild(node);
+    };
+  }, [node]);
+  return <div ref={hostRef} className={className} />;
 }
 
 /* One icon-rail entry: an icon-only control with a tooltip; navigation items
@@ -141,6 +167,30 @@ function ShellContent({
   const attentionCount = useAttentionCount();
   const { logout } = useAuth();
   const navigate = useNavigate();
+
+  // The morph: a session with a report is an investigation - chat moves to the
+  // right rail and the report owns main. Conversations keep the centered chat.
+  const report = useSessionReport(routeSessionId ?? null);
+  const investigationView = routeSessionId !== undefined && report !== null;
+
+  const [chatRailOpen, setChatRailOpen] = useState(true);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setChatRailOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // The chat's permanent DOM home, created once and re-parented between slots.
+  const chatNodeRef = useRef<HTMLDivElement | null>(null);
+  if (chatNodeRef.current === null) {
+    chatNodeRef.current = document.createElement("div");
+    chatNodeRef.current.className = "flex min-h-0 flex-1 flex-col";
+  }
 
   const isSettingsAlias = pathname === "/settings";
   const settingsOpened = settingsOpen || isSettingsAlias;
@@ -344,17 +394,48 @@ function ShellContent({
         </header>
         <div
           className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            isSessionArea ? "overflow-hidden" : "overflow-auto",
+            "flex min-h-0 flex-1",
+            isSessionArea ? "overflow-hidden" : "flex-col overflow-auto",
           )}
         >
           {isSessionArea ? (
-            <SessionView sessionId={routeSessionId ?? null} />
+            investigationView ? (
+              <>
+                <div className="min-w-0 flex-1 overflow-y-auto">
+                  <ReportPanel report={report} />
+                </div>
+                {chatRailOpen && (
+                  <aside
+                    aria-label="Investigation chat"
+                    className="flex w-(--container-rail) max-w-[45vw] shrink-0 flex-col border-l border-border"
+                  >
+                    <ChatSlot
+                      node={chatNodeRef.current}
+                      className="flex min-h-0 flex-1 flex-col"
+                    />
+                  </aside>
+                )}
+              </>
+            ) : (
+              <ChatSlot
+                node={chatNodeRef.current}
+                className="flex min-h-0 flex-1 flex-col"
+              />
+            )
           ) : (
             children
           )}
         </div>
       </SidebarInset>
+
+      {/* Portaled once into the stable node: the / <-> /sessions/$id transition
+          and the conversation <-> investigation morph are both prop/DOM moves,
+          never a remount. */}
+      {isSessionArea &&
+        createPortal(
+          <SessionView sessionId={routeSessionId ?? null} />,
+          chatNodeRef.current,
+        )}
 
       <SettingsModal opened={settingsOpened} onClose={closeSettings} />
     </>
