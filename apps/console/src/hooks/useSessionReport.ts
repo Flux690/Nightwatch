@@ -28,7 +28,27 @@ export function useSessionReport(sessionId: string | null): Report | null {
         throw err;
       }),
     enabled: sessionId !== null,
+    // The report only changes via REPORT_UPDATED (plus the provider's
+    // reconnect invalidation), so event-driven freshness is the model - and it
+    // lets an optimistic seed survive until a real event replaces it.
+    staleTime: Infinity,
   });
 
   return data;
+}
+
+// Seeded into the query cache the moment a send commits to investigate, so the
+// layout morphs immediately; the first real REPORT_UPDATED replaces it, and a
+// failed send rolls it back.
+export function optimisticReport(): Report {
+  return {
+    status: "investigation_incomplete",
+    headline: "",
+    rootCause: { summary: "", detail: "" },
+    hypotheses: [],
+    evidence: [],
+    proposedFix: { summary: "", steps: [], evidenceIds: [] },
+    updatedAt: new Date().toISOString(),
+    model: "",
+  };
 }

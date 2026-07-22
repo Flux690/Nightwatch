@@ -19,6 +19,7 @@ function setup(
     sessionId: string | null;
     isRunning: boolean;
     disabled?: boolean;
+    investigation?: boolean;
   },
   routePath = "/sessions/new",
 ) {
@@ -43,6 +44,7 @@ function setup(
         sessionId={props.sessionId}
         isRunning={props.isRunning}
         disabled={props.disabled}
+        investigation={props.investigation}
       />
     ),
   });
@@ -130,7 +132,7 @@ describe("ChatInput", () => {
   });
 
   describe("submit from new session (sessionId=null)", () => {
-    it("calls POST /api/chat and navigates to the new session", async () => {
+    it("calls POST /api/chat with the default ask mode and navigates", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ sessionId: null, isRunning: false });
 
@@ -142,16 +144,37 @@ describe("ChatInput", () => {
         "/api/chat",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ message: "Is nginx down?" }),
+          body: JSON.stringify({ message: "Is nginx down?", mode: "ask" }),
         }),
       );
 
       await screen.findByText("session page");
     });
+
+    it("sends mode investigate when the picker selects it", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup({ sessionId: null, isRunning: false });
+
+      await screen.findByRole("textbox");
+      await user.click(screen.getByRole("button", { name: /investigate/i }));
+      await user.type(screen.getByRole("textbox"), "web-01 is failing");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/chat",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            message: "web-01 is failing",
+            mode: "investigate",
+          }),
+        }),
+      );
+    });
   });
 
   describe("submit from existing session (sessionId set)", () => {
-    it("calls POST /api/sessions/:id/messages", async () => {
+    it("calls POST /api/sessions/:id/messages without a mode (server derives)", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup(
         { sessionId: "s1", isRunning: false },
@@ -169,6 +192,42 @@ describe("ChatInput", () => {
           body: JSON.stringify({ message: "Why did that tool call fail?" }),
         }),
       );
+    });
+
+    it("escalates a conversation with mode investigate", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup(
+        { sessionId: "s1", isRunning: false },
+        "/sessions/new",
+      );
+
+      await screen.findByRole("textbox");
+      await user.click(screen.getByRole("button", { name: /investigate/i }));
+      await user.type(screen.getByRole("textbox"), "dig into this");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/sessions/s1/messages",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            message: "dig into this",
+            mode: "investigate",
+          }),
+        }),
+      );
+    });
+
+    it("hides the mode picker on an investigation (one-way ratchet)", async () => {
+      setup(
+        { sessionId: "s1", isRunning: false, investigation: true },
+        "/sessions/new",
+      );
+
+      await screen.findByRole("textbox");
+      expect(
+        screen.queryByRole("group", { name: /session mode/i }),
+      ).not.toBeInTheDocument();
     });
   });
 });
