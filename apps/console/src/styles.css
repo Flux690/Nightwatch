@@ -1,70 +1,221 @@
 /* Nightwatch Console — Tailwind v4 + shadcn (base-nova).
-   Single @theme block with direct values. No :root indirection.
-   Token philosophy: single accent (cobalt), surface ladder, ink hierarchy,
-   explicit state tokens — no opacity divisors anywhere. */
+   Dual theme: raw values live on :root (light) and .dark, mapped into Tailwind
+   via @theme inline. Token philosophy: single accent (cobalt), surface ladder,
+   ink hierarchy, explicit state tokens — no opacity divisors anywhere.
+   Every text/border pair is validated against WCAG (AAA body ink, AA text,
+   3:1 UI) in both themes; values here are the validated ones. */
 
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @plugin "@tailwindcss/typography";
 
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --background: #f6f9fc;
+  --foreground: #0d253d;
+  --card: #ffffff;
+  --card-foreground: #0d253d;
+  --popover: #ffffff;
+  --popover-foreground: #0d253d;
+  --secondary: #edf1f6;
+  --secondary-foreground: #0d253d;
+  --secondary-hover: #e3eaf1;
+  --muted: #edf1f6;
+  --muted-foreground: #56677f;
+  --muted-hover: #e3eaf1;
+  --surface: #edf1f6;
+  --surface-hover: #e3eaf1;
+  --surface-active: #d8e1ea;
+  --ink-subtle: #8291a6;
+
+  /* Primary (cobalt) */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-press: #1e40af;
+  --primary-foreground: #ffffff;
+  --ring: #2563eb;
+
+  /* Accent tint */
+  --accent-tint: #eff6ff;
+  --accent-wash: #bfdbfe;
+
+  /* Borders */
+  --border: #e3e8ee;
+  --border-strong: #6e859e;
+  --input: #b9c6d3;
+
+  /* Semantic status */
+  --success: #00552a;
+  --warning: #684000;
+  --destructive: #7a0e0e;
+  --success-tint: #e3ece8;
+  --warning-tint: #eeeae3;
+  --destructive-tint: #f0e4e4;
+  --destructive-wash: #e4cfcf;
+
+  /* Run-state status (queue chips, indicators) */
+  --run: #2563eb;
+  --wait: #684000;
+  --ok: #00552a;
+  --fail: #7a0e0e;
+  --run-tint: #eff6ff;
+  --wait-tint: #eeeae3;
+  --ok-tint: #e3ece8;
+  --fail-tint: #f0e4e4;
+
+  /* Sidebar */
+  --sidebar: #edf1f6;
+  --sidebar-foreground: #56677f;
+  --sidebar-accent: #e3eaf1;
+  --sidebar-accent-foreground: #0d253d;
+  --sidebar-border: #e3e8ee;
+
+  /* Scrim + shadows */
+  --scrim: rgba(13, 37, 61, 0.4);
+  --shadow-overlay:
+    rgba(13, 37, 61, 0.08) 0 8px 24px, rgba(13, 37, 61, 0.04) 0 2px 6px;
+  --shadow-raised:
+    0 1px 2px rgba(13, 37, 61, 0.05), 0 4px 16px rgba(13, 37, 61, 0.06);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --background: #0b0b0c;
+  --foreground: #f0f0f2;
+  --card: #121213;
+  --card-foreground: #f0f0f2;
+  --popover: #171719;
+  --popover-foreground: #f0f0f2;
+  --secondary: #1e1e20;
+  --secondary-foreground: #f0f0f2;
+  --secondary-hover: #26262a;
+  --muted: #1e1e20;
+  --muted-foreground: #b0b0b6;
+  --muted-hover: #26262a;
+  --surface: #171719;
+  --surface-hover: #1e1e20;
+  --surface-active: #2e2e33;
+  --ink-subtle: #8e8e95;
+
+  /* Primary (cobalt, lifted for dark; fills take DARK text — intentional) */
+  --primary: #6b9cf0;
+  --primary-hover: #82abf3;
+  --primary-press: #5a86e0;
+  --primary-foreground: #04121b;
+  --ring: #6b9cf0;
+
+  /* Accent tint */
+  --accent-tint: #1e2532;
+  --accent-wash: #2e3e5a;
+
+  /* Borders (input stays calm: 1.5-3:1 on card, the calm-border split) */
+  --border: #232326;
+  --border-strong: #6a6a70;
+  --input: #4a4a52;
+
+  /* Semantic status */
+  --success: #3fc98a;
+  --warning: #f0b429;
+  --destructive: #f9828b;
+  --success-tint: #182c24;
+  --warning-tint: #312916;
+  --destructive-tint: #322224;
+  --destructive-wash: #4e2f32;
+
+  /* Run-state status (queue chips, indicators) */
+  --run: #6b9cf0;
+  --wait: #f0b429;
+  --ok: #3fc98a;
+  --fail: #f9828b;
+  --run-tint: #1e2532;
+  --wait-tint: #312916;
+  --ok-tint: #182c24;
+  --fail-tint: #322224;
+
+  /* Sidebar */
+  --sidebar: #121213;
+  --sidebar-foreground: #b0b0b6;
+  --sidebar-accent: #1e1e20;
+  --sidebar-accent-foreground: #f0f0f2;
+  --sidebar-border: #232326;
+
+  /* Scrim + shadows */
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-overlay:
+    rgba(0, 0, 0, 0.5) 0 8px 24px, rgba(0, 0, 0, 0.35) 0 2px 6px;
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Theme-dependent tokens resolve through the raw vars above. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted-hover: var(--muted-hover);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-ink-subtle: var(--ink-subtle);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-press: var(--primary-press);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-wash: var(--accent-wash);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-destructive: var(--destructive);
+  --color-success-tint: var(--success-tint);
+  --color-warning-tint: var(--warning-tint);
+  --color-destructive-tint: var(--destructive-tint);
+  --color-destructive-wash: var(--destructive-wash);
+
+  --color-run: var(--run);
+  --color-wait: var(--wait);
+  --color-ok: var(--ok);
+  --color-fail: var(--fail);
+  --color-run-tint: var(--run-tint);
+  --color-wait-tint: var(--wait-tint);
+  --color-ok-tint: var(--ok-tint);
+  --color-fail-tint: var(--fail-tint);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-scrim: var(--scrim);
+  --shadow-overlay: var(--shadow-overlay);
+  --shadow-raised: var(--shadow-raised);
+}
+
+/* Theme-independent tokens. */
 @theme {
   /* Fonts */
   --font-sans: "Geist Sans";
   --font-mono: "Geist Mono";
-
-  /* Surfaces */
-  --color-background: #f6f9fc;
-  --color-foreground: #0d253d;
-  --color-card: #ffffff;
-  --color-card-foreground: #0d253d;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #0d253d;
-  --color-secondary: #edf1f6;
-  --color-secondary-foreground: #0d253d;
-  --color-secondary-hover: #e3eaf1;
-  --color-muted: #edf1f6;
-  --color-muted-foreground: #56677f;
-  --color-muted-hover: #e3eaf1;
-  --color-surface: #edf1f6;
-  --color-surface-hover: #e3eaf1;
-  --color-surface-active: #d8e1ea;
-  --color-ink-subtle: #8a99ad;
-
-  /* Primary (cobalt) */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-press: #1e40af;
-  --color-primary-foreground: #ffffff;
-  --color-ring: #2563eb;
-
-  /* Accent tint */
-  --color-accent-tint: #eff6ff;
-  --color-accent-wash: #bfdbfe;
-
-  /* Borders */
-  --color-border: #e3e8ee;
-  --color-border-strong: #6e859e;
-  --color-input: #b9c6d3;
-
-  /* Semantic status */
-  --color-success: #00552a;
-  --color-warning: #684000;
-  --color-destructive: #7a0e0e;
-  --color-success-tint: color-mix(in srgb, #00552a 11%, #ffffff);
-  --color-warning-tint: color-mix(in srgb, #684000 11%, #ffffff);
-  --color-destructive-tint: color-mix(in srgb, #7a0e0e 11%, #ffffff);
-  --color-destructive-wash: color-mix(in srgb, #7a0e0e 20%, #ffffff);
-
-  /* Sidebar */
-  --color-sidebar: #edf1f6;
-  --color-sidebar-foreground: #56677f;
-  --color-sidebar-accent: #e3eaf1;
-  --color-sidebar-accent-foreground: #0d253d;
-  --color-sidebar-border: #e3e8ee;
-
-  /* Scrim */
-  --color-scrim: rgba(13, 37, 61, 0.4);
 
   /* Radius */
   --radius: 0.5rem;
@@ -93,12 +244,7 @@
   /* Containers */
   --container-page: 920px;
   --container-chat: 760px;
-
-  /* Shadows */
-  --shadow-overlay:
-    rgba(13, 37, 61, 0.08) 0 8px 24px, rgba(13, 37, 61, 0.04) 0 2px 6px;
-  --shadow-raised:
-    0 1px 2px rgba(13, 37, 61, 0.05), 0 4px 16px rgba(13, 37, 61, 0.06);
+  --container-rail: 400px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -114,6 +260,7 @@
   }
 }
 
+/* Prose maps to semantic tokens, so it re-derives per theme automatically. */
 @utility prose-nightwatch {
   --tw-prose-body: var(--color-foreground);
   --tw-prose-headings: var(--color-foreground);
@@ -164,7 +311,6 @@
 
   body {
     @apply bg-background text-foreground text-sm;
-    color-scheme: light;
     margin: 0;
   }
 }
