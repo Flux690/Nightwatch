@@ -6,12 +6,13 @@
     <title>Nightwatch</title>
     <script>
       // Apply the stored theme before first paint so a dark session never
-      // flashes light. Mirrors lib/theme.tsx (key "nw-theme", default system).
+      // flashes light. Mirrors lib/theme.tsx (key "nw-theme", default dark).
       (function () {
         var pref = localStorage.getItem("nw-theme");
         var dark =
           pref === "dark" ||
-          (pref !== "light" &&
+          pref === null ||
+          (pref === "system" &&
             window.matchMedia("(prefers-color-scheme: dark)").matches);
         if (dark) document.documentElement.classList.add("dark");
       })();

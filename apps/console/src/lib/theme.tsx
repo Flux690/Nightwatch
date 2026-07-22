@@ -14,7 +14,8 @@ export const THEME_STORAGE_KEY = "nw-theme";
 
 function storedPreference(): ThemePreference {
   const raw = localStorage.getItem(THEME_STORAGE_KEY);
-  return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
+  // Dark is the default look; light and system are opt-in per device.
+  return raw === "light" || raw === "dark" || raw === "system" ? raw : "dark";
 }
 
 function systemPrefersDark(): boolean {
