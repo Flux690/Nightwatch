@@ -1,4 +1,10 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  act,
+  fireEvent,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -195,47 +201,41 @@ function listRailPresent(): boolean {
   return document.querySelector('[data-slot="list-rail"]') !== null;
 }
 
+// The list rail has no on-screen toggle: cmd/ctrl+B is the only control, handled
+// by a window keydown listener.
+function pressToggleShortcut(): void {
+  fireEvent.keyDown(document.body, { key: "b", metaKey: true });
+}
+
 describe("Shell", () => {
   describe("list rail collapse (icon rail always visible)", () => {
-    it("collapsing writes false to localStorage and hides only the list rail", async () => {
-      const user = userEvent.setup();
+    it("cmd+B collapses only the list rail and writes false to localStorage", async () => {
       setup();
 
-      await waitFor(() =>
-        screen.getByRole("button", { name: /collapse panel/i }),
-      );
+      await screen.findByRole("link", { name: /integrations/i });
       expect(listRailPresent()).toBe(true);
-      // The icon rail's destinations remain regardless of the panel state.
-      expect(
-        screen.getByRole("link", { name: /integrations/i }),
-      ).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /collapse panel/i }));
+      pressToggleShortcut();
 
       await waitFor(() =>
         expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe(
           "false",
         ),
       );
+      // The list rail is gone entirely; the icon rail is untouched.
       expect(listRailPresent()).toBe(false);
-      // Icon rail untouched by the collapse.
       expect(
         screen.getByRole("link", { name: /integrations/i }),
       ).toBeInTheDocument();
     });
 
-    it("expanding after collapse writes true to localStorage", async () => {
-      const user = userEvent.setup();
+    it("cmd+B again reopens the list rail and writes true to localStorage", async () => {
       setup();
 
-      await waitFor(() =>
-        screen.getByRole("button", { name: /collapse panel/i }),
-      );
-      await user.click(screen.getByRole("button", { name: /collapse panel/i }));
-      await waitFor(() =>
-        screen.getByRole("button", { name: /expand panel/i }),
-      );
-      await user.click(screen.getByRole("button", { name: /expand panel/i }));
+      await screen.findByRole("link", { name: /integrations/i });
+      pressToggleShortcut();
+      await waitFor(() => expect(listRailPresent()).toBe(false));
+      pressToggleShortcut();
 
       await waitFor(() =>
         expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe("true"),
@@ -248,16 +248,12 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() => {
-        // The list rail is hidden, but the edge handle offers to expand and the
-        // icon rail's links stay reachable.
-        expect(listRailPresent()).toBe(false);
-        expect(
-          screen.getByRole("button", { name: /expand panel/i }),
-        ).toBeInTheDocument();
+        // The list rail is hidden entirely; the icon rail's links stay reachable.
         expect(
           screen.getByRole("link", { name: /integrations/i }),
         ).toBeInTheDocument();
       });
+      expect(listRailPresent()).toBe(false);
     });
 
     it("New session button navigates to home", async () => {

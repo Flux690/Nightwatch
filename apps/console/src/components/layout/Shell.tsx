@@ -154,28 +154,6 @@ function RailItem({
   );
 }
 
-/* The list rail's collapse handle, on its right edge. Present in both states -
-   so the panel is always one click from collapsing or reopening - and mirrored
-   by the cmd/ctrl+B shortcut. The icon rail is never affected. */
-function PanelRail({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-label={expanded ? "Collapse panel" : "Expand panel"}
-      onClick={onToggle}
-      className="group/rail hidden w-1.5 shrink-0 cursor-pointer border-r border-border bg-sidebar transition-colors hover:bg-surface-hover md:block"
-    >
-      <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover/rail:bg-border-strong" />
-    </button>
-  );
-}
-
 function ShellContent({
   children,
 }: {
@@ -240,7 +218,7 @@ function ShellContent({
   }
 
   const panelTitle = isSessionArea
-    ? "Nightwatch"
+    ? "Sessions"
     : isActive("/integrations")
       ? "Integrations"
       : "Audit log";
@@ -412,18 +390,17 @@ function ShellContent({
         </div>
       </nav>
 
-      {/* List rail: in-flow beside the icon rail (both always visible on
-          desktop); cmd/ctrl+B or the edge handle collapses only this panel. */}
+      {/* List rail: in-flow, starting after the icon rail (no overlap). It is a
+          plain sidebar - cmd/ctrl+B toggles it; when closed it is gone entirely
+          (no handle, nothing visible). The icon rail is never affected. */}
       {!isMobile && expanded && (
         <aside
           data-slot="list-rail"
-          data-state="expanded"
-          className="flex w-80 shrink-0 flex-col bg-sidebar"
+          className="flex w-80 shrink-0 flex-col border-r border-border bg-sidebar"
         >
           {panelSections()}
         </aside>
       )}
-      {!isMobile && <PanelRail expanded={expanded} onToggle={toggleSidebar} />}
 
       {/* Mobile: the same panel as an off-canvas sheet. */}
       {isMobile && (
