@@ -21,6 +21,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
+import { seedCompleteReport } from "./report-helper.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
 import {
@@ -124,10 +125,16 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     vi.unstubAllEnvs();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // Drain any parked runs so a later test never inherits a held dedup key.
-    gate.releaseAll();
+    // Released reportless finishes re-park while the finish gate nudges, so
+    // release repeatedly until every straggler has finalized and completed.
     vi.useRealTimers();
+    for (let i = 0; i < 6 && dispatcher.getActiveAlertSession() !== null; i++) {
+      gate.releaseAll();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    gate.releaseAll();
   });
 
   function ingest(
@@ -181,7 +188,9 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     );
     expect(twin).toMatchObject({ enqueued: 1, skipped: 0 });
 
-    // End the active run; flush the async chain so the dedup key clears.
+    // End the active run; a seeded report satisfies the finish gate so the
+    // released free-form finish completes it, and the dedup key clears.
+    seedCompleteReport(dispatcher.getActiveAlertSession()!);
     gate.releaseAll();
     await vi.advanceTimersByTimeAsync(50);
     expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(false);

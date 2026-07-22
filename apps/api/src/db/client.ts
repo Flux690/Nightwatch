@@ -121,6 +121,17 @@ repo.yarnpkg.com',
   CREATE INDEX IF NOT EXISTS idx_remediation_breaker
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
+  -- The investigation report, maintained live by the agent during an Investigate
+  -- run. Like remediation_actions it is NOT a child of sessions: it is the durable
+  -- record of the conclusion and must outlive a deleted session, so session_id is a
+  -- plain reference. One row per session (full-replace on every UpdateReport).
+  CREATE TABLE IF NOT EXISTS reports (
+    session_id  TEXT PRIMARY KEY,
+    report      TEXT NOT NULL,
+    model       TEXT,
+    updated_at  TEXT NOT NULL
+  );
+
   -- One row per pull-integration ('github', 'prometheus', 'loki', ...): config is
   -- per-kind JSON, secret_encrypted is the encrypted credential (NULL when the
   -- kind has none, e.g. an auth-less Prometheus). Neither is ever returned by an

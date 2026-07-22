@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
+import { GATE_NUDGE } from "./prompts/report.js";
+import { finalizeInconclusive } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
@@ -24,6 +26,7 @@ import {
   getNextSeq,
   getSession,
 } from "../db/sessions.js";
+import { hasReport, reportComplete } from "../db/reports.js";
 import {
   publishTextMessageContent,
   publishMessage,
@@ -40,6 +43,7 @@ import { logger } from "../logger.js";
 import { serviceIdentityKey } from "@nightwatch/shared";
 import type {
   NormalizedAlert,
+  RunMode,
   SessionMessage,
   SessionMeta,
 } from "@nightwatch/shared";
@@ -106,6 +110,10 @@ function buildSessionMeta(
 // handled by the dispatcher's catch - never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
+// Finish-gate pushback cap: after this many nudges the run finalizes as
+// inconclusive rather than looping; the time budget bounds it as well.
+const MAX_NUDGES = 3;
+
 export interface RunInvestigationInput {
   sessionId: string;
   alert?: NormalizedAlert;
@@ -122,6 +130,9 @@ export interface RunInvestigationInput {
   // When true: seed prior transcript and run exactly one wrap-up turn (no tools),
   // then finish. Used when the operator declines a continue-request interrupt.
   wrapUp?: boolean;
+  // "investigate" adds the report tool and the finish gate; "ask" is a plain
+  // chat. Omitted: derived from the session (alert or existing report -> investigate).
+  mode?: RunMode;
 }
 
 export async function runInvestigation(
@@ -131,9 +142,16 @@ export async function runInvestigation(
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
+  // Mode is a one-way ratchet: an alert session or one that already has a
+  // report is an investigation; only a fresh chat defaults to ask.
+  const mode: RunMode =
+    input.mode ??
+    (alert !== null || hasReport(sessionId) ? "investigate" : "ask");
+
   const log = logger.child({
     sessionId,
     alertType: alert?.alertType ?? "chat",
+    mode,
   });
 
   const config = loadConfig();
@@ -174,7 +192,12 @@ export async function runInvestigation(
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
     const remediationEnabled = currentRemediationEnabled();
-    const { systemPrompt } = buildChatContext(remediationEnabled);
+    const { systemPrompt } = buildChatContext(
+      remediationEnabled,
+      undefined,
+      undefined,
+      mode,
+    );
     const provider = createProvider(systemPrompt, config, apiKey);
     createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
@@ -194,6 +217,11 @@ export async function runInvestigation(
     if (signal?.aborted) {
       log.info("run stopped by user during end wrap-up");
       return "stopped";
+    }
+    // The operator is ending the run, so no nudge loop - just guarantee a
+    // complete report exists before the terminal event.
+    if (mode === "investigate" && !reportComplete(sessionId)) {
+      finalizeInconclusive(sessionId, config.model);
     }
     log.info("investigation ended after operator declined to continue");
     return "completed";
@@ -234,7 +262,7 @@ export async function runInvestigation(
           fleetView,
           promptOptions,
         )
-      : buildChatContext(remediationEnabled, fleetView, promptOptions);
+      : buildChatContext(remediationEnabled, fleetView, promptOptions, mode);
   const provider = createProvider(systemPrompt, config, apiKey);
 
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
@@ -294,6 +322,7 @@ export async function runInvestigation(
   };
 
   let turn = 0;
+  let nudges = 0;
   let deadline = Date.now() + config.hardTimeoutMs;
 
   while (Date.now() < deadline) {
@@ -310,6 +339,7 @@ export async function runInvestigation(
         prometheus: getPrometheusIntegration() !== null,
         loki: getLokiIntegration() !== null,
       },
+      mode,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
@@ -347,6 +377,22 @@ export async function runInvestigation(
     }
 
     if (response.toolUses.length === 0) {
+      // Finish gate: an investigate run may only end with a complete report.
+      // Push back up to MAX_NUDGES times, then finalize honestly as inconclusive.
+      if (mode === "investigate" && !reportComplete(sessionId)) {
+        if (nudges < MAX_NUDGES) {
+          nudges++;
+          log.info({ turn, nudges }, "finish gate: report incomplete, nudging");
+          provider.appendUserMessage(GATE_NUDGE);
+          persist();
+          continue;
+        }
+        log.warn(
+          { turn },
+          "finish gate: nudge cap reached, finalizing inconclusive",
+        );
+        finalizeInconclusive(sessionId, config.model);
+      }
       log.info({ turn }, "investigation finished with free-form response");
       return "completed";
     }

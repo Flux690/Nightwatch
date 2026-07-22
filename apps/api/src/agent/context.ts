@@ -2,6 +2,7 @@ import {
   serviceIdentityKey,
   type FleetRunner,
   type NormalizedAlert,
+  type RunMode,
 } from "@nightwatch/shared";
 import {
   budgetLine,
@@ -9,6 +10,7 @@ import {
   SYSTEM_PROMPT,
   type PromptOptions,
 } from "./prompts/system.js";
+import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
 
 export interface InitialContext {
@@ -25,8 +27,10 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
 function systemPromptFor(
   remediationEnabled: boolean,
   opts: PromptOptions,
+  mode: RunMode,
 ): string {
   let prompt = SYSTEM_PROMPT + budgetLine(opts);
+  if (mode === "investigate") prompt += REPORT_PROTOCOL;
   if (!remediationEnabled) prompt += READ_ONLY_INSTRUCTIONS;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
@@ -36,23 +40,29 @@ export function buildChatContext(
   remediationEnabled = false,
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
+  mode: RunMode = "ask",
 ): InitialContext {
   // Chat has no alert message to carry the fleet map, so it rides the system
   // prompt - the model still needs server names for the required `server` param.
   return {
     systemPrompt:
-      systemPromptFor(remediationEnabled, opts) + buildFleetSummary(fleetView),
+      systemPromptFor(remediationEnabled, opts, mode) +
+      buildFleetSummary(fleetView),
     firstUserMessage: "",
   };
 }
 
+// Alert-triggered sessions are always investigations, so the report protocol
+// is unconditional here.
 export function buildInitialContext(
   alerts: NormalizedAlert[],
   remediationEnabled = false,
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
 ): InitialContext {
-  if (!alerts[0]) return buildChatContext(remediationEnabled, fleetView, opts);
+  if (!alerts[0]) {
+    return buildChatContext(remediationEnabled, fleetView, opts, "investigate");
+  }
 
   const alertsSection =
     alerts.length === 1
@@ -69,7 +79,7 @@ ${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
-    systemPrompt: systemPromptFor(remediationEnabled, opts),
+    systemPrompt: systemPromptFor(remediationEnabled, opts, "investigate"),
     firstUserMessage,
   };
 }

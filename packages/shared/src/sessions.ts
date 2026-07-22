@@ -5,6 +5,10 @@
 // never replayed to the model.
 export type SessionRole = "user" | "assistant" | "error";
 
+// How a run behaves: "investigate" adds the report tool and the finish gate;
+// "ask" is a plain chat. Alerts always investigate; the mode is a one-way ratchet.
+export type RunMode = "ask" | "investigate";
+
 export interface SessionMeta {
   sessionId: string;
   title: string;

@@ -2,6 +2,8 @@ import { executeTool } from "./tools/toolset.js";
 import type { Tool, ToolExecuteContext } from "./tools/types.js";
 import { targetRemediationDisabled } from "./policy.js";
 import { circuitBreakerRejection } from "./breaker.js";
+import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
+import { evidenceOrdinals, stampEvidence } from "./report.js";
 import { publishToolCallStart, publishToolCallEnd } from "../session/stream.js";
 import type { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwatch/shared";
@@ -36,6 +38,9 @@ export async function processToolUses(params: {
   const { toolUses, toolset, sessionId, execCtx, config, log } = params;
 
   const toolResults: ToolResult[] = [];
+  // Positional evidence tags for citation: derived from the persisted transcript
+  // (the assistant turn is already persisted), so ordinals survive a resume.
+  const ordinals = evidenceOrdinals(sessionId);
   let gatedTool: ToolUse | null = null;
   let gatedEntry: Tool | null = null;
 
@@ -110,12 +115,18 @@ export async function processToolUses(params: {
       ...execCtx,
       toolUseId: tool.id,
     });
+    const content =
+      typeof result.content === "string"
+        ? result.content
+        : JSON.stringify(result.content);
+    const ordinal = ordinals.get(tool.id);
     toolResults.push({
       tool_use_id: tool.id,
+      // UpdateReport's own ack is not evidence; every other read result is citable.
       content:
-        typeof result.content === "string"
-          ? result.content
-          : JSON.stringify(result.content),
+        ordinal === undefined || tool.name === REPORT_TOOL_SCHEMA.name
+          ? content
+          : stampEvidence(content, ordinal),
       is_error: result.is_error,
     });
     publishToolCallEnd({

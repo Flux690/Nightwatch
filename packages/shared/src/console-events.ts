@@ -141,6 +141,16 @@ export interface ConsoleSessionTitleUpdated extends ConsoleEnvelope {
   };
 }
 
+// The session's stored report changed (agent update mid-run, or the finish gate
+// finalized it). Content event like MESSAGE, fires many times per run; carries
+// only the id - the console refetches the report.
+export interface ConsoleReportUpdated extends ConsoleEnvelope {
+  type: "REPORT_UPDATED";
+  payload: {
+    sessionId: string;
+  };
+}
+
 // Discriminated union of all events on the API→console SSE stream.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -155,4 +165,5 @@ export type ConsoleEvent =
   | ConsoleSandboxStatus
   | ConsoleRunRetrying
   | ConsoleRunFailed
-  | ConsoleSessionTitleUpdated;
+  | ConsoleSessionTitleUpdated
+  | ConsoleReportUpdated;

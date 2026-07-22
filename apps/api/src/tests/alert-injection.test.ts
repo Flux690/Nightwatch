@@ -24,6 +24,7 @@ import Fastify from "fastify";
 import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
+import { seedCompleteReport } from "./report-helper.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
@@ -156,6 +157,8 @@ describe("mid-run alert injection (loop seam)", () => {
     queueRuns([READ, FINISH]);
 
     const sessionId = randomUUID();
+    // Injection mechanics only: a seeded report satisfies the finish gate.
+    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-mr"),
@@ -245,6 +248,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const callsBefore = mockCreateProvider.mock.calls.length;
     const newSessionId = randomUUID();
 
+    seedCompleteReport(newSessionId);
     dispatcher.dispatch({
       sessionId: newSessionId,
       alert: alert("new-after-sus"),
@@ -272,6 +276,7 @@ describe("mid-run alert injection (loop seam)", () => {
     queueRuns([FINISH], [FINISH]);
 
     const sessionId = randomUUID();
+    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-lo"),
@@ -299,7 +304,9 @@ describe("mid-run alert injection (loop seam)", () => {
       string | undefined;
     expect(openingMsg).toBeDefined();
 
-    // The leftover session's opening message is for the leftover alert
+    // The leftover session's id is dispatcher-minted, so seed its report only
+    // now that it is the active alert session.
+    seedCompleteReport(dispatcher.getActiveAlertSession()!);
     gate.releaseNext(); // free-form finish for the leftover session
     await waitFor(() => dispatcher.getActiveAlertSession() === null);
   });
@@ -354,6 +361,7 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const primaryFiredAt = "2026-07-07T03:00:00.000Z";
     const sessionId = randomUUID();
+    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-resume", primaryFiredAt),

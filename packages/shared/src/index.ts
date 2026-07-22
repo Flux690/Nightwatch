@@ -71,6 +71,7 @@ export type {
   ConsoleRunRetrying,
   ConsoleRunFailed,
   ConsoleSessionTitleUpdated,
+  ConsoleReportUpdated,
   ConsoleEvent,
 } from "./console-events.js";
 export type {
@@ -85,7 +86,23 @@ export type {
   RunnerRecord,
   ServiceManifestEntry,
 } from "./runner.js";
-export type { SessionRole, SessionMeta, SessionMessage } from "./sessions.js";
+export type {
+  SessionRole,
+  SessionMeta,
+  SessionMessage,
+  RunMode,
+} from "./sessions.js";
+export type {
+  ReportStatus,
+  HypothesisState,
+  Confidence,
+  Hypothesis,
+  ChartSnapshot,
+  ChangesSnapshot,
+  EvidenceItem,
+  Report,
+  ReportSummary,
+} from "./reports.js";
 export type {
   RemediationStatus,
   RemediationActionRecord,

@@ -6,6 +6,7 @@ import { INTERRUPT_TOOLS } from "./interrupts.js";
 import { LOKI_TOOLS } from "./loki.js";
 import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
+import { REPORT_TOOLS } from "./report.js";
 import type {
   FleetCapabilities,
   Tool,
@@ -13,6 +14,7 @@ import type {
   ToolExecuteResult,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
+import type { RunMode } from "@nightwatch/shared";
 
 // A runner tool's schema.name IS the wire command, addressed by its declared
 // route; an api tool's execute IS its implementation - no mapping table.
@@ -24,6 +26,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...GITHUB_TOOLS,
   ...PROMETHEUS_TOOLS,
   ...LOKI_TOOLS,
+  ...REPORT_TOOLS,
 ];
 
 // Single dispatch chokepoint that both the live loop and the approval resume path pass
@@ -66,6 +69,7 @@ export function effectiveToolset(
   caps: FleetCapabilities | undefined,
   remediationEnabled: boolean,
   connections: IntegrationConnections = {},
+  mode: RunMode = "investigate",
 ): Tool[] {
   const { github = true, prometheus = true, loki = true } = connections;
   const libraries: Tool[] = [
@@ -75,6 +79,8 @@ export function effectiveToolset(
     ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
     ...(prometheus ? PROMETHEUS_TOOLS : []),
     ...(loki ? LOKI_TOOLS : []),
+    // The report tool exists only where the finish gate does: investigate runs.
+    ...(mode === "investigate" ? REPORT_TOOLS : []),
   ];
   return remediationEnabled
     ? libraries

@@ -5,6 +5,7 @@ import type {
   ConsoleInterrupt,
   ConsoleInterruptResolved,
   ConsoleMessage,
+  ConsoleReportUpdated,
   ConsoleRunFinished,
   ConsoleRunStopped,
   ConsoleSandboxStatus,
@@ -149,6 +150,17 @@ export function publishSessionTitleUpdated(
     messageId: randomUUID(),
     type: "SESSION_TITLE_UPDATED",
     payload: { sessionId, title },
+  };
+  publishConsoleEvent(env);
+}
+
+// The session's stored report changed; the console refetches it. Fires many
+// times per run - a content event like MESSAGE, orthogonal to run lifecycle.
+export function publishReportUpdated(sessionId: string): void {
+  const env: ConsoleReportUpdated = {
+    messageId: randomUUID(),
+    type: "REPORT_UPDATED",
+    payload: { sessionId },
   };
   publishConsoleEvent(env);
 }
