@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  Link,
+  Outlet,
   RouterProvider,
   createMemoryHistory,
   createRootRoute,
@@ -61,9 +63,17 @@ function textOk(body: string) {
 }
 
 /* The page is a routed screen with a navigation guard, so the seam under test is the route:
-   a memory router with a stub runner-servers destination. */
+   a memory router with a stub runner-servers destination. The layout link stands
+   in for the shell's rail navigation (the page has no back-link of its own). */
 function renderAddServerRoute() {
-  const rootRoute = createRootRoute();
+  const rootRoute = createRootRoute({
+    component: () => (
+      <>
+        <Link to="/integrations">Integrations</Link>
+        <Outlet />
+      </>
+    ),
+  });
   const addRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations/runner/add",

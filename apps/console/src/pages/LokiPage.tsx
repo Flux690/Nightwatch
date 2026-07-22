@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { LokiIntegrationStatus } from "@nightwatch/shared";
-import { ArrowLeft } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Page,
-  PageHeader,
-  PageTitle,
-  backLinkClass,
-} from "@/components/layout/Page";
+import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -95,10 +89,6 @@ export function LokiPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations" className={backLinkClass}>
-        <ArrowLeft {...ICON_INLINE} />
-        Integrations
-      </Link>
       <PageHeader>
         <PageTitle>Loki</PageTitle>
       </PageHeader>

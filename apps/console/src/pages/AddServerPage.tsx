@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -17,12 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Page,
-  PageHeader,
-  PageTitle,
-  backLinkClass,
-} from "@/components/layout/Page";
+import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import {
   WizardStepper,
   WizardActions,
@@ -182,10 +177,6 @@ export function AddServerPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations" className={backLinkClass}>
-        <ArrowLeft {...ICON_INLINE} />
-        Integrations
-      </Link>
       <PageHeader>
         <PageTitle>Add a server</PageTitle>
       </PageHeader>

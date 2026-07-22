@@ -66,6 +66,11 @@ const auditRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/audit",
   component: AuditLogPage,
+  // Scope rides the URL so the rail and the table share one address.
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(typeof search["scope"] === "string" && { scope: search["scope"] }),
+    ...(typeof search["server"] === "string" && { server: search["server"] }),
+  }),
 });
 
 const integrationsRoute = createRoute({

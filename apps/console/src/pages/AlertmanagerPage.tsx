@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwatch/shared";
-import { ArrowLeft, ChevronDown, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, Eye, EyeOff } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,7 @@ import {
 } from "@/components/ui/native-select";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Page,
-  PageHeader,
-  PageTitle,
-  backLinkClass,
-} from "@/components/layout/Page";
+import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
@@ -240,10 +235,6 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations" className={backLinkClass}>
-        <ArrowLeft {...ICON_INLINE} />
-        Integrations
-      </Link>
       <PageHeader>
         <PageTitle>Alertmanager</PageTitle>
         {showStatus && status && (

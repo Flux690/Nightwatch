@@ -91,6 +91,16 @@ function setup(pendingCount = 0) {
         json: () => Promise.resolve({ sessionId: "new-s1" }),
       });
     }
+    if (url.includes("/runners")) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }
+    if (url.includes("/integrations/")) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ configured: false, lastReceivedAt: null }),
+      });
+    }
     if (url.includes("/report")) {
       return sessionReport === null
         ? Promise.resolve({

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link, useSearch } from "@tanstack/react-router";
 import type { RemediationActionRecord } from "@nightwatch/shared";
-import { ScrollText } from "lucide-react";
+import { ExternalLink, ScrollText } from "lucide-react";
+import { matchesScope, type AuditScope } from "@/components/layout/AuditRail";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,8 +35,15 @@ import { apiFetch } from "@/api/client";
 import { timeAgo } from "@/lib/time";
 
 export function AuditLogPage(): React.JSX.Element {
+  const search = useSearch({ strict: false }) as {
+    scope?: AuditScope;
+    server?: string;
+  };
+  const scope = search.scope ?? "all";
+  const server = search.server ?? null;
+
   const {
-    data: actions,
+    data: allActions,
     isLoading,
     isError,
   } = useQuery<RemediationActionRecord[]>({
@@ -43,6 +52,12 @@ export function AuditLogPage(): React.JSX.Element {
       apiFetch<RemediationActionRecord[]>("/api/remediation-actions"),
     refetchInterval: 30_000,
   });
+
+  const actions = allActions?.filter(
+    (a) =>
+      matchesScope(a, scope) &&
+      (server === null || a.serviceIdentityKey === server),
+  );
 
   const isEmpty = !isLoading && !isError && actions?.length === 0;
 
@@ -63,10 +78,11 @@ export function AuditLogPage(): React.JSX.Element {
                 <TableHead>Decided by</TableHead>
                 <TableHead className="text-right">Created</TableHead>
                 <TableHead className="text-right">Resolved</TableHead>
+                <TableHead className="sr-only">Investigation</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <SkeletonRows count={3} columns={6} />
+              <SkeletonRows count={3} columns={7} />
             </TableBody>
           </Table>
         </PageTableWrap>
@@ -109,6 +125,7 @@ export function AuditLogPage(): React.JSX.Element {
                 <TableHead>Decided by</TableHead>
                 <TableHead className="text-right">Created</TableHead>
                 <TableHead className="text-right">Resolved</TableHead>
+                <TableHead className="sr-only">Investigation</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -152,6 +169,18 @@ export function AuditLogPage(): React.JSX.Element {
                       {action.status === "executing"
                         ? "in progress"
                         : timeAgo(action.resolvedAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {/* Audit rows outlive session deletion; the link simply
+                          degrades when the transcript is gone. */}
+                      <Link
+                        to="/sessions/$id"
+                        params={{ id: action.sessionId }}
+                        aria-label="Open originating investigation"
+                        className="inline-flex text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink {...ICON_DISPLAY} className="size-4" />
+                      </Link>
                     </TableCell>
                   </TableRow>
                 );

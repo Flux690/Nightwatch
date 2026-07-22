@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  CircleCheckIcon,
-  ExternalLink,
-  RefreshCw,
-} from "lucide-react";
+import { CircleCheckIcon, ExternalLink, RefreshCw } from "lucide-react";
 import type {
   GitHubErrorBody,
   GitHubIntegrationStatus,
@@ -29,12 +24,7 @@ import { FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import {
-  Page,
-  PageHeader,
-  PageTitle,
-  backLinkClass,
-} from "@/components/layout/Page";
+import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { expiryDaysFrom } from "@/hooks/useGitHubExpiryDays";
 import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -398,10 +388,6 @@ export function GitHubConnectPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations" className={backLinkClass}>
-        <ArrowLeft {...ICON_INLINE} />
-        Integrations
-      </Link>
       <PageHeader>
         <PageTitle>Connect GitHub</PageTitle>
       </PageHeader>

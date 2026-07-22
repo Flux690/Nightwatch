@@ -12,7 +12,7 @@ import {
 import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwatch/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { IntegrationsPage } from "@/pages/IntegrationsPage";
+import { IntegrationsRail } from "@/components/layout/IntegrationsRail";
 
 const NOT_CONFIGURED: GitHubIntegrationStatus = {
   configured: false,
@@ -40,14 +40,14 @@ const CONNECTED_RUNNER: RunnerRecord = {
   remediationMode: false,
 };
 
-/* The page navigates to each integration's own route, so it renders under a
+/* The rail navigates to each integration's own route, so it renders under a
    memory router with stub destinations. */
-function renderIntegrationsRoute(qc: QueryClient) {
+function renderRailRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations",
-    component: IntegrationsPage,
+    component: IntegrationsRail,
   });
   const connectRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -154,12 +154,12 @@ function setup(
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  const view = renderIntegrationsRoute(qc);
+  const view = renderRailRoute(qc);
   return { fetchMock, qc, view };
 }
 
-function cardFor(title: string): HTMLElement {
-  return screen.getByText(title).closest("[data-slot=card]") as HTMLElement;
+function rowFor(title: string): HTMLElement {
+  return screen.getByRole("button", { name: title });
 }
 
 afterEach(() => {
@@ -167,33 +167,36 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IntegrationsPage", () => {
+describe("IntegrationsRail", () => {
   describe("GitHub", () => {
-    it("shows a Connect button and navigates to the GitHub connect route", async () => {
+    it("shows Not connected and navigates to the GitHub connect route", async () => {
       const user = userEvent.setup();
       setup();
 
       await screen.findByText("GitHub");
-      await user.click(
-        await within(cardFor("GitHub")).findByRole("button", {
-          name: "Connect",
-        }),
-      );
+      expect(
+        await within(rowFor("GitHub")).findByText("Not connected"),
+      ).toBeInTheDocument();
 
+      await user.click(rowFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
     });
 
-    it("shows plain connected text and opens the page from the card once configured", async () => {
+    it("shows Connected under Installed once configured", async () => {
       const user = userEvent.setup();
       setup({ github: CONFIGURED });
 
-      expect(await screen.findByText("Connected")).toBeInTheDocument();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      await screen.findByText("GitHub");
+      await waitFor(() => {
+        expect(
+          within(rowFor("GitHub")).getByText("Connected"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText("Installed")).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "GitHub" }));
-
+      await user.click(rowFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
@@ -206,11 +209,7 @@ describe("IntegrationsPage", () => {
       setup({ runners: [] });
 
       await screen.findByText("Nightwatch Runner");
-      await user.click(
-        await within(cardFor("Nightwatch Runner")).findByRole("button", {
-          name: "Connect",
-        }),
-      );
+      await user.click(rowFor("Nightwatch Runner"));
 
       expect(
         await screen.findByText(/add server destination/i),
@@ -223,10 +222,7 @@ describe("IntegrationsPage", () => {
 
       expect(await screen.findByText("1 server")).toBeInTheDocument();
 
-      await user.click(
-        screen.getByRole("button", { name: "Nightwatch Runner" }),
-      );
-
+      await user.click(rowFor("Nightwatch Runner"));
       expect(
         await screen.findByText(/runner servers destination/i),
       ).toBeInTheDocument();
@@ -239,12 +235,11 @@ describe("IntegrationsPage", () => {
       setup({ ingestConfigured: false });
 
       await screen.findByText("Alertmanager");
-      await user.click(
-        await within(cardFor("Alertmanager")).findByRole("button", {
-          name: "Connect",
-        }),
-      );
+      expect(
+        await within(rowFor("Alertmanager")).findByText("Not connected"),
+      ).toBeInTheDocument();
 
+      await user.click(rowFor("Alertmanager"));
       expect(
         await screen.findByText(/alertmanager destination/i),
       ).toBeInTheDocument();
@@ -254,7 +249,6 @@ describe("IntegrationsPage", () => {
       const { view } = setup({ ingestConfigured: true });
       const waiting = await screen.findByText("Waiting for first alert");
       expect(waiting).toHaveClass("text-muted-foreground");
-      expect(screen.queryByText("Configured")).not.toBeInTheDocument();
       view.unmount();
       vi.unstubAllGlobals();
 
@@ -267,55 +261,29 @@ describe("IntegrationsPage", () => {
     });
   });
 
-  describe("Prometheus", () => {
-    it("offers connect and navigates to the Prometheus page", async () => {
+  describe("Prometheus and Loki", () => {
+    it("navigates to each page and reports connected once configured", async () => {
       const user = userEvent.setup();
-      setup();
+      const { view } = setup({ prometheusConfigured: true });
 
-      await screen.findByText("Prometheus");
-      await user.click(
-        await within(cardFor("Prometheus")).findByRole("button", {
-          name: "Connect",
-        }),
-      );
-
-      expect(
-        await screen.findByText(/prometheus destination/i),
-      ).toBeInTheDocument();
-    });
-
-    it("reports connected once configured", async () => {
-      setup({ prometheusConfigured: true });
       await screen.findByText("Prometheus");
       await waitFor(() => {
         expect(
-          within(cardFor("Prometheus")).getByText("Connected"),
+          within(rowFor("Prometheus")).getByText("Connected"),
         ).toBeInTheDocument();
       });
-    });
-  });
+      await user.click(rowFor("Prometheus"));
+      expect(
+        await screen.findByText(/prometheus destination/i),
+      ).toBeInTheDocument();
+      view.unmount();
+      vi.unstubAllGlobals();
 
-  describe("Loki", () => {
-    it("offers connect and navigates to the Loki page", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await screen.findByText("Loki");
-      await user.click(
-        await within(cardFor("Loki")).findByRole("button", {
-          name: "Connect",
-        }),
-      );
-
-      expect(await screen.findByText(/loki destination/i)).toBeInTheDocument();
-    });
-
-    it("reports connected once configured", async () => {
       setup({ lokiConfigured: true });
       await screen.findByText("Loki");
       await waitFor(() => {
         expect(
-          within(cardFor("Loki")).getByText("Connected"),
+          within(rowFor("Loki")).getByText("Connected"),
         ).toBeInTheDocument();
       });
     });

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
-import { ArrowLeft, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -13,7 +13,6 @@ import {
   PageTableWrap,
   TABLE_HEAD,
   SkeletonRows,
-  backLinkClass,
 } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -170,10 +169,6 @@ export function RunnerServersPage(): React.JSX.Element {
 
   return (
     <Page>
-      <Link to="/integrations" className={backLinkClass}>
-        <ArrowLeft {...ICON_INLINE} />
-        Integrations
-      </Link>
       <PageHeader>
         <PageTitle>Runner servers</PageTitle>
         <Button
