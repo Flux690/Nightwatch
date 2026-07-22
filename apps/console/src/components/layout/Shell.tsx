@@ -11,7 +11,6 @@ import {
   Settings,
   LogOut,
   ScrollText,
-  PanelLeft,
   Menu,
   Plug,
   MessagesSquare,
@@ -155,6 +154,28 @@ function RailItem({
   );
 }
 
+/* The list rail's collapse handle, on its right edge. Present in both states -
+   so the panel is always one click from collapsing or reopening - and mirrored
+   by the cmd/ctrl+B shortcut. The icon rail is never affected. */
+function PanelRail({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={expanded ? "Collapse panel" : "Expand panel"}
+      onClick={onToggle}
+      className="group/rail hidden w-1.5 shrink-0 cursor-pointer border-r border-border bg-sidebar transition-colors hover:bg-surface-hover md:block"
+    >
+      <span className="mx-auto block h-full w-px bg-transparent transition-colors group-hover/rail:bg-border-strong" />
+    </button>
+  );
+}
+
 function ShellContent({
   children,
 }: {
@@ -162,6 +183,7 @@ function ShellContent({
 }): React.JSX.Element {
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const expanded = state === "expanded";
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Present only on /sessions/$id; Shell owns the one persistent SessionView so
@@ -217,6 +239,119 @@ function ShellContent({
     if (isMobile) setOpenMobile(false);
   }
 
+  const panelTitle = isSessionArea
+    ? "Nightwatch"
+    : isActive("/integrations")
+      ? "Integrations"
+      : "Audit log";
+
+  const panelContent = isSessionArea ? (
+    <SessionsSidebar />
+  ) : isActive("/integrations") ? (
+    <IntegrationsRail />
+  ) : (
+    <AuditRail />
+  );
+
+  // The list rail's sections, shared by the desktop in-flow panel and the
+  // mobile sheet; `extraTop` carries the sheet-only primary nav.
+  const panelSections = (extraTop?: React.ReactNode): React.JSX.Element => (
+    <>
+      <SidebarHeader className="h-11 justify-center px-2">
+        <span className="min-w-0 truncate text-lg font-semibold tracking-tight">
+          {panelTitle}
+        </span>
+      </SidebarHeader>
+      <SidebarContent>
+        {extraTop}
+        {isSessionArea && attentionCount > 0 && (
+          <div className="px-2 pt-1">
+            <div
+              className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning"
+              aria-hidden="true"
+            >
+              <span className="flex h-full w-10 shrink-0 items-center justify-center">
+                {attentionCount > 99 ? "99+" : attentionCount}
+              </span>
+              <span className="min-w-0 truncate">awaiting approval</span>
+            </div>
+          </div>
+        )}
+        <SidebarGroup className="min-h-0 flex-1">
+          <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
+            {panelContent}
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </>
+  );
+
+  const mobileNav = (
+    <SidebarGroup>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            aria-label="New session"
+            className="text-primary hover:text-primary-hover"
+            onClick={() => {
+              dismissMobile();
+              void navigate({ to: "/" });
+            }}
+          >
+            <Plus {...ICON_NAV} />
+            <span>New session</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            aria-label="Integrations"
+            isActive={isActive("/integrations")}
+            onClick={dismissMobile}
+            render={<Link to="/integrations" />}
+          >
+            <Plug {...ICON_NAV} />
+            <span>Integrations</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            aria-label="Audit log"
+            isActive={isActive("/audit")}
+            onClick={dismissMobile}
+            render={<Link to="/audit" />}
+          >
+            <ScrollText {...ICON_NAV} />
+            <span>Audit log</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            aria-label="Settings"
+            onClick={() => {
+              dismissMobile();
+              setSettingsOpen(true);
+            }}
+          >
+            <Settings {...ICON_NAV} />
+            <span>Settings</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            aria-label="Log out"
+            onClick={() => {
+              dismissMobile();
+              void logout();
+            }}
+          >
+            <LogOut {...ICON_NAV} />
+            <span>Log out</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+
   return (
     <>
       <a
@@ -226,24 +361,12 @@ function ShellContent({
         Skip to content
       </a>
 
-      {/* Icon rail: always-visible primary navigation (desktop only; the
-          mobile sheet carries the same actions). */}
+      {/* Icon rail: always visible on desktop, never collapses. The mobile
+          sheet carries the same destinations. */}
       <nav
         aria-label="Primary"
         className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-2 md:flex"
       >
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground"
-          aria-label={
-            state === "collapsed" ? "Expand sidebar" : "Collapse sidebar"
-          }
-          onClick={() => toggleSidebar()}
-        >
-          <PanelLeft {...ICON_UI} />
-        </Button>
-
         <RailItem
           label="New session"
           onClick={() => void navigate({ to: "/" })}
@@ -289,115 +412,23 @@ function ShellContent({
         </div>
       </nav>
 
-      {/* List rail: section-scoped content. */}
-      <Sidebar collapsible="offcanvas">
-        <SidebarHeader className="h-11 flex-row items-center justify-between">
-          <span className="min-w-0 truncate px-2 text-lg font-semibold tracking-tight">
-            {isSessionArea
-              ? "Nightwatch"
-              : isActive("/integrations")
-                ? "Integrations"
-                : "Audit log"}
-          </span>
-        </SidebarHeader>
+      {/* List rail: in-flow beside the icon rail (both always visible on
+          desktop); cmd/ctrl+B or the edge handle collapses only this panel. */}
+      {!isMobile && expanded && (
+        <aside
+          data-slot="list-rail"
+          data-state="expanded"
+          className="flex w-80 shrink-0 flex-col bg-sidebar"
+        >
+          {panelSections()}
+        </aside>
+      )}
+      {!isMobile && <PanelRail expanded={expanded} onToggle={toggleSidebar} />}
 
-        <SidebarContent>
-          {/* Mobile-only primary nav: the icon rail is desktop-only, so the
-                sheet carries the same destinations. isMobile is a runtime
-                check, so desktop never renders duplicates. */}
-          {isMobile && (
-            <SidebarGroup>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    aria-label="New session"
-                    className="text-primary hover:text-primary-hover"
-                    onClick={() => {
-                      dismissMobile();
-                      void navigate({ to: "/" });
-                    }}
-                  >
-                    <Plus {...ICON_NAV} />
-                    <span>New session</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    aria-label="Integrations"
-                    isActive={isActive("/integrations")}
-                    onClick={dismissMobile}
-                    render={<Link to="/integrations" />}
-                  >
-                    <Plug {...ICON_NAV} />
-                    <span>Integrations</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    aria-label="Audit log"
-                    isActive={isActive("/audit")}
-                    onClick={dismissMobile}
-                    render={<Link to="/audit" />}
-                  >
-                    <ScrollText {...ICON_NAV} />
-                    <span>Audit log</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    aria-label="Settings"
-                    onClick={() => {
-                      dismissMobile();
-                      setSettingsOpen(true);
-                    }}
-                  >
-                    <Settings {...ICON_NAV} />
-                    <span>Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    aria-label="Log out"
-                    onClick={() => {
-                      dismissMobile();
-                      void logout();
-                    }}
-                  >
-                    <LogOut {...ICON_NAV} />
-                    <span>Log out</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroup>
-          )}
-
-          {isSessionArea && attentionCount > 0 && (
-            <div className="px-2">
-              <div
-                className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning"
-                aria-hidden="true"
-              >
-                <span className="flex h-full w-10 shrink-0 items-center justify-center">
-                  {attentionCount > 99 ? "99+" : attentionCount}
-                </span>
-                <span className="min-w-0 truncate">awaiting approval</span>
-              </div>
-            </div>
-          )}
-
-          <SidebarGroup className="min-h-0 flex-1">
-            <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
-              {isSessionArea ? (
-                <SessionsSidebar />
-              ) : isActive("/integrations") ? (
-                <IntegrationsRail />
-              ) : (
-                <AuditRail />
-              )}
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-      </Sidebar>
+      {/* Mobile: the same panel as an off-canvas sheet. */}
+      {isMobile && (
+        <Sidebar collapsible="offcanvas">{panelSections(mobileNav)}</Sidebar>
+      )}
 
       <SidebarInset
         id="main-content"

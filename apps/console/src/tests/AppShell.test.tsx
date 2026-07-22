@@ -189,34 +189,39 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// jsdom doesn't apply CSS, so assert the Sidebar's data-state attribute
-// instead of the visual collapse.
-function sidebarState(): string | null {
-  return (
-    document
-      .querySelector('[data-slot="sidebar"]')
-      ?.getAttribute("data-state") ?? null
-  );
+// The icon rail is always present; only the list rail collapses. Its presence
+// is the expanded/collapsed signal (jsdom applies no CSS, so we test the DOM).
+function listRailPresent(): boolean {
+  return document.querySelector('[data-slot="list-rail"]') !== null;
 }
 
 describe("Shell", () => {
-  describe("sidebar collapsible rail", () => {
-    it("collapsing writes false to localStorage", async () => {
+  describe("list rail collapse (icon rail always visible)", () => {
+    it("collapsing writes false to localStorage and hides only the list rail", async () => {
       const user = userEvent.setup();
       setup();
 
       await waitFor(() =>
-        screen.getByRole("button", { name: /collapse sidebar/i }),
+        screen.getByRole("button", { name: /collapse panel/i }),
       );
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
+      expect(listRailPresent()).toBe(true);
+      // The icon rail's destinations remain regardless of the panel state.
+      expect(
+        screen.getByRole("link", { name: /integrations/i }),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /collapse panel/i }));
 
       await waitFor(() =>
         expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe(
           "false",
         ),
       );
+      expect(listRailPresent()).toBe(false);
+      // Icon rail untouched by the collapse.
+      expect(
+        screen.getByRole("link", { name: /integrations/i }),
+      ).toBeInTheDocument();
     });
 
     it("expanding after collapse writes true to localStorage", async () => {
@@ -224,19 +229,18 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() =>
-        screen.getByRole("button", { name: /collapse sidebar/i }),
+        screen.getByRole("button", { name: /collapse panel/i }),
       );
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
+      await user.click(screen.getByRole("button", { name: /collapse panel/i }));
       await waitFor(() =>
-        screen.getByRole("button", { name: /expand sidebar/i }),
+        screen.getByRole("button", { name: /expand panel/i }),
       );
-      await user.click(screen.getByRole("button", { name: /expand sidebar/i }));
+      await user.click(screen.getByRole("button", { name: /expand panel/i }));
 
       await waitFor(() =>
         expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe("true"),
       );
+      expect(listRailPresent()).toBe(true);
     });
 
     it("starts collapsed when localStorage has false", async () => {
@@ -244,11 +248,11 @@ describe("Shell", () => {
       setup();
 
       await waitFor(() => {
-        // Restores the collapsed rail from the persisted preference; the toggle
-        // offers to expand and links stay reachable.
-        expect(sidebarState()).toBe("collapsed");
+        // The list rail is hidden, but the edge handle offers to expand and the
+        // icon rail's links stay reachable.
+        expect(listRailPresent()).toBe(false);
         expect(
-          screen.getByRole("button", { name: /expand sidebar/i }),
+          screen.getByRole("button", { name: /expand panel/i }),
         ).toBeInTheDocument();
         expect(
           screen.getByRole("link", { name: /integrations/i }),
@@ -276,19 +280,11 @@ describe("Shell", () => {
       await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     });
 
-    it("Log out is reachable via icon button in rail mode", async () => {
+    it("Log out lives in the always-visible icon rail", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
 
-      // Collapse
-      await waitFor(() =>
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-      await user.click(
-        screen.getByRole("button", { name: /collapse sidebar/i }),
-      );
-
-      // Logout button still present (aria-label)
+      // No collapse needed: the icon rail (and its Log out) is always present.
       const logoutBtn = await screen.findByRole("button", {
         name: /log out/i,
       });
