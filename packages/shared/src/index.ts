@@ -115,6 +115,9 @@ export type {
   ReasoningEffort,
   SandboxNetwork,
   AgentConfig,
+  ConfigHealthKind,
+  ConfigHealthIssue,
+  ConfigHealth,
 } from "./config.js";
 export type {
   GitHubErrorCode,

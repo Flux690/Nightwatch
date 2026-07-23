@@ -42,3 +42,20 @@ export interface AgentConfig {
   promptCaching?: boolean;
   reasoningEffort?: ReasoningEffort | null;
 }
+
+// A setup problem the console surfaces app-wide (a banner), computed server-side
+// from the fleet, integrations, and observed metric labels. Advisory: investigations
+// still run; the banner exists to make a misconfiguration visible at setup, not at 3am.
+export type ConfigHealthKind =
+  "no-evidence-source" | "missing-server-label" | "unknown-server-label";
+
+export interface ConfigHealthIssue {
+  kind: ConfigHealthKind;
+  message: string;
+  // Console route the banner's action links to.
+  href: string;
+}
+
+export interface ConfigHealth {
+  issues: ConfigHealthIssue[];
+}

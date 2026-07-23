@@ -45,6 +45,7 @@ import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
 import { AuditRail } from "./AuditRail.js";
+import { ConfigHealthBanner } from "./ConfigHealthBanner.js";
 import { IntegrationsRail } from "./IntegrationsRail.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
@@ -423,6 +424,7 @@ function ShellContent({
           </Button>
           <span className="text-sm font-semibold">Nightwatch</span>
         </header>
+        <ConfigHealthBanner />
         <div
           className={cn(
             "flex min-h-0 flex-1",
