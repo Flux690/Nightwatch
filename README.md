@@ -10,7 +10,7 @@ Nightwatch is a self-hosted, open-source AI SRE agent for Docker and Kubernetes 
 
 An alert fires at 3am. Normally that means waking up, SSHing into a box, reading logs, checking `docker ps` or `kubectl get pods`, correlating a recent deploy, and only then deciding what to do. The investigation is slow, manual, and always lands on a tired human.
 
-Nightwatch does that first pass for you. The moment an alert arrives, it starts pulling logs, container or pod state, and host metrics, reasons about the root cause, and drafts a concrete remediation such as restarting a service - or, when the root cause is in your application code and a repository is connected, a code fix proposed as a draft pull request. By the time you look at your screen, the investigation is already written up and a fix is sitting there waiting for one click.
+Nightwatch does that first pass for you. The moment an alert arrives, it starts pulling logs, container or pod state, and host metrics, reasons about the root cause, and drafts a concrete remediation such as restarting a service - or, when the root cause is in your application code and a repository is connected, a code fix proposed as a draft pull request. It writes its findings into a live report as it works, so by the time you look at your screen the investigation is already written up - root cause, the hypotheses it ruled out, the evidence behind each - and a fix is sitting there waiting for one click.
 
 The important part is what it will not do. Nightwatch never changes anything on a server without your explicit approval. It reads freely and acts only on permission, so you get the speed of an automated responder with the safety of a human gate.
 
@@ -27,7 +27,7 @@ runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 api["Nightwatch API<br/>Node.js · SQLite<br/>Agent Loop · Approvals · Event Bus"]
 
 %% UI
-console["Console<br/>Chat · Live Transcript<br/>Approval Cards · Fleet · Settings"]
+console["Console<br/>Live Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
 
 %% Code
 github["GitHub<br/>Draft Pull Requests"]
@@ -49,7 +49,7 @@ class console ui;
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
 
-When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (service logs, process lists, metrics), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the root cause is in the application code itself, the same loop can check the code out into an isolated sandbox on the API host, build and test a fix there, and leave a draft pull request for human review.
+When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (service logs, process lists, metrics), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. As it reasons it keeps an **investigation report** up to date through a tool call - raising hypotheses, marking them proven or disproven, and citing the exact tool result behind each - so the report fills in live on screen rather than appearing at the end. The loop will not finish an investigation with an incomplete report: if the agent tries to stop with hypotheses still open it is pushed back, and if it genuinely cannot conclude it must say so rather than invent a cause. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the root cause is in the application code itself, the same loop can check the code out into an isolated sandbox on the API host, build and test a fix there, and leave a draft pull request for human review.
 
 ### The three pieces
 
@@ -57,10 +57,13 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 
 **Runner** is a stateless executor you install on each server or cluster you want monitored. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises what it can do (Docker containers, Kubernetes workloads, or both), and executes the read and approval-gated write commands the API sends against whichever substrate a service runs on. It reads freely and keeps no local state of its own - identity and configuration come entirely from its token and environment. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and the runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the operator UI: a live, streaming session transcript, approval and clarification cards, the runner fleet view, and settings.
+**Console** is the operator UI, built around the report rather than the chat. A left icon rail switches between Sessions, Integrations, and Audit; beside it a list rail carries that section's contents (the sessions queue, the integration catalog, audit scopes). Open an investigation and the report owns the main area - root cause, hypotheses, evidence with charts, proposed fix - while the live transcript docks into a chat rail on the right. A plain conversation keeps the chat centred instead, with no report. Approval and clarification cards, the runner fleet view, and settings all live here too.
 
 ## Features
 
+- **A report, not a wall of chat.** Every investigation produces a structured report the agent maintains _while it works_: the root cause, every hypothesis it raised and whether it was proven or disproven, and the evidence behind each - with metric charts and merged pull requests frozen into the report so it still renders long after your metrics retention has rolled over. Each claim carries a citation chip back to the exact tool call that supports it.
+- **It cannot finish without concluding.** An investigation is not allowed to end with hypotheses left open: the loop pushes the agent back until the report resolves, and if the evidence genuinely does not support a conclusion it must record an honest "inconclusive" with what it checked. No quietly abandoned investigations, and no invented root causes.
+- **Ask or Investigate.** Ask is a normal chat with your fleet - it can look things up and even act with approval, but writes no report. Investigate runs the full gated investigation. Alerts always investigate, and you can escalate a conversation into one at any time.
 - **Docker and Kubernetes.** A runner detects and advertises the substrates it runs on connect. The agent is offered a dedicated toolset per substrate - Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a Docker host, Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster - so it only ever sees the tools its fleet can actually run.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - Nightwatch never merges.
@@ -250,6 +253,7 @@ apps/
   api/                  Fastify API: the brain
     src/
       agent/            agentic loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
+                        report.ts is the report service: the only place a report is saved
       alerts/           Alertmanager ingest, dedup, batching
       auth/             owner password, runner token minting, fleet ingest credential
       config/           settings routes, LLM config, state-directory paths
@@ -259,7 +263,8 @@ apps/
       remediation/      remediation-mode toggle routes
       runners/          runner registry, connect.sh handler
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
-      session/          session routes, console event bus (SSE), interrupt coordinator + approval executor
+      session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
+                        list.ts derives the sessions queue (status, headline, severity)
       ws/               runner registry/routing, command transport
       dispatcher.ts     single entry point for every investigation
   runner/               Stateless executor: the hands
@@ -275,12 +280,13 @@ apps/
       api/              one typed fetch boundary (apiFetch)
       auth/             login and owner-password setup
       components/
-        ui/             shadcn-style primitives
-        layout/         shell, sidebar, settings modal, wizard chrome
+        ui/             shadcn-style primitives (Base UI under the hood)
+        layout/         four-zone shell, section rails (sessions/integrations/audit), settings modal, wizard chrome
+        report/         the investigation report artifact (hypotheses, evidence charts, citations)
         transcript/     transcript dispatcher + per-card panels
-      hooks/            shared console event-stream (SSE) provider, attention counter
-      lib/              shared client helpers (utils, toast, time, icon/status variants)
-      pages/            login, fleet, add-server wizard, session view, audit log, integrations + GitHub connect
+      hooks/            shared console event-stream (SSE) provider, attention counter, per-session report
+      lib/              shared client helpers (theme, utils, toast, time, icon/status variants)
+      pages/            login, fleet, add-server wizard, session view, audit log, integration config pages
 packages/
   shared/               Shared TypeScript types: the contract
     src/
@@ -288,7 +294,8 @@ packages/
       console-events.ts console event envelopes
       service-identity.ts docker/kubernetes service identity shapes
       tools.ts          tool input/output payload types (schemas themselves live in apps/api/src/agent/tools/)
-      sessions.ts       session and message shapes
+      sessions.ts       session, message, run-mode and queue-row shapes
+      reports.ts        investigation report shape (hypotheses, evidence, snapshots)
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
       integrations.ts   integration payloads (GitHub, Prometheus, Loki)
