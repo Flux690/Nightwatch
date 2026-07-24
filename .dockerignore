@@ -1,6 +1,5 @@
 .git
 .smoke
-clipper
 apps/api
 apps/console
 **/node_modules
