@@ -74,10 +74,10 @@ export function describeLLMError(err: unknown): string {
     return `The provider did not recognize the request - usually a wrong or unavailable model name. Check the model in Settings${detail}.`;
   }
   if (status === 429) {
-    return `The provider rate-limited the request, or a free-tier quota ran out. Nightwatch tried ${attempts} times before giving up; this usually clears on its own${detail}.`;
+    return `The provider rate-limited the request, or a free-tier quota ran out. NightWarden tried ${attempts} times before giving up; this usually clears on its own${detail}.`;
   }
   if (status >= 500) {
-    return `The model provider had a server problem - this is upstream, not your setup. Nightwatch tried ${attempts} times before giving up${detail}.`;
+    return `The model provider had a server problem - this is upstream, not your setup. NightWarden tried ${attempts} times before giving up${detail}.`;
   }
   return `The provider returned an unexpected error${detail}.`;
 }

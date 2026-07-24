@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage } from "@nightwatch/shared";
+import type { RunnerCommandMessage } from "@nightwarden/shared";
 
 // Scripted provider: drives the loop to a gated tool so the interrupt row is
 // written to the DB, which is what these tests assert against.
@@ -33,7 +33,7 @@ import {
   setRunnerRemediationMode,
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import type { ApprovalRequest } from "@nightwatch/shared";
+import type { ApprovalRequest } from "@nightwarden/shared";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {

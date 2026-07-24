@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import type { RemediationActionRecord } from "@nightwatch/shared";
+import type { RemediationActionRecord } from "@nightwarden/shared";
 
 import {
   SidebarGroup,

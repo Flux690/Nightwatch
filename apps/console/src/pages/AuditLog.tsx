@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import type { RemediationActionRecord } from "@nightwatch/shared";
+import type { RemediationActionRecord } from "@nightwarden/shared";
 import { ExternalLink, ScrollText } from "lucide-react";
 import { matchesScope, type AuditScope } from "@/components/layout/AuditRail";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -105,7 +105,7 @@ export function AuditLogPage(): React.JSX.Element {
             </EmptyMedia>
             <EmptyTitle>No remediation actions recorded yet</EmptyTitle>
             <EmptyDescription>
-              When Nightwatch executes, rejects, or fails a remediation action,
+              When NightWarden executes, rejects, or fails a remediation action,
               it appears here so you can audit every decision the system made on
               your behalf.
             </EmptyDescription>

@@ -64,7 +64,7 @@ export async function salvageWorkspaces(
         continue;
       }
       if (await isDirty(dir)) {
-        await commitAll(dir, "nightwatch: salvage at boot", opts.commitAuthor);
+        await commitAll(dir, "nightwarden: salvage at boot", opts.commitAuthor);
       }
       if (await hasUnpushedWork(dir)) {
         await push(dir, await currentBranch(dir), await opts.authHeader());

@@ -40,7 +40,7 @@ async function prometheusFetch(
   path: string,
   form?: Record<string, string>,
 ): Promise<Response> {
-  const headers: Record<string, string> = { "User-Agent": "nightwatch" };
+  const headers: Record<string, string> = { "User-Agent": "nightwarden" };
   if (authHeader !== null) headers["Authorization"] = authHeader;
   let res: Response;
   try {

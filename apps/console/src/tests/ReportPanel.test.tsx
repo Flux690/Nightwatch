@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { Report } from "@nightwatch/shared";
+import type { Report } from "@nightwarden/shared";
 
 import { ReportPanel } from "@/components/report/ReportPanel";
 

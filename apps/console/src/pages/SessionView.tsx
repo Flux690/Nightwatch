@@ -7,7 +7,7 @@ import type {
   ConsoleEvent,
   ConsoleHumanInputRequired,
   ApprovalRequest,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 import {
   MessageScrollerProvider,

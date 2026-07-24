@@ -1,4 +1,4 @@
-import { serviceIdentityKey, type ServiceIdentity } from "@nightwatch/shared";
+import { serviceIdentityKey, type ServiceIdentity } from "@nightwarden/shared";
 import { addressName, manifestedConnections } from "./fleet.js";
 import type { RunnerConnection } from "./fleet.js";
 

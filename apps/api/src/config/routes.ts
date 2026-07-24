@@ -4,7 +4,7 @@ import { loadConfig, loadApiKey, updateConfig, saveApiKey } from "./store.js";
 import { encrypt, maskKey } from "./crypto.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 
 const ConfigPatchSchema = z.object({
   provider: z.enum(["anthropic", "openai"]).optional(),

@@ -9,7 +9,7 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { ConfigHealth } from "@nightwatch/shared";
+import type { ConfigHealth } from "@nightwarden/shared";
 
 import { registerConfigHealthRoutes } from "../config/health.js";
 import { useTempDb } from "./temp-db.js";

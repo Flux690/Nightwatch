@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ConsoleEvent } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwarden/shared";
 
 // EventSource retries network drops itself, but a non-200 fails permanently
 // (readyState CLOSED); recreate on a fixed cadence so updates never silently die.

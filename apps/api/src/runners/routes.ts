@@ -7,7 +7,7 @@ import {
 import { listRunners, getFleetView, pushRemediationMode } from "../ws/fleet.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { FleetRunner, RunnerRecord } from "@nightwatch/shared";
+import type { FleetRunner, RunnerRecord } from "@nightwarden/shared";
 
 export async function registerRunnerRoutes(
   fastify: FastifyInstance,

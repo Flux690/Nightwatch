@@ -6,7 +6,7 @@ import type {
   AlertSeverity,
   SessionListRow,
   SessionRunStatus,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { ICON_UI } from "@/lib/iconProps";
 
 import {

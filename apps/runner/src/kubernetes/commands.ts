@@ -1,6 +1,6 @@
 import { PassThrough } from "node:stream";
 import { setHeaderOptions } from "@kubernetes/client-node";
-import { serviceIdentityKey } from "@nightwatch/shared";
+import { serviceIdentityKey } from "@nightwarden/shared";
 import type {
   K8sNodeStatusResult,
   K8sRestartResult,
@@ -19,7 +19,7 @@ import type {
   ServiceProcessesResult,
   ServiceRestartInput,
   ServiceStatsInput,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { getCoreV1Api, getAppsV1Api, getMetrics, getExec } from "./client.js";
 import {
   resolveWorkload,
@@ -47,7 +47,7 @@ export async function getContainerList(
   const appsApi = getAppsV1Api();
   // Env-only, identical to the manifest (detect.ts): the kubeconfig context name
   // is not an authoritative cluster identity.
-  const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
+  const cluster = process.env["NIGHTWARDEN_CLUSTER_NAME"];
 
   const [deployments, statefulSets] = await Promise.all([
     appsApi.listNamespacedDeployment({ namespace }),

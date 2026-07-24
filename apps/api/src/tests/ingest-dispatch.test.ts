@@ -75,7 +75,7 @@ function alertBody(
     ],
     version: "4",
     groupKey: "test",
-    receiver: "nightwatch",
+    receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
     commonLabels: {},
@@ -145,7 +145,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       .inject({
         method: "POST",
         url: "/alerts/ingest",
-        headers: { "x-nightwatch-token": token },
+        headers: { "x-nightwarden-token": token },
         payload: body,
       })
       .then((res) => {
@@ -260,7 +260,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": token },
+      headers: { "x-nightwarden-token": token },
       payload: {
         alerts: [
           {
@@ -290,7 +290,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
         ],
         version: "4",
         groupKey: "test",
-        receiver: "nightwatch",
+        receiver: "nightwarden",
         status: "firing",
         groupLabels: {},
         commonLabels: {},

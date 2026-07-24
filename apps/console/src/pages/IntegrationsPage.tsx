@@ -20,7 +20,7 @@ export function IntegrationsPage(): React.JSX.Element {
           </EmptyMedia>
           <EmptyTitle>Integrations</EmptyTitle>
           <EmptyDescription>
-            Plug Nightwatch into the stack you already run. Pick an integration
+            Plug NightWarden into the stack you already run. Pick an integration
             from the list to connect or manage it.
           </EmptyDescription>
         </EmptyHeader>

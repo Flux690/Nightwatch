@@ -56,7 +56,7 @@ async function lokiFetch(
   path: string,
   form?: Record<string, string>,
 ): Promise<Response> {
-  const headers: Record<string, string> = { "User-Agent": "nightwatch" };
+  const headers: Record<string, string> = { "User-Agent": "nightwarden" };
   if (authHeader !== null) headers["Authorization"] = authHeader;
   // Multi-tenant Loki requires this header on every request; single-binary Loki
   // ignores it, so sending it when configured is always safe.

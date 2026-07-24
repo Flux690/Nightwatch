@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RunnerRecord } from "@nightwatch/shared";
+import type { RunnerRecord } from "@nightwarden/shared";
 import { ChevronDown, Eye, EyeOff } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -62,7 +62,7 @@ function sampleWebhookPayload(serverName: string): unknown {
 function receiverSnippet(ingestUrl: string, token: string): string {
   return [
     "receivers:",
-    "  - name: nightwatch",
+    "  - name: nightwarden",
     "    webhook_configs:",
     `      - url: '${ingestUrl}'`,
     "        http_config:",
@@ -404,7 +404,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                 <p className="max-w-3xl text-sm text-muted-foreground">
                   Give each cluster&apos;s alerts a cluster label (in that
                   cluster&apos;s Prometheus external_labels) and set
-                  NIGHTWATCH_CLUSTER_NAME to the same value on its runner.
+                  NIGHTWARDEN_CLUSTER_NAME to the same value on its runner.
                 </p>
                 <CopyableSnippet
                   label="Copy cluster external_labels"

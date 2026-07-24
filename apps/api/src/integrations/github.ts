@@ -2,7 +2,7 @@ import type {
   GitHubErrorCode,
   GitHubRepoPage,
   GitHubRepoSummary,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const GITHUB_API = "https://api.github.com";
 
@@ -22,7 +22,7 @@ function baseHeaders(token: string): Record<string, string> {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "nightwatch",
+    "User-Agent": "nightwarden",
   };
 }
 
@@ -150,7 +150,7 @@ export async function ownerIsOrganization(owner: string): Promise<boolean> {
     const res = await fetch(`${GITHUB_API}/users/${owner}`, {
       headers: {
         Accept: "application/vnd.github+json",
-        "User-Agent": "nightwatch",
+        "User-Agent": "nightwarden",
       },
     });
     if (!res.ok) return false;

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestProviders } from "./renderWithProviders.js";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 
 import { AuthProvider } from "@/auth/AuthContext";
 import { SettingsModal } from "@/components/layout/SettingsModal";

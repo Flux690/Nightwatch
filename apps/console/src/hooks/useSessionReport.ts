@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ConsoleEvent, Report } from "@nightwatch/shared";
+import type { ConsoleEvent, Report } from "@nightwarden/shared";
 import { apiFetch, ApiError } from "@/api/client";
 import { useConsoleEvents } from "./ConsoleEventsProvider.js";
 

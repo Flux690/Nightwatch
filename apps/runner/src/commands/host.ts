@@ -8,7 +8,7 @@ import type {
   HostDmesgResult,
   HostMemoryResult,
   HostNetworkResult,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const exec = promisify(execFile);
 const PROC_PATH = process.env["HOST_PROC"] ?? "/proc";

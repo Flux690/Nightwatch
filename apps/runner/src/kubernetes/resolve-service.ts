@@ -5,7 +5,7 @@ import {
   type KubernetesServiceIdentity,
   type NoRunningInstanceResult,
   type ServiceIdentity,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 export interface ResolvedK8sPod {
   podName: string;

@@ -12,9 +12,9 @@ COPY packages/shared/ packages/shared/
 COPY apps/runner/ apps/runner/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @nightwatch/shared build
-RUN pnpm --filter @nightwatch/runner build
-RUN pnpm deploy --filter @nightwatch/runner --prod /app
+RUN pnpm --filter @nightwarden/shared build
+RUN pnpm --filter @nightwarden/runner build
+RUN pnpm deploy --filter @nightwarden/runner --prod /app
 
 
 FROM node:24-slim

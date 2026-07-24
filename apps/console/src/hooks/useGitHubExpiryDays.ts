@@ -1,4 +1,4 @@
-import type { GitHubIntegrationStatus } from "@nightwatch/shared";
+import type { GitHubIntegrationStatus } from "@nightwarden/shared";
 
 export function expiryDaysFrom(
   status: GitHubIntegrationStatus | undefined,

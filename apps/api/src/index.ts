@@ -23,13 +23,13 @@ import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
 import { decrypt } from "./config/crypto.js";
 import { getGitHubIntegration } from "./db/integrations.js";
-import { nightwatchDir, workspacesDir } from "./config/paths.js";
+import { nightwardenDir, workspacesDir } from "./config/paths.js";
 import { logger } from "./logger.js";
 
-// Resolve the state directory first so a relative NIGHTWATCH_DIR fails here with
+// Resolve the state directory first so a relative NIGHTWARDEN_DIR fails here with
 // a clear message, not lazily mid-request.
 try {
-  logger.info({ dir: nightwatchDir() }, "state directory");
+  logger.info({ dir: nightwardenDir() }, "state directory");
 } catch (err) {
   logger.error(err instanceof Error ? err.message : String(err));
   process.exit(1);

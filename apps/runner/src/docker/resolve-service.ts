@@ -4,7 +4,7 @@ import {
   type DockerServiceIdentity,
   type NoRunningInstanceResult,
   type ServiceIdentity,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 export interface ResolvedContainer {
   container: Dockerode.Container;

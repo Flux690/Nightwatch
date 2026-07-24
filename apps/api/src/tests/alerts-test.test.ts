@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { CapabilityManifest } from "@nightwatch/shared";
+import type { CapabilityManifest } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { registerAlertTestRoutes } from "../alerts/test-alert.js";

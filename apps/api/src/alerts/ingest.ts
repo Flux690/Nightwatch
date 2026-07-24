@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { serviceIdentityKey } from "@nightwatch/shared";
+import { serviceIdentityKey } from "@nightwarden/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
 import { resolveAgainstFleet } from "./resolve-target.js";
@@ -22,7 +22,7 @@ export async function registerAlertRoutes(
 
     if (!plaintext) {
       return reply.code(401).send({
-        error: "X-Nightwatch-Token or Authorization: Bearer token required",
+        error: "X-NightWarden-Token or Authorization: Bearer token required",
       });
     }
 
@@ -74,7 +74,7 @@ export async function registerAlertRoutes(
       const plaintext = extractToken(request.headers);
       if (!plaintext) {
         return reply.code(401).send({
-          error: "X-Nightwatch-Token or Authorization: Bearer token required",
+          error: "X-NightWarden-Token or Authorization: Bearer token required",
         });
       }
       if (findAlertSourceKindByToken(plaintext) === null) {
@@ -130,7 +130,7 @@ export async function registerAlertRoutes(
 function extractToken(
   headers: Record<string, string | string[] | undefined>,
 ): string | null {
-  const token = headers["x-nightwatch-token"];
+  const token = headers["x-nightwarden-token"];
   if (typeof token === "string" && token.length > 0) return token;
   return extractBearerToken(headers["authorization"]);
 }

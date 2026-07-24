@@ -57,7 +57,7 @@ function alertBody(
     ],
     version: "4",
     groupKey: "test",
-    receiver: "nightwatch",
+    receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
     commonLabels: {},
@@ -109,7 +109,7 @@ describe("alert batching (REST seam + fake timers)", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": token },
+      headers: { "x-nightwarden-token": token },
       payload: body,
     });
     expect(res.statusCode).toBe(200);

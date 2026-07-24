@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,

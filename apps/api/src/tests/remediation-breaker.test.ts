@@ -14,7 +14,7 @@ import type { FastifyInstance } from "fastify";
 import type {
   RunnerCommandMessage,
   RemediationStatus,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 

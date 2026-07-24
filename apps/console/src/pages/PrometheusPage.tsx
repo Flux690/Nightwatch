@@ -5,7 +5,7 @@ import type {
   PrometheusIntegrationStatus,
   PrometheusLabelValidation,
   RunnerRecord,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -146,7 +146,7 @@ export function PrometheusPage(): React.JSX.Element {
             <Field className="max-w-120">
               <FieldLabel htmlFor="prometheus-url">Prometheus URL</FieldLabel>
               <FieldDescription>
-                The base URL of your Prometheus, reachable from the Nightwatch
+                The base URL of your Prometheus, reachable from the NightWarden
                 API host. Don&apos;t expose Prometheus to the public internet.
               </FieldDescription>
               <Input

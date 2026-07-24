@@ -7,18 +7,18 @@ const TEMPLATE = `\
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: nightwatch
+  name: nightwarden
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: nightwatch-runner
-  namespace: nightwatch
+  name: nightwarden-runner
+  namespace: nightwarden
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: nightwatch-runner-read
+  name: nightwarden-runner-read
 rules:
   - apiGroups: [""]
     resources: ["pods", "nodes", "namespaces", "events"]
@@ -33,7 +33,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: nightwatch-runner-write
+  name: nightwarden-runner-write
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets"]
@@ -45,55 +45,55 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: nightwatch-runner-read
+  name: nightwarden-runner-read
 subjects:
   - kind: ServiceAccount
-    name: nightwatch-runner
-    namespace: nightwatch
+    name: nightwarden-runner
+    namespace: nightwarden
 roleRef:
   kind: ClusterRole
-  name: nightwatch-runner-read
+  name: nightwarden-runner-read
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: nightwatch-runner-write
+  name: nightwarden-runner-write
 subjects:
   - kind: ServiceAccount
-    name: nightwatch-runner
-    namespace: nightwatch
+    name: nightwarden-runner
+    namespace: nightwarden
 roleRef:
   kind: ClusterRole
-  name: nightwatch-runner-write
+  name: nightwarden-runner-write
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nightwatch-runner
-  namespace: nightwatch
+  name: nightwarden-runner
+  namespace: nightwarden
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: nightwatch-runner
+      app: nightwarden-runner
   template:
     metadata:
       labels:
-        app: nightwatch-runner
+        app: nightwarden-runner
     spec:
-      serviceAccountName: nightwatch-runner
+      serviceAccountName: nightwarden-runner
       containers:
         - name: runner
-          image: ghcr.io/nightwatch-ai/runner:latest
+          image: ghcr.io/nightwarden-ai/runner:latest
           env:
-            - name: NIGHTWATCH_TOKEN
-              value: "{{NIGHTWATCH_TOKEN}}"
+            - name: NIGHTWARDEN_TOKEN
+              value: "{{NIGHTWARDEN_TOKEN}}"
             - name: WS_URL
               value: "{{WS_URL}}"
-            - name: NIGHTWATCH_SERVER_NAME
-              value: "{{NIGHTWATCH_SERVER_NAME}}"
+            - name: NIGHTWARDEN_SERVER_NAME
+              value: "{{NIGHTWARDEN_SERVER_NAME}}"
 `;
 
 function buildWsUrl(origin: string): string {
@@ -106,9 +106,9 @@ export function buildManifest(
   token: string,
   serverName = "",
 ): string {
-  return TEMPLATE.replaceAll("{{NIGHTWATCH_TOKEN}}", token)
+  return TEMPLATE.replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
     .replaceAll("{{WS_URL}}", wsUrl)
-    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
+    .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
 }
 
 export async function registerManifestRoutes(

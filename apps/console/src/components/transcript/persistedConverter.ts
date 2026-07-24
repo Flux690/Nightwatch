@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@nightwatch/shared";
+import type { SessionMessage } from "@nightwarden/shared";
 import type { TranscriptItem } from "./types.js";
 
 type ProviderBlock =

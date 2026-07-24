@@ -5,10 +5,10 @@ import { join } from "node:path";
 import Dockerode from "dockerode";
 import { SandboxUnavailableError } from "./errors.js";
 
-export const SANDBOX_LABEL = "nightwatch.sandbox";
-export const SESSION_LABEL = "nightwatch.session";
-export const SANDBOX_IMAGE = "nightwatch-sandbox";
-const IMAGE_HASH_LABEL = "nightwatch.sandbox-image";
+export const SANDBOX_LABEL = "nightwarden.sandbox";
+export const SESSION_LABEL = "nightwarden.session";
+export const SANDBOX_IMAGE = "nightwarden-sandbox";
+const IMAGE_HASH_LABEL = "nightwarden.sandbox-image";
 
 // Built locally on top of the official node image: the runtime user is non-root
 // on a read-only rootfs, so global tooling must be baked in at build time (root).
@@ -74,7 +74,7 @@ export async function ensureImage(): Promise<void> {
   }
   // The build context is throwaway (unlike the proxy's config, which stays
   // bind-mounted); building FROM node:24 pulls the base as needed.
-  const context = await mkdtemp(join(tmpdir(), "nightwatch-sandbox-image-"));
+  const context = await mkdtemp(join(tmpdir(), "nightwarden-sandbox-image-"));
   try {
     await writeFile(join(context, "Dockerfile"), SANDBOX_DOCKERFILE);
     const stream = await docker.buildImage(
@@ -148,7 +148,7 @@ export async function createSandboxContainer(opts: {
   const docker = getDocker();
   const container = await docker.createContainer({
     Image: SANDBOX_IMAGE,
-    name: `nightwatch-sandbox-${opts.sessionId}`,
+    name: `nightwarden-sandbox-${opts.sessionId}`,
     Cmd: ["sleep", "infinity"],
     WorkingDir: "/workspace",
     // HOME is a separate mount, not the checkout, so package-manager caches

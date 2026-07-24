@@ -3,7 +3,7 @@ import type {
   Report,
   SessionMessage,
   SessionMeta,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { getDb } from "./client.js";
 import type { PendingHumanInput } from "./interrupts.js";
 
@@ -77,7 +77,7 @@ export function getNextSeq(sessionId: string): number {
   return row.next;
 }
 
-// Nightwatch's own failure note, appended after the turn that died. Display
+// NightWarden's own failure note, appended after the turn that died. Display
 // and history only; buildSeed keeps it away from the model.
 export function appendErrorMessage(
   sessionId: string,

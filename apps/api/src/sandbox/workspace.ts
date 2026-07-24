@@ -348,7 +348,7 @@ export async function teardown(
     if (await isDirty(workspace.dir)) {
       await commitAll(
         workspace.dir,
-        "nightwatch: checkpoint at sandbox teardown",
+        "nightwarden: checkpoint at sandbox teardown",
         options.commitAuthor,
       );
     }

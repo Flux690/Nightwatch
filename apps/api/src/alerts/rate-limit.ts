@@ -1,4 +1,4 @@
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 
 // Fleet-wide alert budget, in memory (no Redis): one global counter is the storm cap since
 // every non-critical alert now reaches an LLM session. Critical severity always bypasses.

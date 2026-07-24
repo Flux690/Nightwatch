@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { RemediationActionRecord } from "@nightwatch/shared";
+import type { RemediationActionRecord } from "@nightwarden/shared";
 import {
   listRemediationActions,
   type RemediationAction,

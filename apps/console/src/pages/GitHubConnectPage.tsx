@@ -7,7 +7,7 @@ import type {
   GitHubIntegrationStatus,
   GitHubRepoPage,
   GitHubRepoSummary,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,16 +31,16 @@ import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
 /* Repo selection stays on GitHub's own picker, the user's deliberate consent
-   moment; no `issues` permission since Nightwatch opens PRs, not issues. */
+   moment; no `issues` permission since NightWarden opens PRs, not issues. */
 const FINE_GRAINED_TOKEN_URL =
   "https://github.com/settings/personal-access-tokens/new" +
-  "?name=Nightwatch" +
-  "&description=Nightwatch%20proposes%20fixes%20as%20draft%20pull%20requests" +
+  "?name=NightWarden" +
+  "&description=NightWarden%20proposes%20fixes%20as%20draft%20pull%20requests" +
   "&expires_in=90&contents=write&pull_requests=write";
 
 /* Escape hatch for orgs that block fine-grained PATs entirely. */
 const CLASSIC_TOKEN_URL =
-  "https://github.com/settings/tokens/new?scopes=repo&description=Nightwatch";
+  "https://github.com/settings/tokens/new?scopes=repo&description=NightWarden";
 
 class GitHubRequestError extends Error {
   constructor(
@@ -81,7 +81,7 @@ async function githubRequest<T>(
       body,
     );
   }
-  // See apiFetch: responses are shape-checked at compile time via @nightwatch/shared.
+  // See apiFetch: responses are shape-checked at compile time via @nightwarden/shared.
   return (await res.json()) as T;
 }
 
@@ -395,7 +395,7 @@ export function GitHubConnectPage(): React.JSX.Element {
       <div className="flex flex-col gap-6">
         <p className="max-w-3xl text-sm text-muted-foreground">
           Let investigations read the bound repository, verify a fix, and
-          propose it as a draft pull request. Nightwatch never merges.
+          propose it as a draft pull request. NightWarden never merges.
         </p>
         {preflightIssue !== null && (
           <Alert variant="destructive">
@@ -586,7 +586,7 @@ export function GitHubConnectPage(): React.JSX.Element {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="Disconnect GitHub?"
-        description={`This deletes Nightwatch's stored copy of the token and unbinds ${status?.repo ?? "the repository"}. The token itself stays valid until you revoke it on GitHub.`}
+        description={`This deletes NightWarden's stored copy of the token and unbinds ${status?.repo ?? "the repository"}. The token itself stays valid until you revoke it on GitHub.`}
         confirmLabel="Disconnect"
         destructive
         onConfirm={() => void disconnect()}

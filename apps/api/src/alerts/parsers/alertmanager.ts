@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   deriveServiceIdentity,
   type NormalizedAlert,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { logger } from "../../logger.js";
 
 // Parsing IS normalization now: no location is ever stamped on an alert, so

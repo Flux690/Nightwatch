@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FleetRunner, ServiceIdentity } from "@nightwatch/shared";
+import type { FleetRunner, ServiceIdentity } from "@nightwarden/shared";
 import { resolveAgainstFleet } from "../alerts/resolve-target.js";
 
 function runner(

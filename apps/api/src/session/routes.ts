@@ -4,7 +4,7 @@ import type {
   ApprovalRequest,
   RespondRequest,
   RunMode,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import {
   listAllPendingHumanInput,
   hasPendingHumanInput,

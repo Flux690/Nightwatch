@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { serviceIdentityKey, type RunnerRecord } from "@nightwatch/shared";
+import { serviceIdentityKey, type RunnerRecord } from "@nightwarden/shared";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

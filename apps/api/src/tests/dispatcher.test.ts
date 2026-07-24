@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
 import type { RunInvestigationInput, RunOutcome } from "../agent/loop.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 
 // The gate resolves with a run outcome; these tests only exercise dedup/running
 // bookkeeping, so a plain "completed" stands in for every run.

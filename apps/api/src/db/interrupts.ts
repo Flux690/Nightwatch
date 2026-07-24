@@ -1,6 +1,6 @@
 import { getDb } from "./client.js";
 import type { ToolResult } from "../llm/types.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 
 export interface PendingHumanInput {
   sessionId: string;

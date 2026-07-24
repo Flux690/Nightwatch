@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { RemediationActionRecord } from "@nightwatch/shared";
+import type { RemediationActionRecord } from "@nightwarden/shared";
 
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";

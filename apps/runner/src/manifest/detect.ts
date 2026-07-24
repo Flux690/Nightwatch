@@ -4,7 +4,7 @@ import {
   serviceIdentityKey,
   type CapabilityManifest,
   type ServiceManifestEntry,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { getDocker } from "../docker/client.js";
 import { getAppsV1Api } from "../kubernetes/client.js";
 import { isRemediationEnabled } from "../remediation-state.js";
@@ -46,7 +46,7 @@ async function detectDocker(): Promise<{
     // `all: true` so a service whose only container is currently stopped is still advertised - otherwise
     // routing would reject the call before the runner ever gets to JIT-resolve it and report a clean finding.
     const list = await docker.listContainers({ all: true });
-    const server = process.env["NIGHTWATCH_SERVER_NAME"];
+    const server = process.env["NIGHTWARDEN_SERVER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const c of list) {
       const name = (c.Names[0] ?? "").replace(/^\//, "");
@@ -79,7 +79,7 @@ async function detectKubernetes(): Promise<{
 
     // The cluster scope comes only from the operator-assigned env var, never the kubeconfig context name
     // (which drifts and wouldn't match the `cluster` label inbound alerts carry). Absent => an unscoped, single-cluster identity.
-    const cluster = process.env["NIGHTWATCH_CLUSTER_NAME"];
+    const cluster = process.env["NIGHTWARDEN_CLUSTER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const item of [...deployments.items, ...statefulSets.items]) {
       const ns = item.metadata?.namespace ?? "default";

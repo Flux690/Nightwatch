@@ -56,7 +56,7 @@ describe("runner WS client", () => {
     it("answers a server ping with a protocol pong", async () => {
       const { wss, port } = await listen();
       vi.stubEnv("WS_URL", `ws://127.0.0.1:${port}`);
-      vi.stubEnv("NIGHTWATCH_TOKEN", "test-token");
+      vi.stubEnv("NIGHTWARDEN_TOKEN", "test-token");
       const connected = nextConnection(wss);
       const stop = startWebSocketClient(new Map());
       try {
@@ -75,7 +75,7 @@ describe("runner WS client", () => {
     it("terminates the socket and reconnects when no ping arrives within the watchdog window", async () => {
       const { wss, port } = await listen();
       vi.stubEnv("WS_URL", `ws://127.0.0.1:${port}`);
-      vi.stubEnv("NIGHTWATCH_TOKEN", "test-token");
+      vi.stubEnv("NIGHTWARDEN_TOKEN", "test-token");
       // Only setTimeout is faked: the watchdog and the reconnect backoff are
       // timeouts; the manifest interval stays real and never fires in-test.
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -107,7 +107,7 @@ describe("runner WS client", () => {
     it("a ping resets the watchdog, so a pinged connection stays up indefinitely", async () => {
       const { wss, port } = await listen();
       vi.stubEnv("WS_URL", `ws://127.0.0.1:${port}`);
-      vi.stubEnv("NIGHTWATCH_TOKEN", "test-token");
+      vi.stubEnv("NIGHTWARDEN_TOKEN", "test-token");
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       const connected = nextConnection(wss);
       const stop = startWebSocketClient(new Map());

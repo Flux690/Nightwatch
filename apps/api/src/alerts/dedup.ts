@@ -1,6 +1,6 @@
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInputForAlert } from "../db/interrupts.js";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 
 // Dedup is derived, never stored: an alert is a duplicate iff a run for the same
 // (fingerprint, startsAt) is already active or durably suspended on approval.

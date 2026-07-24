@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
-import type { AuthStatusResponse } from "@nightwatch/shared";
+import type { AuthStatusResponse } from "@nightwarden/shared";
 
 import { installFetchInterceptor } from "./fetchInterceptor.js";
 

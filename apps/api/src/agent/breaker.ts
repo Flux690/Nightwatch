@@ -2,7 +2,7 @@ import {
   countExecutedRemediations,
   targetKeyFromInput,
 } from "../db/remediation-actions.js";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
 // Refuse a write before it suspends when too many writes to the same (identity, action)

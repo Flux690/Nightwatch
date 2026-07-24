@@ -11,7 +11,7 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import OpenAI from "openai";
-import type { ConsoleEvent } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 

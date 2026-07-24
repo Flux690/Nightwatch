@@ -16,7 +16,7 @@ import { MockEventSource } from "./mockEventSource.js";
 
 vi.mock("@/auth/AuthContext", () => ({
   useAuth: () => ({
-    phase: { kind: "authenticated", email: "operator@nightwatch.io" },
+    phase: { kind: "authenticated", email: "operator@nightwarden.io" },
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(),

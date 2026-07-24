@@ -34,7 +34,7 @@ function alertmanagerBody(fingerprint: string, labels: Record<string, string>) {
     ],
     version: "4",
     groupKey: "test",
-    receiver: "nightwatch",
+    receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
     commonLabels: {},
@@ -89,7 +89,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-1", {
         alertname: "HighCPU",
         severity: "warning",
@@ -134,7 +134,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-k8s", {
         alertname: "CrashLoopBackOff",
         severity: "critical",
@@ -172,7 +172,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-no-match", {
         alertname: "HighCPU",
         severity: "warning",
@@ -223,7 +223,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-ambiguous", {
         alertname: "HighCPU",
         severity: "warning",
@@ -254,7 +254,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: {
         alerts: [
           {
@@ -294,7 +294,7 @@ describe("POST /alerts/validate", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/validate",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: { notAlerts: true },
     });
 

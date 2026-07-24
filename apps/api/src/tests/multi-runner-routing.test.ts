@@ -14,7 +14,7 @@ import type { FastifyInstance } from "fastify";
 import type {
   CapabilityManifest,
   RunnerCommandMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 // Stateful scripted provider — same pattern as approval-cycle.test.ts so the
 // loop runs against a deterministic turn sequence without a real LLM.
@@ -469,7 +469,7 @@ describe("multi-runner routing", () => {
 });
 
 describe("assigned-name server-scoped routing", () => {
-  // Manifests carry server-scoped Docker identities (NIGHTWATCH_SERVER_NAME set); routing
+  // Manifests carry server-scoped Docker identities (NIGHTWARDEN_SERVER_NAME set); routing
   // must match exclusively on the full (server, project, service) key.
   let cleanupDb2: () => void;
   let runnerIdS1: string;

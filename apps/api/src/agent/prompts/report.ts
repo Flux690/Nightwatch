@@ -113,6 +113,6 @@ You maintain a live incident report via the UpdateReport tool; it is the operato
 - Before you finish: no hypothesis may remain "open" (resolve each to root_cause or disproven), and a root_cause hypothesis must cite at least one evidence entry. If you genuinely cannot conclude, set status "inconclusive" and record what you checked - never invent a root cause.`;
 
 // Sent by the finish gate when the model stops with an incomplete report. The
-// [Nightwatch] prefix marks it as harness pushback for transcript styling.
+// [NightWarden] prefix marks it as harness pushback for transcript styling.
 export const GATE_NUDGE =
-  '[Nightwatch] The report is not complete. Resolve every open hypothesis (root_cause or disproven), make sure the root cause cites evidence, and record your conclusion via UpdateReport. If you cannot conclude, set status "inconclusive" with what you checked.';
+  '[NightWarden] The report is not complete. Resolve every open hypothesis (root_cause or disproven), make sure the root cause cites evidence, and record your conclusion via UpdateReport. If you cannot conclude, set status "inconclusive" with what you checked.';

@@ -289,7 +289,7 @@ describe("Kubernetes runner command handlers", () => {
 
   describe("getContainerList", () => {
     it("lists workloads with identities that match the capability manifest", async () => {
-      vi.stubEnv("NIGHTWATCH_CLUSTER_NAME", "test-cluster");
+      vi.stubEnv("NIGHTWARDEN_CLUSTER_NAME", "test-cluster");
       mockAppsApi.listNamespacedDeployment.mockResolvedValue({
         items: [
           {

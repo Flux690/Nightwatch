@@ -23,7 +23,7 @@ import {
 import type {
   RunnerManifestMessage,
   RunnerResultMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const PING_INTERVAL_MS = 30_000;
 

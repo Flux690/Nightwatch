@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type { LokiIntegrationStatus } from "@nightwatch/shared";
+import type { LokiIntegrationStatus } from "@nightwarden/shared";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -110,7 +110,7 @@ export function LokiPage(): React.JSX.Element {
             <Field className="max-w-120">
               <FieldLabel htmlFor="loki-url">Loki URL</FieldLabel>
               <FieldDescription>
-                The base URL of your Loki, reachable from the Nightwatch API
+                The base URL of your Loki, reachable from the NightWarden API
                 host. Don&apos;t expose Loki to the public internet.
               </FieldDescription>
               <Input

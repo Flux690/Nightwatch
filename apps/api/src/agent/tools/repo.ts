@@ -33,12 +33,12 @@ import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
 import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
-import type { ServiceIdentity } from "@nightwatch/shared";
+import type { ServiceIdentity } from "@nightwarden/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
 export const COMMIT_AUTHOR = {
-  name: "Nightwatch",
-  email: "noreply@nightwatch.local",
+  name: "NightWarden",
+  email: "noreply@nightwarden.local",
 };
 
 function slugTarget(identity: ServiceIdentity): string {
@@ -67,7 +67,7 @@ export function branchNameFor(sessionId: string): string {
             ? `${alert.alertType}-${slugTarget(alert.targetIdentifier)}`
             : alert.alertType,
         );
-  return `nightwatch/fix-${slug}-${sessionId.slice(0, 8)}`;
+  return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
 
 function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
@@ -192,7 +192,7 @@ function composePrBody(
 
   sections.push(
     alert === null
-      ? "## Incident\n\nStarted from a Nightwatch chat session."
+      ? "## Incident\n\nStarted from a NightWarden chat session."
       : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Target: ${displayIdentity(alert)}\n- Fired at: ${alert.firedAt}`,
   );
 
@@ -208,7 +208,7 @@ function composePrBody(
   }
 
   sections.push(
-    `---\nOpened by Nightwatch from session "${session?.title ?? "unknown"}" (${sessionId}), branch \`${branch}\`.`,
+    `---\nOpened by NightWarden from session "${session?.title ?? "unknown"}" (${sessionId}), branch \`${branch}\`.`,
   );
   return sections.join("\n\n");
 }

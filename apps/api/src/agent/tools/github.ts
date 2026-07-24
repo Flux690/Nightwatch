@@ -11,7 +11,7 @@ import {
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire, so they live
-// with the tool rather than in @nightwatch/shared.
+// with the tool rather than in @nightwarden/shared.
 export interface RecentPullRequest {
   number: number;
   title: string;

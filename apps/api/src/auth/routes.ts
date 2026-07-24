@@ -1,6 +1,6 @@
 import { hash, verify } from "argon2";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import type { AuthStatusResponse } from "@nightwatch/shared";
+import type { AuthStatusResponse } from "@nightwarden/shared";
 import {
   mintSession,
   requireSession,
@@ -24,7 +24,7 @@ function isHttps(request: FastifyRequest): boolean {
 export async function registerAuthRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  const dummyHash = await hash("nightwatch-dummy-placeholder");
+  const dummyHash = await hash("nightwarden-dummy-placeholder");
   const checkSetupRateLimit = createCredentialRateLimiter();
   const checkLoginRateLimit = createCredentialRateLimiter();
 

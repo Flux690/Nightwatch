@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { ConsoleEvent } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwarden/shared";
 
 // In-process, not Redis: one Node process serves the console, so cross-process
 // fan-out solves a problem we don't have.

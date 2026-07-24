@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { getDocker } from "./docker.js";
 import { SandboxUnavailableError } from "./errors.js";
 
-export const PROXY_IMAGE = "nightwatch-tinyproxy";
-export const PROXY_CONTAINER = "nightwatch-sandbox-proxy";
-export const SANDBOX_NETWORK_NAME = "nightwatch-sandbox-net";
-export const PROXY_LABEL = "nightwatch.proxy";
-const CONFIG_HASH_LABEL = "nightwatch.proxy-config";
+export const PROXY_IMAGE = "nightwarden-tinyproxy";
+export const PROXY_CONTAINER = "nightwarden-sandbox-proxy";
+export const SANDBOX_NETWORK_NAME = "nightwarden-sandbox-net";
+export const PROXY_LABEL = "nightwarden.proxy";
+const CONFIG_HASH_LABEL = "nightwarden.proxy-config";
 const PROXY_PORT = 8888;
 
 // Built locally so no third-party proxy image enters the supply chain; Alpine

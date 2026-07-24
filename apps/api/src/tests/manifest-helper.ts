@@ -1,7 +1,7 @@
 import type {
   CapabilityManifest,
   ServiceManifestEntry,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 export function manifest(
   hostname: string,

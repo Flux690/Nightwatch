@@ -41,7 +41,7 @@ function UserTurn({
 
 function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
-    <div className="animate-in fade-in duration-300 prose prose-nightwatch max-w-none">
+    <div className="animate-in fade-in duration-300 prose prose-nightwarden max-w-none">
       <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
     </div>
   );

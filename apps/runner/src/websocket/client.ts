@@ -8,7 +8,7 @@ import type {
   RunnerManifestMessage,
   RunnerResultMessage,
   SetRemediationModeMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 type CommandHandler = (input: unknown) => Promise<unknown>;
 
@@ -46,7 +46,7 @@ export function startWebSocketClient(
     (() => {
       throw new Error("WS_URL environment variable is required");
     })();
-  const token = process.env["NIGHTWATCH_TOKEN"]!;
+  const token = process.env["NIGHTWARDEN_TOKEN"]!;
 
   let ws: WebSocket | null = null;
   let retryCount = 0;

@@ -1,5 +1,5 @@
 import { openAllowedFile, redactSecrets } from "../safety/allowlist.js";
-import type { HostFileInput, HostFileResult } from "@nightwatch/shared";
+import type { HostFileInput, HostFileResult } from "@nightwarden/shared";
 
 export async function readFileCommand(
   input: HostFileInput,

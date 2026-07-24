@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CapabilityManifest,
   RunnerCommandMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import {
   registerRunner,
   unregisterRunner,

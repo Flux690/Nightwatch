@@ -1,4 +1,4 @@
-/* Nightwatch Console — Tailwind v4 + shadcn (base-nova).
+/* NightWarden Console — Tailwind v4 + shadcn (base-nova).
    Dual theme: raw values live on :root (light) and .dark, mapped into Tailwind
    via @theme inline. Token philosophy: single accent (cobalt), surface ladder,
    ink hierarchy, explicit state tokens — no opacity divisors anywhere.
@@ -261,7 +261,7 @@
 }
 
 /* Prose maps to semantic tokens, so it re-derives per theme automatically. */
-@utility prose-nightwatch {
+@utility prose-nightwarden {
   --tw-prose-body: var(--color-foreground);
   --tw-prose-headings: var(--color-foreground);
   --tw-prose-lead: var(--color-muted-foreground);

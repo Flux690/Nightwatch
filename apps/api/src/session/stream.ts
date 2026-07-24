@@ -16,7 +16,7 @@ import type {
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
   SessionMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 // Every envelope goes to the one console bus as a typed ConsoleEvent; the SSE route
 // serializes it on the wire and the client routes by type/sessionId.

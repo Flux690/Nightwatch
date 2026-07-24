@@ -137,16 +137,16 @@ describe("GET /connect.sh", () => {
       "cadvisor",
       "PROMETHEUS_URL",
       "ALERTMANAGER_URL",
-      "NIGHTWATCH_INGEST_TOKEN",
+      "NIGHTWARDEN_INGEST_TOKEN",
       "PLATFORM_URL",
-      "nightwatch.sh",
+      "nightwarden.sh",
       "inst_",
     ]) {
       expect(res.body).not.toContain(token);
     }
   });
 
-  it("script contains NIGHTWATCH_SERVER_NAME baked in from the token's server name", async () => {
+  it("script contains NIGHTWARDEN_SERVER_NAME baked in from the token's server name", async () => {
     const namedToken = generateRunnerToken(
       "named-server",
       "prod-web-01",
@@ -159,10 +159,10 @@ describe("GET /connect.sh", () => {
         authorization: `Bearer ${namedToken}`,
       },
     });
-    expect(res.body).toContain('NIGHTWATCH_SERVER_NAME="prod-web-01"');
+    expect(res.body).toContain('NIGHTWARDEN_SERVER_NAME="prod-web-01"');
   });
 
-  it("script passes NIGHTWATCH_SERVER_NAME env var to the Docker container", async () => {
+  it("script passes NIGHTWARDEN_SERVER_NAME env var to the Docker container", async () => {
     const namedToken = generateRunnerToken(
       "named-server-2",
       "staging-api-01",
@@ -176,7 +176,7 @@ describe("GET /connect.sh", () => {
       },
     });
     expect(res.body).toContain(
-      "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}",
+      "NIGHTWARDEN_SERVER_NAME=${NIGHTWARDEN_SERVER_NAME}",
     );
     // The container reports the host's real name, never its container id.
     expect(res.body).toContain('--hostname "$(hostname)"');

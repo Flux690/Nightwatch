@@ -10,7 +10,7 @@ import { logger } from "../logger.js";
 import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
-import type { ApprovalResponse, RespondRequest } from "@nightwatch/shared";
+import type { ApprovalResponse, RespondRequest } from "@nightwarden/shared";
 
 export class HumanInputError extends Error {
   constructor(

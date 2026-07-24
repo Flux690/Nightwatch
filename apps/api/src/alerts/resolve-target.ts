@@ -3,7 +3,7 @@ import {
   type FleetRunner,
   type NormalizedAlert,
   type ServiceIdentity,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 // The alert's candidate target key, for display (session titles, PR body).
 // "unidentified" when the labels named no service.

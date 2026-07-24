@@ -13,7 +13,7 @@ import { TestProviders } from "./renderWithProviders.js";
 import type {
   PrometheusIntegrationStatus,
   RunnerRecord,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 import { PrometheusPage } from "../pages/PrometheusPage.js";
 

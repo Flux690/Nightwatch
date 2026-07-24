@@ -22,7 +22,7 @@ import type {
   ReasoningEffort,
   SandboxNetwork,
   ThinkingMode,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const CONFIG_ID = "global";
 

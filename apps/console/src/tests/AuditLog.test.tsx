@@ -9,7 +9,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
-import type { RemediationActionRecord } from "@nightwatch/shared";
+import type { RemediationActionRecord } from "@nightwarden/shared";
 
 import { AuditLogPage } from "../pages/AuditLog.js";
 

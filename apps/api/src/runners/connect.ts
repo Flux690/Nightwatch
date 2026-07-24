@@ -18,8 +18,8 @@ function buildWsUrl(protocol: string, host: string): string {
 
 function buildScript(wsUrl: string, token: string, serverName: string): string {
   return TEMPLATE.replaceAll("{{WS_URL}}", wsUrl)
-    .replaceAll("{{NIGHTWATCH_TOKEN}}", token)
-    .replaceAll("{{NIGHTWATCH_SERVER_NAME}}", serverName);
+    .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
+    .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
 }
 
 export async function registerConnectRoutes(

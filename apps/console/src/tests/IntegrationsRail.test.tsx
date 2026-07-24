@@ -9,7 +9,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwatch/shared";
+import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { IntegrationsRail } from "@/components/layout/IntegrationsRail";
@@ -203,13 +203,13 @@ describe("IntegrationsRail", () => {
     });
   });
 
-  describe("Nightwatch Runner", () => {
+  describe("NightWarden Runner", () => {
     it("routes an empty fleet straight to the add-server wizard", async () => {
       const user = userEvent.setup();
       setup({ runners: [] });
 
-      await screen.findByText("Nightwatch Runner");
-      await user.click(rowFor("Nightwatch Runner"));
+      await screen.findByText("NightWarden Runner");
+      await user.click(rowFor("NightWarden Runner"));
 
       expect(
         await screen.findByText(/add server destination/i),
@@ -222,7 +222,7 @@ describe("IntegrationsRail", () => {
 
       expect(await screen.findByText("1 server")).toBeInTheDocument();
 
-      await user.click(rowFor("Nightwatch Runner"));
+      await user.click(rowFor("NightWarden Runner"));
       expect(
         await screen.findByText(/runner servers destination/i),
       ).toBeInTheDocument();

@@ -14,7 +14,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { NormalizedAlert, Report } from "@nightwatch/shared";
+import type { NormalizedAlert, Report } from "@nightwarden/shared";
 import { runInvestigation } from "../agent/loop.js";
 import { GATE_NUDGE } from "../agent/prompts/report.js";
 import { finalizeInconclusive } from "../agent/report.js";

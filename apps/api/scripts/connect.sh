@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The {{...}} placeholders are substituted at serve time by GET /connect.sh -
-# do not edit them here. NIGHTWATCH_TOKEN is this runner's own nwr_ credential.
+# do not edit them here. NIGHTWARDEN_TOKEN is this runner's own nwr_ credential.
 set -euo pipefail
 
-IMAGE="${NIGHTWATCH_IMAGE:-nightwatch/runner:latest}"
-CONTAINER_NAME="nightwatch"
+IMAGE="${NIGHTWARDEN_IMAGE:-nightwarden/runner:latest}"
+CONTAINER_NAME="nightwarden"
 WS_URL="{{WS_URL}}"
-NIGHTWATCH_TOKEN="{{NIGHTWATCH_TOKEN}}"
-NIGHTWATCH_SERVER_NAME="{{NIGHTWATCH_SERVER_NAME}}"
+NIGHTWARDEN_TOKEN="{{NIGHTWARDEN_TOKEN}}"
+NIGHTWARDEN_SERVER_NAME="{{NIGHTWARDEN_SERVER_NAME}}"
 
 echo "Pulling ${IMAGE}..."
 docker pull "$IMAGE"
@@ -32,16 +32,16 @@ docker run -d \
   -v /proc:/host/proc:ro \
   -v /sys:/sys:ro \
   -v /:/rootfs:ro \
-  -e "NIGHTWATCH_TOKEN=${NIGHTWATCH_TOKEN}" \
+  -e "NIGHTWARDEN_TOKEN=${NIGHTWARDEN_TOKEN}" \
   -e "WS_URL=${WS_URL}" \
-  -e "NIGHTWATCH_SERVER_NAME=${NIGHTWATCH_SERVER_NAME}" \
+  -e "NIGHTWARDEN_SERVER_NAME=${NIGHTWARDEN_SERVER_NAME}" \
   -e "HOST_PROC=/host/proc" \
   "$IMAGE"
 
 echo ""
-echo "Nightwatch runner is running."
+echo "NightWarden runner is running."
 echo ""
 echo "  Container: ${CONTAINER_NAME}"
-echo "  Server:    ${NIGHTWATCH_SERVER_NAME}"
+echo "  Server:    ${NIGHTWARDEN_SERVER_NAME}"
 echo ""
 echo "Logs: docker logs -f ${CONTAINER_NAME}"

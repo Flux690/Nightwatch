@@ -33,7 +33,7 @@ importers:
       '@fastify/websocket':
         specifier: 11.3.0
         version: 11.3.0
-      '@nightwatch/shared':
+      '@nightwarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       argon2:
@@ -103,7 +103,7 @@ importers:
       '@fontsource/geist-sans':
         specifier: 5.2.5
         version: 5.2.5
-      '@nightwatch/shared':
+      '@nightwarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@shadcn/react':
@@ -197,7 +197,7 @@ importers:
       '@kubernetes/client-node':
         specifier: 1.4.0
         version: 1.4.0
-      '@nightwatch/shared':
+      '@nightwarden/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       dockerode:

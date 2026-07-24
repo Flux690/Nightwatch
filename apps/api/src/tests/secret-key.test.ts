@@ -21,7 +21,7 @@ describe("resolveSecretKey", () => {
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "nw-secret-key-"));
-    vi.stubEnv("NIGHTWATCH_DIR", dir);
+    vi.stubEnv("NIGHTWARDEN_DIR", dir);
     // setup.ts sets the suite-wide test key; self-provisioning tests need
     // SECRET_KEY genuinely absent.
     vi.stubEnv("SECRET_KEY", undefined);
@@ -57,7 +57,7 @@ describe("resolveSecretKey", () => {
 
   it("creates the state directory on a truly fresh deploy where it doesn't exist yet", () => {
     const freshDir = join(dir, "not-yet-created");
-    vi.stubEnv("NIGHTWATCH_DIR", freshDir);
+    vi.stubEnv("NIGHTWARDEN_DIR", freshDir);
 
     const key = resolveSecretKey();
     expect(key.length).toBeGreaterThan(0);

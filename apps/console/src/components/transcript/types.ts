@@ -23,7 +23,7 @@ export interface AgentTextItem {
   text: string;
 }
 
-// Nightwatch's own failure note (role "error"), rendered exactly like agent text.
+// NightWarden's own failure note (role "error"), rendered exactly like agent text.
 export interface ErrorTextItem {
   kind: "error_text";
   id: string;

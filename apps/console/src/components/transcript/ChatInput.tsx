@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowUp, ChevronDown, Square } from "lucide-react";
-import type { RunMode } from "@nightwatch/shared";
+import type { RunMode } from "@nightwarden/shared";
 import {
   InputGroup,
   InputGroupAddon,

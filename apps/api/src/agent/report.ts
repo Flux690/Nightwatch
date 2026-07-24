@@ -6,8 +6,8 @@ import type {
   NormalizedAlert,
   Report,
   ReportStatus,
-} from "@nightwatch/shared";
-import { serviceIdentityKey } from "@nightwatch/shared";
+} from "@nightwarden/shared";
+import { serviceIdentityKey } from "@nightwarden/shared";
 import { getReport, upsertReport } from "../db/reports.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { publishReportUpdated } from "../session/stream.js";

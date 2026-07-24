@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import type { ConfigHealth } from "@nightwatch/shared";
+import type { ConfigHealth } from "@nightwarden/shared";
 import { apiFetch } from "@/api/client";
 
 // Polls app-wide setup health on a slow cadence: these states change on runner or

@@ -422,7 +422,7 @@ function ShellContent({
           >
             <Menu {...ICON_UI} />
           </Button>
-          <span className="text-sm font-semibold">Nightwatch</span>
+          <span className="text-sm font-semibold">NightWarden</span>
         </header>
         <ConfigHealthBanner />
         <div

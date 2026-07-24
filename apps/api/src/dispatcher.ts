@@ -9,7 +9,7 @@ import {
   publishRunFinished,
   publishRunStopped,
 } from "./session/stream.js";
-import type { NormalizedAlert, SessionMessage } from "@nightwatch/shared";
+import type { NormalizedAlert, SessionMessage } from "@nightwarden/shared";
 
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
 // concurrency control: a new alert while one is running is injected rather than starting a second.

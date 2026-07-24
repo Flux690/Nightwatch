@@ -1,4 +1,4 @@
-import type { RemediationStatus } from "@nightwatch/shared";
+import type { RemediationStatus } from "@nightwarden/shared";
 import { getDb } from "./client.js";
 
 export interface RemediationAction {

@@ -31,7 +31,7 @@ export async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return undefined as T;
   try {
     // The one trusted cast in the console: responses are shape-checked at
-    // compile time via @nightwatch/shared, a contract we own both ends of.
+    // compile time via @nightwarden/shared, a contract we own both ends of.
     return (await res.json()) as T;
   } catch {
     // A success with an empty or non-JSON body - the void endpoints (DELETE,

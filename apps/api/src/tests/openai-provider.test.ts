@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
@@ -81,7 +81,7 @@ describe("OpenAIProvider", () => {
     vi.clearAllMocks();
     mockStream.on.mockReturnThis();
     mockCompletionsStream.mockReturnValue(mockStream);
-    provider = new OpenAIProvider("You are Nightwatch.", BASE_CONFIG);
+    provider = new OpenAIProvider("You are NightWarden.", BASE_CONFIG);
     provider.start("CPU spike detected.");
   });
 

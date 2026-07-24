@@ -4,7 +4,7 @@ import type {
   NormalizedAlert,
   SessionMessage,
   SessionMeta,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 
 import {

@@ -3,7 +3,7 @@ import {
   type FleetRunner,
   type NormalizedAlert,
   type RunMode,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import {
   budgetLine,
   READ_ONLY_INSTRUCTIONS,

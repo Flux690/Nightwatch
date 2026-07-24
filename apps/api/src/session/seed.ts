@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@nightwatch/shared";
+import type { SessionMessage } from "@nightwarden/shared";
 import { getSessionMessages } from "../db/sessions.js";
 import type { ProviderMessage } from "../llm/types.js";
 

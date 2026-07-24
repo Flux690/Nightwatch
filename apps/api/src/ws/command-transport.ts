@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   RunnerCommandMessage,
   RunnerResultMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { logger } from "../logger.js";
 import { resolveByHost, resolveByService } from "./router.js";
 import type { CommandRoute } from "./router.js";

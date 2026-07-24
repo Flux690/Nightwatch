@@ -1,4 +1,4 @@
-import type { Report, ReportSummary } from "@nightwatch/shared";
+import type { Report, ReportSummary } from "@nightwarden/shared";
 import { getDb } from "./client.js";
 
 // Full-replace: every UpdateReport carries the complete document, so a re-run or

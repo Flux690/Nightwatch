@@ -3,7 +3,7 @@ import type {
   CapabilityManifest,
   FleetRunner,
   SetRemediationModeMessage,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const LIVENESS_TTL_MS = 120_000;
 

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ServiceIdentity } from "@nightwatch/shared";
+import type { ServiceIdentity } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
 import { getFleetView } from "../ws/fleet.js";
 import { parseAlertmanager } from "./parsers/alertmanager.js";
@@ -9,7 +9,7 @@ import { routeAlert } from "./route-alert.js";
 // Rebuild the labels an advertised identity would arrive with, so the verify alert runs
 // through the same deriveServiceIdentity path real alerts do (else a broken parser still passes).
 function identityToLabels(identity: ServiceIdentity): Record<string, string> {
-  const base = { alertname: "NightwatchVerify", severity: "info" };
+  const base = { alertname: "NightWardenVerify", severity: "info" };
   if (identity.provider === "docker") {
     return {
       ...base,
@@ -59,7 +59,7 @@ export async function registerAlertTestRoutes(
           {
             status: "firing",
             labels: identityToLabels(target),
-            annotations: { summary: "Nightwatch verify" },
+            annotations: { summary: "NightWarden verify" },
             startsAt: new Date().toISOString(),
             endsAt: "0001-01-01T00:00:00Z",
             fingerprint: `verify-${randomUUID()}`,

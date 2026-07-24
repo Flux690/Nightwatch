@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ConfigHealthIssue } from "@nightwatch/shared";
+import type { ConfigHealthIssue } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
 import { decrypt } from "./crypto.js";
 import { getFleetView } from "../ws/fleet.js";

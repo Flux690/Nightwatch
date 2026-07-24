@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 

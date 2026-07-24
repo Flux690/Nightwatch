@@ -8,7 +8,7 @@ import type {
   CapabilityManifest,
   FleetRunner,
   RunnerRecord,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { generateRunnerToken, findRunnerById } from "../db/runner.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";

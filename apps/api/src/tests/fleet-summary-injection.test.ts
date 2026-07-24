@@ -33,7 +33,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dispatcher } from "../dispatcher.js";
-import type { CapabilityManifest, NormalizedAlert } from "@nightwatch/shared";
+import type { CapabilityManifest, NormalizedAlert } from "@nightwarden/shared";
 
 const FINISH: ScriptedTurn = { toolUses: [], text: "Investigation complete." };
 

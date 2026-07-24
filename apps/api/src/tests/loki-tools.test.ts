@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../config/crypto.js";
 import { saveLokiIntegration } from "../db/integrations.js";

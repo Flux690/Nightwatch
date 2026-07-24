@@ -10,7 +10,7 @@ import {
 import type Dockerode from "dockerode";
 
 // Mock system boundaries: the Docker client and the Kubernetes client.
-// NIGHTWATCH_SERVER_NAME env var controls the Docker server dimension; tests stub it explicitly via vi.stubEnv.
+// NIGHTWARDEN_SERVER_NAME env var controls the Docker server dimension; tests stub it explicitly via vi.stubEnv.
 
 const { mockListContainers, mockListDeployments, mockListStatefulSets } =
   vi.hoisted(() => ({
@@ -69,8 +69,8 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
   });
 
   describe("Docker: server field", () => {
-    it("stamps server from NIGHTWATCH_SERVER_NAME env var when set", async () => {
-      vi.stubEnv("NIGHTWATCH_SERVER_NAME", "prod-server-01");
+    it("stamps server from NIGHTWARDEN_SERVER_NAME env var when set", async () => {
+      vi.stubEnv("NIGHTWARDEN_SERVER_NAME", "prod-server-01");
       mockListContainers.mockResolvedValue([
         makeContainer("c1", "myapp_api_1", "running", {
           "com.docker.compose.project": "myapp",
@@ -90,7 +90,7 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
     });
 
     it("all Docker identities carry the same assigned server value", async () => {
-      vi.stubEnv("NIGHTWATCH_SERVER_NAME", "prod-server-01");
+      vi.stubEnv("NIGHTWARDEN_SERVER_NAME", "prod-server-01");
       mockListContainers.mockResolvedValue([
         makeContainer("c1", "myapp_api_1", "running", {
           "com.docker.compose.project": "myapp",
@@ -113,8 +113,8 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
       expect(servers.every((s) => s === "prod-server-01")).toBe(true);
     });
 
-    it("server dimension is absent when NIGHTWATCH_SERVER_NAME is not set", async () => {
-      delete process.env["NIGHTWATCH_SERVER_NAME"];
+    it("server dimension is absent when NIGHTWARDEN_SERVER_NAME is not set", async () => {
+      delete process.env["NIGHTWARDEN_SERVER_NAME"];
       mockListContainers.mockResolvedValue([
         makeContainer("c1", "myapp_api_1", "running", {
           "com.docker.compose.project": "myapp",
@@ -135,8 +135,8 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
   });
 
   describe("Kubernetes: cluster field", () => {
-    it("stamps cluster from NIGHTWATCH_CLUSTER_NAME env var when set", async () => {
-      vi.stubEnv("NIGHTWATCH_CLUSTER_NAME", "prod-cluster");
+    it("stamps cluster from NIGHTWARDEN_CLUSTER_NAME env var when set", async () => {
+      vi.stubEnv("NIGHTWARDEN_CLUSTER_NAME", "prod-cluster");
       mockListContainers.mockRejectedValue(new Error("no docker"));
       mockListDeployments.mockResolvedValue({
         items: [
@@ -157,7 +157,7 @@ describe("detectCapabilities — server-scoped identity stamping", () => {
     });
 
     it("leaves the identity unscoped when the cluster env var is absent", async () => {
-      delete process.env["NIGHTWATCH_CLUSTER_NAME"];
+      delete process.env["NIGHTWARDEN_CLUSTER_NAME"];
       mockListContainers.mockRejectedValue(new Error("no docker"));
       mockListDeployments.mockResolvedValue({
         items: [

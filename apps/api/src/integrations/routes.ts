@@ -36,7 +36,7 @@ import type {
   PrometheusIntegrationStatus,
   PrometheusLabelValidation,
   LokiIntegrationStatus,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 
 const ReposBodySchema = z.object({
   token: z.string().min(1).optional(),

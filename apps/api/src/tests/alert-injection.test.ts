@@ -19,7 +19,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
+import type { NormalizedAlert, RunnerCommandMessage } from "@nightwarden/shared";
 import Fastify from "fastify";
 import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
@@ -92,7 +92,7 @@ function alertmanagerBody(
     ],
     version: "4",
     groupKey: "test",
-    receiver: "nightwatch",
+    receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
     commonLabels: {},
@@ -379,7 +379,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const correlated = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": tokenPlaintext },
+      headers: { "x-nightwarden-token": tokenPlaintext },
       payload: alertmanagerBody("correlated-resume"),
     });
     expect(JSON.parse(correlated.body)).toMatchObject({
@@ -393,7 +393,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const refire = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": tokenPlaintext },
+      headers: { "x-nightwarden-token": tokenPlaintext },
       payload: alertmanagerBody("primary-resume", "warning", primaryFiredAt),
     });
     expect(JSON.parse(refire.body)).toMatchObject({

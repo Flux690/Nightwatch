@@ -1,5 +1,5 @@
-import { serviceIdentityKey } from "@nightwatch/shared";
-import type { SessionListRow, SessionRunStatus } from "@nightwatch/shared";
+import { serviceIdentityKey } from "@nightwarden/shared";
+import type { SessionListRow, SessionRunStatus } from "@nightwarden/shared";
 import { listAllPendingHumanInput } from "../db/interrupts.js";
 import { listSessionSources, type SessionListSource } from "../db/sessions.js";
 import { dispatcher } from "../dispatcher.js";

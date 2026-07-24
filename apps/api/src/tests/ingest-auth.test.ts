@@ -52,7 +52,7 @@ const ALERTMANAGER_BODY = {
   ],
   version: "4",
   groupKey: "test",
-  receiver: "nightwatch",
+  receiver: "nightwarden",
   status: "firing",
   groupLabels: {},
   commonLabels: {},
@@ -102,7 +102,7 @@ describe("POST /alerts/ingest auth", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": `nwi_unknown-${randomUUID()}` },
+      headers: { "x-nightwarden-token": `nwi_unknown-${randomUUID()}` },
       payload: ALERTMANAGER_BODY,
     });
     expect(res.statusCode).toBe(401);
@@ -117,7 +117,7 @@ describe("POST /alerts/ingest auth", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": runnerToken },
+      headers: { "x-nightwarden-token": runnerToken },
       payload: ALERTMANAGER_BODY,
     });
     expect(res.statusCode).toBe(401);
@@ -137,7 +137,7 @@ describe("POST /alerts/ingest auth", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": VALID_TOKEN },
+      headers: { "x-nightwarden-token": VALID_TOKEN },
       payload: ALERTMANAGER_BODY,
     });
     // 200 = processed (enqueued or debounced); not 401
@@ -181,7 +181,7 @@ function alertmanagerBody(fingerprint: string): typeof ALERTMANAGER_BODY {
     ],
     version: "4",
     groupKey: "test",
-    receiver: "nightwatch",
+    receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
     commonLabels: {},
@@ -227,7 +227,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": `nwi_unknown-${randomUUID()}` },
+      headers: { "x-nightwarden-token": `nwi_unknown-${randomUUID()}` },
       payload: alertmanagerBody("nwi-unknown"),
     });
     expect(res.statusCode).toBe(401);
@@ -237,7 +237,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-no-evidence"),
     });
     expect(res.statusCode).toBe(503);
@@ -255,7 +255,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const promOnly = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-prometheus-only"),
     });
     expect(promOnly.statusCode).toBe(200);
@@ -273,7 +273,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const lokiOnly = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-loki-only"),
     });
     expect(lokiOnly.statusCode).toBe(200);
@@ -294,7 +294,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-single-runner"),
     });
     expect(res.statusCode).toBe(200);
@@ -321,7 +321,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-multi-runner"),
     });
     expect(res.statusCode).toBe(200);
@@ -341,7 +341,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-no-match"),
     });
     expect(res.statusCode).toBe(200);
@@ -370,7 +370,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-ambiguous"),
     });
     expect(res.statusCode).toBe(200);
@@ -386,7 +386,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     const res = await server.inject({
       method: "POST",
       url: "/alerts/ingest",
-      headers: { "x-nightwatch-token": INGEST_TOKEN },
+      headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: { notAlerts: true },
     });
     expect(res.statusCode).toBe(400);

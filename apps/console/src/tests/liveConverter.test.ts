@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ConsoleEvent } from "@nightwatch/shared";
+import type { ConsoleEvent } from "@nightwarden/shared";
 
 import {
   applyLiveEvent,

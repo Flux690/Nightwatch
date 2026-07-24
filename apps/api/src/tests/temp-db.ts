@@ -8,7 +8,7 @@ import { resetDb } from "../db/client.js";
 // teardown with vi.unstubAllEnvs().
 export function useTempDb(): () => void {
   const dir = mkdtempSync(join(tmpdir(), "nw-api-"));
-  vi.stubEnv("NIGHTWATCH_DIR", dir);
+  vi.stubEnv("NIGHTWARDEN_DIR", dir);
   return () => {
     resetDb();
     rmSync(dir, { recursive: true, force: true });

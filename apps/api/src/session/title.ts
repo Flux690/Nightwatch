@@ -1,4 +1,4 @@
-import type { AgentConfig, NormalizedAlert } from "@nightwatch/shared";
+import type { AgentConfig, NormalizedAlert } from "@nightwarden/shared";
 import { displayIdentity } from "../alerts/resolve-target.js";
 import { createTitleProvider } from "../llm/factory.js";
 import { updateSessionTitle } from "../db/sessions.js";

@@ -12,7 +12,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
-import type { RunnerRecord } from "@nightwatch/shared";
+import type { RunnerRecord } from "@nightwarden/shared";
 
 import { AddServerPage } from "../pages/AddServerPage.js";
 
@@ -24,7 +24,7 @@ const GENERATED_TOKEN = {
 };
 
 const CONNECT_SCRIPT = "#!/bin/sh\necho install-docker";
-const MANIFEST_YAML = "kind: Deployment\nname: nightwatch-runner";
+const MANIFEST_YAML = "kind: Deployment\nname: nightwarden-runner";
 
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",

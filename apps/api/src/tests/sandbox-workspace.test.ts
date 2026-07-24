@@ -79,7 +79,7 @@ function installGitMock(): void {
         // --abbrev-ref HEAD asks the checkout for its own branch (salvage);
         // --verify origin/<branch> probes the remote (resume-vs-fresh clone).
         if (args.includes("--abbrev-ref")) {
-          return ok("nightwatch/fix-oom-12345678\n");
+          return ok("nightwarden/fix-oom-12345678\n");
         }
         return gitState.remoteBranchExists
           ? ok("abc123\n")
@@ -139,7 +139,7 @@ const dockerState = {
   nextId: 1,
 };
 
-const PROXY_NAME = "nightwatch-sandbox-proxy";
+const PROXY_NAME = "nightwarden-sandbox-proxy";
 
 function execEvents(): string[] {
   return dockerState.events
@@ -254,7 +254,7 @@ function dockerFake(): Record<string, unknown> {
     listNetworks: () =>
       Promise.resolve(
         dockerState.sandboxNetExists
-          ? [{ Name: "nightwatch-sandbox-net" }]
+          ? [{ Name: "nightwarden-sandbox-net" }]
           : [],
       ),
     createNetwork: (opts: Record<string, unknown>) => {
@@ -279,7 +279,7 @@ let sessionCounter = 0;
 function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
   return {
     cloneUrl: "https://github.com/acme/api.git",
-    branch: "nightwatch/fix-oom-12345678",
+    branch: "nightwarden/fix-oom-12345678",
     authHeader: () => Promise.resolve(AUTH_HEADER),
     limits: { cpus: 2, memoryMb: 4096 },
     idleTimeoutMs: 60_000,
@@ -288,7 +288,7 @@ function options(overrides?: Partial<WorkspaceOptions>): WorkspaceOptions {
     network: "none",
     allowlistHosts: ["registry.npmjs.org"],
     proxyConfigDir: join(workspacesDir, "proxy-config"),
-    commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
+    commitAuthor: { name: "NightWarden", email: "noreply@nightwarden.local" },
     pullRequests: {
       create: () => Promise.resolve({ number: 1, url: "", draft: true }),
       findOpenByBranch: () => Promise.resolve(null),
@@ -351,7 +351,7 @@ describe("workspace lifecycle", () => {
       expect(cloneCalls()).toHaveLength(1);
       expect(dockerState.createArgs).toHaveLength(1);
       expect(ws.dir).toBe(join(workspacesDir, sessionId));
-      expect(ws.branch).toBe("nightwatch/fix-oom-12345678");
+      expect(ws.branch).toBe("nightwarden/fix-oom-12345678");
       return Promise.resolve(undefined);
     });
 
@@ -362,8 +362,8 @@ describe("workspace lifecycle", () => {
 
     // The locally built image, not stock node - global tooling is baked in.
     const create = dockerState.createArgs[0]!;
-    expect(create["Image"]).toBe("nightwatch-sandbox");
-    expect(dockerState.builtImages).toContain("nightwatch-sandbox");
+    expect(create["Image"]).toBe("nightwarden-sandbox");
+    expect(dockerState.builtImages).toContain("nightwarden-sandbox");
     // HOME rides its own mount so package-manager caches never land inside
     // the checkout (git add -A would sweep them into checkpoint commits).
     expect(create["Env"]).toContain("HOME=/home/sandbox");
@@ -379,8 +379,8 @@ describe("workspace lifecycle", () => {
       ),
     ).toBe(true);
     expect(create["Labels"]).toMatchObject({
-      "nightwatch.sandbox": "1",
-      "nightwatch.session": sessionId,
+      "nightwarden.sandbox": "1",
+      "nightwarden.session": sessionId,
     });
     const host = create["HostConfig"] as Record<string, unknown>;
     expect(host["ReadonlyRootfs"]).toBe(true);
@@ -462,8 +462,8 @@ describe("workspace lifecycle", () => {
     expect(checkout).toEqual([
       "checkout",
       "-B",
-      "nightwatch/fix-oom-12345678",
-      "origin/nightwatch/fix-oom-12345678",
+      "nightwarden/fix-oom-12345678",
+      "origin/nightwarden/fix-oom-12345678",
     ]);
   });
 
@@ -481,7 +481,7 @@ describe("workspace lifecycle", () => {
     expect(gitState.calls.some((a) => a.includes("commit"))).toBe(true);
     const push = gitState.calls.find((a) => a.includes("push"));
     expect(push).toBeDefined();
-    expect(push).toContain("nightwatch/fix-oom-12345678");
+    expect(push).toContain("nightwarden/fix-oom-12345678");
     expect(push?.[1]).toBe(`http.extraHeader=Authorization: ${AUTH_HEADER}`);
   });
 
@@ -570,18 +570,18 @@ describe("sandbox network modes", () => {
     // The internal network is the enforcement: no route out except the proxy.
     expect(
       dockerState.networksCreated.some(
-        (n) => n["Name"] === "nightwatch-sandbox-net" && n["Internal"] === true,
+        (n) => n["Name"] === "nightwarden-sandbox-net" && n["Internal"] === true,
       ),
     ).toBe(true);
     const create = sandboxCreateArgs();
-    expect(hostConfig(create)["NetworkMode"]).toBe("nightwatch-sandbox-net");
+    expect(hostConfig(create)["NetworkMode"]).toBe("nightwarden-sandbox-net");
     const env = create["Env"] as string[];
-    expect(env).toContain("HTTP_PROXY=http://nightwatch-sandbox-proxy:8888");
-    expect(env).toContain("HTTPS_PROXY=http://nightwatch-sandbox-proxy:8888");
+    expect(env).toContain("HTTP_PROXY=http://nightwarden-sandbox-proxy:8888");
+    expect(env).toContain("HTTPS_PROXY=http://nightwarden-sandbox-proxy:8888");
     expect(env).toContain("NO_PROXY=localhost,127.0.0.1");
 
     // Proxy built locally, dual-homed onto the bridge, filter carries the hosts.
-    expect(dockerState.builtImages).toContain("nightwatch-tinyproxy");
+    expect(dockerState.builtImages).toContain("nightwarden-tinyproxy");
     expect(dockerState.events).toContain(`connect:bridge:${PROXY_NAME}`);
     const cfgDir = join(workspacesDir, "proxy-config");
     expect(readFileSync(join(cfgDir, "filter"), "utf8")).toContain(
@@ -622,7 +622,7 @@ describe("sandbox network modes", () => {
   it("none: the container is created with no network and no proxy machinery", async () => {
     await createWorkspace({ network: "none" });
     expect(hostConfig(sandboxCreateArgs())["NetworkMode"]).toBe("none");
-    expect(dockerState.builtImages).not.toContain("nightwatch-tinyproxy");
+    expect(dockerState.builtImages).not.toContain("nightwarden-tinyproxy");
     expect(dockerState.proxyInfo).toBeNull();
     const env = sandboxCreateArgs()["Env"] as string[];
     expect(env.some((e) => e.startsWith("HTTP_PROXY="))).toBe(false);
@@ -682,7 +682,7 @@ describe("boot salvage", () => {
     return {
       workspacesDir: salvageDir,
       authHeader: () => Promise.resolve(AUTH_HEADER),
-      commitAuthor: { name: "Nightwatch", email: "noreply@nightwatch.local" },
+      commitAuthor: { name: "NightWarden", email: "noreply@nightwarden.local" },
     };
   }
 
@@ -710,7 +710,7 @@ describe("boot salvage", () => {
     expect(result).toEqual({ pushed: 1, kept: 0 });
     expect(gitState.calls.some((a) => a.includes("commit"))).toBe(true);
     const push = gitState.calls.find((a) => a.includes("push"));
-    expect(push).toContain("nightwatch/fix-oom-12345678");
+    expect(push).toContain("nightwarden/fix-oom-12345678");
     expect(push?.[1]).toBe(`http.extraHeader=Authorization: ${AUTH_HEADER}`);
     expect(existsSync(dir)).toBe(false);
     expect(existsSync(join(salvageDir, "session-dirty.home"))).toBe(false);

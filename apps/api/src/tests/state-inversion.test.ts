@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { NormalizedAlert, RunnerCommandMessage } from "@nightwatch/shared";
+import type { NormalizedAlert, RunnerCommandMessage } from "@nightwarden/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
 // per-turn persistence writes real transcript rows.

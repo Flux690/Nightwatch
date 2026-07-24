@@ -1,4 +1,4 @@
-import type { Report } from "@nightwatch/shared";
+import type { Report } from "@nightwarden/shared";
 import { upsertReport } from "../db/reports.js";
 
 // Satisfies the investigate finish gate for tests that exercise run mechanics

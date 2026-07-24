@@ -5,7 +5,7 @@ import type {
   LokiIntegrationStatus,
   PrometheusIntegrationStatus,
   RunnerRecord,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { Server } from "lucide-react";
 
 import {
@@ -121,7 +121,7 @@ export function IntegrationsRail(): React.JSX.Element {
 
   const rows: IntegrationRow[] = [
     {
-      title: "Nightwatch Runner",
+      title: "NightWarden Runner",
       logo: <Server className="size-5 text-muted-foreground" />,
       // An empty fleet routes straight to the add-server wizard.
       to:

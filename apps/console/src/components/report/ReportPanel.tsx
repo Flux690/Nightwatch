@@ -4,7 +4,7 @@ import type {
   EvidenceItem,
   Report,
   ReportStatus,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 
 // The investigation report artifact rendered in the main area, filling in live

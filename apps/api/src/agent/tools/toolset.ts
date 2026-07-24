@@ -14,7 +14,7 @@ import type {
   ToolExecuteResult,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
-import type { RunMode } from "@nightwatch/shared";
+import type { RunMode } from "@nightwarden/shared";
 
 // A runner tool's schema.name IS the wire command, addressed by its declared
 // route; an api tool's execute IS its implementation - no mapping table.

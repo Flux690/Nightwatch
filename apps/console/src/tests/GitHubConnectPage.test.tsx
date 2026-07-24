@@ -9,7 +9,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus } from "@nightwatch/shared";
+import type { GitHubIntegrationStatus } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { GitHubConnectPage } from "@/pages/GitHubConnectPage";

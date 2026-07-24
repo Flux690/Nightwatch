@@ -32,13 +32,13 @@ describe("buildManifest", () => {
     expect(yaml).not.toContain("}}");
   });
 
-  it("creates the nightwatch namespace", () => {
+  it("creates the nightwarden namespace", () => {
     const yaml = buildManifest(
       "wss://api.example.com/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("kind: Namespace");
-    expect(yaml).toContain("name: nightwatch");
+    expect(yaml).toContain("name: nightwarden");
   });
 
   it("includes a single-replica Deployment", () => {
@@ -103,7 +103,7 @@ describe("buildManifest", () => {
       "wss://api.example.com/clients/connect",
       "nwr_tok",
     );
-    const writeStart = yaml.indexOf("name: nightwatch-runner-write");
+    const writeStart = yaml.indexOf("name: nightwarden-runner-write");
     const writeEnd = yaml.indexOf("---", writeStart);
     const writeRole = yaml.slice(writeStart, writeEnd);
     expect(writeRole).toContain("pods/exec");
@@ -115,25 +115,25 @@ describe("buildManifest", () => {
       "wss://api.example.com/clients/connect",
       "nwr_tok",
     );
-    expect(yaml).toContain("NIGHTWATCH_TOKEN");
+    expect(yaml).toContain("NIGHTWARDEN_TOKEN");
     expect(yaml).toContain("WS_URL");
   });
 
   it("substitutes different values correctly", () => {
-    const wsUrl = "wss://nightwatch.internal:8443/clients/connect";
+    const wsUrl = "wss://nightwarden.internal:8443/clients/connect";
     const token = "nwr_verylongtoken_withspecialchars-123";
     const yaml = buildManifest(wsUrl, token);
     expect(yaml).toContain(wsUrl);
     expect(yaml).toContain(token);
   });
 
-  it("includes NIGHTWATCH_SERVER_NAME when a server name is provided", () => {
+  it("includes NIGHTWARDEN_SERVER_NAME when a server name is provided", () => {
     const yaml = buildManifest(
       "wss://api.example.com/clients/connect",
       "nwr_tok",
       "prod-web-01",
     );
-    expect(yaml).toContain("NIGHTWATCH_SERVER_NAME");
+    expect(yaml).toContain("NIGHTWARDEN_SERVER_NAME");
     expect(yaml).toContain("prod-web-01");
   });
 
@@ -232,14 +232,14 @@ describe("GET /manifest.yaml", () => {
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
-        host: "nightwatch.example.com",
+        host: "nightwarden.example.com",
         "x-forwarded-proto": "https",
       },
     });
-    expect(res.body).toContain("wss://nightwatch.example.com/clients/connect");
+    expect(res.body).toContain("wss://nightwarden.example.com/clients/connect");
   });
 
-  it("manifest contains the runner token as NIGHTWATCH_TOKEN", async () => {
+  it("manifest contains the runner token as NIGHTWARDEN_TOKEN", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/manifest.yaml",
@@ -264,7 +264,7 @@ describe("GET /manifest.yaml", () => {
     expect(res.body).not.toContain("}}");
   });
 
-  it("manifest contains NIGHTWATCH_SERVER_NAME from the token's server name", async () => {
+  it("manifest contains NIGHTWARDEN_SERVER_NAME from the token's server name", async () => {
     const namedToken = generateRunnerToken(
       "named-k8s",
       "prod-cluster",
@@ -278,7 +278,7 @@ describe("GET /manifest.yaml", () => {
         host: "control.example.com",
       },
     });
-    expect(res.body).toContain("NIGHTWATCH_SERVER_NAME");
+    expect(res.body).toContain("NIGHTWARDEN_SERVER_NAME");
     expect(res.body).toContain("prod-cluster");
   });
 });

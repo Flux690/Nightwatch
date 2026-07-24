@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ConsoleEvent, SessionMessage } from "@nightwatch/shared";
+import type { ConsoleEvent, SessionMessage } from "@nightwarden/shared";
 
 import { applyLiveEvent } from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";

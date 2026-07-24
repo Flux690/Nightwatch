@@ -1,4 +1,4 @@
-import type { NormalizedAlert } from "@nightwatch/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 import { isDuplicate } from "./dedup.js";
 import { checkRateLimit } from "./rate-limit.js";
 import { batchWindow } from "./batch-window.js";

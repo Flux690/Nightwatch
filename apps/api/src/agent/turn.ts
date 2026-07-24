@@ -6,7 +6,7 @@ import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence } from "./report.js";
 import { publishToolCallStart, publishToolCallEnd } from "../session/stream.js";
 import type { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
 export interface GatedTool {

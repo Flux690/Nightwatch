@@ -10,7 +10,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
-import type { RunnerRecord } from "@nightwatch/shared";
+import type { RunnerRecord } from "@nightwarden/shared";
 
 import { RunnerServersPage } from "../pages/RunnerServers.js";
 

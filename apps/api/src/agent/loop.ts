@@ -46,7 +46,7 @@ import type {
   RunMode,
   SessionMessage,
   SessionMeta,
-} from "@nightwatch/shared";
+} from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AgentConfig, ReasoningEffort } from "@nightwatch/shared";
+import type { AgentConfig, ReasoningEffort } from "@nightwarden/shared";
 import { X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

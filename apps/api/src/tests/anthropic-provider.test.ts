@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AgentConfig } from "@nightwatch/shared";
+import type { AgentConfig } from "@nightwarden/shared";
 
 const mockFinalMessage = vi.fn();
 const mockAnthropicOn = vi.fn().mockReturnThis();
@@ -66,7 +66,7 @@ describe("AnthropicProvider", () => {
     vi.clearAllMocks();
     mockAnthropicOn.mockReturnThis();
     mockMessagesStream.mockReturnValue(mockAnthropicStream);
-    provider = new AnthropicProvider("You are Nightwatch.", BASE_CONFIG);
+    provider = new AnthropicProvider("You are NightWarden.", BASE_CONFIG);
     provider.start("CPU spike detected.");
   });
 
