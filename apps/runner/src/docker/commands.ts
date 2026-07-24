@@ -1,6 +1,7 @@
 import type Dockerode from "dockerode";
 import {
   deriveDockerServiceIdentity,
+  serviceIdentityKey,
   type DockerRestartResult,
   type ServiceBashInput,
   type ServiceBashResult,
@@ -33,14 +34,19 @@ export async function getContainerList(
 ): Promise<ServiceListResult> {
   const docker = getDocker();
   const raw = await docker.listContainers({ all: true });
+  // Scoped like the manifest (detect.ts): the server env is the caller-added scope,
+  // so a discovered target keys identically to the advertised one.
+  const server = process.env["NIGHTWATCH_SERVER_NAME"];
   const containers = raw.map((c) => {
     const status = c.Status;
     const image = c.Image;
     const name = (c.Names[0] ?? "").replace(/^\//, "");
+    const base = deriveDockerServiceIdentity(c.Labels, name);
+    const identity = server ? { ...base, server } : base;
     return {
       name,
       id: c.Id.slice(0, 12),
-      service: deriveDockerServiceIdentity(c.Labels, name),
+      target: serviceIdentityKey(identity),
       image,
       imageTag: image.includes(":")
         ? (image.split(":")[1] ?? "latest")

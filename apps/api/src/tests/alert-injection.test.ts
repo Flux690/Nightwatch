@@ -104,6 +104,7 @@ function alertmanagerBody(
 function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
   return {
     sourceAlertId,
+    labels: {},
     targetIdentifier: {
       provider: "docker",
       project: "web-01",
@@ -214,11 +215,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate",
               name: "RestartDockerService",
               input: {
-                service: {
-                  provider: "docker",
-                  project: "web-01",
-                  service: "web-01",
-                },
+                target: "docker/web-01/web-01",
                 rationale: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
@@ -269,8 +266,6 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("inbox leftovers when a run ends become new sessions", async () => {
-    const runnerId = generateRunnerToken("inject-leftover").id;
-
     // R1: free-form finish immediately (loop exits before any appendToolResults,
     // so the inbox is never drained by the loop). R2: leftover's new session.
     queueRuns([FINISH], [FINISH]);
@@ -343,11 +338,7 @@ describe("mid-run alert injection (loop seam)", () => {
               id: "tu-gate-resume",
               name: "RestartDockerService",
               input: {
-                service: {
-                  provider: "docker",
-                  project: "web-01",
-                  service: "web-01",
-                },
+                target: "docker/web-01/web-01",
                 rationale: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,

@@ -308,11 +308,7 @@ describe("flat runner registry", () => {
       const settled = sendCommand(
         "GetDockerLogs",
         {
-          service: {
-            provider: "docker",
-            project: "inflight-svc",
-            service: "inflight-svc",
-          },
+          target: "docker/inflight-svc/inflight-svc",
         },
         "service",
       ).catch((err: unknown) => err);
@@ -363,11 +359,7 @@ describe("flat runner registry", () => {
       const settled = sendCommand(
         "GetDockerLogs",
         {
-          service: {
-            provider: "docker",
-            project: "displace-svc",
-            service: "displace-svc",
-          },
+          target: "docker/displace-svc/displace-svc",
         },
         "service",
       ).catch((err: unknown) => err);

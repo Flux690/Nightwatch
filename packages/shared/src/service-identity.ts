@@ -18,26 +18,37 @@ export interface KubernetesServiceIdentity {
 export type ServiceIdentity = DockerServiceIdentity | KubernetesServiceIdentity;
 
 // Compose re-stamps the project/service labels on every recreate, so they outlive the container
-// name/ID across a redeploy; anonymous `docker run` falls back to the live name. Server scope is added by each caller, never read from labels here.
+// name/ID across a redeploy; anonymous `docker run` falls back to the live name. The `container_label_`
+// prefix is cAdvisor's rendering of the same labels. Server scope is added by each caller.
 export function deriveDockerServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
   liveName: string,
 ): DockerServiceIdentity {
-  const project =
-    labels?.["com.docker.compose.project"] ?? labels?.["compose_project"];
-  const service =
-    labels?.["com.docker.compose.service"] ?? labels?.["compose_service"];
+  const project = composeLabel(labels, "project");
+  const service = composeLabel(labels, "service");
 
   return project && service
     ? { provider: "docker", project, service }
     : { provider: "docker", project: liveName, service: liveName };
 }
 
+function composeLabel(
+  labels: Record<string, string | undefined> | undefined,
+  field: "project" | "service",
+): string | undefined {
+  return (
+    labels?.[`com.docker.compose.${field}`] ??
+    labels?.[`compose_${field}`] ??
+    labels?.[`container_label_com_docker_compose_${field}`]
+  );
+}
+
 // Parse an alert's labels into a candidate identity to match against the fleet, never trusted alone.
-// `namespace` (which Docker/Compose alerts never carry) signals which of the two provider shapes it is.
+// `namespace` (which Docker/Compose alerts never carry) signals which of the two provider shapes it is;
+// null means the labels name no service.
 export function deriveServiceIdentity(
   labels: Record<string, string | undefined> | undefined,
-): ServiceIdentity {
+): ServiceIdentity | null {
   const l = labels ?? {};
   const namespace = l["namespace"];
   return typeof namespace === "string"
@@ -47,16 +58,15 @@ export function deriveServiceIdentity(
 
 function deriveDockerAlertIdentity(
   labels: Record<string, string | undefined>,
-): DockerServiceIdentity {
-  // `name` is what cAdvisor sets (the common source for container alerts); the
-  // rest are fallbacks for other alert sources.
-  const liveName =
-    labels["name"] ??
-    labels["container"] ??
-    labels["service"] ??
-    labels["job"] ??
-    "unknown";
-  const base = deriveDockerServiceIdentity(labels, liveName);
+): DockerServiceIdentity | null {
+  // Compose labels name the durable service; else the live container name cAdvisor sets.
+  // No compose labels and no container name means nothing to identify - null, not a guess.
+  const hasCompose =
+    composeLabel(labels, "project") !== undefined &&
+    composeLabel(labels, "service") !== undefined;
+  const liveName = labels["name"] ?? labels["container"];
+  if (!hasCompose && liveName === undefined) return null;
+  const base = deriveDockerServiceIdentity(labels, liveName ?? "unknown");
   // Only the explicit `nw_server` label (the name the runner advertises) scopes the identity.
   // Namespaced because foreign tools own the generic words: postgres_exporter's `server` is a db address.
   const server = labels["nw_server"];
@@ -66,11 +76,12 @@ function deriveDockerAlertIdentity(
 function deriveKubernetesAlertIdentity(
   labels: Record<string, string | undefined>,
   namespace: string,
-): KubernetesServiceIdentity {
-  // Workload comes only from a controller label (the durable handle the manifest advertises); we don't
-  // guess from a pod name since Deployment/StatefulSet pods are indistinguishable by shape - an under-labelled alert is rejected loudly.
+): KubernetesServiceIdentity | null {
+  // Workload comes only from a controller/pod label (we don't strip pod suffixes - Deployment and
+  // StatefulSet pods are indistinguishable by shape). Absent means nothing to identify - null.
   const workload =
-    labels["deployment"] ?? labels["statefulset"] ?? labels["pod"] ?? "unknown";
+    labels["deployment"] ?? labels["statefulset"] ?? labels["pod"];
+  if (workload === undefined) return null;
   const cluster = labels["cluster"];
   return cluster
     ? { provider: "kubernetes", namespace, workload, cluster }

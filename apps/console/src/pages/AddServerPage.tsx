@@ -173,8 +173,6 @@ export function AddServerPage(): React.JSX.Element {
       }),
   });
 
-  const trimmedServerName = serverName.trim();
-
   return (
     <Page>
       <PageHeader>

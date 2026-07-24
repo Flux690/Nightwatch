@@ -1,3 +1,4 @@
+import { displayIdentity } from "../../alerts/resolve-target.js";
 import { decrypt } from "../../config/crypto.js";
 import { proxyDir, workspacesDir } from "../../config/paths.js";
 import { loadConfig } from "../../config/store.js";
@@ -61,7 +62,11 @@ export function branchNameFor(sessionId: string): string {
   const slug =
     alert === null
       ? "chat"
-      : slugify(`${alert.alertType}-${slugTarget(alert.targetIdentifier)}`);
+      : slugify(
+          alert.targetIdentifier
+            ? `${alert.alertType}-${slugTarget(alert.targetIdentifier)}`
+            : alert.alertType,
+        );
   return `nightwatch/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
 
@@ -188,7 +193,7 @@ function composePrBody(
   sections.push(
     alert === null
       ? "## Incident\n\nStarted from a Nightwatch chat session."
-      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Target: ${JSON.stringify(alert.targetIdentifier)}\n- Fired at: ${alert.firedAt}`,
+      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Target: ${displayIdentity(alert)}\n- Fired at: ${alert.firedAt}`,
   );
 
   if (filesChanged.length > 0) {

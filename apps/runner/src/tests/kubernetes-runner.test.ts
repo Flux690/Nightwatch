@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock @kubernetes/client-node at the system boundary. vi.mock is hoisted, so
 // all factories reference only vi.hoisted() values.
@@ -329,13 +329,8 @@ describe("Kubernetes runner command handlers", () => {
 
       expect(result.containers).toHaveLength(2);
       const api = result.containers.find((c) => c.name === "api-server")!;
-      // workload name + cluster: byte-identical to the manifest's identity.
-      expect(api.service).toEqual({
-        provider: "kubernetes",
-        namespace: "production",
-        workload: "api-server",
-        cluster: "test-cluster",
-      });
+      // workload key + cluster scope: byte-identical to the manifest's advertised key.
+      expect(api.target).toBe("kubernetes/test-cluster/production/api-server");
       expect(api.status).toBe("Running");
       expect(api.healthStatus).toBe("healthy");
       const db = result.containers.find((c) => c.name === "db")!;

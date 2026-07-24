@@ -7,13 +7,16 @@ import type { FleetCapabilities } from "./tools/types.js";
 // Run policy: which tools an investigation may use and on which providers, derived
 // from the connected fleet and DB-stored remediation mode; pure reads, recomputed each turn.
 
-// Keyed on the whole fleet, not just the alerting runner - a mixed-fleet run may reach a
-// sibling. Returns undefined (offer everything) when no manifest has arrived yet.
+// Keyed on the whole fleet, not just the alerting runner. No runner connected -> both
+// false (an integration-only session gets no Docker/K8s tools); connected but no manifest
+// yet -> undefined (offer all for the handshake window); manifested -> what they advertise.
 export function currentFleetCapabilities(): FleetCapabilities | undefined {
+  const runners = listRunners();
+  if (runners.length === 0) return { docker: false, kubernetes: false };
   let docker = false;
   let kubernetes = false;
   let anyManifest = false;
-  for (const runner of listRunners()) {
+  for (const runner of runners) {
     if (!runner.manifest) continue;
     anyManifest = true;
     if (runner.manifest.capabilities.docker) docker = true;
@@ -43,7 +46,7 @@ export function targetRemediationDisabled(
 ): string | null {
   let conn: RunnerConnection;
   try {
-    conn = resolveByService(input);
+    conn = resolveByService(input).conn;
   } catch {
     return null;
   }

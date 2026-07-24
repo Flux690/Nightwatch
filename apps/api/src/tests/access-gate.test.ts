@@ -171,11 +171,7 @@ describe("access-gate: gating is driven by tool access level", () => {
             id: "tu-write-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "svc-01",
-                service: "svc-01",
-              },
+              target: "docker/svc-01/svc-01",
               rationale: "service wedged",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -320,11 +316,7 @@ describe("access-gate: gating is driven by tool access level", () => {
             id: "tu-c-write",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "svc-01",
-                service: "svc-01",
-              },
+              target: "docker/svc-01/svc-01",
               rationale: "confirmed by operator",
               risk: "low",
               estimatedDowntimeSeconds: 2,

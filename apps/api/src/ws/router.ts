@@ -2,56 +2,47 @@ import { serviceIdentityKey, type ServiceIdentity } from "@nightwatch/shared";
 import { addressName, manifestedConnections } from "./fleet.js";
 import type { RunnerConnection } from "./fleet.js";
 
-// A tool call's `service` field arrives as unknown JSON (from the LLM, or
-// replayed from a persisted approval); narrow it before trusting its shape.
-function isServiceIdentity(value: unknown): value is ServiceIdentity {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  if (v["provider"] === "docker") {
-    return typeof v["project"] === "string" && typeof v["service"] === "string";
-  }
-  if (v["provider"] === "kubernetes") {
-    return (
-      typeof v["namespace"] === "string" && typeof v["workload"] === "string"
-    );
-  }
-  return false;
-}
-
-// How a runner command is addressed: by service identity, or by server name.
+// How a runner command is addressed: by service target key, or by server name.
 // Declared per tool in the registry, never inferred from input shape.
 export type CommandRoute = "service" | "host";
 
-// Service-routed (validate-and-route): the identity the model echoed
-// must match exactly one advertising runner, or fail loud.
+// The owning runner plus the advertised identity behind a target key, so the
+// transport can expand the flat key back into the structured runner payload.
+export interface ResolvedService {
+  conn: RunnerConnection;
+  identity: ServiceIdentity;
+}
+
+// Service-routed (validate-and-route): the flat target key the model echoed must
+// match exactly one advertising runner, or fail loud.
 export function resolveByService(
   commandInput: Record<string, unknown>,
-): RunnerConnection {
+): ResolvedService {
   const manifested = manifestedConnections();
 
-  const service = isServiceIdentity(commandInput["service"])
-    ? commandInput["service"]
-    : null;
-  if (service === null) {
+  const target =
+    typeof commandInput["target"] === "string" ? commandInput["target"] : null;
+  if (target === null) {
     throw new Error(
-      "This command requires a 'service' identity. Echo it exactly as given in the alert or a prior list result.",
+      "This command requires a 'target' key. Copy it exactly from the FLEET SUMMARY or a list result.",
     );
   }
 
-  const key = serviceIdentityKey(service);
-  const owners = manifested.filter((conn) =>
-    conn.manifest?.capabilities.services.some(
-      (s) => serviceIdentityKey(s.identity) === key,
-    ),
-  );
+  const owners: ResolvedService[] = [];
+  for (const conn of manifested) {
+    const match = conn.manifest?.capabilities.services.find(
+      (s) => serviceIdentityKey(s.identity) === target,
+    );
+    if (match) owners.push({ conn, identity: match.identity });
+  }
 
   const [owner] = owners;
   if (owners.length === 1 && owner) return owner;
 
   if (owners.length > 1) {
-    const servers = owners.map((c) => addressName(c)).filter(Boolean);
+    const servers = owners.map((o) => addressName(o.conn)).filter(Boolean);
     throw new Error(
-      `Ambiguous service '${key}': advertised by more than one runner (${servers.join(", ")}). Add a server/cluster dimension to disambiguate.`,
+      `Ambiguous target '${target}': advertised by more than one runner (${servers.join(", ")}). Add a server/cluster dimension to disambiguate.`,
     );
   }
 
@@ -60,7 +51,7 @@ export function resolveByService(
     .map((s) => serviceIdentityKey(s.identity))
     .join(", ");
   throw new Error(
-    `No runner has service '${key}'. Known services: ${known || "none"}`,
+    `No runner has target '${target}'. Known targets: ${known || "none"}`,
   );
 }
 

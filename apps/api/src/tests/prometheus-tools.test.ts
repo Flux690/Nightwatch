@@ -12,6 +12,7 @@ const FIRED_AT = "2026-07-16T12:00:00.000Z";
 
 const ALERT: NormalizedAlert = {
   sourceAlertId: "alert-1",
+  labels: {},
   targetIdentifier: { provider: "docker", project: "shop", service: "api" },
   alertType: "OOMKill",
   severity: "critical",

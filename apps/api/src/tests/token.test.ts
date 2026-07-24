@@ -13,7 +13,6 @@ import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
 import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
-import { waitFor } from "./wait.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");

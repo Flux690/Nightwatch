@@ -20,7 +20,6 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 const setScript = (turns: ScriptedTurn[]): void =>
   scriptRunner.setScript(turns);
 
-import { generateRunnerToken } from "../db/runner.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
@@ -33,20 +32,16 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../agent/context.js";
-import { registerRunner, unregisterRunner } from "../ws/fleet.js";
-import { resolveCommand } from "../ws/command-transport.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
-  let TEST_TOKEN: string;
   let SESSION: string;
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("state-inversion").id;
 
     server = Fastify({ logger: false, forceCloseConnections: true });
     await registerConsoleEventRoutes(server);
@@ -179,6 +174,7 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
   it("does not inject past incident history into the opening alert context", async () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
+      labels: {},
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

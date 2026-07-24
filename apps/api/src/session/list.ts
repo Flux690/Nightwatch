@@ -35,7 +35,7 @@ export function listSessionRows(): SessionListRow[] {
       investigation,
       severity: source.originatingAlert?.severity ?? null,
       target:
-        source.originatingAlert !== null
+        source.originatingAlert?.targetIdentifier != null
           ? serviceIdentityKey(source.originatingAlert.targetIdentifier)
           : null,
       status: investigation ? deriveStatus(source, pendingSessions) : null,

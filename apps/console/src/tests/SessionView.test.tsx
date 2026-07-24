@@ -227,7 +227,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            input: { service: "nginx" },
+            input: { target: "nginx" },
           },
         });
       });
@@ -255,7 +255,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            input: { service: "nginx" },
+            input: { target: "nginx" },
           },
         });
       });
@@ -301,7 +301,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            input: { service: "nginx" },
+            input: { target: "nginx" },
           },
         });
         MockEventSource.latest?.push({
@@ -552,7 +552,7 @@ describe("SessionView", () => {
             sessionId: "s1",
             toolUseId: "tu-1",
             toolName: "check_service_status",
-            input: { service: "nginx" },
+            input: { target: "nginx" },
           },
         });
       });
@@ -652,11 +652,7 @@ describe("SessionView", () => {
             toolUseId: "tu-gated",
             toolName: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               risk: "high",
             },
             incidentId: "inc-1",
@@ -785,11 +781,7 @@ describe("SessionView", () => {
             toolUseId: "tu-durable",
             toolName: "RestartDockerService",
             toolInput: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               risk: "high",
             },
             kind: "approval",
@@ -850,11 +842,7 @@ describe("SessionView", () => {
             toolUseId: "tu-durable",
             toolName: "RestartDockerService",
             toolInput: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               risk: "high",
             },
             kind: "approval",

@@ -4,7 +4,6 @@ import type { RemediationActionRecord } from "@nightwatch/shared";
 import { ExternalLink, ScrollText } from "lucide-react";
 import { matchesScope, type AuditScope } from "@/components/layout/AuditRail";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Page,
   PageHeader,

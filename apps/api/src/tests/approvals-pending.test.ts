@@ -46,7 +46,6 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
   let port: number;
   let cleanupDb: () => void;
   let SESSION: string;
-  const RUNNER_ID = "runner-pend-022";
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
@@ -89,11 +88,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-qa-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -166,11 +161,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-sc-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,
@@ -246,11 +237,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
             id: `tu-emp-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "r",
               risk: "low",
               estimatedDowntimeSeconds: 1,

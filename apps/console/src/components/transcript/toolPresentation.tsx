@@ -17,14 +17,13 @@ function inputString(
   return typeof value === "string" ? value : null;
 }
 
-// Human target for fleet tools: the service identity's name, or the server.
+// Human target for fleet tools: the service/workload segment of the target key,
+// or the server name for host tools.
 function targetOf(input: Record<string, unknown>): string | null {
-  const service = input["service"];
-  if (typeof service === "string") return service;
-  if (typeof service === "object" && service !== null) {
-    const s = service as Record<string, unknown>;
-    const name = s["service"] ?? s["workload"];
-    if (typeof name === "string") return name;
+  const target = input["target"];
+  if (typeof target === "string") {
+    const parts = target.split("/");
+    return parts[parts.length - 1] ?? target;
   }
   return inputString(input, "server");
 }

@@ -1,24 +1,11 @@
 import type { Tool } from "./types.js";
 
-// Echo the identity exactly as given in the alert or a prior ListDockerServices
-// result - do not guess. provider is a single-value enum so the wire payload
-// still carries the discriminant the runner dispatches on.
-const DOCKER_SERVICE_IDENTITY_SCHEMA = {
-  type: "object",
-  properties: {
-    provider: { type: "string", enum: ["docker"] },
-    project: {
-      type: "string",
-      description:
-        "Compose project name (or the container's own name if it has no Compose labels).",
-    },
-    service: {
-      type: "string",
-      description:
-        "Compose service name (or the container's own name if it has no Compose labels).",
-    },
-  },
-  required: ["provider", "project", "service"],
+// The service's target key, copied verbatim from the FLEET SUMMARY or a list
+// result - never assembled by hand. The API expands it to the structured identity.
+const TARGET_PROPERTY = {
+  type: "string",
+  description:
+    "The service's target key, copied exactly from the FLEET SUMMARY or a ListDockerServices result (e.g. docker/web/api).",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -57,7 +44,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
           tailLines: {
             type: "number",
             description:
@@ -70,7 +57,7 @@ export const DOCKER_TOOLS: Tool[] = [
           },
           stderrOnly: { type: "boolean" },
         },
-        required: ["service"],
+        required: ["target"],
       },
     },
     access: "read",
@@ -84,8 +71,8 @@ export const DOCKER_TOOLS: Tool[] = [
         "Get a Docker service's configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
-        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -99,8 +86,8 @@ export const DOCKER_TOOLS: Tool[] = [
         "Get real-time resource usage for a Docker service: CPU %, memory used/limit/%, network I/O, and block I/O.",
       input_schema: {
         type: "object",
-        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -115,13 +102,13 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
           },
         },
-        required: ["service"],
+        required: ["target"],
       },
     },
     access: "read",
@@ -135,8 +122,8 @@ export const DOCKER_TOOLS: Tool[] = [
         "List processes running inside a Docker service (like docker top).",
       input_schema: {
         type: "object",
-        properties: { service: DOCKER_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -291,7 +278,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
           delaySeconds: {
             type: "number",
             description: "Delay before restart (default 0).",
@@ -306,7 +293,7 @@ export const DOCKER_TOOLS: Tool[] = [
           },
           estimatedDowntimeSeconds: { type: "number" },
         },
-        required: ["service", "rationale", "risk", "estimatedDowntimeSeconds"],
+        required: ["target", "rationale", "risk", "estimatedDowntimeSeconds"],
       },
     },
     access: "write",
@@ -321,7 +308,7 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: DOCKER_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
           command: {
             type: "array",
             items: { type: "string" },
@@ -330,7 +317,7 @@ export const DOCKER_TOOLS: Tool[] = [
           reason: { type: "string" },
           risk: { type: "string", enum: ["low", "medium", "high"] },
         },
-        required: ["service", "command", "reason", "risk"],
+        required: ["target", "command", "reason", "risk"],
       },
     },
     access: "write",

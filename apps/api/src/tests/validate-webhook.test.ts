@@ -100,18 +100,12 @@ describe("POST /alerts/validate", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
       alerts: Array<{
-        identity: unknown;
         identityKey: string;
         advertisedOn: string[];
         exactMatch: boolean;
       }>;
     };
     expect(body.alerts).toHaveLength(1);
-    expect(body.alerts[0]!.identity).toEqual({
-      provider: "docker",
-      project: "web-01",
-      service: "web-01",
-    });
     expect(body.alerts[0]!.identityKey).toBe("docker/web-01/web-01");
     expect(body.alerts[0]!.advertisedOn).toEqual(["host-a"]);
     expect(body.alerts[0]!.exactMatch).toBe(true);
@@ -152,17 +146,11 @@ describe("POST /alerts/validate", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
       alerts: Array<{
-        identity: unknown;
         identityKey: string;
         advertisedOn: string[];
         exactMatch: boolean;
       }>;
     };
-    expect(body.alerts[0]!.identity).toEqual({
-      provider: "kubernetes",
-      namespace: "production",
-      workload: "api-server",
-    });
     expect(body.alerts[0]!.identityKey).toBe(
       "kubernetes/production/api-server",
     );

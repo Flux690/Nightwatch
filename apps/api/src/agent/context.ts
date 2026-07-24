@@ -12,6 +12,7 @@ import {
 } from "./prompts/system.js";
 import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
+import { resolveAgainstFleet } from "../alerts/resolve-target.js";
 
 export interface InitialContext {
   systemPrompt: string;
@@ -64,11 +65,14 @@ export function buildInitialContext(
     return buildChatContext(remediationEnabled, fleetView, opts, "investigate");
   }
 
+  const fleet = fleetView ?? [];
   const alertsSection =
     alerts.length === 1
-      ? formatAlert(alerts[0]!)
+      ? formatAlert(alerts[0]!, fleet)
       : `BATCHED ALERTS — ${alerts.length} correlated alerts\n\n` +
-        alerts.map((a, i) => `Alert ${i + 1}:\n${formatAlert(a)}`).join("\n\n");
+        alerts
+          .map((a, i) => `Alert ${i + 1}:\n${formatAlert(a, fleet)}`)
+          .join("\n\n");
 
   const fleetSection = buildFleetSummary(fleetView);
 
@@ -98,12 +102,23 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }
 
-function formatAlert(alert: NormalizedAlert): string {
-  // JSON, not a rendered string: the model echoes this object verbatim into the `service`
-  // parameter of any tool call against this target - it never reconstructs an identity.
+// Resolve the alert's candidate identity against the fleet: a resolved target names the key
+// to act on; ambiguous/unresolved hand the agent the raw labels to match itself, never a guess.
+function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
+  const resolution = resolveAgainstFleet(alert.targetIdentifier, fleet);
+  const targetLine =
+    resolution.kind === "resolved"
+      ? resolution.key
+      : resolution.kind === "ambiguous"
+        ? `ambiguous — "${resolution.key}" runs on ${resolution.servers.join(", ")}; identify which server before acting`
+        : "unidentified — match the labels below to a known service, or use a list tool";
+  const labels = Object.entries(alert.labels)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+  const labelLine = labels ? `\nLabels:       ${labels}` : "";
   return `Alert ID:     ${alert.sourceAlertId}
-Target:       ${JSON.stringify(alert.targetIdentifier)}
+Target:       ${targetLine}
 Alert type:   ${alert.alertType}
 Severity:     ${alert.severity}
-Fired at:     ${alert.firedAt}`;
+Fired at:     ${alert.firedAt}${labelLine}`;
 }

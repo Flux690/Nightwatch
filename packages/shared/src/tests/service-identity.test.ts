@@ -138,6 +138,31 @@ describe("deriveServiceIdentity", () => {
         service: "postgres",
       });
     });
+
+    it("reads cAdvisor's container_label_ compose labels", () => {
+      const identity = deriveServiceIdentity({
+        alertname: "ContainerHighMemory",
+        name: "clipper_cache_1",
+        job: "cadvisor",
+        container_label_com_docker_compose_project: "clipper",
+        container_label_com_docker_compose_service: "cache",
+      });
+      expect(identity).toEqual({
+        provider: "docker",
+        project: "clipper",
+        service: "cache",
+      });
+    });
+
+    it("returns null when nothing identifies the service (no compose labels, no name)", () => {
+      expect(
+        deriveServiceIdentity({
+          alertname: "SomethingBroke",
+          job: "cadvisor",
+          instance: "10.0.0.4:8080",
+        }),
+      ).toBeNull();
+    });
   });
 
   describe("Kubernetes alert labels", () => {
@@ -196,6 +221,15 @@ describe("deriveServiceIdentity", () => {
         workload: "myapp-7f8b9c-x4k2",
       });
     });
+
+    it("returns null when a namespaced alert names no workload", () => {
+      expect(
+        deriveServiceIdentity({
+          alertname: "NamespaceQuotaExceeded",
+          namespace: "production",
+        }),
+      ).toBeNull();
+    });
   });
 });
 
@@ -218,7 +252,7 @@ describe("assigned-name round-trip: manifest key === alert-derived key", () => {
         "com.docker.compose.project": "myapp",
         "com.docker.compose.service": "api",
         nw_server: assignedName,
-      }),
+      })!,
     );
 
     expect(alertKey).toBe(manifestKey);
@@ -240,7 +274,7 @@ describe("assigned-name round-trip: manifest key === alert-derived key", () => {
         namespace: "production",
         deployment: "api-server",
         cluster: assignedName,
-      }),
+      })!,
     );
 
     expect(alertKey).toBe(manifestKey);

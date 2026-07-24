@@ -38,9 +38,9 @@ import {
   buildAlertTitleSource,
 } from "../session/title.js";
 import { dispatcher } from "../dispatcher.js";
+import { displayIdentity } from "../alerts/resolve-target.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
-import { serviceIdentityKey } from "@nightwatch/shared";
 import type {
   NormalizedAlert,
   RunMode,
@@ -94,7 +94,7 @@ function buildSessionMeta(
   alert: NormalizedAlert | null,
   userMessage: string | undefined,
 ): SessionMeta {
-  const target = alert ? serviceIdentityKey(alert.targetIdentifier) : "chat";
+  const target = alert ? displayIdentity(alert) : "chat";
   return {
     sessionId,
     title:

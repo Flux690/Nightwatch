@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { CircleCheckIcon, ExternalLink, RefreshCw } from "lucide-react";
 import type {
   GitHubErrorBody,
@@ -26,7 +26,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { expiryDaysFrom } from "@/hooks/useGitHubExpiryDays";
-import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
+import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 

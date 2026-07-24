@@ -48,6 +48,7 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
     parsed.push({
       sourceAlertId: fingerprint,
       targetIdentifier: deriveServiceIdentity(labels),
+      labels,
       alertType: labels["alertname"] ?? "unknown",
       severity: normalizeSeverity(labels["severity"]),
       firedAt,

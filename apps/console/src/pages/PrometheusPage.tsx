@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import type {
   PrometheusIntegrationStatus,
   PrometheusLabelValidation,
@@ -15,7 +15,6 @@ import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import { ICON_INLINE } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
 

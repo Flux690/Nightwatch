@@ -22,6 +22,11 @@ function svc(name: string): {
   return { provider: "docker", project: name, service: name };
 }
 
+// The flat target key svc(name) advertises: docker/<project>/<service>.
+function key(name: string): string {
+  return `docker/${name}/${name}`;
+}
+
 function makeManifest(
   hostname: string,
   containers: string[],
@@ -105,7 +110,7 @@ describe("router", () => {
     const a = connect("web-01", ["nginx"]);
     const b = connect("db-02", ["postgres"]);
 
-    await sendCommand("GetDockerLogs", { service: svc("postgres") }, "service");
+    await sendCommand("GetDockerLogs", { target: key("postgres") }, "service");
 
     expect(b.commands).toHaveLength(1);
     expect(a.commands).toHaveLength(0);
@@ -115,8 +120,8 @@ describe("router", () => {
     connect("web-01", ["nginx"]);
 
     expect(() =>
-      sendCommand("GetDockerLogs", { service: svc("ghost") }, "service"),
-    ).toThrow(/No runner has service/);
+      sendCommand("GetDockerLogs", { target: key("ghost") }, "service"),
+    ).toThrow(/No runner has target/);
   });
 
   it("rejects a command targeting a service identity advertised by more than one runner, rather than silently picking one", () => {
@@ -124,15 +129,15 @@ describe("router", () => {
     connect("web-02", ["nginx"]);
 
     expect(() =>
-      sendCommand("GetDockerLogs", { service: svc("nginx") }, "service"),
-    ).toThrow(/Ambiguous service/);
+      sendCommand("GetDockerLogs", { target: key("nginx") }, "service"),
+    ).toThrow(/Ambiguous target/);
   });
 
   it("rejects a service-routed command that carries no service identity", () => {
     connect("web-01", ["nginx"]);
 
     expect(() => sendCommand("GetDockerLogs", {}, "service")).toThrow(
-      /requires a 'service' identity/,
+      /requires a 'target' key/,
     );
   });
 

@@ -1,6 +1,6 @@
 import {
   countExecutedRemediations,
-  serviceIdentityKeyFromInput,
+  targetKeyFromInput,
 } from "../db/remediation-actions.js";
 import type { AgentConfig } from "@nightwatch/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
@@ -11,7 +11,7 @@ export function circuitBreakerRejection(
   tool: ToolUse,
   config: AgentConfig,
 ): ToolResult | null {
-  const key = serviceIdentityKeyFromInput(tool.input);
+  const key = targetKeyFromInput(tool.input);
   if (key === null) return null;
   const since = new Date(
     Date.now() - config.remediationBreakerWindowMs,

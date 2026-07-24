@@ -20,16 +20,14 @@ export function createBatchWindow(opts: {
   // Single operator-wide pending list: alerts from any runner batch together so
   // the agent can judge shared root cause across servers.
   let pending: NormalizedAlert[] | null = null;
-  let timer: ReturnType<typeof setTimeout> | null = null;
 
   return {
     add(alert: NormalizedAlert): void {
       if (pending === null) {
         pending = [alert];
-        timer = setTimeout(() => {
+        setTimeout(() => {
           const batch = pending!;
           pending = null;
-          timer = null;
           onBatch(batch);
         }, windowMs);
       } else {

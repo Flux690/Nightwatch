@@ -232,7 +232,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-1",
             name: "GetDockerLogs",
-            input: { service: svc("postgres") },
+            input: { target: "docker/postgres/postgres" },
           },
         ],
       },
@@ -254,7 +254,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-2",
             name: "GetDockerStats",
-            input: { service: svc("nginx") },
+            input: { target: "docker/nginx/nginx" },
           },
         ],
       },
@@ -276,7 +276,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-3",
             name: "GetDockerLogs",
-            input: { service: svc("ghost-svc") },
+            input: { target: "docker/ghost-svc/ghost-svc" },
           },
         ],
       },
@@ -354,7 +354,7 @@ describe("multi-runner routing", () => {
             id: "tu-restart",
             name: "RestartDockerService",
             input: {
-              service: svc("postgres"),
+              target: "docker/postgres/postgres",
               rationale: "OOM killed",
               risk: "low",
               estimatedDowntimeSeconds: 5,
@@ -379,7 +379,7 @@ describe("multi-runner routing", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     // Wait for the approval interrupt — RestartDockerService is a gated tool.
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -428,7 +428,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-cross",
             name: "GetDockerLogs",
-            input: { service: svc("redis") },
+            input: { target: "docker/redis/redis" },
           },
         ],
       },
@@ -451,7 +451,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-k8s",
             name: "GetK8sLogs",
-            input: { service: k8sSvc("api-server", "production") },
+            input: { target: "kubernetes/production/api-server" },
           },
         ],
       },
@@ -556,7 +556,7 @@ describe("assigned-name server-scoped routing", () => {
           {
             id: "tu-scoped-1",
             name: "GetDockerLogs",
-            input: { service: scopedSvc("api", "prod-server-01") },
+            input: { target: "docker/prod-server-01/api/api" },
           },
         ],
       },
@@ -578,7 +578,7 @@ describe("assigned-name server-scoped routing", () => {
           {
             id: "tu-scoped-2",
             name: "GetDockerLogs",
-            input: { service: scopedSvc("db", "prod-server-02") },
+            input: { target: "docker/prod-server-02/db/db" },
           },
         ],
       },
@@ -602,7 +602,7 @@ describe("assigned-name server-scoped routing", () => {
           {
             id: "tu-scoped-3",
             name: "GetDockerLogs",
-            input: { service: scopedSvc("api", "prod-server-02") },
+            input: { target: "docker/prod-server-02/api/api" },
           },
         ],
       },

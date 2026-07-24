@@ -63,6 +63,7 @@ function dockerManifest(
 function makeAlert(service: string): NormalizedAlert {
   return {
     sourceAlertId: `alert-${randomUUID()}`,
+    labels: {},
     targetIdentifier: { provider: "docker", project: service, service },
     alertType: "HighCPU",
     severity: "warning",

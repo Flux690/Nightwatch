@@ -4,7 +4,6 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,14 +34,7 @@ import {
 } from "../sandbox/workspace.js";
 import { salvageWorkspaces } from "../sandbox/salvage.js";
 import { reapOrphans, resetIsolationCache } from "../sandbox/docker.js";
-import { preflight } from "../sandbox/preflight.js";
-import { resolveRepoPath, assertContained } from "../sandbox/paths.js";
-import { capOutput } from "../sandbox/output.js";
-import {
-  GitOperationError,
-  PathEscapeError,
-  SandboxUnavailableError,
-} from "../sandbox/errors.js";
+import { SandboxUnavailableError } from "../sandbox/errors.js";
 import { waitFor } from "./wait.js";
 
 const AUTH_HEADER = "Basic c2VjcmV0dG9rZW4=";

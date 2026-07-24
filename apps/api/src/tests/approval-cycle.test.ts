@@ -139,11 +139,7 @@ describe("durable approval interrupts", () => {
             id: "tu-sus-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -210,11 +206,7 @@ describe("durable approval interrupts", () => {
             id: "tu-apr-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -237,7 +229,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -292,11 +284,7 @@ describe("durable approval interrupts", () => {
             id: "tu-rej-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -319,7 +307,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -366,11 +354,7 @@ describe("durable approval interrupts", () => {
             id: "tu-ctx-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -393,7 +377,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -436,11 +420,7 @@ describe("durable approval interrupts", () => {
             id: "tu-409-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -463,7 +443,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -510,11 +490,7 @@ describe("durable approval interrupts", () => {
             id: "tu-h4-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "concurrent",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -590,11 +566,7 @@ describe("durable approval interrupts", () => {
             id: "tu-busy-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -661,11 +633,7 @@ describe("durable approval interrupts", () => {
             id: "tu-val-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "validation",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -732,11 +700,7 @@ describe("durable approval interrupts", () => {
             id: "tu-rr-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -759,7 +723,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -811,11 +775,7 @@ describe("durable approval interrupts", () => {
             id: "tu-mix-gate",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -838,7 +798,7 @@ describe("durable approval interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -882,6 +842,7 @@ describe("durable approval interrupts", () => {
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
+      labels: {},
       targetIdentifier: {
         provider: "docker",
         project: "web-01",
@@ -901,11 +862,7 @@ describe("durable approval interrupts", () => {
             id: `tu-crit-${randomUUID()}`,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "critical",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -969,11 +926,7 @@ describe("durable approval interrupts", () => {
             id: "tu-notmo-1",
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,

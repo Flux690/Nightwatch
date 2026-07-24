@@ -27,6 +27,7 @@ import { useTempDb } from "./temp-db.js";
 function alert(sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
+    labels: {},
     targetIdentifier: {
       provider: "docker",
       project: "web-01",

@@ -12,7 +12,8 @@ export interface ServiceListInput {
 export interface ServiceInstance {
   name: string;
   id: string;
-  service: ServiceIdentity;
+  // Flat identity key the agent echoes into a tool's `target` (serviceIdentityKey).
+  target: string;
   image: string;
   imageTag: string;
   status: string;

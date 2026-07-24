@@ -203,7 +203,7 @@ function pickSeries(
   alert: NormalizedAlert | null,
 ): PrometheusSeries {
   const first = series[0]!;
-  if (alert === null) return first;
+  if (alert === null || alert.targetIdentifier === null) return first;
   const tokens = serviceIdentityKey(alert.targetIdentifier)
     .split(/[^a-zA-Z0-9-]+/)
     .filter((t) => t.length > 2);

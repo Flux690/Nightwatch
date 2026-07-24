@@ -121,11 +121,7 @@ describe("remediation action record", () => {
             id: toolUseId,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "svc-01",
-                service: "api",
-              },
+              target: "docker/svc-01/api",
               rationale: "crash loop",
               risk: "low",
               estimatedDowntimeSeconds: 3,
@@ -200,11 +196,7 @@ describe("remediation action record", () => {
             id: toolUseId,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "svc-01",
-                service: "api",
-              },
+              target: "docker/svc-01/api",
               rationale: "crash loop",
               risk: "high",
               estimatedDowntimeSeconds: 5,
@@ -288,7 +280,7 @@ describe("remediation action record", () => {
       kind: "approval",
       toolName: "RestartDockerService",
       toolInput: {
-        service: { provider: "docker", project: "svc-01", service: "api" },
+        target: "docker/svc-01/api",
         rationale: "wedged",
         risk: "low",
         estimatedDowntimeSeconds: 2,
@@ -359,7 +351,7 @@ describe("remediation action record", () => {
       sessionId,
       toolName: "RestartDockerService",
       input: {
-        service: { provider: "docker", project: "svc-01", service: "api" },
+        target: "docker/svc-01/api",
         rationale: "crash",
         risk: "low",
         estimatedDowntimeSeconds: 2,
@@ -400,7 +392,7 @@ describe("remediation action record", () => {
       toolUseId,
       toolName: "RestartDockerService",
       input: {
-        service: { provider: "docker", project: "svc-01", service: "api" },
+        target: "docker/svc-01/api",
         rationale: "cross-session test",
         risk: "low",
         estimatedDowntimeSeconds: 2,

@@ -99,7 +99,7 @@ describe("remediation circuit breaker", () => {
   let conn: RunnerConnection;
   const executedCommands: string[] = [];
 
-  function restartWrite(service: Record<string, unknown>): ScriptedTurn {
+  function restartWrite(target: string): ScriptedTurn {
     return {
       text: "Restarting service.",
       toolUses: [
@@ -107,7 +107,7 @@ describe("remediation circuit breaker", () => {
           id: `tu-${randomUUID()}`,
           name: "RestartDockerService",
           input: {
-            service,
+            target,
             rationale: "crash loop",
             risk: "low",
             estimatedDowntimeSeconds: 2,
@@ -269,7 +269,7 @@ describe("remediation circuit breaker", () => {
   });
 
   it("refuses a write past the limit with a corrective tool_result and raises no approval card", async () => {
-    const service = { provider: "docker", project: "svc-01", service: "api" };
+    const target = "docker/svc-01/api";
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/api",
       toolName: "RestartDockerService",
@@ -277,14 +277,14 @@ describe("remediation circuit breaker", () => {
       count: DEFAULT_LIMIT,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectBreakerRefused(sessionId, events);
   });
 
   it("suspends for approval when writes are under the limit", async () => {
-    const service = { provider: "docker", project: "svc-01", service: "web" };
+    const target = "docker/svc-01/web";
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/web",
       toolName: "RestartDockerService",
@@ -292,14 +292,14 @@ describe("remediation circuit breaker", () => {
       count: DEFAULT_LIMIT - 1,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectApprovalThenReject(sessionId, events);
   });
 
   it("does not count failed writes toward the limit (a transient failure must not lock out retries)", async () => {
-    const service = { provider: "docker", project: "svc-01", service: "cache" };
+    const target = "docker/svc-01/cache";
     // None of these failed writes actually landed, so the breaker must not trip - a runner blip
     // can't burn the budget and block a retry of an action that never ran.
     seedRemediations({
@@ -309,14 +309,14 @@ describe("remediation circuit breaker", () => {
       count: DEFAULT_LIMIT,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectApprovalThenReject(sessionId, events);
   });
 
   it("ignores rejected and still-executing rows when counting", async () => {
-    const service = { provider: "docker", project: "svc-01", service: "queue" };
+    const target = "docker/svc-01/queue";
     // Far past the limit, but none are landed writes: a rejection never ran and
     // an 'executing' row is a crash with unknown outcome.
     seedRemediations({
@@ -332,7 +332,7 @@ describe("remediation circuit breaker", () => {
       count: DEFAULT_LIMIT * 2,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectApprovalThenReject(sessionId, events);
@@ -354,12 +354,8 @@ describe("remediation circuit breaker", () => {
       count: DEFAULT_LIMIT,
     });
 
-    const service = {
-      provider: "docker",
-      project: "svc-01",
-      service: "worker",
-    };
-    setScript([restartWrite(service), FINISH_TURN]);
+    const target = "docker/svc-01/worker";
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectApprovalThenReject(sessionId, events);
@@ -367,7 +363,7 @@ describe("remediation circuit breaker", () => {
 
   it("honours a configured threshold lower than the default", async () => {
     updateConfig({ remediationBreakerLimit: 2 });
-    const service = { provider: "docker", project: "svc-01", service: "db" };
+    const target = "docker/svc-01/db";
     seedRemediations({
       serviceIdentityKey: "docker/svc-01/db",
       toolName: "RestartDockerService",
@@ -375,14 +371,14 @@ describe("remediation circuit breaker", () => {
       count: 2,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectBreakerRefused(sessionId, events);
   });
 
   it("only counts writes inside the configured window", async () => {
-    const service = { provider: "docker", project: "svc-01", service: "mail" };
+    const target = "docker/svc-01/mail";
     const beforeWindow = new Date(
       Date.now() - (DEFAULT_WINDOW_MS + 60_000),
     ).toISOString();
@@ -395,7 +391,7 @@ describe("remediation circuit breaker", () => {
       createdAt: beforeWindow,
     });
 
-    setScript([restartWrite(service), FINISH_TURN]);
+    setScript([restartWrite(target), FINISH_TURN]);
     const { sessionId, events } = await runChat();
 
     await expectApprovalThenReject(sessionId, events);

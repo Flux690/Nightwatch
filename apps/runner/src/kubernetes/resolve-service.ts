@@ -105,7 +105,7 @@ export async function resolveWorkload(
   if (choice.kind === "ambiguous") {
     return notRunningResult(
       identity,
-      `Pod ${podName} has multiple containers (${choice.available.join(", ")}); set the service's "container" field to choose one.`,
+      `Pod ${podName} has multiple containers (${choice.available.join(", ")}); set the "container" field to choose one.`,
     );
   }
   if (choice.kind === "not-found") {

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { serviceIdentityKey } from "@nightwatch/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
+import { resolveAgainstFleet } from "./resolve-target.js";
 import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
@@ -97,22 +98,27 @@ export async function registerAlertRoutes(
 
       const fleet = getFleetView();
       const alerts = parsed.map((p) => {
-        const key = serviceIdentityKey(p.targetIdentifier);
-        const advertisedOn = fleet
-          .filter((r) =>
-            r.services.some((s) => serviceIdentityKey(s.identity) === key),
-          )
-          .map((r) => r.serverName ?? r.hostname);
-
+        // Advisory: the same scope-tolerant resolution the investigation uses,
+        // so setup shows exactly what routing will do with this alert's labels.
+        const resolution = resolveAgainstFleet(p.targetIdentifier, fleet);
+        const advertisedOn =
+          resolution.kind === "resolved"
+            ? fleet
+                .filter((r) =>
+                  r.services.some(
+                    (s) => serviceIdentityKey(s.identity) === resolution.key,
+                  ),
+                )
+                .map((r) => r.serverName ?? r.hostname)
+                .filter((n): n is string => n !== null)
+            : resolution.kind === "ambiguous"
+              ? resolution.servers
+              : [];
         return {
           sourceAlertId: p.sourceAlertId,
-          identity: p.targetIdentifier,
-          identityKey: key,
-          alertType: p.alertType,
-          severity: p.severity,
-          // Advisory fleet match: exact-identity owners of this alert's target.
+          identityKey: resolution.key ?? "unidentified",
           advertisedOn,
-          exactMatch: advertisedOn.length === 1,
+          exactMatch: resolution.kind === "resolved",
         };
       });
 

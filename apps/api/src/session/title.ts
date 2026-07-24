@@ -1,5 +1,5 @@
 import type { AgentConfig, NormalizedAlert } from "@nightwatch/shared";
-import { serviceIdentityKey } from "@nightwatch/shared";
+import { displayIdentity } from "../alerts/resolve-target.js";
 import { createTitleProvider } from "../llm/factory.js";
 import { updateSessionTitle } from "../db/sessions.js";
 import { publishSessionTitleUpdated } from "./stream.js";
@@ -13,10 +13,7 @@ const MAX_ALERTS_IN_SOURCE = 10;
 export function buildAlertTitleSource(alerts: NormalizedAlert[]): string {
   return alerts
     .slice(0, MAX_ALERTS_IN_SOURCE)
-    .map(
-      (a) =>
-        `[${a.alertType}] ${serviceIdentityKey(a.targetIdentifier)} (${a.severity})`,
-    )
+    .map((a) => `[${a.alertType}] ${displayIdentity(a)} (${a.severity})`)
     .join("\n");
 }
 

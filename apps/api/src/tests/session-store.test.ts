@@ -49,6 +49,7 @@ function msg(
 
 const alert: NormalizedAlert = {
   sourceAlertId: "src-1",
+  labels: {},
   targetIdentifier: {
     provider: "docker",
     project: "web-01",
@@ -193,7 +194,7 @@ describe("API-local session store", () => {
       sessionId: m.sessionId,
       toolName: "RestartDockerService",
       input: {
-        service: { provider: "docker", project: "web", service: "web" },
+        target: "docker/web/web",
       },
       resolvedBy: "console",
     });

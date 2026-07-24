@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Mock dockerode at the system boundary (Docker Engine API).
 // vi.mock is hoisted, so the factory must reference only vi.hoisted() values.

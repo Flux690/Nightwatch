@@ -186,11 +186,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
             id: toolUseId,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
             },
           },
         ],
@@ -210,6 +206,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const sessionId = randomUUID();
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
+      labels: {},
       targetIdentifier: {
         provider: "docker",
         project: "web-01",

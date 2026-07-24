@@ -1,28 +1,19 @@
 import type { Tool } from "./types.js";
 
-// Echo the identity exactly as given in the alert or a prior ListK8sWorkloads
-// result - do not guess. provider is a single-value enum so the wire payload
-// still carries the discriminant the runner dispatches on.
-const K8S_SERVICE_IDENTITY_SCHEMA = {
-  type: "object",
-  properties: {
-    provider: { type: "string", enum: ["kubernetes"] },
-    namespace: {
-      type: "string",
-      description: "Kubernetes namespace the workload runs in.",
-    },
-    workload: {
-      type: "string",
-      description:
-        "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
-    },
-    container: {
-      type: "string",
-      description:
-        "Optional: the specific container to target in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; a tool call against such a pod without it returns the list of choices.",
-    },
-  },
-  required: ["provider", "namespace", "workload"],
+// The workload's target key, copied verbatim from the FLEET SUMMARY or a list
+// result - never assembled by hand. The API expands it to the structured identity.
+const TARGET_PROPERTY = {
+  type: "string",
+  description:
+    "The workload's target key, copied exactly from the FLEET SUMMARY or a ListK8sWorkloads result (e.g. kubernetes/shop/api).",
+} as const;
+
+// The container sub-selector is not part of the key: it rides alongside `target`
+// and selects one container in a multi-container pod.
+const CONTAINER_PROPERTY = {
+  type: "string",
+  description:
+    "Optional: the specific container in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; omitting it then returns the list of choices.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -62,7 +53,8 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: K8S_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
+          container: CONTAINER_PROPERTY,
           tailLines: {
             type: "number",
             description:
@@ -75,7 +67,7 @@ export const K8S_TOOLS: Tool[] = [
           },
           stderrOnly: { type: "boolean" },
         },
-        required: ["service"],
+        required: ["target"],
       },
     },
     access: "read",
@@ -89,8 +81,8 @@ export const K8S_TOOLS: Tool[] = [
         "Get a Kubernetes workload's configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
-        properties: { service: K8S_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -104,8 +96,8 @@ export const K8S_TOOLS: Tool[] = [
         "Get real-time resource usage for a Kubernetes workload: CPU and memory as raw quantified values (e.g. 100m cores, 128Mi), plus network and block I/O.",
       input_schema: {
         type: "object",
-        properties: { service: K8S_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -120,13 +112,14 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: K8S_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
+          container: CONTAINER_PROPERTY,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
           },
         },
-        required: ["service"],
+        required: ["target"],
       },
     },
     access: "read",
@@ -139,8 +132,8 @@ export const K8S_TOOLS: Tool[] = [
       description: "List processes running inside a Kubernetes workload's pod.",
       input_schema: {
         type: "object",
-        properties: { service: K8S_SERVICE_IDENTITY_SCHEMA },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -154,25 +147,8 @@ export const K8S_TOOLS: Tool[] = [
         "Get the rollout status of a Deployment or StatefulSet - desired/ready/updated replica counts and conditions.",
       input_schema: {
         type: "object",
-        properties: {
-          service: {
-            type: "object",
-            properties: {
-              provider: { type: "string", enum: ["kubernetes"] },
-              namespace: {
-                type: "string",
-                description: "Kubernetes namespace the workload runs in.",
-              },
-              workload: {
-                type: "string",
-                description:
-                  "Deployment or StatefulSet name (the durable workload identifier, not the pod name).",
-              },
-            },
-            required: ["provider", "namespace", "workload"],
-          },
-        },
-        required: ["service"],
+        properties: { target: TARGET_PROPERTY },
+        required: ["target"],
       },
     },
     access: "read",
@@ -208,7 +184,8 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: K8S_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
+          container: CONTAINER_PROPERTY,
           delaySeconds: {
             type: "number",
             description: "Delay before restart (default 0).",
@@ -223,7 +200,7 @@ export const K8S_TOOLS: Tool[] = [
           },
           estimatedDowntimeSeconds: { type: "number" },
         },
-        required: ["service", "rationale", "risk", "estimatedDowntimeSeconds"],
+        required: ["target", "rationale", "risk", "estimatedDowntimeSeconds"],
       },
     },
     access: "write",
@@ -238,7 +215,8 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          service: K8S_SERVICE_IDENTITY_SCHEMA,
+          target: TARGET_PROPERTY,
+          container: CONTAINER_PROPERTY,
           command: {
             type: "array",
             items: { type: "string" },
@@ -247,7 +225,7 @@ export const K8S_TOOLS: Tool[] = [
           reason: { type: "string" },
           risk: { type: "string", enum: ["low", "medium", "high"] },
         },
-        required: ["service", "command", "reason", "risk"],
+        required: ["target", "command", "reason", "risk"],
       },
     },
     access: "write",

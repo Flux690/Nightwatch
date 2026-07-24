@@ -141,6 +141,7 @@ describe("session title generation", () => {
   it("builds an alert title source capped to the first ten alerts", () => {
     const alerts = Array.from({ length: 14 }, (_, i): NormalizedAlert => ({
       sourceAlertId: `a-${i}`,
+      labels: {},
       targetIdentifier: {
         provider: "docker",
         project: "web",

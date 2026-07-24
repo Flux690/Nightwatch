@@ -218,7 +218,7 @@ describe("clarification interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -417,7 +417,7 @@ describe("clarification interrupts", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    const interrupt = await waitFor(() =>
+    await waitFor(() =>
       events.find(
         (e) =>
           e.type === "HUMAN_INPUT_REQUIRED" &&
@@ -473,11 +473,7 @@ describe("clarification interrupts", () => {
             id: restart1Id,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
@@ -492,11 +488,7 @@ describe("clarification interrupts", () => {
             id: restart2Id,
             name: "RestartDockerService",
             input: {
-              service: {
-                provider: "docker",
-                project: "web-01",
-                service: "web-01",
-              },
+              target: "docker/web-01/web-01",
               rationale: "confirmed",
               risk: "low",
               estimatedDowntimeSeconds: 2,

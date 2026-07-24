@@ -44,8 +44,6 @@ const MAPS: Record<StatusDomain, Record<string, StatusEntry>> = {
   remediation: REMEDIATION,
 };
 
-const FALLBACK: StatusEntry = { variant: "secondary", label: "" };
-
 export function statusVariant(
   domain: StatusDomain,
   status: string,

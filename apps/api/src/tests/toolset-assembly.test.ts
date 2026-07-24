@@ -40,6 +40,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getToolSchemas } from "../agent/tools/toolset.js";
+import { currentFleetCapabilities } from "../agent/policy.js";
 
 const K8S_SERVICE = {
   provider: "kubernetes" as const,
@@ -49,6 +50,48 @@ const K8S_SERVICE = {
 
 describe("toolset assembly by fleet capabilities and remediation mode", () => {
   describe("provider library injection (unit)", () => {
+    it("capabilities: none with no runner, undefined mid-handshake, concrete once manifested", () => {
+      // No runner connected: concrete all-false, so an integration-only session is
+      // never offered runner tools (not the "offer everything" undefined case).
+      expect(currentFleetCapabilities()).toEqual({
+        docker: false,
+        kubernetes: false,
+      });
+
+      const conn = registerRunner(
+        "caps-unit-docker",
+        () => {},
+        () => {},
+      );
+      // Connected but manifest not arrived: undefined offers all for the handshake.
+      expect(currentFleetCapabilities()).toBeUndefined();
+
+      setRunnerManifest("caps-unit-docker", {
+        hostname: "caps-unit-host",
+        runnerVersion: "2.0.0",
+        capabilities: {
+          docker: true,
+          kubernetes: false,
+          services: [],
+          postgres: { available: false },
+          redis: { available: false },
+          hostMetrics: false,
+          fileRead: false,
+          remediationEnabled: false,
+        },
+      });
+      expect(currentFleetCapabilities()).toEqual({
+        docker: true,
+        kubernetes: false,
+      });
+
+      unregisterRunner(conn);
+      expect(currentFleetCapabilities()).toEqual({
+        docker: false,
+        kubernetes: false,
+      });
+    });
+
     it("offers both provider libraries when capabilities are unknown", () => {
       const names = getToolSchemas().map((s) => s.name);
       expect(names).toContain("GetDockerLogs");
@@ -281,7 +324,7 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
               id: "tu-k8s-write-1",
               name: "RestartK8sWorkload",
               input: {
-                service: K8S_SERVICE,
+                target: "kubernetes/production/api-server",
                 rationale: "K8s workload wedged",
                 risk: "low",
                 estimatedDowntimeSeconds: 10,
@@ -438,7 +481,7 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
               id: "tu-ro-bypass",
               name: "RestartDockerService",
               input: {
-                service: RO_SERVICE,
+                target: "docker/ro-app/ro-svc",
                 rationale: "r",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
@@ -476,7 +519,6 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
 
   describe("agentic loop seam: DB stored remediation value overrides manifest", () => {
     let server: FastifyInstance;
-    let port: number;
     let cleanupDb: () => void;
     let SESSION: string;
 
@@ -692,7 +734,7 @@ describe("per-target write gating", () => {
             id: "tu-gated-off",
             name: "RestartDockerService",
             input: {
-              service: OFF_SERVICE,
+              target: "docker/gated-off-app/off-svc",
               rationale: "wedged",
               risk: "low",
               estimatedDowntimeSeconds: 3,
@@ -742,7 +784,7 @@ describe("per-target write gating", () => {
             id: "tu-gated-on",
             name: "RestartDockerService",
             input: {
-              service: ON_SERVICE,
+              target: "docker/gated-on-app/on-svc",
               rationale: "wedged",
               risk: "low",
               estimatedDowntimeSeconds: 3,

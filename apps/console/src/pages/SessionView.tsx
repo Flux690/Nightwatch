@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import type {
   RunMode,
   SessionListRow,
@@ -237,7 +236,6 @@ export function SessionView({
   // event clears it.
   const [activityNotice, setActivityNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { phase } = useAuth();
 
   // Locks the composer's mode picker away once this is an investigation.

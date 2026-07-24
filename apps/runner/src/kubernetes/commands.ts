@@ -1,5 +1,6 @@
 import { PassThrough } from "node:stream";
 import { setHeaderOptions } from "@kubernetes/client-node";
+import { serviceIdentityKey } from "@nightwatch/shared";
 import type {
   K8sNodeStatusResult,
   K8sRestartResult,
@@ -64,12 +65,12 @@ export async function getContainerList(
     return {
       name,
       id: (w.metadata?.uid ?? "").slice(0, 12),
-      service: {
+      target: serviceIdentityKey({
         provider: "kubernetes" as const,
         namespace: w.metadata?.namespace ?? namespace,
         workload: name,
         ...(cluster && { cluster }),
-      },
+      }),
       image,
       imageTag: parseImageTag(image),
       status: ready > 0 ? "Running" : "Stopped",

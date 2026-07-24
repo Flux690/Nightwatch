@@ -64,17 +64,27 @@ export function sendCommand(
   timeoutMs = 15_000,
 ): Promise<unknown> {
   // Resolve synchronously, before the Promise constructor: routing errors are
-  // caller mistakes and should throw, not settle a pending command.
-  const conn =
-    route === "service"
-      ? resolveByService(commandInput)
-      : resolveByHost(commandInput);
+  // caller mistakes and should throw, not settle a pending command. Service routes
+  // expand the target key into the structured `service` the runner resolves against,
+  // folding an optional container sub-selector into it.
+  let conn: RunnerConnection;
+  let payloadInput = commandInput;
+  if (route === "service") {
+    const { conn: resolved, identity } = resolveByService(commandInput);
+    conn = resolved;
+    const { target: _target, container, ...rest } = commandInput;
+    const service =
+      container !== undefined ? { ...identity, container } : identity;
+    payloadInput = { ...rest, service };
+  } else {
+    conn = resolveByHost(commandInput);
+  }
 
   const correlationId = randomUUID();
   const msg: RunnerCommandMessage = {
     messageId: randomUUID(),
     type: "command",
-    payload: { commandName, commandInput, correlationId },
+    payload: { commandName, commandInput: payloadInput, correlationId },
   };
 
   return new Promise((resolve, reject) => {

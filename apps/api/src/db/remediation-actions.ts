@@ -1,8 +1,4 @@
-import {
-  serviceIdentityKey,
-  type RemediationStatus,
-  type ServiceIdentity,
-} from "@nightwatch/shared";
+import type { RemediationStatus } from "@nightwatch/shared";
 import { getDb } from "./client.js";
 
 export interface RemediationAction {
@@ -19,21 +15,12 @@ export interface RemediationAction {
   resolvedAt: string | null;
 }
 
-// The single place a tool input becomes a key, shared by the record write and
-// the breaker count so both key the same shape.
-export function serviceIdentityKeyFromInput(
+// The tool input's target key, shared by the audit record write and the breaker count.
+export function targetKeyFromInput(
   input: Record<string, unknown>,
 ): string | null {
-  const service = input["service"];
-  if (
-    typeof service !== "object" ||
-    service === null ||
-    !("provider" in service)
-  ) {
-    return null;
-  }
-  // The runner validates the live identity; here we only need its canonical key.
-  return serviceIdentityKey(service as ServiceIdentity);
+  const target = input["target"];
+  return typeof target === "string" ? target : null;
 }
 
 // Durable audit record, so the ceiling is high; eviction only drops rows far
@@ -70,7 +57,7 @@ export function insertExecutingRemediationAction(params: {
         toolUseId: params.toolUseId,
         sessionId: params.sessionId,
         toolName: params.toolName,
-        identityKey: serviceIdentityKeyFromInput(params.input),
+        identityKey: targetKeyFromInput(params.input),
         resolvedBy: params.resolvedBy,
         input: JSON.stringify(params.input),
         createdAt: new Date().toISOString(),
@@ -133,7 +120,7 @@ export function insertRejectedRemediationAction(params: {
       toolUseId: params.toolUseId,
       sessionId: params.sessionId,
       toolName: params.toolName,
-      identityKey: serviceIdentityKeyFromInput(params.input),
+      identityKey: targetKeyFromInput(params.input),
       resolvedBy: params.resolvedBy,
       input: JSON.stringify(params.input),
       createdAt: now,

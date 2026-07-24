@@ -23,6 +23,7 @@ const FIRED_AT = "2026-07-07T03:00:00.000Z";
 function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
   return {
     sourceAlertId,
+    labels: {},
     targetIdentifier: {
       provider: "docker",
       project: "web-01",
