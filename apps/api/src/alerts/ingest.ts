@@ -13,6 +13,10 @@ import {
 } from "../db/integrations.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
+import {
+  checkLLMReadiness,
+  notConfiguredMessage,
+} from "../config/readiness.js";
 
 export async function registerAlertRoutes(
   fastify: FastifyInstance,
@@ -42,6 +46,16 @@ export async function registerAlertRoutes(
     // Delivery is proven by an authenticated, well-formed webhook - stamped on
     // the matched source, before the evidence gate, even when everything dedups.
     setAlertSourceReceived(sourceKind, new Date().toISOString());
+
+    // Nothing to investigate with, in the other direction: evidence exists but no
+    // model can reason over it. 503 rather than a drop, so Alertmanager retries
+    // once the operator finishes setup instead of losing the alert.
+    const readiness = checkLLMReadiness();
+    if (!readiness.ready) {
+      return reply
+        .code(503)
+        .send({ error: notConfiguredMessage(readiness.missing) });
+    }
 
     // Evidence gate, not identity gate: a runner OR a pull-integration (metrics or
     // logs) makes an investigation worth starting; misroute protection is downstream.

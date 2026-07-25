@@ -1,4 +1,4 @@
-import type { AgentConfig, NormalizedAlert } from "@nightwarden/shared";
+import type { ResolvedLLMConfig, NormalizedAlert } from "@nightwarden/shared";
 import { displayIdentity } from "../alerts/resolve-target.js";
 import { createTitleProvider } from "../llm/factory.js";
 import { updateSessionTitle } from "../db/sessions.js";
@@ -39,7 +39,7 @@ function refine(raw: string): string {
 export async function generateSessionTitle(
   sessionId: string,
   source: string,
-  config: AgentConfig,
+  config: ResolvedLLMConfig,
   apiKey?: string,
 ): Promise<void> {
   try {
@@ -48,7 +48,10 @@ export async function generateSessionTitle(
     // reasoning "off": a 4-word label has nothing to think about. The 1024
     // window is a seatbelt for models that reason regardless - reasoning
     // shares the output budget, and a starved budget returns empty text.
-    const titleConfig: AgentConfig = { ...config, maxOutputTokens: 1024 };
+    const titleConfig: ResolvedLLMConfig = {
+      ...config,
+      maxOutputTokens: 1024,
+    };
     const provider = createTitleProvider(
       TITLE_SYSTEM_PROMPT,
       titleConfig,

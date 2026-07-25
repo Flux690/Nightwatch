@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { ResolvedLLMConfig } from "@nightwarden/shared";
 import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
@@ -24,24 +24,14 @@ vi.mock("openai", () => ({
 
 import { OpenAIProvider } from "../llm/openai.js";
 
-const BASE_CONFIG: AgentConfig = {
+const BASE_CONFIG: ResolvedLLMConfig = {
   provider: "openai",
-  model: "gpt-4o",
-  thinking: "off",
+  model: "gpt-5",
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  hardTimeoutMs: 300_000,
-  toolTimeoutMs: 15_000,
-  remediationBreakerLimit: 5,
-  remediationBreakerWindowMs: 600_000,
-  codeSessionBudgetMs: 1_200_000,
-  sandboxIdleTimeoutMs: 3_600_000,
-  sandboxCpus: 2,
-  sandboxMemoryMb: 4096,
-  sandboxRequireGvisor: false,
-  sandboxNetwork: "none",
-  sandboxAllowlistHosts: ["registry.npmjs.org"],
+  thinking: "off",
+  reasoningEffort: null,
 };
 
 const READ_TOOL = {

@@ -17,7 +17,7 @@ mockCreateProvider.mockImplementation(() =>
   createContractFakeProvider([{ toolUses: [], text: "Done." }]),
 );
 
-import { useTempDb } from "./temp-db.js";
+import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 
@@ -154,6 +154,26 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     expect(cont.sessionId).toBe(sessionId);
 
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+  });
+
+  it("POST /chat refuses with 503 when no language model is configured, naming what to pick", async () => {
+    clearTestLLM();
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ message: "why is checkout slow" }),
+      });
+
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toMatch(/no language model is configured/i);
+    } finally {
+      configureTestLLM();
+    }
   });
 
   it("POST /sessions/:id/messages returns 404 for an unknown session", async () => {

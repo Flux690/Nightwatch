@@ -22,6 +22,10 @@ import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
 import { HumanInputError, respondToPendingHumanInput } from "./human-input.js";
 import { dispatcher } from "../dispatcher.js";
+import {
+  checkLLMReadiness,
+  notConfiguredMessage,
+} from "../config/readiness.js";
 
 function toApprovalRequest(i: PendingHumanInputWithSession): ApprovalRequest {
   return {
@@ -132,6 +136,12 @@ export async function registerSessionRoutes(
       const message = request.body?.message?.trim();
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
+      }
+      const readiness = checkLLMReadiness();
+      if (!readiness.ready) {
+        return reply
+          .code(503)
+          .send({ error: notConfiguredMessage(readiness.missing) });
       }
       const sessionId = randomUUID();
       // A new chat is a plain ask unless the composer explicitly investigates.

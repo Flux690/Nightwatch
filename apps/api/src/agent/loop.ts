@@ -13,7 +13,11 @@ import {
 import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
-import { loadConfig, loadApiKey } from "../config/store.js";
+import {
+  checkLLMReadiness,
+  notConfiguredMessage,
+} from "../config/readiness.js";
+import { loadConfig } from "../config/store.js";
 import {
   getGitHubIntegration,
   getPrometheusIntegration,
@@ -154,8 +158,16 @@ export async function runInvestigation(
     mode,
   });
 
+  // Backstop, not the primary gate: the routes that start a run refuse first.
+  // Reaching here unconfigured means a caller bypassed them, so fail loudly.
+  const readiness = checkLLMReadiness();
+  if (!readiness.ready) {
+    throw new Error(notConfiguredMessage(readiness.missing));
+  }
+  // llm is the active provider's block flattened for the SDK; config carries the
+  // loop and sandbox budgets, which are provider-independent.
+  const { config: llm, apiKey } = readiness;
   const config = loadConfig();
-  const apiKey = loadApiKey();
 
   // Transient provider errors are waited out instead of killing the run; each
   // wait is streamed to the console as live status.
@@ -198,7 +210,7 @@ export async function runInvestigation(
       undefined,
       mode,
     );
-    const provider = createProvider(systemPrompt, config, apiKey);
+    const provider = createProvider(systemPrompt, llm, apiKey);
     createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
     let persistedCount = 0;
@@ -221,7 +233,7 @@ export async function runInvestigation(
     // The operator is ending the run, so no nudge loop - just guarantee a
     // complete report exists before the terminal event.
     if (mode === "investigate" && !reportComplete(sessionId)) {
-      finalizeInconclusive(sessionId, config.model);
+      finalizeInconclusive(sessionId, llm.model);
     }
     log.info("investigation ended after operator declined to continue");
     return "completed";
@@ -263,7 +275,7 @@ export async function runInvestigation(
           promptOptions,
         )
       : buildChatContext(remediationEnabled, fleetView, promptOptions, mode);
-  const provider = createProvider(systemPrompt, config, apiKey);
+  const provider = createProvider(systemPrompt, llm, apiKey);
 
   createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
 
@@ -309,7 +321,7 @@ export async function runInvestigation(
     // Brand-new session only: refine the title in the background. Chat uses the
     // message; an alert, a compact summary.
     const titleSource = input.userMessage ?? buildAlertTitleSource(allAlerts);
-    void generateSessionTitle(sessionId, titleSource, config, apiKey);
+    void generateSessionTitle(sessionId, titleSource, llm, apiKey);
   }
 
   const persist = (): void => {
@@ -391,7 +403,7 @@ export async function runInvestigation(
           { turn },
           "finish gate: nudge cap reached, finalizing inconclusive",
         );
-        finalizeInconclusive(sessionId, config.model);
+        finalizeInconclusive(sessionId, llm.model);
       }
       log.info({ turn }, "investigation finished with free-form response");
       return "completed";

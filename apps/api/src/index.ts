@@ -10,6 +10,7 @@ import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { registerAlertTestRoutes } from "./alerts/test-alert.js";
 import { registerConfigRoutes } from "./config/routes.js";
+import { seedConfigFromEnv } from "./config/store.js";
 import { registerConfigHealthRoutes } from "./config/health.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
@@ -73,6 +74,9 @@ const start = async (): Promise<void> => {
   try {
     initDb();
     fastify.log.info("SQLite ready");
+    // Env is a first-boot seed only: this writes the config row on an install
+    // that has none, and never again. After that the database is the sole source.
+    seedConfigFromEnv();
     // Containers first (kills any still-running writer), then salvage: the
     // checkout is a host bind mount, so work orphaned by any death mode is
     // committed and pushed here, before listen() lets a session provision over

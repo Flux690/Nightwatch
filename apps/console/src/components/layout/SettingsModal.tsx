@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AgentConfig, ReasoningEffort } from "@nightwarden/shared";
+import type {
+  AgentConfig,
+  AnthropicSettings,
+  LLMProviderName,
+  OpenAISettings,
+  ProviderSettings,
+  ReasoningEffort,
+} from "@nightwarden/shared";
 import { X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -64,19 +71,41 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   },
 ];
 
-function buildDelta(
-  form: AgentConfig,
-  base: AgentConfig,
-): Partial<AgentConfig> {
-  const delta: Partial<AgentConfig> = {};
+// The patch the API accepts: global fields flat, provider fields nested under the
+// provider they belong to. apiKeyMasked is read-only, computed server-side.
+type ConfigDelta = Partial<Omit<AgentConfig, "providers">> & {
+  providers?: Partial<
+    Record<LLMProviderName, Partial<Omit<ProviderSettings, "apiKeyMasked">>>
+  >;
+};
+
+function buildDelta(form: AgentConfig, base: AgentConfig): ConfigDelta {
+  const delta: ConfigDelta = {};
   for (const key of Object.keys(form) as (keyof AgentConfig)[]) {
-    if (key === "apiKeyMasked") continue;
+    if (key === "providers") continue;
     if (!Object.is(form[key], base[key])) {
       Object.assign(delta, { [key]: form[key] });
     }
   }
+
+  for (const name of PROVIDERS) {
+    const formBlock = form.providers[name];
+    const baseBlock = base.providers[name];
+    const blockDelta: Record<string, unknown> = {};
+    for (const key of Object.keys(formBlock) as (keyof ProviderSettings)[]) {
+      if (key === "apiKeyMasked") continue;
+      if (!Object.is(formBlock[key], baseBlock[key])) {
+        blockDelta[key] = formBlock[key];
+      }
+    }
+    if (Object.keys(blockDelta).length > 0) {
+      delta.providers = { ...delta.providers, [name]: blockDelta };
+    }
+  }
   return delta;
 }
+
+const PROVIDERS: readonly LLMProviderName[] = ["anthropic", "openai"];
 
 export function SettingsModal({
   opened,
@@ -117,7 +146,7 @@ export function SettingsModal({
   }, [config]);
 
   const saveConfig = useMutation({
-    mutationFn: (delta: Partial<AgentConfig>) =>
+    mutationFn: (delta: ConfigDelta) =>
       apiFetch<AgentConfig>("/api/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -126,11 +155,11 @@ export function SettingsModal({
   });
 
   const saveApiKey = useMutation({
-    mutationFn: (apiKey: string) =>
+    mutationFn: (vars: { provider: LLMProviderName; apiKey: string }) =>
       apiFetch<{ apiKeyMasked: string }>("/api/config/key", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify(vars),
       }),
   });
 
@@ -148,13 +177,19 @@ export function SettingsModal({
     // A changed key must pass Test connection before it can be saved.
     if (keyToSave && !testResult?.ok) return;
     if (Object.keys(delta).length === 0 && !keyToSave) return;
+    // A key belongs to the provider whose block is on screen, not to whichever
+    // one happens to be active, so an unsaved provider switch files it correctly.
+    const keyProvider = form.provider;
+    if (keyToSave && keyProvider === null) return;
 
     try {
       await Promise.all([
         Object.keys(delta).length > 0
           ? saveConfig.mutateAsync(delta)
           : undefined,
-        keyToSave ? saveApiKey.mutateAsync(keyToSave) : undefined,
+        keyToSave && keyProvider
+          ? saveApiKey.mutateAsync({ provider: keyProvider, apiKey: keyToSave })
+          : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: ["config"] });
       setNewApiKey("");
@@ -190,13 +225,14 @@ export function SettingsModal({
   });
 
   function handleTestConnection(): void {
-    if (!newApiKey.trim() || !form) return;
+    if (!newApiKey.trim() || !form || form.provider === null) return;
     setTestResult(null);
+    const block = form.providers[form.provider];
     testConnection.mutate({
       apiKey: newApiKey,
-      model: form.model,
+      model: block.model ?? undefined,
       provider: form.provider,
-      baseUrl: form.baseUrl,
+      baseUrl: block.baseUrl,
     });
   }
 
@@ -207,14 +243,50 @@ export function SettingsModal({
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  // Provider/baseUrl/model changes invalidate any prior test result - it was
-  // only ever a verdict on the combination tested at the time.
-  function setConnectionField<K extends "provider" | "baseUrl" | "model">(
-    key: K,
-    value: AgentConfig[K],
+  function patchProvider(
+    name: LLMProviderName,
+    patch: Record<string, unknown>,
   ): void {
-    setField(key, value);
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            providers: {
+              ...prev.providers,
+              [name]: { ...prev.providers[name], ...patch },
+            },
+          }
+        : prev,
+    );
+    // Any change to a provider's connection invalidates a prior test result - it
+    // was only ever a verdict on the combination tested at the time.
     setTestResult(null);
+  }
+
+  // Fields every provider has, applied to whichever is selected, so switching
+  // provider swaps which credentials and endpoint are on screen.
+  function setProviderField<K extends keyof ProviderSettings>(
+    key: K,
+    value: ProviderSettings[K],
+  ): void {
+    if (!form?.provider) return;
+    patchProvider(form.provider, { [key]: value });
+  }
+
+  // The provider-native knobs are statically bound to one block; each is only
+  // rendered when that provider is selected.
+  function setAnthropicField<K extends keyof AnthropicSettings>(
+    key: K,
+    value: AnthropicSettings[K],
+  ): void {
+    patchProvider("anthropic", { [key]: value });
+  }
+
+  function setOpenAIField<K extends keyof OpenAISettings>(
+    key: K,
+    value: OpenAISettings[K],
+  ): void {
+    patchProvider("openai", { [key]: value });
   }
 
   function numberValue(value: string | number): number {
@@ -222,6 +294,9 @@ export function SettingsModal({
   }
 
   const isAnthropic = form?.provider === "anthropic";
+  // Everything below the provider picker describes one provider, so it only has
+  // meaning once one is chosen.
+  const block = form?.provider ? form.providers[form.provider] : null;
   const keyDirty = newApiKey.trim() !== "";
   const keyUntested = keyDirty && !testResult?.ok;
   const configDirty =
@@ -327,15 +402,21 @@ export function SettingsModal({
                           <NativeSelect
                             id="settings-provider"
                             className="w-full"
-                            value={form.provider}
-                            onChange={(e) =>
-                              setConnectionField(
+                            value={form.provider ?? ""}
+                            onChange={(e) => {
+                              setField(
                                 "provider",
-                                e.currentTarget
-                                  .value as AgentConfig["provider"],
-                              )
-                            }
+                                (e.currentTarget.value ||
+                                  null) as AgentConfig["provider"],
+                              );
+                              setTestResult(null);
+                            }}
                           >
+                            {/* A fresh install has picked nothing; the empty
+                                option is what "not chosen yet" looks like. */}
+                            <NativeSelectOption value="">
+                              Select a provider
+                            </NativeSelectOption>
                             <NativeSelectOption value="anthropic">
                               Anthropic native
                             </NativeSelectOption>
@@ -356,9 +437,9 @@ export function SettingsModal({
                                 ? "https://api.anthropic.com"
                                 : "https://api.openai.com/v1"
                             }
-                            value={form.baseUrl ?? ""}
+                            value={block?.baseUrl ?? ""}
                             onChange={(e) =>
-                              setConnectionField(
+                              setProviderField(
                                 "baseUrl",
                                 e.currentTarget.value || undefined,
                               )
@@ -371,8 +452,8 @@ export function SettingsModal({
                             Current key
                           </p>
                           <p className="mt-0.5 text-sm">
-                            {form.apiKeyMasked
-                              ? form.apiKeyMasked
+                            {block?.apiKeyMasked
+                              ? block.apiKeyMasked
                               : "Not configured"}
                           </p>
                         </div>
@@ -427,9 +508,10 @@ export function SettingsModal({
                           <Input
                             id="settings-model"
                             list="settings-model-options"
-                            value={form.model}
+                            value={block?.model ?? ""}
+                            placeholder="Pick a model"
                             onChange={(e) =>
-                              setConnectionField("model", e.currentTarget.value)
+                              setProviderField("model", e.currentTarget.value)
                             }
                           />
                           <datalist id="settings-model-options">
@@ -458,41 +540,30 @@ export function SettingsModal({
                         </Field>
 
                         {isAnthropic && (
-                          <>
-                            <Field className="max-w-80">
-                              <FieldLabel htmlFor="settings-thinking">
-                                Thinking mode
-                              </FieldLabel>
-                              <NativeSelect
-                                id="settings-thinking"
-                                className="w-full"
-                                value={form.thinking}
-                                onChange={(e) =>
-                                  setField(
-                                    "thinking",
-                                    e.currentTarget
-                                      .value as AgentConfig["thinking"],
-                                  )
-                                }
-                              >
-                                <NativeSelectOption value="adaptive">
-                                  Adaptive (extended thinking)
-                                </NativeSelectOption>
-                                <NativeSelectOption value="off">
-                                  Off
-                                </NativeSelectOption>
-                              </NativeSelect>
-                            </Field>
-                            <label className="flex items-center gap-2 text-sm">
-                              <Checkbox
-                                checked={form.promptCaching ?? true}
-                                onCheckedChange={(checked) =>
-                                  setField("promptCaching", checked === true)
-                                }
-                              />
-                              Prompt caching
-                            </label>
-                          </>
+                          <Field className="max-w-80">
+                            <FieldLabel htmlFor="settings-thinking">
+                              Thinking mode
+                            </FieldLabel>
+                            <NativeSelect
+                              id="settings-thinking"
+                              className="w-full"
+                              value={form.providers.anthropic.thinking}
+                              onChange={(e) =>
+                                setAnthropicField(
+                                  "thinking",
+                                  e.currentTarget
+                                    .value as AnthropicSettings["thinking"],
+                                )
+                              }
+                            >
+                              <NativeSelectOption value="adaptive">
+                                Adaptive (extended thinking)
+                              </NativeSelectOption>
+                              <NativeSelectOption value="off">
+                                Off
+                              </NativeSelectOption>
+                            </NativeSelect>
+                          </Field>
                         )}
 
                         {!isAnthropic && (
@@ -503,9 +574,11 @@ export function SettingsModal({
                             <NativeSelect
                               id="settings-reasoning"
                               className="w-full"
-                              value={form.reasoningEffort ?? ""}
+                              value={
+                                form.providers.openai.reasoningEffort ?? ""
+                              }
                               onChange={(e) =>
-                                setField(
+                                setOpenAIField(
                                   "reasoningEffort",
                                   (e.currentTarget.value ||
                                     null) as ReasoningEffort | null,

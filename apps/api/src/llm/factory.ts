@@ -2,13 +2,14 @@ import { AnthropicProvider } from "./anthropic.js";
 import { OpenAIProvider } from "./openai.js";
 import type { Provider } from "./provider.js";
 import type { ProviderCallOptions } from "./types.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
-// Both adapters are always compiled in; the global config picks one at runtime. apiKey, when
-// supplied, overrides each provider's env-var fallback so the DB-stored key takes precedence.
+// Both adapters are always compiled in; the global config picks one at runtime.
+// Taking a ResolvedLLMConfig means an unconfigured install cannot reach here:
+// the gate that proved provider/model are set is the only way to obtain one.
 export function createProvider(
   system: string,
-  config: AgentConfig,
+  config: ResolvedLLMConfig,
   apiKey?: string,
   opts?: ProviderCallOptions,
 ): Provider {
@@ -19,7 +20,7 @@ export function createProvider(
       return new OpenAIProvider(system, config, apiKey, opts);
     default:
       throw new Error(
-        `Unknown provider "${config.provider}" (expected "anthropic" or "openai")`,
+        `Unknown provider "${String(config.provider)}" (expected "anthropic" or "openai")`,
       );
   }
 }
@@ -29,7 +30,7 @@ export function createProvider(
 // leaves title generation a harmless no-op.
 export function createTitleProvider(
   system: string,
-  config: AgentConfig,
+  config: ResolvedLLMConfig,
   apiKey?: string,
   opts?: ProviderCallOptions,
 ): Provider {

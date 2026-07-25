@@ -32,7 +32,7 @@ import {
   unregisterRunner,
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
-import { useTempDb } from "./temp-db.js";
+import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 
 const ALERTMANAGER_BODY = {
@@ -392,5 +392,27 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { error: string };
     expect(body.error).toMatch(/unrecognized payload/i);
+  });
+
+  describe("with no language model configured", () => {
+    afterEach(() => {
+      configureTestLLM();
+    });
+
+    it("refuses the delivery with 503 and names what is missing, so Alertmanager retries rather than dropping the alert", async () => {
+      clearTestLLM();
+
+      const res = await server.inject({
+        method: "POST",
+        url: "/alerts/ingest",
+        headers: { "x-nightwarden-token": INGEST_TOKEN },
+        payload: alertmanagerBody("nwi-unconfigured"),
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body) as { error: string };
+      expect(body.error).toMatch(/no language model is configured/i);
+      expect(body.error).toMatch(/provider/i);
+    });
   });
 });

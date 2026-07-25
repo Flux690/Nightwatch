@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { ResolvedLLMConfig } from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -16,23 +16,23 @@ export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly system: string;
-  private readonly config: AgentConfig;
+  private readonly config: ResolvedLLMConfig;
   private readonly opts?: ProviderCallOptions;
   private messages: Anthropic.Messages.MessageParam[] = [];
 
   constructor(
     system: string,
-    config: AgentConfig,
+    config: ResolvedLLMConfig,
     apiKey?: string,
     opts?: ProviderCallOptions,
   ) {
     this.system = system;
     this.config = config;
     this.opts = opts;
-    // apiKey comes from the DB-stored encrypted key (decrypted by the caller)
-    // when set, falling back to the env var for deployments that still use env.
+    // The DB is the only runtime source for the key: an env var is read once at
+    // first boot to seed that row, never again, so there is no second source here.
     this.client = new Anthropic({
-      apiKey: apiKey ?? process.env["ANTHROPIC_API_KEY"],
+      apiKey,
       ...(config.baseUrl && { baseURL: config.baseUrl }),
       timeout: config.requestTimeoutMs,
       maxRetries: config.maxRetries,

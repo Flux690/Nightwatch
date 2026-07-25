@@ -1,6 +1,7 @@
 import {
   afterEach,
   beforeAll,
+  beforeEach,
   afterAll,
   describe,
   expect,
@@ -10,8 +11,9 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { registerConfigRoutes } from "../config/routes.js";
-import { useTempDb } from "./temp-db.js";
+import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
+import type { AgentConfig } from "@nightwarden/shared";
 
 // Builds a mock Response-like object for stubbing global fetch.
 function mockResponse(
@@ -146,8 +148,10 @@ describe("provider/model config seam", () => {
       url: "/config",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
-    const body = JSON.parse(configRes.body) as { apiKeyMasked: string | null };
-    expect(body.apiKeyMasked).toBeNull();
+    const body = JSON.parse(configRes.body) as {
+      providers: { anthropic: { apiKeyMasked: string | null } };
+    };
+    expect(body.providers.anthropic.apiKeyMasked).toBeNull();
   });
 
   it("POST /config/test: probes against a provider/baseUrl override instead of the persisted config", async () => {
@@ -256,7 +260,7 @@ describe("provider/model config seam", () => {
       method: "PATCH",
       url: "/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { apiKey: "sk-ant-test-key-12345678" },
+      payload: { provider: "anthropic", apiKey: "sk-ant-test-key-12345678" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -272,7 +276,7 @@ describe("provider/model config seam", () => {
       method: "PATCH",
       url: "/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { apiKey },
+      payload: { provider: "anthropic", apiKey },
     });
     expect(saved.statusCode).toBe(200);
 
@@ -284,9 +288,69 @@ describe("provider/model config seam", () => {
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as Record<string, unknown>;
-    expect(body["apiKeyMasked"]).toBe("sk-...9999");
+    const body = JSON.parse(res.body) as AgentConfig & Record<string, unknown>;
+    expect(body.providers.anthropic.apiKeyMasked).toBe("sk-...9999");
     expect(body).not.toHaveProperty("apiKeyEncrypted");
     expect(JSON.stringify(body)).not.toContain(apiKey);
+  });
+
+  // --- no invented defaults ---
+
+  describe("an install nobody has configured", () => {
+    beforeEach(() => {
+      clearTestLLM();
+    });
+
+    afterEach(() => {
+      configureTestLLM();
+    });
+
+    it("GET /config reports no provider and no model rather than guessing one, while keeping the operational defaults", async () => {
+      const res = await server.inject({
+        method: "GET",
+        url: "/config",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body) as AgentConfig;
+      expect(body.provider).toBeNull();
+      expect(body.providers.anthropic.model).toBeNull();
+      expect(body.providers.openai.model).toBeNull();
+      expect(body.providers.anthropic.apiKeyMasked).toBeNull();
+      // Timeouts and sandbox limits are engineering choices, not the operator's;
+      // a provider's own tuning defaults the same way inside its block.
+      expect(body.providers.anthropic.thinking).toBe("adaptive");
+      expect(body.sandboxNetwork).toBe("allowlist");
+      expect(body.hardTimeoutMs).toEqual(expect.any(Number));
+    });
+
+    it("GET /config/models returns nothing instead of probing a guessed endpoint", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const res = await server.inject({
+        method: "GET",
+        url: "/config/models",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ models: [] });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("an env API key is not a live fallback: the DB is the only runtime source", async () => {
+      vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-from-the-environment");
+
+      const res = await server.inject({
+        method: "GET",
+        url: "/config",
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+
+      const body = JSON.parse(res.body) as AgentConfig;
+      expect(body.providers.anthropic.apiKeyMasked).toBeNull();
+    });
   });
 });

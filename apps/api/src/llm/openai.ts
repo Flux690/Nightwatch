@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { ResolvedLLMConfig } from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -31,7 +31,7 @@ export class OpenAIProvider implements LLMProvider {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly system: string;
-  private readonly config: AgentConfig;
+  private readonly config: ResolvedLLMConfig;
   private readonly opts?: ProviderCallOptions;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   // Reasoning per turn, keyed by message index; finalChatCompletion() drops the
@@ -40,18 +40,19 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(
     system: string,
-    config: AgentConfig,
+    config: ResolvedLLMConfig,
     apiKey?: string,
     opts?: ProviderCallOptions,
   ) {
     this.system = system;
     this.config = config;
     this.opts = opts;
-    // apiKey falls back to the env var when not passed; config.baseUrl overrides
-    // the env var so operators can switch endpoints without a server restart.
+    // The DB is the only runtime source for the key and base URL: env seeds that
+    // row once at first boot, never again. An unset baseUrl means the SDK's own
+    // default endpoint, which is the correct value for OpenAI proper.
     this.client = new OpenAI({
-      apiKey: apiKey ?? process.env["OPENAI_API_KEY"],
-      baseURL: config.baseUrl ?? process.env["OPENAI_BASE_URL"],
+      apiKey,
+      baseURL: config.baseUrl,
       timeout: config.requestTimeoutMs,
       maxRetries: config.maxRetries,
     });

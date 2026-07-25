@@ -18,8 +18,20 @@ const AUTH_STATUS_RESPONSE = {
 
 const CONFIG: AgentConfig = {
   provider: "anthropic",
-  model: "claude-sonnet-4-6",
-  thinking: "adaptive",
+  providers: {
+    anthropic: {
+      model: "claude-sonnet-4-6",
+      baseUrl: undefined,
+      apiKeyMasked: null,
+      thinking: "adaptive",
+    },
+    openai: {
+      model: null,
+      baseUrl: undefined,
+      apiKeyMasked: null,
+      reasoningEffort: null,
+    },
+  },
   maxOutputTokens: 32000,
   maxRetries: 2,
   requestTimeoutMs: 120000,
@@ -34,10 +46,6 @@ const CONFIG: AgentConfig = {
   sandboxRequireGvisor: false,
   sandboxNetwork: "none",
   sandboxAllowlistHosts: ["registry.npmjs.org"],
-  baseUrl: undefined,
-  apiKeyMasked: null,
-  promptCaching: true,
-  reasoningEffort: null,
 };
 
 const MODELS_RESPONSE = {
@@ -256,7 +264,7 @@ describe("SettingsModal", () => {
         };
         expect(body.apiKey).toBe("sk-ant-newkey");
         expect(body.provider).toBe(CONFIG.provider);
-        expect(body.model).toBe(CONFIG.model);
+        expect(body.model).toBe(CONFIG.providers.anthropic.model);
       });
     });
 

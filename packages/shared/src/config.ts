@@ -1,5 +1,5 @@
-// Global agent config: how the one brain reasons (no per-runner dimension). Secrets
-// stay in env, so this API-seeded shape is safe to send to the console.
+// Global agent config: how the one brain reasons (no per-runner dimension). Every
+// value here is API-seeded and safe to send to the console; keys are masked.
 
 export type LLMProviderName = "anthropic" | "openai";
 export type ThinkingMode = "adaptive" | "off";
@@ -8,10 +8,35 @@ export type ReasoningEffort = "low" | "medium" | "high";
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
 
-export interface AgentConfig {
-  provider: LLMProviderName;
-  model: string;
+// How to reach one provider. Each keeps its own credentials, so switching the
+// active provider cannot carry the previous one's key or endpoint across.
+export interface ProviderSettings {
+  model: string | null;
+  // Unset means the provider's own endpoint. Set it for a gateway or an
+  // OpenAI-compatible host (OpenRouter, Groq, Ollama).
+  baseUrl?: string;
+  // Computed server-side on read and never stored; the plaintext never leaves.
+  apiKeyMasked?: string | null;
+}
+
+export interface AnthropicSettings extends ProviderSettings {
   thinking: ThinkingMode;
+}
+
+export interface OpenAISettings extends ProviderSettings {
+  reasoningEffort: ReasoningEffort | null;
+}
+
+export interface ProviderSettingsMap {
+  anthropic: AnthropicSettings;
+  openai: OpenAISettings;
+}
+
+export interface AgentConfig {
+  // Which provider block is live; null until an operator picks one. There is no
+  // default: a fresh install must not look configured when it can reach no LLM.
+  provider: LLMProviderName | null;
+  providers: ProviderSettingsMap;
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
@@ -33,21 +58,32 @@ export interface AgentConfig {
   sandboxNetwork: SandboxNetwork;
   // Domains the allowlist proxy may reach, one hostname per entry.
   sandboxAllowlistHosts: string[];
-  // Provider endpoint config. baseUrl overrides the SDK default; apiKeyMasked
-  // is computed server-side (never stored) and shows the configured key hint.
+}
+
+// The active provider's block flattened onto the loop settings an SDK call needs.
+// Only the readiness gate builds one, so holding it is proof the install is
+// configured and no call site has to re-check.
+export interface ResolvedLLMConfig {
+  provider: LLMProviderName;
+  model: string;
   baseUrl?: string;
-  apiKeyMasked?: string | null;
-  // Provider-native tuning. promptCaching applies to Anthropic; reasoningEffort
-  // applies to OpenAI-class endpoints.
-  promptCaching?: boolean;
-  reasoningEffort?: ReasoningEffort | null;
+  maxOutputTokens: number;
+  maxRetries: number;
+  requestTimeoutMs: number;
+  // Provider-native tuning: thinking is Anthropic's, reasoningEffort is
+  // OpenAI-class. Each is inert for the other adapter.
+  thinking: ThinkingMode;
+  reasoningEffort: ReasoningEffort | null;
 }
 
 // A setup problem the console surfaces app-wide (a banner), computed server-side
-// from the fleet, integrations, and observed metric labels. Advisory: investigations
-// still run; the banner exists to make a misconfiguration visible at setup, not at 3am.
+// from the config, fleet, integrations, and observed metric labels. Mostly advisory,
+// but llm-not-configured is also enforced: without a model nothing can run at all.
 export type ConfigHealthKind =
-  "no-evidence-source" | "missing-server-label" | "unknown-server-label";
+  | "llm-not-configured"
+  | "no-evidence-source"
+  | "missing-server-label"
+  | "unknown-server-label";
 
 export interface ConfigHealthIssue {
   kind: ConfigHealthKind;

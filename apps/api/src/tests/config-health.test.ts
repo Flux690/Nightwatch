@@ -12,7 +12,7 @@ import type { FastifyInstance } from "fastify";
 import type { ConfigHealth } from "@nightwarden/shared";
 
 import { registerConfigHealthRoutes } from "../config/health.js";
-import { useTempDb } from "./temp-db.js";
+import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import {
@@ -137,5 +137,23 @@ describe("config health", () => {
     const missing = issues.find((i) => i.kind === "missing-server-label");
     expect(missing).toBeDefined();
     expect(missing?.message).toContain("prod-2");
+  });
+
+  describe("with no language model configured", () => {
+    afterEach(() => {
+      configureTestLLM();
+    });
+
+    it("raises llm-not-configured pointing at Settings, since nothing can be investigated without a model", async () => {
+      clearTestLLM();
+
+      const { issues } = await fetchHealth();
+
+      const issue = issues.find((i) => i.kind === "llm-not-configured");
+      expect(issue).toBeDefined();
+      expect(issue?.href).toBe("/settings");
+      expect(issue?.message).toMatch(/provider/i);
+      expect(issue?.message).toMatch(/model/i);
+    });
   });
 });

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ConfigHealthIssue } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
+import { checkLLMReadiness, notConfiguredMessage } from "./readiness.js";
 import { decrypt } from "./crypto.js";
 import { getFleetView } from "../ws/fleet.js";
 import {
@@ -16,10 +17,11 @@ import { logger } from "../logger.js";
 // page, where delivery and identity labels are configured together.
 const INTEGRATIONS_HREF = "/integrations";
 const ALERTS_HREF = "/integrations/alertmanager";
+const SETTINGS_HREF = "/settings";
 
 // App-wide setup problems, surfaced as a console banner so a misconfiguration is found
-// at setup, not at 3am. Advisory only; the label check is a Prometheus round-trip, so it
-// is gated to the multi-server case where a missing/typo'd nw_server is the only risk.
+// at setup, not at 3am. Advisory except llm-not-configured, which the run gate enforces;
+// the label check is gated to multi-server because it costs a Prometheus round-trip.
 export async function registerConfigHealthRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
@@ -28,6 +30,18 @@ export async function registerConfigHealthRoutes(
     { preHandler: requireSession },
     async (): Promise<{ issues: ConfigHealthIssue[] }> => {
       const issues: ConfigHealthIssue[] = [];
+
+      // First among the issues because it blocks everything: without a model no
+      // alert can be investigated at all, whatever else is connected.
+      const readiness = checkLLMReadiness();
+      if (!readiness.ready) {
+        issues.push({
+          kind: "llm-not-configured",
+          message: notConfiguredMessage(readiness.missing),
+          href: SETTINGS_HREF,
+        });
+      }
+
       const fleet = getFleetView();
       const prometheus = getPrometheusIntegration();
       const loki = getLokiIntegration();

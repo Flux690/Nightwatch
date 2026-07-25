@@ -1,4 +1,4 @@
-import { loadConfig } from "../../config/store.js";
+import { checkLLMReadiness } from "../../config/readiness.js";
 import { getSession } from "../../db/sessions.js";
 import { REPORT_TOOL_SCHEMA } from "../prompts/report.js";
 import {
@@ -27,7 +27,10 @@ export const REPORT_TOOLS: Tool[] = [
       }
       const index = buildEvidenceIndex(ctx.sessionId);
       const alert = getSession(ctx.sessionId)?.originatingAlert ?? null;
-      const model = loadConfig().model;
+      // A run cannot start unconfigured, so the active provider's model is set by
+      // the time any tool executes; the fallback only keeps attribution honest.
+      const readiness = checkLLMReadiness();
+      const model = readiness.ready ? readiness.config.model : "unknown";
       saveReport(
         ctx.sessionId,
         enrichReport(report, index, alert, model),

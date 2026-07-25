@@ -1,15 +1,34 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { loadConfig, loadApiKey, updateConfig, saveApiKey } from "./store.js";
-import { encrypt, maskKey } from "./crypto.js";
+import {
+  loadConfig,
+  loadApiKey,
+  updateConfig,
+  updateProvider,
+  type ProviderPatch,
+} from "./store.js";
+import { maskKey } from "./crypto.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { LLMProviderName } from "@nightwarden/shared";
+
+// One provider's settings. Nested under `providers` on the patch so a change to
+// one cannot touch the other's model, endpoint, or credential.
+const ProviderPatchSchema = z.object({
+  model: z.string().min(1).nullable().optional(),
+  baseUrl: z.string().url().nullable().optional(),
+  thinking: z.enum(["adaptive", "off"]).optional(),
+  reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
+});
 
 const ConfigPatchSchema = z.object({
-  provider: z.enum(["anthropic", "openai"]).optional(),
-  model: z.string().min(1).optional(),
-  thinking: z.enum(["adaptive", "off"]).optional(),
+  provider: z.enum(["anthropic", "openai"]).nullable().optional(),
+  providers: z
+    .object({
+      anthropic: ProviderPatchSchema.optional(),
+      openai: ProviderPatchSchema.optional(),
+    })
+    .optional(),
   maxOutputTokens: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).optional(),
   requestTimeoutMs: z.number().int().positive().optional(),
@@ -34,9 +53,6 @@ const ConfigPatchSchema = z.object({
     )
     .min(1)
     .optional(),
-  baseUrl: z.string().url().nullable().optional(),
-  promptCaching: z.boolean().optional(),
-  reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
 });
 
 const TestBodySchema = z.object({
@@ -46,19 +62,27 @@ const TestBodySchema = z.object({
   baseUrl: z.string().url().optional(),
 });
 
+// The provider is explicit: a key belongs to one provider's block, and inferring
+// it from whichever is active would file the key under the wrong one mid-switch.
 const KeyBodySchema = z.object({
+  provider: z.enum(["anthropic", "openai"]),
   apiKey: z.string().min(1),
 });
 
-function modelsUrl(config: AgentConfig): string {
-  if (config.provider === "anthropic") {
-    const base = config.baseUrl ?? "https://api.anthropic.com";
+// What listing or probing an endpoint actually needs: which dialect to speak,
+// where to speak it, and (for a probe) which model to look for.
+interface ProbeTarget {
+  provider: LLMProviderName;
+  baseUrl?: string;
+  model?: string | null;
+}
+
+function modelsUrl(target: ProbeTarget): string {
+  if (target.provider === "anthropic") {
+    const base = target.baseUrl ?? "https://api.anthropic.com";
     return `${base}/v1/models`;
   }
-  const base =
-    config.baseUrl ??
-    process.env["OPENAI_BASE_URL"] ??
-    "https://api.openai.com/v1";
+  const base = target.baseUrl ?? "https://api.openai.com/v1";
   // Ollama uses /api/tags; all others use /models. baseUrl is always the full
   // versioned base (e.g. https://openrouter.ai/api/v1), so append /models only.
   if (base.endsWith("/api")) return `${base}/tags`;
@@ -66,7 +90,7 @@ function modelsUrl(config: AgentConfig): string {
 }
 
 function authHeaders(
-  provider: AgentConfig["provider"],
+  provider: LLMProviderName,
   apiKey: string,
 ): Record<string, string> {
   if (provider === "anthropic") {
@@ -100,12 +124,11 @@ type TestError = "bad_key" | "unreachable" | "unknown_model";
 type TestResult = { ok: true } | { ok: false; error: TestError };
 
 async function probeEndpoint(
-  config: AgentConfig,
+  target: ProbeTarget,
   apiKey: string,
-  model?: string,
 ): Promise<TestResult> {
-  const url = modelsUrl(config);
-  const headers = authHeaders(config.provider, apiKey);
+  const url = modelsUrl(target);
+  const headers = authHeaders(target.provider, apiKey);
   let responseData: unknown;
   try {
     const res = await fetch(url, { headers });
@@ -121,10 +144,11 @@ async function probeEndpoint(
   }
 
   const models = extractModels(responseData);
-  const target = model ?? config.model;
   // Only flag unknown_model against a non-empty list; an empty list means the
   // endpoint doesn't support listing, so treat that as a successful connection.
-  if (models.length > 0 && !models.includes(target)) {
+  // An unset model means the form is testing a key before picking one.
+  const wanted = target.model;
+  if (wanted && models.length > 0 && !models.includes(wanted)) {
     return { ok: false, error: "unknown_model" };
   }
   return { ok: true };
@@ -148,15 +172,19 @@ export async function registerConfigRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      // Zod nullable().optional() produces string | null | undefined for baseUrl;
-      // destructure it out and coerce null → undefined to match AgentConfig.
-      const { baseUrl: rawBaseUrl, ...rest } = parsed.data;
-      const patch: Parameters<typeof updateConfig>[0] = {
-        ...rest,
-        ...(rawBaseUrl !== undefined && { baseUrl: rawBaseUrl ?? undefined }),
-      };
-      const updated = updateConfig(patch);
-      logger.info({ keys: Object.keys(parsed.data) }, "agent config updated");
+      // Provider blocks are written per provider so one cannot disturb the other;
+      // everything else is global and goes through the single config row.
+      const { providers, ...global } = parsed.data;
+      for (const name of ["anthropic", "openai"] as const) {
+        const block = providers?.[name];
+        if (block !== undefined)
+          updateProvider(name, block satisfies ProviderPatch);
+      }
+      const updated = updateConfig(global);
+      logger.info(
+        { keys: Object.keys(global), providers: Object.keys(providers ?? {}) },
+        "agent config updated",
+      );
       return updated;
     },
   );
@@ -164,14 +192,15 @@ export async function registerConfigRoutes(
   // proxies model list so the browser never calls the LLM endpoint directly
   fastify.get("/config/models", { preHandler: requireSession }, async () => {
     const config = loadConfig();
-    const apiKey =
-      loadApiKey() ??
-      (config.provider === "anthropic"
-        ? process.env["ANTHROPIC_API_KEY"]
-        : process.env["OPENAI_API_KEY"]) ??
-      "";
-    const url = modelsUrl(config);
-    const headers = authHeaders(config.provider, apiKey);
+    // Nothing to list before a provider is picked; the DB is the only key source.
+    const provider = config.provider;
+    if (provider === null) return { models: [] };
+    const apiKey = loadApiKey(provider) ?? "";
+    const url = modelsUrl({
+      provider,
+      baseUrl: config.providers[provider].baseUrl,
+    });
+    const headers = authHeaders(provider, apiKey);
     try {
       const res = await fetch(url, { headers });
       if (!res.ok) return { models: [] };
@@ -194,12 +223,18 @@ export async function registerConfigRoutes(
       }
       const { apiKey, model, provider, baseUrl } = parsed.data;
 
-      const config: AgentConfig = {
-        ...loadConfig(),
-        ...(provider !== undefined && { provider }),
-        ...(baseUrl !== undefined && { baseUrl }),
+      // Falls back to the stored block only for what the form did not override,
+      // so a probe can test an unsaved provider/endpoint/model combination.
+      const config = loadConfig();
+      const target: ProbeTarget = {
+        provider: provider ?? config.provider ?? "anthropic",
+        baseUrl,
+        model,
       };
-      const result = await probeEndpoint(config, apiKey, model);
+      if (baseUrl === undefined && provider === undefined && config.provider) {
+        target.baseUrl = config.providers[config.provider].baseUrl;
+      }
+      const result = await probeEndpoint(target, apiKey);
       logger.info({ ok: result.ok }, "config/test probe completed");
       return result;
     },
@@ -213,10 +248,9 @@ export async function registerConfigRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const { apiKey } = parsed.data;
-      const encrypted = encrypt(apiKey);
-      saveApiKey(encrypted);
-      return { apiKeyMasked: maskKey(apiKey) };
+      const { provider, apiKey } = parsed.data;
+      updateProvider(provider, { apiKey });
+      return { provider, apiKeyMasked: maskKey(apiKey) };
     },
   );
 }

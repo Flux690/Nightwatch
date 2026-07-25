@@ -17,7 +17,21 @@ import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { subscribeConsole } from "../session/bus.js";
 import { createSession, getSession } from "../db/sessions.js";
-import { loadConfig } from "../config/store.js";
+import type { ResolvedLLMConfig } from "@nightwarden/shared";
+
+// Title generation only runs inside a configured session, so the test states
+// that precondition rather than depending on what an empty config returns.
+function configuredConfig(): ResolvedLLMConfig {
+  return {
+    provider: "anthropic",
+    model: "test-model",
+    maxOutputTokens: 4096,
+    maxRetries: 0,
+    requestTimeoutMs: 10_000,
+    thinking: "off",
+    reasoningEffort: null,
+  };
+}
 import {
   generateSessionTitle,
   buildAlertTitleSource,
@@ -67,7 +81,7 @@ describe("session title generation", () => {
     await generateSessionTitle(
       sessionId,
       "Why is checkout slow this morning?",
-      loadConfig(),
+      configuredConfig(),
     );
     unsubscribe();
 
@@ -90,7 +104,7 @@ describe("session title generation", () => {
     await generateSessionTitle(
       sessionId,
       "Hey there, how's it going?",
-      loadConfig(),
+      configuredConfig(),
     );
 
     const framed: unknown = provider.start.mock.calls[0]?.[0];
@@ -108,13 +122,13 @@ describe("session title generation", () => {
     scriptTitleOnce("Identity Inquiry,");
     const sessionId = "sess-title-comma";
     seedSession(sessionId, "temp");
-    await generateSessionTitle(sessionId, "who are you?", loadConfig());
+    await generateSessionTitle(sessionId, "who are you?", configuredConfig());
     expect(getSession(sessionId)?.title).toBe("Identity Inquiry");
 
     scriptTitleOnce("One Two Three Four, Five");
     const sessionId2 = "sess-title-comma-2";
     seedSession(sessionId2, "temp");
-    await generateSessionTitle(sessionId2, "some question", loadConfig());
+    await generateSessionTitle(sessionId2, "some question", configuredConfig());
     expect(getSession(sessionId2)?.title).toBe("One Two Three Four");
   });
 
@@ -123,7 +137,7 @@ describe("session title generation", () => {
     const sessionId = "sess-title-2";
     seedSession(sessionId, "temp");
 
-    await generateSessionTitle(sessionId, "redis is oom", loadConfig());
+    await generateSessionTitle(sessionId, "redis is oom", configuredConfig());
 
     expect(getSession(sessionId)?.title).toBe("Redis Ran Out Of");
   });
@@ -133,7 +147,7 @@ describe("session title generation", () => {
     const sessionId = "sess-title-3";
     seedSession(sessionId, "original temp title");
 
-    await generateSessionTitle(sessionId, "some question", loadConfig());
+    await generateSessionTitle(sessionId, "some question", configuredConfig());
 
     expect(getSession(sessionId)?.title).toBe("original temp title");
   });

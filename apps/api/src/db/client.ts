@@ -16,11 +16,14 @@ const SCHEMA = `
     last_used_at      TEXT
   );
 
+  -- Loop and sandbox policy, which is provider-independent. Anything that
+  -- describes how to reach one model lives in provider_config below.
   CREATE TABLE IF NOT EXISTS config (
     id                 TEXT PRIMARY KEY,
-    provider           TEXT NOT NULL DEFAULT 'anthropic',
-    model              TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
-    thinking           TEXT NOT NULL DEFAULT 'adaptive',
+    -- Which provider_config row is live. NULL means the operator has not picked
+    -- yet, which the run gate refuses on; a default would make a fresh install
+    -- look configured while holding no API key.
+    active_provider    TEXT,
     max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
     max_retries        INTEGER NOT NULL DEFAULT 2,
     request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
@@ -37,11 +40,20 @@ const SCHEMA = `
     sandbox_allowlist_hosts TEXT NOT NULL DEFAULT 'registry.npmjs.org
 registry.yarnpkg.com
 repo.yarnpkg.com',
-    base_url           TEXT,
-    api_key_encrypted  TEXT,
-    prompt_caching     INTEGER NOT NULL DEFAULT 1,
-    reasoning_effort   TEXT,
     updated_at         TEXT NOT NULL
+  );
+
+  -- One row per provider, each owning its own credentials and endpoint, so
+  -- switching the active provider cannot carry the previous one's key or base
+  -- URL across. thinking is Anthropic's knob, reasoning_effort OpenAI's.
+  CREATE TABLE IF NOT EXISTS provider_config (
+    provider          TEXT PRIMARY KEY,
+    model             TEXT,
+    base_url          TEXT,
+    api_key_encrypted TEXT,
+    thinking          TEXT NOT NULL DEFAULT 'adaptive',
+    reasoning_effort  TEXT,
+    updated_at        TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS user (
