@@ -1,9 +1,9 @@
 {
   "name": "nightwarden",
-  "version": "0.2.40",
+  "version": "0.2.41",
   "private": true,
   "engines": {
-    "node": ">=20",
+    "node": ">=24",
     "pnpm": ">=11"
   },
   "packageManager": "pnpm@11.5.1",

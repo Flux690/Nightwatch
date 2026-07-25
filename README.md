@@ -1,7 +1,7 @@
 # NightWarden
 
 ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
-![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)
+![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)
 ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)
 
 NightWarden is a self-hosted, open-source AI SRE agent for Docker and Kubernetes workloads. It watches your servers and clusters, and when something breaks it investigates the problem on its own, works out the smallest safe fix, and waits for you to approve it before touching anything.
@@ -76,7 +76,7 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 
 ## Getting started
 
-You need Node.js 20 or newer, pnpm 11 or newer, and an Anthropic or OpenAI-compatible API key.
+You need Node.js 24 or newer, pnpm 11 or newer, and an Anthropic or OpenAI-compatible API key.
 
 ### 1. Clone and install
 
@@ -138,7 +138,9 @@ Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider*
 
 **Upgrade.** `docker compose pull && docker compose up -d`. Pre-1.0 there are no schema migrations - a release that changes the schema is applied by deleting `nightwarden.db` and setting up again, and the release notes say when that applies.
 
-**Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/runner/Dockerfile -t nightwarden-runner .` for the runner. On an Apple Silicon Mac add `--platform linux/amd64` for an x86 host: `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures.
+**Architecture.** The published images are `linux/amd64`, which is what a standard cloud VM runs. `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures, so on arm64 hosts - Apple Silicon, Graviton, Ampere - build locally rather than pulling.
+
+**Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/runner/Dockerfile -t nightwarden-runner .` for the runner. Both build natively for whatever machine you are on; add `--platform linux/amd64` on an Apple Silicon Mac when the image is destined for an x86 host.
 
 ## Configuration
 
