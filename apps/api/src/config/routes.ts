@@ -7,7 +7,7 @@ import {
   updateProvider,
   type ProviderPatch,
 } from "./store.js";
-import { maskKey } from "./crypto.js";
+import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { LLMProviderName } from "@nightwarden/shared";

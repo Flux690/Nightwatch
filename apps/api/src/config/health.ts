@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ConfigHealthIssue } from "@nightwarden/shared";
 import { requireSession } from "../auth/session.js";
 import { checkLLMReadiness, notConfiguredMessage } from "./readiness.js";
-import { decrypt } from "./crypto.js";
+import { decrypt } from "../secrets.js";
 import { getFleetView } from "../ws/fleet.js";
 import {
   getLokiIntegration,

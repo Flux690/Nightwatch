@@ -15,7 +15,7 @@ import {
   MAX_RETRIES,
   REQUEST_TIMEOUT_MS,
 } from "../llm/config.js";
-import { decrypt, encrypt, maskKey } from "./crypto.js";
+import { decrypt, encrypt, maskKey } from "../secrets.js";
 import { logger } from "../logger.js";
 import type {
   AgentConfig,

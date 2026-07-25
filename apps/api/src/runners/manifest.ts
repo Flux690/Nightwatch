@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
-import { publicWsUrl } from "../config/public-url.js";
+import { publicWsUrl } from "../env/public-url.js";
 import { RUNNER_IMAGE } from "./image.js";
 
 const TEMPLATE = `\

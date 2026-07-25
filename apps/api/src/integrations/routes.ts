@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { requireSession } from "../auth/session.js";
-import { decrypt, encrypt } from "../config/crypto.js";
+import { decrypt, encrypt } from "../secrets.js";
 import {
   deleteGitHubIntegration,
   getGitHubIntegration,
@@ -31,7 +31,7 @@ import { getFleetView } from "../ws/fleet.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
-import { publicUrl } from "../config/public-url.js";
+import { publicUrl } from "../env/public-url.js";
 import type {
   GitHubIntegrationStatus,
   PrometheusIntegrationStatus,

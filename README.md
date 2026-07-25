@@ -285,8 +285,9 @@ apps/
                         report.ts is the report service: the only place a report is saved
       alerts/           Alertmanager ingest, dedup, batching
       auth/             owner password, runner token minting, fleet ingest credential
-      config/           settings routes, LLM config, state-directory paths
+      config/           operator settings: the config store, its routes, health and the run-readiness gate
       db/               SQLite schema and table modules (FKs on, no migrations)
+      env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
       integrations/     GitHub / Prometheus / Loki clients and connect/status routes
       llm/              provider factory (Anthropic / OpenAI)
       remediation/      remediation-mode toggle routes
@@ -296,6 +297,7 @@ apps/
                         list.ts derives the sessions queue (status, headline, severity)
       ws/               runner registry/routing, command transport
       dispatcher.ts     single entry point for every investigation
+      secrets.ts        encrypt/decrypt/mask for every credential stored at rest
   runner/               Stateless executor: the hands
     src/
       commands/         command dispatch (registry.ts) + host, file tools

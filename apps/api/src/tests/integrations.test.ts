@@ -26,7 +26,7 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { manifest } from "./manifest-helper.js";
 import { getDb } from "../db/client.js";
-import { decrypt } from "../config/crypto.js";
+import { decrypt } from "../secrets.js";
 import { mountApi } from "./api-server.js";
 
 const TOKEN = "github_pat_test_plaintext";

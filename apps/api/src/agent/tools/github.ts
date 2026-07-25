@@ -1,4 +1,4 @@
-import { decrypt } from "../../config/crypto.js";
+import { decrypt } from "../../secrets.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import {

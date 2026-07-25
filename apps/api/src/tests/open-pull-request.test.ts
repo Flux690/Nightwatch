@@ -11,7 +11,7 @@ vi.mock("node:child_process", () => ({ execFile: execFileMock }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../config/crypto.js";
+import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
 import { getDb } from "../db/client.js";
 import { saveGitHubIntegration } from "../db/integrations.js";

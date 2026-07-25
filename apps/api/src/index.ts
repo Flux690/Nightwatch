@@ -1,7 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import FastifyWebSocket from "@fastify/websocket";
-import { resolveSecretKey } from "./config/secret-key.js";
+import { resolveSecretKey } from "./env/secret-key.js";
 import { initDb } from "./db/client.js";
 import { registerAuthRoutes } from "./auth/routes.js";
 import { registerTokenRoutes } from "./auth/token.js";
@@ -23,13 +23,13 @@ import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
-import { decrypt } from "./config/crypto.js";
+import { decrypt } from "./secrets.js";
 import { getGitHubIntegration } from "./db/integrations.js";
 import {
   nightwardenDir,
   stateDirIsEphemeral,
   workspacesDir,
-} from "./config/paths.js";
+} from "./env/paths.js";
 import { logger } from "./logger.js";
 
 // Resolve the state directory first so a relative NIGHTWARDEN_DIR fails here with

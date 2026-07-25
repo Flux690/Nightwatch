@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { dbPath } from "../config/paths.js";
+import { dbPath } from "../env/paths.js";
 
 // No upgrade migrations: pre-production, so a schema change is applied by
 // recreating the database, not by migrating data.

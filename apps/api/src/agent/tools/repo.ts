@@ -1,6 +1,6 @@
 import { displayIdentity } from "../../alerts/resolve-target.js";
-import { decrypt } from "../../config/crypto.js";
-import { proxyDir, workspacesDir } from "../../config/paths.js";
+import { decrypt } from "../../secrets.js";
+import { proxyDir, workspacesDir } from "../../env/paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
 import { getSession } from "../../db/sessions.js";

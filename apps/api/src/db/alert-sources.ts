@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "./client.js";
 import { hashToken } from "./runner.js";
-import { encrypt, decrypt } from "../config/crypto.js";
+import { encrypt, decrypt } from "../secrets.js";
 
 export interface AlertSourceRow {
   kind: string;

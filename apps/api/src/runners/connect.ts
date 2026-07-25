@@ -4,7 +4,7 @@ import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
 import { CONNECT_SCRIPT_TEMPLATE as TEMPLATE } from "./connect-script.js";
 import { RUNNER_IMAGE } from "./image.js";
-import { publicWsUrl } from "../config/public-url.js";
+import { publicWsUrl } from "../env/public-url.js";
 
 function buildScript(wsUrl: string, token: string, serverName: string): string {
   return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)

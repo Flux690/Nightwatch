@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../config/crypto.js";
+import { encrypt } from "../secrets.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";

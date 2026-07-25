@@ -1,4 +1,4 @@
-import { decrypt } from "../../config/crypto.js";
+import { decrypt } from "../../secrets.js";
 import { getPrometheusIntegration } from "../../db/integrations.js";
 import {
   PrometheusApiError,

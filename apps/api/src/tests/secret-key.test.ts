@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, platform } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveSecretKey } from "../config/secret-key.js";
-import { encrypt, decrypt } from "../config/crypto.js";
+import { resolveSecretKey } from "../env/secret-key.js";
+import { encrypt, decrypt } from "../secrets.js";
 
 function expectRestrictedPermissions(file: string): void {
   if (platform() === "win32") {

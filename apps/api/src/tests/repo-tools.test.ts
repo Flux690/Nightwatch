@@ -18,7 +18,7 @@ import {
   createScriptRunner,
 } from "./contract-fake-provider.js";
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../config/crypto.js";
+import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
 import {
   deleteGitHubIntegration,
