@@ -5,8 +5,9 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    // Nothing emits through tsc (esbuild bundles the apps, Vite builds the
+    // console), so a type-only import left unmarked would survive into the
+    // bundle as a runtime import of a binding that does not exist.
+    "verbatimModuleSyntax": true
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "nightwarden",
-  "version": "0.2.36",
+  "version": "0.2.37",
   "private": true,
   "engines": {
     "node": ">=20",
@@ -11,13 +11,15 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "dev": "pnpm -r --parallel dev",
+    "dev": "pnpm --filter @nightwarden/api --filter @nightwarden/console --parallel dev",
+    "dev:runner": "pnpm --filter @nightwarden/runner dev",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/dockerode": "4.0.1",
     "@types/node": "26.1.1",
+    "esbuild": "0.28.1",
     "prettier": "3.9.5",
     "typescript": "7.0.2"
   }

@@ -6,15 +6,22 @@ RUN apt-get update \
 
 RUN corepack enable pnpm
 
+# A build is non-interactive: lets pnpm re-link node_modules for the prod prune
+# below instead of stopping to ask.
+ENV CI=true
+
 WORKDIR /build
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
+COPY scripts/ scripts/
 COPY packages/shared/ packages/shared/
 COPY apps/runner/ apps/runner/
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @nightwarden/shared build
 RUN pnpm --filter @nightwarden/runner build
-RUN pnpm deploy --filter @nightwarden/runner --prod /app
+# shared is inlined in the bundle, so no workspace package is left to resolve and
+# pruning leaves exactly what the bundle imports. The tree is copied whole because
+# pnpm's node_modules are relative symlinks into the store.
+RUN pnpm install --frozen-lockfile --prod
 
 
 FROM node:24-slim
@@ -31,9 +38,9 @@ RUN apt-get update \
        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app /app
+COPY --from=builder /build /app
 WORKDIR /app
 
 ENV HOST_PROC=/host/proc
 
-ENTRYPOINT ["node", "dist/index.js"]
+ENTRYPOINT ["node", "apps/runner/dist/index.js"]

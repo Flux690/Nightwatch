@@ -1,15 +1,8 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
-
-const TEMPLATE = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../../scripts/connect.sh"),
-  "utf8",
-);
+import { CONNECT_SCRIPT_TEMPLATE as TEMPLATE } from "./connect-script.js";
 
 function buildWsUrl(protocol: string, host: string): string {
   const wsProto = protocol === "https" ? "wss" : "ws";

@@ -1,7 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
-injectWorkspacePackages: true
+# No injectWorkspacePackages: shared is consumed as a live symlink to its source,
+# so an edit is visible immediately instead of needing a re-copy.
 allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true

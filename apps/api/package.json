@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx watch --clear-screen=false --include ../../packages/shared/dist src/index.ts",
+    "build": "node ../../scripts/build-app.mjs .",
+    "dev": "tsx watch --clear-screen=false --include ../../packages/shared/src src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -12,7 +12,6 @@
     "@anthropic-ai/sdk": "0.111.0",
     "@fastify/sse": "0.5.0",
     "@fastify/websocket": "11.3.0",
-    "@nightwarden/shared": "workspace:*",
     "argon2": "0.44.0",
     "better-sqlite3": "12.11.1",
     "diff": "9.0.0",
@@ -26,6 +25,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@nightwarden/shared": "workspace:*",
     "@types/better-sqlite3": "7.6.13",
     "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "4.1.10",
