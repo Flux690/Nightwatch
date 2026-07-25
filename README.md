@@ -1,5 +1,6 @@
 # NightWarden
 
+[![CI](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml/badge.svg)](https://github.com/PrabhatMattoo/NightWarden/actions/workflows/ci.yml)
 ![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)
 ![Node.js >= 24](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)
 ![pnpm >= 11](https://img.shields.io/badge/pnpm-%3E%3D11-orange.svg)

@@ -13,11 +13,20 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # The same gate a pull request faces, so nothing reaches the registry that
+  # would have failed review.
+  verify:
+    uses: ./.github/workflows/verify.yml
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      # Attaches a signed record of which commit and workflow built the image.
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         include:
@@ -40,16 +49,26 @@ jobs:
       - id: repo
         run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/build-push-action@v7
+      - id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           push: true
-          # amd64 is what a DigitalOcean droplet runs; built natively here, so
-          # better-sqlite3 and argon2 compile for the right target.
+          # amd64 is what a standard cloud VM runs, built natively here so
+          # better-sqlite3 and argon2 compile for the right target. arm64 hosts
+          # build locally; the README says so.
           platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/${{ matrix.name }}:latest
             ${{ inputs.tag && format('{0}/{1}/{2}:{3}', env.REGISTRY, steps.repo.outputs.owner, matrix.name, inputs.tag) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scoped per image: on one shared scope the two matrix legs evict each
+          # other and neither ends up cached.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ steps.repo.outputs.owner }}/${{ matrix.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
