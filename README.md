@@ -81,8 +81,8 @@ You need Node.js 20 or newer, pnpm 11 or newer, and an Anthropic or OpenAI-compa
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/Flux690/nightwarden
-cd nightwarden
+git clone https://github.com/PrabhatMattoo/NightWarden.git
+cd NightWarden
 pnpm install
 ```
 
@@ -121,7 +121,7 @@ In the console go to **Integrations**. Four plugs matter here: the **Runner** (a
 The API and the console ship as one image on a single origin, and SQLite is the system of record - one container on one Linux host with Docker, no database alongside it.
 
 ```bash
-curl -O https://raw.githubusercontent.com/PrabhatMattoo/nightwarden/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/PrabhatMattoo/NightWarden/main/docker-compose.yml
 export PUBLIC_URL=http://203.0.113.10:3000   # routable from your servers, not localhost
 docker compose up -d
 ```
