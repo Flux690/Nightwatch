@@ -5,10 +5,9 @@ import {
   randomBytes,
 } from "node:crypto";
 
-// Every credential the database holds at rest passes through here: LLM API keys,
-// integration tokens, the fleet ingest token. Sealing is the whole job, which is
-// why this is not named for the algorithm and does not live beside the settings
-// it happens to encrypt.
+// Every credential stored at rest passes through here: provider keys,
+// integration tokens, the fleet ingest token. Named for what it protects rather
+// than the algorithm, since node:crypto already owns that name.
 
 // Derive a stable 32-byte key from the SECRET_KEY env var via SHA-256.
 // The env var can be any length; the hash normalises it to exactly 32 bytes.

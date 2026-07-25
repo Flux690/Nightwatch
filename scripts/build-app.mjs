@@ -4,9 +4,7 @@ import { build } from "esbuild";
 
 // shared has no build of its own, so it must be inlined here. npm dependencies
 // stay external: native modules cannot be bundled, and pino resolves its
-// transports from node_modules at runtime. Listing them from `dependencies`
-// rather than esbuild's `packages: "external"` is deliberate - shared is a
-// devDependency, and blanket externalising would leave it unresolved at runtime.
+// transports from node_modules at runtime.
 const appDir = resolve(process.argv[2] ?? process.cwd());
 const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8"));
 
@@ -30,6 +28,8 @@ await build({
   format: "esm",
   target: `node${major}`,
   sourcemap: true,
+  // From dependencies, not esbuild's `packages: "external"`: shared is a
+  // devDependency, and externalising everything would leave it unresolved.
   external: Object.keys(pkg.dependencies ?? {}),
   logLevel: "info",
 });

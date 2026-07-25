@@ -26,10 +26,9 @@ COPY apps/console/package.json apps/console/
 COPY packages/shared/package.json packages/shared/
 
 
-# The tree the image ships. It never sees a devDependency, so there is nothing
-# to prune afterwards - `--prod` decides what to install, and cannot uninstall.
-# Filtered to the api: unfiltered, this would also pull the console's React tree,
-# which Vite has already bundled into its dist.
+# The tree the image ships: it never sees a devDependency, so nothing needs
+# pruning - `--prod` decides what to install and cannot uninstall. Filtered to
+# the api, or it also installs the console's React tree that Vite has bundled.
 FROM manifests AS prod-deps
 
 RUN pnpm install --frozen-lockfile --prod --filter @nightwarden/api
