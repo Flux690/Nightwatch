@@ -35,6 +35,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
+import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN: ScriptedTurn = {
@@ -93,8 +94,8 @@ describe("continue-request interrupts", () => {
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -113,7 +114,7 @@ describe("continue-request interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -146,7 +147,7 @@ describe("continue-request interrupts", () => {
     close();
 
     // cleanup: end the investigation
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -163,7 +164,7 @@ describe("continue-request interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -189,7 +190,7 @@ describe("continue-request interrupts", () => {
 
     // Respond to continue (no decision = continue)
     const continueRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -228,7 +229,7 @@ describe("continue-request interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -249,7 +250,7 @@ describe("continue-request interrupts", () => {
 
     // Respond with reject = end investigation
     const endRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -287,7 +288,7 @@ describe("continue-request interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -315,7 +316,7 @@ describe("continue-request interrupts", () => {
 
     // Resolve purely from DB state
     const resumeRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {

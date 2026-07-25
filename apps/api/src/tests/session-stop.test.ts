@@ -22,6 +22,7 @@ import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
+import { mountApi } from "./api-server.js";
 
 describe("POST /sessions/:id/stop", () => {
   let server: FastifyInstance;
@@ -34,7 +35,7 @@ describe("POST /sessions/:id/stop", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerSessionRoutes(server);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -46,17 +47,23 @@ describe("POST /sessions/:id/stop", () => {
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/sessions/unknown/stop`, {
-      method: "POST",
-    });
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/unknown/stop`,
+      {
+        method: "POST",
+      },
+    );
     expect(res.status).toBe(401);
   });
 
   it("returns 409 when the session is not running", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/sessions/unknown/stop`, {
-      method: "POST",
-      headers: { Cookie: `nw_auth=${SESSION}` },
-    });
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/unknown/stop`,
+      {
+        method: "POST",
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      },
+    );
     expect(res.status).toBe(409);
   });
 
@@ -68,7 +75,7 @@ describe("POST /sessions/:id/stop", () => {
       }),
     );
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -80,7 +87,7 @@ describe("POST /sessions/:id/stop", () => {
     await waitFor(() => dispatcher.isSessionRunning(sessionId));
 
     const stopRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/stop`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/stop`,
       {
         method: "POST",
         headers: { Cookie: `nw_auth=${SESSION}` },

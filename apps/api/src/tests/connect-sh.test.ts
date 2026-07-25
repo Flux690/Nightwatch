@@ -1,10 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { generateRunnerToken } from "../db/runner.js";
 import { registerConnectRoutes } from "../runners/connect.js";
+import { mountApi } from "./api-server.js";
 
 describe("GET /connect.sh", () => {
   let server: FastifyInstance;
@@ -17,7 +18,7 @@ describe("GET /connect.sh", () => {
     SESSION = await mintTestSession();
     TOKEN = generateRunnerToken("test-server").plaintext;
     server = Fastify({ logger: false, trustProxy: true });
-    await registerConnectRoutes(server);
+    await mountApi(server, registerConnectRoutes);
     await server.ready();
   });
 
@@ -29,7 +30,7 @@ describe("GET /connect.sh", () => {
   it("returns 401 without a session cookie", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(res.statusCode).toBe(401);
@@ -38,7 +39,7 @@ describe("GET /connect.sh", () => {
   it("returns 400 when the Authorization header is missing", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(400);
@@ -47,7 +48,7 @@ describe("GET /connect.sh", () => {
   it("does not accept the token as a query parameter", async () => {
     const res = await server.inject({
       method: "GET",
-      url: `/connect.sh?token=${TOKEN}`,
+      url: `/api/connect.sh?token=${TOKEN}`,
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(400);
@@ -56,7 +57,7 @@ describe("GET /connect.sh", () => {
   it("returns 404 for a token not in the DB", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: "Bearer nwr_notarealtoken_just_a_fake_value_xxxx",
@@ -68,7 +69,7 @@ describe("GET /connect.sh", () => {
   it("returns a shell script with Content-Type text/x-shellscript", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -81,20 +82,22 @@ describe("GET /connect.sh", () => {
   it("script contains the ws:// runner WS URL", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
         host: "control.example.com:3000",
       },
     });
-    expect(res.body).toContain("ws://control.example.com:3000/clients/connect");
+    expect(res.body).toContain(
+      "ws://control.example.com:3000/api/clients/connect",
+    );
   });
 
   it("uses wss:// for https requests", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -102,13 +105,36 @@ describe("GET /connect.sh", () => {
         "x-forwarded-proto": "https",
       },
     });
-    expect(res.body).toContain("wss://my-host.example.com/clients/connect");
+    expect(res.body).toContain("wss://my-host.example.com/api/clients/connect");
+  });
+
+  it("bakes in PUBLIC_URL over the request Host, so a runner dials the address that is reachable from its own machine", async () => {
+    vi.stubEnv("PUBLIC_URL", "https://nightwarden.example.com");
+    try {
+      const res = await server.inject({
+        method: "GET",
+        url: "/api/connect.sh",
+        headers: {
+          cookie: `nw_auth=${SESSION}`,
+          authorization: `Bearer ${TOKEN}`,
+          // What an operator's browser reached the console on: useless to a runner.
+          host: "localhost:3000",
+        },
+      });
+
+      expect(res.body).toContain(
+        "wss://nightwarden.example.com/api/clients/connect",
+      );
+      expect(res.body).not.toContain("localhost:3000");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("script contains the runner token", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -120,7 +146,7 @@ describe("GET /connect.sh", () => {
   it("carries no bundled-monitoring plumbing (unbundled runner)", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -153,7 +179,7 @@ describe("GET /connect.sh", () => {
     ).plaintext;
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${namedToken}`,
@@ -169,7 +195,7 @@ describe("GET /connect.sh", () => {
     ).plaintext;
     const res = await server.inject({
       method: "GET",
-      url: "/connect.sh",
+      url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${namedToken}`,

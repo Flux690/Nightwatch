@@ -34,6 +34,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { dockerService, manifest } from "./manifest-helper.js";
+import { mountApi } from "./api-server.js";
 
 const ALERTMANAGER_BODY = {
   alerts: [
@@ -87,7 +88,7 @@ describe("POST /alerts/ingest auth", () => {
     );
 
     server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
   });
 
@@ -101,7 +102,7 @@ describe("POST /alerts/ingest auth", () => {
   it("rejects unknown token with 401 before any processing", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": `nwi_unknown-${randomUUID()}` },
       payload: ALERTMANAGER_BODY,
     });
@@ -116,7 +117,7 @@ describe("POST /alerts/ingest auth", () => {
     const runnerToken = generateRunnerToken("not-an-alert-source").plaintext;
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": runnerToken },
       payload: ALERTMANAGER_BODY,
     });
@@ -127,7 +128,7 @@ describe("POST /alerts/ingest auth", () => {
   it("rejects missing token with 401", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       payload: ALERTMANAGER_BODY,
     });
     expect(res.statusCode).toBe(401);
@@ -136,7 +137,7 @@ describe("POST /alerts/ingest auth", () => {
   it("accepts valid token and processes the alert", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": VALID_TOKEN },
       payload: ALERTMANAGER_BODY,
     });
@@ -152,7 +153,7 @@ describe("POST /alerts/ingest auth", () => {
   it("accepts a valid Authorization bearer token and processes the alert", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { authorization: `Bearer ${VALID_TOKEN}` },
       payload: ALERTMANAGER_BODY,
     });
@@ -202,7 +203,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     INGEST_TOKEN = generateAlertSourceToken("alertmanager");
 
     server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
   });
 
@@ -226,7 +227,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   it("rejects an unknown nwi_ token with 401", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": `nwi_unknown-${randomUUID()}` },
       payload: alertmanagerBody("nwi-unknown"),
     });
@@ -236,7 +237,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   it("rejects only when neither a runner nor a pull-integration can supply evidence", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-no-evidence"),
     });
@@ -254,7 +255,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     const promOnly = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-prometheus-only"),
     });
@@ -272,7 +273,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     const lokiOnly = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-loki-only"),
     });
@@ -293,7 +294,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-single-runner"),
     });
@@ -320,7 +321,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-multi-runner"),
     });
@@ -340,7 +341,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-no-match"),
     });
@@ -369,7 +370,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("nwi-ambiguous"),
     });
@@ -385,7 +386,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   it("returns 400 for an unrecognized payload body so a misconfigured sender learns its body was not understood", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: { notAlerts: true },
     });
@@ -404,7 +405,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
       const res = await server.inject({
         method: "POST",
-        url: "/alerts/ingest",
+        url: "/api/alerts/ingest",
         headers: { "x-nightwarden-token": INGEST_TOKEN },
         payload: alertmanagerBody("nwi-unconfigured"),
       });

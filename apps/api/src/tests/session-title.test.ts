@@ -36,6 +36,7 @@ import {
   generateSessionTitle,
   buildAlertTitleSource,
 } from "../session/title.js";
+import { mountApi } from "./api-server.js";
 
 function scriptTitleOnce(text: string): void {
   mockCreateTitleProvider.mockImplementationOnce(() =>
@@ -60,7 +61,7 @@ describe("session title generation", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerSessionRoutes(server);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -181,7 +182,7 @@ describe("session title generation", () => {
     const events: ConsoleEvent[] = [];
     const unsubscribe = subscribeConsole((e) => events.push(e));
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

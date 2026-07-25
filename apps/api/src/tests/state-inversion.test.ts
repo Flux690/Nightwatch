@@ -35,6 +35,7 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSession } from "../db/sessions.js";
 import { buildInitialContext } from "../agent/context.js";
+import { mountApi } from "./api-server.js";
 
 describe("state inversion: persistence and reads are API-local", () => {
   let server: FastifyInstance;
@@ -47,8 +48,8 @@ describe("state inversion: persistence and reads are API-local", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -78,7 +79,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     // Deliberately register no runner: the console must work during an outage.
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -92,7 +93,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
-    const listRes = await fetch(`http://127.0.0.1:${port}/sessions`, {
+    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
     expect(listRes.status).toBe(200);
@@ -100,7 +101,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(sessions.some((s) => s.sessionId === sessionId)).toBe(true);
 
     const txRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(txRes.status).toBe(200);
@@ -118,7 +119,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -135,7 +136,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(stored?.originatingAlert).toBeNull();
 
     const txRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     const transcript = (await txRes.json()) as Array<{
@@ -152,11 +153,11 @@ describe("state inversion: persistence and reads are API-local", () => {
   });
 
   it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {
-    const listRes = await fetch(`http://127.0.0.1:${port}/sessions`);
+    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`);
     expect(listRes.status).toBe(401);
 
     const txRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/nonexistent-id`,
+      `http://127.0.0.1:${port}/api/sessions/nonexistent-id`,
     );
     expect(txRes.status).toBe(401);
   });

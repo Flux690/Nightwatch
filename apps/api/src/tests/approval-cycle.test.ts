@@ -50,6 +50,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
+import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -114,8 +115,8 @@ describe("durable approval interrupts", () => {
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -155,7 +156,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -188,7 +189,7 @@ describe("durable approval interrupts", () => {
     close();
 
     // cleanup: approve via /respond to prevent leaking into later tests
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -222,7 +223,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -241,7 +242,7 @@ describe("durable approval interrupts", () => {
     );
     // Approve via /respond
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -300,7 +301,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -318,7 +319,7 @@ describe("durable approval interrupts", () => {
       ),
     );
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -370,7 +371,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -388,7 +389,7 @@ describe("durable approval interrupts", () => {
       ),
     );
     const ctxRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -436,7 +437,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -454,7 +455,7 @@ describe("durable approval interrupts", () => {
       ),
     );
     const first = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -467,7 +468,7 @@ describe("durable approval interrupts", () => {
     expect(first.status).toBe(200);
 
     const second = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -506,7 +507,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -526,7 +527,7 @@ describe("durable approval interrupts", () => {
 
     // Fire approve and reject concurrently
     const [approveRes, rejectRes] = await Promise.all([
-      fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+      fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -534,7 +535,7 @@ describe("durable approval interrupts", () => {
         },
         body: JSON.stringify({ decision: "approve", resolvedBy: "op-approve" }),
       }),
-      fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+      fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -582,7 +583,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -602,7 +603,7 @@ describe("durable approval interrupts", () => {
 
     // Session is suspended — sending a chat message must get 409
     const msgRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {
         method: "POST",
         headers: {
@@ -617,7 +618,7 @@ describe("durable approval interrupts", () => {
     close();
 
     // cleanup
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -649,7 +650,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -669,7 +670,7 @@ describe("durable approval interrupts", () => {
 
     // Empty body — no decision, no text — must return 400 for approval kind
     const validationRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -683,7 +684,7 @@ describe("durable approval interrupts", () => {
 
     // Cleanup
     close();
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -716,7 +717,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -741,7 +742,7 @@ describe("durable approval interrupts", () => {
 
     // Resolve via REST — works purely from DB state (as it would after restart)
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -791,7 +792,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -822,7 +823,7 @@ describe("durable approval interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -888,7 +889,7 @@ describe("durable approval interrupts", () => {
       ),
     );
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -942,7 +943,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -974,7 +975,7 @@ describe("durable approval interrupts", () => {
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {

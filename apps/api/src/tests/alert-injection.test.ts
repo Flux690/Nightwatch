@@ -41,6 +41,7 @@ import {
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dockerService, manifest } from "./manifest-helper.js";
+import { mountApi } from "./api-server.js";
 
 // Matches the container:"web-01" label alertmanagerBody() carries.
 function webOneManifest() {
@@ -374,14 +375,14 @@ describe("mid-run alert injection (loop seam)", () => {
     expect(dispatcher.getActiveAlertSession()).toBe(sessionId);
 
     const server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
 
     // A correlated alert from the same server, ingested through the real
     // route, must inject into the resumed session rather than spawn a new one.
     const correlated = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": tokenPlaintext },
       payload: alertmanagerBody("correlated-resume"),
     });
@@ -395,7 +396,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // resumed run is active is deduped.
     const refire = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": tokenPlaintext },
       payload: alertmanagerBody("primary-resume", "warning", primaryFiredAt),
     });

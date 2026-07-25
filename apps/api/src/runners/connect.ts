@@ -3,14 +3,12 @@ import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
 import { CONNECT_SCRIPT_TEMPLATE as TEMPLATE } from "./connect-script.js";
-
-function buildWsUrl(protocol: string, host: string): string {
-  const wsProto = protocol === "https" ? "wss" : "ws";
-  return `${wsProto}://${host}/clients/connect`;
-}
+import { RUNNER_IMAGE } from "./image.js";
+import { publicWsUrl } from "../config/public-url.js";
 
 function buildScript(wsUrl: string, token: string, serverName: string): string {
-  return TEMPLATE.replaceAll("{{WS_URL}}", wsUrl)
+  return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)
+    .replaceAll("{{WS_URL}}", wsUrl)
     .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
     .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
 }
@@ -34,10 +32,7 @@ export async function registerConnectRoutes(
         return reply.code(404).send({ error: "token not found" });
       }
 
-      const wsUrl = buildWsUrl(
-        request.protocol,
-        request.headers.host ?? "localhost",
-      );
+      const wsUrl = publicWsUrl(request, "/api/clients/connect");
       const script = buildScript(wsUrl, token, record.serverName ?? "");
 
       reply.header("Content-Type", "text/x-shellscript");

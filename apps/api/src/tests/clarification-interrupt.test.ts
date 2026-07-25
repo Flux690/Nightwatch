@@ -36,6 +36,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
+import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -108,8 +109,8 @@ describe("clarification interrupts", () => {
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -141,7 +142,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -177,7 +178,7 @@ describe("clarification interrupts", () => {
     close();
 
     // cleanup via /respond
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -208,7 +209,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -226,7 +227,7 @@ describe("clarification interrupts", () => {
       ),
     );
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -279,7 +280,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -300,7 +301,7 @@ describe("clarification interrupts", () => {
 
     // Console pre-joins selections; server receives a plain string
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -344,7 +345,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -364,7 +365,7 @@ describe("clarification interrupts", () => {
 
     // Sending decision:"approve" on a clarification interrupt must return 400
     const badRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -379,7 +380,7 @@ describe("clarification interrupts", () => {
     close();
 
     // cleanup
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -407,7 +408,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -430,7 +431,7 @@ describe("clarification interrupts", () => {
 
     // Resolve purely from DB state
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -501,7 +502,7 @@ describe("clarification interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -524,7 +525,7 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const answerRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -549,7 +550,7 @@ describe("clarification interrupts", () => {
     expect(restartCommands).toHaveLength(0);
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {

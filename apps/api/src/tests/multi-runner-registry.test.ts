@@ -17,6 +17,7 @@ import { registerWsRoutes } from "../ws/server.js";
 import { registerRunnerRoutes } from "../runners/routes.js";
 import { resolveCommand, sendCommand } from "../ws/command-transport.js";
 import { logger } from "../logger.js";
+import { mountApi } from "./api-server.js";
 
 function manifest(hostname: string, containers: string[]): CapabilityManifest {
   return {
@@ -45,7 +46,7 @@ async function connectRunner(
   token: string,
   m: CapabilityManifest,
 ): Promise<WebSocket> {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
     headers: {
       authorization: `Bearer ${token}`,
     },
@@ -72,8 +73,8 @@ describe("flat runner registry", () => {
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
-    await registerWsRoutes(server);
-    await registerRunnerRoutes(server);
+    await mountApi(server, registerWsRoutes);
+    await mountApi(server, registerRunnerRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -85,7 +86,7 @@ describe("flat runner registry", () => {
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({ method: "GET", url: "/runners" });
+    const res = await server.inject({ method: "GET", url: "/api/runners" });
 
     expect(res.statusCode).toBe(401);
   });
@@ -93,7 +94,7 @@ describe("flat runner registry", () => {
   async function getRunners(): Promise<RunnerRecord[]> {
     const res = await server.inject({
       method: "GET",
-      url: "/runners",
+      url: "/api/runners",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
@@ -103,7 +104,7 @@ describe("flat runner registry", () => {
   async function getFleet(): Promise<FleetRunner[]> {
     const res = await server.inject({
       method: "GET",
-      url: "/fleet",
+      url: "/api/fleet",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
@@ -461,8 +462,8 @@ describe("protocol ping/pong liveness", () => {
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
-    await registerWsRoutes(server);
-    await registerRunnerRoutes(server);
+    await mountApi(server, registerWsRoutes);
+    await mountApi(server, registerRunnerRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -476,7 +477,7 @@ describe("protocol ping/pong liveness", () => {
   async function getRunners(): Promise<RunnerRecord[]> {
     const res = await server.inject({
       method: "GET",
-      url: "/runners",
+      url: "/api/runners",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
@@ -572,8 +573,8 @@ describe("remediation mode toggle", () => {
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
-    await registerWsRoutes(server);
-    await registerRunnerRoutes(server);
+    await mountApi(server, registerWsRoutes);
+    await mountApi(server, registerRunnerRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -590,7 +591,7 @@ describe("remediation mode toggle", () => {
     );
 
     const receivedMessages: Array<{ type: string; payload: unknown }> = [];
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
       headers: { authorization: `Bearer ${token}` },
     });
     await new Promise<void>((resolve, reject) => {
@@ -614,7 +615,7 @@ describe("remediation mode toggle", () => {
 
     const res = await server.inject({
       method: "PATCH",
-      url: `/runners/${runnerId}/remediation-mode`,
+      url: `/api/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: true },
     });
@@ -642,7 +643,7 @@ describe("remediation mode toggle", () => {
   it("PATCH /runners/:id/remediation-mode returns 404 for unknown id", async () => {
     const res = await server.inject({
       method: "PATCH",
-      url: `/runners/00000000-0000-0000-0000-000000000000/remediation-mode`,
+      url: `/api/runners/00000000-0000-0000-0000-000000000000/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: true },
     });
@@ -653,7 +654,7 @@ describe("remediation mode toggle", () => {
     const { id: runnerId } = generateRunnerToken("toggle-badreq");
     const res = await server.inject({
       method: "PATCH",
-      url: `/runners/${runnerId}/remediation-mode`,
+      url: `/api/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {},
     });
@@ -672,8 +673,8 @@ describe("remediation mode reconciliation on reconnect", () => {
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
-    await registerWsRoutes(server);
-    await registerRunnerRoutes(server);
+    await mountApi(server, registerWsRoutes);
+    await mountApi(server, registerRunnerRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -692,7 +693,7 @@ describe("remediation mode reconciliation on reconnect", () => {
     // Set DB to false before connecting
     const patchRes = await server.inject({
       method: "PATCH",
-      url: `/runners/${runnerId}/remediation-mode`,
+      url: `/api/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: false },
     });
@@ -701,7 +702,7 @@ describe("remediation mode reconciliation on reconnect", () => {
     // Runner connects and reports remediationEnabled: true in its manifest
     // (simulates env-var bootstrap mismatch after a toggle)
     const receivedMessages: Array<{ type: string; payload: unknown }> = [];
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
       headers: { authorization: `Bearer ${token}` },
     });
     await new Promise<void>((resolve, reject) => {
@@ -752,14 +753,14 @@ describe("remediation mode reconciliation on reconnect", () => {
 
     const patchRes = await server.inject({
       method: "PATCH",
-      url: `/runners/${runnerId}/remediation-mode`,
+      url: `/api/runners/${runnerId}/remediation-mode`,
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { enabled: false },
     });
     expect(patchRes.statusCode).toBe(200);
 
     const receivedMessages: Array<{ type: string; payload: unknown }> = [];
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
       headers: { authorization: `Bearer ${token}` },
     });
     await new Promise<void>((resolve, reject) => {

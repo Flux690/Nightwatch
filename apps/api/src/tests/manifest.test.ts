@@ -5,19 +5,20 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { generateRunnerToken } from "../db/runner.js";
 import { buildManifest, registerManifestRoutes } from "../runners/manifest.js";
+import { mountApi } from "./api-server.js";
 
 describe("buildManifest", () => {
   it("inserts the WS URL into the manifest", () => {
     const yaml = buildManifest(
-      "wss://control.example.com/clients/connect",
+      "wss://control.example.com/api/clients/connect",
       "nwr_abc123",
     );
-    expect(yaml).toContain("wss://control.example.com/clients/connect");
+    expect(yaml).toContain("wss://control.example.com/api/clients/connect");
   });
 
   it("inserts the runner token into the manifest", () => {
     const yaml = buildManifest(
-      "wss://control.example.com/clients/connect",
+      "wss://control.example.com/api/clients/connect",
       "nwr_abc123",
     );
     expect(yaml).toContain("nwr_abc123");
@@ -25,7 +26,7 @@ describe("buildManifest", () => {
 
   it("does not leave any unreplaced placeholders", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok_xyz",
     );
     expect(yaml).not.toContain("{{");
@@ -34,7 +35,7 @@ describe("buildManifest", () => {
 
   it("creates the nightwarden namespace", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("kind: Namespace");
@@ -43,7 +44,7 @@ describe("buildManifest", () => {
 
   it("includes a single-replica Deployment", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("kind: Deployment");
@@ -52,7 +53,7 @@ describe("buildManifest", () => {
 
   it("includes a ServiceAccount", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("kind: ServiceAccount");
@@ -60,7 +61,7 @@ describe("buildManifest", () => {
 
   it("includes ClusterRole and ClusterRoleBinding for read access", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("kind: ClusterRole");
@@ -69,7 +70,7 @@ describe("buildManifest", () => {
 
   it("grants read access to required resources", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("pods");
@@ -84,7 +85,7 @@ describe("buildManifest", () => {
 
   it("grants log read access", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("pods/log");
@@ -92,7 +93,7 @@ describe("buildManifest", () => {
 
   it("grants write access to deployments and statefulsets", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("patch");
@@ -100,7 +101,7 @@ describe("buildManifest", () => {
 
   it("write ClusterRole grants create on pods/exec", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     const writeStart = yaml.indexOf("name: nightwarden-runner-write");
@@ -112,7 +113,7 @@ describe("buildManifest", () => {
 
   it("uses the correct env var names that the runner reads", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
     );
     expect(yaml).toContain("NIGHTWARDEN_TOKEN");
@@ -120,7 +121,7 @@ describe("buildManifest", () => {
   });
 
   it("substitutes different values correctly", () => {
-    const wsUrl = "wss://nightwarden.internal:8443/clients/connect";
+    const wsUrl = "wss://nightwarden.internal:8443/api/clients/connect";
     const token = "nwr_verylongtoken_withspecialchars-123";
     const yaml = buildManifest(wsUrl, token);
     expect(yaml).toContain(wsUrl);
@@ -129,7 +130,7 @@ describe("buildManifest", () => {
 
   it("includes NIGHTWARDEN_SERVER_NAME when a server name is provided", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
       "prod-web-01",
     );
@@ -139,7 +140,7 @@ describe("buildManifest", () => {
 
   it("still contains no unreplaced placeholders when a server name is provided", () => {
     const yaml = buildManifest(
-      "wss://api.example.com/clients/connect",
+      "wss://api.example.com/api/clients/connect",
       "nwr_tok",
       "web-01",
     );
@@ -159,7 +160,7 @@ describe("GET /manifest.yaml", () => {
     SESSION = await mintTestSession();
     TOKEN = generateRunnerToken("k8s-server").plaintext;
     server = Fastify({ logger: false, trustProxy: true });
-    await registerManifestRoutes(server);
+    await mountApi(server, registerManifestRoutes);
     await server.ready();
   });
 
@@ -171,7 +172,7 @@ describe("GET /manifest.yaml", () => {
   it("returns 401 without a session cookie", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(res.statusCode).toBe(401);
@@ -180,7 +181,7 @@ describe("GET /manifest.yaml", () => {
   it("returns 400 when the Authorization header is missing", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(400);
@@ -189,7 +190,7 @@ describe("GET /manifest.yaml", () => {
   it("returns 404 for a token not in the DB", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: "Bearer nwr_notarealtoken_just_a_fake_value_xxxx",
@@ -201,7 +202,7 @@ describe("GET /manifest.yaml", () => {
   it("returns 200 with Content-Type application/yaml", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -215,20 +216,22 @@ describe("GET /manifest.yaml", () => {
   it("WS_URL uses ws:// for plain HTTP requests", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
         host: "control.example.com:3000",
       },
     });
-    expect(res.body).toContain("ws://control.example.com:3000/clients/connect");
+    expect(res.body).toContain(
+      "ws://control.example.com:3000/api/clients/connect",
+    );
   });
 
   it("WS_URL uses wss:// when the request is forwarded over TLS", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -236,13 +239,15 @@ describe("GET /manifest.yaml", () => {
         "x-forwarded-proto": "https",
       },
     });
-    expect(res.body).toContain("wss://nightwarden.example.com/clients/connect");
+    expect(res.body).toContain(
+      "wss://nightwarden.example.com/api/clients/connect",
+    );
   });
 
   it("manifest contains the runner token as NIGHTWARDEN_TOKEN", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -254,7 +259,7 @@ describe("GET /manifest.yaml", () => {
   it("manifest contains no unreplaced placeholders", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${TOKEN}`,
@@ -271,7 +276,7 @@ describe("GET /manifest.yaml", () => {
     ).plaintext;
     const res = await server.inject({
       method: "GET",
-      url: "/manifest.yaml",
+      url: "/api/manifest.yaml",
       headers: {
         cookie: `nw_auth=${SESSION}`,
         authorization: `Bearer ${namedToken}`,

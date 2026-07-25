@@ -15,7 +15,7 @@ export async function connectConsoleEvents<
   E extends { type: string } = ConsoleEventFrame,
 >(port: number, session: string): Promise<ConsoleEventsClient<E>> {
   const controller = new AbortController();
-  const res = await fetch(`http://127.0.0.1:${port}/console/events`, {
+  const res = await fetch(`http://127.0.0.1:${port}/api/console/events`, {
     headers: {
       Accept: "text/event-stream",
       Cookie: `nw_auth=${session}`,

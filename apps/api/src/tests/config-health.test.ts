@@ -25,6 +25,7 @@ import {
   unregisterRunner,
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
+import { mountApi } from "./api-server.js";
 
 function dockerManifest(hostname: string) {
   return {
@@ -62,7 +63,7 @@ describe("config health", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerConfigHealthRoutes(server);
+    await mountApi(server, registerConfigHealthRoutes);
     await server.ready();
   });
 
@@ -80,7 +81,7 @@ describe("config health", () => {
   async function fetchHealth(): Promise<ConfigHealth> {
     const res = await server.inject({
       method: "GET",
-      url: "/config/health",
+      url: "/api/config/health",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     return res.json() as ConfigHealth;

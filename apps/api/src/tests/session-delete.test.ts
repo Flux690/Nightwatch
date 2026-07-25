@@ -23,6 +23,7 @@ import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSession } from "../db/sessions.js";
+import { mountApi } from "./api-server.js";
 
 describe("DELETE /sessions/:id", () => {
   let server: FastifyInstance;
@@ -35,7 +36,7 @@ describe("DELETE /sessions/:id", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerSessionRoutes(server);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -47,14 +48,14 @@ describe("DELETE /sessions/:id", () => {
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/sessions/unknown`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/sessions/unknown`, {
       method: "DELETE",
     });
     expect(res.status).toBe(401);
   });
 
   it("deletes a finished session and returns 204", async () => {
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -66,7 +67,7 @@ describe("DELETE /sessions/:id", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
     const delRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       {
         method: "DELETE",
         headers: { Cookie: `nw_auth=${SESSION}` },
@@ -84,7 +85,7 @@ describe("DELETE /sessions/:id", () => {
       }),
     );
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -96,7 +97,7 @@ describe("DELETE /sessions/:id", () => {
     await waitFor(() => dispatcher.isSessionRunning(sessionId));
 
     const delRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       {
         method: "DELETE",
         headers: { Cookie: `nw_auth=${SESSION}` },

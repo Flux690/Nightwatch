@@ -31,6 +31,7 @@ import { getFleetView } from "../ws/fleet.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
+import { publicUrl } from "../config/public-url.js";
 import type {
   GitHubIntegrationStatus,
   PrometheusIntegrationStatus,
@@ -459,11 +460,10 @@ export async function registerIntegrationRoutes(
     "/integrations/alertmanager",
     { preHandler: requireSession },
     async (request) => {
-      const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
       const source = getAlertSource("alertmanager");
       return {
         configured: source !== null,
-        ingestUrl: `${origin}/alerts/ingest`,
+        ingestUrl: `${publicUrl(request)}/api/alerts/ingest`,
         // Delivery proof, not configuration state: null until the user's
         // Alertmanager actually posts, and again after a rotation.
         lastReceivedAt: source?.lastReceivedAt ?? null,

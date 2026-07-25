@@ -26,6 +26,7 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
+import { mountApi } from "./api-server.js";
 
 describe("console SSE pipeline", () => {
   let server: FastifyInstance;
@@ -55,8 +56,8 @@ describe("console SSE pipeline", () => {
     );
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -68,7 +69,7 @@ describe("console SSE pipeline", () => {
   });
 
   it("rejects the stream without a valid session cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/console/events`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/console/events`, {
       headers: { Accept: "text/event-stream" },
     });
     expect(res.status).toBe(401);
@@ -79,7 +80,7 @@ describe("console SSE pipeline", () => {
     script.setScript([{ toolUses: [], text: "All looks well." }]);
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -123,7 +124,7 @@ describe("console SSE pipeline", () => {
     expect(finishes.length).toBe(1);
 
     const transcriptRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(transcriptRes.status).toBe(200);
@@ -155,7 +156,7 @@ describe("console SSE pipeline", () => {
         );
       }).length;
 
-    const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const startRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -171,7 +172,7 @@ describe("console SSE pipeline", () => {
     // Resume the ended session with a follow-up message. The same sessionId
     // must come back - no new session is minted.
     const resumeRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {
         method: "POST",
         headers: {
@@ -212,7 +213,9 @@ describe("console SSE pipeline", () => {
 
   it("sends heartbeat comments on the configured interval", async () => {
     const hb = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(hb, { heartbeatInterval: 50 });
+    await mountApi(hb, (api) =>
+      registerConsoleEventRoutes(api, { heartbeatInterval: 50 }),
+    );
     await hb.listen({ port: 0, host: "127.0.0.1" });
     const hbPort = (hb.server.address() as AddressInfo).port;
 

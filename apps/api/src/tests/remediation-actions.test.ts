@@ -39,6 +39,7 @@ import {
   insertRejectedRemediationAction,
 } from "../db/remediation-actions.js";
 import { getDb } from "../db/client.js";
+import { mountApi } from "./api-server.js";
 
 const FINISH_TURN = { text: "Done.", toolUses: [] };
 
@@ -96,8 +97,8 @@ describe("remediation action record", () => {
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -134,7 +135,7 @@ describe("remediation action record", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -153,7 +154,7 @@ describe("remediation action record", () => {
     );
 
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -209,7 +210,7 @@ describe("remediation action record", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -228,7 +229,7 @@ describe("remediation action record", () => {
     );
 
     const rejectRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -306,7 +307,7 @@ describe("remediation action record", () => {
 
     // Approve — should detect the conflict and skip execution
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -434,7 +435,7 @@ describe("remediation action record", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

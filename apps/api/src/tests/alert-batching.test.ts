@@ -29,6 +29,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dockerService, manifest } from "./manifest-helper.js";
+import { mountApi } from "./api-server.js";
 
 // Every alertBody() below carries the `container: "web-01"` label, so one connected
 // runner advertising that exact identity resolves every alert in this file.
@@ -80,7 +81,7 @@ describe("alert batching (REST seam + fake timers)", () => {
     );
     setRunnerManifest("batching-runner-token", WEB_01_MANIFEST);
     server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
   });
 
@@ -108,7 +109,7 @@ describe("alert batching (REST seam + fake timers)", () => {
   ): Promise<{ enqueued: number; skipped: number }> {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": token },
       payload: body,
     });

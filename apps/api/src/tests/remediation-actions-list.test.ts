@@ -8,6 +8,7 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
 import { registerRemediationRoutes } from "../remediation/routes.js";
+import { mountApi } from "./api-server.js";
 
 function seedSession(sessionId: string): void {
   getDb()
@@ -48,7 +49,7 @@ describe("GET /remediation-actions", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerRemediationRoutes(server);
+    await mountApi(server, registerRemediationRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -60,7 +61,7 @@ describe("GET /remediation-actions", () => {
   });
 
   it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/remediation-actions`);
+    const res = await fetch(`http://127.0.0.1:${port}/api/remediation-actions`);
     expect(res.status).toBe(401);
   });
 
@@ -87,9 +88,12 @@ describe("GET /remediation-actions", () => {
       resolvedAt: "2024-06-01T00:00:00.000Z",
     });
 
-    const res = await fetch(`http://127.0.0.1:${port}/remediation-actions`, {
-      headers: { Cookie: `nw_auth=${SESSION}` },
-    });
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/remediation-actions`,
+      {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      },
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as RemediationActionRecord[];
 

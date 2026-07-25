@@ -32,6 +32,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dockerService, manifest } from "./manifest-helper.js";
+import { mountApi } from "./api-server.js";
 
 // A free-form finish: no tool call ends the run successfully.
 const FINISH: ScriptedTurn[] = [
@@ -113,7 +114,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       manifest("host-web-02", [dockerService("web-02")]),
     );
     server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
   });
 
@@ -144,7 +145,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     return server
       .inject({
         method: "POST",
-        url: "/alerts/ingest",
+        url: "/api/alerts/ingest",
         headers: { "x-nightwarden-token": token },
         payload: body,
       })
@@ -259,7 +260,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/ingest",
+      url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": token },
       payload: {
         alerts: [

@@ -51,6 +51,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getDb } from "../db/client.js";
+import { mountApi } from "./api-server.js";
 
 const FINISH_TURN: ScriptedTurn = {
   text: "Investigation complete.",
@@ -128,7 +129,7 @@ describe("remediation circuit breaker", () => {
     const { events, close } = await connectConsoleEvents(port, SESSION);
     openStreams.push(close);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -189,7 +190,7 @@ describe("remediation circuit breaker", () => {
     expect(interrupt.payload["toolName"]).toBe("RestartDockerService");
     expect(executedCommands).not.toContain("RestartDockerService");
 
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -246,8 +247,8 @@ describe("remediation circuit breaker", () => {
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });

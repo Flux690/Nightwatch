@@ -1,0 +1,39 @@
+services:
+  nightwarden:
+    image: ghcr.io/prabhatmattoo/nightwarden:latest
+    # Or build locally: docker compose build
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # Must be routable from runners and Alertmanager, not just your browser.
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL, e.g. http://203.0.113.10:3000}
+      # One variable for all three references so the paths cannot drift.
+      NIGHTWARDEN_DIR: ${NIGHTWARDEN_DIR:-/opt/nightwarden}
+      # Optional first-boot seed; otherwise pick the provider in the console.
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # Same path inside and out, never a named volume: the host daemon resolves
+      # sandbox mounts against the host, so a container-only path mounts empty.
+      - ${NIGHTWARDEN_DIR:-/opt/nightwarden}:${NIGHTWARDEN_DIR:-/opt/nightwarden}
+      # Sandboxes and the egress proxy are sibling containers started here.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

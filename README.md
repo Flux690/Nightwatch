@@ -116,6 +116,30 @@ In the console go to **Integrations**. Four plugs matter here: the **Runner** (a
 
 **Connect Loki.** The **Loki** card takes the base URL of the Loki you already run (and, only if yours needs them, a verbatim `Authorization` header value and a tenant `X-Scope-OrgID` for multi-tenant Loki - both optional, the header stored encrypted). NightWarden only ever reads: the agent gains three log tools - one for log lines (newest first, filtered in LogQL), one for log-derived metrics (rate/count over logs), and a label-discovery tool it uses to learn which labels select a service's logs, since log labels are not a fixed convention. All three window on the alert. The connection is probed against the labels endpoint before it saves, and a **Test query** button re-proves it any time. Loki alone is a sufficient evidence source, so a logs-first fleet with no metrics can still be investigated. Keep Loki off the public internet; NightWarden needs to reach it over your private network.
 
+## Self-hosting
+
+The API and the console ship as one image on a single origin, and SQLite is the system of record - one container on one Linux host with Docker, no database alongside it.
+
+```bash
+curl -O https://raw.githubusercontent.com/PrabhatMattoo/nightwarden/main/docker-compose.yml
+export PUBLIC_URL=http://203.0.113.10:3000   # routable from your servers, not localhost
+docker compose up -d
+```
+
+Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider**: choose Anthropic or OpenAI-compatible, paste a key, press **Test connection**, and pick a model. Until that is done NightWarden refuses to start investigations rather than failing at the first alert. Runners and monitoring are wired up afterwards from **Integrations**, exactly as in [Getting started](#getting-started).
+
+`PUBLIC_URL` is the only required variable - it is the address runners dial back to and Alertmanager posts to, so a browser's `localhost` is not it. Everything else is optional and listed under [Configuration](#configuration); the LLM variables seed the database on first boot only, after which the console is the place to change them.
+
+**The state directory must be a host path mounted at the same path inside and out** - never a named volume. Code sandboxes run as sibling containers started through the mounted Docker socket, and the host's daemon resolves their workspace mounts against the host filesystem: a path that exists only inside the container does not error, it mounts an empty directory and every sandbox comes up with an empty checkout. The compose file derives both sides from one variable so they cannot drift; if you move the path, keep the mapping symmetrical. NightWarden also refuses to boot when its state directory is on the container's writable layer, since the database and secret key would be discarded on the next restart.
+
+**HTTPS.** Put Caddy (or any reverse proxy) in front, point a domain at the host, set `PUBLIC_URL=https://your-domain`, and drop the `ports` mapping so only the proxy is exposed. Without a domain, run plain HTTP and restrict the port with your firewall.
+
+**Backup.** Everything durable is in the state directory. Stop the stack, `tar czf backup.tar.gz -C /opt nightwarden`, start it again. `secret.key` is in there: restoring the database without it leaves the stored API keys unreadable and signs every operator out.
+
+**Upgrade.** `docker compose pull && docker compose up -d`. Pre-1.0 there are no schema migrations - a release that changes the schema is applied by deleting `nightwarden.db` and setting up again, and the release notes say when that applies.
+
+**Building the images yourself.** `docker compose build` for the control plane, `docker build -f apps/runner/Dockerfile -t nightwarden-runner .` for the runner. On an Apple Silicon Mac add `--platform linux/amd64` for an x86 host: `better-sqlite3` and `argon2` compile to native binaries that do not cross architectures.
+
 ## Configuration
 
 ### API (`apps/api/.env`)
@@ -129,6 +153,7 @@ In the console go to **Integrations**. Four plugs matter here: the **Runner** (a
 | `ANTHROPIC_BASE_URL` | no       | Base URL for an Anthropic-compatible gateway or proxy. Unset means `api.anthropic.com`.                                                                                                                                                                                                                                                                                                                                                                 |
 | `ANTHROPIC_MODEL`    | no       | Model id for the Anthropic provider. No default: an unpicked model blocks investigations rather than guessing one.                                                                                                                                                                                                                                                                                                                                      |
 | `OPENAI_MODEL`       | no       | Model id for the OpenAI provider. No default, as above.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `PUBLIC_URL`         | no       | The address other machines use to reach this install, e.g. `https://nightwarden.example.com`. Runners dial back here and Alertmanager posts here, so it must be routable from them. Unset means the request's own origin, which is fine for local development and wrong behind a proxy.                                                                                                                                                                 |
 | `PORT`               | no       | HTTP port the API listens on (default: `3000`).                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `HOST`               | no       | Bind address (default: `127.0.0.1`).                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `NIGHTWARDEN_DIR`    | no       | Absolute path to the directory holding all durable state: `nightwarden.db`, `secret.key`, the per-session GitHub sandbox `workspaces/`, and the generated egress-proxy config `proxy/`. Defaults to `~/.nightwarden`; created on boot if missing. Must be absolute (a relative value fails at boot); on a Mac keep it under your home so Docker Desktop's file sharing covers the sandbox mounts.                                                       |

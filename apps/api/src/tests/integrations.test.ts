@@ -27,6 +27,7 @@ import { mintTestSession } from "./session-helper.js";
 import { manifest } from "./manifest-helper.js";
 import { getDb } from "../db/client.js";
 import { decrypt } from "../config/crypto.js";
+import { mountApi } from "./api-server.js";
 
 const TOKEN = "github_pat_test_plaintext";
 
@@ -79,7 +80,7 @@ describe("GitHub integration routes", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerIntegrationRoutes(server);
+    await mountApi(server, registerIntegrationRoutes);
     await server.ready();
   });
 
@@ -110,7 +111,10 @@ describe("GitHub integration routes", () => {
 
   describe("GET /integrations/github", () => {
     it("reports not configured before onboarding", async () => {
-      const res = await authed({ method: "GET", url: "/integrations/github" });
+      const res = await authed({
+        method: "GET",
+        url: "/api/integrations/github",
+      });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body)).toEqual({
         configured: false,
@@ -123,7 +127,7 @@ describe("GitHub integration routes", () => {
     it("requires a session", async () => {
       const res = await server.inject({
         method: "GET",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
       });
       expect(res.statusCode).toBe(401);
     });
@@ -133,7 +137,7 @@ describe("GitHub integration routes", () => {
     it("rejects rebinding when nothing is configured yet", async () => {
       const res = await authed({
         method: "PATCH",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { repo: "acme/api" },
       });
       expect(res.statusCode).toBe(400);
@@ -154,7 +158,7 @@ describe("GitHub integration routes", () => {
 
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: { token: TOKEN, page: 1 },
       });
       expect(res.statusCode).toBe(200);
@@ -188,7 +192,7 @@ describe("GitHub integration routes", () => {
       );
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: { token: TOKEN },
       });
       expect(res.statusCode).toBe(401);
@@ -207,7 +211,7 @@ describe("GitHub integration routes", () => {
       );
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: { token: TOKEN },
       });
       expect(res.statusCode).toBe(403);
@@ -220,7 +224,7 @@ describe("GitHub integration routes", () => {
       });
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: { token: TOKEN },
       });
       expect(res.statusCode).toBe(502);
@@ -230,7 +234,7 @@ describe("GitHub integration routes", () => {
     it("rejects when no token is supplied and none is stored", async () => {
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: {},
       });
       expect(res.statusCode).toBe(400);
@@ -253,7 +257,7 @@ describe("GitHub integration routes", () => {
 
       const res = await authed({
         method: "POST",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { token: TOKEN, repo: "acme/api" },
       });
       expect(res.statusCode).toBe(201);
@@ -276,7 +280,7 @@ describe("GitHub integration routes", () => {
       const mock = stubFetch(() => jsonResponse([]));
       const res = await authed({
         method: "POST",
-        url: "/integrations/github/repos",
+        url: "/api/integrations/github/repos",
         payload: {},
       });
       expect(res.statusCode).toBe(200);
@@ -295,7 +299,7 @@ describe("GitHub integration routes", () => {
       });
       const res = await authed({
         method: "POST",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { token: TOKEN, repo: "acme/secret" },
       });
       expect(res.statusCode).toBe(404);
@@ -315,7 +319,7 @@ describe("GitHub integration routes", () => {
       });
       const res = await authed({
         method: "POST",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { token: TOKEN, repo: "prabhat/gone" },
       });
       expect(res.statusCode).toBe(404);
@@ -328,7 +332,7 @@ describe("GitHub integration routes", () => {
       const mock = stubFetch(() => jsonResponse({}));
       const res = await authed({
         method: "POST",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { token: TOKEN, repo: "not-a-repo" },
       });
       expect(res.statusCode).toBe(400);
@@ -345,7 +349,7 @@ describe("GitHub integration routes", () => {
 
       const res = await authed({
         method: "PATCH",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { repo: "acme/other" },
       });
       expect(res.statusCode).toBe(200);
@@ -375,7 +379,7 @@ describe("GitHub integration routes", () => {
       });
       const res = await authed({
         method: "PATCH",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { repo: "acme/missing", token: "ignored" },
       });
       expect(res.statusCode).toBe(404);
@@ -385,7 +389,7 @@ describe("GitHub integration routes", () => {
     it("requires a session", async () => {
       const res = await server.inject({
         method: "PATCH",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
         payload: { repo: "acme/other" },
       });
       expect(res.statusCode).toBe(401);
@@ -396,13 +400,13 @@ describe("GitHub integration routes", () => {
     it("disconnects: deletes the stored row and reports not configured", async () => {
       const res = await authed({
         method: "DELETE",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
       });
       expect(res.statusCode).toBe(204);
 
       const status = await authed({
         method: "GET",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
       });
       expect(JSON.parse(status.body)).toMatchObject({ configured: false });
     });
@@ -410,7 +414,7 @@ describe("GitHub integration routes", () => {
     it("requires a session", async () => {
       const res = await server.inject({
         method: "DELETE",
-        url: "/integrations/github",
+        url: "/api/integrations/github",
       });
       expect(res.statusCode).toBe(401);
     });
@@ -431,7 +435,7 @@ describe("Prometheus integration routes", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerIntegrationRoutes(server);
+    await mountApi(server, registerIntegrationRoutes);
     await server.ready();
   });
 
@@ -462,13 +466,13 @@ describe("Prometheus integration routes", () => {
   it("reports not configured before onboarding and requires a session", async () => {
     const unauthed = await server.inject({
       method: "GET",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
     });
     expect(unauthed.statusCode).toBe(401);
 
     const res = await authed({
       method: "GET",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
     });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
@@ -492,7 +496,7 @@ describe("Prometheus integration routes", () => {
 
     const res = await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: {
         url: "http://prom.internal:9090/",
         authHeader: "Bearer secret-123",
@@ -526,7 +530,7 @@ describe("Prometheus integration routes", () => {
 
     const res = await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: { url: "http://prom.internal:9090" },
     });
     expect(res.statusCode).toBe(201);
@@ -545,7 +549,7 @@ describe("Prometheus integration routes", () => {
     );
     const badQuery = await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: { url: "http://prom.internal:9090" },
     });
     expect(badQuery.statusCode).toBe(400);
@@ -556,7 +560,7 @@ describe("Prometheus integration routes", () => {
     });
     const unreachable = await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: { url: "http://prom.internal:9090" },
     });
     expect(unreachable.statusCode).toBe(502);
@@ -564,7 +568,7 @@ describe("Prometheus integration routes", () => {
 
     const status = await authed({
       method: "GET",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
     });
     expect(JSON.parse(status.body).configured).toBe(false);
   });
@@ -572,14 +576,14 @@ describe("Prometheus integration routes", () => {
   it("test endpoint is 400 unconfigured, then re-probes the stored config with the decrypted header", async () => {
     const before = await authed({
       method: "POST",
-      url: "/integrations/prometheus/test",
+      url: "/api/integrations/prometheus/test",
     });
     expect(before.statusCode).toBe(400);
 
     stubFetch(() => jsonResponse(PROM_OK));
     await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: {
         url: "http://prom.internal:9090",
         authHeader: "Basic dXNlcg==",
@@ -595,7 +599,7 @@ describe("Prometheus integration routes", () => {
     });
     const res = await authed({
       method: "POST",
-      url: "/integrations/prometheus/test",
+      url: "/api/integrations/prometheus/test",
     });
     expect(res.statusCode).toBe(200);
     expect(mock).toHaveBeenCalledTimes(1);
@@ -604,7 +608,7 @@ describe("Prometheus integration routes", () => {
   it("validate-labels compares observed nw_server values against the fleet", async () => {
     const before = await authed({
       method: "POST",
-      url: "/integrations/prometheus/validate-labels",
+      url: "/api/integrations/prometheus/validate-labels",
     });
     expect(before.statusCode).toBe(400);
 
@@ -619,7 +623,7 @@ describe("Prometheus integration routes", () => {
     });
     await authed({
       method: "POST",
-      url: "/integrations/prometheus",
+      url: "/api/integrations/prometheus",
       payload: { url: "http://prom.internal:9090" },
     });
 
@@ -639,7 +643,7 @@ describe("Prometheus integration routes", () => {
     try {
       const res = await authed({
         method: "POST",
-        url: "/integrations/prometheus/validate-labels",
+        url: "/api/integrations/prometheus/validate-labels",
       });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body)).toEqual({
@@ -664,7 +668,7 @@ describe("Alertmanager integration routes", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerIntegrationRoutes(server);
+    await mountApi(server, registerIntegrationRoutes);
     await server.ready();
   });
 
@@ -689,13 +693,13 @@ describe("Alertmanager integration routes", () => {
   it("reports not configured with the ingest URL; reveal 404s; a session is required", async () => {
     const unauthed = await server.inject({
       method: "GET",
-      url: "/integrations/alertmanager",
+      url: "/api/integrations/alertmanager",
     });
     expect(unauthed.statusCode).toBe(401);
 
     const res = await authed({
       method: "GET",
-      url: "/integrations/alertmanager",
+      url: "/api/integrations/alertmanager",
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
@@ -705,7 +709,7 @@ describe("Alertmanager integration routes", () => {
 
     const reveal = await authed({
       method: "POST",
-      url: "/integrations/alertmanager/credential/reveal",
+      url: "/api/integrations/alertmanager/credential/reveal",
     });
     expect(reveal.statusCode).toBe(404);
   });
@@ -713,7 +717,7 @@ describe("Alertmanager integration routes", () => {
   it("mints an nwi_ credential storing only the hash; reveal returns the plaintext", async () => {
     const res = await authed({
       method: "POST",
-      url: "/integrations/alertmanager/credential",
+      url: "/api/integrations/alertmanager/credential",
     });
     expect(res.statusCode).toBe(201);
     const { token } = JSON.parse(res.body) as { token: string };
@@ -729,13 +733,13 @@ describe("Alertmanager integration routes", () => {
 
     const reveal = await authed({
       method: "POST",
-      url: "/integrations/alertmanager/credential/reveal",
+      url: "/api/integrations/alertmanager/credential/reveal",
     });
     expect(JSON.parse(reveal.body)).toEqual({ token });
 
     const status = await authed({
       method: "GET",
-      url: "/integrations/alertmanager",
+      url: "/api/integrations/alertmanager",
     });
     expect(JSON.parse(status.body)).toMatchObject({ configured: true });
   });
@@ -743,14 +747,14 @@ describe("Alertmanager integration routes", () => {
   it("rotation replaces the hash and resets the delivery stamp", async () => {
     const first = await authed({
       method: "POST",
-      url: "/integrations/alertmanager/credential",
+      url: "/api/integrations/alertmanager/credential",
     });
     const { token: oldToken } = JSON.parse(first.body) as { token: string };
     setAlertSourceReceived("alertmanager", "2026-07-18T03:12:00.000Z");
 
     const before = await authed({
       method: "GET",
-      url: "/integrations/alertmanager",
+      url: "/api/integrations/alertmanager",
     });
     expect(
       (JSON.parse(before.body) as { lastReceivedAt: string | null })
@@ -759,7 +763,7 @@ describe("Alertmanager integration routes", () => {
 
     const second = await authed({
       method: "POST",
-      url: "/integrations/alertmanager/credential",
+      url: "/api/integrations/alertmanager/credential",
     });
     const { token: newToken } = JSON.parse(second.body) as { token: string };
     expect(newToken).not.toBe(oldToken);
@@ -786,7 +790,7 @@ describe("Loki integration routes", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerIntegrationRoutes(server);
+    await mountApi(server, registerIntegrationRoutes);
     await server.ready();
   });
 
@@ -817,11 +821,11 @@ describe("Loki integration routes", () => {
   it("reports not configured before onboarding and requires a session", async () => {
     const unauthed = await server.inject({
       method: "GET",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
     });
     expect(unauthed.statusCode).toBe(401);
 
-    const res = await authed({ method: "GET", url: "/integrations/loki" });
+    const res = await authed({ method: "GET", url: "/api/integrations/loki" });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
       configured: false,
@@ -843,7 +847,7 @@ describe("Loki integration routes", () => {
 
     const res = await authed({
       method: "POST",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
       payload: {
         url: "http://loki.internal:3100/",
         authHeader: "Bearer secret-123",
@@ -884,7 +888,7 @@ describe("Loki integration routes", () => {
 
     const res = await authed({
       method: "POST",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
       payload: { url: "http://loki.internal:3100" },
     });
     expect(res.statusCode).toBe(201);
@@ -901,7 +905,7 @@ describe("Loki integration routes", () => {
     });
     const unreachable = await authed({
       method: "POST",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
       payload: { url: "http://loki.internal:3100" },
     });
     expect(unreachable.statusCode).toBe(502);
@@ -910,27 +914,30 @@ describe("Loki integration routes", () => {
     stubFetch(() => jsonResponse({ message: "no org id" }, { status: 401 }));
     const unauthorized = await authed({
       method: "POST",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
       payload: { url: "http://loki.internal:3100" },
     });
     expect(unauthorized.statusCode).toBe(401);
     expect(JSON.parse(unauthorized.body).code).toBe("unauthorized");
 
-    const status = await authed({ method: "GET", url: "/integrations/loki" });
+    const status = await authed({
+      method: "GET",
+      url: "/api/integrations/loki",
+    });
     expect(JSON.parse(status.body).configured).toBe(false);
   });
 
   it("test endpoint is 400 unconfigured, then re-probes stored config with header + tenant", async () => {
     const before = await authed({
       method: "POST",
-      url: "/integrations/loki/test",
+      url: "/api/integrations/loki/test",
     });
     expect(before.statusCode).toBe(400);
 
     stubFetch(() => jsonResponse(LOKI_LABELS));
     await authed({
       method: "POST",
-      url: "/integrations/loki",
+      url: "/api/integrations/loki",
       payload: {
         url: "http://loki.internal:3100",
         authHeader: "Basic dXNlcg==",
@@ -947,7 +954,7 @@ describe("Loki integration routes", () => {
     });
     const res = await authed({
       method: "POST",
-      url: "/integrations/loki/test",
+      url: "/api/integrations/loki/test",
     });
     expect(res.statusCode).toBe(200);
     expect(mock).toHaveBeenCalledTimes(1);

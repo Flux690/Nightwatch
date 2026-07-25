@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { findRunnerByToken } from "../db/runner.js";
+import { publicWsUrl } from "../config/public-url.js";
+import { RUNNER_IMAGE } from "./image.js";
 
 const TEMPLATE = `\
 apiVersion: v1
@@ -86,7 +88,7 @@ spec:
       serviceAccountName: nightwarden-runner
       containers:
         - name: runner
-          image: ghcr.io/nightwarden-ai/runner:latest
+          image: {{RUNNER_IMAGE}}
           env:
             - name: NIGHTWARDEN_TOKEN
               value: "{{NIGHTWARDEN_TOKEN}}"
@@ -96,17 +98,13 @@ spec:
               value: "{{NIGHTWARDEN_SERVER_NAME}}"
 `;
 
-function buildWsUrl(origin: string): string {
-  const wsProto = origin.startsWith("https://") ? "wss" : "ws";
-  return `${wsProto}://${origin.replace(/^https?:\/\//, "")}/clients/connect`;
-}
-
 export function buildManifest(
   wsUrl: string,
   token: string,
   serverName = "",
 ): string {
-  return TEMPLATE.replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
+  return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)
+    .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
     .replaceAll("{{WS_URL}}", wsUrl)
     .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
 }
@@ -130,9 +128,8 @@ export async function registerManifestRoutes(
         return reply.code(404).send({ error: "token not found" });
       }
 
-      const origin = `${request.protocol}://${request.headers.host ?? "localhost"}`;
       const yaml = buildManifest(
-        buildWsUrl(origin),
+        publicWsUrl(request, "/api/clients/connect"),
         token,
         record.serverName ?? "",
       );

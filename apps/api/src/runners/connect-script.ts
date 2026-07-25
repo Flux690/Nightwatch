@@ -1,11 +1,10 @@
-// Inlined, not read from disk: walking up from the module's own path breaks under
-// bundling. Shell ${...} is escaped as \${...} to survive the template literal;
-// {{...}} placeholders are substituted by GET /connect.sh.
+// Inlined because walking up from the module's own path breaks under bundling.
+// Shell ${...} is escaped as \${...}; {{...}} is substituted at serve time.
 export const CONNECT_SCRIPT_TEMPLATE = `#!/usr/bin/env bash
 # NIGHTWARDEN_TOKEN is this runner's own nwr_ credential.
 set -euo pipefail
 
-IMAGE="\${NIGHTWARDEN_IMAGE:-nightwarden/runner:latest}"
+IMAGE="\${NIGHTWARDEN_IMAGE:-{{RUNNER_IMAGE}}}"
 CONTAINER_NAME="nightwarden"
 WS_URL="{{WS_URL}}"
 NIGHTWARDEN_TOKEN="{{NIGHTWARDEN_TOKEN}}"

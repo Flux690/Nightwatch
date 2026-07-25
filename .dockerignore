@@ -1,7 +1,5 @@
 .git
 .smoke
-apps/api
-apps/console
 **/node_modules
 **/dist
 **/.env

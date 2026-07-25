@@ -13,11 +13,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Forwarded verbatim: the API serves these routes under /api itself, so dev
+    // and production URLs are identical and neither can drift from the other.
     proxy: {
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ""),
       },
     },
   },

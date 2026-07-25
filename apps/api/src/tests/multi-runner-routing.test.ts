@@ -49,6 +49,7 @@ import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
+import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -194,8 +195,8 @@ describe("multi-runner routing", () => {
     );
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -367,7 +368,7 @@ describe("multi-runner routing", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -393,7 +394,7 @@ describe("multi-runner routing", () => {
     // Approve — the approve route calls sendCommand with the persisted toolInput
     // (which has service: docker/postgres/postgres), routing it to runner-b.
     const approveRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
         method: "POST",
         headers: {

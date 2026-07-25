@@ -14,6 +14,7 @@ import { registerConfigRoutes } from "../config/routes.js";
 import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import type { AgentConfig } from "@nightwarden/shared";
+import { mountApi } from "./api-server.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
 function mockResponse(
@@ -45,7 +46,7 @@ describe("provider/model config seam", () => {
     vi.stubEnv("SECRET_KEY", "test-secret-key-for-aes256-gcm-!!!");
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerConfigRoutes(server);
+    await mountApi(server, registerConfigRoutes);
     await server.ready();
   });
 
@@ -66,7 +67,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-bad-key" },
     });
@@ -84,7 +85,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "claude-sonnet-4-6" },
     });
@@ -102,7 +103,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-ant-valid-key", model: "gpt-99-not-real" },
     });
@@ -119,7 +120,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-any-key" },
     });
@@ -133,7 +134,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {
         apiKey: "sk-ant-should-not-persist",
@@ -145,7 +146,7 @@ describe("provider/model config seam", () => {
 
     const configRes = await server.inject({
       method: "GET",
-      url: "/config",
+      url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     const body = JSON.parse(configRes.body) as {
@@ -163,7 +164,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/config/test",
+      url: "/api/config/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {
         apiKey: "sk-or-key",
@@ -181,7 +182,10 @@ describe("provider/model config seam", () => {
   // --- GET /config/models ---
 
   it("GET /config/models: returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({ method: "GET", url: "/config/models" });
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/config/models",
+    });
 
     expect(res.statusCode).toBe(401);
   });
@@ -199,7 +203,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "GET",
-      url: "/config/models",
+      url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
 
@@ -220,7 +224,7 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "GET",
-      url: "/config/models",
+      url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
 
@@ -232,7 +236,7 @@ describe("provider/model config seam", () => {
   // --- requireSession gate ---
 
   it("GET /config: returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({ method: "GET", url: "/config" });
+    const res = await server.inject({ method: "GET", url: "/api/config" });
     expect(res.statusCode).toBe(401);
   });
 
@@ -241,7 +245,7 @@ describe("provider/model config seam", () => {
   it("GET /config: never returns apiKeyEncrypted or plaintext key in the response", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/config",
+      url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
 
@@ -258,7 +262,7 @@ describe("provider/model config seam", () => {
   it("PATCH /config/key: saves the encrypted key and returns the masked representation", async () => {
     const res = await server.inject({
       method: "PATCH",
-      url: "/config/key",
+      url: "/api/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { provider: "anthropic", apiKey: "sk-ant-test-key-12345678" },
     });
@@ -274,7 +278,7 @@ describe("provider/model config seam", () => {
     const apiKey = "sk-ant-roundtrip-abcd9999";
     const saved = await server.inject({
       method: "PATCH",
-      url: "/config/key",
+      url: "/api/config/key",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { provider: "anthropic", apiKey },
     });
@@ -284,7 +288,7 @@ describe("provider/model config seam", () => {
     // store → decrypt → mask round-trip without ever returning the plaintext.
     const res = await server.inject({
       method: "GET",
-      url: "/config",
+      url: "/api/config",
       headers: { cookie: `nw_auth=${SESSION}` },
     });
     expect(res.statusCode).toBe(200);
@@ -308,7 +312,7 @@ describe("provider/model config seam", () => {
     it("GET /config reports no provider and no model rather than guessing one, while keeping the operational defaults", async () => {
       const res = await server.inject({
         method: "GET",
-        url: "/config",
+        url: "/api/config",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 
@@ -331,7 +335,7 @@ describe("provider/model config seam", () => {
 
       const res = await server.inject({
         method: "GET",
-        url: "/config/models",
+        url: "/api/config/models",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 
@@ -345,7 +349,7 @@ describe("provider/model config seam", () => {
 
       const res = await server.inject({
         method: "GET",
-        url: "/config",
+        url: "/api/config",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 

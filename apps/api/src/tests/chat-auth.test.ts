@@ -23,6 +23,7 @@ import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
+import { mountApi } from "./api-server.js";
 
 describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   let server: FastifyInstance;
@@ -35,7 +36,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerSessionRoutes(server);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -47,7 +48,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   });
 
   it("POST /chat returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "hello" }),
@@ -56,7 +57,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   });
 
   it("POST /chat returns 400 when message is missing", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -68,7 +69,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   });
 
   it("POST /chat creates a session and returns its uuid", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -86,7 +87,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   });
 
   it("POST /chat/:id (old route) returns 404 — token-scoped chat removed", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/chat/some-token-id`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat/some-token-id`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -99,7 +100,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
 
   it("POST /sessions/:id/messages returns 401 without a cookie", async () => {
     // Start a real session first.
-    const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const startRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -111,7 +112,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
     const res = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -123,7 +124,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
 
   it("POST /sessions/:id/messages continues the session by uuid, returning the same sessionId", async () => {
     // Start a session.
-    const startRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const startRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -139,7 +140,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
 
     // Continue the session — no token in body.
     const contRes = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {
         method: "POST",
         headers: {
@@ -159,7 +160,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
   it("POST /chat refuses with 503 when no language model is configured, naming what to pick", async () => {
     clearTestLLM();
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -178,7 +179,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
 
   it("POST /sessions/:id/messages returns 404 for an unknown session", async () => {
     const res = await fetch(
-      `http://127.0.0.1:${port}/sessions/unknown-uuid/messages`,
+      `http://127.0.0.1:${port}/api/sessions/unknown-uuid/messages`,
       {
         method: "POST",
         headers: {

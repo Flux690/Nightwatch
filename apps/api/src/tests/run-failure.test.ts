@@ -32,6 +32,7 @@ import {
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { getSessionMessages } from "../db/sessions.js";
+import { mountApi } from "./api-server.js";
 
 function providerError(status: number, body?: Record<string, unknown>): Error {
   return OpenAI.APIError.generate(
@@ -57,8 +58,8 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
     client = await connectConsoleEvents<ConsoleEvent>(port, SESSION);
@@ -76,7 +77,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
   });
 
   async function startChat(message: string): Promise<string> {
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -195,7 +196,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     const healthy = healthyProvider("Fresh answer.");
     mockCreateProvider.mockImplementation(() => healthy);
     const res = await fetch(
-      `http://127.0.0.1:${port}/sessions/${sessionId}/messages`,
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
       {
         method: "POST",
         headers: {

@@ -5,10 +5,11 @@ import type { FastifyInstance } from "fastify";
 import { useTempDb } from "./temp-db.js";
 import { registerAuthRoutes } from "../auth/routes.js";
 import { mintSession, requireSession } from "../auth/session.js";
+import { mountApi } from "./api-server.js";
 
 async function buildServer(): Promise<FastifyInstance> {
   const server = Fastify({ logger: false, trustProxy: true });
-  await registerAuthRoutes(server);
+  await mountApi(server, registerAuthRoutes);
   server.get("/protected", { preHandler: requireSession }, async () => ({
     ok: true,
   }));
@@ -45,7 +46,7 @@ describe("POST /setup", () => {
   it("rejects password shorter than 12 characters", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "tooshort" },
     });
     expect(res.statusCode).toBe(400);
@@ -54,7 +55,7 @@ describe("POST /setup", () => {
   it("rejects password of exactly 11 characters", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "elevencharx" },
     });
     expect(res.statusCode).toBe(400);
@@ -63,7 +64,7 @@ describe("POST /setup", () => {
   it("creates owner and sets nw_auth session cookie for a 12+ character password", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     expect(res.statusCode).toBe(200);
@@ -79,7 +80,7 @@ describe("POST /setup", () => {
   it("rejects a second setup call with 409", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "other@example.com", password: "anotherpassword123" },
     });
     expect(res.statusCode).toBe(409);
@@ -88,7 +89,7 @@ describe("POST /setup", () => {
   it("sets the Secure flag when X-Forwarded-Proto is https", async () => {
     const loginRes = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       headers: { "x-forwarded-proto": "https" },
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
@@ -99,7 +100,7 @@ describe("POST /setup", () => {
   it("omits the Secure flag over plain HTTP", async () => {
     const loginRes = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     expect(loginRes.statusCode).toBe(200);
@@ -122,7 +123,7 @@ describe("GET /auth/status", () => {
   });
 
   it("returns { ownerExists: false } before setup", async () => {
-    const res = await server.inject({ method: "GET", url: "/auth/status" });
+    const res = await server.inject({ method: "GET", url: "/api/auth/status" });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ ownerExists: false });
   });
@@ -130,10 +131,10 @@ describe("GET /auth/status", () => {
   it("returns { ownerExists: true, authenticated: false } once an owner exists but with no cookie", async () => {
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
-    const res = await server.inject({ method: "GET", url: "/auth/status" });
+    const res = await server.inject({ method: "GET", url: "/api/auth/status" });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
       ownerExists: true,
@@ -144,7 +145,7 @@ describe("GET /auth/status", () => {
   it("returns authenticated: false for an invalid cookie", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/auth/status",
+      url: "/api/auth/status",
       headers: { cookie: "nw_auth=garbage" },
     });
     expect(res.statusCode).toBe(200);
@@ -157,7 +158,7 @@ describe("GET /auth/status", () => {
   it("returns { ownerExists: true, authenticated: true, email } with a valid cookie", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/auth/status",
+      url: "/api/auth/status",
       headers: { cookie: `nw_auth=${await mintSession(0)}` },
     });
     expect(res.statusCode).toBe(200);
@@ -172,14 +173,14 @@ describe("GET /auth/status", () => {
     const staleCookie = await mintSession(0);
     const logoutAllRes = await server.inject({
       method: "POST",
-      url: "/logout-all",
+      url: "/api/logout-all",
       headers: { cookie: `nw_auth=${staleCookie}` },
     });
     expect(logoutAllRes.statusCode).toBe(200);
 
     const res = await server.inject({
       method: "GET",
-      url: "/auth/status",
+      url: "/api/auth/status",
       headers: { cookie: `nw_auth=${staleCookie}` },
     });
     expect(res.statusCode).toBe(200);
@@ -199,7 +200,7 @@ describe("POST /login", () => {
     server = await buildServer();
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
   });
@@ -212,7 +213,7 @@ describe("POST /login", () => {
   it("sets nw_auth cookie on correct credentials", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     expect(res.statusCode).toBe(200);
@@ -225,7 +226,7 @@ describe("POST /login", () => {
   it("returns 401 for wrong password, generic error message", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "wrongpassword123" },
     });
     expect(res.statusCode).toBe(401);
@@ -237,7 +238,7 @@ describe("POST /login", () => {
   it("returns 401 for unknown email, same generic error", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "nobody@example.com", password: "correcthorsebattery" },
     });
     expect(res.statusCode).toBe(401);
@@ -257,7 +258,7 @@ describe("requireSession gate", () => {
     // Establish owner so login_version = 0 is in the DB
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
   });
@@ -335,7 +336,7 @@ describe("session cookie unlocks protected routes", () => {
   it("cookie from /setup unlocks a protected route", async () => {
     const setupRes = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     const sessionValue = extractSessionValue(setCookieHeader(setupRes));
@@ -350,7 +351,7 @@ describe("session cookie unlocks protected routes", () => {
   it("cookie from /login unlocks a protected route", async () => {
     const loginRes = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     const sessionValue = extractSessionValue(setCookieHeader(loginRes));
@@ -372,7 +373,7 @@ describe("POST /logout", () => {
     server = await buildServer();
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
   });
@@ -383,7 +384,7 @@ describe("POST /logout", () => {
   });
 
   it("returns 200 with Max-Age=0 to clear the nw_auth cookie", async () => {
-    const res = await server.inject({ method: "POST", url: "/logout" });
+    const res = await server.inject({ method: "POST", url: "/api/logout" });
     expect(res.statusCode).toBe(200);
     const header = setCookieHeader(res);
     expect(header).toContain("nw_auth=");
@@ -391,7 +392,7 @@ describe("POST /logout", () => {
   });
 
   it("is safe to call when unauthenticated", async () => {
-    const res = await server.inject({ method: "POST", url: "/logout" });
+    const res = await server.inject({ method: "POST", url: "/api/logout" });
     expect(res.statusCode).toBe(200);
   });
 
@@ -410,7 +411,7 @@ describe("rolling session reissue", () => {
     server = await buildServer();
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
   });
@@ -459,7 +460,7 @@ describe("POST /logout-all", () => {
     server = await buildServer();
     const setupRes = await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     validCookie = extractSessionValue(setCookieHeader(setupRes));
@@ -473,7 +474,7 @@ describe("POST /logout-all", () => {
   it("returns 401 without a valid session", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/logout-all",
+      url: "/api/logout-all",
     });
     expect(res.statusCode).toBe(401);
   });
@@ -481,7 +482,7 @@ describe("POST /logout-all", () => {
   it("returns 200 when called with a valid session", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/logout-all",
+      url: "/api/logout-all",
       headers: { cookie: `nw_auth=${validCookie}` },
     });
     expect(res.statusCode).toBe(200);
@@ -499,7 +500,7 @@ describe("POST /logout-all", () => {
   it("fresh login works after logout-all", async () => {
     const loginRes = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     expect(loginRes.statusCode).toBe(200);
@@ -523,7 +524,7 @@ describe("credential endpoint rate limiting", () => {
     server = await buildServer();
     await server.inject({
       method: "POST",
-      url: "/setup",
+      url: "/api/setup",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
   });
@@ -537,7 +538,7 @@ describe("credential endpoint rate limiting", () => {
     for (let i = 0; i < 5; i++) {
       const res = await server.inject({
         method: "POST",
-        url: "/login",
+        url: "/api/login",
         payload: { email: "admin@example.com", password: "wrongpassword123" },
       });
       expect(res.statusCode).toBe(401);
@@ -547,7 +548,7 @@ describe("credential endpoint rate limiting", () => {
   it("blocks the 6th attempt with 429", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "wrongpassword123" },
     });
     expect(res.statusCode).toBe(429);
@@ -556,7 +557,7 @@ describe("credential endpoint rate limiting", () => {
   it("blocks correct credentials too while rate-limited (no bypass)", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     expect(res.statusCode).toBe(429);
@@ -569,7 +570,7 @@ describe("credential endpoint rate limiting", () => {
     vi.setSystemTime(futureTime);
     const res = await server.inject({
       method: "POST",
-      url: "/login",
+      url: "/api/login",
       payload: { email: "admin@example.com", password: "correcthorsebattery" },
     });
     vi.useRealTimers();

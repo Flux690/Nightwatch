@@ -41,6 +41,7 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getToolSchemas } from "../agent/tools/toolset.js";
 import { currentFleetCapabilities } from "../agent/policy.js";
+import { mountApi } from "./api-server.js";
 
 const K8S_SERVICE = {
   provider: "kubernetes" as const,
@@ -300,8 +301,8 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       });
 
       server = Fastify({ logger: false, forceCloseConnections: true });
-      await registerConsoleEventRoutes(server);
-      await registerSessionRoutes(server);
+      await mountApi(server, registerConsoleEventRoutes);
+      await mountApi(server, registerSessionRoutes);
       await server.listen({ port: 0, host: "127.0.0.1" });
       port = (server.server.address() as AddressInfo).port;
     });
@@ -337,7 +338,7 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
 
       const { events, close } = await connectConsoleEvents(port, SESSION);
 
-      const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -362,14 +363,17 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
 
       close();
 
-      await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
+      await fetch(
+        `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `nw_auth=${SESSION}`,
+          },
+          body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
         },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
-      });
+      );
       await waitFor(() => !hasPendingHumanInput(sessionId));
     });
   });
@@ -414,8 +418,8 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       });
 
       server = Fastify({ logger: false, forceCloseConnections: true });
-      await registerConsoleEventRoutes(server);
-      await registerSessionRoutes(server);
+      await mountApi(server, registerConsoleEventRoutes);
+      await mountApi(server, registerSessionRoutes);
       await server.listen({ port: 0, host: "127.0.0.1" });
       port = (server.server.address() as AddressInfo).port;
     });
@@ -439,7 +443,7 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
 
       const { events, close } = await connectConsoleEvents(port, SESSION);
 
-      const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -492,7 +496,7 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
         { text: "Investigation complete.", toolUses: [] },
       ]);
 
-      const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -577,15 +581,15 @@ describe("toolset assembly by fleet capabilities and remediation mode", () => {
       setScript([{ text: "Done.", toolUses: [] }]);
 
       const s = Fastify({ logger: false, forceCloseConnections: true });
-      await registerConsoleEventRoutes(s);
-      await registerSessionRoutes(s);
+      await mountApi(s, registerConsoleEventRoutes);
+      await mountApi(s, registerSessionRoutes);
       await s.listen({ port: 0, host: "127.0.0.1" });
       const p = (s.server.address() as AddressInfo).port;
       server = s;
 
       const { events, close } = await connectConsoleEvents(p, SESSION);
 
-      await fetch(`http://127.0.0.1:${p}/chat`, {
+      await fetch(`http://127.0.0.1:${p}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -692,8 +696,8 @@ describe("per-target write gating", () => {
     setRunnerRemediationMode(offId, false);
 
     server = Fastify({ logger: false, forceCloseConnections: true });
-    await registerConsoleEventRoutes(server);
-    await registerSessionRoutes(server);
+    await mountApi(server, registerConsoleEventRoutes);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -712,7 +716,7 @@ describe("per-target write gating", () => {
   }> {
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

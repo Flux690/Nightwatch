@@ -13,6 +13,7 @@ import { mintTestSession } from "./session-helper.js";
 import { getDb } from "../db/client.js";
 import { generateRunnerToken, touchLastUsed } from "../db/runner.js";
 import { createSession } from "../db/sessions.js";
+import { mountApi } from "./api-server.js";
 
 function sha256hex(s: string): string {
   return createHash("sha256").update(s).digest("hex");
@@ -29,8 +30,8 @@ describe("Runner token lifecycle (issue 038)", () => {
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
     await server.register(FastifyWebSocket);
-    await registerTokenRoutes(server);
-    await registerWsRoutes(server);
+    await mountApi(server, registerTokenRoutes);
+    await mountApi(server, registerWsRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -45,7 +46,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns nwr_-prefixed plaintext with a UUID id", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(201);
@@ -59,7 +60,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("stores only the SHA-256 hash in the DB, never the plaintext", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(res.body) as {
@@ -77,7 +78,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("stores an optional label", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "prod-server" },
       });
@@ -89,12 +90,12 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("each generate produces a unique token", async () => {
       const a = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const b = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const tokenA = (JSON.parse(a.body) as { token: string }).token;
@@ -105,7 +106,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("stores and returns serverName when provided", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "web-01" },
       });
@@ -117,7 +118,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns 400 when serverName is empty", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "" },
       });
@@ -127,7 +128,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns 400 when serverName contains a forward slash", async () => {
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "prod/web-01" },
       });
@@ -137,7 +138,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("reclaims a server name whose runner never connected (abandoned setup)", async () => {
       const first = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "db-server-01" },
       });
@@ -145,7 +146,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const second = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "db-server-01" },
       });
@@ -162,7 +163,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns 409 when the server name belongs to a runner that has connected", async () => {
       const first = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "web-prod-01" },
       });
@@ -172,7 +173,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const res = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { serverName: "web-prod-01" },
       });
@@ -184,7 +185,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("never returns plaintext in the list", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "list-test" },
       });
@@ -192,7 +193,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const res = await server.inject({
         method: "GET",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
@@ -202,7 +203,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("includes id, label, createdAt, lastUsedAt", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "meta-test" },
       });
@@ -210,7 +211,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const res = await server.inject({
         method: "GET",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(res.body) as {
@@ -233,7 +234,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns 204 and removes the token row entirely", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
         payload: { label: "to-delete" },
       });
@@ -241,14 +242,14 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const del = await server.inject({
         method: "DELETE",
-        url: `/tokens/${id}`,
+        url: `/api/tokens/${id}`,
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(del.statusCode).toBe(204);
 
       const list = await server.inject({
         method: "GET",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
@@ -260,7 +261,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("returns 404 for unknown id", async () => {
       const res = await server.inject({
         method: "DELETE",
-        url: "/tokens/00000000-0000-0000-0000-000000000000",
+        url: "/api/tokens/00000000-0000-0000-0000-000000000000",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(404);
@@ -269,7 +270,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("denies reconnect with the deleted token", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -279,12 +280,12 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       await server.inject({
         method: "DELETE",
-        url: `/tokens/${id}`,
+        url: `/api/tokens/${id}`,
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 
       const code = await new Promise<number>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -300,13 +301,13 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("accepts a valid token and sends connected", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
 
       await new Promise<void>((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -324,7 +325,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
     it("closes with 4003 for an unknown token", async () => {
       const code = await new Promise<number>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
           headers: {
             Authorization:
               "Bearer nwr_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -338,7 +339,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
     it("closes with 4001 when no Authorization header is sent", async () => {
       const code = await new Promise<number>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`);
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`);
         ws.on("close", (c) => resolve(c));
         ws.on("error", () => resolve(4001));
       });
@@ -348,7 +349,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("disconnects live runner sockets immediately on token delete", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -357,7 +358,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       };
 
       const closeCode = await new Promise<number>((resolve) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -367,7 +368,7 @@ describe("Runner token lifecycle (issue 038)", () => {
           if (msg.type === "connected") {
             await server.inject({
               method: "DELETE",
-              url: `/tokens/${id}`,
+              url: `/api/tokens/${id}`,
               headers: { cookie: `nw_auth=${SESSION}` },
             });
           }
@@ -382,7 +383,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     it("is set after the runner sends its manifest", async () => {
       const mint = await server.inject({
         method: "POST",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -391,7 +392,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       };
 
       await new Promise<void>((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${port}/clients/connect`, {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -430,7 +431,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       const list = await server.inject({
         method: "GET",
-        url: "/tokens",
+        url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
@@ -455,7 +456,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
       await server.inject({
         method: "DELETE",
-        url: `/tokens/${runnerId}`,
+        url: `/api/tokens/${runnerId}`,
         headers: { cookie: `nw_auth=${SESSION}` },
       });
 

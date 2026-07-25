@@ -34,6 +34,7 @@ import {
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import type { ApprovalRequest } from "@nightwarden/shared";
+import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -52,7 +53,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await registerSessionRoutes(server);
+    await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -99,7 +100,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       FINISH_TURN,
     ]);
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -112,7 +113,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // Wait for the interrupt row to appear in DB via the endpoint
     const body = await waitFor(async () => {
       const r = await fetch(
-        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
         {
           headers: { Cookie: `nw_auth=${SESSION}` },
         },
@@ -130,7 +131,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
     // Cleanup: reject to free the interrupt row
     await fetch(
-      `http://127.0.0.1:${port}/sessions/${found.sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${found.sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -145,7 +146,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
 
   it("returns 401 without a valid nw_auth cookie", async () => {
     const res = await fetch(
-      `http://127.0.0.1:${port}/sessions/pending-human-input`,
+      `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
     );
     expect(res.status).toBe(401);
   });
@@ -186,7 +187,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     );
     setRunnerRemediationMode(tokC, true);
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -199,7 +200,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // Operator-wide: endpoint returns the interrupt without needing a token param
     const body = await waitFor(async () => {
       const r = await fetch(
-        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
         {
           headers: { Cookie: `nw_auth=${SESSION}` },
         },
@@ -213,7 +214,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // Cleanup
     const found = body[0];
     await fetch(
-      `http://127.0.0.1:${port}/sessions/${found.sessionId}/respond`,
+      `http://127.0.0.1:${port}/api/sessions/${found.sessionId}/respond`,
       {
         method: "POST",
         headers: {
@@ -262,7 +263,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     );
     setRunnerRemediationMode(tokE, true);
 
-    const chatRes = await fetch(`http://127.0.0.1:${port}/chat`, {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -275,7 +276,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // Wait for interrupt
     const body = await waitFor(async () => {
       const r = await fetch(
-        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
         {
           headers: { Cookie: `nw_auth=${SESSION}` },
         },
@@ -285,7 +286,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     });
 
     const sessionId = body[0].sessionId;
-    await fetch(`http://127.0.0.1:${port}/sessions/${sessionId}/respond`, {
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -297,7 +298,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     // After resolution the list is empty
     await waitFor(async () => {
       const r = await fetch(
-        `http://127.0.0.1:${port}/sessions/pending-human-input`,
+        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
         {
           headers: { Cookie: `nw_auth=${SESSION}` },
         },
@@ -307,7 +308,7 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     });
 
     const resAfter = await fetch(
-      `http://127.0.0.1:${port}/sessions/pending-human-input`,
+      `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
       {
         headers: { Cookie: `nw_auth=${SESSION}` },
       },

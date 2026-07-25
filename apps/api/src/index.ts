@@ -18,19 +18,32 @@ import { registerConnectRoutes } from "./runners/connect.js";
 import { registerManifestRoutes } from "./runners/manifest.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
+import { registerConsoleRoutes } from "./console/serve.js";
 import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
 import { decrypt } from "./config/crypto.js";
 import { getGitHubIntegration } from "./db/integrations.js";
-import { nightwardenDir, workspacesDir } from "./config/paths.js";
+import {
+  nightwardenDir,
+  stateDirIsEphemeral,
+  workspacesDir,
+} from "./config/paths.js";
 import { logger } from "./logger.js";
 
 // Resolve the state directory first so a relative NIGHTWARDEN_DIR fails here with
 // a clear message, not lazily mid-request.
 try {
-  logger.info({ dir: nightwardenDir() }, "state directory");
+  const dir = nightwardenDir();
+  if (stateDirIsEphemeral(dir)) {
+    logger.error(
+      { dir },
+      "state directory is on the container's writable layer, so the database and secret key would be lost on restart - mount a volume at this path",
+    );
+    process.exit(1);
+  }
+  logger.info({ dir }, "state directory");
 } catch (err) {
   logger.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
@@ -53,22 +66,33 @@ const fastify = Fastify({
 
 await fastify.register(FastifyWebSocket);
 
-await registerAuthRoutes(fastify);
-await registerTokenRoutes(fastify);
-await registerWsRoutes(fastify);
-await registerConsoleEventRoutes(fastify);
-await registerAlertRoutes(fastify);
-await registerAlertTestRoutes(fastify);
-await registerConfigRoutes(fastify);
-await registerConfigHealthRoutes(fastify);
-await registerSessionRoutes(fastify);
-await registerRunnerRoutes(fastify);
-await registerConnectRoutes(fastify);
-await registerManifestRoutes(fastify);
-await registerRemediationRoutes(fastify);
-await registerIntegrationRoutes(fastify);
+// Under /api so the console owns every other path: /integrations/prometheus
+// and /sessions/:id each name both a page and an endpoint.
+await fastify.register(
+  async (api) => {
+    await registerAuthRoutes(api);
+    await registerTokenRoutes(api);
+    await registerWsRoutes(api);
+    await registerConsoleEventRoutes(api);
+    await registerAlertRoutes(api);
+    await registerAlertTestRoutes(api);
+    await registerConfigRoutes(api);
+    await registerConfigHealthRoutes(api);
+    await registerSessionRoutes(api);
+    await registerRunnerRoutes(api);
+    await registerConnectRoutes(api);
+    await registerManifestRoutes(api);
+    await registerRemediationRoutes(api);
+    await registerIntegrationRoutes(api);
+  },
+  { prefix: "/api" },
+);
 
+// Outside /api: a container probe is infrastructure, not API surface.
 fastify.get("/health", async () => ({ status: "ok" }));
+
+// Last, so it can never shadow an API route.
+await registerConsoleRoutes(fastify);
 
 const start = async (): Promise<void> => {
   try {

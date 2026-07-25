@@ -19,6 +19,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { useTempDb } from "./temp-db.js";
 import { dockerService, manifest } from "./manifest-helper.js";
+import { mountApi } from "./api-server.js";
 
 function alertmanagerBody(fingerprint: string, labels: Record<string, string>) {
   return {
@@ -54,7 +55,7 @@ describe("POST /alerts/validate", () => {
     cleanupDb = useTempDb();
     INGEST_TOKEN = generateAlertSourceToken("alertmanager");
     server = Fastify({ logger: false });
-    await registerAlertRoutes(server);
+    await mountApi(server, registerAlertRoutes);
     await server.ready();
   });
 
@@ -88,7 +89,7 @@ describe("POST /alerts/validate", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-1", {
         alertname: "HighCPU",
@@ -133,7 +134,7 @@ describe("POST /alerts/validate", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-k8s", {
         alertname: "CrashLoopBackOff",
@@ -171,7 +172,7 @@ describe("POST /alerts/validate", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-no-match", {
         alertname: "HighCPU",
@@ -222,7 +223,7 @@ describe("POST /alerts/validate", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: alertmanagerBody("validate-ambiguous", {
         alertname: "HighCPU",
@@ -253,7 +254,7 @@ describe("POST /alerts/validate", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: {
         alerts: [
@@ -293,7 +294,7 @@ describe("POST /alerts/validate", () => {
   it("returns a clear 400 error for a malformed payload missing the alerts array", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       headers: { "x-nightwarden-token": INGEST_TOKEN },
       payload: { notAlerts: true },
     });
@@ -306,7 +307,7 @@ describe("POST /alerts/validate", () => {
   it("rejects requests without a valid token before parsing the payload", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/validate",
+      url: "/api/alerts/validate",
       payload: alertmanagerBody("validate-noauth", { container: "web-01" }),
     });
 

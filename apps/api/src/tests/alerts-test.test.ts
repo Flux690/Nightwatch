@@ -11,6 +11,7 @@ import {
   unregisterRunner,
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
+import { mountApi } from "./api-server.js";
 
 function manifest(
   hostname: string,
@@ -42,7 +43,7 @@ describe("POST /alerts/test", () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await registerAlertTestRoutes(server);
+    await mountApi(server, registerAlertTestRoutes);
     await server.ready();
   });
 
@@ -61,7 +62,7 @@ describe("POST /alerts/test", () => {
   it("returns 401 without a session cookie", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       payload: { runnerId: "runner-verify" },
     });
     expect(res.statusCode).toBe(401);
@@ -70,7 +71,7 @@ describe("POST /alerts/test", () => {
   it("returns 400 when runnerId is missing", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {},
     });
@@ -80,7 +81,7 @@ describe("POST /alerts/test", () => {
   it("returns 404 when the runner is not connected", async () => {
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { runnerId: "no-such-runner" },
     });
@@ -112,7 +113,7 @@ describe("POST /alerts/test", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { runnerId: "verify-runner-token" },
     });
@@ -139,7 +140,7 @@ describe("POST /alerts/test", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { runnerId: "verify-runner-token" },
     });
@@ -160,7 +161,7 @@ describe("POST /alerts/test", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/alerts/test",
+      url: "/api/alerts/test",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { runnerId: "verify-runner-token" },
     });
