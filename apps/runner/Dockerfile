@@ -66,7 +66,6 @@ COPY --from=prod-deps /build/apps/runner/node_modules ./apps/runner/node_modules
 COPY --from=build /build/apps/runner/dist ./apps/runner/dist
 
 ENV HOST_PROC=/host/proc
-ENV NODE_ENV=production
 # The bundle ships a sourcemap; without this a stack trace names a line in the
 # bundle instead of the file it came from.
 ENV NODE_OPTIONS=--enable-source-maps

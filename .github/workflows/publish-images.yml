@@ -66,6 +66,9 @@ jobs:
           # other and neither ends up cached.
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # The attest step below already records provenance. BuildKit's own
+          # would be a second copy, published as an extra manifest per image.
+          provenance: false
 
       - uses: actions/attest-build-provenance@v4
         with:
