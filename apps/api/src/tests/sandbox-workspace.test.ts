@@ -446,9 +446,10 @@ describe("workspace lifecycle", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     vi.useRealTimers();
 
-    await waitFor(() => !existsSync(join(workspacesDir, sessionId)));
-    // The sibling HOME mount dies with the workspace.
-    expect(existsSync(join(workspacesDir, `${sessionId}.home`))).toBe(false);
+    // The sibling HOME mount dies with the workspace, and teardown removes it
+    // last - so waiting on it is what proves the whole sequence finished.
+    await waitFor(() => !existsSync(join(workspacesDir, `${sessionId}.home`)));
+    expect(existsSync(join(workspacesDir, sessionId))).toBe(false);
     expect(dockerState.removed).toHaveLength(1);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
 

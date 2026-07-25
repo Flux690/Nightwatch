@@ -173,7 +173,10 @@ describe("Prometheus tools through the tool dispatch", () => {
     const end = Date.parse(params.get("end")!);
     const start = Date.parse(params.get("start")!);
     expect(Math.abs(end - Date.now())).toBeLessThan(5_000);
-    expect(end - start).toBe(180 * 60_000);
+    // The anchor and the future-clamp read the clock separately, so the window
+    // is the lookback plus however long elapsed between the two reads.
+    expect(end - start).toBeGreaterThanOrEqual(180 * 60_000);
+    expect(end - start).toBeLessThan(180 * 60_000 + 5_000);
   });
 
   it("caps lookback at 7 days and the result at 20 series with an omitted count", async () => {
