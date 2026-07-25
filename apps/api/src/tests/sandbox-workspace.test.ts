@@ -570,7 +570,8 @@ describe("sandbox network modes", () => {
     // The internal network is the enforcement: no route out except the proxy.
     expect(
       dockerState.networksCreated.some(
-        (n) => n["Name"] === "nightwarden-sandbox-net" && n["Internal"] === true,
+        (n) =>
+          n["Name"] === "nightwarden-sandbox-net" && n["Internal"] === true,
       ),
     ).toBe(true);
     const create = sandboxCreateArgs();

@@ -11,7 +11,10 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { NormalizedAlert, RunnerCommandMessage } from "@nightwarden/shared";
+import type {
+  NormalizedAlert,
+  RunnerCommandMessage,
+} from "@nightwarden/shared";
 
 // Stateful scripted provider: snapshot() accumulates messages so persist() in the loop
 // writes real session_messages rows.

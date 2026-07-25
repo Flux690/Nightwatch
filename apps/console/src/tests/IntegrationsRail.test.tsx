@@ -9,7 +9,10 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import type { GitHubIntegrationStatus, RunnerRecord } from "@nightwarden/shared";
+import type {
+  GitHubIntegrationStatus,
+  RunnerRecord,
+} from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { IntegrationsRail } from "@/components/layout/IntegrationsRail";

@@ -19,7 +19,10 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { NormalizedAlert, RunnerCommandMessage } from "@nightwarden/shared";
+import type {
+  NormalizedAlert,
+  RunnerCommandMessage,
+} from "@nightwarden/shared";
 import Fastify from "fastify";
 import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
