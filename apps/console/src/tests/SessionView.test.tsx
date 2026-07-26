@@ -313,12 +313,15 @@ describe("SessionView", () => {
         });
       });
 
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId("tool-card-out-loading"),
-        ).not.toBeInTheDocument();
-        expect(screen.getByText(/stopped/)).toBeInTheDocument();
+      // Output is evidence to check rather than the thread to follow, so it
+      // collapses until asked for.
+      const disclosure = await screen.findByRole("button", {
+        name: /output|lines/i,
       });
+      expect(screen.queryByText(/stopped/)).not.toBeInTheDocument();
+
+      await userEvent.setup().click(disclosure);
+      expect(screen.getByText(/stopped/)).toBeInTheDocument();
     });
 
     it("replaces the right card by toolUseId, leaving the other alone", async () => {
@@ -386,17 +389,15 @@ describe("SessionView", () => {
         });
       });
 
-      await waitFor(() => {
-        // The list_processes output landed (clamped to 3 lines, so assert on
-        // the quoted first entry rather than the whole array).
-        expect(screen.getByText(/"nginx"/)).toBeInTheDocument();
-        // tu-1 is still running: its card has no output area at all yet.
-        const pending = screen
-          .getAllByTestId("tool-card")
-          .find((card) => card.textContent?.includes("check_service_status"));
-        expect(pending).toBeDefined();
-        expect(pending!.querySelector("pre")).toBeNull();
+      // Exactly one card gained output: the one the item named. The other is
+      // still running, so it offers nothing to open.
+      const disclosures = await screen.findAllByRole("button", {
+        name: /output|lines/i,
       });
+      expect(disclosures).toHaveLength(1);
+
+      await userEvent.setup().click(disclosures[0]!);
+      expect(screen.getByText(/"nginx"/)).toBeInTheDocument();
     });
 
     it("ignores items for a different session", async () => {
@@ -841,8 +842,11 @@ describe("SessionView", () => {
         resolvedCard.compareDocumentPosition(toolCard) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      await userEvent
+        .setup()
+        .click(within(toolCard).getByRole("button", { name: /output|lines/i }));
       expect(
-        within(toolCard).getByText(/web-01 restarted/),
+        within(screen.getByTestId("tool-card")).getByText(/web-01 restarted/),
       ).toBeInTheDocument();
     });
   });

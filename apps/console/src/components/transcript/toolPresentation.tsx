@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { ICON_INLINE } from "@/lib/iconProps";
 import type { ToolCardItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import {
@@ -52,13 +55,42 @@ function resultText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
+// Collapsed by default. Raw tool output is evidence to check, not the thing a
+// reader is following, and at rail width it buries everything around it.
 function OutputCard({ result }: { result: unknown }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const text = resultText(result);
+  const lines = text.split("\n").length;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen(true)}
+      >
+        <ChevronRight {...ICON_INLINE} />
+        {lines > 1 ? `${lines} lines` : "output"}
+      </button>
+    );
+  }
+
   return (
-    <Card size="sm" className={TOOL_CARD_CLASS}>
-      <CardContent className="px-3.5 py-2.5">
-        <pre className={CARD_PRE_CLASS}>{firstLines(resultText(result))}</pre>
-      </CardContent>
-    </Card>
+    <div>
+      <button
+        type="button"
+        className="mb-1 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen(false)}
+      >
+        <ChevronDown {...ICON_INLINE} />
+        {lines > 1 ? `${lines} lines` : "output"}
+      </button>
+      <Card size="sm" className={TOOL_CARD_CLASS}>
+        <CardContent className="max-h-72 overflow-auto px-3.5 py-2.5">
+          <pre className={CARD_PRE_CLASS}>{text}</pre>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

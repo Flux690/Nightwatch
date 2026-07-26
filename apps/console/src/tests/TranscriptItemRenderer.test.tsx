@@ -248,4 +248,41 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText("Created draft PR #42.")).toBeInTheDocument();
     });
   });
+
+  describe("output disclosure", () => {
+    it("keeps a generic tool's output behind a chevron", async () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-5",
+        toolName: "QueryPrometheus",
+        input: { target: "docker/api/api" },
+        state: { phase: "complete", result: "cpu 0.91\nmem 0.44" },
+      });
+
+      expect(screen.queryByText(/cpu 0.91/)).not.toBeInTheDocument();
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: /2 lines/i }));
+      expect(screen.getByText(/cpu 0.91/)).toBeInTheDocument();
+    });
+
+    it("previews a long shell result and reveals the rest on demand", async () => {
+      const output = ["one", "two", "three", "four", "five"].join("\n");
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-6",
+        toolName: "Bash",
+        input: { command: "ls" },
+        state: { phase: "complete", result: { exitCode: 0, output } },
+      });
+
+      expect(screen.getByText(/one/)).toBeInTheDocument();
+      expect(screen.queryByText(/five/)).not.toBeInTheDocument();
+
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: /2 more lines/i }));
+      expect(screen.getByText(/five/)).toBeInTheDocument();
+    });
+  });
 });
