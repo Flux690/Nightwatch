@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwarden/shared";
+import { serviceIdentityKey } from "@nightwarden/shared";
 import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -39,11 +40,10 @@ const RUNNER_POLL_MS = 3000;
 const STEP_TITLES = [
   "Server details",
   "Install the runner",
-  "Verify the pipeline",
+  "Confirm what it sees",
 ];
 
 function validateServerName(name: string): string | null {
-  if (name.trim().length === 0) return "Server name is required";
   if (name.includes("/")) return "Server name must not contain '/'";
   return null;
 }
@@ -53,23 +53,16 @@ export function AddServerPage(): React.JSX.Element {
   const [step, setStep] = useState(0);
   const [provider, setProvider] = useState<Provider | null>(null);
   const [serverName, setServerName] = useState("");
-  const [serverNameTouched, setServerNameTouched] = useState(false);
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [committed, setCommitted] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<
-    { ok: true; server: string } | { ok: false; error: string } | null
-  >(null);
 
   const serverNameError = serverName.includes("/")
     ? "Server name must not contain '/'"
-    : serverNameTouched && serverName.trim().length === 0
-      ? "Server name is required"
-      : null;
-  const canContinueFromServer =
-    provider !== null && validateServerName(serverName) === null;
+    : null;
+  const canContinueFromServer = provider !== null && serverNameError === null;
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
@@ -84,6 +77,12 @@ export function AddServerPage(): React.JSX.Element {
 
   // Snippets live only on the Alertmanager page (one owner); the wizard just
   // points there the moment routing ambiguity becomes possible.
+  // Read from the manifest the runner already sent: nothing is dispatched, so
+  // checking the wiring cannot start an investigation or spend a token.
+  const advertised = (
+    connectedRunner?.manifest?.capabilities.services ?? []
+  ).map((entry) => serviceIdentityKey(entry.identity));
+
   const connectedDockerServers = (runners ?? []).filter(
     (r) =>
       r.online &&
@@ -150,29 +149,6 @@ export function AddServerPage(): React.JSX.Element {
     }
   }
 
-  const sendTestAlert = useMutation({
-    mutationFn: async (runnerId: string): Promise<string> => {
-      const body = await apiFetch<{ server?: string; error?: string }>(
-        "/api/alerts/test",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ runnerId }),
-        },
-      );
-      if (!body.server)
-        throw new Error(body.error ?? "Failed to send test alert");
-      return body.server;
-    },
-    onMutate: () => setVerifyResult(null),
-    onSuccess: (server) => setVerifyResult({ ok: true, server }),
-    onError: (err) =>
-      setVerifyResult({
-        ok: false,
-        error: err instanceof Error ? err.message : "Failed to send test alert",
-      }),
-  });
-
   return (
     <Page>
       <PageHeader>
@@ -206,10 +182,13 @@ export function AddServerPage(): React.JSX.Element {
           </Field>
 
           <Field className="max-w-80">
-            <FieldLabel htmlFor="server-name">Server name</FieldLabel>
+            <FieldLabel htmlFor="server-name">
+              Server name (optional)
+            </FieldLabel>
             <FieldDescription>
-              A unique name for this server in your fleet. Immutable once
-              installed.
+              Only needed to tell the same service apart across several servers.
+              Naming one means your alerts must carry that name too, and the
+              Alertmanager page hands you the snippet for it.
             </FieldDescription>
             <Input
               id="server-name"
@@ -217,7 +196,6 @@ export function AddServerPage(): React.JSX.Element {
               value={serverName}
               aria-invalid={serverNameError !== null}
               onChange={(e) => setServerName(e.currentTarget.value)}
-              onBlur={() => setServerNameTouched(true)}
             />
             {serverNameError && (
               <FieldError>
@@ -305,34 +283,26 @@ export function AddServerPage(): React.JSX.Element {
       {step === 2 && (
         <div className="flex flex-col gap-4">
           <p className="text-sm">
-            Send a synthetic alert through the full pipeline to confirm it
-            reaches this server.
+            What this server advertises. An alert reaches a service by carrying
+            labels that produce one of these keys.
           </p>
 
-          <Button
-            className="self-start"
-            disabled={!connectedRunner || sendTestAlert.isPending}
-            onClick={() =>
-              connectedRunner && sendTestAlert.mutate(connectedRunner.id)
-            }
-          >
-            {sendTestAlert.isPending && <Spinner className="size-4" />}
-            Send test alert
-          </Button>
-
-          {verifyResult?.ok === true && (
-            <Alert>
-              <AlertTitle>Pipeline verified</AlertTitle>
+          {advertised.length === 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>No services detected</AlertTitle>
               <AlertDescription>
-                Alert received and routed to {verifyResult.server}.
+                The runner connected but sees no containers or workloads. On
+                Docker that usually means the socket is not mounted.
               </AlertDescription>
             </Alert>
-          )}
-          {verifyResult?.ok === false && (
-            <Alert variant="destructive">
-              <AlertTitle>Verification failed</AlertTitle>
-              <AlertDescription>{verifyResult.error}</AlertDescription>
-            </Alert>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {advertised.map((key) => (
+                <span key={key} className="font-mono text-sm">
+                  {key}
+                </span>
+              ))}
+            </div>
           )}
 
           {connectedDockerServers >= 2 && (

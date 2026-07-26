@@ -239,31 +239,55 @@ describe("AddServerPage", () => {
       ).toBeInTheDocument();
     });
 
-    it("sends a test alert and reports success once the pipeline confirms", async () => {
+    it("lists the identity keys the runner advertises, dispatching nothing", async () => {
       const user = userEvent.setup();
-      const { fetchMock } = setup({ runners: [CONNECTED_RUNNER] });
+      const { fetchMock } = setup({
+        runners: [
+          {
+            ...CONNECTED_RUNNER,
+            manifest: {
+              hostname: "web-host",
+              runnerVersion: "2.0.0",
+              capabilities: {
+                docker: true,
+                kubernetes: false,
+                services: [
+                  {
+                    identity: {
+                      provider: "docker",
+                      project: "encodr",
+                      service: "cache",
+                    },
+                    status: "running",
+                  },
+                ],
+                postgres: { available: false },
+                redis: { available: false },
+                hostMetrics: true,
+                fileRead: true,
+                remediationEnabled: false,
+              },
+            },
+          },
+        ],
+      });
       await advanceToVerify(user);
 
-      await user.click(
-        screen.getByRole("button", { name: /send test alert/i }),
-      );
+      expect(screen.getByText("docker/encodr/cache")).toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/alerts/test",
-          expect.objectContaining({
-            method: "POST",
-            body: JSON.stringify({ runnerId: "new-token-uuid" }),
-          }),
-        );
-      });
-      await waitFor(() => {
-        expect(screen.getByText(/pipeline verified/i)).toBeInTheDocument();
-      });
-      // A lone server needs no routing labels, so no signpost.
-      expect(
-        screen.queryByText(/finish alert routing/i),
-      ).not.toBeInTheDocument();
+      // Checking the wiring must not start an investigation or spend a token.
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/alerts/test",
+        expect.anything(),
+      );
+    });
+
+    it("warns when the runner connected but sees nothing", async () => {
+      const user = userEvent.setup();
+      setup({ runners: [CONNECTED_RUNNER] });
+      await advanceToVerify(user);
+
+      expect(screen.getByText(/no services detected/i)).toBeInTheDocument();
     });
 
     it("points to the Alertmanager page once a second docker server exists - a link, never a snippet", async () => {
@@ -305,38 +329,6 @@ describe("AddServerPage", () => {
       expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
     });
 
-    it("shows an error when the test alert fails", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-          if (url === "/api/runners") return jsonOk([CONNECTED_RUNNER]);
-          if (url === "/api/tokens" && init?.method === "POST")
-            return jsonOk(GENERATED_TOKEN, 201);
-          if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
-          if (url === "/api/alerts/test")
-            return Promise.resolve({
-              ok: false,
-              status: 404,
-              json: () => Promise.resolve({ error: "runner not connected" }),
-            });
-          return jsonOk({});
-        }),
-      );
-
-      await advanceToVerify(user);
-      await user.click(
-        screen.getByRole("button", { name: /send test alert/i }),
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/runner not connected/i)).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe("token hygiene on leaving the page", () => {
     it("confirms, deletes the minted token, and navigates when leaving before the runner connects", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ runners: [AWAITING_RUNNER] });

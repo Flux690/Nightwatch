@@ -123,13 +123,21 @@ export function AlertmanagerPage(): React.JSX.Element {
   const connected = (runners ?? []).filter(
     (r) => r.online && r.hostname !== null,
   );
-  const dockerServers = connected
-    .filter((r) => r.manifest?.capabilities.docker === true)
-    .map((r) => r.serverName ?? r.hostname ?? r.id);
+  const dockerRunners = connected.filter(
+    (r) => r.manifest?.capabilities.docker === true,
+  );
+  const dockerServers = dockerRunners.map(
+    (r) => r.serverName ?? r.hostname ?? r.id,
+  );
+  // Only an explicit name scopes a runner's identities, so only a named runner
+  // needs its alerts labelled to match.
+  const namedServers = dockerRunners
+    .map((r) => r.serverName)
+    .filter((n): n is string => n !== null);
   const k8sRunnerCount = connected.filter(
     (r) => r.manifest?.capabilities.kubernetes === true,
   ).length;
-  const effectiveServer = selectedServer || (dockerServers[0] ?? "");
+  const effectiveServer = selectedServer || (namedServers[0] ?? "");
 
   const generate = useMutation({
     mutationFn: () =>
@@ -339,23 +347,23 @@ export function AlertmanagerPage(): React.JSX.Element {
               </section>
             )}
 
-            {configured && dockerServers.length === 1 && (
+            {configured && namedServers.length === 0 && (
               <p className="max-w-3xl text-sm text-muted-foreground">
-                One server - alerts resolve to it automatically. When you add a
-                second, come back here to label which server each alert is
-                about.
+                No server is named, so alerts resolve by service alone. Name a
+                server when the same service runs on more than one, then come
+                back here for the label to add.
               </p>
             )}
 
-            {configured && dockerServers.length >= 2 && (
+            {configured && namedServers.length > 0 && (
               <section className="flex flex-col gap-2">
                 <p className="text-sm font-semibold">
                   Make your alerts say which server they&apos;re about
                 </p>
                 <p className="max-w-3xl text-sm text-muted-foreground">
-                  With {dockerServers.length} servers, the same service can run
-                  in two places. Add an nw_server label per scrape target in
-                  your Prometheus so every alert carries its server.
+                  A named server scopes every service it advertises, so your
+                  alerts have to carry that name to match. Add an nw_server
+                  label per scrape target in your Prometheus.
                 </p>
                 <Field className="max-w-80">
                   <FieldLabel htmlFor="server-select">Server</FieldLabel>
@@ -367,7 +375,7 @@ export function AlertmanagerPage(): React.JSX.Element {
                     value={effectiveServer}
                     onChange={(e) => setSelectedServer(e.currentTarget.value)}
                   >
-                    {dockerServers.map((name) => (
+                    {namedServers.map((name) => (
                       <NativeSelectOption key={name} value={name}>
                         {name}
                       </NativeSelectOption>

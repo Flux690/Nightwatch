@@ -347,19 +347,26 @@ describe("AlertmanagerPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("routing section is hidden with no docker servers and a one-liner with one", async () => {
+  it("offers the label only once a server carries a name", async () => {
     const { view } = setup({ configured: true, runners: [] });
     await screen.findByText(/waiting for first alert/i);
     expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/^server$/i)).not.toBeInTheDocument();
     view.unmount();
     vi.unstubAllGlobals();
 
+    // An unnamed runner scopes nothing, so its alerts need no label.
+    const unnamed = { ...dockerRunner("prod-web-01"), serverName: null };
+    const second = setup({ configured: true, runners: [unnamed] });
+    expect(await screen.findByText(/no server is named/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
+    second.view.unmount();
+    vi.unstubAllGlobals();
+
+    // Naming it is what makes the label necessary, so that is when it appears.
     setup({ configured: true, runners: [dockerRunner("prod-web-01")] });
     expect(
-      await screen.findByText(/alerts resolve to it automatically/i),
+      await screen.findByText(/nw_server: "prod-web-01"/),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText(/^server$/i)).not.toBeInTheDocument();
   });
 
   it("with two servers: dropdown of runner names drives the per-target snippet, external_labels as the aside", async () => {

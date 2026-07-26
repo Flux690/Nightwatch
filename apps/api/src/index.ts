@@ -8,7 +8,6 @@ import { registerTokenRoutes } from "./auth/token.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
-import { registerAlertTestRoutes } from "./alerts/test-alert.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { seedConfigFromEnv } from "./config/store.js";
 import { registerConfigHealthRoutes } from "./config/health.js";
@@ -75,7 +74,6 @@ await fastify.register(
     await registerWsRoutes(api);
     await registerConsoleEventRoutes(api);
     await registerAlertRoutes(api);
-    await registerAlertTestRoutes(api);
     await registerConfigRoutes(api);
     await registerConfigHealthRoutes(api);
     await registerSessionRoutes(api);
