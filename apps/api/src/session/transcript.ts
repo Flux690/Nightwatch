@@ -1,5 +1,6 @@
 import type {
   ApprovalRequest,
+  ApprovalStatus,
   Citation,
   MessagePart,
   SessionMessage,
@@ -9,6 +10,7 @@ import type {
 import { buildEvidenceIndex } from "../agent/report.js";
 import { getPendingHumanInputWithSessionBySessionId } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
+import { listRemediationActionsForSession } from "../db/remediation-actions.js";
 
 const EVIDENCE_TAG_SUFFIX = /\n\n\[evidence: e\d+\]$/;
 const EVIDENCE_MARKER = /\[evidence: (e\d+)\]/g;
@@ -108,6 +110,19 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     ]),
   );
 
+  // A decision the operator already made. Without this a reloaded transcript
+  // shows the tool's output but forgets who released it.
+  const decisions = new Map<
+    string,
+    { decision: ApprovalStatus; by?: string }
+  >();
+  for (const action of listRemediationActionsForSession(sessionId)) {
+    decisions.set(action.toolUseId, {
+      decision: action.status === "rejected" ? "rejected" : "approved",
+      ...(action.resolvedBy && { by: action.resolvedBy }),
+    });
+  }
+
   const results = new Map<string, string>();
   for (const msg of messages) {
     for (const part of msg.parts) {
@@ -168,20 +183,34 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
         }
       } else if (part.type === "tool_call") {
         const result = results.get(part.id);
+        const decided = decisions.get(part.id);
+        const answered =
+          part.name === "AskUserQuestion" && result !== undefined;
         const state: ToolCallState =
           pending?.toolUseId === part.id
             ? { phase: "awaiting_human" }
-            : result !== undefined
-              ? { phase: "complete", result }
-              : { phase: "running" };
+            : decided
+              ? {
+                  phase: "resolved",
+                  ...decided,
+                  ...(result !== undefined && { result }),
+                }
+              : answered
+                ? { phase: "resolved", decision: "answered", result }
+                : result !== undefined
+                  ? { phase: "complete", result }
+                  : { phase: "running" };
         items.push(
           toolCallCard({
             toolUseId: part.id,
             toolName: part.name,
             input: part.input,
             state,
-            ...(pending?.toolUseId === part.id &&
-              pending.kind && { awaitingKind: pending.kind }),
+            // A decided call stays an approval card so its outcome has somewhere
+            // to render, not just the tool output it produced.
+            ...((pending?.toolUseId === part.id && pending.kind) || decided
+              ? { awaitingKind: pending?.kind ?? "approval" }
+              : {}),
           }),
         );
       }

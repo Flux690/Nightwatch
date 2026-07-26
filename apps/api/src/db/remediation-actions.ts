@@ -157,6 +157,17 @@ export function findRemediationAction(
     .get(sessionId, toolUseId) as RemediationAction | undefined;
 }
 
+// Every decision made in one session, for rebuilding its transcript after a reload.
+export function listRemediationActionsForSession(
+  sessionId: string,
+): RemediationAction[] {
+  return getDb()
+    .prepare(
+      `SELECT ${SELECT_COLUMNS} FROM remediation_actions WHERE session_id = ?`,
+    )
+    .all(sessionId) as RemediationAction[];
+}
+
 // Newest first, capped like listAllSessions: the audit view reads top-to-bottom
 // as "most recent activity", not a full unbounded export.
 export function listRemediationActions(): RemediationAction[] {

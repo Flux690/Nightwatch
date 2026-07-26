@@ -169,6 +169,26 @@ describe("a suspended session serves its pending row with its transcript", () =>
     unregisterRunner(conn);
   });
 
+  it("still shows who decided, and what the tool returned, after the wait ends", async () => {
+    const { conn } = connectRunner("after-decision");
+    await startGatedChat("decision survives");
+
+    const sessionId = await waitForAwaitingSession();
+    await resolvePending(sessionId);
+
+    // Reloading is the only way an operator sees a finished investigation, so the
+    // decision has to come from the database, not from the browser that made it.
+    const items = await getTranscript(sessionId);
+    const card = items.find((i) => i.kind === "approval_card");
+    expect(card?.kind === "approval_card" && card.state).toMatchObject({
+      phase: "resolved",
+      decision: "rejected",
+      by: "cleanup",
+    });
+
+    unregisterRunner(conn);
+  });
+
   it("returns 401 without a valid nw_auth cookie", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/sessions/any-id`);
     expect(res.status).toBe(401);
