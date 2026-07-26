@@ -4,6 +4,10 @@ services:
     # Or build locally: docker compose build
     build: .
     restart: unless-stopped
+    # Docker Desktop provides this name; Linux does not, and without it a
+    # Prometheus or Loki on this same host is unreachable from in here.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${PORT:-3000}:3000"
     environment:

@@ -1,3 +1,4 @@
+import { describeNetworkFailure } from "./reachability.js";
 export type LokiErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
 
@@ -76,8 +77,8 @@ async function lokiFetch(
         body: new URLSearchParams(form).toString(),
       }),
     });
-  } catch {
-    throw new LokiApiError("network", 0, "Could not reach Loki");
+  } catch (err) {
+    throw new LokiApiError("network", 0, describeNetworkFailure(err, "Loki"));
   }
   if (res.status === 401 || res.status === 403) {
     throw new LokiApiError(

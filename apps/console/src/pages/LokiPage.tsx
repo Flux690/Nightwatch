@@ -110,8 +110,9 @@ export function LokiPage(): React.JSX.Element {
             <Field className="max-w-120">
               <FieldLabel htmlFor="loki-url">Loki URL</FieldLabel>
               <FieldDescription>
-                The base URL of your Loki, reachable from the NightWarden API
-                host. Don&apos;t expose Loki to the public internet.
+                The base URL of your Loki. NightWarden connects from its own
+                machine, so the address has to work from there, not from this
+                browser. Don&apos;t expose Loki to the public internet.
               </FieldDescription>
               <Input
                 id="loki-url"

@@ -1,3 +1,4 @@
+import { describeNetworkFailure } from "./reachability.js";
 export type PrometheusErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
 
@@ -54,8 +55,12 @@ async function prometheusFetch(
         body: new URLSearchParams(form).toString(),
       }),
     });
-  } catch {
-    throw new PrometheusApiError("network", 0, "Could not reach Prometheus");
+  } catch (err) {
+    throw new PrometheusApiError(
+      "network",
+      0,
+      describeNetworkFailure(err, "Prometheus"),
+    );
   }
   if (res.status === 401 || res.status === 403) {
     throw new PrometheusApiError(
