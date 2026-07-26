@@ -36,7 +36,9 @@ import {
   publishMessage,
   publishInterrupt,
   publishRunRetrying,
+  publishTranscriptItem,
 } from "../session/stream.js";
+import { toolCallCard } from "../session/transcript.js";
 import {
   generateSessionTitle,
   buildAlertTitleSource,
@@ -459,6 +461,16 @@ export async function runInvestigation(
             multiSelect?: boolean;
           })
         : null;
+      publishTranscriptItem({
+        sessionId,
+        item: toolCallCard({
+          toolUseId: gated.tool.id,
+          toolName: gated.tool.name,
+          input: gated.tool.input,
+          state: { phase: "awaiting_human" },
+          awaitingKind: isAskGate ? "clarification" : "approval",
+        }),
+      });
       publishInterrupt({
         sessionId,
         toolUseId: gated.tool.id,
@@ -508,6 +520,16 @@ export async function runInvestigation(
     seqOffset,
     continueInterrupt,
   );
+  publishTranscriptItem({
+    sessionId,
+    item: toolCallCard({
+      toolUseId: continueId,
+      toolName: "",
+      input: {},
+      state: { phase: "awaiting_human" },
+      awaitingKind: "continue",
+    }),
+  });
   publishInterrupt({
     sessionId,
     toolUseId: continueId,

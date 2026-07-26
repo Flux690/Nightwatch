@@ -230,8 +230,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("tool card (TOOL_CALL_START / TOOL_CALL_END events)", () => {
-    it("renders a tool card with IN block when TOOL_CALL_START arrives", async () => {
+  describe("tool card (TRANSCRIPT_ITEM events)", () => {
+    it("renders a tool card with IN block when the API sends a running call", async () => {
       setup();
 
       await waitFor(() => {
@@ -243,12 +243,16 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m3",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-1",
-            toolName: "check_service_status",
-            input: { target: "nginx" },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-1",
+              toolName: "check_service_status",
+              input: { target: "nginx" },
+              state: { phase: "running" },
+            },
           },
         });
       });
@@ -259,7 +263,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("fills the OUT block when TOOL_CALL_END arrives", async () => {
+    it("fills the OUT block when the call completes", async () => {
       setup();
 
       await waitFor(() => {
@@ -271,12 +275,16 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m3",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-1",
-            toolName: "check_service_status",
-            input: { target: "nginx" },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-1",
+              toolName: "check_service_status",
+              input: { target: "nginx" },
+              state: { phase: "running" },
+            },
           },
         });
       });
@@ -288,11 +296,19 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m4",
-          type: "TOOL_CALL_END",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-1",
-            result: { status: "stopped", exitCode: 1 },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-1",
+              toolName: "check_service_status",
+              input: {},
+              state: {
+                phase: "complete",
+                result: { status: "stopped", exitCode: 1 },
+              },
+            },
           },
         });
       });
@@ -305,7 +321,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("matches TOOL_CALL_END to the correct card by toolUseId", async () => {
+    it("replaces the right card by toolUseId, leaving the other alone", async () => {
       setup();
 
       await waitFor(() => {
@@ -317,22 +333,30 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m3",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-1",
-            toolName: "check_service_status",
-            input: { target: "nginx" },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-1",
+              toolName: "check_service_status",
+              input: { target: "nginx" },
+              state: { phase: "running" },
+            },
           },
         });
         MockEventSource.latest?.push({
           messageId: "m5",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-2",
-            toolName: "list_processes",
-            input: { filter: "http" },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-2",
+              toolName: "list_processes",
+              input: { filter: "http" },
+              state: { phase: "running" },
+            },
           },
         });
       });
@@ -345,11 +369,19 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m6",
-          type: "TOOL_CALL_END",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-2",
-            result: { processes: ["nginx", "node"] },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-2",
+              toolName: "check_service_status",
+              input: {},
+              state: {
+                phase: "complete",
+                result: { processes: ["nginx", "node"] },
+              },
+            },
           },
         });
       });
@@ -367,7 +399,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("ignores TOOL_CALL_START events for a different session", async () => {
+    it("ignores items for a different session", async () => {
       setup();
 
       await waitFor(() => {
@@ -379,12 +411,16 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m3",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "other-session",
-            toolUseId: "tu-99",
-            toolName: "should_not_appear",
-            input: {},
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-99",
+              toolName: "should_not_appear",
+              input: {},
+              state: { phase: "running" },
+            },
           },
         });
       });
@@ -578,12 +614,16 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m3",
-          type: "TOOL_CALL_START",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-1",
-            toolName: "check_service_status",
-            input: { target: "nginx" },
+            item: {
+              kind: "tool_card",
+              toolUseId: "tu-1",
+              toolName: "check_service_status",
+              input: { target: "nginx" },
+              state: { phase: "running" },
+            },
           },
         });
       });
@@ -682,16 +722,17 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "a1",
-          type: "HUMAN_INPUT_REQUIRED",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-gated",
-            toolName: "RestartDockerService",
-            input: {
-              target: "docker/web-01/web-01",
+            item: {
+              kind: "approval_card",
+              toolUseId: "tu-gated",
+              toolName: "RestartDockerService",
+              input: { target: "docker/web-01/web-01", risk: "high" },
               risk: "high",
+              state: { phase: "awaiting_human" },
             },
-            incidentId: "inc-1",
           },
         });
       });
@@ -758,13 +799,22 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "a2",
-          type: "HUMAN_INPUT_RESOLVED",
+          type: "TRANSCRIPT_ITEM",
           payload: {
-            incidentId: "inc-1",
-            toolUseId: "tu-gated",
-            status: "approved",
-            resolvedBy: "operator",
-            resolvedAt: "2024-01-01T00:03:00Z",
+            sessionId: "s1",
+            item: {
+              kind: "approval_card",
+              toolUseId: "tu-gated",
+              toolName: "RestartDockerService",
+              input: { target: "docker/web-01/web-01", risk: "high" },
+              risk: "high",
+              state: {
+                phase: "resolved",
+                decision: "approved",
+                by: "operator",
+                result: "web-01 restarted",
+              },
+            },
           },
         });
       });
@@ -782,8 +832,8 @@ describe("SessionView", () => {
         ).not.toBeInTheDocument();
       });
 
-      // The paired tool card now appears below the resolved approval card,
-      // header-only until the result arrives (both cards label the tool name).
+      // The decision carries the result of the tool it released, so the paired
+      // tool card renders below it with that output already in place.
       expect(screen.getAllByText("RestartDockerService")).toHaveLength(2);
       const resolvedCard = screen.getByTestId("approval-card");
       const toolCard = screen.getByTestId("tool-card");
@@ -791,23 +841,9 @@ describe("SessionView", () => {
         resolvedCard.compareDocumentPosition(toolCard) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(toolCard.querySelector("pre")).toBeNull();
-
-      act(() => {
-        MockEventSource.latest?.push({
-          messageId: "a3",
-          type: "TOOL_CALL_END",
-          payload: {
-            sessionId: "s1",
-            toolUseId: "tu-gated",
-            result: { restarted: true },
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/restarted/)).toBeInTheDocument();
-      });
+      expect(
+        within(toolCard).getByText(/web-01 restarted/),
+      ).toBeInTheDocument();
     });
   });
 
@@ -1134,20 +1170,22 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "c1",
-          type: "HUMAN_INPUT_REQUIRED",
+          type: "TRANSCRIPT_ITEM",
           payload: {
             sessionId: "s1",
-            toolUseId: "tu-clar",
-            toolName: "AskUserQuestion",
-            input: {},
-            incidentId: "inc-clar",
-            kind: "clarification",
-            question: "Which service should I investigate first?",
-            options: [
-              { label: "nginx", description: "The web server" },
-              { label: "postgres", description: "The database" },
-            ],
-            ...extra,
+            item: {
+              kind: "clarification_card",
+              toolUseId: "tu-clar",
+              toolName: "AskUserQuestion",
+              input: {},
+              question: "Which service should I investigate first?",
+              options: [
+                { label: "nginx", description: "The web server" },
+                { label: "postgres", description: "The database" },
+              ],
+              state: { phase: "awaiting_human" },
+              ...extra,
+            },
           },
         });
       });
@@ -1232,12 +1270,22 @@ describe("SessionView", () => {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "c2",
-          type: "HUMAN_INPUT_RESOLVED",
+          type: "TRANSCRIPT_ITEM",
           payload: {
-            incidentId: "inc-clar",
-            toolUseId: "tu-clar",
-            status: "answered",
-            resolvedBy: "operator",
+            sessionId: "s1",
+            item: {
+              kind: "clarification_card",
+              toolUseId: "tu-clar",
+              toolName: "AskUserQuestion",
+              input: {},
+              question: "Which service should I investigate first?",
+              state: {
+                phase: "resolved",
+                decision: "answered",
+                by: "operator",
+                result: "nginx",
+              },
+            },
           },
         });
       });

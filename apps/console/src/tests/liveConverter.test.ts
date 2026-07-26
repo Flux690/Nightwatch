@@ -26,60 +26,67 @@ function thinkingDelta(delta: string): ConsoleEvent {
   };
 }
 
-function toolCallStart(toolUseId: string): ConsoleEvent {
+// The API builds the card; these mirror what it sends.
+function itemEvent(item: TranscriptItem): ConsoleEvent {
   return {
     messageId: "m1",
-    type: "TOOL_CALL_START",
-    payload: {
-      sessionId: "s1",
-      toolUseId,
-      toolName: "check_service_status",
-      input: {},
-    },
+    type: "TRANSCRIPT_ITEM",
+    payload: { sessionId: "s1", item },
   };
+}
+
+function toolCallStart(toolUseId: string): ConsoleEvent {
+  return itemEvent({
+    kind: "tool_card",
+    toolUseId,
+    toolName: "check_service_status",
+    input: {},
+    state: { phase: "running" },
+  });
+}
+
+function toolCallEnd(toolUseId: string, result: unknown): ConsoleEvent {
+  return itemEvent({
+    kind: "tool_card",
+    toolUseId,
+    toolName: "check_service_status",
+    input: {},
+    state: { phase: "complete", result },
+  });
 }
 
 function interrupt(toolUseId: string): ConsoleEvent {
-  return {
-    messageId: "m1",
-    type: "HUMAN_INPUT_REQUIRED",
-    payload: {
-      sessionId: "s1",
-      kind: "approval",
-      toolUseId,
-      toolName: "RestartDockerService",
-      input: { risk: "high" },
-    },
-  };
+  return itemEvent({
+    kind: "approval_card",
+    toolUseId,
+    toolName: "RestartDockerService",
+    input: { risk: "high" },
+    risk: "high",
+    state: { phase: "awaiting_human" },
+  });
 }
 
 function continueInterrupt(toolUseId: string): ConsoleEvent {
-  return {
-    messageId: "m1",
-    type: "HUMAN_INPUT_REQUIRED",
-    payload: {
-      sessionId: "s1",
-      kind: "continue",
-      toolUseId,
-      toolName: "",
-      input: {},
-    },
-  };
+  return itemEvent({
+    kind: "continue_card",
+    toolUseId,
+    state: { phase: "awaiting_human" },
+  });
 }
 
 function interruptResolved(
   toolUseId: string,
   status: "approved" | "rejected" | "context_added" | "answered" | "continued",
 ): ConsoleEvent {
-  return {
-    messageId: "m2",
-    type: "HUMAN_INPUT_RESOLVED",
-    payload: { sessionId: "s1", toolUseId, status, resolvedBy: "console" },
-  };
+  return itemEvent({
+    kind: "continue_card",
+    toolUseId,
+    state: { phase: "resolved", decision: status, by: "console" },
+  });
 }
 
 describe("applyLiveEvent — continue interrupt", () => {
-  it("produces a continue_card item on HUMAN_INPUT_REQUIRED kind=continue", () => {
+  it("inserts the continue card the API sent", () => {
     const items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
 
     expect(items).toHaveLength(1);
@@ -242,15 +249,7 @@ describe("hasActiveStream", () => {
   it("is true while a tool card is in flight, false once it resolves", () => {
     let items = applyLiveEvent([], toolCallStart("tu-1"), "s1");
     expect(hasActiveStream(items)).toBe(true);
-    items = applyLiveEvent(
-      items,
-      {
-        messageId: "m1",
-        type: "TOOL_CALL_END",
-        payload: { sessionId: "s1", toolUseId: "tu-1", result: "ok" },
-      },
-      "s1",
-    );
+    items = applyLiveEvent(items, toolCallEnd("tu-1", "ok"), "s1");
     expect(hasActiveStream(items)).toBe(false);
   });
 

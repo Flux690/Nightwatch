@@ -1,4 +1,5 @@
 import type { SessionMessage } from "./sessions.js";
+import type { TranscriptItem } from "./transcript.js";
 
 // Common envelope for the API→console event stream (SSE). messageId is a per-event UUID
 // inside the payload JSON, not an SSE `id:` field - the feed is drop-tolerant with no Last-Event-ID replay.
@@ -50,6 +51,16 @@ export interface ConsoleRunFinished extends ConsoleEnvelope {
   payload: {
     sessionId: string;
     reason: "completed";
+  };
+}
+
+// A card the API has built, to insert or replace by its key. The same projection
+// serves the transcript fetch, so a live card and a reloaded one cannot differ.
+export interface ConsoleTranscriptItem extends ConsoleEnvelope {
+  type: "TRANSCRIPT_ITEM";
+  payload: {
+    sessionId: string;
+    item: TranscriptItem;
   };
 }
 
@@ -154,6 +165,7 @@ export interface ConsoleReportUpdated extends ConsoleEnvelope {
 // Discriminated union of all events on the API→console SSE stream.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
+  | ConsoleTranscriptItem
   | ConsoleTextMessageContent
   | ConsoleMessage
   | ConsoleRunFinished

@@ -33,16 +33,21 @@ function resolveCitations(
   return Object.keys(found).length > 0 ? found : undefined;
 }
 
-function cardFor(
-  part: Extract<MessagePart, { type: "tool_call" }>,
-  state: ToolCallState,
-  pending: ApprovalRequest | null,
-): TranscriptItem {
-  const input = part.input;
-  if (pending?.toolUseId === part.id && pending.kind === "continue") {
-    return { kind: "continue_card", toolUseId: part.id, state };
+// The only place a tool call becomes a card. Both the transcript fetch and the
+// live stream call it, which is what keeps a streamed card and a reloaded one
+// byte-identical instead of merely similar.
+export function toolCallCard(call: {
+  toolUseId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  state: ToolCallState;
+  awaitingKind?: "approval" | "clarification" | "continue";
+}): TranscriptItem {
+  const { toolUseId, toolName, input, state, awaitingKind } = call;
+  if (awaitingKind === "continue") {
+    return { kind: "continue_card", toolUseId, state };
   }
-  if (part.name === "AskUserQuestion") {
+  if (toolName === "AskUserQuestion") {
     const parsed = input as {
       question?: string;
       options?: Array<{ label: string; description: string }>;
@@ -50,8 +55,8 @@ function cardFor(
     };
     return {
       kind: "clarification_card",
-      toolUseId: part.id,
-      toolName: part.name,
+      toolUseId,
+      toolName,
       input,
       question: parsed.question,
       options: parsed.options,
@@ -59,24 +64,23 @@ function cardFor(
       state,
     };
   }
-  if (pending?.toolUseId === part.id) {
+  if (awaitingKind === "approval") {
     const risk = input["risk"];
     return {
       kind: "approval_card",
-      toolUseId: part.id,
-      toolName: part.name,
+      toolUseId,
+      toolName,
       input,
       ...(typeof risk === "string" && { risk }),
       state,
     };
   }
-  return {
-    kind: "tool_card",
-    toolUseId: part.id,
-    toolName: part.name,
-    input,
-    state,
-  };
+  return { kind: "tool_card", toolUseId, toolName, input, state };
+}
+
+// The evidence tag is the model's citation handle, never operator-facing text.
+export function stripEvidenceTag(output: string): string {
+  return output.replace(EVIDENCE_TAG_SUFFIX, "");
 }
 
 // The one place a transcript becomes something to draw. Everything the console
@@ -170,7 +174,16 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
             : result !== undefined
               ? { phase: "complete", result }
               : { phase: "running" };
-        items.push(cardFor(part, state, pending));
+        items.push(
+          toolCallCard({
+            toolUseId: part.id,
+            toolName: part.name,
+            input: part.input,
+            state,
+            ...(pending?.toolUseId === part.id &&
+              pending.kind && { awaitingKind: pending.kind }),
+          }),
+        );
       }
     }
   }

@@ -15,6 +15,7 @@ import type {
   ConsoleTextMessageContent,
   ConsoleToolCallEnd,
   ConsoleToolCallStart,
+  ConsoleTranscriptItem,
   SessionMessage,
 } from "@nightwarden/shared";
 
@@ -72,6 +73,18 @@ export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
   const env: ConsoleInterrupt = {
     messageId: randomUUID(),
     type: "HUMAN_INPUT_REQUIRED",
+    payload,
+  };
+  publishConsoleEvent(env);
+}
+
+// One card, built by the projection, inserted or replaced by its key.
+export function publishTranscriptItem(
+  payload: ConsoleTranscriptItem["payload"],
+): void {
+  const env: ConsoleTranscriptItem = {
+    messageId: randomUUID(),
+    type: "TRANSCRIPT_ITEM",
     payload,
   };
   publishConsoleEvent(env);

@@ -7,7 +7,12 @@ import { insertRejectedRemediationAction } from "../db/remediation-actions.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
-import { publishInterruptResolved, publishToolCallEnd } from "./stream.js";
+import {
+  publishInterruptResolved,
+  publishToolCallEnd,
+  publishTranscriptItem,
+} from "./stream.js";
+import { toolCallCard, stripEvidenceTag } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
 import type { ApprovalResponse, RespondRequest } from "@nightwarden/shared";
@@ -61,10 +66,28 @@ function unpause(
   resolvedBy: string,
   completedResults: ToolResult[],
   gatedResult: ToolResult,
+  card: { toolName: string; input: Record<string, unknown> },
 ): HumanInputActionResult {
   ensureDeleted(sessionId);
 
   const resolvedAt = new Date().toISOString();
+
+  publishTranscriptItem({
+    sessionId,
+    item: toolCallCard({
+      toolUseId,
+      toolName: card.toolName,
+      input: card.input,
+      state: {
+        phase: "resolved",
+        decision: status,
+        by: resolvedBy,
+        ...(status === "approved" && {
+          result: stripEvidenceTag(gatedResult.content),
+        }),
+      },
+    }),
+  });
 
   if (status === "approved") {
     publishToolCallEnd({
@@ -171,6 +194,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       { tool_use_id: pending.toolUseId, content: answer },
+      { toolName: pending.toolName, input: pending.toolInput },
     );
   }
 
@@ -188,6 +212,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       gatedResult,
+      { toolName: pending.toolName, input: pending.toolInput },
     );
   }
 
@@ -224,6 +249,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       gatedResult,
+      { toolName: pending.toolName, input: pending.toolInput },
     );
   }
 
@@ -250,5 +276,6 @@ export async function respondToPendingHumanInput(
       tool_use_id: pending.toolUseId,
       content: `Human added context: ${context}`,
     },
+    { toolName: pending.toolName, input: pending.toolInput },
   );
 }

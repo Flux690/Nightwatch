@@ -127,14 +127,18 @@ function TranscriptColumn({
       ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
       : null;
 
-  // The persisted transcript is authoritative: it arrives with its pending row
-  // already joined, so a live card for the same tool_use is the same card twice.
-  const persistedKeys = new Set(persistedItems.map(transcriptItemKey));
-  const allItems = [
-    ...persistedItems,
-    ...(echoItem ? [echoItem] : []),
-    ...liveItems.filter((item) => !persistedKeys.has(transcriptItemKey(item))),
-  ].filter((item) => transcriptItemKey(item) !== dockedKey);
+  // Live events update the fetched list in place rather than competing with it:
+  // a card can be replaced by a newer version of itself, never discarded.
+  const merged = [...persistedItems, ...(echoItem ? [echoItem] : [])];
+  for (const item of liveItems) {
+    const key = transcriptItemKey(item);
+    const at = merged.findIndex((seen) => transcriptItemKey(seen) === key);
+    if (at === -1) merged.push(item);
+    else merged[at] = item;
+  }
+  const allItems = merged.filter(
+    (item) => transcriptItemKey(item) !== dockedKey,
+  );
 
   return (
     <MessageScrollerContent
