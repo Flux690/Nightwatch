@@ -11,16 +11,20 @@ import { firstLines, IO_LABEL_CLASS, TOOL_CARD_CLASS } from "./TerminalCard.js";
 
 export function ClarificationCardPanel({
   item,
+  submitting = false,
   onAnswer,
 }: {
   item: ClarificationCardItem;
+  submitting?: boolean;
   onAnswer?: (answer: string | string[]) => void;
 }): React.JSX.Element {
+  const state = item.state;
+  const resolved = state.phase === "resolved";
+  const answer = state.phase === "resolved" ? state.result : undefined;
+  const answeredBy = state.phase === "resolved" ? state.by : undefined;
   const [selected, setSelected] = useState<string[]>([]);
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
-  const resolved = item.approval === "answered";
-  const disabled = item.approval === "pending";
 
   const options = item.options ?? [];
 
@@ -70,22 +74,22 @@ export function ClarificationCardPanel({
   // Once answered, the interactive card collapses into one compact Q/A card:
   // the question in, the human's answer out, nothing else.
   if (resolved) {
-    const answer =
-      typeof item.result === "string"
-        ? item.result
-        : item.result !== undefined
-          ? JSON.stringify(item.result)
+    const answerText =
+      typeof answer === "string"
+        ? answer
+        : answer !== undefined
+          ? JSON.stringify(answer)
           : null;
     return (
       <div data-testid="clarification-card" data-resolved="true">
         <p className="mb-1.5 font-mono text-base font-medium">
           AskUserQuestion
-          {item.resolvedBy ? (
+          {answeredBy ? (
             <span
               className="ml-2 font-normal text-muted-foreground"
               data-testid="clarification-resolution"
             >
-              answered by {item.resolvedBy}
+              answered by {answeredBy}
             </span>
           ) : null}
         </p>
@@ -99,7 +103,7 @@ export function ClarificationCardPanel({
           <CardContent className="border-t border-border px-3.5 py-2.5">
             <p className={IO_LABEL_CLASS}>OUT</p>
             <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
-              {answer === null ? "Answered" : firstLines(answer)}
+              {answerText === null ? "Answered" : firstLines(answerText)}
             </p>
           </CardContent>
         </Card>
@@ -120,7 +124,7 @@ export function ClarificationCardPanel({
               >
                 <Checkbox
                   checked={selected.includes(opt.label)}
-                  disabled={disabled}
+                  disabled={submitting}
                   onCheckedChange={() => toggleOption(opt.label)}
                 />
                 {opt.label}
@@ -129,7 +133,7 @@ export function ClarificationCardPanel({
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={otherChecked}
-                disabled={disabled}
+                disabled={submitting}
                 onCheckedChange={toggleOther}
               />
               Other
@@ -151,12 +155,12 @@ export function ClarificationCardPanel({
                 key={opt.label}
                 className="flex items-center gap-2 text-sm"
               >
-                <RadioGroupItem value={opt.label} disabled={disabled} />
+                <RadioGroupItem value={opt.label} disabled={submitting} />
                 {opt.label}
               </label>
             ))}
             <label className="flex items-center gap-2 text-sm">
-              <RadioGroupItem value="__other__" disabled={disabled} />
+              <RadioGroupItem value="__other__" disabled={submitting} />
               Other
             </label>
           </RadioGroup>
@@ -166,13 +170,13 @@ export function ClarificationCardPanel({
             placeholder="Type your answer…"
             value={otherText}
             onChange={(e) => setOtherText(e.currentTarget.value)}
-            disabled={disabled}
+            disabled={submitting}
             className="max-h-32 min-h-9"
           />
         )}
         <Button
           size="sm"
-          disabled={disabled || !canSubmit}
+          disabled={submitting || !canSubmit}
           onClick={handleSubmit}
         >
           Submit

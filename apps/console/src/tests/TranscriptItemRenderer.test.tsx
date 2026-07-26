@@ -51,8 +51,8 @@ describe("TranscriptItemRenderer", () => {
       input: {
         service: { provider: "docker", project: "web-01", service: "web-01" },
       },
-      result: null,
       risk: "high",
+      state: { phase: "awaiting_human" },
     };
 
     it("calls onResolve with approve when Approve is clicked", async () => {
@@ -87,6 +87,7 @@ describe("TranscriptItemRenderer", () => {
         { label: "nginx", description: "web server" },
         { label: "postgres", description: "database" },
       ],
+      state: { phase: "awaiting_human" },
     };
 
     it("calls onAnswer with the selected radio once Submit is clicked", async () => {
@@ -143,6 +144,7 @@ describe("TranscriptItemRenderer", () => {
     const continueItem = {
       kind: "continue_card" as const,
       toolUseId: "continue-uuid-1",
+      state: { phase: "awaiting_human" as const },
     };
 
     it("calls onResolve with 'approve' when Continue is clicked", async () => {
@@ -195,7 +197,7 @@ describe("TranscriptItemRenderer", () => {
         toolUseId: "tu-1",
         toolName: "Edit",
         input: { path: "src/app.ts" },
-        result: DIFF_RESULT,
+        state: { phase: "complete", result: DIFF_RESULT },
       });
 
       expect(screen.getByTestId("diff-card")).toBeInTheDocument();
@@ -212,7 +214,7 @@ describe("TranscriptItemRenderer", () => {
         toolUseId: "tu-2",
         toolName: "Write",
         input: { path: "src/app.ts" },
-        result: JSON.stringify(DIFF_RESULT),
+        state: { phase: "complete", result: JSON.stringify(DIFF_RESULT) },
       });
 
       expect(screen.getByTestId("diff-card")).toBeInTheDocument();
@@ -225,12 +227,15 @@ describe("TranscriptItemRenderer", () => {
         toolUseId: "tu-4",
         toolName: "OpenPullRequest",
         input: { title: "Fix the leak" },
-        result: {
-          action: "created",
-          number: 42,
-          url: "https://github.com/acme/api/pull/42",
-          draft: true,
-          message: "Created draft PR #42.",
+        state: {
+          phase: "complete",
+          result: {
+            action: "created",
+            number: 42,
+            url: "https://github.com/acme/api/pull/42",
+            draft: true,
+            message: "Created draft PR #42.",
+          },
         },
       });
 

@@ -89,24 +89,23 @@ describe("applyLiveEvent — continue interrupt", () => {
     });
   });
 
-  it("sets approval to 'continued' on HUMAN_INPUT_RESOLVED status=continued", () => {
+  it("resolves the card with the decision and who made it", () => {
     let items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
     items = applyLiveEvent(items, interruptResolved("ci-1", "continued"), "s1");
 
     expect(items[0]).toMatchObject({
       kind: "continue_card",
-      approval: "continued",
-      resolvedBy: "console",
+      state: { phase: "resolved", decision: "continued", by: "console" },
     });
   });
 
-  it("sets approval to 'rejected' on HUMAN_INPUT_RESOLVED status=rejected", () => {
+  it("carries a rejection through as the decision, not a generic pending state", () => {
     let items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
     items = applyLiveEvent(items, interruptResolved("ci-1", "rejected"), "s1");
 
     expect(items[0]).toMatchObject({
       kind: "continue_card",
-      approval: "rejected",
+      state: { phase: "resolved", decision: "rejected" },
     });
   });
 

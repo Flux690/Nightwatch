@@ -26,7 +26,7 @@ export interface ChatInputProps {
   isRunning: boolean;
   disabled?: boolean;
   // Hides the mode picker: an investigation can never demote (one-way ratchet),
-  // so the composer has nothing to choose.
+  // so the chat input has nothing to choose.
   investigation?: boolean;
   onSessionCreated?: (
     sessionId: string,
@@ -43,7 +43,7 @@ const MODE_LABEL: Record<RunMode, string> = {
   investigate: "Investigate",
 };
 
-/* Composer mode dropdown. On an existing conversation, choosing Investigate
+/* Chat input mode dropdown. On an existing conversation, choosing Investigate
    escalates it on the next send; descriptions explain what each mode does. */
 function ModePicker({
   mode,
@@ -194,13 +194,13 @@ export function ChatInput({
 
   return (
     <div className="mx-auto w-full max-w-chat px-6 pb-4 pt-2 max-md:px-3 max-md:pb-3">
-      <Label htmlFor="composer-textarea" className="sr-only">
+      <Label htmlFor="chat-textarea" className="sr-only">
         Message
       </Label>
       <InputGroup className="rounded-2xl bg-card shadow-raised">
         <InputGroupTextarea
           ref={textareaRef}
-          id="composer-textarea"
+          id="chat-textarea"
           className="max-h-[200px] px-4 py-3"
           placeholder={isRunning ? "Agent is running…" : "Write a message…"}
           value={text}

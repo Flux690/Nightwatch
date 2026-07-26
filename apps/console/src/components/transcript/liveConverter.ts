@@ -1,11 +1,5 @@
 import type { ConsoleEvent } from "@nightwarden/shared";
-import type {
-  TranscriptItem,
-  ThinkingItem,
-  ApprovalCardItem,
-  ClarificationCardItem,
-  ContinueCardItem,
-} from "./types.js";
+import type { TranscriptItem, ThinkingItem, ToolCallState } from "./types.js";
 
 // A non-thinking event finalizes the most recent streaming thinking burst;
 // a later thinking delta opens a fresh item rather than reopening this one.
@@ -30,7 +24,7 @@ export function hasActiveStream(items: TranscriptItem[]): boolean {
   if (last.kind === "thinking")
     return last.streaming && last.text.trim() !== "";
   if (last.kind === "agent_text") return true;
-  if (last.kind === "tool_card") return last.result === null;
+  if (last.kind === "tool_card") return last.state.phase === "running";
   return false;
 }
 
@@ -88,7 +82,7 @@ export function applyLiveEvent(
         toolUseId: payload.toolUseId,
         toolName: payload.toolName,
         input: payload.input,
-        result: null,
+        state: { phase: "running" },
       },
     ];
   }
@@ -109,6 +103,7 @@ export function applyLiveEvent(
           question: payload.question,
           options: payload.options,
           multiSelect: payload.multiSelect,
+          state: { phase: "awaiting_human" },
         },
       ];
     }
@@ -119,6 +114,7 @@ export function applyLiveEvent(
         {
           kind: "continue_card",
           toolUseId: payload.toolUseId,
+          state: { phase: "awaiting_human" },
         },
       ];
     }
@@ -131,8 +127,8 @@ export function applyLiveEvent(
         toolUseId: payload.toolUseId,
         toolName: payload.toolName,
         input: payload.input,
-        result: null,
         risk: typeof riskValue === "string" ? riskValue : undefined,
+        state: { phase: "awaiting_human" },
       },
     ];
   }
@@ -145,7 +141,12 @@ export function applyLiveEvent(
         (item.kind === "tool_card" || item.kind === "approval_card") &&
         item.toolUseId === payload.toolUseId
       ) {
-        return { ...item, result: payload.result ?? null };
+        const result = payload.result ?? null;
+        const state: ToolCallState =
+          item.state.phase === "resolved"
+            ? { ...item.state, result }
+            : { phase: "complete", result };
+        return { ...item, state };
       }
       return item;
     });
@@ -155,35 +156,22 @@ export function applyLiveEvent(
     const payload = env.payload;
     const { status, resolvedBy } = payload;
     return items.map((item) => {
-      if (
-        item.kind === "approval_card" &&
-        item.toolUseId === payload.toolUseId
-      ) {
-        const approval: ApprovalCardItem["approval"] =
-          status === "approved" || status === "rejected" ? status : "pending";
-        return { ...item, approval, resolvedBy };
-      }
-      if (
-        item.kind === "clarification_card" &&
-        item.toolUseId === payload.toolUseId
-      ) {
-        const approval: ClarificationCardItem["approval"] =
-          status === "answered" ? "answered" : "pending";
-        return { ...item, approval, resolvedBy };
-      }
-      if (
-        item.kind === "continue_card" &&
-        item.toolUseId === payload.toolUseId
-      ) {
-        const approval: ContinueCardItem["approval"] =
-          status === "continued"
-            ? "continued"
-            : status === "rejected"
-              ? "rejected"
-              : "pending";
-        return { ...item, approval, resolvedBy };
-      }
-      return item;
+      const isCard =
+        item.kind === "approval_card" ||
+        item.kind === "clarification_card" ||
+        item.kind === "continue_card";
+      if (!isCard || item.toolUseId !== payload.toolUseId) return item;
+      // The approved tool can finish before its resolution arrives, so a result
+      // already in hand carries over rather than being overwritten.
+      const known =
+        item.state.phase === "complete" ? item.state.result : undefined;
+      const state: ToolCallState = {
+        phase: "resolved",
+        decision: status,
+        ...(resolvedBy && { by: resolvedBy }),
+        ...(known !== undefined && { result: known }),
+      };
+      return { ...item, state };
     });
   }
 

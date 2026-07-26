@@ -5,12 +5,17 @@ import { InterruptCard } from "./InterruptCard.js";
 
 export function ApprovalCardPanel({
   item,
+  submitting = false,
   onResolve,
 }: {
   item: ApprovalCardItem;
+  // A decision already sent and awaiting its reply. Belongs to the component,
+  // not the transcript: it describes this browser, not the session.
+  submitting?: boolean;
   onResolve?: (action: "approve" | "reject") => void;
 }): React.JSX.Element {
-  const resolved = item.approval === "approved" || item.approval === "rejected";
+  const state = item.state;
+  const resolved = state.phase === "resolved";
 
   return (
     <>
@@ -19,16 +24,16 @@ export function ApprovalCardPanel({
         <p className="text-sm text-muted-foreground">
           Risk: {item.risk ?? "unknown"}
         </p>
-        {resolved ? (
+        {state.phase === "resolved" ? (
           <p className="text-sm" data-testid="approval-resolution">
-            {item.approval === "approved" ? "Approved" : "Rejected"}
-            {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
+            {state.decision === "approved" ? "Approved" : "Rejected"}
+            {state.by ? ` by ${state.by}` : ""}
           </p>
         ) : (
           <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={item.approval === "pending"}
+              disabled={submitting}
               onClick={() => onResolve?.("approve")}
             >
               Approve
@@ -36,7 +41,7 @@ export function ApprovalCardPanel({
             <Button
               size="sm"
               variant="secondary"
-              disabled={item.approval === "pending"}
+              disabled={submitting}
               onClick={() => onResolve?.("reject")}
             >
               Reject
@@ -44,14 +49,17 @@ export function ApprovalCardPanel({
           </div>
         )}
       </InterruptCard>
-      {resolved && (
+      {state.phase === "resolved" && (
         <ToolCard
           item={{
             kind: "tool_card",
             toolUseId: item.toolUseId,
             toolName: item.toolName,
             input: item.input,
-            result: item.result,
+            state:
+              state.result === undefined
+                ? { phase: "running" }
+                : { phase: "complete", result: state.result },
           }}
         />
       )}

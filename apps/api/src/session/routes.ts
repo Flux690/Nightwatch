@@ -4,20 +4,16 @@ import type {
   ApprovalRequest,
   RespondRequest,
   RunMode,
-  SessionTranscript,
+  TranscriptItem,
 } from "@nightwarden/shared";
 import {
-  getPendingHumanInputWithSessionBySessionId,
   hasPendingHumanInput,
   type PendingHumanInputWithSession,
 } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
-import {
-  getSessionMessages,
-  getSession,
-  deleteSession,
-} from "../db/sessions.js";
+import { getSession, deleteSession } from "../db/sessions.js";
 import { listSessionRows } from "./list.js";
+import { buildTranscript } from "./transcript.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
@@ -64,14 +60,8 @@ export async function registerSessionRoutes(
   fastify.get<{ Params: { id: string } }>(
     "/sessions/:id",
     { preHandler: requireSession },
-    async (request): Promise<SessionTranscript> => {
-      const sessionId = request.params.id;
-      const pending = getPendingHumanInputWithSessionBySessionId(sessionId);
-      return {
-        messages: getSessionMessages(sessionId),
-        pending: pending ? toApprovalRequest(pending) : null,
-      };
-    },
+    async (request): Promise<TranscriptItem[]> =>
+      buildTranscript(request.params.id),
   );
 
   fastify.get<{ Params: { id: string } }>(

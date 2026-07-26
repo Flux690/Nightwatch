@@ -1,5 +1,4 @@
 import type { AlertSeverity } from "./alerts.js";
-import type { ApprovalRequest } from "./approvals.js";
 import type { MessagePart, NativeEnvelope } from "./messages.js";
 
 // A session is the agent's conversation thread (the durable parent); an incident is an optional
@@ -42,14 +41,6 @@ export interface SessionMeta {
   sessionId: string;
   title: string;
   createdAt: string;
-}
-
-// One session's transcript plus whatever it is suspended on. Joined server-side
-// so the console never has to reconcile two lists against each other - the pending
-// row and the tool_use it belongs to arrive together or not at all.
-export interface SessionTranscript {
-  messages: SessionMessage[];
-  pending: ApprovalRequest | null;
 }
 
 export interface SessionMessage {

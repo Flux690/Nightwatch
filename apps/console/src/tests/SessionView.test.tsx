@@ -24,43 +24,44 @@ vi.mock("@/auth/AuthContext", () => ({
   }),
 }));
 
-const SESSION_MESSAGE_1 = {
-  sessionId: "s1",
-  seq: 1,
-  role: "user",
-  content: "Service is down on web-01",
-  parts: [{ type: "text", text: "Service is down on web-01" }],
-  createdAt: "2024-01-01T00:01:00Z",
+// The projected transcript the API returns: items to draw, not raw messages.
+const USER_TURN = {
+  kind: "user_turn",
+  id: "user-1-0",
+  text: "Service is down on web-01",
 };
 
-// The assistant turn a suspended run leaves behind. The API writes the tool call and
-// the interrupt row in one transaction, so a reloaded transcript always carries both.
-function suspendedAssistantTurn(toolUseId: string, toolName: string): object {
-  return {
-    sessionId: "s1",
-    seq: 2,
-    role: "assistant",
-    content: "Restarting.",
-    createdAt: "2024-01-01T00:04:00Z",
-    parts: [
-      { type: "text", text: "Restarting." },
-      { type: "tool_call", id: toolUseId, name: toolName, input: {} },
-    ],
-  };
-}
-
-function setup(
-  messages: object[] = [SESSION_MESSAGE_1],
-  pending: object | null = null,
-) {
+function setup(initialItems: object[] = [USER_TURN]) {
   MockEventSource.reset();
+
+  // Mutable, because the projection lives server-side now: a test that fires a
+  // MESSAGE event states what the server would then project.
+  let items = initialItems;
+  const setItems = (next: object[]): void => {
+    items = next;
+  };
+
+  // A decision the test can hold open, so "in flight" is a state it controls
+  // rather than a race against an instantly-resolving mock.
+  let holdingRespond = false;
+  let releaseRespond: (() => void) | null = null;
+  const holdRespond = (): (() => void) => {
+    holdingRespond = true;
+    return () => releaseRespond?.();
+  };
 
   vi.stubGlobal("EventSource", MockEventSource);
   const fetchMock = vi.fn().mockImplementation((url: string) => {
+    if (url.includes("/respond") && holdingRespond) {
+      return new Promise((resolve) => {
+        releaseRespond = () =>
+          resolve({ ok: true, json: () => Promise.resolve({}) });
+      });
+    }
     if (url.includes("/sessions/s1")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ messages, pending }),
+        json: () => Promise.resolve(items),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -90,7 +91,7 @@ function setup(
     </TestProviders>,
   );
 
-  return { qc, fetchMock };
+  return { qc, fetchMock, setItems, holdRespond };
 }
 
 afterEach(() => {
@@ -176,7 +177,7 @@ describe("SessionView", () => {
 
   describe("MESSAGE flush", () => {
     it("clears the live buffer when the assistant MESSAGE arrives", async () => {
-      setup();
+      const { setItems } = setup();
 
       await waitFor(() => {
         expect(
@@ -196,6 +197,14 @@ describe("SessionView", () => {
         expect(screen.getByText("Analyzing...")).toBeInTheDocument();
       });
 
+      setItems([
+        USER_TURN,
+        {
+          kind: "agent_text",
+          id: "agent-2-0",
+          text: "Investigation complete.",
+        },
+      ]);
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m2",
@@ -207,6 +216,7 @@ describe("SessionView", () => {
               seq: 2,
               role: "assistant",
               content: "Investigation complete.",
+              parts: [{ type: "text", text: "Investigation complete." }],
               createdAt: new Date().toISOString(),
             },
           },
@@ -385,7 +395,7 @@ describe("SessionView", () => {
 
   describe("thinking choreography (TEXT_MESSAGE_CONTENT kind=thinking)", () => {
     it("clears thinking blocks once the assistant MESSAGE flushes the turn", async () => {
-      setup();
+      const { setItems } = setup();
 
       await waitFor(() => {
         expect(
@@ -404,6 +414,10 @@ describe("SessionView", () => {
         expect(screen.getByText("Thinking")).toBeInTheDocument();
       });
 
+      setItems([
+        USER_TURN,
+        { kind: "agent_text", id: "agent-3-0", text: "Done." },
+      ]);
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m4",
@@ -415,6 +429,7 @@ describe("SessionView", () => {
               seq: 3,
               role: "assistant",
               content: "Done.",
+              parts: [{ type: "text", text: "Done." }],
               createdAt: "2024-01-01T00:03:00Z",
             },
           },
@@ -430,7 +445,7 @@ describe("SessionView", () => {
 
   describe("working indicator (immediate affordance)", () => {
     it("shows the indicator on send and keeps it through the user-turn persist", async () => {
-      setup();
+      const { setItems } = setup();
 
       await waitFor(() => {
         expect(
@@ -452,6 +467,10 @@ describe("SessionView", () => {
 
       // Persisting the user's own turn is a MESSAGE, not a terminal: the run is
       // still active, so the indicator stays.
+      setItems([
+        USER_TURN,
+        { kind: "user_turn", id: "user-2-0", text: "check the db" },
+      ]);
       act(() => {
         MockEventSource.latest?.push({
           messageId: "u1",
@@ -463,6 +482,7 @@ describe("SessionView", () => {
               seq: 2,
               role: "user",
               content: "check the db",
+              parts: [{ type: "text", text: "check the db" }],
               createdAt: new Date().toISOString(),
             },
           },
@@ -580,7 +600,7 @@ describe("SessionView", () => {
 
   describe("optimistic echo", () => {
     it("echoes the message instantly and keeps exactly one bubble through the persist", async () => {
-      setup();
+      const { setItems } = setup();
 
       await waitFor(() => {
         expect(
@@ -596,6 +616,10 @@ describe("SessionView", () => {
       expect(screen.getAllByText("check the db")).toHaveLength(1);
       expect(screen.getByRole("textbox")).toHaveValue("");
 
+      setItems([
+        USER_TURN,
+        { kind: "user_turn", id: "user-2-0", text: "check the db" },
+      ]);
       act(() => {
         MockEventSource.latest?.push({
           messageId: "u1",
@@ -607,6 +631,7 @@ describe("SessionView", () => {
               seq: 2,
               role: "user",
               content: "check the db",
+              parts: [{ type: "text", text: "check the db" }],
               createdAt: new Date().toISOString(),
             },
           },
@@ -639,7 +664,7 @@ describe("SessionView", () => {
       await user.type(screen.getByRole("textbox"), "check the db");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
-      // Echo and working indicator roll back; the composer gets the message
+      // Echo and working indicator roll back; the chat input gets the message
       // back. The only remaining bubble is the session's original persisted turn.
       await waitFor(() => {
         expect(screen.getAllByTestId("user-turn")).toHaveLength(1);
@@ -673,7 +698,8 @@ describe("SessionView", () => {
     }
 
     it("posts to /respond with decision=approve and disables both buttons on Approve", async () => {
-      setup();
+      const { holdRespond } = setup();
+      const release = holdRespond();
 
       await waitFor(() => {
         expect(
@@ -708,6 +734,9 @@ describe("SessionView", () => {
         expect(
           within(card).getByRole("button", { name: /reject/i }),
         ).toBeDisabled();
+      });
+      act(() => {
+        release();
       });
     });
 
@@ -784,24 +813,17 @@ describe("SessionView", () => {
 
   describe("reload reconstruction (pending interrupt on load)", () => {
     it("shows an approval card on load for a session with a durable pending approval, with no live event", async () => {
-      setup(
-        [
-          SESSION_MESSAGE_1,
-          suspendedAssistantTurn("tu-durable", "RestartDockerService"),
-        ],
+      setup([
+        USER_TURN,
         {
-          sessionId: "s1",
+          kind: "approval_card",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          toolInput: {
-            target: "docker/web-01/web-01",
-            risk: "high",
-          },
-          kind: "approval",
-          status: "pending",
-          createdAt: "2024-01-01T00:05:00Z",
+          input: { target: "docker/web-01/web-01", risk: "high" },
+          risk: "high",
+          state: { phase: "awaiting_human" },
         },
-      );
+      ]);
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
@@ -816,24 +838,18 @@ describe("SessionView", () => {
     });
 
     it("shows a clarification card on load for a session with a durable pending clarification", async () => {
-      setup(
-        [
-          SESSION_MESSAGE_1,
-          suspendedAssistantTurn("tu-durable-clar", "AskUserQuestion"),
-        ],
+      setup([
+        USER_TURN,
         {
-          sessionId: "s1",
+          kind: "clarification_card",
           toolUseId: "tu-durable-clar",
           toolName: "AskUserQuestion",
-          toolInput: {
-            question: "Which service first?",
-            options: [{ label: "nginx", description: "The web server" }],
-          },
-          kind: "clarification",
-          status: "pending",
-          createdAt: "2024-01-01T00:05:00Z",
+          input: {},
+          question: "Which service first?",
+          options: [{ label: "nginx", description: "The web server" }],
+          state: { phase: "awaiting_human" },
         },
-      );
+      ]);
 
       await waitFor(() => {
         const card = screen.getByTestId("clarification-card");
@@ -847,24 +863,17 @@ describe("SessionView", () => {
     });
 
     it("approving a reconstructed card posts to /respond exactly like a live one", async () => {
-      setup(
-        [
-          SESSION_MESSAGE_1,
-          suspendedAssistantTurn("tu-durable", "RestartDockerService"),
-        ],
+      setup([
+        USER_TURN,
         {
-          sessionId: "s1",
+          kind: "approval_card",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
-          toolInput: {
-            target: "docker/web-01/web-01",
-            risk: "high",
-          },
-          kind: "approval",
-          status: "pending",
-          createdAt: "2024-01-01T00:05:00Z",
+          input: { target: "docker/web-01/web-01", risk: "high" },
+          risk: "high",
+          state: { phase: "awaiting_human" },
         },
-      );
+      ]);
 
       await waitFor(() => {
         expect(screen.getByTestId("approval-card")).toBeInTheDocument();
@@ -889,8 +898,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("composer integration", () => {
-    it("disables the composer while TEXT_MESSAGE_CONTENT events are arriving", async () => {
+  describe("chat input integration", () => {
+    it("disables the chat input while TEXT_MESSAGE_CONTENT events are arriving", async () => {
       setup();
 
       await waitFor(() => {
@@ -915,7 +924,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("re-enables the composer once RUN_FINISHED arrives", async () => {
+    it("re-enables the chat input once RUN_FINISHED arrives", async () => {
       setup();
 
       await waitFor(() => {
@@ -1060,8 +1069,8 @@ describe("SessionView", () => {
       });
     });
 
-    it("re-enables the composer when RUN_FAILED arrives (run not left spinning)", async () => {
-      setup();
+    it("re-enables the chat input when RUN_FAILED arrives (run not left spinning)", async () => {
+      const { setItems } = setup();
 
       await waitFor(() => {
         expect(
@@ -1080,6 +1089,14 @@ describe("SessionView", () => {
         expect(screen.getByRole("textbox")).toBeDisabled();
       });
 
+      setItems([
+        USER_TURN,
+        {
+          kind: "error_text",
+          id: "error-2",
+          text: "The model provider had a server problem - this is upstream, not your setup.",
+        },
+      ]);
       act(() => {
         MockEventSource.latest?.push({
           messageId: "m-fail",
@@ -1099,7 +1116,7 @@ describe("SessionView", () => {
       });
 
       // The failure reads like any other message in the conversation and the
-      // composer is usable again.
+      // chat input is usable again.
       await waitFor(() => {
         expect(
           screen.getByText(/The model provider had a server problem/),

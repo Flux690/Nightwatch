@@ -33,7 +33,7 @@ import {
   setRunnerRemediationMode,
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import type { SessionListRow, SessionTranscript } from "@nightwarden/shared";
+import type { SessionListRow, TranscriptItem } from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -121,11 +121,11 @@ describe("a suspended session serves its pending row with its transcript", () =>
     return (await r.json()) as SessionListRow[];
   }
 
-  async function getTranscript(id: string): Promise<SessionTranscript> {
+  async function getTranscript(id: string): Promise<TranscriptItem[]> {
     const r = await fetch(`http://127.0.0.1:${port}/api/sessions/${id}`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
-    return (await r.json()) as SessionTranscript;
+    return (await r.json()) as TranscriptItem[];
   }
 
   // The session id is discovered the way the console discovers it: from the list.
@@ -147,19 +147,23 @@ describe("a suspended session serves its pending row with its transcript", () =>
     });
   }
 
-  it("serves the pending row with the transcript in one response", async () => {
+  it("projects the suspended tool call as a card awaiting a human", async () => {
     const { conn } = connectRunner("qa");
     await startGatedChat("test");
 
     const sessionId = await waitForAwaitingSession();
-    const transcript = await getTranscript(sessionId);
+    const items = await getTranscript(sessionId);
 
-    // One response carries both, so the console never reconciles two lists.
-    expect(transcript.messages.length).toBeGreaterThan(0);
-    expect(transcript.pending).not.toBeNull();
-    expect(transcript.pending?.toolName).toBe("RestartDockerService");
-    expect(transcript.pending?.status).toBe("pending");
-    expect(transcript.pending?.sessionId).toBe(sessionId);
+    // The card and the decision it waits on arrive as one item, so the console
+    // has nothing to reconcile and nothing to drop.
+    const card = items.find((i) => i.kind === "approval_card");
+    expect(card).toBeDefined();
+    expect(card?.kind === "approval_card" && card.toolName).toBe(
+      "RestartDockerService",
+    );
+    expect(card?.kind === "approval_card" && card.state.phase).toBe(
+      "awaiting_human",
+    );
 
     await resolvePending(sessionId);
     unregisterRunner(conn);
@@ -195,8 +199,10 @@ describe("a suspended session serves its pending row with its transcript", () =>
       return row && !row.awaitingHumanInput ? true : null;
     });
 
-    const transcript = await getTranscript(sessionId);
-    expect(transcript.pending).toBeNull();
+    const items = await getTranscript(sessionId);
+    expect(
+      items.some((i) => "state" in i && i.state.phase === "awaiting_human"),
+    ).toBe(false);
 
     unregisterRunner(conn);
   });

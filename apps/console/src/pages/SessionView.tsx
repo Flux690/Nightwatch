@@ -8,11 +8,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RunMode,
   SessionListRow,
-  SessionMessage,
-  SessionTranscript,
   ConsoleEvent,
-  ApprovalRequest,
+  TranscriptItem,
 } from "@nightwarden/shared";
+import { transcriptItemKey } from "@nightwarden/shared";
 
 import {
   MessageScrollerProvider,
@@ -32,59 +31,28 @@ import {
   applyLiveEvent,
   hasActiveStream,
 } from "@/components/transcript/liveConverter";
-import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
 import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
 import { WorkingIndicator } from "@/components/transcript/WorkingIndicator";
-import type { TranscriptItem } from "@/components/transcript/types";
 import { apiFetch } from "@/api/client";
 
-interface PendingInterrupt {
-  id: string;
-  kind: "approval" | "clarification" | "continue";
-}
+// A stable empty default, so an unloaded transcript does not remount the column.
+const EMPTY_ITEMS: TranscriptItem[] = [];
 
-// A live row lands in the same cache entry the transcript fetch fills, so it has to
-// preserve the pending half rather than replace the object with a bare array.
-function appendPersistedMessage(
-  queryClient: QueryClient,
-  sessionId: string,
-  message: SessionMessage,
-): void {
-  queryClient.setQueryData<SessionTranscript>(
-    ["session", sessionId],
-    (prev) => ({
-      messages: [...(prev?.messages ?? []), message],
-      pending: prev?.pending ?? null,
-    }),
-  );
-}
-
-function pendingInterruptFromItems(
-  items: TranscriptItem[],
-): PendingInterrupt | undefined {
-  for (const item of items) {
-    if (item.kind === "approval_card" && !item.approval) {
-      return { id: item.toolUseId, kind: "approval" };
-    }
-    if (item.kind === "clarification_card" && !item.approval) {
-      return { id: item.toolUseId, kind: "clarification" };
-    }
-    if (item.kind === "continue_card" && !item.approval) {
-      return { id: item.toolUseId, kind: "continue" };
+// The one card the session is waiting on, wherever it came from: the projected
+// transcript after a reload, or the live stream during a run.
+function awaitingCard(
+  ...lists: TranscriptItem[][]
+): TranscriptItem | undefined {
+  for (const items of lists) {
+    for (const item of items) {
+      const isCard =
+        item.kind === "approval_card" ||
+        item.kind === "clarification_card" ||
+        item.kind === "continue_card";
+      if (isCard && item.state.phase === "awaiting_human") return item;
     }
   }
   return undefined;
-}
-
-function itemKey(item: TranscriptItem): string {
-  if (
-    item.kind === "user_turn" ||
-    item.kind === "agent_text" ||
-    item.kind === "error_text" ||
-    item.kind === "thinking"
-  )
-    return item.id;
-  return item.toolUseId;
 }
 
 function displayNameFromEmail(email: string): string {
@@ -112,35 +80,37 @@ function ScrollToEndChatInput(
 }
 
 function TranscriptColumn({
-  persistedMessages,
-  persistedPending,
+  persistedItems: fetched,
   liveItems,
   pendingEcho,
   lastEchoText,
   showWorking,
+  dockedKey,
+  submittingToolUseId,
   onResolve,
   onAnswer,
 }: {
-  persistedMessages: SessionMessage[];
-  persistedPending: ApprovalRequest | null;
+  persistedItems: TranscriptItem[];
   liveItems: TranscriptItem[];
+  // Rendered above the chat input instead of inline, so it never scrolls away.
+  dockedKey: string | null;
   pendingEcho: string | null;
   lastEchoText: string | null;
   showWorking: boolean;
+  submittingToolUseId: string | null;
   onResolve: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
   const persistedItems = useMemo(() => {
-    const items = convertPersistedMessages(persistedMessages, persistedPending);
-    if (lastEchoText === null) return items;
+    if (lastEchoText === null) return fetched;
     // The persisted copy of a just-echoed bubble mounts without the fade so
     // the echo-to-persisted swap has no visible frame.
-    return items.map((item) =>
+    return fetched.map((item) =>
       item.kind === "user_turn" && item.text === lastEchoText
         ? { ...item, instant: true }
         : item,
     );
-  }, [persistedMessages, persistedPending, lastEchoText]);
+  }, [fetched, lastEchoText]);
 
   // The fetch can return the persisted user turn before any event is heard
   // for a newly-created session; if the last user turn already carries the
@@ -159,12 +129,12 @@ function TranscriptColumn({
 
   // The persisted transcript is authoritative: it arrives with its pending row
   // already joined, so a live card for the same tool_use is the same card twice.
-  const persistedKeys = new Set(persistedItems.map(itemKey));
+  const persistedKeys = new Set(persistedItems.map(transcriptItemKey));
   const allItems = [
     ...persistedItems,
     ...(echoItem ? [echoItem] : []),
-    ...liveItems.filter((item) => !persistedKeys.has(itemKey(item))),
-  ];
+    ...liveItems.filter((item) => !persistedKeys.has(transcriptItemKey(item))),
+  ].filter((item) => transcriptItemKey(item) !== dockedKey);
 
   return (
     <MessageScrollerContent
@@ -175,7 +145,7 @@ function TranscriptColumn({
     >
       {allItems.map((item, index) => (
         <MessageScrollerItem
-          key={itemKey(item)}
+          key={transcriptItemKey(item)}
           className={
             index === 0
               ? "mt-0"
@@ -188,6 +158,9 @@ function TranscriptColumn({
         >
           <TranscriptItemRenderer
             item={item}
+            submitting={
+              "toolUseId" in item && item.toolUseId === submittingToolUseId
+            }
             onResolve={onResolve}
             onAnswer={onAnswer}
           />
@@ -227,7 +200,7 @@ export function SessionView({
   const queryClient = useQueryClient();
   const { phase } = useAuth();
 
-  // Locks the composer's mode picker away once this is an investigation.
+  // Locks the chat input's mode picker away once this is an investigation.
   const investigation = useSessionReport(activeSessionId) !== null;
   // The session whose report cache this view seeded optimistically, so a
   // failed send can roll exactly that seed back.
@@ -265,14 +238,12 @@ export function SessionView({
     setActiveSessionId(curr);
   }, [sessionIdFromRoute]);
 
-  const { data: transcript } = useQuery<SessionTranscript>({
+  const { data: persistedItems = EMPTY_ITEMS } = useQuery<TranscriptItem[]>({
     queryKey: ["session", activeSessionId],
     queryFn: () =>
-      apiFetch<SessionTranscript>(`/api/sessions/${activeSessionId}`),
+      apiFetch<TranscriptItem[]>(`/api/sessions/${activeSessionId}`),
     enabled: !!activeSessionId,
   });
-  const messages = transcript?.messages ?? [];
-  const pendingForSession = transcript?.pending ?? null;
 
   const handleSessionCreated = useCallback(
     (newId: string, firstMessage: string, mode: RunMode) => {
@@ -344,7 +315,7 @@ export function SessionView({
         if (message.role === "assistant" || message.role === "error") {
           setLiveItems([]);
         }
-        appendPersistedMessage(queryClient, sid, message);
+        void queryClient.invalidateQueries({ queryKey: ["session", sid] });
         return;
       }
 
@@ -377,9 +348,7 @@ export function SessionView({
         setActivityNotice(null);
         setPendingEcho(null);
         setLiveItems([]);
-        // The failure is a persisted transcript row: append it like a MESSAGE so
-        // it renders in the conversation and survives reloads.
-        appendPersistedMessage(queryClient, sid, message);
+        void queryClient.invalidateQueries({ queryKey: ["session", sid] });
         return;
       }
 
@@ -501,7 +470,10 @@ export function SessionView({
     }
   }, [queryClient]);
 
-  const pendingInterrupt = pendingInterruptFromItems(liveItems);
+  const awaitingItem = awaitingCard(persistedItems, liveItems);
+  const submittingToolUseId = respond.isPending
+    ? (respond.variables?.toolUseId ?? null)
+    : null;
   // The run is working but silent: nothing is streaming into the transcript, so
   // show the animation in the reply's place. Any live streaming tail hides it.
   const showWorking = isRunning && !hasActiveStream(liveItems);
@@ -528,23 +500,19 @@ export function SessionView({
     );
   }
 
-  const composerHidden =
-    pendingInterrupt?.kind === "approval" ||
-    pendingInterrupt?.kind === "clarification";
-  const composerDisabled = pendingInterrupt?.kind === "continue";
-
   return (
     <MessageScrollerProvider defaultScrollPosition="end">
       <div className="flex h-full flex-col">
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <TranscriptColumn
-              persistedMessages={messages}
-              persistedPending={pendingForSession}
+              persistedItems={persistedItems}
               liveItems={liveItems}
               pendingEcho={pendingEcho}
               lastEchoText={lastEchoRef.current}
               showWorking={showWorking}
+              dockedKey={awaitingItem ? transcriptItemKey(awaitingItem) : null}
+              submittingToolUseId={submittingToolUseId}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
             />
@@ -560,16 +528,27 @@ export function SessionView({
           </div>
         )}
 
-        {!composerHidden && (
-          <ScrollToEndChatInput
-            sessionId={activeSessionId}
-            isRunning={isRunning}
-            disabled={composerDisabled}
-            investigation={investigation}
-            onSend={handleSend}
-            onSendFailed={handleSendFailed}
-          />
+        {awaitingItem && (
+          <div className="mx-auto mb-2 w-full max-w-chat px-6">
+            <TranscriptItemRenderer
+              item={awaitingItem}
+              submitting={
+                "toolUseId" in awaitingItem &&
+                awaitingItem.toolUseId === submittingToolUseId
+              }
+              onResolve={handleResolve}
+              onAnswer={handleAnswer}
+            />
+          </div>
         )}
+
+        <ScrollToEndChatInput
+          sessionId={activeSessionId}
+          isRunning={isRunning}
+          investigation={investigation}
+          onSend={handleSend}
+          onSendFailed={handleSendFailed}
+        />
       </div>
     </MessageScrollerProvider>
   );

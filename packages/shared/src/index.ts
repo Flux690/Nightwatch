@@ -90,7 +90,6 @@ export type {
   SessionRole,
   SessionMeta,
   SessionMessage,
-  SessionTranscript,
   RunMode,
   SessionRunStatus,
   SessionListRow,
@@ -106,6 +105,20 @@ export type {
   CanonicalMessage,
 } from "./messages.js";
 export { messagePartsToText } from "./messages.js";
+export type {
+  ToolCallState,
+  Citation,
+  UserTurnItem,
+  AgentTextItem,
+  ErrorTextItem,
+  ThinkingItem,
+  ToolCardItem,
+  ApprovalCardItem,
+  ClarificationCardItem,
+  ContinueCardItem,
+  TranscriptItem,
+} from "./transcript.js";
+export { transcriptItemKey } from "./transcript.js";
 export type {
   ReportStatus,
   HypothesisState,

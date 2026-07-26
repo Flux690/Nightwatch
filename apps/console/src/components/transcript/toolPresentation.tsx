@@ -65,7 +65,14 @@ function OutputCard({ result }: { result: unknown }): React.JSX.Element {
 /* The single presentation registry: input collapses into the header line and
    the body exists only once a result does; IN/OUT chrome is for shell tools. */
 export function ToolCard({ item }: { item: ToolCardItem }): React.JSX.Element {
-  const { toolName, input, result } = item;
+  const { toolName, input } = item;
+  // Null until the call finishes, which is what the IN/OUT chrome keys off.
+  const result =
+    item.state.phase === "complete"
+      ? item.state.result
+      : item.state.phase === "resolved"
+        ? (item.state.result ?? null)
+        : null;
 
   if (toolName === "Read" || toolName === "ReadHostFile") {
     const path = inputString(input, "path") ?? "";

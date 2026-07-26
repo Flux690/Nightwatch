@@ -102,10 +102,12 @@ function ThinkingBlock({
 
 export function TranscriptItemRenderer({
   item,
+  submitting = false,
   onResolve,
   onAnswer,
 }: {
   item: TranscriptItem;
+  submitting?: boolean;
   onResolve?: (toolUseId: string, action: "approve" | "reject") => void;
   onAnswer?: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
@@ -125,6 +127,7 @@ export function TranscriptItemRenderer({
       return (
         <ApprovalCardPanel
           item={item}
+          submitting={submitting}
           onResolve={
             onResolve
               ? (action) => onResolve(item.toolUseId, action)
@@ -136,6 +139,7 @@ export function TranscriptItemRenderer({
       return (
         <ClarificationCardPanel
           item={item}
+          submitting={submitting}
           onAnswer={
             onAnswer ? (answer) => onAnswer(item.toolUseId, answer) : undefined
           }
@@ -145,6 +149,7 @@ export function TranscriptItemRenderer({
       return (
         <ContinueCardPanel
           item={item}
+          submitting={submitting}
           onResolve={
             onResolve
               ? (action) => onResolve(item.toolUseId, action)

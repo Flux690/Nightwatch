@@ -119,7 +119,7 @@ function setup(pendingCount = 0) {
     if (/\/sessions\/[^?]+/.test(url)) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ messages: [], pending: null }),
+        json: () => Promise.resolve([]),
       });
     }
     if (url.includes("/sessions")) {

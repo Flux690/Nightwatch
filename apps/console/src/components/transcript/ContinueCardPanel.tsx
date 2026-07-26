@@ -4,14 +4,15 @@ import { InterruptCard } from "./InterruptCard.js";
 
 export function ContinueCardPanel({
   item,
+  submitting = false,
   onResolve,
 }: {
   item: ContinueCardItem;
+  submitting?: boolean;
   onResolve?: (action: "approve" | "reject") => void;
 }): React.JSX.Element {
-  const resolved =
-    item.approval === "continued" || item.approval === "rejected";
-  const disabled = item.approval === "pending";
+  const state = item.state;
+  const resolved = state.phase === "resolved";
 
   return (
     <InterruptCard data-testid="continue-card" resolved={resolved}>
@@ -19,16 +20,16 @@ export function ContinueCardPanel({
         Time budget reached. Resume with a fresh budget or end the
         investigation.
       </p>
-      {resolved ? (
+      {state.phase === "resolved" ? (
         <p className="text-sm" data-testid="continue-resolution">
-          {item.approval === "continued" ? "Continued" : "Cancelled"}
-          {item.resolvedBy ? ` by ${item.resolvedBy}` : ""}
+          {state.decision === "continued" ? "Continued" : "Cancelled"}
+          {state.by ? ` by ${state.by}` : ""}
         </p>
       ) : (
         <div className="flex gap-2">
           <Button
             size="sm"
-            disabled={disabled}
+            disabled={submitting}
             onClick={() => onResolve?.("approve")}
           >
             Continue
@@ -36,7 +37,7 @@ export function ContinueCardPanel({
           <Button
             size="sm"
             variant="secondary"
-            disabled={disabled}
+            disabled={submitting}
             onClick={() => onResolve?.("reject")}
           >
             Cancel
