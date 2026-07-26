@@ -259,6 +259,11 @@ export class OpenAIProvider implements LLMProvider {
 function toNativeMessages(
   m: ProviderMessage,
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const text = m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text)
+    .join("\n");
+
   const toolResults = m.parts.filter((p) => p.type === "tool_result");
   if (toolResults.length > 0) {
     const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
@@ -269,18 +274,9 @@ function toNativeMessages(
         content: p.isError ? `ERROR: ${p.output}` : p.output,
       }));
     // Injected text rides alongside tool results; it needs its own turn here.
-    const text = m.parts
-      .filter((p) => p.type === "text")
-      .map((p) => p.text)
-      .join("\n");
     if (text) out.push({ role: "user", content: text });
     return out;
   }
-
-  const text = m.parts
-    .filter((p) => p.type === "text")
-    .map((p) => p.text)
-    .join("\n");
 
   if (m.role !== "assistant") {
     return [{ role: "user", content: text || m.content }];

@@ -179,15 +179,20 @@ export function pushRemediationMode(runnerId: string, enabled: boolean): void {
   conn.send(JSON.stringify(msg));
 }
 
-// Our own container id, if we run in one. Read from the cgroup path rather than
-// an image or Compose name, both of which the operator can change.
+// This process's own container id, or null when it is not containerized. The
+// mountinfo pattern is anchored on the containers path because that file also
+// lists overlay layer directories, whose names are 64-hex and are not ids.
 function ownContainerId(): string | null {
-  for (const file of ["/proc/self/mountinfo", "/proc/self/cgroup"]) {
+  const sources: Array<[string, RegExp]> = [
+    ["/proc/self/mountinfo", /\/docker\/containers\/([0-9a-f]{64})/],
+    ["/proc/self/cgroup", /\b([0-9a-f]{64})\b/],
+  ];
+  for (const [file, pattern] of sources) {
     try {
-      const match = /([0-9a-f]{64})/.exec(readFileSync(file, "utf8"));
+      const match = pattern.exec(readFileSync(file, "utf8"));
       if (match?.[1]) return match[1];
     } catch {
-      // Not containerized, or the host does not expose it: nothing to hide.
+      // Not containerized, or the host does not expose it: nothing to identify.
     }
   }
   return null;

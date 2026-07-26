@@ -538,8 +538,6 @@ export async function runInvestigation(
     sessionId,
     item: toolCallCard({
       toolUseId: continueId,
-      toolName: "",
-      input: {},
       state: { phase: "awaiting_human" },
       awaitingKind: "continue",
     }),

@@ -19,6 +19,7 @@ import type { PrometheusSeries } from "../integrations/prometheus.js";
 // owner of the evidence-tag format shared by result stamping and enrichment.
 
 const EVIDENCE_TAG_SUFFIX = /\n\n\[evidence: e\d+\]$/;
+const EVIDENCE_MARKER = /\[evidence: (e\d+)\]/g;
 const MAX_CHART_POINTS = 80;
 
 export function evidenceTag(n: number): string {
@@ -29,8 +30,14 @@ export function stampEvidence(content: string, n: number): string {
   return `${content}\n\n[evidence: ${evidenceTag(n)}]`;
 }
 
-function stripEvidenceTag(content: string): string {
+// The tag is the model's citation handle, never operator-facing text.
+export function stripEvidenceTag(content: string): string {
   return content.replace(EVIDENCE_TAG_SUFFIX, "");
+}
+
+// Tags cited inline, in the order they appear.
+export function evidenceTagsIn(text: string): string[] {
+  return [...text.matchAll(EVIDENCE_MARKER)].flatMap((m) => m[1] ?? []);
 }
 
 export interface EvidenceIndexEntry {

@@ -9,26 +9,27 @@ export function getDocker(): Dockerode {
 // while it runs, and this is consulted on every enumeration.
 const hidden = new Set<string>();
 
-// Our own id, read from the cgroup path the container is in. Image and Compose
-// names are operator-configurable, so neither can identify us reliably.
+// This process's own container id, or null when it is not containerized. The
+// mountinfo pattern is anchored on the containers path because that file also
+// lists overlay layer directories, whose names are 64-hex and are not ids.
 function ownContainerId(): string | null {
-  try {
-    const mountinfo = readFileSync("/proc/self/mountinfo", "utf8");
-    const match = /\/docker\/containers\/([0-9a-f]{64})/.exec(mountinfo);
-    if (match?.[1]) return match[1];
-  } catch {
-    // Not in a container, or the host does not expose it: nothing to hide.
-  }
-  try {
-    const cgroup = readFileSync("/proc/self/cgroup", "utf8");
-    const match = /([0-9a-f]{64})/.exec(cgroup);
-    if (match?.[1]) return match[1];
-  } catch {
-    // Same: absence just means there is nothing of ours to exclude.
+  const sources: Array<[string, RegExp]> = [
+    ["/proc/self/mountinfo", /\/docker\/containers\/([0-9a-f]{64})/],
+    ["/proc/self/cgroup", /\b([0-9a-f]{64})\b/],
+  ];
+  for (const [file, pattern] of sources) {
+    try {
+      const match = pattern.exec(readFileSync(file, "utf8"));
+      if (match?.[1]) return match[1];
+    } catch {
+      // Not containerized, or the host does not expose it: nothing to identify.
+    }
   }
   return null;
 }
 
+// Identity by container id: image and Compose names are operator-configurable,
+// so neither can identify us reliably.
 const self = ownContainerId();
 if (self) hidden.add(self);
 
