@@ -1,48 +1,23 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { serviceIdentityKey, type RunnerRecord } from "@nightwarden/shared";
-import { ChevronDown, ChevronUp, Plus } from "lucide-react";
+import type { RunnerRecord } from "@nightwarden/shared";
+import { Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
+import { ServerCard, serverDisplayName } from "@/components/layout/ServerCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Page,
-  PageHeader,
-  PageTitle,
-  PageTableWrap,
-  TABLE_HEAD,
-  SkeletonRows,
-} from "@/components/layout/Page";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { statusVariant } from "@/lib/statusVariants";
+import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ICON_INLINE } from "@/lib/iconProps";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
 import { apiFetch } from "@/api/client";
-import { timeAgo } from "@/lib/time";
-
-type RunnerStatus = "online" | "offline";
-
-function runnerStatus(runner: RunnerRecord): RunnerStatus {
-  return runner.online ? "online" : "offline";
-}
 
 type SortField = "hostname" | "status" | "lastSeen" | "services";
 type SortDir = "asc" | "desc";
-
-// The operator-assigned server name is the primary label everywhere; the
-// self-reported OS hostname is a fallback for legacy tokens minted without one.
-function displayName(runner: RunnerRecord): string {
-  return runner.serverName ?? runner.hostname ?? runner.id;
-}
 
 function compareRunners(
   a: RunnerRecord,
@@ -53,7 +28,7 @@ function compareRunners(
   let cmp = 0;
   switch (field) {
     case "hostname":
-      cmp = displayName(a).localeCompare(displayName(b));
+      cmp = serverDisplayName(a).localeCompare(serverDisplayName(b));
       break;
     case "status": {
       const aOnline = a.online ? 1 : 0;
@@ -75,49 +50,6 @@ function compareRunners(
     }
   }
   return dir === "asc" ? cmp : -cmp;
-}
-
-function SortableHeader({
-  label,
-  field,
-  activeField,
-  activeDir,
-  onSort,
-  align,
-}: {
-  label: string;
-  field: SortField;
-  activeField: SortField;
-  activeDir: SortDir;
-  onSort: (field: SortField) => void;
-  align?: "right";
-}): React.JSX.Element {
-  const active = field === activeField;
-  return (
-    <TableHead
-      className={align === "right" ? "text-right" : undefined}
-      aria-sort={
-        active ? (activeDir === "asc" ? "ascending" : "descending") : "none"
-      }
-    >
-      <button
-        type="button"
-        className="inline-flex cursor-pointer items-center gap-0.5 rounded-sm border-0 bg-none p-0 font-[inherit] text-[inherit] tracking-[inherit] hover:text-foreground"
-        onClick={() => onSort(field)}
-      >
-        {label}
-        {active && (
-          <span className="text-sm" aria-hidden="true">
-            {activeDir === "asc" ? (
-              <ChevronUp {...ICON_INLINE} />
-            ) : (
-              <ChevronDown {...ICON_INLINE} />
-            )}
-          </span>
-        )}
-      </button>
-    </TableHead>
-  );
 }
 
 export function RunnerServersPage(): React.JSX.Element {
@@ -193,22 +125,9 @@ export function RunnerServersPage(): React.JSX.Element {
       )}
 
       {isLoading && (
-        <PageTableWrap role="status" aria-label="Loading servers">
-          <Table className={TABLE_HEAD}>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Server</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Services</TableHead>
-                <TableHead className="text-right">Last seen</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <SkeletonRows count={3} columns={5} />
-            </TableBody>
-          </Table>
-        </PageTableWrap>
+        <div role="status" aria-label="Loading servers" className="py-6">
+          <Spinner className="size-4" />
+        </div>
       )}
 
       {isError && (
@@ -221,116 +140,43 @@ export function RunnerServersPage(): React.JSX.Element {
         </Alert>
       )}
 
+      {!isLoading && !isError && connectedRunners.length > 1 && (
+        <Field className="mb-3 max-w-60">
+          <FieldLabel htmlFor="server-sort">Sort by</FieldLabel>
+          <NativeSelect
+            id="server-sort"
+            value={sortField}
+            onChange={(e) => handleSort(e.currentTarget.value as SortField)}
+          >
+            <NativeSelectOption value="hostname">Name</NativeSelectOption>
+            <NativeSelectOption value="status">Status</NativeSelectOption>
+            <NativeSelectOption value="services">Services</NativeSelectOption>
+            <NativeSelectOption value="lastSeen">Last seen</NativeSelectOption>
+          </NativeSelect>
+        </Field>
+      )}
+
       {!isLoading && !isError && connectedRunners.length > 0 && (
-        <PageTableWrap>
-          <Table className={TABLE_HEAD}>
-            <TableHeader>
-              <TableRow>
-                <SortableHeader
-                  label="Server"
-                  field="hostname"
-                  activeField={sortField}
-                  activeDir={sortDir}
-                  onSort={handleSort}
-                />
-                <SortableHeader
-                  label="Status"
-                  field="status"
-                  activeField={sortField}
-                  activeDir={sortDir}
-                  onSort={handleSort}
-                />
-                <SortableHeader
-                  label="Services"
-                  field="services"
-                  activeField={sortField}
-                  activeDir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <SortableHeader
-                  label="Last seen"
-                  field="lastSeen"
-                  activeField={sortField}
-                  activeDir={sortDir}
-                  onSort={handleSort}
-                  align="right"
-                />
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sorted.map((runner) => {
-                const status = runnerStatus(runner);
-                const statusView = statusVariant("runner", status);
-                const services = runner.manifest?.capabilities.services ?? [];
-                const isOffline = !runner.online;
-                return (
-                  <TableRow
-                    key={runner.token}
-                    data-offline={isOffline || undefined}
-                    className={cn(isOffline && "opacity-60")}
-                  >
-                    <TableCell>
-                      <span
-                        className="block max-w-60 truncate"
-                        title={displayName(runner)}
-                      >
-                        {displayName(runner)}
-                      </span>
-                      {runner.serverName !== null &&
-                        runner.hostname !== null &&
-                        runner.hostname !== runner.serverName && (
-                          <span className="mt-0.5 block max-w-60 truncate text-sm text-muted-foreground">
-                            host: {runner.hostname}
-                          </span>
-                        )}
-                      {services.length > 0 && (
-                        <span
-                          className="mt-0.5 block max-w-60 truncate font-mono text-sm text-muted-foreground"
-                          title={services
-                            .map((s) => serviceIdentityKey(s.identity))
-                            .join(", ")}
-                        >
-                          {services
-                            .map((s) => serviceIdentityKey(s.identity))
-                            .join(", ")}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusView.variant} dot>
-                        {statusView.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-mono tabular-nums text-right">
-                      {services.length}
-                    </TableCell>
-                    <TableCell className="font-mono tabular-nums text-right">
-                      {timeAgo(runner.lastSeen)}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        disabled={removing === runner.token}
-                        aria-label={`Remove server ${displayName(runner)}`}
-                        onClick={() => void handleRemove(runner.token)}
-                      >
-                        {removing === runner.token && (
-                          <Spinner className="size-3" />
-                        )}
-                        Remove
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </PageTableWrap>
+        <div className="flex flex-col gap-3">
+          {sorted.map((runner) => (
+            <ServerCard
+              key={runner.token}
+              runner={runner}
+              actions={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={removing === runner.token}
+                  aria-label={`Remove server ${serverDisplayName(runner)}`}
+                  onClick={() => void handleRemove(runner.token)}
+                >
+                  {removing === runner.token && <Spinner className="size-3" />}
+                  Remove
+                </Button>
+              }
+            />
+          ))}
+        </div>
       )}
     </Page>
   );

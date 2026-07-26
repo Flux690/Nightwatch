@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwarden/shared";
 import { serviceIdentityKey } from "@nightwarden/shared";
+import { ServerCard } from "@/components/layout/ServerCard";
 import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -287,23 +288,17 @@ export function AddServerPage(): React.JSX.Element {
             labels that produce one of these keys.
           </p>
 
-          {advertised.length === 0 ? (
-            <Alert variant="destructive">
+          {advertised.length === 0 && (
+            <Alert variant="warning">
               <AlertTitle>No services detected</AlertTitle>
               <AlertDescription>
                 The runner connected but sees no containers or workloads. On
                 Docker that usually means the socket is not mounted.
               </AlertDescription>
             </Alert>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {advertised.map((key) => (
-                <span key={key} className="font-mono text-sm">
-                  {key}
-                </span>
-              ))}
-            </div>
           )}
+
+          {connectedRunner && <ServerCard runner={connectedRunner} />}
 
           {connectedDockerServers >= 2 && (
             <p className="text-sm text-muted-foreground">
