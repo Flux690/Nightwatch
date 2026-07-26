@@ -25,6 +25,7 @@ import {
 } from "../db/integrations.js";
 import {
   createSession,
+  promoteSessionToInvestigate,
   appendSessionMessages,
   appendMessagesAndInterrupt,
   getNextSeq,
@@ -149,17 +150,22 @@ export async function runInvestigation(
 
   const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
 
-  // Mode is a one-way ratchet: an alert session or one that already has a
-  // report is an investigation; only a fresh chat defaults to ask.
+  // Mode is a one-way ratchet, recorded on the session. An alert always
+  // investigates; a chat keeps whatever it was last started as.
   const mode: RunMode =
     input.mode ??
-    (alert !== null || hasReport(sessionId) ? "investigate" : "ask");
+    (alert !== null
+      ? "investigate"
+      : (getSession(sessionId)?.mode ??
+        (hasReport(sessionId) ? "investigate" : "ask")));
 
   const log = logger.child({
     sessionId,
     alertType: alert?.alertType ?? "chat",
     mode,
   });
+
+  if (mode === "investigate") promoteSessionToInvestigate(sessionId);
 
   // Backstop, not the primary gate: the routes that start a run refuse first.
   // Reaching here unconfigured means a caller bypassed them, so fail loudly.
@@ -214,7 +220,11 @@ export async function runInvestigation(
       mode,
     );
     const provider = createProvider(systemPrompt, llm, apiKey);
-    createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
+    createSession(
+      buildSessionMeta(sessionId, alert, input.userMessage),
+      alert,
+      mode,
+    );
 
     let persistedCount = 0;
     const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
@@ -280,7 +290,11 @@ export async function runInvestigation(
       : buildChatContext(remediationEnabled, fleetView, promptOptions, mode);
   const provider = createProvider(systemPrompt, llm, apiKey);
 
-  createSession(buildSessionMeta(sessionId, alert, input.userMessage), alert);
+  createSession(
+    buildSessionMeta(sessionId, alert, input.userMessage),
+    alert,
+    mode,
+  );
 
   let persistedCount = 0;
   const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);

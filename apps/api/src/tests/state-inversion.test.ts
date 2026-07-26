@@ -146,6 +146,39 @@ describe("state inversion: persistence and reads are API-local", () => {
     expect(JSON.stringify(items[0])).not.toMatch(/INCIDENT ALERT/);
   });
 
+  it("keeps a stopped investigation classified as one", async () => {
+    setScript([{ text: "Looking into it.", toolUses: [] }]);
+    const { events, close } = await connectConsoleEvents(port, SESSION);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({
+        message: "Look into web-01",
+        mode: "investigate",
+      }),
+    });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+    await waitFor(() => hasAssistantMessage(events, sessionId));
+    close();
+
+    // Stopping before the agent writes a report used to file the session as a
+    // conversation, because the classification was inferred from its leftovers.
+    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
+      headers: { Cookie: `nw_auth=${SESSION}` },
+    });
+    const rows = (await listRes.json()) as Array<{
+      sessionId: string;
+      investigation: boolean;
+    }>;
+    expect(rows.find((r) => r.sessionId === sessionId)?.investigation).toBe(
+      true,
+    );
+  });
+
   it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {
     const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`);
     expect(listRes.status).toBe(401);

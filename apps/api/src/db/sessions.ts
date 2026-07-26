@@ -1,5 +1,6 @@
 import type {
   MessagePart,
+  RunMode,
   NativeEnvelope,
   NormalizedAlert,
   Report,
@@ -13,6 +14,7 @@ import type { PendingHumanInput } from "./interrupts.js";
 // a run that no longer carries it in its job can recover it from here.
 export type StoredSession = SessionMeta & {
   originatingAlert: NormalizedAlert | null;
+  mode: RunMode;
 };
 
 // Create the session row once. Idempotent: a resume re-enters the loop with the
@@ -20,11 +22,12 @@ export type StoredSession = SessionMeta & {
 export function createSession(
   meta: SessionMeta,
   originatingAlert: NormalizedAlert | null,
+  mode: RunMode = "ask",
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO sessions (session_id, title, originating_alert, created_at)
-       VALUES (@sessionId, @title, @originatingAlert, @createdAt)
+      `INSERT INTO sessions (session_id, title, originating_alert, mode, created_at)
+       VALUES (@sessionId, @title, @originatingAlert, @mode, @createdAt)
        ON CONFLICT(session_id) DO NOTHING`,
     )
     .run({
@@ -32,8 +35,18 @@ export function createSession(
       title: meta.title,
       originatingAlert:
         originatingAlert != null ? JSON.stringify(originatingAlert) : null,
+      mode,
       createdAt: meta.createdAt,
     });
+}
+
+// One-way: an ask session that escalates stays an investigation for good.
+export function promoteSessionToInvestigate(sessionId: string): void {
+  getDb()
+    .prepare(
+      `UPDATE sessions SET mode = 'investigate' WHERE session_id = ? AND mode <> 'investigate'`,
+    )
+    .run(sessionId);
 }
 
 // Overwrites unconditionally: the refined title deliberately replaces the
@@ -192,6 +205,7 @@ export interface SessionListSource {
   createdAt: string;
   lastActivityAt: string;
   originatingAlert: NormalizedAlert | null;
+  mode: RunMode;
   report: Report | null;
   lastRole: string | null;
 }
@@ -200,7 +214,7 @@ export function listSessionSources(): SessionListSource[] {
   const rows = getDb()
     .prepare(
       `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-              s.originating_alert AS originatingAlert, r.report,
+              s.originating_alert AS originatingAlert, s.mode, r.report,
               (SELECT m.role FROM session_messages m
                 WHERE m.session_id = s.session_id
                 ORDER BY m.seq DESC LIMIT 1) AS lastRole,
@@ -216,6 +230,7 @@ export function listSessionSources(): SessionListSource[] {
     createdAt: string;
     lastActivityAt: string;
     originatingAlert: string | null;
+    mode: string;
     report: string | null;
     lastRole: string | null;
   }>;
@@ -228,6 +243,7 @@ export function listSessionSources(): SessionListSource[] {
       r.originatingAlert !== null
         ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
         : null,
+    mode: r.mode === "investigate" ? "investigate" : "ask",
     report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
     lastRole: r.lastRole,
   }));
@@ -236,7 +252,7 @@ export function listSessionSources(): SessionListSource[] {
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, title,
+      `SELECT session_id AS sessionId, title, mode,
               originating_alert AS originatingAlert, created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
@@ -247,6 +263,7 @@ export function getSession(sessionId: string): StoredSession | undefined {
     sessionId: row.sessionId,
     title: row.title,
     createdAt: row.createdAt,
+    mode: row.mode === "investigate" ? "investigate" : "ask",
     // Stored as JSON text; only this layer deserializes it.
     originatingAlert:
       row.originatingAlert != null

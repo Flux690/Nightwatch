@@ -75,10 +75,13 @@ repo.yarnpkg.com',
     created_at       TEXT NOT NULL
   );
 
+  -- mode is what the session IS, recorded when it starts. Deriving it from the
+  -- artifacts a run happens to produce reclassifies anything stopped early.
   CREATE TABLE IF NOT EXISTS sessions (
     session_id        TEXT PRIMARY KEY,
     title             TEXT NOT NULL DEFAULT '',
     originating_alert TEXT,
+    mode              TEXT NOT NULL DEFAULT 'ask',
     created_at        TEXT NOT NULL
   );
 
