@@ -21,6 +21,10 @@ const { mockListContainers, mockListDeployments, mockListStatefulSets } =
 
 vi.mock("../docker/client.js", () => ({
   getDocker: () => ({ listContainers: mockListContainers }),
+  // Stands in for the real enumerator, which lists then drops our own containers.
+  listVisibleContainers: (docker: {
+    listContainers: typeof mockListContainers;
+  }) => docker.listContainers({ all: true }),
 }));
 
 vi.mock("../kubernetes/client.js", () => ({

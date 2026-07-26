@@ -5,7 +5,7 @@ import {
   type CapabilityManifest,
   type ServiceManifestEntry,
 } from "@nightwarden/shared";
-import { getDocker } from "../docker/client.js";
+import { getDocker, listVisibleContainers } from "../docker/client.js";
 import { getAppsV1Api } from "../kubernetes/client.js";
 import { isRemediationEnabled } from "../remediation-state.js";
 
@@ -45,7 +45,7 @@ async function detectDocker(): Promise<{
     const docker = getDocker();
     // `all: true` so a service whose only container is currently stopped is still advertised - otherwise
     // routing would reject the call before the runner ever gets to JIT-resolve it and report a clean finding.
-    const list = await docker.listContainers({ all: true });
+    const list = await listVisibleContainers(docker);
     const server = process.env["NIGHTWARDEN_SERVER_NAME"];
     const byKey = new Map<string, ServiceManifestEntry>();
     for (const c of list) {

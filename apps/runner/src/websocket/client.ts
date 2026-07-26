@@ -2,12 +2,14 @@ import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
 import { logger } from "../logger.js";
+import { hideContainer } from "../docker/client.js";
 import { setRemediationEnabled } from "../remediation-state.js";
 import type {
   RunnerCommandMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
   SetRemediationModeMessage,
+  HideContainerMessage,
 } from "@nightwarden/shared";
 
 type CommandHandler = (input: unknown) => Promise<unknown>;
@@ -198,6 +200,9 @@ export function startWebSocketClient(
           { enabled: msg.payload.enabled },
           "remediation mode updated",
         );
+      } else if (parsed["type"] === "hide_container") {
+        const msg = parsed as unknown as HideContainerMessage;
+        hideContainer(msg.payload.containerId);
       }
     });
 

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type {
   CapabilityManifest,
   FleetRunner,
   SetRemediationModeMessage,
+  HideContainerMessage,
 } from "@nightwarden/shared";
 
 const LIVENESS_TTL_MS = 120_000;
@@ -66,6 +68,7 @@ export function registerRunner(
     remediationMode: null,
   };
   connectionsByRunnerId.set(runnerId, conn);
+  pushHiddenContainer(conn);
   return conn;
 }
 
@@ -172,6 +175,34 @@ export function pushRemediationMode(runnerId: string, enabled: boolean): void {
     messageId: randomUUID(),
     type: "set_remediation_mode",
     payload: { enabled },
+  };
+  conn.send(JSON.stringify(msg));
+}
+
+// Our own container id, if we run in one. Read from the cgroup path rather than
+// an image or Compose name, both of which the operator can change.
+function ownContainerId(): string | null {
+  for (const file of ["/proc/self/mountinfo", "/proc/self/cgroup"]) {
+    try {
+      const match = /([0-9a-f]{64})/.exec(readFileSync(file, "utf8"));
+      if (match?.[1]) return match[1];
+    } catch {
+      // Not containerized, or the host does not expose it: nothing to hide.
+    }
+  }
+  return null;
+}
+
+const apiContainerId = ownContainerId();
+
+// Told on connect, so the runner can keep NightWarden out of everything it
+// enumerates. The runner already excludes itself; this covers the API beside it.
+export function pushHiddenContainer(conn: RunnerConnection): void {
+  if (!apiContainerId) return;
+  const msg: HideContainerMessage = {
+    messageId: randomUUID(),
+    type: "hide_container",
+    payload: { containerId: apiContainerId },
   };
   conn.send(JSON.stringify(msg));
 }

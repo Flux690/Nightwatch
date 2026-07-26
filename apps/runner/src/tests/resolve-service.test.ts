@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type Dockerode from "dockerode";
 import { resolveService } from "../docker/resolve-service.js";
+import { hideContainer } from "../docker/client.js";
 
 function containerInfo(
   overrides: Partial<Dockerode.ContainerInfo> & { Id: string },
@@ -199,5 +200,26 @@ describe("resolveService", () => {
     await expect(resolveService(docker, IDENTITY)).rejects.toThrow(
       "connect ENOENT /var/run/docker.sock",
     );
+  });
+});
+
+describe("the control plane is not a service", () => {
+  it("resolves a hidden container to nothing, like one that does not exist", async () => {
+    const hiddenId = "c".repeat(64);
+    hideContainer(hiddenId);
+
+    const docker = makeDocker([
+      containerInfo({
+        Id: hiddenId,
+        Labels: {
+          "com.docker.compose.project": "myapp",
+          "com.docker.compose.service": "postgres",
+        },
+      }),
+    ]);
+
+    // Not a refusal the agent can tell apart from a missing service: read and
+    // write share this resolver, so neither can reach what it cannot enumerate.
+    expect(await resolveService(docker, IDENTITY)).toBeNull();
   });
 });

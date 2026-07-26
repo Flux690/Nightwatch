@@ -53,6 +53,7 @@ export type {
   WsEnvelope,
   RunnerCommandMessage,
   SetRemediationModeMessage,
+  HideContainerMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
 } from "./ws.js";

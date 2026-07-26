@@ -21,6 +21,13 @@ export interface SetRemediationModeMessage extends WsEnvelope {
   payload: { enabled: boolean };
 }
 
+// API → Runner: the API's own container id, so the runner can keep the control
+// plane out of everything it enumerates. Absent when the API is not containerized.
+export interface HideContainerMessage extends WsEnvelope {
+  type: "hide_container";
+  payload: { containerId: string };
+}
+
 // Runner → API: capability manifest on connect
 export interface RunnerManifestMessage extends WsEnvelope {
   type: "manifest";

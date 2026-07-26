@@ -1,4 +1,5 @@
 import type Dockerode from "dockerode";
+import { listVisibleContainers } from "./client.js";
 import {
   notRunningResult,
   type DockerServiceIdentity,
@@ -35,7 +36,7 @@ export async function resolveService(
   identity: ServiceIdentity,
 ): Promise<ResolvedContainer | null> {
   const service = requireDockerIdentity(identity);
-  const all = await docker.listContainers({ all: true });
+  const all = await listVisibleContainers(docker);
   const matches = all.filter((c) => matchesIdentity(c, service));
   if (matches.length === 0) return null;
 

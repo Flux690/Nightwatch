@@ -21,7 +21,7 @@ import {
   type ServiceStatsInput,
   type ServiceStatsResult,
 } from "@nightwarden/shared";
-import { getDocker, parseDockerMux } from "./client.js";
+import { getDocker, listVisibleContainers, parseDockerMux } from "./client.js";
 import {
   notRunningResult,
   resolveService,
@@ -33,7 +33,7 @@ export async function getContainerList(
   _input: ServiceListInput,
 ): Promise<ServiceListResult> {
   const docker = getDocker();
-  const raw = await docker.listContainers({ all: true });
+  const raw = await listVisibleContainers(docker);
   // Scoped like the manifest (detect.ts): the server env is the caller-added scope,
   // so a discovered target keys identically to the advertised one.
   const server = process.env["NIGHTWARDEN_SERVER_NAME"];
