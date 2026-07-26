@@ -122,7 +122,7 @@ function RailItem({
       <span
         role="status"
         aria-label="awaiting approval"
-        className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold leading-none text-warning-tint"
+        className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-sm bg-warning px-1 text-[10px] font-semibold leading-none text-warning-tint"
       >
         {badge > 99 ? "99+" : badge}
       </span>

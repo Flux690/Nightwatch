@@ -17,7 +17,7 @@ export function ConfigHealthBanner(): React.JSX.Element | null {
       {issues.map((issue) => (
         <Alert
           key={issue.kind}
-          variant="destructive"
+          variant="warning"
           className="rounded-none border-0"
         >
           <TriangleAlert />
