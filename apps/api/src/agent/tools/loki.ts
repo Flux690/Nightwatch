@@ -11,7 +11,7 @@ import {
   type LokiMetricSeries,
 } from "../../integrations/loki.js";
 import { alertAnchorFor } from "./alert-anchor.js";
-import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
+import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
 export interface LokiLogLine {

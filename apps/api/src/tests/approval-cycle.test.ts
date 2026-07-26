@@ -37,7 +37,10 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import {
+  connectConsoleEvents,
+  toolCallReached,
+} from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
@@ -810,14 +813,8 @@ describe("durable approval interrupts", () => {
       ),
     );
 
-    // The non-gated read tool should have produced a TOOL_CALL_END before suspension
-    expect(
-      events.some(
-        (e) =>
-          e.type === "TOOL_CALL_END" &&
-          e.payload["toolUseId"] === "tu-mix-read",
-      ),
-    ).toBe(true);
+    // The non-gated read tool should have completed before suspension
+    expect(toolCallReached(events, "tu-mix-read", "complete")).toBe(true);
 
     // The gated tool was NOT called on the runner yet
     expect(restartCommands).toHaveLength(0);

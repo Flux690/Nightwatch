@@ -24,7 +24,10 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import {
+  connectConsoleEvents,
+  toolCallReached,
+} from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import {
   registerRunner,
@@ -445,13 +448,8 @@ describe("remediation action record", () => {
     });
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Wait for run to finish (no interrupt, just tool call end + run finished)
-    await waitFor(() =>
-      events.some(
-        (e) =>
-          e.type === "TOOL_CALL_END" && e.payload["toolUseId"] === toolUseId,
-      ),
-    );
+    // Wait for the read tool's card to complete: no interrupt on this path.
+    await waitFor(() => toolCallReached(events, toolUseId, "complete"));
 
     // No record in remediation_actions for this tool_use_id
     expect(findRemediationAction(sessionId, toolUseId)).toBeUndefined();

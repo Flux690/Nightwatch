@@ -64,16 +64,6 @@ export interface ConsoleTranscriptItem extends ConsoleEnvelope {
   };
 }
 
-export interface ConsoleToolCallStart extends ConsoleEnvelope {
-  type: "TOOL_CALL_START";
-  payload: {
-    sessionId: string;
-    toolUseId: string;
-    toolName: string;
-    input: Record<string, unknown>;
-  };
-}
-
 // Gated tool paused for approval or clarification. Resolved via POST /sessions/:id/respond.
 export interface ConsoleHumanInputRequired extends ConsoleEnvelope {
   type: "HUMAN_INPUT_REQUIRED";
@@ -90,16 +80,6 @@ export interface ConsoleHumanInputRequired extends ConsoleEnvelope {
 }
 
 export type ConsoleInterrupt = ConsoleHumanInputRequired;
-
-export interface ConsoleToolCallEnd extends ConsoleEnvelope {
-  type: "TOOL_CALL_END";
-  payload: {
-    sessionId: string;
-    toolUseId: string;
-    result: unknown;
-    isError?: boolean;
-  };
-}
 
 export interface ConsoleRunStopped extends ConsoleEnvelope {
   type: "RUN_STOPPED";
@@ -169,9 +149,7 @@ export type ConsoleEvent =
   | ConsoleTextMessageContent
   | ConsoleMessage
   | ConsoleRunFinished
-  | ConsoleToolCallStart
   | ConsoleHumanInputRequired
-  | ConsoleToolCallEnd
   | ConsoleHumanInputResolved
   | ConsoleRunStopped
   | ConsoleSandboxStatus

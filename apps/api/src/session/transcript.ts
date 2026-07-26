@@ -2,7 +2,6 @@ import type {
   ApprovalRequest,
   ApprovalStatus,
   Citation,
-  MessagePart,
   SessionMessage,
   ToolCallState,
   TranscriptItem,

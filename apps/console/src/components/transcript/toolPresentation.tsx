@@ -6,7 +6,6 @@ import type { ToolCardItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import {
   CARD_PRE_CLASS,
-  firstLines,
   TerminalCard,
   TOOL_CARD_CLASS,
 } from "./TerminalCard.js";

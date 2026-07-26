@@ -24,7 +24,10 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
-import { connectConsoleEvents } from "./console-events-helper.js";
+import {
+  connectConsoleEvents,
+  toolCallReached,
+} from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import {
@@ -111,7 +114,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     vi.unstubAllEnvs();
   });
 
-  it("read tool executes without suspending: TOOL_CALL_END arrives, no HUMAN_INPUT_REQUIRED", async () => {
+  it("read tool executes without suspending: its card completes, no HUMAN_INPUT_REQUIRED", async () => {
     setScript([
       {
         text: "Listing containers.",
@@ -139,13 +142,8 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(res.status).toBe(202);
     const { sessionId } = (await res.json()) as { sessionId: string };
 
-    // Read tool must emit TOOL_CALL_END without any suspension
-    await waitFor(() =>
-      events.some(
-        (e) =>
-          e.type === "TOOL_CALL_END" && e.payload["toolUseId"] === "tu-read-1",
-      ),
-    );
+    // Read tool must complete without any suspension
+    await waitFor(() => toolCallReached(events, "tu-read-1", "complete"));
 
     // No suspension must have occurred
     expect(
@@ -341,12 +339,7 @@ describe("access-gate: gating is driven by tool access level", () => {
     const { sessionId } = (await res.json()) as { sessionId: string };
 
     // Read tool ran without suspending
-    await waitFor(() =>
-      events.some(
-        (e) =>
-          e.type === "TOOL_CALL_END" && e.payload["toolUseId"] === "tu-c-read",
-      ),
-    );
+    await waitFor(() => toolCallReached(events, "tu-c-read", "complete"));
 
     // Ask tool suspended with clarification
     const clarInterrupt = await waitFor(() =>

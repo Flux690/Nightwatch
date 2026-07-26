@@ -18,7 +18,6 @@ function setup(
   props: {
     sessionId: string | null;
     isRunning: boolean;
-    disabled?: boolean;
     investigation?: boolean;
   },
   routePath = "/sessions/new",
@@ -43,7 +42,6 @@ function setup(
       <ChatInput
         sessionId={props.sessionId}
         isRunning={props.isRunning}
-        disabled={props.disabled}
         investigation={props.investigation}
       />
     ),
@@ -115,19 +113,6 @@ describe("ChatInput", () => {
       expect(fetchMock).toHaveBeenCalledWith("/api/sessions/s1/stop", {
         method: "POST",
       });
-    });
-  });
-
-  describe("disabled state (disabled=true)", () => {
-    it("disables the textarea and send button when disabled prop is set", async () => {
-      const user = userEvent.setup();
-      setup({ sessionId: "s1", isRunning: false, disabled: true });
-
-      const textarea = await screen.findByRole("textbox");
-      expect(textarea).toBeDisabled();
-
-      await user.type(textarea, "hello");
-      expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
     });
   });
 

@@ -67,3 +67,19 @@ export async function connectConsoleEvents<
 
   return client;
 }
+
+// A tool call whose card reached a phase, as the console would see it. The
+// stream carries whole cards, so a completed call is a phase, not an event type.
+export function toolCallReached(
+  events: ConsoleEventFrame[],
+  toolUseId: string,
+  phase: "running" | "complete" | "awaiting_human" | "resolved",
+): boolean {
+  return events.some((e) => {
+    if (e.type !== "TRANSCRIPT_ITEM") return false;
+    // Frames arrive as parsed JSON; the item shape is the published contract.
+    const item = e.payload["item"] as
+      { toolUseId?: string; state?: { phase?: string } } | undefined;
+    return item?.toolUseId === toolUseId && item.state?.phase === phase;
+  });
+}

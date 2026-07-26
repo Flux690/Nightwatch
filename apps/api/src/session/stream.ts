@@ -13,8 +13,6 @@ import type {
   ConsoleRunFailed,
   ConsoleSessionTitleUpdated,
   ConsoleTextMessageContent,
-  ConsoleToolCallEnd,
-  ConsoleToolCallStart,
   ConsoleTranscriptItem,
   SessionMessage,
 } from "@nightwarden/shared";
@@ -58,17 +56,6 @@ export function publishRunFinished(sessionId: string): void {
   publishConsoleEvent(env);
 }
 
-export function publishToolCallStart(
-  payload: ConsoleToolCallStart["payload"],
-): void {
-  const env: ConsoleToolCallStart = {
-    messageId: randomUUID(),
-    type: "TOOL_CALL_START",
-    payload,
-  };
-  publishConsoleEvent(env);
-}
-
 export function publishInterrupt(payload: ConsoleInterrupt["payload"]): void {
   const env: ConsoleInterrupt = {
     messageId: randomUUID(),
@@ -85,17 +72,6 @@ export function publishTranscriptItem(
   const env: ConsoleTranscriptItem = {
     messageId: randomUUID(),
     type: "TRANSCRIPT_ITEM",
-    payload,
-  };
-  publishConsoleEvent(env);
-}
-
-export function publishToolCallEnd(
-  payload: ConsoleToolCallEnd["payload"],
-): void {
-  const env: ConsoleToolCallEnd = {
-    messageId: randomUUID(),
-    type: "TOOL_CALL_END",
     payload,
   };
   publishConsoleEvent(env);

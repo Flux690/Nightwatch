@@ -7,11 +7,7 @@ import { insertRejectedRemediationAction } from "../db/remediation-actions.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
-import {
-  publishInterruptResolved,
-  publishToolCallEnd,
-  publishTranscriptItem,
-} from "./stream.js";
+import { publishInterruptResolved, publishTranscriptItem } from "./stream.js";
 import { toolCallCard, stripEvidenceTag } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
@@ -88,15 +84,6 @@ function unpause(
       },
     }),
   });
-
-  if (status === "approved") {
-    publishToolCallEnd({
-      sessionId,
-      toolUseId,
-      result: gatedResult.content,
-      isError: gatedResult.is_error,
-    });
-  }
 
   publishInterruptResolved({
     sessionId,

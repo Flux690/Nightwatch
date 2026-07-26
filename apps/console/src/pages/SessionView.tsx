@@ -1,9 +1,4 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RunMode,
@@ -313,9 +308,9 @@ export function SessionView({
         // A persisted row, not a lifecycle signal - never touch isRunning here.
         // The optimistic echo clears once its own turn lands.
         setPendingEcho(null);
-        // Assistant/error rows replace live streamed items whose ephemeral ids
-        // can't dedup against the persisted copy, so drop them. Tool_result
-        // (user) rows leave live tool cards for the persisted-key filter.
+        // Streamed text and reasoning carry ephemeral ids the refetch cannot
+        // match, so an assistant or error row drops them; tool cards key on
+        // toolUseId and are updated in place instead.
         if (message.role === "assistant" || message.role === "error") {
           setLiveItems([]);
         }
@@ -346,8 +341,7 @@ export function SessionView({
       }
 
       if (env.type === "RUN_FAILED") {
-        const { sessionId, message } = env.payload;
-        if (sessionId !== sid) return;
+        if (env.payload.sessionId !== sid) return;
         setIsRunning(false);
         setActivityNotice(null);
         setPendingEcho(null);

@@ -52,9 +52,6 @@ function setup(statusResponse: object) {
         json: () => Promise.resolve(statusResponse),
       });
     }
-    if (url.includes("/sessions/pending-human-input")) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
-    }
     if (url.includes("/sessions")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     }
@@ -164,9 +161,6 @@ describe("AuthGate", () => {
               email: "a@b.com",
             }),
         });
-      }
-      if (url.includes("/sessions/pending-human-input")) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
       }
       if (url.includes("/sessions")) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });

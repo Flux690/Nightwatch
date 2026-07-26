@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwarden/shared";
 import { serviceIdentityKey } from "@nightwarden/shared";
@@ -44,11 +44,6 @@ const STEP_TITLES = [
   "Confirm what it sees",
 ];
 
-function validateServerName(name: string): string | null {
-  if (name.includes("/")) return "Server name must not contain '/'";
-  return null;
-}
-
 export function AddServerPage(): React.JSX.Element {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
@@ -76,14 +71,14 @@ export function AddServerPage(): React.JSX.Element {
     (r) => r.token === mintedToken?.id && r.online && r.hostname !== null,
   );
 
-  // Snippets live only on the Alertmanager page (one owner); the wizard just
-  // points there the moment routing ambiguity becomes possible.
   // Read from the manifest the runner already sent: nothing is dispatched, so
   // checking the wiring cannot start an investigation or spend a token.
   const advertised = (
     connectedRunner?.manifest?.capabilities.services ?? []
   ).map((entry) => serviceIdentityKey(entry.identity));
 
+  // Snippets live only on the Alertmanager page (one owner); the wizard just
+  // points there the moment routing ambiguity becomes possible.
   const connectedDockerServers = (runners ?? []).filter(
     (r) =>
       r.online &&

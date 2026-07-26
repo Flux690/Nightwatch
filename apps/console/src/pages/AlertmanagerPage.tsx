@@ -126,9 +126,6 @@ export function AlertmanagerPage(): React.JSX.Element {
   const dockerRunners = connected.filter(
     (r) => r.manifest?.capabilities.docker === true,
   );
-  const dockerServers = dockerRunners.map(
-    (r) => r.serverName ?? r.hostname ?? r.id,
-  );
   // Only an explicit name scopes a runner's identities, so only a named runner
   // needs its alerts labelled to match.
   const namedServers = dockerRunners

@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type {
-  ApprovalRequest,
   RespondRequest,
   RunMode,
   TranscriptItem,
 } from "@nightwarden/shared";
-import {
-  hasPendingHumanInput,
-  type PendingHumanInputWithSession,
-} from "../db/interrupts.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { getSession, deleteSession } from "../db/sessions.js";
 import { listSessionRows } from "./list.js";
@@ -23,18 +19,6 @@ import {
   checkLLMReadiness,
   notConfiguredMessage,
 } from "../config/readiness.js";
-
-function toApprovalRequest(i: PendingHumanInputWithSession): ApprovalRequest {
-  return {
-    sessionId: i.sessionId,
-    toolName: i.toolName,
-    toolInput: i.toolInput,
-    toolUseId: i.toolUseId,
-    kind: i.kind,
-    status: "pending",
-    createdAt: i.createdAt,
-  };
-}
 
 function sendHumanInputError(
   reply: {

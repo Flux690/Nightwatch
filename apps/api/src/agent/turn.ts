@@ -4,11 +4,7 @@ import { targetRemediationDisabled } from "./policy.js";
 import { circuitBreakerRejection } from "./breaker.js";
 import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence } from "./report.js";
-import {
-  publishToolCallStart,
-  publishToolCallEnd,
-  publishTranscriptItem,
-} from "../session/stream.js";
+import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard, stripEvidenceTag } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { AgentConfig } from "@nightwarden/shared";
@@ -119,12 +115,6 @@ export async function processToolUses(params: {
         state: { phase: "running" },
       }),
     });
-    publishToolCallStart({
-      sessionId,
-      toolUseId: tool.id,
-      toolName: tool.name,
-      input: tool.input,
-    });
     const result = await executeTool(entry, tool.input, {
       ...execCtx,
       toolUseId: tool.id,
@@ -153,12 +143,6 @@ export async function processToolUses(params: {
         // reload cannot render this result differently from the live card.
         state: { phase: "complete", result: stripEvidenceTag(content) },
       }),
-    });
-    publishToolCallEnd({
-      sessionId,
-      toolUseId: tool.id,
-      result: result.content,
-      isError: result.is_error,
     });
   }
 

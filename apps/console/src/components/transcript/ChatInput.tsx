@@ -24,7 +24,6 @@ import { apiFetch } from "@/api/client";
 export interface ChatInputProps {
   sessionId: string | null;
   isRunning: boolean;
-  disabled?: boolean;
   // Hides the mode picker: an investigation can never demote (one-way ratchet),
   // so the chat input has nothing to choose.
   investigation?: boolean;
@@ -98,7 +97,6 @@ function ModePicker({
 export function ChatInput({
   sessionId,
   isRunning,
-  disabled,
   investigation = false,
   onSessionCreated,
   onSend,
@@ -170,16 +168,14 @@ export function ChatInput({
 
   const handleSubmit = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed || isRunning || disabled || submit.isPending) return;
+    if (!trimmed || isRunning || submit.isPending) return;
     // Cleared at submit, not on success: the echoed bubble is the message now.
     setText("");
     onSend?.(trimmed, mode);
     submit.mutate(trimmed);
-  }, [text, isRunning, disabled, submit, onSend, mode]);
+  }, [text, isRunning, submit, onSend, mode]);
 
-  const canSend =
-    text.trim().length > 0 && !isRunning && !disabled && !submit.isPending;
-  const inputDisabled = isRunning || !!disabled;
+  const canSend = text.trim().length > 0 && !isRunning && !submit.isPending;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -212,7 +208,7 @@ export function ChatInput({
           onCompositionEnd={() => {
             composingRef.current = false;
           }}
-          disabled={inputDisabled}
+          disabled={isRunning}
           rows={3}
         />
         <InputGroupAddon
@@ -222,11 +218,7 @@ export function ChatInput({
           {investigation ? (
             <span />
           ) : (
-            <ModePicker
-              mode={mode}
-              onChange={setMode}
-              disabled={inputDisabled}
-            />
+            <ModePicker mode={mode} onChange={setMode} disabled={isRunning} />
           )}
           {isRunning ? (
             <InputGroupButton
