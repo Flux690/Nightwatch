@@ -1,6 +1,8 @@
 // Provider-neutral contract. The investigation domain talks to LLMs only
 // through these shapes, never to a vendor SDK directly.
 
+import type { MessagePart, NativeEnvelope } from "@nightwarden/shared";
+
 export interface ToolSchema {
   name: string;
   description: string;
@@ -39,12 +41,13 @@ export interface StreamDelta {
 
 export type OnDelta = (delta: StreamDelta) => void;
 
-// One conversation turn, provider-neutral: `content` is the human-readable transcript text;
-// `providerContent` is the native message kept verbatim so a resumed run rebuilds a valid turn.
+// One conversation turn: `parts` is the portable content, `native` the vendor's
+// own message for a byte-exact same-dialect resume, `content` the text rendering.
 export interface ProviderMessage {
   role: "user" | "assistant";
   content: string;
-  providerContent: unknown;
+  parts: MessagePart[];
+  native?: NativeEnvelope;
 }
 
 // Per-call behavior toggles, provider-neutral: callers state intent and each

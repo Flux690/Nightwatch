@@ -40,6 +40,7 @@ export function listSessionRows(): SessionListRow[] {
           : null,
       status: investigation ? deriveStatus(source, pendingSessions) : null,
       rootCauseLine: source.report?.rootCause.summary.trim() || null,
+      awaitingHumanInput: pendingSessions.has(source.sessionId),
     };
   });
 }

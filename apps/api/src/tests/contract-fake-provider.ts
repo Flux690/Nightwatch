@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { MessagePart, WireDialect } from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -101,6 +102,53 @@ function nativeToText(m: NativeMessage): string {
     .join("\n");
 }
 
+// The fake's native shape mirrors Anthropic's blocks, so it claims that dialect
+// and exercises both halves of the replay contract.
+const DIALECT: WireDialect = "anthropic-messages";
+
+function nativeToParts(m: NativeMessage): MessagePart[] {
+  if (typeof m.content === "string") {
+    return m.content ? [{ type: "text", text: m.content }] : [];
+  }
+  return m.content.map((b): MessagePart => {
+    if (b.type === "text") return { type: "text", text: b.text };
+    if (b.type === "tool_use")
+      return { type: "tool_call", id: b.id, name: b.name, input: b.input };
+    return {
+      type: "tool_result",
+      toolCallId: b.tool_use_id,
+      output: b.content,
+      ...(b.is_error && { isError: true }),
+    };
+  });
+}
+
+function partsToNative(m: ProviderMessage): NativeMessage {
+  const blocks = m.parts.flatMap((p): Array<TextBlock | ToolUseBlock> =>
+    p.type === "text"
+      ? [{ type: "text", text: p.text }]
+      : p.type === "tool_call"
+        ? [{ type: "tool_use", id: p.id, name: p.name, input: p.input }]
+        : [],
+  );
+  if (m.role === "assistant") return { role: "assistant", content: blocks };
+  const userBlocks = m.parts.flatMap((p): Array<ToolResultBlock | TextBlock> =>
+    p.type === "tool_result"
+      ? [
+          {
+            type: "tool_result",
+            tool_use_id: p.toolCallId,
+            content: p.output,
+            ...(p.isError && { is_error: true }),
+          },
+        ]
+      : p.type === "text"
+        ? [{ type: "text", text: p.text }]
+        : [],
+  );
+  return { role: "user", content: userBlocks };
+}
+
 export type ContractFakeProvider = {
   [K in keyof LLMProvider]: LLMProvider[K] & ReturnType<typeof vi.fn>;
 };
@@ -119,7 +167,8 @@ function makeProvider(
     return messages.map((m) => ({
       role: m.role,
       content: nativeToText(m),
-      providerContent: m,
+      parts: nativeToParts(m),
+      native: { dialect: DIALECT, message: m },
     }));
   }
 
@@ -129,7 +178,13 @@ function makeProvider(
     }),
 
     seed: vi.fn((history: ProviderMessage[]) => {
-      const native = history.map((m) => m.providerContent as NativeMessage);
+      // Same split a real adapter makes: replay own-dialect messages verbatim,
+      // rebuild the rest from parts.
+      const native = history.map((m) =>
+        m.native?.dialect === DIALECT
+          ? (m.native.message as NativeMessage)
+          : partsToNative(m),
+      );
       validateTranscript(native);
       messages.length = 0;
       messages.push(...native);

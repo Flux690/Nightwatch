@@ -90,10 +90,22 @@ export type {
   SessionRole,
   SessionMeta,
   SessionMessage,
+  SessionTranscript,
   RunMode,
   SessionRunStatus,
   SessionListRow,
 } from "./sessions.js";
+export type {
+  TextPart,
+  ReasoningPart,
+  ToolCallPart,
+  ToolResultPart,
+  MessagePart,
+  WireDialect,
+  NativeEnvelope,
+  CanonicalMessage,
+} from "./messages.js";
+export { messagePartsToText } from "./messages.js";
 export type {
   ReportStatus,
   HypothesisState,

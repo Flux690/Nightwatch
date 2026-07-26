@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type {
   NormalizedAlert,
   RunnerCommandMessage,
+  SessionTranscript,
 } from "@nightwarden/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
@@ -105,13 +106,9 @@ describe("state inversion: persistence and reads are API-local", () => {
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(txRes.status).toBe(200);
-    const transcript = (await txRes.json()) as Array<{
-      role: string;
-      content: string;
-      seq: number;
-    }>;
-    expect(transcript.length).toBeGreaterThanOrEqual(2);
-    expect(transcript.map((m) => m.seq)).toEqual([0, 1]);
+    const { messages } = (await txRes.json()) as SessionTranscript;
+    expect(messages.length).toBeGreaterThanOrEqual(2);
+    expect(messages.map((m) => m.seq)).toEqual([0, 1]);
   });
 
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
@@ -139,17 +136,14 @@ describe("state inversion: persistence and reads are API-local", () => {
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
-    const transcript = (await txRes.json()) as Array<{
-      role: string;
-      content: string;
-    }>;
+    const { messages } = (await txRes.json()) as SessionTranscript;
     // The opening message is the human's verbatim - not a fabricated INCIDENT
     // ALERT block.
-    expect(transcript[0]).toMatchObject({
+    expect(messages[0]).toMatchObject({
       role: "user",
       content: "Why did web-01 restart?",
     });
-    expect(transcript[0].content).not.toMatch(/INCIDENT ALERT/);
+    expect(messages[0]?.content).not.toMatch(/INCIDENT ALERT/);
   });
 
   it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {

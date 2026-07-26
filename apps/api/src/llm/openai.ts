@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 import { logger } from "../logger.js";
-import type { ResolvedLLMConfig } from "@nightwarden/shared";
+import { messagePartsToText } from "@nightwarden/shared";
+import type {
+  MessagePart,
+  ResolvedLLMConfig,
+  WireDialect,
+} from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -12,18 +17,7 @@ import type {
   ToolUse,
 } from "./types.js";
 
-// Mirrors Anthropic's blocks so persistedConverter reads both providers the same way;
-// OpenAI has no reasoning field, so a thinking turn is reassembled into this before persisting.
-type ProviderBlock =
-  | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string }
-  | {
-      type: "tool_use";
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-    }
-  | { type: "tool_result"; tool_use_id: string; content: unknown };
+const DIALECT: WireDialect = "openai-chat";
 
 // Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
 // OPENAI_BASE_URL selects the host; the model comes from the global config.
@@ -190,58 +184,19 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   seed(history: ProviderMessage[]): void {
-    // System prompt lives in the message array, not the transcript, so it's re-prepended
-    // here; messages without providerContent fall back to plain role/content.
+    // System prompt lives in the message array here, not the transcript, so it is
+    // re-prepended. Own-dialect messages replay verbatim; others rebuild from parts.
     this.messages = [
       { role: "system", content: this.system },
-      ...history.map((m) => this.toNativeMessage(m)),
+      ...history.flatMap((m) =>
+        m.native?.dialect === DIALECT
+          ? [
+              m.native
+                .message as OpenAI.Chat.Completions.ChatCompletionMessageParam,
+            ]
+          : toNativeMessages(m),
+      ),
     ];
-  }
-
-  // Persisted ProviderBlock[] reasoning isn't needed to replay context, so only
-  // text/tool_calls round-trip back into a native message.
-  private toNativeMessage(
-    m: ProviderMessage,
-  ): OpenAI.Chat.Completions.ChatCompletionMessageParam {
-    if (Array.isArray(m.providerContent)) {
-      const blocks = m.providerContent as ProviderBlock[];
-      const toolResult = blocks.find(
-        (b): b is ProviderBlock & { type: "tool_result" } =>
-          b.type === "tool_result",
-      );
-      // Round-trips as a native "tool" message; the console persists it under
-      // role "user" purely for display grouping.
-      if (toolResult) {
-        return {
-          role: "tool",
-          tool_call_id: toolResult.tool_use_id,
-          content:
-            typeof toolResult.content === "string"
-              ? toolResult.content
-              : JSON.stringify(toolResult.content),
-        };
-      }
-      const text = blocks.find((b) => b.type === "text")?.text ?? null;
-      const toolCalls = blocks
-        .filter(
-          (b): b is ProviderBlock & { type: "tool_use" } =>
-            b.type === "tool_use",
-        )
-        .map((b) => ({
-          id: b.id,
-          type: "function" as const,
-          function: { name: b.name, arguments: JSON.stringify(b.input) },
-        }));
-      return {
-        role: "assistant",
-        content: text,
-        ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
-      };
-    }
-    if (m.providerContent != null) {
-      return m.providerContent as OpenAI.Chat.Completions.ChatCompletionMessageParam;
-    }
-    return { role: m.role, content: m.content };
   }
 
   snapshot(): ProviderMessage[] {
@@ -250,58 +205,101 @@ export class OpenAIProvider implements LLMProvider {
       .map((m, i) => ({ m, i }))
       .filter(({ m }) => m.role !== "system")
       .map(({ m, i }) => {
-        // Reconstructed as the same ProviderBlock[] shape the console reads for
-        // Anthropic, persisted under role "user" purely for display grouping.
-        if (m.role === "tool") {
-          const blocks: ProviderBlock[] = [
-            {
-              type: "tool_result",
-              tool_use_id: m.tool_call_id,
-              content: m.content,
-            },
-          ];
-          return {
-            role: "user" as const,
-            content: typeof m.content === "string" ? m.content : "",
-            providerContent: blocks,
-          };
-        }
-
-        const content = typeof m.content === "string" ? m.content : "";
-
-        if (m.role === "assistant") {
-          // Built even when empty, since persistedConverter only recognizes
-          // ProviderBlock[] for assistant turns.
-          const thinking = this.thinkingByIndex.get(i);
-          const blocks: ProviderBlock[] = [];
-          if (thinking?.trim()) blocks.push({ type: "thinking", thinking });
-          if (content) blocks.push({ type: "text", text: content });
-          for (const call of m.tool_calls ?? []) {
-            if (call.type !== "function") continue;
-            blocks.push({
-              type: "tool_use",
-              id: call.id,
-              name: call.function.name,
-              input: parseToolArguments(
-                call.function.arguments,
-                call.function.name,
-              ),
-            });
-          }
-          return {
-            role: "assistant" as const,
-            content,
-            providerContent: blocks,
-          };
-        }
-
+        const parts = this.toParts(m, i);
         return {
-          role: "user" as const,
-          content,
-          providerContent: m,
+          // A native "tool" message is a tool result, which is a user turn in the
+          // neutral shape - the roles differ, so it is mapped rather than coerced.
+          role:
+            m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+          content: messagePartsToText(parts),
+          parts,
+          native: { dialect: DIALECT, message: m },
         };
       });
   }
+
+  private toParts(
+    m: OpenAI.Chat.Completions.ChatCompletionMessageParam,
+    index: number,
+  ): MessagePart[] {
+    if (m.role === "tool") {
+      return [
+        {
+          type: "tool_result",
+          toolCallId: m.tool_call_id,
+          output: typeof m.content === "string" ? m.content : "",
+        },
+      ];
+    }
+
+    const content = typeof m.content === "string" ? m.content : "";
+    if (m.role !== "assistant") {
+      return content ? [{ type: "text", text: content }] : [];
+    }
+
+    const parts: MessagePart[] = [];
+    const reasoning = this.thinkingByIndex.get(index);
+    if (reasoning?.trim()) parts.push({ type: "reasoning", text: reasoning });
+    if (content) parts.push({ type: "text", text: content });
+    for (const call of m.tool_calls ?? []) {
+      if (call.type !== "function") continue;
+      parts.push({
+        type: "tool_call",
+        id: call.id,
+        name: call.function.name,
+        input: parseToolArguments(call.function.arguments, call.function.name),
+      });
+    }
+    return parts;
+  }
+}
+
+// Rebuild native messages from parts. One turn can become several: each tool
+// result is its own "tool" message here, and reasoning has no field to land in.
+function toNativeMessages(
+  m: ProviderMessage,
+): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  const toolResults = m.parts.filter((p) => p.type === "tool_result");
+  if (toolResults.length > 0) {
+    const out: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
+      toolResults.map((p) => ({
+        role: "tool" as const,
+        tool_call_id: p.toolCallId,
+        // No is_error flag here, so it folds into the content the model reads.
+        content: p.isError ? `ERROR: ${p.output}` : p.output,
+      }));
+    // Injected text rides alongside tool results; it needs its own turn here.
+    const text = m.parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+    if (text) out.push({ role: "user", content: text });
+    return out;
+  }
+
+  const text = m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text)
+    .join("\n");
+
+  if (m.role !== "assistant") {
+    return [{ role: "user", content: text || m.content }];
+  }
+
+  const toolCalls = m.parts
+    .filter((p) => p.type === "tool_call")
+    .map((p) => ({
+      id: p.id,
+      type: "function" as const,
+      function: { name: p.name, arguments: JSON.stringify(p.input) },
+    }));
+  return [
+    {
+      role: "assistant",
+      content: text || null,
+      ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+    },
+  ];
 }
 
 // Model-generated JSON can be malformed; a bad payload becomes empty input,

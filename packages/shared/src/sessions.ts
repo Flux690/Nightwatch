@@ -1,4 +1,6 @@
 import type { AlertSeverity } from "./alerts.js";
+import type { ApprovalRequest } from "./approvals.js";
+import type { MessagePart, NativeEnvelope } from "./messages.js";
 
 // A session is the agent's conversation thread (the durable parent); an incident is an optional
 // artifact referencing it. Sessions live in the API's SQLite, id minted at trigger time, appended per turn.
@@ -31,6 +33,9 @@ export interface SessionListRow extends SessionMeta {
   target: string | null;
   status: SessionRunStatus | null;
   rootCauseLine: string | null;
+  // Its own field rather than a reading of `status`, which is null on
+  // conversations - an Ask session awaiting a clarification still needs you.
+  awaitingHumanInput: boolean;
 }
 
 export interface SessionMeta {
@@ -39,14 +44,25 @@ export interface SessionMeta {
   createdAt: string;
 }
 
+// One session's transcript plus whatever it is suspended on. Joined server-side
+// so the console never has to reconcile two lists against each other - the pending
+// row and the tool_use it belongs to arrive together or not at all.
+export interface SessionTranscript {
+  messages: SessionMessage[];
+  pending: ApprovalRequest | null;
+}
+
 export interface SessionMessage {
   sessionId: string;
   seq: number;
   role: SessionRole;
-  // Human-readable rendering for the console transcript.
+  // Human-readable rendering, derived from parts. Titles and list rows read it.
   content: string;
-  // Provider-native message kept verbatim so a resumed run rebuilds a valid turn - text alone can't
-  // restore the thinking/tool_use/tool_result pairing. Opaque here; only the matching provider deserializes it.
-  providerContent?: unknown;
+  // The turn's portable content. Empty on "error" rows, which are our own notes
+  // rather than a model turn.
+  parts: MessagePart[];
+  // The vendor's own message, replayed verbatim when the dialect still matches -
+  // parts alone can't restore a signed thinking block.
+  native?: NativeEnvelope;
   createdAt: string;
 }

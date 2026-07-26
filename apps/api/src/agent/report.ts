@@ -40,68 +40,26 @@ export interface EvidenceIndexEntry {
   resultContent: string | null;
 }
 
-// Both provider transcripts persist tool calls as typed blocks: Anthropic as a
-// MessageParam whose content is a block array, OpenAI as a ProviderBlock array.
-interface ToolUseBlock {
-  type: "tool_use";
-  id: string;
-  name: string;
-}
-interface ToolResultBlock {
-  type: "tool_result";
-  tool_use_id: string;
-  content: unknown;
-}
-type TranscriptBlock = ToolUseBlock | ToolResultBlock;
-
-function isTranscriptBlock(value: unknown): value is TranscriptBlock {
-  if (typeof value !== "object" || value === null || !("type" in value)) {
-    return false;
-  }
-  const block = value as Record<string, unknown>;
-  if (block["type"] === "tool_use") {
-    return typeof block["id"] === "string" && typeof block["name"] === "string";
-  }
-  if (block["type"] === "tool_result") {
-    return typeof block["tool_use_id"] === "string";
-  }
-  return false;
-}
-
-function contentBlocks(providerContent: unknown): TranscriptBlock[] {
-  const raw = Array.isArray(providerContent)
-    ? providerContent
-    : typeof providerContent === "object" &&
-        providerContent !== null &&
-        Array.isArray((providerContent as { content?: unknown }).content)
-      ? (providerContent as { content: unknown[] }).content
-      : [];
-  return raw.filter(isTranscriptBlock);
-}
-
-// Walks the persisted transcript in order, numbering EVERY tool_use (errored and
-// gated included) so ordinals never shift, and pairing each with its tool_result.
-// The assistant turn is persisted before its tools execute, so the walk is always
-// current; being DB-derived makes it resume-safe with no in-memory state.
+// Walks the persisted transcript in order, numbering EVERY tool call (errored and
+// gated included) so ordinals never shift, and pairing each with its result. The
+// assistant turn is persisted before its tools execute, so the walk is current.
 export function buildEvidenceIndex(sessionId: string): EvidenceIndexEntry[] {
   const entries: EvidenceIndexEntry[] = [];
   const byToolUseId = new Map<string, EvidenceIndexEntry>();
   for (const message of getSessionMessages(sessionId)) {
-    for (const block of contentBlocks(message.providerContent)) {
-      if (block.type === "tool_use") {
+    for (const part of message.parts) {
+      if (part.type === "tool_call") {
         const entry: EvidenceIndexEntry = {
           tag: evidenceTag(entries.length + 1),
-          toolUseId: block.id,
-          toolName: block.name,
+          toolUseId: part.id,
+          toolName: part.name,
           resultContent: null,
         };
         entries.push(entry);
-        byToolUseId.set(block.id, entry);
-      } else {
-        const entry = byToolUseId.get(block.tool_use_id);
-        if (entry && typeof block.content === "string") {
-          entry.resultContent = stripEvidenceTag(block.content);
-        }
+        byToolUseId.set(part.id, entry);
+      } else if (part.type === "tool_result") {
+        const entry = byToolUseId.get(part.toolCallId);
+        if (entry) entry.resultContent = stripEvidenceTag(part.output);
       }
     }
   }

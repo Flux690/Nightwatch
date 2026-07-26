@@ -79,7 +79,8 @@ function persistNewTurns(
       seq: seqOffset + i,
       role: m.role,
       content: m.content,
-      providerContent: m.providerContent,
+      parts: m.parts,
+      ...(m.native && { native: m.native }),
       createdAt: new Date().toISOString(),
     });
   }

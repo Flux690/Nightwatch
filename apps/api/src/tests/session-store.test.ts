@@ -41,7 +41,7 @@ function msg(
     seq,
     role: seq % 2 === 0 ? "user" : "assistant",
     content: `message ${seq}`,
-    providerContent: { block: seq },
+    parts: [{ type: "text", text: `message ${seq}` }],
     createdAt: new Date().toISOString(),
     ...overrides,
   };
@@ -111,7 +111,7 @@ describe("API-local session store", () => {
     expect(transcript.map((t) => t.seq)).toEqual([0, 1, 2]);
     expect(transcript[0].role).toBe("user");
     expect(transcript[1].role).toBe("assistant");
-    expect(transcript[0].providerContent).toEqual({ block: 0 });
+    expect(transcript[0].parts).toEqual([{ type: "text", text: "message 0" }]);
   });
 
   it("rejects a duplicate (session_id, seq) so a hole can never be re-filled", () => {

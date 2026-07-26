@@ -1,6 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
-import type { ResolvedLLMConfig } from "@nightwarden/shared";
+import { messagePartsToText } from "@nightwarden/shared";
+import type {
+  MessagePart,
+  ResolvedLLMConfig,
+  WireDialect,
+} from "@nightwarden/shared";
 import type {
   ChatResponse,
   LLMProvider,
@@ -11,6 +16,8 @@ import type {
   ToolSchema,
   ToolUse,
 } from "./types.js";
+
+const DIALECT: WireDialect = "anthropic-messages";
 
 export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;
@@ -177,36 +184,84 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   seed(history: ProviderMessage[]): void {
-    // providerContent is the MessageParam stored verbatim on persist; the
-    // role/content fallback only applies to messages that predate it.
+    // A message this dialect wrote is replayed byte-exact: thinking blocks carry
+    // signatures Anthropic rejects if altered. Anything else is rebuilt from parts,
+    // which loses the reasoning and keeps the conversation.
     this.messages = history.map((m) =>
-      m.providerContent != null
-        ? (m.providerContent as Anthropic.Messages.MessageParam)
-        : { role: m.role, content: m.content },
+      m.native?.dialect === DIALECT
+        ? (m.native.message as Anthropic.Messages.MessageParam)
+        : toNativeMessage(m),
     );
   }
 
   snapshot(): ProviderMessage[] {
-    return this.messages.map((m) => ({
-      // Anthropic messages are only user/assistant; coerce for the neutral type.
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: messageText(m),
-      providerContent: m,
-    }));
+    return this.messages.map((m) => {
+      const parts = toParts(m);
+      return {
+        // Anthropic messages are only user/assistant; coerce for the neutral type.
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: messagePartsToText(parts),
+        parts,
+        native: { dialect: DIALECT, message: m },
+      };
+    });
   }
 }
 
-function messageText(m: Anthropic.Messages.MessageParam): string {
-  if (typeof m.content === "string") return m.content;
-  const parts: string[] = [];
-  for (const b of m.content) {
-    if (b.type === "text") parts.push(b.text);
-    else if (b.type === "thinking") parts.push(b.thinking);
-    else if (b.type === "tool_use") parts.push(`[tool_use: ${b.name}]`);
-    else if (b.type === "tool_result")
-      parts.push(typeof b.content === "string" ? b.content : "[tool_result]");
+function toParts(m: Anthropic.Messages.MessageParam): MessagePart[] {
+  if (typeof m.content === "string") {
+    return m.content ? [{ type: "text", text: m.content }] : [];
   }
-  return parts.join("\n");
+  const parts: MessagePart[] = [];
+  for (const b of m.content) {
+    if (b.type === "text") parts.push({ type: "text", text: b.text });
+    else if (b.type === "thinking")
+      parts.push({ type: "reasoning", text: b.thinking });
+    else if (b.type === "tool_use")
+      parts.push({
+        type: "tool_call",
+        id: b.id,
+        name: b.name,
+        input: b.input as Record<string, unknown>,
+      });
+    else if (b.type === "tool_result")
+      parts.push({
+        type: "tool_result",
+        toolCallId: b.tool_use_id,
+        output:
+          typeof b.content === "string" ? b.content : JSON.stringify(b.content),
+        ...(b.is_error && { isError: true }),
+      });
+  }
+  return parts;
+}
+
+// Rebuild from parts for a message another dialect wrote. Reasoning is dropped
+// rather than replayed: a thinking block without its original signature is rejected.
+function toNativeMessage(m: ProviderMessage): Anthropic.Messages.MessageParam {
+  const blocks: Anthropic.Messages.ContentBlockParam[] = [];
+  for (const part of m.parts) {
+    if (part.type === "text") {
+      if (part.text) blocks.push({ type: "text", text: part.text });
+    } else if (part.type === "tool_call") {
+      blocks.push({
+        type: "tool_use",
+        id: part.id,
+        name: part.name,
+        input: part.input,
+      });
+    } else if (part.type === "tool_result") {
+      blocks.push({
+        type: "tool_result",
+        tool_use_id: part.toolCallId,
+        content: part.output,
+        ...(part.isError && { is_error: true }),
+      });
+    }
+  }
+  return blocks.length > 0
+    ? { role: m.role, content: blocks }
+    : { role: m.role, content: m.content };
 }
 
 function mapStopReason(

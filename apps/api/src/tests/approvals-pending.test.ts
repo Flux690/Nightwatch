@@ -33,7 +33,7 @@ import {
   setRunnerRemediationMode,
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import type { ApprovalRequest } from "@nightwarden/shared";
+import type { SessionListRow, SessionTranscript } from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -42,7 +42,23 @@ const FINISH_TURN = {
   toolUses: [],
 };
 
-describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () => {
+const RESTART_TURN = (): ScriptedTurn => ({
+  text: "Restarting.",
+  toolUses: [
+    {
+      id: `tu-${randomUUID()}`,
+      name: "RestartDockerService",
+      input: {
+        target: "docker/web-01/web-01",
+        rationale: "r",
+        risk: "low",
+        estimatedDowntimeSeconds: 1,
+      },
+    },
+  ],
+});
+
+describe("a suspended session serves its pending row with its transcript", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;
@@ -64,10 +80,12 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
     vi.unstubAllEnvs();
   });
 
-  it("returns pending interrupt rows with session cookie", async () => {
-    const tokA = generateRunnerToken("qa").id;
-    const connA = registerRunner(
-      tokA,
+  function connectRunner(label: string): {
+    conn: ReturnType<typeof registerRunner>;
+  } {
+    const token = generateRunnerToken(label).id;
+    const conn = registerRunner(
+      token,
       (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
@@ -79,243 +97,107 @@ describe("GET /sessions/pending-human-input reads from DB (not in-memory)", () =
       () => {},
     );
     // Remediation on so the write tool is offered (chat reads the live fleet).
-    setRunnerRemediationMode(tokA, true);
+    setRunnerRemediationMode(token, true);
+    return { conn };
+  }
 
-    setScript([
-      {
-        text: "Restarting.",
-        toolUses: [
-          {
-            id: `tu-qa-${randomUUID()}`,
-            name: "RestartDockerService",
-            input: {
-              target: "docker/web-01/web-01",
-              rationale: "r",
-              risk: "low",
-              estimatedDowntimeSeconds: 1,
-            },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
+  async function startGatedChat(message: string): Promise<void> {
+    setScript([RESTART_TURN(), FINISH_TURN]);
     const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ message: "test" }),
+      body: JSON.stringify({ message }),
     });
     expect(chatRes.status).toBe(202);
+  }
 
-    // Wait for the interrupt row to appear in DB via the endpoint
-    const body = await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-        {
-          headers: { Cookie: `nw_auth=${SESSION}` },
-        },
-      );
-      const data = (await r.json()) as ApprovalRequest[];
-      return data.length > 0 ? data : null;
+  async function listSessions(): Promise<SessionListRow[]> {
+    const r = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
+      headers: { Cookie: `nw_auth=${SESSION}` },
     });
+    return (await r.json()) as SessionListRow[];
+  }
 
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThan(0);
-    const found = body[0];
-    expect(found.toolName).toBe("RestartDockerService");
-    expect(found.status).toBe("pending");
-    expect(found.sessionId).toBeTruthy();
-
-    // Cleanup: reject to free the interrupt row
-    await fetch(
-      `http://127.0.0.1:${port}/api/sessions/${found.sessionId}/respond`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
-        },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
-      },
-    );
-    unregisterRunner(connA);
-  });
-
-  it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(
-      `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-    );
-    expect(res.status).toBe(401);
-  });
-
-  it("returns interrupts from all runner tokens (operator-wide)", async () => {
-    const tokC = generateRunnerToken("scope-c").id;
-
-    setScript([
-      {
-        text: "Restarting.",
-        toolUses: [
-          {
-            id: `tu-sc-${randomUUID()}`,
-            name: "RestartDockerService",
-            input: {
-              target: "docker/web-01/web-01",
-              rationale: "r",
-              risk: "low",
-              estimatedDowntimeSeconds: 1,
-            },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
-    const connC = registerRunner(
-      tokC,
-      (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        resolveCommand({
-          correlationId: msg.payload.correlationId,
-          success: true,
-          result: [],
-        });
-      },
-      () => {},
-    );
-    setRunnerRemediationMode(tokC, true);
-
-    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "scope test" }),
+  async function getTranscript(id: string): Promise<SessionTranscript> {
+    const r = await fetch(`http://127.0.0.1:${port}/api/sessions/${id}`, {
+      headers: { Cookie: `nw_auth=${SESSION}` },
     });
-    expect(chatRes.status).toBe(202);
+    return (await r.json()) as SessionTranscript;
+  }
 
-    // Operator-wide: endpoint returns the interrupt without needing a token param
-    const body = await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-        {
-          headers: { Cookie: `nw_auth=${SESSION}` },
-        },
-      );
-      const data = (await r.json()) as ApprovalRequest[];
-      return data.length > 0 ? data : null;
+  // The session id is discovered the way the console discovers it: from the list.
+  async function waitForAwaitingSession(): Promise<string> {
+    return waitFor(async () => {
+      const rows = await listSessions();
+      return rows.find((s) => s.awaitingHumanInput)?.sessionId ?? null;
     });
+  }
 
-    expect(body.length).toBeGreaterThan(0);
-
-    // Cleanup
-    const found = body[0];
-    await fetch(
-      `http://127.0.0.1:${port}/api/sessions/${found.sessionId}/respond`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `nw_auth=${SESSION}`,
-        },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
-      },
-    );
-    unregisterRunner(connC);
-  });
-
-  it("returns empty list after interrupt is resolved", async () => {
-    const tokE = generateRunnerToken("empty-after").id;
-
-    setScript([
-      {
-        text: "Restarting.",
-        toolUses: [
-          {
-            id: `tu-emp-${randomUUID()}`,
-            name: "RestartDockerService",
-            input: {
-              target: "docker/web-01/web-01",
-              rationale: "r",
-              risk: "low",
-              estimatedDowntimeSeconds: 1,
-            },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
-    const connE = registerRunner(
-      tokE,
-      (raw: string) => {
-        const msg = JSON.parse(raw) as RunnerCommandMessage;
-        resolveCommand({
-          correlationId: msg.payload.correlationId,
-          success: true,
-          result: [],
-        });
-      },
-      () => {},
-    );
-    setRunnerRemediationMode(tokE, true);
-
-    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "empty after resolve" }),
-    });
-    expect(chatRes.status).toBe(202);
-
-    // Wait for interrupt
-    const body = await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-        {
-          headers: { Cookie: `nw_auth=${SESSION}` },
-        },
-      );
-      const data = (await r.json()) as ApprovalRequest[];
-      return data.length > 0 ? data : null;
-    });
-
-    const sessionId = body[0].sessionId;
+  async function resolvePending(sessionId: string): Promise<void> {
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "op" }),
+      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
     });
+  }
 
-    // After resolution the list is empty
+  it("serves the pending row with the transcript in one response", async () => {
+    const { conn } = connectRunner("qa");
+    await startGatedChat("test");
+
+    const sessionId = await waitForAwaitingSession();
+    const transcript = await getTranscript(sessionId);
+
+    // One response carries both, so the console never reconciles two lists.
+    expect(transcript.messages.length).toBeGreaterThan(0);
+    expect(transcript.pending).not.toBeNull();
+    expect(transcript.pending?.toolName).toBe("RestartDockerService");
+    expect(transcript.pending?.status).toBe("pending");
+    expect(transcript.pending?.sessionId).toBe(sessionId);
+
+    await resolvePending(sessionId);
+    unregisterRunner(conn);
+  });
+
+  it("returns 401 without a valid nw_auth cookie", async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/sessions/any-id`);
+    expect(res.status).toBe(401);
+  });
+
+  it("flags the waiting session operator-wide, whichever runner produced it", async () => {
+    const { conn } = connectRunner("scope-c");
+    await startGatedChat("scope test");
+
+    // No token parameter anywhere: the operator sees every waiting session.
+    const sessionId = await waitForAwaitingSession();
+    expect(sessionId).toBeTruthy();
+
+    await resolvePending(sessionId);
+    unregisterRunner(conn);
+  });
+
+  it("clears pending and the awaiting flag once resolved", async () => {
+    const { conn } = connectRunner("empty-after");
+    await startGatedChat("empty after resolve");
+
+    const sessionId = await waitForAwaitingSession();
+    await resolvePending(sessionId);
+
     await waitFor(async () => {
-      const r = await fetch(
-        `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-        {
-          headers: { Cookie: `nw_auth=${SESSION}` },
-        },
-      );
-      const data = (await r.json()) as ApprovalRequest[];
-      return data.length === 0 ? true : null;
+      const rows = await listSessions();
+      const row = rows.find((s) => s.sessionId === sessionId);
+      return row && !row.awaitingHumanInput ? true : null;
     });
 
-    const resAfter = await fetch(
-      `http://127.0.0.1:${port}/api/sessions/pending-human-input`,
-      {
-        headers: { Cookie: `nw_auth=${SESSION}` },
-      },
-    );
-    const bodyAfter = (await resAfter.json()) as ApprovalRequest[];
-    expect(bodyAfter.length).toBe(0);
+    const transcript = await getTranscript(sessionId);
+    expect(transcript.pending).toBeNull();
 
-    unregisterRunner(connE);
+    unregisterRunner(conn);
   });
 });

@@ -4,9 +4,10 @@ import type {
   ApprovalRequest,
   RespondRequest,
   RunMode,
+  SessionTranscript,
 } from "@nightwarden/shared";
 import {
-  listAllPendingHumanInput,
+  getPendingHumanInputWithSessionBySessionId,
   hasPendingHumanInput,
   type PendingHumanInputWithSession,
 } from "../db/interrupts.js";
@@ -56,12 +57,6 @@ function sendHumanInputError(
 export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.get(
-    "/sessions/pending-human-input",
-    { preHandler: requireSession },
-    async () => listAllPendingHumanInput().map(toApprovalRequest),
-  );
-
   fastify.get("/sessions", { preHandler: requireSession }, async () =>
     listSessionRows(),
   );
@@ -69,7 +64,14 @@ export async function registerSessionRoutes(
   fastify.get<{ Params: { id: string } }>(
     "/sessions/:id",
     { preHandler: requireSession },
-    async (request) => getSessionMessages(request.params.id),
+    async (request): Promise<SessionTranscript> => {
+      const sessionId = request.params.id;
+      const pending = getPendingHumanInputWithSessionBySessionId(sessionId);
+      return {
+        messages: getSessionMessages(sessionId),
+        pending: pending ? toApprovalRequest(pending) : null,
+      };
+    },
   );
 
   fastify.get<{ Params: { id: string } }>(

@@ -29,27 +29,38 @@ const SESSION_MESSAGE_1 = {
   seq: 1,
   role: "user",
   content: "Service is down on web-01",
+  parts: [{ type: "text", text: "Service is down on web-01" }],
   createdAt: "2024-01-01T00:01:00Z",
 };
 
+// The assistant turn a suspended run leaves behind. The API writes the tool call and
+// the interrupt row in one transaction, so a reloaded transcript always carries both.
+function suspendedAssistantTurn(toolUseId: string, toolName: string): object {
+  return {
+    sessionId: "s1",
+    seq: 2,
+    role: "assistant",
+    content: "Restarting.",
+    createdAt: "2024-01-01T00:04:00Z",
+    parts: [
+      { type: "text", text: "Restarting." },
+      { type: "tool_call", id: toolUseId, name: toolName, input: {} },
+    ],
+  };
+}
+
 function setup(
   messages: object[] = [SESSION_MESSAGE_1],
-  pendingHumanInput: object[] = [],
+  pending: object | null = null,
 ) {
   MockEventSource.reset();
 
   vi.stubGlobal("EventSource", MockEventSource);
   const fetchMock = vi.fn().mockImplementation((url: string) => {
-    if (url.includes("pending-human-input")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(pendingHumanInput),
-      });
-    }
     if (url.includes("/sessions/s1")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(messages),
+        json: () => Promise.resolve({ messages, pending }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -774,21 +785,22 @@ describe("SessionView", () => {
   describe("reload reconstruction (pending interrupt on load)", () => {
     it("shows an approval card on load for a session with a durable pending approval, with no live event", async () => {
       setup(
-        [SESSION_MESSAGE_1],
         [
-          {
-            sessionId: "s1",
-            toolUseId: "tu-durable",
-            toolName: "RestartDockerService",
-            toolInput: {
-              target: "docker/web-01/web-01",
-              risk: "high",
-            },
-            kind: "approval",
-            status: "pending",
-            createdAt: "2024-01-01T00:05:00Z",
-          },
+          SESSION_MESSAGE_1,
+          suspendedAssistantTurn("tu-durable", "RestartDockerService"),
         ],
+        {
+          sessionId: "s1",
+          toolUseId: "tu-durable",
+          toolName: "RestartDockerService",
+          toolInput: {
+            target: "docker/web-01/web-01",
+            risk: "high",
+          },
+          kind: "approval",
+          status: "pending",
+          createdAt: "2024-01-01T00:05:00Z",
+        },
       );
 
       await waitFor(() => {
@@ -805,21 +817,22 @@ describe("SessionView", () => {
 
     it("shows a clarification card on load for a session with a durable pending clarification", async () => {
       setup(
-        [SESSION_MESSAGE_1],
         [
-          {
-            sessionId: "s1",
-            toolUseId: "tu-durable-clar",
-            toolName: "AskUserQuestion",
-            toolInput: {
-              question: "Which service first?",
-              options: [{ label: "nginx", description: "The web server" }],
-            },
-            kind: "clarification",
-            status: "pending",
-            createdAt: "2024-01-01T00:05:00Z",
-          },
+          SESSION_MESSAGE_1,
+          suspendedAssistantTurn("tu-durable-clar", "AskUserQuestion"),
         ],
+        {
+          sessionId: "s1",
+          toolUseId: "tu-durable-clar",
+          toolName: "AskUserQuestion",
+          toolInput: {
+            question: "Which service first?",
+            options: [{ label: "nginx", description: "The web server" }],
+          },
+          kind: "clarification",
+          status: "pending",
+          createdAt: "2024-01-01T00:05:00Z",
+        },
       );
 
       await waitFor(() => {
@@ -835,21 +848,22 @@ describe("SessionView", () => {
 
     it("approving a reconstructed card posts to /respond exactly like a live one", async () => {
       setup(
-        [SESSION_MESSAGE_1],
         [
-          {
-            sessionId: "s1",
-            toolUseId: "tu-durable",
-            toolName: "RestartDockerService",
-            toolInput: {
-              target: "docker/web-01/web-01",
-              risk: "high",
-            },
-            kind: "approval",
-            status: "pending",
-            createdAt: "2024-01-01T00:05:00Z",
-          },
+          SESSION_MESSAGE_1,
+          suspendedAssistantTurn("tu-durable", "RestartDockerService"),
         ],
+        {
+          sessionId: "s1",
+          toolUseId: "tu-durable",
+          toolName: "RestartDockerService",
+          toolInput: {
+            target: "docker/web-01/web-01",
+            risk: "high",
+          },
+          kind: "approval",
+          status: "pending",
+          createdAt: "2024-01-01T00:05:00Z",
+        },
       );
 
       await waitFor(() => {
@@ -872,30 +886,6 @@ describe("SessionView", () => {
           }),
         );
       });
-    });
-
-    it("ignores a pending interrupt belonging to a different session", async () => {
-      setup(
-        [SESSION_MESSAGE_1],
-        [
-          {
-            sessionId: "other-session",
-            toolUseId: "tu-other",
-            toolName: "RestartDockerService",
-            toolInput: { risk: "high" },
-            kind: "approval",
-            status: "pending",
-            createdAt: "2024-01-01T00:05:00Z",
-          },
-        ],
-      );
-
-      await waitFor(() => {
-        expect(
-          screen.getByText("Service is down on web-01"),
-        ).toBeInTheDocument();
-      });
-      expect(screen.queryByTestId("approval-card")).not.toBeInTheDocument();
     });
   });
 

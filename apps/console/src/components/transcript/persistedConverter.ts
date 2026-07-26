@@ -1,41 +1,72 @@
-import type { SessionMessage } from "@nightwarden/shared";
+import type {
+  ApprovalRequest,
+  MessagePart,
+  SessionMessage,
+} from "@nightwarden/shared";
 import type { TranscriptItem } from "./types.js";
 
-type ProviderBlock =
-  | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string }
-  | {
-      type: "tool_use";
-      id: string;
-      name: string;
-      input: Record<string, unknown>;
-    }
-  | { type: "tool_result"; tool_use_id: string; content: unknown };
-
-function isProviderBlockArray(val: unknown): val is ProviderBlock[] {
-  return (
-    Array.isArray(val) &&
-    val.every(
-      (b: unknown) =>
-        b !== null &&
-        typeof b === "object" &&
-        typeof (b as Record<string, unknown>).type === "string",
-    )
-  );
+function clarificationFields(input: Record<string, unknown>): {
+  question?: string;
+  options?: Array<{ label: string; description: string }>;
+  multiSelect?: boolean;
+} {
+  const parsed = input as {
+    question?: string;
+    options?: Array<{ label: string; description: string }>;
+    multiSelect?: boolean;
+  };
+  return {
+    question: parsed.question,
+    options: parsed.options,
+    multiSelect: parsed.multiSelect,
+  };
 }
 
+// Built from the pending row, the DB's own copy of the arguments awaiting a
+// decision. `approval` stays unset: it marks a submitted decision in flight,
+// which disables the buttons, not a decision still owed.
+function pendingCard(pending: ApprovalRequest): TranscriptItem {
+  const input = pending.toolInput;
+  if (pending.kind === "clarification") {
+    return {
+      ...clarificationFields(input),
+      kind: "clarification_card",
+      toolUseId: pending.toolUseId,
+      toolName: pending.toolName,
+      input,
+    };
+  }
+  if (pending.kind === "continue") {
+    return { kind: "continue_card", toolUseId: pending.toolUseId };
+  }
+  const risk = input["risk"];
+  return {
+    kind: "approval_card",
+    toolUseId: pending.toolUseId,
+    toolName: pending.toolName,
+    input,
+    result: null,
+    ...(typeof risk === "string" && { risk }),
+  };
+}
+
+// The suspended tool call is persisted like any other, so `pending` is what turns
+// the one it names into a card that asks for a decision.
 export function convertPersistedMessages(
   messages: SessionMessage[],
+  pending: ApprovalRequest | null = null,
 ): TranscriptItem[] {
-  // Pass 1: collect tool results by tool_use_id so tool cards can show their output.
+  // A row with no parts renders from its flat text rather than blanking the
+  // whole transcript, so one malformed message costs one turn.
+  const partsOf = (msg: SessionMessage): MessagePart[] =>
+    Array.isArray(msg.parts) ? msg.parts : [];
+
+  // Pass 1: results by tool call id, so a call renders with its output.
   const toolResults = new Map<string, unknown>();
   for (const msg of messages) {
-    if (msg.role !== "user" || !isProviderBlockArray(msg.providerContent)) {
-      continue;
-    }
-    for (const block of msg.providerContent) {
-      if (block.type === "tool_result") {
-        toolResults.set(block.tool_use_id, block.content);
+    for (const part of partsOf(msg)) {
+      if (part.type === "tool_result") {
+        toolResults.set(part.toolCallId, part.output);
       }
     }
   }
@@ -52,90 +83,69 @@ export function convertPersistedMessages(
           text: msg.content,
         });
       }
-    } else if (msg.role === "user") {
-      if (isProviderBlockArray(msg.providerContent)) {
-        // Walk blocks in order, surfacing text as user turns; tool_result blocks
-        // are skipped since pass 1 already collected them (a message may contain both).
-        let textIdx = 0;
-        for (const block of msg.providerContent) {
-          if (block.type === "text" && block.text) {
-            items.push({
-              kind: "user_turn",
-              id: `user-${msg.seq}-${textIdx++}`,
-              text: block.text,
-            });
-          }
-        }
-      } else {
-        // No providerContent: flat content string is the human-readable turn.
-        if (msg.content) {
+      continue;
+    }
+
+    // Nothing structured to walk, so the flat text is the whole turn.
+    if (partsOf(msg).length === 0) {
+      if (msg.content) {
+        items.push({
+          kind: msg.role === "user" ? "user_turn" : "agent_text",
+          id: `${msg.role}-${msg.seq}`,
+          text: msg.content,
+        });
+      }
+      continue;
+    }
+
+    let idx = 0;
+    for (const part of partsOf(msg)) {
+      const id = `${msg.role}-${msg.seq}-${idx++}`;
+      if (part.type === "text") {
+        if (!part.text) continue;
+        items.push(
+          msg.role === "user"
+            ? { kind: "user_turn", id, text: part.text }
+            : { kind: "agent_text", id, text: part.text },
+        );
+      } else if (part.type === "reasoning") {
+        if (part.text.trim()) {
           items.push({
-            kind: "user_turn",
-            id: `user-${msg.seq}`,
-            text: msg.content,
+            kind: "thinking",
+            id,
+            text: part.text,
+            streaming: false,
           });
         }
-      }
-    } else if (msg.role === "assistant") {
-      if (isProviderBlockArray(msg.providerContent)) {
-        let textIdx = 0;
-        let thinkingIdx = 0;
-        for (const block of msg.providerContent) {
-          if (block.type === "text" && block.text) {
-            items.push({
-              kind: "agent_text",
-              id: `agent-${msg.seq}-${textIdx++}`,
-              text: block.text,
-            });
-          } else if (block.type === "thinking" && block.thinking.trim()) {
-            items.push({
-              kind: "thinking",
-              id: `thinking-${msg.seq}-${thinkingIdx++}`,
-              text: block.thinking,
-              streaming: false,
-            });
-          } else if (block.type === "tool_use") {
-            if (block.name === "AskUserQuestion") {
-              // Rebuild the clarification card here once answered so it survives a reload; while
-              // pending the live/seeded card already covers it (see SessionView).
-              if (!toolResults.has(block.id)) continue;
-              const input = block.input as {
-                question?: string;
-                options?: Array<{ label: string; description: string }>;
-                multiSelect?: boolean;
-              };
-              items.push({
-                kind: "clarification_card",
-                toolUseId: block.id,
-                toolName: block.name,
-                input: block.input,
-                question: input.question,
-                options: input.options,
-                multiSelect: input.multiSelect,
-                approval: "answered",
-                result: toolResults.get(block.id),
-              });
-              continue;
-            }
-            items.push({
-              kind: "tool_card",
-              toolUseId: block.id,
-              toolName: block.name,
-              input: block.input,
-              result: toolResults.get(block.id) ?? null,
-            });
-          }
+      } else if (part.type === "tool_call") {
+        if (pending?.toolUseId === part.id) {
+          items.push(pendingCard(pending));
+          continue;
         }
-      } else {
-        // Flat content fallback when providerContent is absent.
-        if (msg.content) {
+        if (part.name === "AskUserQuestion") {
+          // Only the answered copy is rebuilt here; an unanswered one that is not
+          // the pending row is an orphan from a run that never resumed.
+          if (!toolResults.has(part.id)) continue;
           items.push({
-            kind: "agent_text",
-            id: `agent-${msg.seq}`,
-            text: msg.content,
+            ...clarificationFields(part.input),
+            kind: "clarification_card",
+            toolUseId: part.id,
+            toolName: part.name,
+            input: part.input,
+            approval: "answered",
+            result: toolResults.get(part.id),
           });
+          continue;
         }
+        items.push({
+          kind: "tool_card",
+          toolUseId: part.id,
+          toolName: part.name,
+          input: part.input,
+          result: toolResults.get(part.id) ?? null,
+        });
       }
+      // tool_result parts render inside their call, collected in pass 1.
     }
   }
 

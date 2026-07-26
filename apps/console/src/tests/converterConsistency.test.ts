@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import type { ConsoleEvent, SessionMessage } from "@nightwarden/shared";
+import type {
+  ConsoleEvent,
+  MessagePart,
+  SessionMessage,
+} from "@nightwarden/shared";
 
 import { applyLiveEvent } from "@/components/transcript/liveConverter";
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
@@ -17,31 +21,26 @@ function comparable(items: TranscriptItem[]): unknown[] {
   });
 }
 
-function assistantMessage(
-  seq: number,
-  providerContent: unknown,
-): SessionMessage {
+function assistantMessage(seq: number, parts: MessagePart[]): SessionMessage {
   return {
-    id: `m${seq}`,
     sessionId: SESSION_ID,
     seq,
     role: "assistant",
     content: "",
-    providerContent,
+    parts,
     createdAt: "2024-01-01T00:00:00Z",
-  } as unknown as SessionMessage;
+  };
 }
 
-function userMessage(seq: number, providerContent: unknown): SessionMessage {
+function userMessage(seq: number, parts: MessagePart[]): SessionMessage {
   return {
-    id: `m${seq}`,
     sessionId: SESSION_ID,
     seq,
     role: "user",
     content: "",
-    providerContent,
+    parts,
     createdAt: "2024-01-01T00:00:01Z",
-  } as unknown as SessionMessage;
+  };
 }
 
 function textDelta(delta: string): ConsoleEvent {
@@ -97,17 +96,17 @@ describe("live vs persisted converter consistency", () => {
     );
     live = applyLiveEvent(
       live,
-      toolCallEnd("tu-1", { status: "down" }),
+      toolCallEnd("tu-1", "status: down"),
       SESSION_ID,
     );
 
     // Persisted path: the same run saved as provider messages
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "Let me check the logs." },
+        { type: "reasoning", text: "Let me check the logs." },
         { type: "text", text: "The service is down." },
         {
-          type: "tool_use",
+          type: "tool_call",
           id: "tu-1",
           name: "check_service_status",
           input: { service: "web" },
@@ -116,8 +115,8 @@ describe("live vs persisted converter consistency", () => {
       userMessage(2, [
         {
           type: "tool_result",
-          tool_use_id: "tu-1",
-          content: { status: "down" },
+          toolCallId: "tu-1",
+          output: "status: down",
         },
       ]),
     ]);
@@ -133,25 +132,25 @@ describe("live vs persisted converter consistency", () => {
       toolCallStart("tu-1", "check_service_status", {}),
       SESSION_ID,
     );
-    live = applyLiveEvent(live, toolCallEnd("tu-1", { ok: true }), SESSION_ID);
+    live = applyLiveEvent(live, toolCallEnd("tu-1", "ok"), SESSION_ID);
     live = applyLiveEvent(live, thinkingDelta("Second burst"), SESSION_ID);
     live = applyLiveEvent(live, textDelta("Done."), SESSION_ID);
 
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "First burst" },
+        { type: "reasoning", text: "First burst" },
         {
-          type: "tool_use",
+          type: "tool_call",
           id: "tu-1",
           name: "check_service_status",
           input: {},
         },
       ]),
       userMessage(2, [
-        { type: "tool_result", tool_use_id: "tu-1", content: { ok: true } },
+        { type: "tool_result", toolCallId: "tu-1", output: "ok" },
       ]),
       assistantMessage(3, [
-        { type: "thinking", thinking: "Second burst" },
+        { type: "reasoning", text: "Second burst" },
         { type: "text", text: "Done." },
       ]),
     ]);
@@ -171,7 +170,7 @@ describe("live vs persisted converter consistency", () => {
     const persisted = convertPersistedMessages([
       assistantMessage(1, [
         {
-          type: "tool_use",
+          type: "tool_call",
           id: "tu-2",
           name: "RestartDockerService",
           input: { service: "db" },

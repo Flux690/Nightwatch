@@ -1,11 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   RunMode,
   SessionListRow,
   SessionMessage,
+  SessionTranscript,
   ConsoleEvent,
-  ConsoleHumanInputRequired,
   ApprovalRequest,
 } from "@nightwarden/shared";
 
@@ -38,38 +43,20 @@ interface PendingInterrupt {
   kind: "approval" | "clarification" | "continue";
 }
 
-function pendingApprovalToEnvelope(
-  p: ApprovalRequest,
-): ConsoleHumanInputRequired {
-  const isClarification = p.kind === "clarification";
-  const isContinue = p.kind === "continue";
-  const clarInput = isClarification
-    ? (p.toolInput as {
-        question: string;
-        options: Array<{ label: string; description: string }>;
-        multiSelect?: boolean;
-      })
-    : null;
-  return {
-    messageId: `pending-${p.toolUseId}`,
-    type: "HUMAN_INPUT_REQUIRED",
-    payload: {
-      sessionId: p.sessionId,
-      toolUseId: p.toolUseId,
-      toolName: p.toolName,
-      input: p.toolInput,
-      kind: isClarification
-        ? "clarification"
-        : isContinue
-          ? "continue"
-          : "approval",
-      ...(clarInput !== null && {
-        question: clarInput.question,
-        options: clarInput.options,
-        multiSelect: clarInput.multiSelect,
-      }),
-    },
-  };
+// A live row lands in the same cache entry the transcript fetch fills, so it has to
+// preserve the pending half rather than replace the object with a bare array.
+function appendPersistedMessage(
+  queryClient: QueryClient,
+  sessionId: string,
+  message: SessionMessage,
+): void {
+  queryClient.setQueryData<SessionTranscript>(
+    ["session", sessionId],
+    (prev) => ({
+      messages: [...(prev?.messages ?? []), message],
+      pending: prev?.pending ?? null,
+    }),
+  );
 }
 
 function pendingInterruptFromItems(
@@ -126,6 +113,7 @@ function ScrollToEndChatInput(
 
 function TranscriptColumn({
   persistedMessages,
+  persistedPending,
   liveItems,
   pendingEcho,
   lastEchoText,
@@ -134,6 +122,7 @@ function TranscriptColumn({
   onAnswer,
 }: {
   persistedMessages: SessionMessage[];
+  persistedPending: ApprovalRequest | null;
   liveItems: TranscriptItem[];
   pendingEcho: string | null;
   lastEchoText: string | null;
@@ -142,7 +131,7 @@ function TranscriptColumn({
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
   const persistedItems = useMemo(() => {
-    const items = convertPersistedMessages(persistedMessages);
+    const items = convertPersistedMessages(persistedMessages, persistedPending);
     if (lastEchoText === null) return items;
     // The persisted copy of a just-echoed bubble mounts without the fade so
     // the echo-to-persisted swap has no visible frame.
@@ -151,7 +140,7 @@ function TranscriptColumn({
         ? { ...item, instant: true }
         : item,
     );
-  }, [persistedMessages, lastEchoText]);
+  }, [persistedMessages, persistedPending, lastEchoText]);
 
   // The fetch can return the persisted user turn before any event is heard
   // for a newly-created session; if the last user turn already carries the
@@ -168,8 +157,8 @@ function TranscriptColumn({
       ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
       : null;
 
-  // A live card whose tool_use has since been persisted (e.g. an answered
-  // question after the resumed run flushes) would render twice - drop it.
+  // The persisted transcript is authoritative: it arrives with its pending row
+  // already joined, so a live card for the same tool_use is the same card twice.
   const persistedKeys = new Set(persistedItems.map(itemKey));
   const allItems = [
     ...persistedItems,
@@ -276,37 +265,14 @@ export function SessionView({
     setActiveSessionId(curr);
   }, [sessionIdFromRoute]);
 
-  const { data: messages = [] } = useQuery<SessionMessage[]>({
+  const { data: transcript } = useQuery<SessionTranscript>({
     queryKey: ["session", activeSessionId],
     queryFn: () =>
-      apiFetch<SessionMessage[]>(`/api/sessions/${activeSessionId}`),
+      apiFetch<SessionTranscript>(`/api/sessions/${activeSessionId}`),
     enabled: !!activeSessionId,
   });
-
-  const { data: pendingHumanInput = [] } = useQuery<ApprovalRequest[]>({
-    queryKey: ["sessions-pending-human-input"],
-    queryFn: () =>
-      apiFetch<ApprovalRequest[]>("/api/sessions/pending-human-input"),
-  });
-  const pendingForSession = pendingHumanInput.find(
-    (p) => p.sessionId === activeSessionId,
-  );
-
-  useEffect(() => {
-    if (!activeSessionId || !pendingForSession) return;
-    const env = pendingApprovalToEnvelope(pendingForSession);
-    setLiveItems((prev) => {
-      const alreadySeeded = prev.some(
-        (item) =>
-          (item.kind === "approval_card" ||
-            item.kind === "clarification_card" ||
-            item.kind === "continue_card") &&
-          item.toolUseId === pendingForSession.toolUseId,
-      );
-      if (alreadySeeded) return prev;
-      return applyLiveEvent(prev, env, activeSessionId);
-    });
-  }, [activeSessionId, pendingForSession]);
+  const messages = transcript?.messages ?? [];
+  const pendingForSession = transcript?.pending ?? null;
 
   const handleSessionCreated = useCallback(
     (newId: string, firstMessage: string, mode: RunMode) => {
@@ -330,6 +296,7 @@ export function SessionView({
           target: null,
           status: investigate ? "investigating" : null,
           rootCauseLine: null,
+          awaitingHumanInput: false,
         },
         ...prev,
       ]);
@@ -377,10 +344,7 @@ export function SessionView({
         if (message.role === "assistant" || message.role === "error") {
           setLiveItems([]);
         }
-        queryClient.setQueryData<SessionMessage[]>(
-          ["session", sid],
-          (prev = []) => [...prev, message],
-        );
+        appendPersistedMessage(queryClient, sid, message);
         return;
       }
 
@@ -415,10 +379,7 @@ export function SessionView({
         setLiveItems([]);
         // The failure is a persisted transcript row: append it like a MESSAGE so
         // it renders in the conversation and survives reloads.
-        queryClient.setQueryData<SessionMessage[]>(
-          ["session", sid],
-          (prev = []) => [...prev, message],
-        );
+        appendPersistedMessage(queryClient, sid, message);
         return;
       }
 
@@ -579,6 +540,7 @@ export function SessionView({
           <MessageScrollerViewport>
             <TranscriptColumn
               persistedMessages={messages}
+              persistedPending={pendingForSession}
               liveItems={liveItems}
               pendingEcho={pendingEcho}
               lastEchoText={lastEchoRef.current}

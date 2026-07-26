@@ -84,13 +84,16 @@ repo.yarnpkg.com',
 
   -- A session's transcript and any pending approval ARE part of the session, so
   -- they cascade-delete with it (foreign_keys is enabled below).
+  -- canonical holds { parts, native }: our own portable form of the turn plus the
+  -- vendor's verbatim message, so a same-dialect resume replays byte-exact and a
+  -- switched provider still reads the conversation.
   CREATE TABLE IF NOT EXISTS session_messages (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id       TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
     seq              INTEGER NOT NULL,
     role             TEXT NOT NULL,
     content          TEXT NOT NULL,
-    provider_content TEXT,
+    canonical        TEXT,
     created_at       TEXT NOT NULL,
     UNIQUE(session_id, seq)
   );

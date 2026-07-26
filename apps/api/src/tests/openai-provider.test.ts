@@ -189,9 +189,13 @@ describe("OpenAIProvider", () => {
   });
 
   describe("seed", () => {
-    it("reconstructs a well-formed message from role/content when providerContent is null", async () => {
+    it("reconstructs a well-formed message from parts when no native is stored", async () => {
       provider.seed([
-        { role: "user", content: "CPU spike detected.", providerContent: null },
+        {
+          role: "user",
+          content: "CPU spike detected.",
+          parts: [{ type: "text", text: "CPU spike detected." }],
+        },
       ]);
       mockFinalChatCompletion.mockResolvedValueOnce({
         choices: [

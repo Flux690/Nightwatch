@@ -179,18 +179,15 @@ describe("report storage and enrichment", () => {
         sessionId,
         seq: 0,
         role: "assistant",
-        content: "[tool_use: QueryMetricsRange]",
-        providerContent: {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: "tu-1",
-              name: "QueryMetricsRange",
-              input: { query: "container_memory_rss" },
-            },
-          ],
-        },
+        content: "[tool: QueryMetricsRange]",
+        parts: [
+          {
+            type: "tool_call",
+            id: "tu-1",
+            name: "QueryMetricsRange",
+            input: { query: "container_memory_rss" },
+          },
+        ],
         createdAt: now,
       },
       {
@@ -198,34 +195,28 @@ describe("report storage and enrichment", () => {
         seq: 1,
         role: "user",
         content: "results",
-        providerContent: {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "tu-1",
-              content: `${metrics}\n\n[evidence: e1]`,
-            },
-          ],
-        },
+        parts: [
+          {
+            type: "tool_result",
+            toolCallId: "tu-1",
+            output: `${metrics}\n\n[evidence: e1]`,
+          },
+        ],
         createdAt: now,
       },
       {
         sessionId,
         seq: 2,
         role: "assistant",
-        content: "[tool_use: GetRecentChanges]",
-        providerContent: {
-          role: "assistant",
-          content: [
-            {
-              type: "tool_use",
-              id: "tu-2",
-              name: "GetRecentChanges",
-              input: {},
-            },
-          ],
-        },
+        content: "[tool: GetRecentChanges]",
+        parts: [
+          {
+            type: "tool_call",
+            id: "tu-2",
+            name: "GetRecentChanges",
+            input: {},
+          },
+        ],
         createdAt: now,
       },
       {
@@ -233,16 +224,13 @@ describe("report storage and enrichment", () => {
         seq: 3,
         role: "user",
         content: "results",
-        providerContent: {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "tu-2",
-              content: `${changes}\n\n[evidence: e2]`,
-            },
-          ],
-        },
+        parts: [
+          {
+            type: "tool_result",
+            toolCallId: "tu-2",
+            output: `${changes}\n\n[evidence: e2]`,
+          },
+        ],
         createdAt: now,
       },
     ]);

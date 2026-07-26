@@ -1,22 +1,18 @@
 import { describe, it, expect } from "vitest";
-import type { SessionMessage } from "@nightwarden/shared";
+import type { MessagePart, SessionMessage } from "@nightwarden/shared";
 
 import { convertPersistedMessages } from "@/components/transcript/persistedConverter";
 import type { ThinkingItem } from "@/components/transcript/types";
 
-function assistantMessage(
-  seq: number,
-  providerContent: unknown,
-): SessionMessage {
+function assistantMessage(seq: number, parts: MessagePart[]): SessionMessage {
   return {
-    id: `m${seq}`,
     sessionId: "s1",
     seq,
     role: "assistant",
     content: "",
-    providerContent,
+    parts,
     createdAt: new Date().toISOString(),
-  } as unknown as SessionMessage;
+  };
 }
 
 describe("convertPersistedMessages — error rows", () => {
@@ -26,6 +22,7 @@ describe("convertPersistedMessages — error rows", () => {
       seq: 0,
       role: "user",
       content: "hello",
+      parts: [{ type: "text", text: "hello" }],
       createdAt: new Date().toISOString(),
     };
     const errorRow: SessionMessage = {
@@ -33,6 +30,7 @@ describe("convertPersistedMessages — error rows", () => {
       seq: 1,
       role: "error",
       content: "The provider rejected the API key.",
+      parts: [],
       createdAt: new Date().toISOString(),
     };
 
@@ -50,7 +48,7 @@ describe("convertPersistedMessages — thinking", () => {
   it("extracts a thinking block as a non-streaming item", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "Checking the logs first" },
+        { type: "reasoning", text: "Checking the logs first" },
         { type: "text", text: "Looks fine." },
       ]),
     ]);
@@ -66,16 +64,16 @@ describe("convertPersistedMessages — thinking", () => {
   it("preserves occurrence order across multiple thinking bursts and tool calls", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "First, check the container" },
+        { type: "reasoning", text: "First, check the container" },
         {
-          type: "tool_use",
+          type: "tool_call",
           id: "tu-1",
           name: "check_service_status",
           input: {},
         },
       ]),
       assistantMessage(2, [
-        { type: "thinking", thinking: "Now decide on a fix" },
+        { type: "reasoning", text: "Now decide on a fix" },
         { type: "text", text: "Restarting should fix it." },
       ]),
     ]);
@@ -101,7 +99,7 @@ describe("convertPersistedMessages — thinking", () => {
   it("drops a whitespace-only thinking block so no bare item renders", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "\n  \t" },
+        { type: "reasoning", text: "\n  \t" },
         { type: "text", text: "Done." },
       ]),
     ]);
@@ -114,8 +112,8 @@ describe("convertPersistedMessages — thinking", () => {
   it("assigns each thinking block a stable, unique id", () => {
     const items = convertPersistedMessages([
       assistantMessage(1, [
-        { type: "thinking", thinking: "burst one" },
-        { type: "thinking", thinking: "burst two" },
+        { type: "reasoning", text: "burst one" },
+        { type: "reasoning", text: "burst two" },
       ]),
     ]);
 

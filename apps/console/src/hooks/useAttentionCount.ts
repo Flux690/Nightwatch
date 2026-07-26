@@ -1,35 +1,21 @@
-import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ApprovalRequest, ConsoleEvent } from "@nightwarden/shared";
+import { useQuery } from "@tanstack/react-query";
+import type { SessionListRow } from "@nightwarden/shared";
 import { apiFetch } from "@/api/client";
-import { useConsoleEvents } from "./ConsoleEventsProvider.js";
 
-export function useAttentionCount(): number {
-  const queryClient = useQueryClient();
-
-  const { data: pending = [] } = useQuery<ApprovalRequest[]>({
-    queryKey: ["sessions-pending-human-input"],
-    queryFn: () =>
-      apiFetch<ApprovalRequest[]>("/api/sessions/pending-human-input"),
+// Derived from the session list, never fetched separately: a parallel query can
+// outlive the sessions it counts, and one list means one place to invalidate.
+export function useAttentionCount(): {
+  count: number;
+  firstSessionId: string | null;
+} {
+  const { data: sessions = [] } = useQuery<SessionListRow[]>({
+    queryKey: ["sessions"],
+    queryFn: () => apiFetch<SessionListRow[]>("/api/sessions"),
   });
 
-  const handleEnvelope = useCallback(
-    (envelope: ConsoleEvent) => {
-      // The pending list is the source of truth: refetch on an interrupt event rather than
-      // keeping a parallel delta, which double-counts once the query independently refetches.
-      if (
-        envelope.type === "HUMAN_INPUT_REQUIRED" ||
-        envelope.type === "HUMAN_INPUT_RESOLVED"
-      ) {
-        void queryClient.invalidateQueries({
-          queryKey: ["sessions-pending-human-input"],
-        });
-      }
-    },
-    [queryClient],
-  );
-
-  useConsoleEvents(handleEnvelope);
-
-  return pending.length;
+  const awaiting = sessions.filter((s) => s.awaitingHumanInput);
+  return {
+    count: awaiting.length,
+    firstSessionId: awaiting[0]?.sessionId ?? null,
+  };
 }

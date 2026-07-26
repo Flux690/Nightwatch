@@ -106,6 +106,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
             seq: 0,
             role: "error",
             content: text,
+            parts: [],
             createdAt: new Date().toISOString(),
           };
         }

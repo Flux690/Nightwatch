@@ -1,4 +1,6 @@
 import type {
+  MessagePart,
+  NativeEnvelope,
   NormalizedAlert,
   Report,
   SessionMessage,
@@ -42,14 +44,40 @@ export function updateSessionTitle(sessionId: string, title: string): void {
     .run(title, sessionId);
 }
 
+function serializeCanonical(m: SessionMessage): string | null {
+  if (m.parts.length === 0 && m.native === undefined) return null;
+  return JSON.stringify({ parts: m.parts, native: m.native });
+}
+
+// Untrusted on read despite being our own INSERT: a partial write or a schema change
+// should surface as an empty turn, never crash the transcript or a resume.
+function parseCanonical(raw: string | null): {
+  parts: MessagePart[];
+  native?: NativeEnvelope;
+} {
+  if (raw === null) return { parts: [] };
+  try {
+    const parsed = JSON.parse(raw) as {
+      parts?: MessagePart[];
+      native?: NativeEnvelope;
+    };
+    return {
+      parts: Array.isArray(parsed.parts) ? parsed.parts : [],
+      ...(parsed.native && { native: parsed.native }),
+    };
+  } catch {
+    return { parts: [] };
+  }
+}
+
 // Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
 // the transaction makes the turn all-or-nothing so the transcript checkpoint never holds a hole.
 export function appendSessionMessages(messages: SessionMessage[]): void {
   if (messages.length === 0) return;
   const insert = getDb().prepare(
     `INSERT INTO session_messages
-       (session_id, seq, role, content, provider_content, created_at)
-     VALUES (@sessionId, @seq, @role, @content, @providerContent, @createdAt)`,
+       (session_id, seq, role, content, canonical, created_at)
+     VALUES (@sessionId, @seq, @role, @content, @canonical, @createdAt)`,
   );
   const insertAll = getDb().transaction((rows: SessionMessage[]) => {
     for (const m of rows) {
@@ -58,8 +86,7 @@ export function appendSessionMessages(messages: SessionMessage[]): void {
         seq: m.seq,
         role: m.role,
         content: m.content,
-        providerContent:
-          m.providerContent != null ? JSON.stringify(m.providerContent) : null,
+        canonical: serializeCanonical(m),
         createdAt: m.createdAt,
       });
     }
@@ -86,7 +113,7 @@ export function appendErrorMessage(
   const db = getDb();
   const insert = db.prepare(
     `INSERT INTO session_messages
-       (session_id, seq, role, content, provider_content, created_at)
+       (session_id, seq, role, content, canonical, created_at)
      VALUES (@sessionId, @seq, 'error', @content, NULL, @createdAt)`,
   );
   const message: SessionMessage = {
@@ -94,6 +121,7 @@ export function appendErrorMessage(
     seq: 0,
     role: "error",
     content: text,
+    parts: [],
     createdAt: new Date().toISOString(),
   };
   db.transaction(() => {
@@ -116,8 +144,8 @@ export function appendMessagesAndInterrupt(
 ): void {
   const insertMsg = getDb().prepare(
     `INSERT INTO session_messages
-       (session_id, seq, role, content, provider_content, created_at)
-     VALUES (@sessionId, @seq, @role, @content, @providerContent, @createdAt)`,
+       (session_id, seq, role, content, canonical, created_at)
+     VALUES (@sessionId, @seq, @role, @content, @canonical, @createdAt)`,
   );
   const insertHumanInput = getDb().prepare(
     `INSERT INTO pending_human_input
@@ -131,8 +159,7 @@ export function appendMessagesAndInterrupt(
         seq: m.seq,
         role: m.role,
         content: m.content,
-        providerContent:
-          m.providerContent != null ? JSON.stringify(m.providerContent) : null,
+        canonical: serializeCanonical(m),
         createdAt: m.createdAt,
       });
     }
@@ -232,7 +259,7 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
   const rows = getDb()
     .prepare(
       `SELECT session_id AS sessionId, seq, role, content,
-              provider_content AS providerContent, created_at AS createdAt
+              canonical, created_at AS createdAt
        FROM session_messages WHERE session_id = ? ORDER BY seq ASC`,
     )
     .all(sessionId) as Array<{
@@ -240,7 +267,7 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
     seq: number;
     role: string;
     content: string;
-    providerContent: string | null;
+    canonical: string | null;
     createdAt: string;
   }>;
   return rows.map((r) => ({
@@ -249,8 +276,7 @@ export function getSessionMessages(sessionId: string): SessionMessage[] {
     role: r.role as SessionMessage["role"],
     seq: r.seq,
     content: r.content,
-    providerContent:
-      r.providerContent != null ? JSON.parse(r.providerContent) : undefined,
+    ...parseCanonical(r.canonical),
     createdAt: r.createdAt,
   }));
 }

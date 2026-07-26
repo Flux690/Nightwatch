@@ -170,7 +170,8 @@ function ShellContent({
   const { id: routeSessionId } = useParams({ strict: false }) as {
     id?: string;
   };
-  const attentionCount = useAttentionCount();
+  const { count: attentionCount, firstSessionId: attentionSessionId } =
+    useAttentionCount();
   const { logout } = useAuth();
   const { preference, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -243,17 +244,20 @@ function ShellContent({
       </SidebarHeader>
       <SidebarContent>
         {extraTop}
-        {isSessionArea && attentionCount > 0 && (
+        {isSessionArea && attentionCount > 0 && attentionSessionId !== null && (
           <div className="px-2 pt-1">
-            <div
-              className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning"
-              aria-hidden="true"
+            {/* A link, not a notice: knowing something waits is useless without a way to reach it. */}
+            <Link
+              to="/sessions/$id"
+              params={{ id: attentionSessionId }}
+              aria-label={`${attentionCount} awaiting approval - open the first`}
+              className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
             >
               <span className="flex h-full w-10 shrink-0 items-center justify-center">
                 {attentionCount > 99 ? "99+" : attentionCount}
               </span>
               <span className="min-w-0 truncate">awaiting approval</span>
-            </div>
+            </Link>
           </div>
         )}
         <SidebarGroup className="min-h-0 flex-1">

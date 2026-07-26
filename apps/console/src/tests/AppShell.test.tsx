@@ -46,17 +46,20 @@ function setup(pendingCount = 0) {
 
   vi.stubGlobal("EventSource", MockEventSource);
 
+  // Waiting sessions are ordinary session rows carrying the flag - the badge counts
+  // the list, so there is no second endpoint that can disagree with it.
   const makePending = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
-      id: `appr-${i}`,
-      incidentId: `inc-${i}`,
       sessionId: `s-${i}`,
-      token: "tok-1",
-      toolName: "RestartDockerService",
-      toolInput: {},
-      toolUseId: `tool-${i}`,
-      status: "pending",
+      title: `Waiting session ${i}`,
       createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      investigation: true,
+      severity: null,
+      target: null,
+      status: "action_required",
+      rootCauseLine: null,
+      awaitingHumanInput: true,
     }));
 
   // Mutable so a test can change the server-side count before broadcasting a WS
@@ -83,12 +86,6 @@ function setup(pendingCount = 0) {
             authenticated: true,
             email: OWNER_EMAIL,
           }),
-      });
-    }
-    if (url.includes("/sessions/pending-human-input")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve(pendingApprovals),
       });
     }
     if (url.includes("/chat")) {
@@ -122,13 +119,13 @@ function setup(pendingCount = 0) {
     if (/\/sessions\/[^?]+/.test(url)) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve([]),
+        json: () => Promise.resolve({ messages: [], pending: null }),
       });
     }
     if (url.includes("/sessions")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve([SESSION_1]),
+        json: () => Promise.resolve([SESSION_1, ...pendingApprovals]),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -498,9 +495,7 @@ describe("Shell", () => {
       // An unrelated refetch must not re-apply the event on top of the already
       // up to date list; the count stays 2, not 3.
       await act(async () => {
-        await qc.invalidateQueries({
-          queryKey: ["sessions-pending-human-input"],
-        });
+        await qc.invalidateQueries({ queryKey: ["sessions"] });
       });
       await waitFor(() => {
         expect(
