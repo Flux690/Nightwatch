@@ -66,6 +66,7 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 - **It cannot finish without concluding.** An investigation is not allowed to end with hypotheses left open: the loop pushes the agent back until the report resolves, and if the evidence genuinely does not support a conclusion it must record an honest "inconclusive" with what it checked. No quietly abandoned investigations, and no invented root causes.
 - **Ask or Investigate.** Ask is a normal chat with your fleet - it can look things up and even act with approval, but writes no report. Investigate runs the full gated investigation. Alerts always investigate, and you can escalate a conversation into one at any time.
 - **Docker and Kubernetes.** A runner detects and advertises the substrates it runs on connect. The agent is offered a dedicated toolset per substrate - Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a Docker host, Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster - so it only ever sees the tools its fleet can actually run.
+- **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - NightWarden never merges.
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits.
@@ -107,11 +108,11 @@ In the console go to **Integrations**. Four plugs matter here: the **Runner** (a
 
 **Add a runner.** From the Runner card, choose **Add a server**. The wizard is three steps and needs no manual config editing:
 
-1. **Server details** - pick the substrate (Docker or Kubernetes) and name the server.
+1. **Server details** - pick the substrate (Docker or Kubernetes). A server name is optional: name one only when the same service runs on more than one server, since a name is what your alerts then have to carry to match.
 2. **Install the runner** - NightWarden mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target server or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
-3. **Verify the pipeline** - send a synthetic alert through the full path and confirm it reaches the runner.
+3. **Confirm what it sees** - the runner's advertised services, with the full identity key each one resolves under. Read straight from the manifest it already sent, so checking the wiring costs nothing and starts nothing.
 
-**Wire your alerts.** NightWarden does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card hands you one ready-made receiver snippet (URL and bearer credential baked in) to paste into your `alertmanager.yml`, plus a **Test webhook** button; its status reflects delivery, not configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". The credential belongs to this alert source - one for the whole fleet (never per server), and rotating it affects Alertmanager deliveries only. When you run more than one Docker server, the same page dispenses per-scrape-target `nw_server` labels for your Prometheus (with a `global.external_labels` shortcut when a Prometheus monitors only one server), so every alert says which server it is about. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+**Wire your alerts.** NightWarden does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card hands you one ready-made receiver snippet (URL and bearer credential baked in) to paste into your `alertmanager.yml`, plus a **Test webhook** button; its status reflects delivery, not configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". The credential belongs to this alert source - one for the whole fleet (never per server), and rotating it affects Alertmanager deliveries only. Naming a server scopes every service it advertises, so the same page dispenses the per-scrape-target `nw_server` label for your Prometheus (with a `global.external_labels` shortcut when a Prometheus monitors only one server) that makes an alert say which server it is about. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
 
 **Connect Prometheus.** The **Prometheus** card takes the base URL of the Prometheus you already run (and, only if yours sits behind auth, a verbatim `Authorization` header value, stored encrypted). NightWarden only ever reads: the agent gains two query tools - an instant lookup and a range query windowed around the alert - so it can tell whether a metric climbed for hours or spiked at deploy time, with zero runners installed. The connection is probed with a real query before it saves, a **Test query** button re-proves it any time, and once runners exist a **Check labels** button compares the `nw_server` values observed in your metrics against your runner names to catch typos. Keep Prometheus off the public internet; NightWarden needs to reach it over your private network.
 
@@ -305,6 +306,7 @@ apps/
       runners/          runner registry, connect.sh handler
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
       session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
+                        transcript.ts projects stored messages into the render-ready items the console draws,
                         list.ts derives the sessions queue (status, headline, severity)
       ws/               runner registry/routing, command transport
       dispatcher.ts     single entry point for every investigation
@@ -340,6 +342,8 @@ packages/
       tools/            tool input/output payload types, by substrate: service.ts, host.ts, k8s.ts
                         (the LLM schemas themselves live in apps/api/src/agent/tools/)
       sessions.ts       session, message, run-mode and queue-row shapes
+      messages.ts       canonical message parts and the native envelope a provider replays verbatim
+      transcript.ts     the render-ready transcript items and their explicit tool-call states
       reports.ts        investigation report shape (hypotheses, evidence, snapshots)
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
