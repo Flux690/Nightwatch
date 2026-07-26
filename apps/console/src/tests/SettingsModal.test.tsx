@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -109,7 +109,7 @@ function renderModal(fetchMock: ReturnType<typeof vi.fn>) {
     </TestProviders>,
   );
 
-  return { fetchMock, onClose };
+  return { fetchMock, onClose, qc };
 }
 
 function setup(configOverride?: Partial<typeof CONFIG>) {
@@ -133,6 +133,27 @@ afterEach(() => {
 
 describe("SettingsModal", () => {
   describe("form state", () => {
+    it("keeps unsaved edits when the config refetches underneath", async () => {
+      const user = userEvent.setup();
+      const { qc } = setup();
+
+      const modelInput = await screen.findByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      await user.clear(modelInput);
+      await user.type(modelInput, "claude-opus-4-8");
+
+      // Window focus is enough to trigger this in a real browser, and it used to
+      // replace the whole form with the saved values mid-edit.
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ["config"] });
+      });
+
+      expect(
+        await screen.findByLabelText(/^model$/i, { selector: "input" }),
+      ).toHaveValue("claude-opus-4-8");
+    });
+
     it("PATCHes /config with only the changed field when Save is clicked", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
@@ -321,26 +342,42 @@ describe("SettingsModal", () => {
       ).toBe(false);
     });
 
-    it("disables Save for an untested key, and enables it once Test Connection succeeds", async () => {
+    it("enables Save as soon as anything is edited, tested or not", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+
+      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
+      await user.type(keyInput, "sk-ant-newkey");
+
+      // Testing the key is a convenience; the server is what accepts or rejects
+      // it, so an untested one never blocks saving.
+      expect(
+        screen.getByRole("button", { name: /^save$/i }),
+      ).not.toBeDisabled();
+    });
+
+    it("keeps a passing test result when the model changes", async () => {
       const user = userEvent.setup();
       setup();
       await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
-
-      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
-
       await user.click(
         screen.getByRole("button", { name: /test connection/i }),
       );
-
       await waitFor(() => {
         expect(screen.getByText(/connected/i)).toBeInTheDocument();
       });
-      expect(
-        screen.getByRole("button", { name: /^save$/i }),
-      ).not.toBeDisabled();
+
+      // Picking a model is the natural next step; it must not discard the verdict
+      // about the endpoint that was just reached.
+      await user.type(screen.getByLabelText(/^model$/i), "-extra");
+
+      expect(screen.getByText(/connected/i)).toBeInTheDocument();
     });
 
     it("PATCHes /config/key on Save after a successful test", async () => {

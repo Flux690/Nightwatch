@@ -141,9 +141,16 @@ export function SettingsModal({
   const [newApiKey, setNewApiKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
+  // Seeded once per opening, never re-seeded while open: a background refetch
+  // (window focus is enough) would otherwise replace whatever is being typed with
+  // the saved values, silently reverting the provider and inerting its fields.
   useEffect(() => {
-    if (config) setForm(config);
-  }, [config]);
+    if (!opened) {
+      setForm(null);
+      return;
+    }
+    setForm((prev) => prev ?? config ?? null);
+  }, [opened, config]);
 
   const saveConfig = useMutation({
     mutationFn: (delta: ConfigDelta) =>
@@ -174,8 +181,6 @@ export function SettingsModal({
         .filter((h) => h.length > 0);
     }
     const keyToSave = newApiKey.trim();
-    // A changed key must pass Test connection before it can be saved.
-    if (keyToSave && !testResult?.ok) return;
     if (Object.keys(delta).length === 0 && !keyToSave) return;
     // A key belongs to the provider whose block is on screen, not to whichever
     // one happens to be active, so an unsaved provider switch files it correctly.
@@ -258,9 +263,9 @@ export function SettingsModal({
           }
         : prev,
     );
-    // Any change to a provider's connection invalidates a prior test result - it
-    // was only ever a verdict on the combination tested at the time.
-    setTestResult(null);
+    // Only the endpoint invalidates a verdict about reaching it; the model is
+    // checked by the request itself, so picking one keeps a passing test.
+    if ("baseUrl" in patch || "apiKey" in patch) setTestResult(null);
   }
 
   // Fields every provider has, applied to whichever is selected, so switching
@@ -298,7 +303,6 @@ export function SettingsModal({
   // meaning once one is chosen.
   const block = form?.provider ? form.providers[form.provider] : null;
   const keyDirty = newApiKey.trim() !== "";
-  const keyUntested = keyDirty && !testResult?.ok;
   const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
   const dirty = configDirty || keyDirty;
@@ -432,6 +436,7 @@ export function SettingsModal({
                           </FieldLabel>
                           <Input
                             id="settings-base-url"
+                            disabled={block === null}
                             placeholder={
                               form.provider === "anthropic"
                                 ? "https://api.anthropic.com"
@@ -464,6 +469,7 @@ export function SettingsModal({
                           <Input
                             id="settings-api-key"
                             type="password"
+                            disabled={block === null}
                             placeholder="Paste API key"
                             value={newApiKey}
                             onChange={(e) => {
@@ -495,11 +501,6 @@ export function SettingsModal({
                             </Badge>
                           )}
                         </div>
-                        {keyUntested && (
-                          <p className="text-sm text-muted-foreground">
-                            Test connection before you can save this key.
-                          </p>
-                        )}
 
                         <Field className="max-w-80">
                           <FieldLabel htmlFor="settings-model">
@@ -508,8 +509,13 @@ export function SettingsModal({
                           <Input
                             id="settings-model"
                             list="settings-model-options"
+                            disabled={block === null}
                             value={block?.model ?? ""}
-                            placeholder="Pick a model"
+                            placeholder={
+                              block === null
+                                ? "Choose a protocol first"
+                                : "Pick a model"
+                            }
                             onChange={(e) =>
                               setProviderField("model", e.currentTarget.value)
                             }
@@ -848,10 +854,7 @@ export function SettingsModal({
                 <Button
                   type="submit"
                   disabled={
-                    !dirty ||
-                    keyUntested ||
-                    saveConfig.isPending ||
-                    saveApiKey.isPending
+                    !dirty || saveConfig.isPending || saveApiKey.isPending
                   }
                 >
                   {(saveConfig.isPending || saveApiKey.isPending) && (
