@@ -62,9 +62,8 @@ const REPORT: Report = {
       },
     },
   ],
-  proposedFix: {
+  recommendedFix: {
     summary: "Revert PR #482",
-    steps: ["revert the merge", "redeploy payments-worker"],
     evidenceIds: ["ev-changes"],
   },
   updatedAt: "2026-07-21T12:30:00.000Z",
@@ -77,7 +76,7 @@ afterEach(() => {
 
 describe("ReportPanel", () => {
   it("renders the artifact: headline, verdict, evidence chart and changes", () => {
-    render(<ReportPanel report={REPORT} />);
+    render(<ReportPanel report={REPORT} actions={[]} />);
 
     expect(
       screen.getByText("payments-worker OOM after PR #482"),
@@ -106,7 +105,7 @@ describe("ReportPanel", () => {
       window.HTMLElement.prototype,
       "scrollIntoView",
     );
-    render(<ReportPanel report={REPORT} />);
+    render(<ReportPanel report={REPORT} actions={[]} />);
 
     // The chip's target is the evidence card anchor.
     expect(document.getElementById("evidence-ev-metrics")).not.toBeNull();
@@ -122,6 +121,7 @@ describe("ReportPanel", () => {
   it("states an honest empty inconclusive outcome", () => {
     render(
       <ReportPanel
+        actions={[]}
         report={{
           ...REPORT,
           status: "inconclusive",
@@ -129,7 +129,7 @@ describe("ReportPanel", () => {
           rootCause: { summary: "", detail: "" },
           hypotheses: [],
           evidence: [],
-          proposedFix: { summary: "", steps: [], evidenceIds: [] },
+          recommendedFix: { summary: "", evidenceIds: [] },
         }}
       />,
     );

@@ -128,6 +128,7 @@ export type {
   EvidenceItem,
   Report,
   ReportSummary,
+  SessionReportResponse,
 } from "./reports.js";
 export type {
   RemediationStatus,

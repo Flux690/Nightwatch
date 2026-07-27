@@ -11,7 +11,7 @@ export function seedCompleteReport(sessionId: string): void {
     rootCause: { summary: "", detail: "" },
     hypotheses: [],
     evidence: [],
-    proposedFix: { summary: "", steps: [], evidenceIds: [] },
+    recommendedFix: { summary: "", evidenceIds: [] },
     updatedAt: new Date().toISOString(),
     model: "test",
   };

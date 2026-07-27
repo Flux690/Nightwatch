@@ -15,7 +15,7 @@ export const REPORT_TOOL_SCHEMA: ToolSchema = {
       "rootCause",
       "hypotheses",
       "evidence",
-      "proposedFix",
+      "recommendedFix",
     ],
     properties: {
       status: {
@@ -88,13 +88,14 @@ export const REPORT_TOOL_SCHEMA: ToolSchema = {
           },
         },
       },
-      proposedFix: {
+      recommendedFix: {
         type: "object",
         additionalProperties: false,
-        required: ["summary", "steps", "evidenceIds"],
+        required: ["summary", "evidenceIds"],
+        description:
+          "What you recommend, in the present or future tense. Never a claim that something was done: actions you take are recorded automatically and shown separately.",
         properties: {
           summary: { type: "string" },
-          steps: { type: "array", items: { type: "string" } },
           evidenceIds: { type: "array", items: { type: "string" } },
         },
       },
@@ -109,7 +110,7 @@ INVESTIGATION REPORT
 You maintain a live incident report via the UpdateReport tool; it is the operator's primary view of your work.
 - Call UpdateReport early: set a short headline and status "investigation_incomplete" before deep work, then again whenever your understanding changes - a new hypothesis, one disproven, the root cause found.
 - Every call carries the COMPLETE report; it replaces the previous version.
-- Tool results are tagged [evidence: eN]. Record evidence entries citing these tags, and reference evidence entry ids from hypotheses and the proposed fix.
+- Tool results are tagged [evidence: eN]. Record evidence entries citing these tags, and reference evidence entry ids from hypotheses and the recommended fix.
 - Before you finish: no hypothesis may remain "open" (resolve each to root_cause or disproven), and a root_cause hypothesis must cite at least one evidence entry. If you genuinely cannot conclude, set status "inconclusive" and record what you checked - never invent a root cause.`;
 
 // Sent by the finish gate when the model stops with an incomplete report. The

@@ -1,6 +1,8 @@
 // The investigation report: a durable, structured artifact the agent maintains
 // live during an Investigate run via the UpdateReport tool. Stored one-per-session.
 
+import type { RemediationActionRecord } from "./remediation.js";
+
 export type ReportStatus =
   "root_cause_identified" | "inconclusive" | "investigation_incomplete";
 export type HypothesisState = "root_cause" | "disproven" | "open";
@@ -50,9 +52,18 @@ export interface Report {
   rootCause: { summary: string; detail: string };
   hypotheses: Hypothesis[];
   evidence: EvidenceItem[];
-  proposedFix: { summary: string; steps: string[]; evidenceIds: string[] };
+  // What the agent RECOMMENDS, never a claim that anything ran. What actually
+  // ran is the executed action log, which the model cannot write to.
+  recommendedFix: { summary: string; evidenceIds: string[] };
   updatedAt: string;
   model: string;
+}
+
+// The report route's response. The two halves have different authors and that
+// is the point: the model writes `report`, the executor writes `actions`.
+export interface SessionReportResponse {
+  report: Report;
+  actions: RemediationActionRecord[];
 }
 
 // Row shape for the Sessions queue: derived from the stored report without

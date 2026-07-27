@@ -3,10 +3,15 @@ import type { FastifyInstance } from "fastify";
 import type {
   RespondRequest,
   RunMode,
+  SessionReportResponse,
   TranscriptItem,
 } from "@nightwarden/shared";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
+import {
+  listRemediationActionsForSession,
+  toActionRecord,
+} from "../db/remediation-actions.js";
 import { getSession, deleteSession } from "../db/sessions.js";
 import { listSessionRows } from "./list.js";
 import { buildTranscript } from "./transcript.js";
@@ -56,7 +61,15 @@ export async function registerSessionRoutes(
       if (report === undefined) {
         return reply.code(404).send({ error: "no report for session" });
       }
-      return report;
+      // Actions come from the executor's own log, never from the report the
+      // model wrote, so "what ran" cannot disagree with what actually ran.
+      const response: SessionReportResponse = {
+        report,
+        actions: listRemediationActionsForSession(request.params.id).map(
+          toActionRecord,
+        ),
+      };
+      return response;
     },
   );
 

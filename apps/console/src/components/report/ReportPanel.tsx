@@ -2,6 +2,8 @@ import type {
   ChangesSnapshot,
   ChartSnapshot,
   EvidenceItem,
+  RemediationActionRecord,
+  RemediationStatus,
   Report,
   ReportStatus,
 } from "@nightwarden/shared";
@@ -177,7 +179,29 @@ function SectionHeading({
   );
 }
 
-export function ReportPanel({ report }: { report: Report }): React.JSX.Element {
+// Written by the executor, never by the model: "executed" means the command ran
+// and returned, not that the agent said so.
+const ACTION_LABEL: Record<RemediationStatus, string> = {
+  executed: "Ran",
+  failed: "Failed",
+  rejected: "Declined",
+  executing: "Running",
+};
+
+const ACTION_TONE: Record<RemediationStatus, string> = {
+  executed: "text-ok",
+  failed: "text-fail",
+  rejected: "text-muted-foreground",
+  executing: "text-run",
+};
+
+export function ReportPanel({
+  report,
+  actions,
+}: {
+  report: Report;
+  actions: RemediationActionRecord[];
+}): React.JSX.Element {
   const resolved = report.hypotheses.filter((h) => h.state !== "open").length;
   const { evidence } = report;
 
@@ -282,23 +306,46 @@ export function ReportPanel({ report }: { report: Report }): React.JSX.Element {
         </section>
       )}
 
-      {report.proposedFix.summary && (
+      {report.recommendedFix.summary && (
         <section className="mb-7">
-          <SectionHeading>Proposed fix</SectionHeading>
+          <SectionHeading>Recommended fix</SectionHeading>
           <p className="m-0 text-sm font-medium">
-            {report.proposedFix.summary}
+            {report.recommendedFix.summary}
             <CitationChips
-              ids={report.proposedFix.evidenceIds}
+              ids={report.recommendedFix.evidenceIds}
               evidence={evidence}
             />
           </p>
-          {report.proposedFix.steps.length > 0 && (
-            <ol className="m-0 mt-2 flex flex-col gap-1 pl-5 text-sm text-muted-foreground">
-              {report.proposedFix.steps.map((step, i) => (
-                <li key={i}>{step}</li>
-              ))}
-            </ol>
-          )}
+        </section>
+      )}
+
+      {actions.length > 0 && (
+        <section className="mb-7">
+          <SectionHeading>Actions taken</SectionHeading>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {actions.map((action) => (
+              <li key={action.toolUseId} className="flex items-baseline gap-2">
+                <span className={cn("text-sm", ACTION_TONE[action.status])}>
+                  {ACTION_LABEL[action.status]}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                  {action.toolName}
+                  {action.serviceIdentityKey ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      {action.serviceIdentityKey}
+                    </span>
+                  ) : null}
+                </span>
+                {action.resolvedBy && (
+                  <span className="shrink-0 text-sm text-ink-subtle">
+                    {action.status === "rejected" ? "declined" : "approved"} by{" "}
+                    {action.resolvedBy}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

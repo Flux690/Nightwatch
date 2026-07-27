@@ -439,7 +439,10 @@ function ShellContent({
             investigationView ? (
               <>
                 <div className="min-w-0 flex-1 overflow-y-auto">
-                  <ReportPanel report={report} />
+                  <ReportPanel
+                    report={report.report}
+                    actions={report.actions}
+                  />
                 </div>
                 {chatRailOpen && (
                   <aside

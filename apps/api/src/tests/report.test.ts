@@ -63,7 +63,7 @@ function baseReport(overrides: Partial<Report>): Report {
         summary: "climb",
       },
     ],
-    proposedFix: { summary: "restart", steps: [], evidenceIds: [] },
+    recommendedFix: { summary: "restart", evidenceIds: [] },
     updatedAt: new Date().toISOString(),
     model: "test",
     ...overrides,
@@ -261,9 +261,8 @@ describe("report storage and enrichment", () => {
           { id: "ev2", evidenceTag: "e2", summary: "PR #482 merged" },
           { id: "ev-bogus", evidenceTag: "e99", summary: "phantom" },
         ],
-        proposedFix: {
+        recommendedFix: {
           summary: "revert PR #482",
-          steps: ["revert", "deploy"],
           evidenceIds: ["ev2", "ev-bogus"],
         },
       },
@@ -276,7 +275,7 @@ describe("report storage and enrichment", () => {
     // Unknown tag e99: the entry is dropped and every reference to it stripped.
     expect(report.evidence.map((e) => e.id)).toEqual(["ev1", "ev2"]);
     expect(report.hypotheses[0]!.evidenceIds).toEqual(["ev1", "ev2"]);
-    expect(report.proposedFix.evidenceIds).toEqual(["ev2"]);
+    expect(report.recommendedFix.evidenceIds).toEqual(["ev2"]);
     // Citations resolved to real transcript tool calls.
     expect(report.evidence[0]).toMatchObject({
       toolUseId: "tu-1",
@@ -347,7 +346,7 @@ describe("report storage and enrichment", () => {
                 rootCause: { summary: "", detail: "" },
                 hypotheses: [],
                 evidence: [],
-                proposedFix: { summary: "", steps: [], evidenceIds: [] },
+                recommendedFix: { summary: "", evidenceIds: [] },
               },
             },
           ],

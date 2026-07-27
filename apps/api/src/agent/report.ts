@@ -91,7 +91,7 @@ export interface ReportInput {
   rootCause: { summary: string; detail: string };
   hypotheses: Hypothesis[];
   evidence: { id: string; evidenceTag: string; summary: string }[];
-  proposedFix: { summary: string; steps: string[]; evidenceIds: string[] };
+  recommendedFix: { summary: string; evidenceIds: string[] };
 }
 
 const REPORT_STATUSES: ReportStatus[] = [
@@ -144,9 +144,8 @@ export function validateReportInput(
     return null;
   }
   if (
-    typeof candidate.proposedFix?.summary !== "string" ||
-    !stringArray(candidate.proposedFix?.steps) ||
-    !stringArray(candidate.proposedFix?.evidenceIds)
+    typeof candidate.recommendedFix?.summary !== "string" ||
+    !stringArray(candidate.recommendedFix?.evidenceIds)
   ) {
     return null;
   }
@@ -282,9 +281,9 @@ export function enrichReport(
       evidenceIds: keep(h.evidenceIds),
     })),
     evidence,
-    proposedFix: {
-      ...input.proposedFix,
-      evidenceIds: keep(input.proposedFix.evidenceIds),
+    recommendedFix: {
+      ...input.recommendedFix,
+      evidenceIds: keep(input.recommendedFix.evidenceIds),
     },
     updatedAt: new Date().toISOString(),
     model,
@@ -318,7 +317,7 @@ export function finalizeInconclusive(sessionId: string, model: string): void {
         rootCause: { summary: "", detail: "" },
         hypotheses: [],
         evidence: [],
-        proposedFix: { summary: "", steps: [], evidenceIds: [] },
+        recommendedFix: { summary: "", evidenceIds: [] },
         updatedAt: new Date().toISOString(),
         model,
       };

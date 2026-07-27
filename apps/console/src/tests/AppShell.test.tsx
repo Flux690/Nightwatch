@@ -113,7 +113,7 @@ function setup(pendingCount = 0) {
           })
         : Promise.resolve({
             ok: true,
-            json: () => Promise.resolve(sessionReport),
+            json: () => Promise.resolve({ report: sessionReport, actions: [] }),
           });
     }
     if (/\/sessions\/[^?]+/.test(url)) {
@@ -347,7 +347,7 @@ describe("Shell", () => {
         rootCause: { summary: "", detail: "" },
         hypotheses: [],
         evidence: [],
-        proposedFix: { summary: "", steps: [], evidenceIds: [] },
+        recommendedFix: { summary: "", evidenceIds: [] },
         updatedAt: new Date().toISOString(),
         model: "test",
       });

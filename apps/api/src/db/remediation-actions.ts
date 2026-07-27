@@ -1,4 +1,7 @@
-import type { RemediationStatus } from "@nightwarden/shared";
+import type {
+  RemediationActionRecord,
+  RemediationStatus,
+} from "@nightwarden/shared";
 import { getDb } from "./client.js";
 
 export interface RemediationAction {
@@ -196,4 +199,21 @@ export function countExecutedRemediations(params: {
     )
     .get(params) as { count: number };
   return row.count;
+}
+
+// Row to wire shape. Shared by the audit log and the session report so the two
+// views of one action can never drift apart.
+export function toActionRecord(
+  action: RemediationAction,
+): RemediationActionRecord {
+  return {
+    sessionId: action.sessionId,
+    toolUseId: action.toolUseId,
+    serviceIdentityKey: action.serviceIdentityKey,
+    toolName: action.toolName,
+    status: action.status,
+    resolvedBy: action.resolvedBy,
+    createdAt: action.createdAt,
+    resolvedAt: action.resolvedAt,
+  };
 }
