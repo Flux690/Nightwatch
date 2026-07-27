@@ -39,15 +39,6 @@ export interface PrometheusIntegrationStatus {
   validatedAt: string | null;
 }
 
-// Declared runner names vs the nw_server label values observed in Prometheus -
-// the pull-side proof that the routing stamp took effect.
-export interface PrometheusLabelValidation {
-  observed: string[];
-  matched: string[];
-  missing: string[];
-  unknown: string[];
-}
-
 export type LokiErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
 

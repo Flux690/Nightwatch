@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type {
-  PrometheusIntegrationStatus,
-  PrometheusLabelValidation,
-  RunnerRecord,
-} from "@nightwarden/shared";
+import type { PrometheusIntegrationStatus } from "@nightwarden/shared";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -25,22 +21,12 @@ export function PrometheusPage(): React.JSX.Element {
   const [authHeader, setAuthHeader] = useState("");
   const [connectError, setConnectError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [validation, setValidation] =
-    useState<PrometheusLabelValidation | null>(null);
 
   const { data: status, isLoading } = useQuery<PrometheusIntegrationStatus>({
     queryKey: ["prometheus-integration"],
     queryFn: () =>
       apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
   });
-
-  const { data: runners } = useQuery<RunnerRecord[]>({
-    queryKey: ["runners"],
-    queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-  });
-  const connectedRunners = (runners ?? []).filter(
-    (r) => r.online && r.hostname !== null,
-  );
 
   const connect = useMutation({
     mutationFn: () =>
@@ -67,47 +53,10 @@ export function PrometheusPage(): React.JSX.Element {
       ),
   });
 
-  const test = useMutation({
-    mutationFn: () =>
-      apiFetch<PrometheusIntegrationStatus>(
-        "/api/integrations/prometheus/test",
-        { method: "POST" },
-      ),
-    onSuccess: async () => {
-      toast.success("Prometheus responded to a test query");
-      await queryClient.invalidateQueries({
-        queryKey: ["prometheus-integration"],
-      });
-    },
-    onError: (err) =>
-      toast.show({
-        title: "Test query failed",
-        message: err instanceof Error ? err.message : "Try again.",
-        variant: "error",
-      }),
-  });
-
-  const validateLabels = useMutation({
-    mutationFn: () =>
-      apiFetch<PrometheusLabelValidation>(
-        "/api/integrations/prometheus/validate-labels",
-        { method: "POST" },
-      ),
-    onMutate: () => setValidation(null),
-    onSuccess: (result) => setValidation(result),
-    onError: (err) =>
-      toast.show({
-        title: "Could not check labels",
-        message: err instanceof Error ? err.message : "Try again.",
-        variant: "error",
-      }),
-  });
-
   const disconnect = useMutation({
     mutationFn: () =>
       apiFetch<void>("/api/integrations/prometheus", { method: "DELETE" }),
     onSuccess: async () => {
-      setValidation(null);
       toast.success("Prometheus disconnected");
       await queryClient.invalidateQueries({
         queryKey: ["prometheus-integration"],
@@ -194,104 +143,27 @@ export function PrometheusPage(): React.JSX.Element {
         )}
 
         {status?.configured === true && (
-          <>
-            <section className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{status.url}</p>
-                <Badge variant="success">Connected</Badge>
-                {status.hasAuth && <Badge variant="secondary">Auth</Badge>}
-              </div>
-              {status.validatedAt !== null && (
-                <p className="text-sm text-muted-foreground">
-                  Last verified {new Date(status.validatedAt).toLocaleString()}
-                </p>
-              )}
-              <div className="flex items-center gap-2">
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={test.isPending}
-                  onClick={() => test.mutate()}
-                >
-                  {test.isPending && <Spinner className="size-3" />}
-                  Test query
-                </Button>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  onClick={() => setConfirmDisconnect(true)}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            </section>
-
-            {connectedRunners.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  Check alert routing labels
-                </p>
-                <p className="max-w-3xl text-sm text-muted-foreground">
-                  Compares the nw_server label values in your metrics against
-                  your runner server names - catches a typo before it costs an
-                  investigation.
-                </p>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  className="self-start"
-                  disabled={validateLabels.isPending}
-                  onClick={() => validateLabels.mutate()}
-                >
-                  {validateLabels.isPending && <Spinner className="size-3" />}
-                  Check labels
-                </Button>
-
-                {validation !== null && (
-                  <div className="flex max-w-3xl flex-col gap-2">
-                    {validation.matched.length > 0 && (
-                      <Alert>
-                        <AlertTitle>Labelled correctly</AlertTitle>
-                        <AlertDescription>
-                          {validation.matched.join(", ")}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {validation.missing.length > 0 && (
-                      <Alert variant="destructive">
-                        <AlertTitle>No metrics carry these servers</AlertTitle>
-                        <AlertDescription>
-                          {validation.missing.join(", ")} - add the nw_server
-                          label for them on the Alertmanager page.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {validation.unknown.length > 0 && (
-                      <Alert variant="destructive">
-                        <AlertTitle>
-                          Labels matching no runner (typo?)
-                        </AlertTitle>
-                        <AlertDescription>
-                          {validation.unknown.join(", ")}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {validation.matched.length === 0 &&
-                      validation.missing.length === 0 &&
-                      validation.unknown.length === 0 && (
-                        <Alert>
-                          <AlertTitle>No nw_server labels observed</AlertTitle>
-                          <AlertDescription>
-                            Fine with one server; with several, add the labels
-                            from the Alertmanager page.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                  </div>
-                )}
-              </section>
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">{status.url}</p>
+              <Badge variant="success">Connected</Badge>
+              {status.hasAuth && <Badge variant="secondary">Auth</Badge>}
+            </div>
+            {status.validatedAt !== null && (
+              <p className="text-sm text-muted-foreground">
+                Last verified {new Date(status.validatedAt).toLocaleString()}
+              </p>
             )}
-          </>
+            <div className="flex items-center gap-2">
+              <Button
+                size="xs"
+                variant="secondary"
+                onClick={() => setConfirmDisconnect(true)}
+              >
+                Disconnect
+              </Button>
+            </div>
+          </section>
         )}
       </div>
 

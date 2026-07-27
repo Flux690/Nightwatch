@@ -156,7 +156,6 @@ export type {
   GitHubRepoPage,
   GitHubErrorBody,
   PrometheusIntegrationStatus,
-  PrometheusLabelValidation,
   LokiErrorCode,
   LokiIntegrationStatus,
 } from "./integrations.js";

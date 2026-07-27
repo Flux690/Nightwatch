@@ -53,23 +53,6 @@ export function LokiPage(): React.JSX.Element {
       ),
   });
 
-  const test = useMutation({
-    mutationFn: () =>
-      apiFetch<LokiIntegrationStatus>("/api/integrations/loki/test", {
-        method: "POST",
-      }),
-    onSuccess: async () => {
-      toast.success("Loki responded to a test query");
-      await queryClient.invalidateQueries({ queryKey: ["loki-integration"] });
-    },
-    onError: (err) =>
-      toast.show({
-        title: "Test query failed",
-        message: err instanceof Error ? err.message : "Try again.",
-        variant: "error",
-      }),
-  });
-
   const disconnect = useMutation({
     mutationFn: () =>
       apiFetch<void>("/api/integrations/loki", { method: "DELETE" }),
@@ -183,15 +166,6 @@ export function LokiPage(): React.JSX.Element {
               </p>
             )}
             <div className="flex items-center gap-2">
-              <Button
-                size="xs"
-                variant="secondary"
-                disabled={test.isPending}
-                onClick={() => test.mutate()}
-              >
-                {test.isPending && <Spinner className="size-3" />}
-                Test query
-              </Button>
               <Button
                 size="xs"
                 variant="secondary"

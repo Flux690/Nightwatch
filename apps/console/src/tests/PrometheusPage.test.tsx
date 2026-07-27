@@ -86,7 +86,6 @@ function setup(
     runners?: RunnerRecord[];
     connectStatus?: number;
     connectBody?: unknown;
-    validateBody?: unknown;
   } = {},
 ) {
   const {
@@ -94,7 +93,6 @@ function setup(
     runners = [],
     connectStatus = 201,
     connectBody = CONFIGURED,
-    validateBody = { observed: [], matched: [], missing: [], unknown: [] },
   } = opts;
   let connected = status.configured;
 
@@ -113,16 +111,6 @@ function setup(
         connected = true;
         return jsonOk(connectBody, connectStatus);
       }
-      if (
-        url === "/api/integrations/prometheus/validate-labels" &&
-        init?.method === "POST"
-      )
-        return jsonOk(validateBody);
-      if (
-        url === "/api/integrations/prometheus/test" &&
-        init?.method === "POST"
-      )
-        return jsonOk(CONFIGURED);
       if (url === "/api/integrations/prometheus" && init?.method === "DELETE")
         return Promise.resolve({
           ok: true,
@@ -192,39 +180,7 @@ describe("PrometheusPage", () => {
     expect(await screen.findByText("Connected")).toBeInTheDocument();
     expect(screen.getByText("http://prom.internal:9090")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /test query/i }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("button", { name: /disconnect/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/check alert routing labels/i),
-    ).not.toBeInTheDocument();
-  });
-
-  it("label check renders matched, missing, and unknown against the fleet", async () => {
-    const user = userEvent.setup();
-    setup({
-      status: CONFIGURED,
-      runners: [CONNECTED_RUNNER],
-      validateBody: {
-        observed: ["prod-web-01", "prod-web-2"],
-        matched: ["prod-web-01"],
-        missing: ["prod-db-01"],
-        unknown: ["prod-web-2"],
-      },
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: /check labels/i }),
-    );
-
-    expect(await screen.findByText(/labelled correctly/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/no metrics carry these servers/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/prod-db-01/)).toBeInTheDocument();
-    expect(screen.getByText(/matching no runner/i)).toBeInTheDocument();
-    expect(screen.getByText("prod-web-2")).toBeInTheDocument();
   });
 });

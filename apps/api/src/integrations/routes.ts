@@ -35,7 +35,6 @@ import { publicUrl } from "../env/public-url.js";
 import type {
   GitHubIntegrationStatus,
   PrometheusIntegrationStatus,
-  PrometheusLabelValidation,
   LokiIntegrationStatus,
 } from "@nightwarden/shared";
 
@@ -356,34 +355,6 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  // Re-probes the stored config; success bumps validated_at via re-save.
-  fastify.post(
-    "/integrations/prometheus/test",
-    { preHandler: requireSession },
-    async (_request, reply) => {
-      const stored = getPrometheusIntegration();
-      if (!stored) {
-        return reply.code(400).send({ error: "Prometheus is not connected" });
-      }
-      try {
-        await instantQuery(
-          stored.baseUrl,
-          stored.authHeaderEncrypted
-            ? decrypt(stored.authHeaderEncrypted)
-            : null,
-          "up",
-        );
-        savePrometheusIntegration({
-          baseUrl: stored.baseUrl,
-          authHeaderEncrypted: stored.authHeaderEncrypted,
-        });
-        return await reply.code(200).send(prometheusStatusPayload());
-      } catch (err) {
-        return sendPrometheusError(reply, err);
-      }
-    },
-  );
-
   fastify.get("/integrations/loki", { preHandler: requireSession }, async () =>
     lokiStatusPayload(),
   );
@@ -422,35 +393,6 @@ export async function registerIntegrationRoutes(
       deleteLokiIntegration();
       logger.info("loki integration disconnected");
       return reply.code(204).send();
-    },
-  );
-
-  // Re-probes the stored config; success bumps validated_at via re-save.
-  fastify.post(
-    "/integrations/loki/test",
-    { preHandler: requireSession },
-    async (_request, reply) => {
-      const stored = getLokiIntegration();
-      if (!stored) {
-        return reply.code(400).send({ error: "Loki is not connected" });
-      }
-      try {
-        await probeLoki(
-          stored.baseUrl,
-          stored.authHeaderEncrypted
-            ? decrypt(stored.authHeaderEncrypted)
-            : null,
-          stored.orgId,
-        );
-        saveLokiIntegration({
-          baseUrl: stored.baseUrl,
-          orgId: stored.orgId,
-          authHeaderEncrypted: stored.authHeaderEncrypted,
-        });
-        return await reply.code(200).send(lokiStatusPayload());
-      } catch (err) {
-        return sendLokiError(reply, err);
-      }
     },
   );
 
@@ -493,38 +435,6 @@ export async function registerIntegrationRoutes(
           .send({ error: "No ingest credential configured" });
       }
       return { token };
-    },
-  );
-
-  // Declared runner names vs observed nw_server label values - typo detection
-  // for the routing stamp, only meaningful once runners exist.
-  fastify.post(
-    "/integrations/prometheus/validate-labels",
-    { preHandler: requireSession },
-    async (_request, reply) => {
-      const stored = getPrometheusIntegration();
-      if (!stored) {
-        return reply.code(400).send({ error: "Prometheus is not connected" });
-      }
-      try {
-        const observed = await labelValues(
-          stored.baseUrl,
-          stored.authHeaderEncrypted
-            ? decrypt(stored.authHeaderEncrypted)
-            : null,
-          "nw_server",
-        );
-        const declared = getFleetView().map((r) => r.serverName ?? r.hostname);
-        const result: PrometheusLabelValidation = {
-          observed,
-          matched: declared.filter((name) => observed.includes(name)),
-          missing: declared.filter((name) => !observed.includes(name)),
-          unknown: observed.filter((value) => !declared.includes(value)),
-        };
-        return await reply.code(200).send(result);
-      } catch (err) {
-        return sendPrometheusError(reply, err);
-      }
     },
   );
 }
