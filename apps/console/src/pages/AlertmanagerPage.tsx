@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RunnerRecord } from "@nightwarden/shared";
-import { ChevronDown, Eye, EyeOff } from "lucide-react";
+import { ChevronRight, Eye, EyeOff } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -359,10 +359,10 @@ export function AlertmanagerPage(): React.JSX.Element {
                 </p>
                 <p className="max-w-3xl text-sm text-muted-foreground">
                   A named server scopes every service it advertises, so your
-                  alerts have to carry that name to match. Add an nw_server
-                  label per scrape target in your Prometheus.
+                  alerts have to carry that name to match. One line in your
+                  Prometheus stamps it on everything that Prometheus alerts on.
                 </p>
-                <Field className="max-w-80">
+                <Field className="max-w-120">
                   <FieldLabel htmlFor="server-select">Server</FieldLabel>
                   <FieldDescription>
                     Names come from your connected runners.
@@ -380,20 +380,23 @@ export function AlertmanagerPage(): React.JSX.Element {
                   </NativeSelect>
                 </Field>
                 <CopyableSnippet
-                  label="Copy Prometheus labels"
-                  text={perTargetSnippet(effectiveServer)}
+                  label="Copy external_labels"
+                  text={externalLabelsSnippet(effectiveServer)}
                 />
                 <Collapsible>
-                  <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-                    <ChevronDown {...ICON_INLINE} />
-                    This Prometheus only monitors {effectiveServer}? Set it once
+                  <CollapsibleTrigger className="group flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+                    One Prometheus watching several servers? Label each target
                     instead
+                    <ChevronRight
+                      {...ICON_INLINE}
+                      className="transition-transform group-aria-expanded:rotate-90"
+                    />
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="pt-2">
                       <CopyableSnippet
-                        label="Copy external_labels"
-                        text={externalLabelsSnippet(effectiveServer)}
+                        label="Copy Prometheus labels"
+                        text={perTargetSnippet(effectiveServer)}
                       />
                     </div>
                   </CollapsibleContent>

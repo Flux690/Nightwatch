@@ -23,11 +23,15 @@ fi
 # for allowlisted file reads. No inbound ports - the runner dials out over WSS.
 # --hostname passes the host's real name through, so the runner never
 # advertises a container id as its hostname.
+# CAP_SYSLOG is what dmesg needs to read the kernel ring buffer; without it
+# GetHostDmesg fails on every call, which is exactly the OOM-kill evidence an
+# investigation wants. It grants reading kernel messages, nothing else.
 docker run -d \\
   --name "$CONTAINER_NAME" \\
   --restart unless-stopped \\
   --hostname "$(hostname)" \\
   --pid=host \\
+  --cap-add=SYSLOG \\
   --security-opt=no-new-privileges \\
   -v /var/run/docker.sock:/var/run/docker.sock:ro \\
   -v /proc:/host/proc:ro \\

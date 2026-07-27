@@ -367,7 +367,7 @@ describe("AlertmanagerPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("with two servers: dropdown of runner names drives the per-target snippet, external_labels as the aside", async () => {
+  it("with two servers: dropdown of runner names drives external_labels, per-target snippet as the aside", async () => {
     const user = userEvent.setup();
     setup({
       configured: true,
@@ -381,9 +381,11 @@ describe("AlertmanagerPage", () => {
 
     await user.selectOptions(screen.getByLabelText(/^server$/i), "prod-web-02");
     expect(screen.getByText(/nw_server: "prod-web-02"/)).toBeInTheDocument();
+    // external_labels is the primary snippet: one line, right for the common
+    // case of one Prometheus per server.
     expect(
-      screen.getByRole("button", { name: /copy prometheus labels/i }),
+      screen.getByRole("button", { name: /copy external_labels/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/set it once instead/i)).toBeInTheDocument();
+    expect(screen.getByText(/label each target instead/i)).toBeInTheDocument();
   });
 });
