@@ -258,7 +258,7 @@ merges. Requirements and properties:
 | `FILE_ALLOWLIST`           | no       | Colon-separated paths appended to the built-in allowlist for the `ReadHostFile` tool.                                                                                                                       |
 | `LOG_LEVEL`                | no       | Pino log level for the runner process (default: `info`).                                                                                                                                                    |
 
-Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`) - there is no Kubernetes-specific env var beyond the two identity labels above. `POSTGRES_URL` and `REDIS_URL`, if present on the host, are only probed to advertise availability to the agent as investigation context; they are unrelated to NightWarden's own storage, which is always the API's single SQLite file. Remediation mode (whether write tools like `RestartDockerService`/`DockerBash` are available) has no runner env var at all - it is stored per runner in the API's database and pushed live to the runner over its WebSocket connection whenever you toggle it from the console.
+Kubernetes access comes from the runner's kubeconfig or in-cluster service account (via `@kubernetes/client-node`) - there is no Kubernetes-specific env var beyond the two identity labels above. `POSTGRES_URL` and `REDIS_URL`, if present on the host, are only probed to advertise availability to the agent as investigation context; they are unrelated to NightWarden's own storage, which is always the API's single SQLite file. Write tools like `RestartDockerService`/`DockerBash` are always offered and always gated: a write suspends the investigation for human approval, so there is no mode to configure and no env var to set.
 
 ## Development
 
@@ -302,7 +302,7 @@ apps/
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
       integrations/     GitHub / Prometheus / Loki clients and connect/status routes
       llm/              provider factory (Anthropic / OpenAI)
-      remediation/      remediation-mode toggle routes
+      remediation/      executed/rejected action log routes (the audit trail)
       runners/          runner registry, connect.sh handler
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
       session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,

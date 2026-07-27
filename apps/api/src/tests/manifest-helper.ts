@@ -18,7 +18,6 @@ export function manifest(
       redis: { available: false },
       hostMetrics: false,
       fileRead: false,
-      remediationEnabled: false,
     },
   };
 }

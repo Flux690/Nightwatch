@@ -98,7 +98,6 @@ function makeManifest(
       redis: { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: true,
     },
   };
 }
@@ -121,7 +120,6 @@ function makeK8sManifest(
       redis: { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: false,
     },
   };
 }
@@ -505,7 +503,6 @@ describe("assigned-name server-scoped routing", () => {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: false,
       },
     };
   }

@@ -67,12 +67,11 @@ export interface IntegrationConnections {
 // checkout) plus the GitHub evidence tools, Prometheus gates the metrics tools, Loki the log tools.
 export function effectiveToolset(
   caps: FleetCapabilities | undefined,
-  remediationEnabled: boolean,
   connections: IntegrationConnections = {},
   mode: RunMode = "investigate",
 ): Tool[] {
   const { github = true, prometheus = true, loki = true } = connections;
-  const libraries: Tool[] = [
+  return [
     ...(caps === undefined || caps.docker ? DOCKER_TOOLS : []),
     ...(caps === undefined || caps.kubernetes ? K8S_TOOLS : []),
     ...INTERRUPT_TOOLS,
@@ -82,21 +81,13 @@ export function effectiveToolset(
     // The report tool exists only where the finish gate does: investigate runs.
     ...(mode === "investigate" ? REPORT_TOOLS : []),
   ];
-  return remediationEnabled
-    ? libraries
-    : libraries.filter((t) => t.access !== "write");
 }
 
 // Schemas only, for callers that just need the wire shape (e.g. tests); the loop uses
 // effectiveToolset directly.
 export function getToolSchemas(
   caps?: FleetCapabilities,
-  remediationEnabled?: boolean,
   connections?: IntegrationConnections,
 ): ToolSchema[] {
-  return effectiveToolset(
-    caps,
-    remediationEnabled ?? true,
-    connections ?? {},
-  ).map((t) => t.schema);
+  return effectiveToolset(caps, connections ?? {}).map((t) => t.schema);
 }

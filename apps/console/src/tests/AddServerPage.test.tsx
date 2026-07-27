@@ -35,7 +35,6 @@ const AWAITING_RUNNER: RunnerRecord = {
   online: false,
   lastSeen: null,
   manifest: null,
-  remediationMode: null,
 };
 
 const CONNECTED_RUNNER: RunnerRecord = {
@@ -47,7 +46,6 @@ const CONNECTED_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date().toISOString(),
   manifest: null,
-  remediationMode: false,
 };
 
 function jsonOk(body: unknown, status = 200) {
@@ -265,7 +263,6 @@ describe("AddServerPage", () => {
                 redis: { available: false },
                 hostMetrics: true,
                 fileRead: true,
-                remediationEnabled: false,
               },
             },
           },
@@ -303,7 +300,6 @@ describe("AddServerPage", () => {
           redis: { available: false },
           hostMetrics: true,
           fileRead: true,
-          remediationEnabled: false,
         },
       };
       setup({

@@ -1,20 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
-import {
-  findRunnerByToken,
-  findRunnerById,
-  setRemediationMode,
-  touchLastUsed,
-} from "../db/runner.js";
+import { findRunnerByToken, touchLastUsed } from "../db/runner.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import {
   registerRunner,
   unregisterRunner,
   setRunnerManifest,
   markRunnerAlive,
-  pushRemediationMode,
-  setRunnerRemediationMode,
 } from "./fleet.js";
 import {
   rejectPendingForConnection,
@@ -98,19 +91,6 @@ export async function registerWsRoutes(
             { runnerId: runnerId.slice(0, 8) },
             "manifest stored",
           );
-          // Re-read from DB each time (operator may have toggled), bootstrap from
-          // the manifest on first arrival, then keep DB authoritative.
-          const currentRow = findRunnerById(runnerId);
-          const dbMode = currentRow?.remediationMode ?? null;
-          const manifestMode = msg.payload.capabilities.remediationEnabled;
-          if (dbMode === null) {
-            setRemediationMode(runnerId, manifestMode);
-            setRunnerRemediationMode(runnerId, manifestMode);
-          } else if (dbMode !== manifestMode) {
-            pushRemediationMode(runnerId, dbMode);
-          } else {
-            setRunnerRemediationMode(runnerId, dbMode);
-          }
         } else if (type === "result") {
           const msg = parsed as unknown as RunnerResultMessage;
           resolveCommand(msg.payload);

@@ -11,7 +11,6 @@ const SCHEMA = `
     token             TEXT NOT NULL UNIQUE,
     label             TEXT,
     server_name       TEXT UNIQUE,
-    remediation_mode  INTEGER,
     created_at        TEXT NOT NULL,
     last_used_at      TEXT
   );

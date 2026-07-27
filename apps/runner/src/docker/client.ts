@@ -33,8 +33,8 @@ function ownContainerId(): string | null {
 const self = ownContainerId();
 if (self) hidden.add(self);
 
-// The API tells the runner which container it is, over the socket it already
-// uses to push remediation mode. Absent when the API runs elsewhere or on a host.
+// The API tells the runner which container it is, over the command socket.
+// Absent when the API runs elsewhere or on a host.
 export function hideContainer(id: string): void {
   hidden.add(id);
 }

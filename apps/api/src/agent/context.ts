@@ -6,7 +6,6 @@ import {
 } from "@nightwarden/shared";
 import {
   budgetLine,
-  READ_ONLY_INSTRUCTIONS,
   SYSTEM_PROMPT,
   type PromptOptions,
 } from "./prompts/system.js";
@@ -25,20 +24,14 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   repo: null,
 };
 
-function systemPromptFor(
-  remediationEnabled: boolean,
-  opts: PromptOptions,
-  mode: RunMode,
-): string {
+function systemPromptFor(opts: PromptOptions, mode: RunMode): string {
   let prompt = SYSTEM_PROMPT + budgetLine(opts);
   if (mode === "investigate") prompt += REPORT_PROTOCOL;
-  if (!remediationEnabled) prompt += READ_ONLY_INSTRUCTIONS;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
 }
 
 export function buildChatContext(
-  remediationEnabled = false,
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
   mode: RunMode = "ask",
@@ -46,9 +39,7 @@ export function buildChatContext(
   // Chat has no alert message to carry the fleet map, so it rides the system
   // prompt - the model still needs server names for the required `server` param.
   return {
-    systemPrompt:
-      systemPromptFor(remediationEnabled, opts, mode) +
-      buildFleetSummary(fleetView),
+    systemPrompt: systemPromptFor(opts, mode) + buildFleetSummary(fleetView),
     firstUserMessage: "",
   };
 }
@@ -57,12 +48,11 @@ export function buildChatContext(
 // is unconditional here.
 export function buildInitialContext(
   alerts: NormalizedAlert[],
-  remediationEnabled = false,
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
 ): InitialContext {
   if (!alerts[0]) {
-    return buildChatContext(remediationEnabled, fleetView, opts, "investigate");
+    return buildChatContext(fleetView, opts, "investigate");
   }
 
   const fleet = fleetView ?? [];
@@ -83,7 +73,7 @@ ${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
-    systemPrompt: systemPromptFor(remediationEnabled, opts, "investigate"),
+    systemPrompt: systemPromptFor(opts, "investigate"),
     firstUserMessage,
   };
 }
@@ -97,7 +87,7 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
     const identities =
       r.services.map((s) => serviceIdentityKey(s.identity)).join(", ") ||
       "no services advertised";
-    return `  ${name} (remediation ${r.remediationEnabled ? "on" : "off"}): ${identities}`;
+    return `  ${name}: ${identities}`;
   });
   return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }

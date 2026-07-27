@@ -27,11 +27,7 @@ import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import {
-  registerRunner,
-  unregisterRunner,
-  setRunnerRemediationMode,
-} from "../ws/fleet.js";
+import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import type { SessionListRow, TranscriptItem } from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
@@ -96,8 +92,6 @@ describe("a suspended session serves its pending row with its transcript", () =>
       },
       () => {},
     );
-    // Remediation on so the write tool is offered (chat reads the live fleet).
-    setRunnerRemediationMode(token, true);
     return { conn };
   }
 

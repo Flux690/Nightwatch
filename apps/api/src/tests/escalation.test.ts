@@ -78,7 +78,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: true,
       },
     });
 

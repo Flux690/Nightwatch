@@ -40,7 +40,6 @@ const CONNECTED_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date().toISOString(),
   manifest: null,
-  remediationMode: false,
 };
 
 /* The rail navigates to each integration's own route, so it renders under a

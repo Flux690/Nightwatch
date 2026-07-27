@@ -16,7 +16,6 @@ export interface CapabilityManifest {
     redis: { available: boolean; via?: string };
     hostMetrics: boolean;
     fileRead: boolean;
-    remediationEnabled: boolean;
   };
 }
 
@@ -29,7 +28,6 @@ export interface RunnerRecord {
   online: boolean;
   lastSeen: string | null;
   manifest: CapabilityManifest | null;
-  remediationMode: boolean | null;
 }
 
 // Live view of one connected runner for fleet reasoning: enough to match an alert or target identity.
@@ -43,5 +41,4 @@ export interface FleetRunner {
   online: boolean;
   lastSeen: number;
   services: ServiceManifestEntry[];
-  remediationEnabled: boolean;
 }

@@ -8,7 +8,6 @@ export type RunnerRow = {
   tokenHash: string;
   label: string | null;
   serverName: string | null;
-  remediationMode: boolean | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -18,7 +17,6 @@ export type RunnerMeta = {
   id: string;
   label: string | null;
   serverName: string | null;
-  remediationMode: boolean | null;
   createdAt: string;
   lastUsedAt: string | null;
 };
@@ -64,7 +62,6 @@ export function generateRunnerToken(
     id,
     label: label ?? null,
     serverName: serverName ?? null,
-    remediationMode: null,
     createdAt,
     lastUsedAt: null,
   };
@@ -75,14 +72,9 @@ const SELECT_ROW = `
   token             AS tokenHash,
   label,
   server_name       AS serverName,
-  remediation_mode  AS remediationModeRaw,
   created_at        AS createdAt,
   last_used_at      AS lastUsedAt
 `;
-
-function toBoolean(raw: number | null): boolean | null {
-  return raw === null ? null : raw !== 0;
-}
 
 function mapRow(raw: Record<string, unknown>): RunnerRow {
   return {
@@ -90,9 +82,6 @@ function mapRow(raw: Record<string, unknown>): RunnerRow {
     tokenHash: raw["tokenHash"] as string,
     label: (raw["label"] as string | null) ?? null,
     serverName: (raw["serverName"] as string | null) ?? null,
-    remediationMode: toBoolean(
-      (raw["remediationModeRaw"] as number | null) ?? null,
-    ),
     createdAt: raw["createdAt"] as string,
     lastUsedAt: (raw["lastUsedAt"] as string | null) ?? null,
   };
@@ -112,21 +101,6 @@ export function findRunnerById(id: string): RunnerRow | undefined {
     .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE id = ?`)
     .get(id) as Record<string, unknown> | undefined;
   return raw ? mapRow(raw) : undefined;
-}
-
-// null means bootstrap from the manifest; reading the DB (system of record)
-// lets a post-restart resume see it pre-reconnect.
-export function getRemediationModeByRunnerRef(ref: string): boolean | null {
-  const raw = getDb()
-    .prepare(`SELECT remediation_mode AS m FROM runner WHERE id = ? LIMIT 1`)
-    .get(ref) as { m: number | null } | undefined;
-  return raw ? toBoolean(raw.m) : null;
-}
-
-export function setRemediationMode(id: string, enabled: boolean): void {
-  getDb()
-    .prepare(`UPDATE runner SET remediation_mode = ? WHERE id = ?`)
-    .run(enabled ? 1 : 0, id);
 }
 
 // Touch last_used_at on every authenticated use (WS connect, ingest, chat).

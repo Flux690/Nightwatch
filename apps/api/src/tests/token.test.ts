@@ -414,7 +414,6 @@ describe("Runner token lifecycle (issue 038)", () => {
                     redis: { available: false },
                     hostMetrics: false,
                     fileRead: false,
-                    remediationEnabled: false,
                   },
                 },
               }),

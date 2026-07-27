@@ -181,10 +181,10 @@ afterAll(async () => {
 
 describe("offering gate", () => {
   it("strips every repo tool when no integration is configured", () => {
-    const withRepo = effectiveToolset(undefined, true, { github: true }).map(
+    const withRepo = effectiveToolset(undefined, { github: true }).map(
       (t) => t.schema.name,
     );
-    const withoutRepo = effectiveToolset(undefined, true, {
+    const withoutRepo = effectiveToolset(undefined, {
       github: false,
     }).map((t) => t.schema.name);
     for (const name of REPO_TOOL_NAMES) {

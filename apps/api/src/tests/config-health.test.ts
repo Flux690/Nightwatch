@@ -48,7 +48,6 @@ function dockerManifest(hostname: string) {
       redis: { available: false },
       hostMetrics: false,
       fileRead: false,
-      remediationEnabled: false,
     },
   };
 }

@@ -3,12 +3,10 @@ import { randomUUID } from "node:crypto";
 import { detectCapabilities } from "../manifest/detect.js";
 import { logger } from "../logger.js";
 import { hideContainer } from "../docker/client.js";
-import { setRemediationEnabled } from "../remediation-state.js";
 import type {
   RunnerCommandMessage,
   RunnerManifestMessage,
   RunnerResultMessage,
-  SetRemediationModeMessage,
   HideContainerMessage,
 } from "@nightwarden/shared";
 
@@ -192,13 +190,6 @@ export function startWebSocketClient(
       if (parsed["type"] === "command") {
         handleCommand(ws!, parsed as unknown as RunnerCommandMessage).catch(
           (err: unknown) => logger.error({ err }, "command handler error"),
-        );
-      } else if (parsed["type"] === "set_remediation_mode") {
-        const msg = parsed as unknown as SetRemediationModeMessage;
-        setRemediationEnabled(msg.payload.enabled);
-        logger.info(
-          { enabled: msg.payload.enabled },
-          "remediation mode updated",
         );
       } else if (parsed["type"] === "hide_container") {
         const msg = parsed as unknown as HideContainerMessage;

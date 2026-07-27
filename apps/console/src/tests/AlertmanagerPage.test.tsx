@@ -38,10 +38,8 @@ function dockerRunner(name: string): RunnerRecord {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: false,
       },
     },
-    remediationMode: false,
   };
 }
 

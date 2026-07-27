@@ -40,7 +40,6 @@ const CONNECTED_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date().toISOString(),
   manifest: null,
-  remediationMode: false,
 };
 
 function jsonOk(body: unknown, status = 200) {

@@ -1,10 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import {
-  findRunnerById,
-  listRunnersMeta,
-  setRemediationMode,
-} from "../db/runner.js";
-import { listRunners, getFleetView, pushRemediationMode } from "../ws/fleet.js";
+import { listRunnersMeta } from "../db/runner.js";
+import { listRunners, getFleetView } from "../ws/fleet.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import type { FleetRunner, RunnerRecord } from "@nightwarden/shared";
@@ -36,7 +32,6 @@ export async function registerRunnerRoutes(
           online: false,
           lastSeen: null,
           manifest: null,
-          remediationMode: t.remediationMode,
         });
         continue;
       }
@@ -50,7 +45,6 @@ export async function registerRunnerRoutes(
           online: r.online,
           lastSeen: new Date(r.lastSeen).toISOString(),
           manifest: r.manifest,
-          remediationMode: t.remediationMode,
         });
       }
     }
@@ -61,30 +55,6 @@ export async function registerRunnerRoutes(
   // pane of glass.
   fastify.get("/fleet", { preHandler: requireSession }, (): FleetRunner[] =>
     getFleetView(),
-  );
-
-  // Persists to DB and pushes over WS; a missed push self-heals on the next
-  // heartbeat via manifest reconciliation in ws/server.ts.
-  fastify.patch<{
-    Params: { id: string };
-    Body: { enabled?: boolean };
-  }>(
-    "/runners/:id/remediation-mode",
-    { preHandler: requireSession },
-    (request, reply) => {
-      const { id: runnerId } = request.params;
-      const { enabled } = request.body ?? {};
-      if (typeof enabled !== "boolean") {
-        return reply.code(400).send({ error: "enabled (boolean) is required" });
-      }
-      const row = findRunnerById(runnerId);
-      if (!row) {
-        return reply.code(404).send({ error: "runner not found" });
-      }
-      setRemediationMode(runnerId, enabled);
-      pushRemediationMode(runnerId, enabled);
-      return reply.code(200).send({ runnerId, remediationMode: enabled });
-    },
   );
 
   logger.info("runner routes registered");

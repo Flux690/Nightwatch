@@ -44,10 +44,8 @@ const WEB_RUNNER: RunnerRecord = {
       redis: { available: false },
       hostMetrics: false,
       fileRead: true,
-      remediationEnabled: false,
     },
   },
-  remediationMode: false,
 };
 
 /* The page navigates to the add-server route and back to Integrations, so it renders

@@ -113,7 +113,6 @@ describe("durable approval interrupts", () => {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: true,
       },
     });
 

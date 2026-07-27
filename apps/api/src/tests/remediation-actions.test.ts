@@ -95,7 +95,6 @@ describe("remediation action record", () => {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: true,
       },
     });
 

@@ -7,7 +7,6 @@ import {
 } from "@nightwarden/shared";
 import { getDocker, listVisibleContainers } from "../docker/client.js";
 import { getAppsV1Api } from "../kubernetes/client.js";
-import { isRemediationEnabled } from "../remediation-state.js";
 
 const RUNNER_VERSION = "0.2.0";
 
@@ -32,7 +31,6 @@ export async function detectCapabilities(): Promise<CapabilityManifest> {
         : { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: isRemediationEnabled(),
     },
   };
 }

@@ -26,9 +26,3 @@ export function budgetLine(opts: PromptOptions): string {
       : ` Working in the repository extends the budget to ${opts.codeBudgetMinutes} minutes on every repo tool call.`;
   return `\n\nBudget: ${opts.budgetMinutes} minutes of investigation time (human approval wait excluded).${codeNote} When the budget runs out the investigation pauses - the operator can resume it with a fresh budget or end it.`;
 }
-
-// Write tools are already filtered from the offered schema when remediation is off; this
-// just tells the model why, so it recommends instead of attempting a call never on the menu.
-export const READ_ONLY_INSTRUCTIONS = `
-
-You are in READ-ONLY mode: write tools (RestartDockerService, DockerBash, RestartK8sWorkload, K8sBash) are not available in this session, and will not appear in your tool list. Investigate and state your root-cause analysis and recommended remediation in plain text; do not attempt to call a write tool. The operator can enable remediation from the console.`;

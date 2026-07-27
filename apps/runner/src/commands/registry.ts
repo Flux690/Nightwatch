@@ -28,7 +28,6 @@ import {
   getHostDmesg,
 } from "./host.js";
 import { readFileCommand } from "./files.js";
-import { isRemediationEnabled } from "../remediation-state.js";
 
 type Handler = (input: unknown) => Promise<unknown>;
 
@@ -36,19 +35,6 @@ type Handler = (input: unknown) => Promise<unknown>;
 // carries the substrate, so there is no runtime provider dispatch to do.
 function direct<T>(fn: (input: T) => Promise<unknown>): Handler {
   return (input) => fn(input as T);
-}
-
-// Defense in depth for writes: the API gates by this runner's mode, but the runner still refuses on its
-// own flag so a control-plane bug can never execute a write the operator turned off here.
-function guardedWrite(handler: Handler): Handler {
-  return (input) => {
-    if (!isRemediationEnabled()) {
-      return Promise.reject(
-        new Error("Remediation is disabled on this runner"),
-      );
-    }
-    return handler(input);
-  };
 }
 
 export function createDispatchRegistry(): Map<string, Handler> {
@@ -59,16 +45,16 @@ export function createDispatchRegistry(): Map<string, Handler> {
     ["GetDockerStats", direct(dockerGetContainerStats)],
     ["GetDockerEvents", direct(dockerGetContainerEvents)],
     ["GetDockerProcesses", direct(dockerGetContainerProcesses)],
-    ["RestartDockerService", guardedWrite(direct(restartContainer))],
-    ["DockerBash", guardedWrite(direct(execCommand))],
+    ["RestartDockerService", direct(restartContainer)],
+    ["DockerBash", direct(execCommand)],
     ["ListK8sWorkloads", direct(k8sGetContainerList)],
     ["GetK8sLogs", direct(k8sGetContainerLogs)],
     ["GetK8sConfig", direct(k8sGetContainerInspect)],
     ["GetK8sStats", direct(k8sGetContainerStats)],
     ["GetK8sEvents", direct(k8sGetContainerEvents)],
     ["GetK8sProcesses", direct(k8sGetContainerProcesses)],
-    ["RestartK8sWorkload", guardedWrite(direct(k8sRestartService))],
-    ["K8sBash", guardedWrite(direct(k8sExecCommand))],
+    ["RestartK8sWorkload", direct(k8sRestartService)],
+    ["K8sBash", direct(k8sExecCommand)],
     ["GetK8sRolloutStatus", direct(k8sGetRolloutStatus)],
     ["GetK8sNodeStatus", () => k8sGetNodeStatus()],
     ["GetHostMemory", () => getHostMemory()],

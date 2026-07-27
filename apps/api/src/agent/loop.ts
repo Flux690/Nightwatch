@@ -6,10 +6,7 @@ import { finalizeInconclusive } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import { REPO_TOOL_NAMES } from "./tools/repo.js";
 import type { ToolExecuteContext } from "./tools/types.js";
-import {
-  currentFleetCapabilities,
-  currentRemediationEnabled,
-} from "./policy.js";
+import { currentFleetCapabilities } from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { createProvider } from "../llm/factory.js";
@@ -212,13 +209,7 @@ export async function runInvestigation(
   // Operator declined a continue-request: replay the transcript and run one free-form
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
-    const remediationEnabled = currentRemediationEnabled();
-    const { systemPrompt } = buildChatContext(
-      remediationEnabled,
-      undefined,
-      undefined,
-      mode,
-    );
+    const { systemPrompt } = buildChatContext(undefined, undefined, mode);
     const provider = createProvider(systemPrompt, llm, apiKey);
     createSession(
       buildSessionMeta(sessionId, alert, input.userMessage),
@@ -265,7 +256,6 @@ export async function runInvestigation(
     ...(input.alert ? [input.alert] : []),
     ...(input.additionalAlerts ?? []),
   ];
-  const remediationEnabled = currentRemediationEnabled();
   const fleetView = getFleetView();
   const integration = getGitHubIntegration();
   const promptOptions: PromptOptions = {
@@ -281,13 +271,8 @@ export async function runInvestigation(
   };
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
-      ? buildInitialContext(
-          allAlerts,
-          remediationEnabled,
-          fleetView,
-          promptOptions,
-        )
-      : buildChatContext(remediationEnabled, fleetView, promptOptions, mode);
+      ? buildInitialContext(allAlerts, fleetView, promptOptions)
+      : buildChatContext(fleetView, promptOptions, mode);
   const provider = createProvider(systemPrompt, llm, apiKey);
 
   createSession(
@@ -358,11 +343,10 @@ export async function runInvestigation(
     turn++;
 
     const fleetCapabilities = currentFleetCapabilities();
-    // Re-read per turn like the remediation switch: disconnecting an
-    // integration strips its tools from the very next turn.
+    // Re-read per turn: disconnecting an integration strips its tools from the
+    // very next turn.
     const toolset = effectiveToolset(
       fleetCapabilities,
-      currentRemediationEnabled(),
       {
         github: getGitHubIntegration() !== null,
         prometheus: getPrometheusIntegration() !== null,

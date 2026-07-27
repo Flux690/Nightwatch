@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import type {
   CapabilityManifest,
   FleetRunner,
-  SetRemediationModeMessage,
   HideContainerMessage,
 } from "@nightwarden/shared";
 
@@ -20,7 +19,6 @@ export interface RunnerConnection {
   manifest: CapabilityManifest | null;
   hostname: string | null;
   lastSeen: number;
-  remediationMode: boolean | null;
 }
 
 export interface RunnerView {
@@ -30,7 +28,6 @@ export interface RunnerView {
   manifest: CapabilityManifest | null;
   lastSeen: number;
   online: boolean;
-  remediationMode: boolean | null;
 }
 
 const connectionsByRunnerId = new Map<string, RunnerConnection>();
@@ -65,7 +62,6 @@ export function registerRunner(
     manifest: null,
     hostname: null,
     lastSeen: Date.now(),
-    remediationMode: null,
   };
   connectionsByRunnerId.set(runnerId, conn);
   pushHiddenContainer(conn);
@@ -114,7 +110,6 @@ export function listRunners(): RunnerView[] {
       manifest: conn.manifest,
       lastSeen: conn.lastSeen,
       online: now - conn.lastSeen < LIVENESS_TTL_MS,
-      remediationMode: conn.remediationMode,
     });
   }
   return views;
@@ -134,10 +129,6 @@ export function getFleetView(): FleetRunner[] {
       online: now - conn.lastSeen < LIVENESS_TTL_MS,
       lastSeen: conn.lastSeen,
       services: conn.manifest.capabilities.services,
-      remediationEnabled:
-        conn.remediationMode ??
-        conn.manifest.capabilities.remediationEnabled ??
-        false,
     });
   }
   return views;
@@ -148,35 +139,6 @@ export function getRunnerManifestForAlert(
   runnerId: string,
 ): CapabilityManifest | null {
   return connectionsByRunnerId.get(runnerId)?.manifest ?? null;
-}
-
-// Syncs without pushing to the runner - used by server.ts reconciliation for
-// bootstrap and agree-in-place cases where no push is needed.
-export function setRunnerRemediationMode(
-  runnerId: string,
-  mode: boolean,
-): void {
-  const conn = connectionsByRunnerId.get(runnerId);
-  if (conn) conn.remediationMode = mode;
-}
-
-// Read the cached remediation mode by runnerId.
-export function getRunnerRemediationMode(runnerId: string): boolean | null {
-  return connectionsByRunnerId.get(runnerId)?.remediationMode ?? null;
-}
-
-// Fire-and-forget push; also updates the in-memory cache so the next
-// reconciliation doesn't push again unnecessarily.
-export function pushRemediationMode(runnerId: string, enabled: boolean): void {
-  const conn = connectionsByRunnerId.get(runnerId);
-  if (!conn) return;
-  conn.remediationMode = enabled;
-  const msg: SetRemediationModeMessage = {
-    messageId: randomUUID(),
-    type: "set_remediation_mode",
-    payload: { enabled },
-  };
-  conn.send(JSON.stringify(msg));
 }
 
 // This process's own container id, or null when it is not containerized. The

@@ -45,7 +45,6 @@ function makeManifest(
       redis: { available: false },
       hostMetrics: true,
       fileRead: true,
-      remediationEnabled: true,
     },
   };
 }

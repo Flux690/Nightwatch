@@ -55,7 +55,6 @@ function dockerManifest(
       redis: { available: false },
       hostMetrics: false,
       fileRead: false,
-      remediationEnabled: false,
     },
   };
 }
@@ -207,7 +206,6 @@ describe("fleet summary injection", () => {
       expect(msg).toBeDefined();
 
       // The capability manifest fields must NOT appear in the opening message.
-      expect(msg).not.toContain("remediationEnabled");
       expect(msg).not.toContain("hostMetrics");
       expect(msg).not.toContain("fileRead");
       expect(msg).not.toContain("runnerVersion");

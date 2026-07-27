@@ -7,7 +7,6 @@ import type { PendingHumanInputWithSession } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
-import { targetRemediationDisabled } from "../agent/policy.js";
 
 // Never throws: any fault becomes an is_error result so the run resumes
 // instead of the card wedging.
@@ -49,23 +48,6 @@ export async function executeApprovedTool(
       const result: ToolResult = {
         tool_use_id: toolUseId,
         content: `Tool "${toolName}" not found in registry. Platform configuration error.`,
-        is_error: true,
-      };
-      settleRemediationAction(sessionId, toolUseId, "failed", result.content);
-      return result;
-    }
-
-    // Authoritative per-target gate: the mode can change while the interrupt
-    // sat waiting, so the check at proposal time is not enough on its own.
-    const disabledOn = targetRemediationDisabled(toolInput);
-    if (disabledOn !== null) {
-      logger.warn(
-        { sessionId, tool: toolName, server: disabledOn },
-        "approved write refused: remediation disabled on target server",
-      );
-      const result: ToolResult = {
-        tool_use_id: toolUseId,
-        content: `Remediation is disabled on '${disabledOn}'. The approved action was NOT executed. Recommend the fix in plain text instead; the operator can enable remediation for that server from the console.`,
         is_error: true,
       };
       settleRemediationAction(sessionId, toolUseId, "failed", result.content);

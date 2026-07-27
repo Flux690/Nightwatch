@@ -242,7 +242,6 @@ describe("remediation circuit breaker", () => {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: true,
       },
     });
 

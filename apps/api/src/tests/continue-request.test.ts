@@ -89,7 +89,6 @@ describe("continue-request interrupts", () => {
         redis: { available: false },
         hostMetrics: true,
         fileRead: true,
-        remediationEnabled: false,
       },
     });
 

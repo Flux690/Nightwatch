@@ -16,7 +16,6 @@ function runner(
       identity,
       status: "running" as const,
     })),
-    remediationEnabled: true,
   };
 }
 

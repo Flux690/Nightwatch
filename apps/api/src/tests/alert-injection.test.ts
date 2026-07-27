@@ -24,7 +24,7 @@ import type {
   RunnerCommandMessage,
 } from "@nightwarden/shared";
 import Fastify from "fastify";
-import { generateRunnerToken, setRemediationMode } from "../db/runner.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport } from "./report-helper.js";
@@ -36,7 +36,6 @@ import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
   registerRunner,
   setRunnerManifest,
-  setRunnerRemediationMode,
   unregisterRunner,
 } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
@@ -199,15 +198,12 @@ describe("mid-run alert injection (loop seam)", () => {
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
     const runnerId = generateRunnerToken("inject-sus").id;
-    // Write offering is fleet-wide (any connected runner with remediation on), so a
     // connection with a synced cache is required, mirroring ws/server.ts's reconciliation.
-    setRemediationMode(runnerId, true);
     const susConn = registerRunner(
       runnerId,
       () => {},
       () => {},
     );
-    setRunnerRemediationMode(runnerId, true);
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -315,7 +311,6 @@ describe("mid-run alert injection (loop seam)", () => {
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const runnerId = generateRunnerToken("inject-resume").id;
     const tokenPlaintext = generateAlertSourceToken("inject-resume");
-    setRemediationMode(runnerId, true);
     const conn = registerRunner(
       runnerId,
       (raw: string) => {
@@ -330,7 +325,6 @@ describe("mid-run alert injection (loop seam)", () => {
     );
     setRunnerManifest(runnerId, webOneManifest());
     // Sync the DB mode into the connection cache, as reconciliation would.
-    setRunnerRemediationMode(runnerId, true);
 
     // R1: gated tool → run suspends. R2 (resume): free-form finish.
     queueRuns(

@@ -1,6 +1,5 @@
 import { executeTool } from "./tools/toolset.js";
 import type { Tool, ToolExecuteContext } from "./tools/types.js";
-import { targetRemediationDisabled } from "./policy.js";
 import { circuitBreakerRejection } from "./breaker.js";
 import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence, stripEvidenceTag } from "./report.js";
@@ -46,8 +45,8 @@ export async function processToolUses(params: {
   let gatedEntry: Tool | null = null;
 
   for (const tool of toolUses) {
-    // Resolve against the effective set, not the full registry, so a tool stripped by remediation
-    // mode or fleet providers never reaches the gate - this makes the master write switch unbypassable.
+    // Resolve against the effective set, not the full registry, so a tool stripped
+    // by fleet providers or integrations never reaches the gate.
     const entry = toolset.find((t) => t.schema.name === tool.name);
 
     if (!entry) {
@@ -73,22 +72,6 @@ export async function processToolUses(params: {
       }
 
       if (entry.access === "write") {
-        // Per-target gate: a write against a machine whose remediation is off is rejected
-        // before waking a human - the switch belongs to the target, not the session.
-        const disabledOn = targetRemediationDisabled(tool.input);
-        if (disabledOn !== null) {
-          log.warn(
-            { tool: tool.name, server: disabledOn },
-            "write refused: remediation disabled on target server",
-          );
-          toolResults.push({
-            tool_use_id: tool.id,
-            content: `Remediation is disabled on '${disabledOn}'. The action was NOT proposed or executed. Recommend the fix in plain text instead; the operator can enable remediation for that server from the console.`,
-            is_error: true,
-          });
-          continue;
-        }
-
         const breakerRejection = circuitBreakerRejection(tool, config);
         if (breakerRejection) {
           log.warn(
