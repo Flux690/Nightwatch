@@ -1,0 +1,245 @@
+// The one-line answer a tool row shows without being expanded.
+//
+// Every finding is COMPUTED from the tool's own structured result. None of it is
+// written by the model, for the same reason the report's action log is not: a
+// sentence the model composes about data the system already holds is a sentence
+// nothing can check. `redis-cli info memory` returning used_memory is a fact;
+// "memory looks high" is a claim. We only ever render the fact, and when we
+// quote a log line we quote it verbatim rather than summarising it.
+
+export type FindingTone = "normal" | "bad";
+
+export interface ToolFinding {
+  text: string;
+  tone: FindingTone;
+}
+
+// Runner errors arrive as a plain string with this prefix, not as a shaped
+// object, so every formatter has to survive one.
+const ERROR_PREFIX = "ERROR:";
+
+function asRecord(result: unknown): Record<string, unknown> | null {
+  let value = result;
+  if (typeof value === "string") {
+    if (value.startsWith(ERROR_PREFIX)) return null;
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function num(record: Record<string, unknown>, key: string): number | null {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function str(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
+function arr(record: Record<string, unknown>, key: string): unknown[] | null {
+  const value = record[key];
+  return Array.isArray(value) ? value : null;
+}
+
+// Binary units, matching what docker stats and free report.
+export function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const rounded =
+    value >= 100 || unit === 0 ? Math.round(value) : value.toFixed(1);
+  return `${rounded} ${units[unit]}`;
+}
+
+function formatPercent(value: number): string {
+  return value >= 10 ? `${Math.round(value)}%` : `${value.toFixed(1)}%`;
+}
+
+// One line of a log, clipped so a 400px rail shows the start of the message
+// rather than an ellipsis where the interesting part was.
+const LINE_CLIP = 120;
+
+function clip(line: string): string {
+  const trimmed = line.trim();
+  return trimmed.length > LINE_CLIP
+    ? `${trimmed.slice(0, LINE_CLIP)}…`
+    : trimmed;
+}
+
+const SEVERE = /\b(error|err|fatal|panic|exception|traceback|oom)\b/i;
+const WARNING = /\b(warn|warning)\b/i;
+
+// Highest severity wins, and the line is returned as written. Choosing which
+// line to show is a sort; rewording it would be a summary, which is the thing
+// we are avoiding.
+function worstLine(lines: string[]): { line: string; severe: boolean } | null {
+  const severe = lines.find((l) => SEVERE.test(l));
+  if (severe !== undefined) return { line: severe, severe: true };
+  const warning = lines.find((l) => WARNING.test(l));
+  if (warning !== undefined) return { line: warning, severe: false };
+  const last = lines[lines.length - 1];
+  return last === undefined ? null : { line: last, severe: false };
+}
+
+type Formatter = (record: Record<string, unknown>) => ToolFinding | null;
+
+const FORMATTERS: Record<string, Formatter> = {
+  GetDockerLogs: (r) => {
+    const lines = arr(r, "lines")?.filter(
+      (l): l is string => typeof l === "string",
+    );
+    const total = num(r, "totalLines");
+    if (!lines) return null;
+    const counted =
+      total !== null && total !== lines.length
+        ? `${lines.length} of ${total}`
+        : `${lines.length} lines`;
+    if (lines.length === 0)
+      return { text: "no matching lines", tone: "normal" };
+    const worst = worstLine(lines);
+    return worst === null
+      ? { text: counted, tone: "normal" }
+      : {
+          text: `${clip(worst.line)} · ${counted}`,
+          tone: worst.severe ? "bad" : "normal",
+        };
+  },
+
+  GetDockerStats: (r) => {
+    const cpu = num(r, "cpuPercent");
+    const used = num(r, "memoryUsedBytes");
+    const limit = num(r, "memoryLimitBytes");
+    if (cpu === null && used === null) return null;
+    const parts: string[] = [];
+    if (cpu !== null) parts.push(`cpu ${formatPercent(cpu)}`);
+    if (used !== null) {
+      parts.push(
+        limit !== null && limit > 0
+          ? `mem ${formatBytes(used)} of ${formatBytes(limit)}`
+          : `mem ${formatBytes(used)}`,
+      );
+    }
+    return { text: parts.join(" · "), tone: "normal" };
+  },
+
+  GetHostMemory: (r) => {
+    const total = num(r, "totalBytes");
+    const available = num(r, "availableBytes");
+    if (total === null || available === null) return null;
+    // An OOM kill is the whole answer when it happened, so it leads.
+    const oom = r["oomKillerFiredRecently"] === true;
+    const text = `${formatBytes(available)} free of ${formatBytes(total)}`;
+    return oom
+      ? { text: `OOM killer fired · ${text}`, tone: "bad" }
+      : { text, tone: "normal" };
+  },
+
+  GetDockerConfig: (r) => {
+    const image = str(r, "image");
+    const restart = str(r, "restartPolicy");
+    if (image === null) return null;
+    return {
+      text: restart ? `${image} · restart ${restart}` : image,
+      tone: "normal",
+    };
+  },
+
+  GetDockerEvents: (r) => {
+    const events = arr(r, "events");
+    if (!events) return null;
+    if (events.length === 0) return { text: "no events", tone: "normal" };
+    const first = events[0];
+    const label =
+      typeof first === "object" && first !== null
+        ? (str(first as Record<string, unknown>, "eventType") ?? "")
+        : "";
+    const count = `${events.length} event${events.length === 1 ? "" : "s"}`;
+    return {
+      text: label ? `${clip(label)} · ${count}` : count,
+      tone: "normal",
+    };
+  },
+};
+
+// Prometheus and Loki share a series shape, and an empty result is the finding
+// that matters: it usually means the query named a metric that does not exist,
+// which is otherwise invisible until the report has no chart in it.
+function seriesFinding(record: Record<string, unknown>): ToolFinding | null {
+  const series = arr(record, "series");
+  if (!series) return null;
+  if (series.length === 0) return { text: "no series matched", tone: "bad" };
+  return {
+    text: `${series.length} series`,
+    tone: "normal",
+  };
+}
+
+for (const name of [
+  "QueryMetrics",
+  "QueryMetricsRange",
+  "QueryLogs",
+  "QueryLogMetrics",
+]) {
+  FORMATTERS[name] = seriesFinding;
+}
+
+// Shell tools: exit status is the finding, and a non-zero exit is the failure
+// the reader is scanning for.
+function execFinding(record: Record<string, unknown>): ToolFinding | null {
+  const exit = num(record, "exitCode");
+  if (exit === null) return null;
+  // The runner's container exec splits the streams; the repo sandbox's Bash
+  // returns one combined `output`. Both reach this row.
+  const stdout = str(record, "stdout") ?? str(record, "output") ?? "";
+  const stderr = str(record, "stderr") ?? "";
+  const lines = `${stdout}\n${stderr}`.split("\n").filter(Boolean).length;
+  const counted = `${lines} line${lines === 1 ? "" : "s"}`;
+  if (exit !== 0) {
+    const firstErr = stderr.split("\n").find(Boolean);
+    return {
+      text: firstErr ? `exit ${exit} · ${clip(firstErr)}` : `exit ${exit}`,
+      tone: "bad",
+    };
+  }
+  return { text: `exit 0 · ${counted}`, tone: "normal" };
+}
+
+for (const name of ["DockerBash", "K8sBash", "Bash"]) {
+  FORMATTERS[name] = execFinding;
+}
+
+// null while the call is still running, and for any tool without a formatter:
+// the row then shows its target alone rather than an invented summary.
+export function findingFor(
+  toolName: string,
+  result: unknown,
+): ToolFinding | null {
+  if (result === null || result === undefined) return null;
+
+  if (typeof result === "string" && result.startsWith(ERROR_PREFIX)) {
+    const message = result.slice(ERROR_PREFIX.length).trim();
+    const firstLine = message.split("\n").find(Boolean) ?? "failed";
+    return { text: clip(firstLine), tone: "bad" };
+  }
+
+  const record = asRecord(result);
+  if (record === null) {
+    if (typeof result !== "string") return null;
+    const firstLine = result.split("\n").find(Boolean);
+    return firstLine ? { text: clip(firstLine), tone: "normal" } : null;
+  }
+
+  const formatter = FORMATTERS[toolName];
+  return formatter ? formatter(record) : null;
+}

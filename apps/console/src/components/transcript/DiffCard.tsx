@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TOOL_CARD_CLASS } from "./TerminalCard.js";
+import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { cn } from "@/lib/utils";
 
 export type DiffLineType = "added" | "removed" | "unchanged";

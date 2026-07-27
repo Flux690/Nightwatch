@@ -7,7 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import type { ClarificationCardItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
-import { firstLines, IO_LABEL_CLASS, TOOL_CARD_CLASS } from "./TerminalCard.js";
+import { firstLines, IO_LABEL_CLASS, TOOL_CARD_CLASS } from "./cardChrome.js";
 
 export function ClarificationCardPanel({
   item,

@@ -250,7 +250,7 @@ describe("TranscriptItemRenderer", () => {
   });
 
   describe("output disclosure", () => {
-    it("keeps a generic tool's output behind a chevron", async () => {
+    it("shows an unknown tool's first line as the finding and the rest on expand", async () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-5",
@@ -259,15 +259,22 @@ describe("TranscriptItemRenderer", () => {
         state: { phase: "complete", result: "cpu 0.91\nmem 0.44" },
       });
 
-      expect(screen.queryByText(/cpu 0.91/)).not.toBeInTheDocument();
+      // The row carries the answer; the remainder stays folded away.
+      expect(screen.getByText(/cpu 0.91/)).toBeInTheDocument();
+      expect(screen.queryByText(/mem 0.44/)).not.toBeInTheDocument();
+
       await userEvent
         .setup()
-        .click(screen.getByRole("button", { name: /2 lines/i }));
-      expect(screen.getByText(/cpu 0.91/)).toBeInTheDocument();
+        .click(screen.getByRole("button", { name: /QueryPrometheus/ }));
+      expect(screen.getByText(/mem 0.44/)).toBeInTheDocument();
     });
 
-    it("previews a long shell result and reveals the rest on demand", async () => {
-      const output = ["one", "two", "three", "four", "five"].join("\n");
+    it("caps a long shell result and reveals the rest on demand", async () => {
+      // Twelve lines against a body cap of eight, so the cap is exercised
+      // rather than merely configured.
+      const output = Array.from({ length: 12 }, (_, i) => `line-${i + 1}`).join(
+        "\n",
+      );
       wrap({
         kind: "tool_card",
         toolUseId: "tu-6",
@@ -276,13 +283,16 @@ describe("TranscriptItemRenderer", () => {
         state: { phase: "complete", result: { exitCode: 0, output } },
       });
 
-      expect(screen.getByText(/one/)).toBeInTheDocument();
-      expect(screen.queryByText(/five/)).not.toBeInTheDocument();
+      const user = userEvent.setup();
+      // Exit status is the finding, so the row reports it without expanding.
+      expect(screen.getByText(/exit 0/)).toBeInTheDocument();
 
-      await userEvent
-        .setup()
-        .click(screen.getByRole("button", { name: /2 more lines/i }));
-      expect(screen.getByText(/five/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /Bash/ }));
+      expect(screen.getByText(/line-1/)).toBeInTheDocument();
+      expect(screen.queryByText(/line-12/)).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /show all 12/i }));
+      expect(screen.getByText(/line-12/)).toBeInTheDocument();
     });
   });
 });

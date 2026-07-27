@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { TOOL_CARD_CLASS } from "./TerminalCard.js";
+import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { ICON_UI } from "@/lib/iconProps";
 
 export interface PullRequestResult {

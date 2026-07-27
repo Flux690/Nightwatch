@@ -314,9 +314,9 @@ describe("SessionView", () => {
       });
 
       // Output is evidence to check rather than the thread to follow, so it
-      // collapses until asked for.
+      // collapses until asked for. The row itself is the disclosure.
       const disclosure = await screen.findByRole("button", {
-        name: /output|lines/i,
+        name: /check_service_status/,
       });
       expect(screen.queryByText(/stopped/)).not.toBeInTheDocument();
 
@@ -390,10 +390,11 @@ describe("SessionView", () => {
       });
 
       // Exactly one card gained output: the one the item named. The other is
-      // still running, so it offers nothing to open.
-      const disclosures = await screen.findAllByRole("button", {
-        name: /output|lines/i,
+      // still running, so its row is disabled and cannot be opened.
+      const rows = await screen.findAllByRole("button", {
+        name: /check_service_status|list_processes/,
       });
+      const disclosures = rows.filter((r) => !r.hasAttribute("disabled"));
       expect(disclosures).toHaveLength(1);
 
       await userEvent.setup().click(disclosures[0]!);
@@ -842,11 +843,9 @@ describe("SessionView", () => {
         resolvedCard.compareDocumentPosition(toolCard) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      await userEvent
-        .setup()
-        .click(within(toolCard).getByRole("button", { name: /output|lines/i }));
+      // The result is the row's finding, so it reads without being expanded.
       expect(
-        within(screen.getByTestId("tool-card")).getByText(/web-01 restarted/),
+        within(toolCard).getByText(/web-01 restarted/),
       ).toBeInTheDocument();
     });
   });
