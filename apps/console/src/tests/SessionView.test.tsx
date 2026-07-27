@@ -758,7 +758,7 @@ describe("SessionView", () => {
 
       const user = userEvent.setup();
       const card = screen.getByTestId("approval-card");
-      await user.click(within(card).getByRole("button", { name: /approve/i }));
+      await user.click(within(card).getByRole("button", { name: /restart/i }));
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
@@ -772,7 +772,7 @@ describe("SessionView", () => {
           }),
         );
         expect(
-          within(card).getByRole("button", { name: /approve/i }),
+          within(card).getByRole("button", { name: /restart/i }),
         ).toBeDisabled();
         expect(
           within(card).getByRole("button", { name: /reject/i }),
@@ -827,7 +827,7 @@ describe("SessionView", () => {
           within(card).getByText(/approved by operator/i),
         ).toBeInTheDocument();
         expect(
-          within(card).queryByRole("button", { name: /approve/i }),
+          within(card).queryByRole("button", { name: /restart/i }),
         ).not.toBeInTheDocument();
         expect(
           within(card).queryByRole("button", { name: /reject/i }),
@@ -871,7 +871,7 @@ describe("SessionView", () => {
         ).toBeInTheDocument();
         expect(within(card).getByText(/high/i)).toBeInTheDocument();
         expect(
-          within(card).getByRole("button", { name: /approve/i }),
+          within(card).getByRole("button", { name: /restart/i }),
         ).toBeInTheDocument();
       });
     });
@@ -920,7 +920,7 @@ describe("SessionView", () => {
 
       const user = userEvent.setup();
       const card = screen.getByTestId("approval-card");
-      await user.click(within(card).getByRole("button", { name: /approve/i }));
+      await user.click(within(card).getByRole("button", { name: /restart/i }));
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(

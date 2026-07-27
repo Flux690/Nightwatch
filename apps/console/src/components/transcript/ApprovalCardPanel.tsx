@@ -1,7 +1,56 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { ApprovalCardItem } from "./types.js";
 import { ToolCard } from "./toolPresentation.js";
 import { InterruptCard } from "./InterruptCard.js";
+
+/* The only bordered block in the stream, which is what makes it unmissable
+   without a colour wash. Approvals habituate when every request looks the same,
+   so the weight lives here and ordinary tool calls are borderless rows. */
+
+function inputString(
+  input: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = input[key];
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
+// The exact argv, never a paraphrase: what the operator reads has to be what
+// runs, or the approval is theatre.
+function commandOf(input: Record<string, unknown>): string | null {
+  const command = input["command"];
+  if (Array.isArray(command))
+    return command.map((part) => String(part)).join(" ");
+  return typeof command === "string" ? command : null;
+}
+
+function serviceOf(input: Record<string, unknown>): string | null {
+  const target = input["target"];
+  if (typeof target === "string") {
+    const parts = target.split("/");
+    return parts[parts.length - 1] ?? target;
+  }
+  return inputString(input, "server");
+}
+
+// A verb and its object beat "Approve": a generic label is the one users learn
+// to click without reading. Derived from the tool, so it cannot overstate.
+function actionLabel(toolName: string, input: Record<string, unknown>): string {
+  const service = serviceOf(input);
+  switch (toolName) {
+    case "RestartDockerService":
+    case "RestartK8sWorkload":
+      return service ? `Restart ${service}` : "Restart service";
+    case "DockerBash":
+    case "K8sBash":
+    case "Bash":
+      return "Run this command";
+    default:
+      return `Run ${toolName}`;
+  }
+}
 
 export function ApprovalCardPanel({
   item,
@@ -12,23 +61,94 @@ export function ApprovalCardPanel({
   // A decision already sent and awaiting its reply. Belongs to the component,
   // not the transcript: it describes this browser, not the session.
   submitting?: boolean;
-  onResolve?: (action: "approve" | "reject") => void;
+  onResolve?: (action: "approve" | "reject", reason?: string) => void;
 }): React.JSX.Element {
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+
   const state = item.state;
   const resolved = state.phase === "resolved";
+  const { input } = item;
+  const command = commandOf(input);
+  const service = serviceOf(input);
+  // The agent's own words for why, which is the one part of this card it is
+  // entitled to author.
+  const why = inputString(input, "reason") ?? inputString(input, "rationale");
 
   return (
     <>
       <InterruptCard data-testid="approval-card" resolved={resolved}>
-        <p className="font-mono text-sm font-medium">{item.toolName}</p>
-        <p className="text-sm text-muted-foreground">
-          Risk: {item.risk ?? "unknown"}
+        {!resolved && (
+          <p className="text-sm font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+            Needs your approval
+          </p>
+        )}
+
+        <p className="text-base font-semibold">
+          {actionLabel(item.toolName, input)}
         </p>
+
+        {why !== null && (
+          <p className="text-sm leading-relaxed text-muted-foreground">{why}</p>
+        )}
+
+        {command !== null && (
+          <pre className="m-0 overflow-x-auto rounded-md border border-border px-2.5 py-2 font-mono text-sm break-words whitespace-pre-wrap">
+            <span className="text-ink-subtle select-none">$ </span>
+            {command}
+          </pre>
+        )}
+
+        {/* Facts about the call, plus the agent's own risk assessment. Its
+            opinion, labelled as such, sitting beside the command that lets you
+            judge it yourself. */}
+        <div className="flex flex-wrap gap-3.5 text-sm text-ink-subtle">
+          <span className="font-mono">{item.toolName}</span>
+          {service !== null && <span className="font-mono">{service}</span>}
+          <span>{item.risk ?? "unknown"} risk, per the agent</span>
+        </div>
+
         {state.phase === "resolved" ? (
           <p className="text-sm" data-testid="approval-resolution">
             {state.decision === "approved" ? "Approved" : "Rejected"}
             {state.by ? ` by ${state.by}` : ""}
           </p>
+        ) : rejecting ? (
+          // Rejection has always accepted a comment server-side, where it is fed
+          // back to the agent so it can reassess instead of guessing why.
+          <div className="flex flex-col gap-2">
+            <Textarea
+              autoFocus
+              rows={2}
+              aria-label="Why are you rejecting this?"
+              placeholder="What is wrong with it? The agent gets this."
+              value={reason}
+              onChange={(e) => setReason(e.currentTarget.value)}
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={submitting}
+                onClick={() =>
+                  onResolve?.("reject", reason.trim() || undefined)
+                }
+              >
+                Send rejection
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={submitting}
+                onClick={() => {
+                  setRejecting(false);
+                  setReason("");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
         ) : (
           <div className="flex gap-2">
             <Button
@@ -36,13 +156,13 @@ export function ApprovalCardPanel({
               disabled={submitting}
               onClick={() => onResolve?.("approve")}
             >
-              Approve
+              {actionLabel(item.toolName, input)}
             </Button>
             <Button
               size="sm"
-              variant="secondary"
+              variant="ghost"
               disabled={submitting}
-              onClick={() => onResolve?.("reject")}
+              onClick={() => setRejecting(true)}
             >
               Reject
             </Button>

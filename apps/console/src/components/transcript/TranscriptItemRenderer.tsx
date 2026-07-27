@@ -108,7 +108,11 @@ export function TranscriptItemRenderer({
 }: {
   item: TranscriptItem;
   submitting?: boolean;
-  onResolve?: (toolUseId: string, action: "approve" | "reject") => void;
+  onResolve?: (
+    toolUseId: string,
+    action: "approve" | "reject",
+    reason?: string,
+  ) => void;
   onAnswer?: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
   switch (item.kind) {
@@ -130,7 +134,7 @@ export function TranscriptItemRenderer({
           submitting={submitting}
           onResolve={
             onResolve
-              ? (action) => onResolve(item.toolUseId, action)
+              ? (action, reason) => onResolve(item.toolUseId, action, reason)
               : undefined
           }
         />

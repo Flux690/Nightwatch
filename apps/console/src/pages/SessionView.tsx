@@ -93,7 +93,11 @@ function TranscriptColumn({
   lastEchoText: string | null;
   showWorking: boolean;
   submittingToolUseId: string | null;
-  onResolve: (toolUseId: string, action: "approve" | "reject") => void;
+  onResolve: (
+    toolUseId: string,
+    action: "approve" | "reject",
+    reason?: string,
+  ) => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
 }): React.JSX.Element {
   const persistedItems = useMemo(() => {
@@ -398,7 +402,7 @@ export function SessionView({
   });
 
   const handleResolve = useCallback(
-    (toolUseId: string, action: "approve" | "reject") => {
+    (toolUseId: string, action: "approve" | "reject", reason?: string) => {
       setLiveItems((prev) =>
         prev.map((item) =>
           (item.kind === "approval_card" || item.kind === "continue_card") &&
@@ -409,7 +413,13 @@ export function SessionView({
       );
       respond.mutate({
         toolUseId,
-        body: { decision: action, resolvedBy: "console" },
+        // The comment rides the same request the decision does; the API feeds it
+        // to the agent so a rejection says why instead of only saying no.
+        body: {
+          decision: action,
+          resolvedBy: "console",
+          ...(reason !== undefined && { text: reason }),
+        },
       });
     },
     [respond],

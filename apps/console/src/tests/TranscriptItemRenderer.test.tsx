@@ -55,24 +55,67 @@ describe("TranscriptItemRenderer", () => {
       state: { phase: "awaiting_human" },
     };
 
-    it("calls onResolve with approve when Approve is clicked", async () => {
+    it("labels the action button with the verb, not a generic Approve", async () => {
       const onResolve = vi.fn();
       wrap(approvalItem, { onResolve });
 
-      const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: /approve/i }));
+      // A generic label is the one users learn to click without reading.
+      expect(
+        screen.queryByRole("button", { name: /^approve$/i }),
+      ).not.toBeInTheDocument();
 
-      expect(onResolve).toHaveBeenCalledWith("tu-gate", "approve");
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /restart/i }));
+
+      expect(onResolve).toHaveBeenCalledWith("tu-gate", "approve", undefined);
     });
 
-    it("calls onResolve with reject when Reject is clicked", async () => {
+    it("shows the exact command for a shell tool", () => {
+      wrap({
+        ...approvalItem,
+        toolName: "DockerBash",
+        input: {
+          target: "docker/encodr-prod/encodr/cache",
+          command: ["redis-cli", "CONFIG", "SET", "maxmemory", "8gb"],
+          reason: "writes are being rejected",
+        },
+      });
+
+      // Verbatim argv: what the operator reads has to be what runs.
+      expect(
+        screen.getByText(/redis-cli CONFIG SET maxmemory 8gb/),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/writes are being rejected/)).toBeInTheDocument();
+    });
+
+    it("sends a rejection reason so the agent learns why", async () => {
       const onResolve = vi.fn();
       wrap(approvalItem, { onResolve });
 
       const user = userEvent.setup();
-      await user.click(screen.getByRole("button", { name: /reject/i }));
+      await user.click(screen.getByRole("button", { name: /^reject$/i }));
+      await user.type(
+        screen.getByRole("textbox", { name: /why are you rejecting/i }),
+        "restarting drops the cache",
+      );
+      await user.click(screen.getByRole("button", { name: /send rejection/i }));
 
-      expect(onResolve).toHaveBeenCalledWith("tu-gate", "reject");
+      expect(onResolve).toHaveBeenCalledWith(
+        "tu-gate",
+        "reject",
+        "restarting drops the cache",
+      );
+    });
+
+    it("allows a bare rejection with no reason typed", async () => {
+      const onResolve = vi.fn();
+      wrap(approvalItem, { onResolve });
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /^reject$/i }));
+      await user.click(screen.getByRole("button", { name: /send rejection/i }));
+
+      expect(onResolve).toHaveBeenCalledWith("tu-gate", "reject", undefined);
     });
   });
 
