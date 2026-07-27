@@ -407,8 +407,10 @@ describe("Shell", () => {
       const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("1");
+          screen.getByRole("status", {
+            name: "1 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
 
       // The interrupt is now durable server-side; the event triggers a refetch
@@ -430,8 +432,10 @@ describe("Shell", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("2");
+          screen.getByRole("status", {
+            name: "2 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
     });
 
@@ -439,8 +443,10 @@ describe("Shell", () => {
       const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("1");
+          screen.getByRole("status", {
+            name: "1 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
 
       setPendingCount(0);
@@ -467,8 +473,10 @@ describe("Shell", () => {
       const { qc, setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("1");
+          screen.getByRole("status", {
+            name: "1 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
 
       // Server count grows to 2; the event refreshes the list to 2.
@@ -488,8 +496,10 @@ describe("Shell", () => {
       });
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("2");
+          screen.getByRole("status", {
+            name: "2 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
 
       // An unrelated refetch must not re-apply the event on top of the already
@@ -499,8 +509,10 @@ describe("Shell", () => {
       });
       await waitFor(() => {
         expect(
-          screen.getByRole("status", { name: /awaiting approval/i }),
-        ).toHaveTextContent("2");
+          screen.getByRole("status", {
+            name: "2 awaiting approval",
+          }),
+        ).toBeInTheDocument();
       });
     });
   });

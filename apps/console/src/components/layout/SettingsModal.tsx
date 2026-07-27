@@ -10,7 +10,7 @@ import type {
 } from "@nightwarden/shared";
 import { X } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -399,7 +399,7 @@ export function SettingsModal({
                   <TabsContent value="model">
                     {form && (
                       <div className="flex flex-col items-start gap-4 [&>*]:w-full">
-                        <Field className="max-w-80">
+                        <Field className="max-w-120">
                           <FieldLabel htmlFor="settings-provider">
                             Protocol
                           </FieldLabel>
@@ -430,7 +430,7 @@ export function SettingsModal({
                           </NativeSelect>
                         </Field>
 
-                        <Field className="max-w-80">
+                        <Field className="max-w-120">
                           <FieldLabel htmlFor="settings-base-url">
                             Base URL
                           </FieldLabel>
@@ -462,7 +462,7 @@ export function SettingsModal({
                               : "Not configured"}
                           </p>
                         </div>
-                        <Field className="max-w-80">
+                        <Field className="max-w-120">
                           <FieldLabel htmlFor="settings-api-key">
                             New API key
                           </FieldLabel>
@@ -492,17 +492,17 @@ export function SettingsModal({
                             Test connection
                           </Button>
                           {testResult?.ok && (
-                            <Badge variant="success">Connected</Badge>
+                            <StatusText tone="ok">Connected</StatusText>
                           )}
                           {testResult && !testResult.ok && (
-                            <Badge variant="destructive">
+                            <StatusText tone="fail">
                               {ERROR_LABELS[testResult.error] ??
                                 testResult.error}
-                            </Badge>
+                            </StatusText>
                           )}
                         </div>
 
-                        <Field className="max-w-80">
+                        <Field className="max-w-120">
                           <FieldLabel htmlFor="settings-model">
                             Model
                           </FieldLabel>
@@ -546,7 +546,7 @@ export function SettingsModal({
                         </Field>
 
                         {isAnthropic && (
-                          <Field className="max-w-80">
+                          <Field className="max-w-120">
                             <FieldLabel htmlFor="settings-thinking">
                               Thinking mode
                             </FieldLabel>

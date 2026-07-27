@@ -117,15 +117,16 @@ function RailItem({
       ? "bg-surface-active text-foreground"
       : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
   );
+  // A dot, not a counted pill: the number was 10px, and the sessions list one
+  // click away already names every waiting session. The count survives for
+  // assistive tech, which is the reader that cannot see the list.
   const badgeEl =
     badge !== undefined && badge > 0 ? (
       <span
         role="status"
-        aria-label="awaiting approval"
-        className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-sm bg-warning px-1 text-[10px] font-semibold leading-none text-warning-tint"
-      >
-        {badge > 99 ? "99+" : badge}
-      </span>
+        aria-label={`${badge} awaiting approval`}
+        className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-run ring-2 ring-sidebar"
+      />
     ) : null;
 
   return (

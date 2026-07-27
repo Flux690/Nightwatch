@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { LokiIntegrationStatus } from "@nightwarden/shared";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { MetaText, StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
@@ -156,9 +156,9 @@ export function LokiPage(): React.JSX.Element {
           <section className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">{status.url}</p>
-              <Badge variant="success">Connected</Badge>
-              {status.hasAuth && <Badge variant="secondary">Auth</Badge>}
-              {status.hasOrgId && <Badge variant="secondary">Tenant</Badge>}
+              <StatusText tone="ok">Connected</StatusText>
+              {status.hasAuth && <MetaText>Auth</MetaText>}
+              {status.hasOrgId && <MetaText>Tenant</MetaText>}
             </div>
             {status.validatedAt !== null && (
               <p className="text-sm text-muted-foreground">

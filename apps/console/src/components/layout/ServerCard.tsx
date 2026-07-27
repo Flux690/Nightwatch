@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { serviceIdentityKey, type RunnerRecord } from "@nightwarden/shared";
-import { Badge } from "@/components/ui/badge";
+import { StatusText } from "@/components/ui/status";
 import { Card } from "@/components/ui/card";
-import { statusVariant } from "@/lib/statusVariants";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
@@ -24,8 +23,7 @@ export function ServerCard({
   actions?: React.ReactNode;
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
-  const status = runner.online ? "online" : "offline";
-  const view = statusVariant("runner", status);
+  const online = runner.online;
   const capabilities = runner.manifest?.capabilities;
   const keys = (capabilities?.services ?? []).map((entry) =>
     serviceIdentityKey(entry.identity),
@@ -60,9 +58,9 @@ export function ServerCard({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Badge variant={view.variant} dot>
-            {view.label}
-          </Badge>
+          <StatusText tone={online ? "ok" : "muted"}>
+            {online ? "Online" : "Offline"}
+          </StatusText>
           <span className="font-mono text-sm tabular-nums text-muted-foreground">
             {timeAgo(runner.lastSeen)}
           </span>

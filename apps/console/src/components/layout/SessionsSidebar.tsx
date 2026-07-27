@@ -16,6 +16,7 @@ import {
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatusText, type StatusTone } from "@/components/ui/status";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { cn } from "@/lib/utils";
@@ -24,28 +25,19 @@ import { apiFetch } from "@/api/client";
 
 type Tab = "investigations" | "conversations";
 
-// Flat list, statuses not groups: state is a chip on the row, and the one
-// sort exception is that a paused agent floats to the top - it is waiting
+// Flat list, statuses not groups: state is a dot and a word on the row, and the
+// one sort exception is that a paused agent floats to the top - it is waiting
 // on a human and must never be buried under newer resolved rows.
-const STATUS_CHIP: Record<
+const STATUS_VIEW: Record<
   SessionRunStatus,
-  { label: string; className: string }
+  { label: string; tone: StatusTone }
 > = {
-  action_required: {
-    label: "Action required",
-    className: "bg-wait-tint text-wait",
-  },
-  investigating: {
-    label: "Investigating",
-    className: "bg-run-tint text-run animate-pulse",
-  },
-  resolved: { label: "Resolved", className: "bg-ok-tint text-ok" },
-  inconclusive: {
-    label: "Inconclusive",
-    className: "bg-surface text-muted-foreground",
-  },
-  failed: { label: "Failed", className: "bg-fail-tint text-fail" },
-  stopped: { label: "Stopped", className: "bg-surface text-muted-foreground" },
+  action_required: { label: "Action required", tone: "warn" },
+  investigating: { label: "Investigating", tone: "run" },
+  resolved: { label: "Resolved", tone: "ok" },
+  inconclusive: { label: "Inconclusive", tone: "muted" },
+  failed: { label: "Failed", tone: "fail" },
+  stopped: { label: "Stopped", tone: "muted" },
 };
 
 const SEVERITY_DOT: Record<AlertSeverity, string> = {
@@ -74,7 +66,7 @@ function SessionRow({
   onOpen: () => void;
   onDelete: () => void;
 }): React.JSX.Element {
-  const chip = session.status !== null ? STATUS_CHIP[session.status] : null;
+  const chip = session.status !== null ? STATUS_VIEW[session.status] : null;
   const subline = session.investigation
     ? (session.rootCauseLine ?? session.target ?? "started by you")
     : null;
@@ -115,14 +107,9 @@ function SessionRow({
               </span>
             )}
             {chip !== null && (
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold",
-                  chip.className,
-                )}
-              >
+              <StatusText tone={chip.tone} className="shrink-0">
                 {chip.label}
-              </span>
+              </StatusText>
             )}
           </span>
         )}

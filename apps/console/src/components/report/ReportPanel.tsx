@@ -4,11 +4,12 @@ import type {
   ChartSnapshot,
   EvidenceItem,
   RemediationActionRecord,
-  RemediationStatus,
   Report,
   ReportStatus,
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
+import { StatusText } from "@/components/ui/status";
+import { ACTION_LABEL, ACTION_TONE } from "@/lib/remediationStatus";
 
 // The investigation report artifact rendered in the main area, filling in live
 // as the agent calls UpdateReport. Snapshots are frozen into the report, so
@@ -219,22 +220,6 @@ function SectionHeading({
   );
 }
 
-// Written by the executor, never by the model: "executed" means the command ran
-// and returned, not that the agent said so.
-const ACTION_LABEL: Record<RemediationStatus, string> = {
-  executed: "Ran",
-  failed: "Failed",
-  rejected: "Declined",
-  executing: "Running",
-};
-
-const ACTION_TONE: Record<RemediationStatus, string> = {
-  executed: "text-ok",
-  failed: "text-fail",
-  rejected: "text-muted-foreground",
-  executing: "text-run",
-};
-
 export function ReportPanel({
   report,
   actions,
@@ -382,9 +367,9 @@ export function ReportPanel({
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {actions.map((action) => (
               <li key={action.toolUseId} className="flex items-baseline gap-2">
-                <span className={cn("text-sm", ACTION_TONE[action.status])}>
+                <StatusText tone={ACTION_TONE[action.status]}>
                   {ACTION_LABEL[action.status]}
-                </span>
+                </StatusText>
                 <span className="min-w-0 flex-1 truncate font-mono text-sm">
                   {action.toolName}
                   {action.serviceIdentityKey ? (

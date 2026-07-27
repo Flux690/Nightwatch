@@ -244,7 +244,7 @@
   /* Containers */
   --container-page: 920px;
   --container-chat: 760px;
-  --container-rail: 400px;
+  --container-rail: 420px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

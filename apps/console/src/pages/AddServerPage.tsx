@@ -4,10 +4,10 @@ import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { RunnerRecord } from "@nightwarden/shared";
 import { serviceIdentityKey } from "@nightwarden/shared";
 import { ServerCard } from "@/components/layout/ServerCard";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -147,6 +147,15 @@ export function AddServerPage(): React.JSX.Element {
 
   return (
     <Page>
+      {/* The wizard is reachable directly from an empty fleet, so browser back
+          may leave the console entirely. This always returns to the list. */}
+      <Link
+        to="/integrations/runner"
+        className="mb-2 inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft {...ICON_INLINE} />
+        Connected servers
+      </Link>
       <PageHeader>
         <PageTitle>Add a server</PageTitle>
       </PageHeader>
@@ -177,7 +186,7 @@ export function AddServerPage(): React.JSX.Element {
             </RadioGroup>
           </Field>
 
-          <Field className="max-w-80">
+          <Field className="max-w-120">
             <FieldLabel htmlFor="server-name">
               Server name (optional)
             </FieldLabel>
@@ -252,7 +261,7 @@ export function AddServerPage(): React.JSX.Element {
 
               <div className="flex items-center gap-2">
                 {connectedRunner ? (
-                  <Badge variant="success">Runner connected</Badge>
+                  <StatusText tone="ok">Runner connected</StatusText>
                 ) : (
                   <div className="flex items-center gap-2">
                     <Spinner />

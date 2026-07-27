@@ -20,8 +20,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ICON_DISPLAY } from "@/lib/iconProps";
-import { Badge } from "@/components/ui/badge";
-import { statusVariant } from "@/lib/statusVariants";
+import { StatusText } from "@/components/ui/status";
+import { ACTION_LABEL, ACTION_TONE } from "@/lib/remediationStatus";
 import {
   Table,
   TableHeader,
@@ -129,7 +129,6 @@ export function AuditLogPage(): React.JSX.Element {
             </TableHeader>
             <TableBody>
               {actions.map((action) => {
-                const statusView = statusVariant("remediation", action.status);
                 return (
                   <TableRow key={`${action.sessionId}/${action.toolUseId}`}>
                     <TableCell className="font-mono tabular-nums">
@@ -149,9 +148,9 @@ export function AuditLogPage(): React.JSX.Element {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusView.variant} dot>
-                        {statusView.label}
-                      </Badge>
+                      <StatusText tone={ACTION_TONE[action.status]}>
+                        {ACTION_LABEL[action.status]}
+                      </StatusText>
                     </TableCell>
                     <TableCell>
                       <span

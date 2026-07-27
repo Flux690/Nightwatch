@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { MetaText, StatusText } from "@/components/ui/status";
 import { Card, CardContent } from "@/components/ui/card";
 import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { ICON_UI } from "@/lib/iconProps";
@@ -54,10 +54,10 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
           <span className="text-base font-medium">
             Pull request #{pr.number}
           </span>
-          <Badge variant={pr.draft ? "secondary" : "success"}>
+          <StatusText tone={pr.draft ? "muted" : "ok"}>
             {pr.draft ? "Draft" : "Open"}
-          </Badge>
-          <Badge variant="outline">{pr.action}</Badge>
+          </StatusText>
+          <MetaText>{pr.action}</MetaText>
           <a
             href={pr.url}
             target="_blank"

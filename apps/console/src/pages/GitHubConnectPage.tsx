@@ -10,7 +10,7 @@ import type {
 } from "@nightwarden/shared";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { MetaText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import {
   Combobox,
@@ -523,9 +523,7 @@ export function GitHubConnectPage(): React.JSX.Element {
                         <span className="min-w-0 truncate font-mono">
                           {r.fullName}
                         </span>
-                        {r.private && (
-                          <Badge variant="secondary">Private</Badge>
-                        )}
+                        {r.private && <MetaText>Private</MetaText>}
                       </ComboboxItem>
                     ))}
                   </ComboboxList>
