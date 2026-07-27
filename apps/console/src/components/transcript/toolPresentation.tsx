@@ -269,7 +269,9 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   const target = targetOf(input) ?? inputString(input, "path");
 
   return (
-    <div data-testid="tool-card">
+    // Anchor for the report's evidence links: a citation there names the tool
+    // call that produced it, and this is where that call lives.
+    <div data-testid="tool-card" id={`tool-${item.toolUseId}`}>
       <button
         type="button"
         aria-expanded={open}

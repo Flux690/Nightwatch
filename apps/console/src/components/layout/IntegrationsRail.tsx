@@ -57,7 +57,7 @@ function RailRow({
           ) : (
             <span
               className={cn(
-                "truncate text-xs",
+                "truncate text-sm",
                 row.status !== null && row.statusVariant !== "muted"
                   ? "text-success"
                   : "text-muted-foreground",

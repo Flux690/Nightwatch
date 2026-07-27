@@ -58,7 +58,7 @@ function ModePicker({
       <DropdownMenuTrigger
         aria-label="Session mode"
         disabled={disabled}
-        className="group/mode inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:border-ring disabled:pointer-events-none disabled:opacity-50 data-popup-open:text-foreground"
+        className="group/mode inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:border-ring disabled:pointer-events-none disabled:opacity-50 data-popup-open:text-foreground"
       >
         {MODE_LABEL[mode]}
         <ChevronDown
@@ -74,7 +74,7 @@ function ModePicker({
           <DropdownMenuRadioItem value="ask">
             <span className="flex flex-col gap-0.5">
               <span className="font-medium text-foreground">Ask</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 Chat with the agent. It can look things up, but writes no
                 report.
               </span>
@@ -83,7 +83,7 @@ function ModePicker({
           <DropdownMenuRadioItem value="investigate">
             <span className="flex flex-col gap-0.5">
               <span className="font-medium text-foreground">Investigate</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-sm text-muted-foreground">
                 Run a full investigation with a live root-cause report.
               </span>
             </span>

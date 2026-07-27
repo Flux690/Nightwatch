@@ -81,7 +81,8 @@ describe("ReportPanel", () => {
     expect(
       screen.getByText("payments-worker OOM after PR #482"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Resolved")).toBeInTheDocument();
+    // Status is a word under the title now, not a pill beside it.
+    expect(screen.getByText("Root cause identified")).toBeInTheDocument();
     expect(screen.getByText("Cache bump leaks memory")).toBeInTheDocument();
     expect(
       screen.getByText(/1 of 2 resolved|2 of 2 resolved/),
@@ -138,5 +139,67 @@ describe("ReportPanel", () => {
     expect(
       screen.getByText(/ended without identifying a root cause/),
     ).toBeInTheDocument();
+  });
+  it("reports actions from the executor's log, not from the report text", () => {
+    render(
+      <ReportPanel
+        report={REPORT}
+        actions={[
+          {
+            sessionId: "s1",
+            toolUseId: "tu-1",
+            serviceIdentityKey: "docker/encodr-prod/encodr/cache",
+            toolName: "RestartDockerService",
+            status: "executed",
+            resolvedBy: "operator",
+            createdAt: "2026-07-26T17:43:00.000Z",
+            resolvedAt: "2026-07-26T17:43:02.000Z",
+          },
+          {
+            sessionId: "s1",
+            toolUseId: "tu-2",
+            serviceIdentityKey: null,
+            toolName: "DockerBash",
+            status: "rejected",
+            resolvedBy: "operator",
+            createdAt: "2026-07-26T17:44:00.000Z",
+            resolvedAt: "2026-07-26T17:44:01.000Z",
+          },
+        ]}
+      />,
+    );
+
+    // Executed and declined read differently, and both name who decided.
+    expect(screen.getByText("Actions taken")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.getByText("Declined")).toBeInTheDocument();
+    expect(screen.getAllByText(/by operator/)).toHaveLength(2);
+  });
+
+  it("omits the actions section entirely when nothing ran", () => {
+    render(<ReportPanel report={REPORT} actions={[]} />);
+    expect(screen.queryByText("Actions taken")).not.toBeInTheDocument();
+  });
+
+  it("links each evidence entry to the tool call that produced it", async () => {
+    const scrollIntoView = vi.spyOn(
+      window.HTMLElement.prototype,
+      "scrollIntoView",
+    );
+    // The transcript lives beside the report; the anchor is the tool row's id.
+    const anchor = document.createElement("div");
+    anchor.id = "tool-tu-1";
+    document.body.appendChild(anchor);
+
+    render(<ReportPanel report={REPORT} actions={[]} />);
+
+    const links = screen.getAllByRole("button", {
+      name: /show in transcript/i,
+    });
+    expect(links.length).toBeGreaterThan(0);
+    fireEvent.click(links[0]!);
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    anchor.remove();
   });
 });

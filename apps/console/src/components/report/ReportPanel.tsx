@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ChangesSnapshot,
   ChartSnapshot,
@@ -13,40 +14,33 @@ import { cn } from "@/lib/utils";
 // as the agent calls UpdateReport. Snapshots are frozen into the report, so
 // evidence renders forever - nothing here re-queries a data source.
 
-const STATUS_CHIP: Record<ReportStatus, { label: string; className: string }> =
-  {
-    investigation_incomplete: {
-      label: "Investigating",
-      className: "bg-run-tint text-run",
-    },
-    root_cause_identified: {
-      label: "Resolved",
-      className: "bg-ok-tint text-ok",
-    },
-    inconclusive: {
-      label: "Inconclusive",
-      className: "bg-surface text-muted-foreground",
-    },
-  };
+// A dot and a word, under the title. A pill floating at the top right reads as
+// a badge to be glanced at; the state of an investigation is part of its
+// heading, not decoration beside it.
+const STATUS_VIEW: Record<ReportStatus, { label: string; dot: string }> = {
+  investigation_incomplete: { label: "Investigating", dot: "bg-run" },
+  root_cause_identified: { label: "Root cause identified", dot: "bg-ok" },
+  inconclusive: { label: "Inconclusive", dot: "bg-border-strong" },
+};
 
-function StatusChip({ status }: { status: ReportStatus }): React.JSX.Element {
-  const chip = STATUS_CHIP[status];
+function StatusLine({ status }: { status: ReportStatus }): React.JSX.Element {
+  const view = STATUS_VIEW[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
-        chip.className,
-      )}
-    >
-      {chip.label}
+    <span className="inline-flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className={cn("size-1.5 shrink-0 rounded-full", view.dot)}
+      />
+      {view.label}
     </span>
   );
 }
 
-/* Numbered citation chips: click scrolls to the cited evidence card. The
-   number is the card's position in the evidence section, so chip and card
-   always agree. */
-function CitationChips({
+/* Numbered citation references: click scrolls to the cited evidence entry. The
+   number is the entry's position in the evidence section, so reference and
+   entry always agree. Typographic rather than a chip, so a sentence with three
+   citations still reads as a sentence. */
+function CitationRefs({
   ids,
   evidence,
 }: {
@@ -58,13 +52,13 @@ function CitationChips({
     .filter((c) => c.index !== -1);
   if (cited.length === 0) return null;
   return (
-    <span className="ml-1.5 inline-flex gap-1 align-middle">
+    <span className="ml-1 inline-flex gap-1">
       {cited.map(({ id, index }) => (
         <button
           key={id}
           type="button"
           aria-label={`Show evidence ${index + 1}`}
-          className="rounded-full bg-accent-tint px-1.5 py-px text-[10px] font-semibold text-run transition-colors hover:bg-accent-wash"
+          className="font-mono text-sm text-run underline decoration-accent-wash underline-offset-2 transition-colors hover:decoration-run"
           onClick={() =>
             document
               .getElementById(`evidence-${id}`)
@@ -99,6 +93,7 @@ function EvidenceChart({
 }: {
   snapshot: ChartSnapshot;
 }): React.JSX.Element | null {
+  const [hover, setHover] = useState<number | null>(null);
   const { points, seriesLabel } = snapshot;
   if (points.length < 2) return null;
 
@@ -115,22 +110,67 @@ function EvidenceChart({
 
   return (
     <figure className="m-0 mt-3">
-      <svg
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
-        role="img"
-        aria-label={seriesLabel}
-        className="w-full rounded-md border border-border bg-background"
-      >
-        <polygon points={area} className="fill-run-tint" />
-        <polyline
-          points={line}
-          className="stroke-run fill-none"
-          strokeWidth={1.5}
-          strokeLinejoin="round"
-        />
-      </svg>
-      <figcaption className="mt-1 flex justify-between text-xs text-muted-foreground">
-        <span className="min-w-0 truncate">{seriesLabel}</span>
+      <div className="relative">
+        <svg
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          role="img"
+          aria-label={seriesLabel}
+          className="w-full rounded-md border border-border bg-background"
+          onPointerMove={(e) => {
+            const box = e.currentTarget.getBoundingClientRect();
+            const at = ((e.clientX - box.left) / box.width) * CHART_W;
+            let nearest = 0;
+            for (let i = 1; i < points.length; i++) {
+              if (Math.abs(x(i) - at) < Math.abs(x(nearest) - at)) nearest = i;
+            }
+            setHover(nearest);
+          }}
+          onPointerLeave={() => setHover(null)}
+        >
+          <polygon points={area} className="fill-run-tint" />
+          <polyline
+            points={line}
+            className="stroke-run fill-none"
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {hover !== null && (
+            <g>
+              <line
+                x1={x(hover)}
+                x2={x(hover)}
+                y1={CHART_PAD}
+                y2={CHART_H - CHART_PAD}
+                className="stroke-border-strong"
+                strokeWidth={1}
+                strokeDasharray="3 3"
+              />
+              {/* Ringed against the surface so the marker reads on the fill. */}
+              <circle
+                cx={x(hover)}
+                cy={y(values[hover]!)}
+                r={4.5}
+                className="fill-run stroke-background"
+                strokeWidth={2}
+              />
+            </g>
+          )}
+        </svg>
+        {hover !== null && (
+          <div
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-md border border-border-strong bg-card px-2 py-1 font-mono text-sm whitespace-nowrap shadow-raised"
+            style={{
+              left: `${(x(hover) / CHART_W) * 100}%`,
+              top: `${(y(values[hover]!) / CHART_H) * 100}%`,
+            }}
+          >
+            {compact.format(values[hover]!)} · {timeLabel(points[hover]![0])}
+          </div>
+        )}
+      </div>
+      <figcaption className="mt-1.5 flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
+        <span className="min-w-0">{seriesLabel}</span>
         <span className="shrink-0">
           {compact.format(min)}–{compact.format(max)} ·{" "}
           {timeLabel(points[0]![0])}–{timeLabel(points[points.length - 1]![0])}
@@ -158,7 +198,7 @@ function ChangesList({
           >
             #{pr.number} {pr.title}
           </a>
-          <span className="shrink-0 text-xs text-muted-foreground">
+          <span className="shrink-0 text-sm text-muted-foreground">
             {pr.author} · merged {timeLabel(pr.mergedAt)}
           </span>
         </li>
@@ -207,15 +247,17 @@ export function ReportPanel({
 
   return (
     <div className="mx-auto w-full max-w-page px-8 py-6">
-      <header className="mb-6 flex items-center gap-3">
-        <h1 className="m-0 min-w-0 flex-1 truncate text-2xl font-semibold tracking-[-0.3px]">
+      <header className="mb-6">
+        <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
           {report.headline || "Investigation"}
         </h1>
-        <StatusChip status={report.status} />
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <StatusLine status={report.status} />
+        </div>
       </header>
 
       {report.rootCause.summary && (
-        <section className="mb-7">
+        <section className="mt-6 border-t border-border pt-6">
           <SectionHeading>Root cause</SectionHeading>
           <p className="m-0 text-base font-medium">
             {report.rootCause.summary}
@@ -229,20 +271,17 @@ export function ReportPanel({
       )}
 
       {report.hypotheses.length > 0 && (
-        <section className="mb-7">
+        <section className="mt-6 border-t border-border pt-6">
           <SectionHeading>
             Hypotheses · {resolved} of {report.hypotheses.length} resolved
           </SectionHeading>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {report.hypotheses.map((h) => (
-              <li
-                key={h.id}
-                className="rounded-lg border border-border bg-card px-4 py-3"
-              >
+              <li key={h.id}>
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      "text-xs font-semibold uppercase tracking-[0.05em]",
+                      "text-sm font-semibold uppercase tracking-[0.05em]",
                       h.state === "root_cause"
                         ? "text-ok"
                         : h.state === "disproven"
@@ -256,13 +295,13 @@ export function ReportPanel({
                         ? "Disproven"
                         : "Open"}
                   </span>
-                  <span className="text-xs text-ink-subtle">
+                  <span className="text-sm text-ink-subtle">
                     {h.confidence} confidence
                   </span>
                 </div>
                 <p className="m-0 mt-1 text-sm">
                   {h.statement}
-                  <CitationChips ids={h.evidenceIds} evidence={evidence} />
+                  <CitationRefs ids={h.evidenceIds} evidence={evidence} />
                 </p>
                 {h.reason && (
                   <p className="m-0 mt-1 text-sm text-muted-foreground">
@@ -276,22 +315,40 @@ export function ReportPanel({
       )}
 
       {evidence.length > 0 && (
-        <section className="mb-7">
+        <section className="mt-6 border-t border-border pt-6">
           <SectionHeading>Evidence</SectionHeading>
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          <ul className="m-0 flex list-none flex-col gap-5 p-0">
             {evidence.map((item, index) => (
               <li
                 key={item.id}
                 id={`evidence-${item.id}`}
-                className="scroll-mt-4 rounded-lg border border-border bg-card px-4 py-3"
+                className="scroll-mt-4"
               >
                 <div className="flex items-baseline gap-2">
-                  <span className="rounded-full bg-accent-tint px-1.5 py-px text-[10px] font-semibold text-run">
+                  <span className="font-mono text-sm font-semibold text-run">
                     e{index + 1}
                   </span>
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span className="min-w-0 font-mono text-sm text-ink-subtle">
                     {item.toolName}
                   </span>
+                  {/* Closes the loop: the citation names a claim, this reaches
+                      the call that produced it. */}
+                  {item.toolUseId !== "" && (
+                    <button
+                      type="button"
+                      className="ml-auto shrink-0 text-sm text-ink-subtle underline decoration-border underline-offset-2 hover:text-run hover:decoration-run"
+                      onClick={() =>
+                        document
+                          .getElementById(`tool-${item.toolUseId}`)
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          })
+                      }
+                    >
+                      Show in transcript
+                    </button>
+                  )}
                 </div>
                 <p className="m-0 mt-1 text-sm">{item.summary}</p>
                 {item.chartSnapshot && (
@@ -307,11 +364,11 @@ export function ReportPanel({
       )}
 
       {report.recommendedFix.summary && (
-        <section className="mb-7">
+        <section className="mt-6 border-t border-border pt-6">
           <SectionHeading>Recommended fix</SectionHeading>
           <p className="m-0 text-sm font-medium">
             {report.recommendedFix.summary}
-            <CitationChips
+            <CitationRefs
               ids={report.recommendedFix.evidenceIds}
               evidence={evidence}
             />
@@ -320,7 +377,7 @@ export function ReportPanel({
       )}
 
       {actions.length > 0 && (
-        <section className="mb-7">
+        <section className="mt-6 border-t border-border pt-6">
           <SectionHeading>Actions taken</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {actions.map((action) => (

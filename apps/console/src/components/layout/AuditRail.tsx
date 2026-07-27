@@ -87,7 +87,7 @@ export function AuditRail(): React.JSX.Element {
                   isActive={activeServer === server}
                   render={
                     <Link to="/audit" search={{ scope: "all", server }}>
-                      <span className="truncate font-mono text-xs">
+                      <span className="truncate font-mono text-sm">
                         {server}
                       </span>
                     </Link>

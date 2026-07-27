@@ -110,7 +110,7 @@ function SessionRow({
         {(subline !== null || chip !== null) && (
           <span className="flex w-full min-w-0 items-center gap-2">
             {subline !== null && (
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
                 {subline}
               </span>
             )}
