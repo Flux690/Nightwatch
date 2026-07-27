@@ -9,6 +9,7 @@ import type {
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 import { StatusText } from "@/components/ui/status";
+import { revealToolCall } from "@/components/transcript/revealToolCall";
 import { ACTION_LABEL, ACTION_TONE } from "@/lib/remediationStatus";
 
 // The investigation report artifact rendered in the main area, filling in live
@@ -322,14 +323,7 @@ export function ReportPanel({
                     <button
                       type="button"
                       className="ml-auto shrink-0 text-sm text-ink-subtle underline decoration-border underline-offset-2 hover:text-run hover:decoration-run"
-                      onClick={() =>
-                        document
-                          .getElementById(`tool-${item.toolUseId}`)
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          })
-                      }
+                      onClick={() => revealToolCall(item.toolUseId)}
                     >
                       Show in transcript
                     </button>

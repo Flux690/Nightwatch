@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/lib/iconProps";
+import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
 import type { ToolCardItem } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
@@ -256,7 +257,21 @@ function ToolBody({
 
 export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const { toolName, input } = item;
+
+  // The report can point at this exact call. Opening it is the whole signal:
+  // a collapsed row scrolled into view looks like every other collapsed row.
+  useEffect(
+    () =>
+      onRevealToolCall((id) => {
+        if (id !== item.toolUseId) return;
+        setOpen(true);
+        setRevealed(true);
+        window.setTimeout(() => setRevealed(false), REVEAL_MS);
+      }),
+    [item.toolUseId],
+  );
   const result =
     item.state.phase === "complete"
       ? item.state.result
@@ -271,7 +286,15 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   return (
     // Anchor for the report's evidence links: a citation there names the tool
     // call that produced it, and this is where that call lives.
-    <div data-testid="tool-card" id={`tool-${item.toolUseId}`}>
+    <div
+      data-testid="tool-card"
+      id={`tool-${item.toolUseId}`}
+      data-revealed={revealed || undefined}
+      className={cn(
+        "-mx-2 scroll-mt-6 rounded-md px-2 transition-colors duration-500",
+        revealed && "bg-accent-tint",
+      )}
+    >
       <button
         type="button"
         aria-expanded={open}

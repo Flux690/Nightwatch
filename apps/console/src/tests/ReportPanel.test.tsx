@@ -181,25 +181,21 @@ describe("ReportPanel", () => {
     expect(screen.queryByText("Actions taken")).not.toBeInTheDocument();
   });
 
-  it("links each evidence entry to the tool call that produced it", async () => {
-    const scrollIntoView = vi.spyOn(
-      window.HTMLElement.prototype,
-      "scrollIntoView",
-    );
-    // The transcript lives beside the report; the anchor is the tool row's id.
-    const anchor = document.createElement("div");
-    anchor.id = "tool-tu-1";
-    document.body.appendChild(anchor);
+  it("tells the transcript which call to reveal, not just where to scroll", () => {
+    // Scrolling alone left a collapsed row looking untouched, so the reveal is
+    // an instruction the row acts on rather than a scroll the report performs.
+    const revealed: string[] = [];
+    const listener = (e: Event): void => {
+      revealed.push((e as CustomEvent<string>).detail);
+    };
+    window.addEventListener("nw:reveal-tool-call", listener);
 
     render(<ReportPanel report={REPORT} actions={[]} />);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /show in transcript/i })[0]!,
+    );
 
-    const links = screen.getAllByRole("button", {
-      name: /show in transcript/i,
-    });
-    expect(links.length).toBeGreaterThan(0);
-    fireEvent.click(links[0]!);
-    expect(scrollIntoView).toHaveBeenCalled();
-
-    anchor.remove();
+    expect(revealed).toEqual(["tu-1"]);
+    window.removeEventListener("nw:reveal-tool-call", listener);
   });
 });

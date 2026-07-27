@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { TestProviders } from "./renderWithProviders.js";
@@ -336,6 +336,67 @@ describe("TranscriptItemRenderer", () => {
 
       await user.click(screen.getByRole("button", { name: /show all 12/i }));
       expect(screen.getByText(/line-12/)).toBeInTheDocument();
+    });
+  });
+  describe("reveal from the report", () => {
+    it("opens the named tool row and marks it, leaving the others shut", async () => {
+      const { revealToolCall } =
+        await import("@/components/transcript/revealToolCall");
+
+      render(
+        <>
+          <TranscriptItemRenderer
+            item={{
+              kind: "tool_card",
+              toolUseId: "tu-logs",
+              toolName: "GetDockerLogs",
+              input: { target: "docker/encodr/cache" },
+              state: {
+                phase: "complete",
+                result: JSON.stringify({
+                  lines: ["OOM command not allowed"],
+                  totalLines: 200,
+                }),
+              },
+            }}
+          />
+          <TranscriptItemRenderer
+            item={{
+              kind: "tool_card",
+              toolUseId: "tu-stats",
+              toolName: "GetDockerStats",
+              input: { target: "docker/encodr/cache" },
+              state: {
+                phase: "complete",
+                result: JSON.stringify({ cpuPercent: 0.35 }),
+              },
+            }}
+          />
+        </>,
+      );
+
+      const [logs, stats] = screen.getAllByTestId("tool-card");
+      expect(logs!.querySelector("button")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+
+      act(() => revealToolCall("tu-logs"));
+
+      // The named row opens and is marked; its neighbour is untouched, which is
+      // the whole point of the mark - ten collapsed rows look identical.
+      await waitFor(() => {
+        expect(logs!.querySelector("button")).toHaveAttribute(
+          "aria-expanded",
+          "true",
+        );
+      });
+      expect(logs).toHaveAttribute("data-revealed");
+      expect(stats!.querySelector("button")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      expect(stats).not.toHaveAttribute("data-revealed");
     });
   });
 });
