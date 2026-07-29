@@ -23,13 +23,12 @@ const SCHEMA = `
     -- yet, which the run gate refuses on; a default would make a fresh install
     -- look configured while holding no API key.
     active_provider    TEXT,
-    max_retries        INTEGER NOT NULL DEFAULT 2,
+    max_retries        INTEGER NOT NULL DEFAULT 3,
     request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
-    hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
-    tool_timeout_ms    INTEGER NOT NULL DEFAULT 15000,
+    check_in_after_ms  INTEGER NOT NULL DEFAULT 1800000,
+    tool_call_ceiling_ms INTEGER NOT NULL DEFAULT 600000,
     remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
     remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
-    code_session_budget_ms  INTEGER NOT NULL DEFAULT 1200000,
     sandbox_idle_timeout_ms INTEGER NOT NULL DEFAULT 3600000,
     sandbox_cpus            INTEGER NOT NULL DEFAULT 2,
     sandbox_memory_mb       INTEGER NOT NULL DEFAULT 4096,

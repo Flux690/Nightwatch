@@ -158,10 +158,13 @@ describe("describeLLMError", () => {
     expect(describeLLMError(openAIError(400))).toContain("malformed");
   });
 
-  it("quotes the free-model quota on a 429, which is the usual cause", () => {
+  it("keeps the 429 wording provider-neutral, since this text serves both", () => {
+    // One provider's free-tier numbers here would be wrong for the other. The
+    // per-model caution lives on the model, where the adapter knows it.
     const text = describeLLMError(openAIError(429));
-    expect(text).toContain("20 requests a minute");
-    expect(text).toContain("50 a day");
+
+    expect(text).toContain("rate-limited");
+    expect(text).not.toContain("Free models");
   });
 
   it("reads provider_unavailable as an upstream outage rather than a setup problem", () => {

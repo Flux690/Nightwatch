@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { LLM_RETRY_DELAYS_MS } from "./config.js";
+import { MAX_RETRIES, retryDelaysMs } from "./config.js";
 
 function providerStatus(err: unknown): number | undefined | null {
   // null: not a provider error at all; undefined: provider connection error.
@@ -68,7 +68,7 @@ export function describeLLMError(err: unknown): string {
     return `The run failed unexpectedly: ${message}`;
   }
   const status = err.status;
-  const attempts = LLM_RETRY_DELAYS_MS.length + 1;
+  const attempts = MAX_RETRIES + 1;
   if (status === undefined) {
     return "Could not reach the model provider - the connection failed. Check the Base URL in Settings and your network, then send a message to try again.";
   }
@@ -92,7 +92,7 @@ export function describeLLMError(err: unknown): string {
     return `The provider rejected the request as malformed. If you have just changed the model or its reasoning level, check them under Settings, Provider${detail}.`;
   }
   if (status === 429) {
-    return `The provider rate-limited the request, or a free-model quota ran out. Free models allow 20 requests a minute and 50 a day, or 1000 a day once the account has bought credits. NightWarden tried ${attempts} times before giving up${detail}.`;
+    return `The provider rate-limited the request, or a quota on the chosen model ran out. NightWarden tried ${attempts} times before giving up; this usually clears on its own${detail}.`;
   }
   if (status >= 500) {
     return `The model provider had a server problem - this is upstream, not your setup. NightWarden tried ${attempts} times before giving up${detail}.`;
@@ -112,9 +112,9 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-// The SDKs' built-in retries span ~2s - too short for a real provider blip.
-// This ladder rides out outages; abort cuts the sleep and rethrows so the
-// caller's stop handling sees the original error.
+// The only retry mechanism: the SDKs' own are switched off, so the configured
+// count is the real one. Abort cuts the sleep and rethrows so the caller's stop
+// handling sees the original error.
 export async function withLLMRetries<T>(
   fn: () => Promise<T>,
   opts: {
@@ -123,7 +123,7 @@ export async function withLLMRetries<T>(
     onRetry?: (notice: RetryNotice) => void;
   } = {},
 ): Promise<T> {
-  const delays = opts.delays ?? LLM_RETRY_DELAYS_MS;
+  const delays = opts.delays ?? retryDelaysMs(MAX_RETRIES);
   const maxAttempts = delays.length + 1;
   for (let attempt = 1; ; attempt++) {
     try {

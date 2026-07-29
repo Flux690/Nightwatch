@@ -298,7 +298,6 @@ export function SettingsModal({
   // catalog entry for gets no reasoning control rather than a guessed one.
   const chosenModel = availableModels.find((m) => m.id === block?.model);
   const reasoning = chosenModel?.reasoning ?? null;
-  const isFreeModel = block?.model?.endsWith(":free") === true;
   const keyDirty = newApiKey.trim() !== "";
   const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
@@ -560,12 +559,11 @@ export function SettingsModal({
                           </Field>
                         )}
 
-                        {isFreeModel && (
+                        {/* Whatever the provider's adapter wants said about
+                            this model. Shown as-is; the meaning is theirs. */}
+                        {chosenModel?.notice && (
                           <p className="max-w-120 text-sm text-muted-foreground">
-                            Free models are capped at 20 requests a minute and
-                            50 a day, or 1000 a day once the account has bought
-                            credits. Investigations will fail once that runs
-                            out.
+                            {chosenModel.notice}
                           </p>
                         )}
                       </div>
@@ -610,51 +608,34 @@ export function SettingsModal({
                           />
                         </Field>
                         <Field>
-                          <FieldLabel htmlFor="settings-hard-timeout">
-                            Hard timeout (ms)
+                          <FieldLabel htmlFor="settings-check-in">
+                            Check in after (ms)
                           </FieldLabel>
                           <Input
-                            id="settings-hard-timeout"
-                            type="number"
-                            step={1000}
-                            value={form.hardTimeoutMs}
-                            onChange={(e) =>
-                              setField(
-                                "hardTimeoutMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-tool-timeout">
-                            Tool timeout (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-tool-timeout"
-                            type="number"
-                            step={1000}
-                            value={form.toolTimeoutMs}
-                            onChange={(e) =>
-                              setField(
-                                "toolTimeoutMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-code-budget">
-                            Code session budget (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-code-budget"
+                            id="settings-check-in"
                             type="number"
                             step={60000}
-                            value={form.codeSessionBudgetMs}
+                            value={form.checkInAfterMs}
                             onChange={(e) =>
                               setField(
-                                "codeSessionBudgetMs",
+                                "checkInAfterMs",
+                                numberValue(e.currentTarget.value),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="settings-tool-ceiling">
+                            Max tool call (ms)
+                          </FieldLabel>
+                          <Input
+                            id="settings-tool-ceiling"
+                            type="number"
+                            step={1000}
+                            value={form.toolCallCeilingMs}
+                            onChange={(e) =>
+                              setField(
+                                "toolCallCeilingMs",
                                 numberValue(e.currentTarget.value),
                               )
                             }

@@ -4,11 +4,11 @@ import type { PromptOptions } from "./prompts/system.js";
 import { GATE_NUDGE } from "./prompts/report.js";
 import { finalizeInconclusive } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
-import { REPO_TOOL_NAMES } from "./tools/repo.js";
-import type { ToolExecuteContext } from "./tools/types.js";
+import type { ToolDispatchContext } from "./tools/types.js";
 import { currentFleetCapabilities } from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
+import { retryDelaysMs } from "../llm/config.js";
 import { createProvider } from "../llm/factory.js";
 import {
   checkLLMReadiness,
@@ -23,6 +23,7 @@ import {
 import {
   createSession,
   promoteSessionToInvestigate,
+  appendErrorMessage,
   appendSessionMessages,
   appendMessagesAndInterrupt,
   getNextSeq,
@@ -180,16 +181,20 @@ export async function runInvestigation(
   const chatWithRetries = (
     provider: LLMProvider,
     toolSchemas: ToolSchema[],
+    // The run's effective signal: the operator's stop, or that combined with
+    // the investigation deadline once the loop has one.
+    chatSignal: AbortSignal | undefined = signal,
   ): Promise<ChatResponse> =>
     withLLMRetries(
       () =>
         provider.chat(
           toolSchemas,
           (d) => publishTextMessageContent(sessionId, d),
-          signal,
+          chatSignal,
         ),
       {
-        signal,
+        signal: chatSignal,
+        delays: retryDelaysMs(config.maxRetries),
         onRetry: (notice) => {
           log.warn(
             { attempt: notice.attempt, delayMs: notice.delayMs },
@@ -259,11 +264,7 @@ export async function runInvestigation(
   const fleetView = getFleetView();
   const integration = getGitHubIntegration();
   const promptOptions: PromptOptions = {
-    budgetMinutes: Math.max(1, Math.round(config.hardTimeoutMs / 60_000)),
-    codeBudgetMinutes: Math.max(
-      1,
-      Math.round(config.codeSessionBudgetMs / 60_000),
-    ),
+    budgetMinutes: Math.max(1, Math.round(config.checkInAfterMs / 60_000)),
     repo:
       integration === null
         ? null
@@ -337,7 +338,14 @@ export async function runInvestigation(
 
   let turn = 0;
   let nudges = 0;
-  let deadline = Date.now() + config.hardTimeoutMs;
+  // Computed once and never moved, so a run cannot outrun its own clock: every
+  // turn spends the same budget and the check-in below always arrives.
+  const deadline = Date.now() + config.checkInAfterMs;
+  // Propagated into the model request and every tool call so the budget is one
+  // shared instant, not a duration each layer counts separately. Distinct from
+  // `signal`, which means the operator stopped the run.
+  const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
+  const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
   while (Date.now() < deadline) {
     turn++;
@@ -359,12 +367,19 @@ export async function runInvestigation(
     const startedAt = Date.now();
     let response: ChatResponse;
     try {
-      response = await chatWithRetries(provider, toolSchemas);
+      response = await chatWithRetries(provider, toolSchemas, runSignal);
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");
         persist();
         return "stopped";
+      }
+      // The budget cut the turn short. That is the check-in below, not a
+      // failure, so it leaves the loop rather than killing the run.
+      if (outOfTime.aborted) {
+        log.info({ turn }, "time budget reached mid-turn");
+        persist();
+        break;
       }
       throw err;
     }
@@ -389,6 +404,18 @@ export async function runInvestigation(
       return "completed";
     }
 
+    // A turn cut off at max_tokens is not a finished answer, and its last tool
+    // call may carry truncated arguments. Say so rather than reading the stump
+    // as a conclusion.
+    if (response.stopReason === "max_tokens") {
+      log.warn({ turn, model: llm.model }, "turn truncated at max_tokens");
+      appendErrorMessage(
+        sessionId,
+        `The model's reply was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so this turn is incomplete. Send a message to continue, or pick a model with a larger limit in Settings.`,
+      );
+      return "completed";
+    }
+
     if (response.toolUses.length === 0) {
       // Finish gate: an investigate run may only end with a complete report.
       // Push back up to MAX_NUDGES times, then finalize honestly as inconclusive.
@@ -410,8 +437,13 @@ export async function runInvestigation(
       return "completed";
     }
 
-    const execCtx: Omit<ToolExecuteContext, "toolUseId"> = {
-      toolTimeoutMs: config.toolTimeoutMs,
+    const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {
+      // Already clamped by what remains of the investigation, so no tool call
+      // can outlive the budget it is being spent from.
+      toolCallCeilingMs: Math.max(
+        0,
+        Math.min(config.toolCallCeilingMs, deadline - Date.now()),
+      ),
       sessionId,
     };
 
@@ -423,12 +455,6 @@ export async function runInvestigation(
       config,
       log,
     });
-
-    // Repo tools re-extend the deadline to the code-session budget since clone
-    // + install + tests dwarf the investigation default.
-    if (response.toolUses.some((t) => REPO_TOOL_NAMES.has(t.name))) {
-      deadline = Math.max(deadline, Date.now() + config.codeSessionBudgetMs);
-    }
 
     if (gated !== null) {
       // Durably suspend: persist assistant turn + interrupt row in one transaction, then exit and

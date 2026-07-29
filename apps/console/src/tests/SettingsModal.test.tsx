@@ -38,11 +38,10 @@ const CONFIG: AgentConfig = {
   },
   maxRetries: 2,
   requestTimeoutMs: 120000,
-  hardTimeoutMs: 300000,
-  toolTimeoutMs: 15000,
+  checkInAfterMs: 1800000,
+  toolCallCeilingMs: 600000,
   remediationBreakerLimit: 5,
   remediationBreakerWindowMs: 600000,
-  codeSessionBudgetMs: 1200000,
   sandboxIdleTimeoutMs: 3600000,
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,
@@ -69,12 +68,19 @@ const MODELS_RESPONSE: { models: ModelOption[] } = {
         canDisable: true,
       },
       maxOutputTokens: 64_000,
+      notice: null,
     },
-    { id: "claude-opus-4-8", reasoning: null, maxOutputTokens: null },
+    {
+      id: "claude-opus-4-8",
+      reasoning: null,
+      maxOutputTokens: null,
+      notice: null,
+    },
     {
       id: "claude-haiku-4-5-20251001",
       reasoning: null,
       maxOutputTokens: null,
+      notice: null,
     },
   ],
 };
@@ -322,6 +328,7 @@ describe("SettingsModal", () => {
           canDisable: false,
         },
         maxOutputTokens: null,
+        notice: null,
       };
       setup(undefined, { models: [mandatory] });
       await openSection(user, /provider/i);
@@ -341,6 +348,7 @@ describe("SettingsModal", () => {
             id: "claude-sonnet-4-6",
             reasoning: null,
             maxOutputTokens: null,
+            notice: null,
           },
         ],
       });
@@ -351,28 +359,28 @@ describe("SettingsModal", () => {
       expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
     });
 
-    it("warns about a free model's quota without preventing the choice", async () => {
+    it("shows the model's notice as written, without preventing the choice", async () => {
+      // The console does not know what makes a model worth warning about; the
+      // adapter that read the catalog decided that and wrote the sentence.
       const user = userEvent.setup();
-      const freeConfig = {
-        ...CONFIG,
-        providers: {
-          ...CONFIG.providers,
-          anthropic: {
-            ...CONFIG.providers.anthropic,
-            model: "openai/gpt-oss-20b:free",
+      setup(undefined, {
+        models: [
+          {
+            id: "claude-sonnet-4-6",
+            reasoning: null,
+            maxOutputTokens: null,
+            notice: "This model bills at a premium rate.",
           },
-        },
-      };
-      setup(freeConfig);
+        ],
+      });
       await openSection(user, /provider/i);
 
       expect(
-        await screen.findByText(/20 requests a minute/i),
+        await screen.findByText("This model bills at a premium rate."),
       ).toBeInTheDocument();
-      const modelInput = screen.getByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      expect(modelInput).not.toBeDisabled();
+      expect(
+        screen.getByLabelText(/^model$/i, { selector: "input" }),
+      ).not.toBeDisabled();
     });
   });
 

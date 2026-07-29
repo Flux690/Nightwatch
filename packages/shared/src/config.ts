@@ -34,6 +34,10 @@ export interface ModelOption {
   reasoning: ReasoningDescriptor | null;
   // The model's own output ceiling, null when its catalog does not publish one.
   maxOutputTokens: number | null;
+  // A caution worth showing before this model is chosen, written by the adapter
+  // that understands the catalog. The console shows it without knowing what it
+  // means, so no naming convention of one provider's leaks into the UI.
+  notice: string | null;
 }
 
 // How to reach one provider. Each keeps its own credentials, so switching the
@@ -68,15 +72,15 @@ export interface AgentConfig {
   providers: ProviderSettingsMap;
   maxRetries: number;
   requestTimeoutMs: number;
-  hardTimeoutMs: number;
-  toolTimeoutMs: number;
+  // How long the agent works before finishing its current step and asking
+  // whether to continue. The continue gate is what it reaches, not a kill.
+  checkInAfterMs: number;
+  // Upper bound on any single tool call. Tools declare their own lower limits.
+  toolCallCeilingMs: number;
   // Remediation circuit breaker: refuses a write once this many executed/failed writes to
   // the same (service identity, action) landed within the window, so a crash-loop fix cannot become a restart storm.
   remediationBreakerLimit: number;
   remediationBreakerWindowMs: number;
-  // Code sessions: any repo tool call re-extends the session deadline to
-  // codeSessionBudgetMs; the sandbox knobs bound the per-session container.
-  codeSessionBudgetMs: number;
   sandboxIdleTimeoutMs: number;
   sandboxCpus: number;
   sandboxMemoryMb: number;

@@ -19,8 +19,7 @@ export interface InitialContext {
 }
 
 const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
-  budgetMinutes: 5,
-  codeBudgetMinutes: 20,
+  budgetMinutes: 30,
   repo: null,
 };
 

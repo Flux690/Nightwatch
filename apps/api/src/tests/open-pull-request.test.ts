@@ -209,7 +209,7 @@ function runOpr(
   const entry = findTool("OpenPullRequest");
   if (!entry) throw new Error("OpenPullRequest missing from registry");
   return executeTool(entry, input, {
-    toolTimeoutMs: 15_000,
+    toolCallCeilingMs: 15_000,
     sessionId,
     toolUseId,
   });

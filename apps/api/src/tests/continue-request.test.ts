@@ -9,6 +9,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import {
+  createGateController,
   createScriptRunner,
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
@@ -106,9 +107,53 @@ describe("continue-request interrupts", () => {
     vi.unstubAllEnvs();
   });
 
-  it("hardTimeoutMs=0 suspends immediately: kind=continue, HUMAN_INPUT_REQUIRED event, run exited", async () => {
+  it("cuts a turn short when the budget runs out mid-request, and checks in rather than failing", async () => {
+    // The deadline is propagated into the request itself, so a turn already in
+    // flight is aborted. That abort is the check-in, not a run failure.
+    const gates = createGateController();
+    updateConfig({ checkInAfterMs: 200 });
+    setScript([FINISH_TURN]);
+
+    let sessionId = "";
+    try {
+      mockCreateProvider.mockImplementation(() =>
+        scriptRunner.create({ gate: gates.gate }),
+      );
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ message: "Take your time." }),
+      });
+      ({ sessionId } = (await res.json()) as { sessionId: string });
+
+      // Park the only turn until well past the deadline, then let it go. The
+      // turn is already in flight, so only a propagated deadline can end it.
+      await new Promise((r) => setTimeout(r, 400));
+      gates.releaseAll();
+
+      await waitFor(() => hasPendingHumanInput(sessionId));
+      expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    } finally {
+      gates.releaseAll();
+      mockCreateProvider.mockImplementation(() => scriptRunner.create());
+    }
+
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ decision: "end" }),
+    });
+  });
+
+  it("checkInAfterMs=0 suspends immediately: kind=continue, HUMAN_INPUT_REQUIRED event, run exited", async () => {
     // Deadline expires before any turns run.
-    updateConfig({ hardTimeoutMs: 0 });
+    updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
@@ -158,7 +203,7 @@ describe("continue-request interrupts", () => {
   });
 
   it("continuing resumes with fresh deadline and run completes", async () => {
-    updateConfig({ hardTimeoutMs: 0 });
+    updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
@@ -185,7 +230,7 @@ describe("continue-request interrupts", () => {
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Grant a fresh deadline before responding
-    updateConfig({ hardTimeoutMs: 300_000 });
+    updateConfig({ checkInAfterMs: 300_000 });
 
     // Respond to continue (no decision = continue)
     const continueRes = await fetch(
@@ -223,7 +268,7 @@ describe("continue-request interrupts", () => {
   });
 
   it("ending runs a wrap-up turn and finishes the investigation", async () => {
-    updateConfig({ hardTimeoutMs: 0 });
+    updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
@@ -282,7 +327,7 @@ describe("continue-request interrupts", () => {
   });
 
   it("restart-resume: continue interrupt survives process exit, resolve still works", async () => {
-    updateConfig({ hardTimeoutMs: 0 });
+    updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
@@ -311,7 +356,7 @@ describe("continue-request interrupts", () => {
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
     // Grant a fresh deadline before responding (mimics operator action after restart)
-    updateConfig({ hardTimeoutMs: 300_000 });
+    updateConfig({ checkInAfterMs: 300_000 });
 
     // Resolve purely from DB state
     const resumeRes = await fetch(

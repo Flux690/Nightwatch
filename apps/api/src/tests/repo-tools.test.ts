@@ -33,7 +33,7 @@ import {
 } from "../agent/tools/toolset.js";
 import { REPO_TOOL_NAMES } from "../agent/tools/repo.js";
 import { teardownAll } from "../sandbox/workspace.js";
-import type { Tool, ToolExecuteContext } from "../agent/tools/types.js";
+import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 import type { DiffHunk } from "../sandbox/tools/diff.js";
 
 const scriptRunner = createScriptRunner();
@@ -137,8 +137,9 @@ function installDockerMock(): void {
 }
 
 const SESSION_ID = "aaaabbbb-0000-4000-8000-000000000001";
-const CTX: ToolExecuteContext = {
-  toolTimeoutMs: 15_000,
+// The ceiling the operator allows, which a tool's own lower limit narrows.
+const CTX: ToolDispatchContext = {
+  toolCallCeilingMs: 600_000,
   sessionId: SESSION_ID,
   toolUseId: "static",
 };
@@ -313,7 +314,7 @@ describe("repo tools through registry dispatch", () => {
     );
   });
 
-  it("execs in the container with the per-tool timeout, not the 15s default", async () => {
+  it("execs in the container with its own timeout when that is under the ceiling", async () => {
     const result = await run("Bash", { command: "pnpm test" });
     expect(result.is_error).toBeUndefined();
     const outcome = result.content as { exitCode: number; output: string };
@@ -326,6 +327,20 @@ describe("repo tools through registry dispatch", () => {
     expect(cmd).toContain("pnpm test");
   });
 
+  it("is cut down to the ceiling when the operator allows less than the tool wants", async () => {
+    // The ceiling is the operator's brake: a tool can narrow it, never raise it.
+    await executeTool(
+      tool("Bash"),
+      { command: "pnpm test" },
+      {
+        ...CTX,
+        toolCallCeilingMs: 20_000,
+      },
+    );
+
+    expect(dockerState.execCmds.at(-1)?.slice(0, 2)).toEqual(["timeout", "20"]);
+  });
+
   it("rejects a cwd that escapes and re-roots a valid one at /workspace", async () => {
     const escape = await run("Bash", { command: "ls", cwd: "../.." });
     expect(escape.is_error).toBe(true);
@@ -336,55 +351,47 @@ describe("repo tools through registry dispatch", () => {
   });
 });
 
-describe("code-session budget extension", () => {
-  it("a repo tool call extends the deadline past the investigation budget", async () => {
+// Repo work spends the same budget as anything else: touching a repo tool buys
+// no extra time, so a code session reaches the check-in like every other run.
+describe("repo work and the time budget", () => {
+  async function runPastTheBudget(
+    sessionId: string,
+    toolName: string,
+  ): Promise<void> {
     const gates = createGateController();
     mockCreateProvider.mockImplementation(() =>
       scriptRunner.create({ gate: gates.gate }),
     );
-    updateConfig({ hardTimeoutMs: 300, codeSessionBudgetMs: 1_200_000 });
+    updateConfig({ checkInAfterMs: 300 });
     scriptRunner.setScript([
       {
-        toolUses: [{ id: "t1", name: "Read", input: { path: "src/app.ts" } }],
+        toolUses: [{ id: "t1", name: toolName, input: { path: "src/app.ts" } }],
         text: "",
       },
       { toolUses: [], text: "Done." },
     ]);
 
-    const sessionId = "aaaabbbb-0000-4000-8000-00000000ea01";
     const run = runInvestigation({ sessionId, userMessage: "fix the repo" });
-    // Park turn 1 until the original 300ms deadline has passed: only the
-    // repo-tool extension can keep the loop alive beyond it.
+    // Park turn 1 until the deadline has passed.
     await new Promise((r) => setTimeout(r, 400));
     gates.releaseNext();
-    // Give turn 1's tool time to execute and turn 2 time to park at the gate.
     await new Promise((r) => setTimeout(r, 150));
     gates.releaseAll();
     await run;
+  }
 
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
+  it("a repo tool call does not buy the run more time", async () => {
+    const sessionId = "aaaabbbb-0000-4000-8000-00000000ea01";
+
+    await runPastTheBudget(sessionId, "Read");
+
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
   });
 
-  it("without a repo tool the same timing suspends with a continue request", async () => {
-    const gates = createGateController();
-    mockCreateProvider.mockImplementation(() =>
-      scriptRunner.create({ gate: gates.gate }),
-    );
-    updateConfig({ hardTimeoutMs: 300, codeSessionBudgetMs: 1_200_000 });
-    scriptRunner.setScript([
-      {
-        toolUses: [{ id: "t1", name: "nonexistent_tool", input: {} }],
-        text: "",
-      },
-      { toolUses: [], text: "Done." },
-    ]);
-
+  it("which is the same answer any other tool gets", async () => {
     const sessionId = "aaaabbbb-0000-4000-8000-00000000ea02";
-    const run = runInvestigation({ sessionId, userMessage: "look around" });
-    await new Promise((r) => setTimeout(r, 400));
-    gates.releaseNext();
-    gates.releaseAll();
-    await run;
+
+    await runPastTheBudget(sessionId, "nonexistent_tool");
 
     expect(hasPendingHumanInput(sessionId)).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { executeTool } from "./tools/toolset.js";
-import type { Tool, ToolExecuteContext } from "./tools/types.js";
+import type { Tool, ToolDispatchContext } from "./tools/types.js";
 import { circuitBreakerRejection } from "./breaker.js";
 import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence, stripEvidenceTag } from "./report.js";
@@ -31,7 +31,7 @@ export async function processToolUses(params: {
   sessionId: string;
   // toolUseId is per call, so the loop hands over a turn-scoped base context
   // and each execution below completes it with its own tool_use id.
-  execCtx: Omit<ToolExecuteContext, "toolUseId">;
+  execCtx: Omit<ToolDispatchContext, "toolUseId">;
   config: AgentConfig;
   log: typeof logger;
 }): Promise<TurnOutcome> {

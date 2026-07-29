@@ -524,6 +524,35 @@ describe("provider/model config seam", () => {
       expect(models[0]?.reasoning?.canDisable).toBe(false);
     });
 
+    it("OpenRouter: carries its own free-tier caution, so the console never has to know what :free means", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            { id: "openai/gpt-oss-20b:free", reasoning: { mandatory: true } },
+            { id: "openai/gpt-oss-20b", reasoning: { mandatory: true } },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.notice).toContain("20 requests a minute");
+      expect(models[1]?.notice).toBeNull();
+    });
+
+    it("Anthropic: has no free tier, so no model carries a caution", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-opus-5", { max: true })],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.notice).toBeNull();
+    });
+
     it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {
       useOpenRouter();
       stubFetch(() =>
@@ -636,7 +665,7 @@ describe("provider/model config seam", () => {
       // Timeouts and sandbox limits are engineering choices, not the operator's;
       // a provider's own tuning defaults the same way inside its block.
       expect(body.sandboxNetwork).toBe("allowlist");
-      expect(body.hardTimeoutMs).toEqual(expect.any(Number));
+      expect(body.checkInAfterMs).toEqual(expect.any(Number));
     });
 
     it("GET /config/models returns nothing instead of probing a guessed endpoint", async () => {

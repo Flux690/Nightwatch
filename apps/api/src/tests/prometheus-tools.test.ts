@@ -6,7 +6,7 @@ import { savePrometheusIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import type { MetricsRangeResult } from "../agent/tools/prometheus.js";
-import type { Tool, ToolExecuteContext } from "../agent/tools/types.js";
+import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 
 const FIRED_AT = "2026-07-16T12:00:00.000Z";
 
@@ -82,14 +82,18 @@ describe("Prometheus tools through the tool dispatch", () => {
   let mock: PromMock;
   let sessionSeq = 0;
 
-  function mintSession(alert: NormalizedAlert | null): ToolExecuteContext {
+  function mintSession(alert: NormalizedAlert | null): ToolDispatchContext {
     sessionSeq++;
     const sessionId = `prom-tools-${sessionSeq}`;
     createSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alert,
     );
-    return { toolTimeoutMs: 30_000, sessionId, toolUseId: `tu-${sessionSeq}` };
+    return {
+      toolCallCeilingMs: 30_000,
+      sessionId,
+      toolUseId: `tu-${sessionSeq}`,
+    };
   }
 
   function connect(): void {

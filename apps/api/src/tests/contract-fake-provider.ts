@@ -196,10 +196,14 @@ function makeProvider(
       async (
         _tools: unknown,
         onDelta?: (d: { kind: string; text: string }) => void,
+        signal?: AbortSignal,
       ): Promise<ChatResponse> => {
         // Optional gate: park here until the test releases this turn, so timing tests
         // can act (e.g. inject an alert) mid-chat. No gate means immediate resolution.
         if (opts?.gate) await opts.gate();
+        // A real SDK abandons an in-flight request when the signal fires; a fake
+        // that returned a turn anyway would hide every abort bug.
+        if (signal?.aborted) throw signal.reason;
         const turn = nextTurn();
         if (onDelta && turn.text) {
           onDelta({ kind: "text", text: turn.text });

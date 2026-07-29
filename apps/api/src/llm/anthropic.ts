@@ -125,6 +125,8 @@ export function describeAnthropicModels(data: unknown): ModelOption[] {
               },
         maxOutputTokens:
           typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : null,
+        // Anthropic has no free tier to caution anyone about.
+        notice: null,
       },
     ];
   });
@@ -153,7 +155,9 @@ export class AnthropicProvider implements LLMProvider {
       apiKey,
       ...(config.baseUrl && { baseURL: config.baseUrl }),
       timeout: config.requestTimeoutMs,
-      maxRetries: config.maxRetries,
+      // Retries live in withLLMRetries alone. Leaving the SDK's own on would
+      // multiply with that ladder, turning one logical call into a dozen.
+      maxRetries: 0,
     });
     this.model = config.model;
   }

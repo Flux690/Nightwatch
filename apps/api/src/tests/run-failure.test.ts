@@ -163,6 +163,34 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     expectInvestigationFailure();
   });
 
+  it("says a turn was cut off at the output limit instead of reading the stump as an answer", async () => {
+    // A turn with no tool calls otherwise reads as a finished reply, so the
+    // output limit has to be named before that branch is reached.
+    mockCreateProvider.mockImplementation(() =>
+      createContractFakeProvider([
+        {
+          toolUses: [],
+          text: "Partial answer that stops mid-",
+          stopReason: "max_tokens",
+        },
+      ]),
+    );
+
+    const sessionId = await startChat("explain everything");
+
+    await waitFor(() =>
+      client.events.find(
+        (e) => e.type === "RUN_FINISHED" && e.payload.sessionId === sessionId,
+      ),
+    );
+
+    const truncation = getSessionMessages(sessionId).find(
+      (m) => m.role === "error",
+    );
+    expect(truncation?.content).toContain("cut off");
+    expect(truncation?.content).toContain("output limit");
+  });
+
   it("fails immediately on a 401 - no retries, key guidance in the transcript", async () => {
     const fake = healthyProvider("never reached");
     fake.chat.mockRejectedValue(providerError(401));

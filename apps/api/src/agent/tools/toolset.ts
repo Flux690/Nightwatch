@@ -1,4 +1,5 @@
 import { executeRunnerTool } from "../executor.js";
+import { DEFAULT_TOOL_TIMEOUT_MS } from "../../llm/config.js";
 import { DOCKER_TOOLS } from "./docker.js";
 import { GITHUB_TOOLS } from "./github.js";
 import { K8S_TOOLS } from "./kubernetes.js";
@@ -10,6 +11,7 @@ import { REPORT_TOOLS } from "./report.js";
 import type {
   FleetCapabilities,
   Tool,
+  ToolDispatchContext,
   ToolExecuteContext,
   ToolExecuteResult,
 } from "./types.js";
@@ -29,17 +31,22 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
-// Single dispatch chokepoint that both the live loop and the approval resume path pass
-// through; a per-tool timeoutMs overrides the global default here.
+// Single dispatch chokepoint that both the live loop and the approval resume
+// path pass through. The caller supplies a ceiling; a tool's own limit can only
+// narrow it, never raise it past what the operator allowed.
 export function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
-  ctx: ToolExecuteContext,
+  ctx: ToolDispatchContext,
 ): Promise<ToolExecuteResult> {
-  const effectiveCtx: ToolExecuteContext =
-    tool.timeoutMs === undefined
-      ? ctx
-      : { ...ctx, toolTimeoutMs: tool.timeoutMs };
+  const { toolCallCeilingMs, ...identity } = ctx;
+  const effectiveCtx: ToolExecuteContext = {
+    ...identity,
+    toolTimeoutMs: Math.min(
+      tool.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS,
+      toolCallCeilingMs,
+    ),
+  };
   if (tool.on === "api") return tool.execute(input, effectiveCtx);
   return executeRunnerTool(tool.schema.name, tool.route, input, effectiveCtx);
 }

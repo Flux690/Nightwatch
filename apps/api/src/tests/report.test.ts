@@ -266,7 +266,7 @@ describe("report storage and enrichment", () => {
           evidenceIds: ["ev2", "ev-bogus"],
         },
       },
-      { sessionId, toolUseId: "tu-report", toolTimeoutMs: 15_000 },
+      { sessionId, toolUseId: "tu-report", toolCallCeilingMs: 15_000 },
     );
     expect(result.is_error).toBeUndefined();
 

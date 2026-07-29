@@ -129,9 +129,19 @@ export function describeOpenRouterModels(data: unknown): ModelOption[] {
         id,
         reasoning: reasoning === null ? null : describeReasoning(reasoning),
         maxOutputTokens: maxCompletionTokens(entry["top_provider"]),
+        notice: freeModelNotice(id),
       },
     ];
   });
+}
+
+// The ":free" suffix is OpenRouter's own convention for its no-cost variants,
+// which carry a hard daily cap. Knowing that is this adapter's job, not the
+// console's, so the warning travels as finished text.
+function freeModelNotice(id: string): string | null {
+  return id.endsWith(":free")
+    ? "Free models are capped at 20 requests a minute and 50 a day, or 1000 a day once the account has bought credits. Investigations fail once that runs out."
+    : null;
 }
 
 function describeReasoning(
@@ -193,7 +203,9 @@ export class OpenRouterProvider implements LLMProvider {
       apiKey,
       baseURL: config.baseUrl,
       timeout: config.requestTimeoutMs,
-      maxRetries: config.maxRetries,
+      // Retries live in withLLMRetries alone. Leaving the SDK's own on would
+      // multiply with that ladder, turning one logical call into a dozen.
+      maxRetries: 0,
     });
     this.model = config.model;
   }

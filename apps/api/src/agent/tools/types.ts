@@ -13,14 +13,25 @@ export interface ToolExecuteResult {
   is_error?: boolean;
 }
 
-export interface ToolExecuteContext {
-  toolTimeoutMs: number;
+interface ToolCallIdentity {
   // Session-scoped: repo tools key their sandbox workspace on it. Tools stay
   // stateless; the sandbox module owns all bookkeeping.
   sessionId: string;
   // The tool_use id of this call: OpenPullRequest keys its write-ahead audit row on
   // (sessionId, toolUseId), the same idempotency the approval path uses.
   toolUseId: string;
+}
+
+// What a caller hands the dispatcher: the upper bound this call may not exceed,
+// being the operator's ceiling already clamped by what remains of the run.
+export interface ToolDispatchContext extends ToolCallIdentity {
+  toolCallCeilingMs: number;
+}
+
+// What a tool is handed: the limit resolved for this one call. Distinct from
+// the ceiling above so neither can be mistaken for the other.
+export interface ToolExecuteContext extends ToolCallIdentity {
+  toolTimeoutMs: number;
 }
 
 interface ToolCommon {

@@ -6,7 +6,7 @@ import { saveGitHubIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import type { GetRecentChangesResult } from "../agent/tools/github.js";
-import type { Tool, ToolExecuteContext } from "../agent/tools/types.js";
+import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 
 const FIRED_AT = "2026-07-16T12:00:00.000Z";
 const WINDOW_START_24H = "2026-07-15T12:00:00.000Z";
@@ -120,14 +120,18 @@ describe("GetRecentChanges through the tool dispatch", () => {
   let tool: Tool;
   let sessionSeq = 0;
 
-  function mintSession(alert: NormalizedAlert | null): ToolExecuteContext {
+  function mintSession(alert: NormalizedAlert | null): ToolDispatchContext {
     sessionSeq++;
     const sessionId = `gh-changes-${sessionSeq}`;
     createSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alert,
     );
-    return { toolTimeoutMs: 60_000, sessionId, toolUseId: `tu-${sessionSeq}` };
+    return {
+      toolCallCeilingMs: 60_000,
+      sessionId,
+      toolUseId: `tu-${sessionSeq}`,
+    };
   }
 
   function connectGitHub(): void {
