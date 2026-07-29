@@ -30,8 +30,8 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  thinking: "off",
-  reasoningEffort: null,
+  reasoningLevel: null,
+  reasoningCanDisable: true,
 };
 
 const READ_TOOL = {
@@ -73,6 +73,72 @@ describe("OpenRouterProvider", () => {
     mockCompletionsStream.mockReturnValue(mockStream);
     provider = new OpenRouterProvider("You are NightWarden.", BASE_CONFIG);
     provider.start("CPU spike detected.");
+  });
+
+  describe("reasoning param", () => {
+    async function sentParams(
+      config: ResolvedLLMConfig,
+      opts?: { reasoning: "off" },
+    ): Promise<{
+      reasoning?: { effort?: string; enabled?: boolean };
+      reasoning_effort?: string;
+    }> {
+      mockFinalChatCompletion.mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { role: "assistant", content: "done" },
+          },
+        ],
+      });
+      const p = new OpenRouterProvider("sys", config, undefined, opts);
+      p.start("go");
+      await p.chat([]);
+      return mockCompletionsStream.mock.calls[0]?.[0] as {
+        reasoning?: { effort?: string; enabled?: boolean };
+        reasoning_effort?: string;
+      };
+    }
+
+    it("sends the chosen level under OpenRouter's own reasoning param", async () => {
+      const params = await sentParams({
+        ...BASE_CONFIG,
+        reasoningLevel: "high",
+      });
+
+      expect(params.reasoning).toEqual({ effort: "high" });
+    });
+
+    it("sends nothing when the operator has picked no level", async () => {
+      const params = await sentParams(BASE_CONFIG);
+
+      expect(params.reasoning).toBeUndefined();
+      expect(params.reasoning_effort).toBeUndefined();
+    });
+
+    it("never asks a mandatory model to stop reasoning, which OpenRouter documents as rejected", async () => {
+      const params = await sentParams(
+        {
+          ...BASE_CONFIG,
+          reasoningLevel: "medium",
+          reasoningCanDisable: false,
+        },
+        { reasoning: "off" },
+      );
+
+      expect(params.reasoning).toBeUndefined();
+      expect(params.reasoning_effort).toBeUndefined();
+    });
+
+    it("disables reasoning by flag rather than by an effort value for a model that allows it", async () => {
+      const params = await sentParams(
+        { ...BASE_CONFIG, reasoningLevel: "medium" },
+        { reasoning: "off" },
+      );
+
+      expect(params.reasoning).toEqual({ enabled: false });
+      expect(params.reasoning_effort).toBeUndefined();
+    });
   });
 
   it("returns free-form text with no toolUses when the model ends its turn", async () => {

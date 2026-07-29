@@ -23,16 +23,19 @@ const CONFIG: AgentConfig = {
       model: "claude-sonnet-4-6",
       baseUrl: undefined,
       apiKeyMasked: null,
-      thinking: "adaptive",
+      reasoningLevel: "high",
+      maxOutputTokens: 64_000,
+      reasoningCanDisable: true,
     },
     openrouter: {
       model: null,
       baseUrl: undefined,
       apiKeyMasked: null,
-      reasoningEffort: null,
+      reasoningLevel: null,
+      maxOutputTokens: null,
+      reasoningCanDisable: true,
     },
   },
-  maxOutputTokens: 32000,
   maxRetries: 2,
   requestTimeoutMs: 120000,
   hardTimeoutMs: 300000,
@@ -76,7 +79,10 @@ const MODELS_RESPONSE: { models: ModelOption[] } = {
   ],
 };
 
-function makeFetchMock(config: AgentConfig) {
+function makeFetchMock(
+  config: AgentConfig,
+  models: { models: ModelOption[] } = MODELS_RESPONSE,
+) {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes("/auth/status")) {
       return Promise.resolve({
@@ -88,7 +94,7 @@ function makeFetchMock(config: AgentConfig) {
     if (url.includes("/config/models")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve(MODELS_RESPONSE),
+        json: () => Promise.resolve(models),
       });
     }
     if (url.includes("/config/test")) {
@@ -136,9 +142,12 @@ function renderModal(fetchMock: ReturnType<typeof vi.fn>) {
   return { fetchMock, onClose, qc };
 }
 
-function setup(configOverride?: Partial<typeof CONFIG>) {
+function setup(
+  configOverride?: Partial<typeof CONFIG>,
+  modelsOverride?: { models: ModelOption[] },
+) {
   const config = { ...CONFIG, ...configOverride };
-  return renderModal(makeFetchMock(config));
+  return renderModal(makeFetchMock(config, modelsOverride));
 }
 
 async function openSection(
@@ -279,6 +288,91 @@ describe("SettingsModal", () => {
       );
 
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("reasoning control", () => {
+    // The catalog is the authority on what a model accepts, so the control is
+    // rendered from its descriptor. Nothing here knows which provider is active.
+    it("labels the control with the provider's own word and offers exactly that model's levels", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      const select = await screen.findByLabelText(/^effort$/i);
+      const options = within(select).getAllByRole("option");
+
+      expect(options.map((o) => o.textContent)).toEqual([
+        "Off",
+        "Max",
+        "High",
+        "Medium",
+        "Low",
+      ]);
+    });
+
+    it("offers no off switch for a model that rejects being switched off", async () => {
+      const user = userEvent.setup();
+      const mandatory: ModelOption = {
+        id: "claude-sonnet-4-6",
+        reasoning: {
+          label: "Reasoning",
+          levels: [{ value: "medium", label: "Medium" }],
+          defaultLevel: "medium",
+          canDisable: false,
+        },
+        maxOutputTokens: null,
+      };
+      setup(undefined, { models: [mandatory] });
+      await openSection(user, /provider/i);
+
+      const select = await screen.findByLabelText(/^reasoning$/i);
+
+      expect(
+        within(select).queryByRole("option", { name: "Off" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows no reasoning control at all for a model that advertises none", async () => {
+      const user = userEvent.setup();
+      setup(undefined, {
+        models: [
+          {
+            id: "claude-sonnet-4-6",
+            reasoning: null,
+            maxOutputTokens: null,
+          },
+        ],
+      });
+      await openSection(user, /provider/i);
+
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      expect(screen.queryByLabelText(/^effort$/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
+    });
+
+    it("warns about a free model's quota without preventing the choice", async () => {
+      const user = userEvent.setup();
+      const freeConfig = {
+        ...CONFIG,
+        providers: {
+          ...CONFIG.providers,
+          anthropic: {
+            ...CONFIG.providers.anthropic,
+            model: "openai/gpt-oss-20b:free",
+          },
+        },
+      };
+      setup(freeConfig);
+      await openSection(user, /provider/i);
+
+      expect(
+        await screen.findByText(/20 requests a minute/i),
+      ).toBeInTheDocument();
+      const modelInput = screen.getByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      expect(modelInput).not.toBeDisabled();
     });
   });
 

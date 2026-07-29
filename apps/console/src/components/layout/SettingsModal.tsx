@@ -2,12 +2,9 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentConfig,
-  AnthropicSettings,
   LLMProviderName,
   ModelOption,
-  OpenRouterSettings,
   ProviderSettings,
-  ReasoningEffort,
 } from "@nightwarden/shared";
 import { X } from "lucide-react";
 
@@ -72,11 +69,23 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   },
 ];
 
+// Only these three are the operator's to send. The rest of a provider block is
+// computed server-side: the mask on read, and the model's own limits when a
+// model is picked.
+const EDITABLE_PROVIDER_FIELDS = [
+  "model",
+  "baseUrl",
+  "reasoningLevel",
+] as const satisfies readonly (keyof ProviderSettings)[];
+
 // The patch the API accepts: global fields flat, provider fields nested under the
-// provider they belong to. apiKeyMasked is read-only, computed server-side.
+// provider they belong to.
 type ConfigDelta = Partial<Omit<AgentConfig, "providers">> & {
   providers?: Partial<
-    Record<LLMProviderName, Partial<Omit<ProviderSettings, "apiKeyMasked">>>
+    Record<
+      LLMProviderName,
+      Partial<Pick<ProviderSettings, (typeof EDITABLE_PROVIDER_FIELDS)[number]>>
+    >
   >;
 };
 
@@ -93,8 +102,7 @@ function buildDelta(form: AgentConfig, base: AgentConfig): ConfigDelta {
     const formBlock = form.providers[name];
     const baseBlock = base.providers[name];
     const blockDelta: Record<string, unknown> = {};
-    for (const key of Object.keys(formBlock) as (keyof ProviderSettings)[]) {
-      if (key === "apiKeyMasked") continue;
+    for (const key of EDITABLE_PROVIDER_FIELDS) {
       if (!Object.is(formBlock[key], baseBlock[key])) {
         blockDelta[key] = formBlock[key];
       }
@@ -279,30 +287,18 @@ export function SettingsModal({
     patchProvider(form.provider, { [key]: value });
   }
 
-  // The provider-native knobs are statically bound to one block; each is only
-  // rendered when that provider is selected.
-  function setAnthropicField<K extends keyof AnthropicSettings>(
-    key: K,
-    value: AnthropicSettings[K],
-  ): void {
-    patchProvider("anthropic", { [key]: value });
-  }
-
-  function setOpenRouterField<K extends keyof OpenRouterSettings>(
-    key: K,
-    value: OpenRouterSettings[K],
-  ): void {
-    patchProvider("openrouter", { [key]: value });
-  }
-
   function numberValue(value: string | number): number {
     return typeof value === "number" ? value : Number(value);
   }
 
-  const isAnthropic = form?.provider === "anthropic";
   // Everything below the provider picker describes one provider, so it only has
   // meaning once one is chosen.
   const block = form?.provider ? form.providers[form.provider] : null;
+  // The controls describe the chosen model, not the provider: an id we have no
+  // catalog entry for gets no reasoning control rather than a guessed one.
+  const chosenModel = availableModels.find((m) => m.id === block?.model);
+  const reasoning = chosenModel?.reasoning ?? null;
+  const isFreeModel = block?.model?.endsWith(":free") === true;
   const keyDirty = newApiKey.trim() !== "";
   const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
@@ -528,84 +524,49 @@ export function SettingsModal({
                           </datalist>
                         </Field>
 
-                        <Field className="max-w-28">
-                          <FieldLabel htmlFor="settings-max-tokens">
-                            Max output tokens
-                          </FieldLabel>
-                          <Input
-                            id="settings-max-tokens"
-                            type="number"
-                            step={1000}
-                            value={form.maxOutputTokens}
-                            onChange={(e) =>
-                              setField(
-                                "maxOutputTokens",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-
-                        {isAnthropic && (
-                          <Field className="max-w-120">
-                            <FieldLabel htmlFor="settings-thinking">
-                              Thinking mode
-                            </FieldLabel>
-                            <NativeSelect
-                              id="settings-thinking"
-                              className="w-full"
-                              value={form.providers.anthropic.thinking}
-                              onChange={(e) =>
-                                setAnthropicField(
-                                  "thinking",
-                                  e.currentTarget
-                                    .value as AnthropicSettings["thinking"],
-                                )
-                              }
-                            >
-                              <NativeSelectOption value="adaptive">
-                                Adaptive (extended thinking)
-                              </NativeSelectOption>
-                              <NativeSelectOption value="off">
-                                Off
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                        )}
-
-                        {!isAnthropic && (
+                        {/* Rendered from the chosen model's own descriptor:
+                            the provider's word arrives in `label`, so nothing
+                            here branches on which provider is selected. */}
+                        {reasoning && (
                           <Field className="max-w-40">
                             <FieldLabel htmlFor="settings-reasoning">
-                              Reasoning effort
+                              {reasoning.label}
                             </FieldLabel>
                             <NativeSelect
                               id="settings-reasoning"
                               className="w-full"
-                              value={
-                                form.providers.openrouter.reasoningEffort ?? ""
-                              }
+                              value={block?.reasoningLevel ?? ""}
                               onChange={(e) =>
-                                setOpenRouterField(
-                                  "reasoningEffort",
-                                  (e.currentTarget.value ||
-                                    null) as ReasoningEffort | null,
+                                setProviderField(
+                                  "reasoningLevel",
+                                  e.currentTarget.value || null,
                                 )
                               }
                             >
-                              <NativeSelectOption value="">
-                                Not set
-                              </NativeSelectOption>
-                              <NativeSelectOption value="low">
-                                Low
-                              </NativeSelectOption>
-                              <NativeSelectOption value="medium">
-                                Medium
-                              </NativeSelectOption>
-                              <NativeSelectOption value="high">
-                                High
-                              </NativeSelectOption>
+                              {reasoning.canDisable && (
+                                <NativeSelectOption value="">
+                                  Off
+                                </NativeSelectOption>
+                              )}
+                              {reasoning.levels.map((l) => (
+                                <NativeSelectOption
+                                  key={l.value}
+                                  value={l.value}
+                                >
+                                  {l.label}
+                                </NativeSelectOption>
+                              ))}
                             </NativeSelect>
                           </Field>
+                        )}
+
+                        {isFreeModel && (
+                          <p className="max-w-120 text-sm text-muted-foreground">
+                            Free models are capped at 20 requests a minute and
+                            50 a day, or 1000 a day once the account has bought
+                            credits. Investigations will fail once that runs
+                            out.
+                          </p>
                         )}
                       </div>
                     )}

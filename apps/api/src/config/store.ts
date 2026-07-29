@@ -11,7 +11,6 @@ import {
   DEFAULT_SANDBOX_NETWORK,
   DEFAULT_SANDBOX_REQUIRE_GVISOR,
   DEFAULT_TOOL_TIMEOUT_MS,
-  MAX_OUTPUT_TOKENS,
   MAX_RETRIES,
   REQUEST_TIMEOUT_MS,
 } from "../llm/config.js";
@@ -20,10 +19,9 @@ import { logger } from "../logger.js";
 import type {
   AgentConfig,
   LLMProviderName,
+  ProviderSettings,
   ProviderSettingsMap,
-  ReasoningEffort,
   SandboxNetwork,
-  ThinkingMode,
 } from "@nightwarden/shared";
 
 const CONFIG_ID = "global";
@@ -35,7 +33,6 @@ export const PROVIDER_NAMES: readonly LLMProviderName[] = [
 
 type ConfigRow = {
   activeProvider: string | null;
-  maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
   hardTimeoutMs: number;
@@ -51,20 +48,20 @@ type ConfigRow = {
   sandboxAllowlistHosts: string;
 };
 
-// thinking/reasoning_effort are plain TEXT, constrained to their enums on write
-// by the route schema; each is inert for the provider it does not belong to.
+// reasoning_level is plain TEXT: the legal values come from the chosen model's
+// descriptor, so no column constraint could express them.
 type ProviderRow = {
   provider: string;
   model: string | null;
   baseUrl: string | null;
   apiKeyEncrypted: string | null;
-  thinking: string;
-  reasoningEffort: string | null;
+  reasoningLevel: string | null;
+  maxOutputTokens: number | null;
+  reasoningCanDisable: number;
 };
 
 const SELECT_CONFIG = `
   SELECT active_provider    AS activeProvider,
-         max_output_tokens  AS maxOutputTokens,
          max_retries        AS maxRetries,
          request_timeout_ms AS requestTimeoutMs,
          hard_timeout_ms    AS hardTimeoutMs,
@@ -83,10 +80,11 @@ const SELECT_CONFIG = `
 
 const SELECT_PROVIDER = `
   SELECT provider, model,
-         base_url          AS baseUrl,
-         api_key_encrypted AS apiKeyEncrypted,
-         thinking,
-         reasoning_effort  AS reasoningEffort
+         base_url              AS baseUrl,
+         api_key_encrypted     AS apiKeyEncrypted,
+         reasoning_level       AS reasoningLevel,
+         max_output_tokens     AS maxOutputTokens,
+         reasoning_can_disable AS reasoningCanDisable
   FROM provider_config WHERE provider = ?
 `;
 
@@ -118,24 +116,22 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
   }
 }
 
-function loadProviders(): ProviderSettingsMap {
-  const anthropic = readProviderRow("anthropic");
-  const openrouter = readProviderRow("openrouter");
+function toSettings(row: ProviderRow | undefined): ProviderSettings {
   return {
-    anthropic: {
-      model: anthropic?.model ?? null,
-      baseUrl: anthropic?.baseUrl ?? undefined,
-      apiKeyMasked: maskStored(anthropic?.apiKeyEncrypted ?? null),
-      thinking: (anthropic?.thinking as ThinkingMode | undefined) ?? "adaptive",
-    },
-    openrouter: {
-      model: openrouter?.model ?? null,
-      baseUrl: openrouter?.baseUrl ?? undefined,
-      apiKeyMasked: maskStored(openrouter?.apiKeyEncrypted ?? null),
-      reasoningEffort:
-        (openrouter?.reasoningEffort as ReasoningEffort | null | undefined) ??
-        null,
-    },
+    model: row?.model ?? null,
+    baseUrl: row?.baseUrl ?? undefined,
+    apiKeyMasked: maskStored(row?.apiKeyEncrypted ?? null),
+    reasoningLevel: row?.reasoningLevel ?? null,
+    maxOutputTokens: row?.maxOutputTokens ?? null,
+    // Unset reads as "can disable": nothing is refused until a model says so.
+    reasoningCanDisable: row?.reasoningCanDisable !== 0,
+  };
+}
+
+function loadProviders(): ProviderSettingsMap {
+  return {
+    anthropic: toSettings(readProviderRow("anthropic")),
+    openrouter: toSettings(readProviderRow("openrouter")),
   };
 }
 
@@ -148,7 +144,6 @@ export function loadConfig(): AgentConfig {
     return {
       provider: null,
       providers,
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
       maxRetries: MAX_RETRIES,
       requestTimeoutMs: REQUEST_TIMEOUT_MS,
       hardTimeoutMs: DEFAULT_HARD_TIMEOUT_MS,
@@ -168,7 +163,6 @@ export function loadConfig(): AgentConfig {
   return {
     provider: row.activeProvider as LLMProviderName | null,
     providers,
-    maxOutputTokens: row.maxOutputTokens,
     maxRetries: row.maxRetries,
     requestTimeoutMs: row.requestTimeoutMs,
     hardTimeoutMs: row.hardTimeoutMs,
@@ -198,13 +192,13 @@ export function loadApiKey(provider: LLMProviderName): string | undefined {
 
 const UPSERT_CONFIG = `
   INSERT INTO config (
-    id, active_provider, max_output_tokens, max_retries,
+    id, active_provider, max_retries,
     request_timeout_ms, hard_timeout_ms, tool_timeout_ms,
     remediation_breaker_limit, remediation_breaker_window_ms,
     code_session_budget_ms, sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
     sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts, updated_at
   ) VALUES (
-    @id, @activeProvider, @maxOutputTokens, @maxRetries,
+    @id, @activeProvider, @maxRetries,
     @requestTimeoutMs, @hardTimeoutMs, @toolTimeoutMs,
     @remediationBreakerLimit, @remediationBreakerWindowMs,
     @codeSessionBudgetMs, @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
@@ -212,7 +206,6 @@ const UPSERT_CONFIG = `
   )
   ON CONFLICT(id) DO UPDATE SET
     active_provider = excluded.active_provider,
-    max_output_tokens = excluded.max_output_tokens,
     max_retries = excluded.max_retries,
     request_timeout_ms = excluded.request_timeout_ms,
     hard_timeout_ms = excluded.hard_timeout_ms,
@@ -240,7 +233,6 @@ export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
     .run({
       id: CONFIG_ID,
       activeProvider: next.provider,
-      maxOutputTokens: next.maxOutputTokens,
       maxRetries: next.maxRetries,
       requestTimeoutMs: next.requestTimeoutMs,
       hardTimeoutMs: next.hardTimeoutMs,
@@ -262,24 +254,28 @@ export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
 export interface ProviderPatch {
   model?: string | null;
   baseUrl?: string | null;
-  thinking?: ThinkingMode;
-  reasoningEffort?: ReasoningEffort | null;
+  reasoningLevel?: string | null;
+  maxOutputTokens?: number | null;
+  reasoningCanDisable?: boolean;
   // Plaintext; encrypted here so no caller has to remember to.
   apiKey?: string;
 }
 
 const UPSERT_PROVIDER = `
   INSERT INTO provider_config (
-    provider, model, base_url, api_key_encrypted, thinking, reasoning_effort, updated_at
+    provider, model, base_url, api_key_encrypted,
+    reasoning_level, max_output_tokens, reasoning_can_disable, updated_at
   ) VALUES (
-    @provider, @model, @baseUrl, @apiKeyEncrypted, @thinking, @reasoningEffort, @updatedAt
+    @provider, @model, @baseUrl, @apiKeyEncrypted,
+    @reasoningLevel, @maxOutputTokens, @reasoningCanDisable, @updatedAt
   )
   ON CONFLICT(provider) DO UPDATE SET
     model = excluded.model,
     base_url = excluded.base_url,
     api_key_encrypted = excluded.api_key_encrypted,
-    thinking = excluded.thinking,
-    reasoning_effort = excluded.reasoning_effort,
+    reasoning_level = excluded.reasoning_level,
+    max_output_tokens = excluded.max_output_tokens,
+    reasoning_can_disable = excluded.reasoning_can_disable,
     updated_at = excluded.updated_at
 `;
 
@@ -304,11 +300,20 @@ export function updateProvider(
         patch.apiKey !== undefined
           ? encrypt(patch.apiKey)
           : (existing?.apiKeyEncrypted ?? null),
-      thinking: patch.thinking ?? existing?.thinking ?? "adaptive",
-      reasoningEffort:
-        patch.reasoningEffort !== undefined
-          ? patch.reasoningEffort
-          : (existing?.reasoningEffort ?? null),
+      reasoningLevel:
+        patch.reasoningLevel !== undefined
+          ? patch.reasoningLevel
+          : (existing?.reasoningLevel ?? null),
+      maxOutputTokens:
+        patch.maxOutputTokens !== undefined
+          ? patch.maxOutputTokens
+          : (existing?.maxOutputTokens ?? null),
+      reasoningCanDisable:
+        patch.reasoningCanDisable !== undefined
+          ? patch.reasoningCanDisable
+            ? 1
+            : 0
+          : (existing?.reasoningCanDisable ?? 1),
       updatedAt: new Date().toISOString(),
     });
   return loadConfig();

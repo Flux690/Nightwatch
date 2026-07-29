@@ -147,10 +147,46 @@ describe("describeLLMError", () => {
   it.each([
     [401, "rejected the API key"],
     [402, "out of credits"],
-    [404, "model name"],
+    [404, "no such model"],
     [429, "rate-limited"],
   ])("maps HTTP %d to actionable words", (status, phrase) => {
     expect(describeLLMError(openAIError(status))).toContain(phrase);
+  });
+
+  it("tells a 404 apart from a malformed request, since only one means the model is gone", () => {
+    expect(describeLLMError(openAIError(404))).toContain("retired");
+    expect(describeLLMError(openAIError(400))).toContain("malformed");
+  });
+
+  it("quotes the free-model quota on a 429, which is the usual cause", () => {
+    const text = describeLLMError(openAIError(429));
+    expect(text).toContain("20 requests a minute");
+    expect(text).toContain("50 a day");
+  });
+
+  it("reads provider_unavailable as an upstream outage rather than a setup problem", () => {
+    // OpenRouter returns this when the host behind a model answers with nothing
+    // usable: a different condition from a bad key, and it reads differently.
+    const err = OpenAI.APIError.generate(
+      502,
+      {
+        error: {
+          message: "Provider returned error",
+          metadata: {
+            provider_name: "Poolside",
+            error_type: "provider_unavailable",
+          },
+        },
+      },
+      "502",
+      new Headers(),
+    );
+
+    const text = describeLLMError(err);
+
+    expect(text).toContain("outage");
+    expect(text).toContain("anything being wrong with your setup");
+    expect(text).toContain("from Poolside");
   });
 
   it("explains connection failures without a status code", () => {

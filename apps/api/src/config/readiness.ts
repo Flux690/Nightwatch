@@ -1,4 +1,5 @@
 import { loadApiKey, loadConfig } from "./store.js";
+import { MAX_OUTPUT_TOKENS } from "../llm/config.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
 
 // The single answer to "can the agent reach an LLM?". Every entry point that
@@ -29,8 +30,9 @@ export function checkLLMReadiness(): LLMReadiness {
     return { ready: false, missing };
   }
 
-  // Flatten the active block onto the loop settings the SDKs need. Each
-  // provider-native knob defaults inert for the adapter it does not belong to.
+  // Flatten the active block onto the loop settings the SDKs need. The output
+  // ceiling is the chosen model's own, captured when it was saved; the constant
+  // only stands in for a model whose catalog published none.
   return {
     ready: true,
     apiKey,
@@ -38,15 +40,11 @@ export function checkLLMReadiness(): LLMReadiness {
       provider,
       model,
       baseUrl: settings.baseUrl,
-      maxOutputTokens: config.maxOutputTokens,
+      maxOutputTokens: settings.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs,
-      thinking:
-        provider === "anthropic" ? config.providers.anthropic.thinking : "off",
-      reasoningEffort:
-        provider === "openrouter"
-          ? config.providers.openrouter.reasoningEffort
-          : null,
+      reasoningLevel: settings.reasoningLevel,
+      reasoningCanDisable: settings.reasoningCanDisable,
     },
   };
 }

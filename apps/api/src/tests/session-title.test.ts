@@ -28,8 +28,8 @@ function configuredConfig(): ResolvedLLMConfig {
     maxOutputTokens: 4096,
     maxRetries: 0,
     requestTimeoutMs: 10_000,
-    thinking: "off",
-    reasoningEffort: null,
+    reasoningLevel: null,
+    reasoningCanDisable: true,
   };
 }
 import {

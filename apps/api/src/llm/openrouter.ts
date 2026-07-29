@@ -46,6 +46,44 @@ export function openRouterAuthHeaders(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
+// OpenRouter's extensions to the chat-completions contract, which the OpenAI
+// SDK does not type. Declared here so reading them needs no casts.
+interface OpenRouterReasoningParam {
+  effort?: string;
+  enabled?: boolean;
+}
+
+interface ReasoningDetail {
+  type: string;
+  text?: string;
+}
+
+// Reads reasoning_details off a stream chunk. The SDK types the chunk without
+// this field, so every hop is checked rather than assumed.
+function reasoningDetails(chunk: unknown): ReasoningDetail[] {
+  if (typeof chunk !== "object" || chunk === null) return [];
+  const choices = (chunk as Record<string, unknown>)["choices"];
+  if (!Array.isArray(choices)) return [];
+  const first: unknown = choices[0];
+  if (typeof first !== "object" || first === null) return [];
+  const delta = (first as Record<string, unknown>)["delta"];
+  if (typeof delta !== "object" || delta === null) return [];
+  const entries = (delta as Record<string, unknown>)["reasoning_details"];
+  if (!Array.isArray(entries)) return [];
+
+  return entries.flatMap((entry): ReasoningDetail[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const e = entry as Record<string, unknown>;
+    if (typeof e["type"] !== "string") return [];
+    return [
+      {
+        type: e["type"],
+        ...(typeof e["text"] === "string" && { text: e["text"] }),
+      },
+    ];
+  });
+}
+
 // A model's reasoning block, as OpenRouter's catalog publishes it. Only
 // `mandatory` is present on every entry; the rest are absent on most models.
 interface OpenRouterReasoning {
@@ -178,7 +216,6 @@ export class OpenRouterProvider implements LLMProvider {
     try {
       // Streamed via finalChatCompletion() so a large response can't trip the single-read
       // timeout; the accumulated result has the same shape as a non-streamed one.
-      const reasoningOff = this.opts?.reasoning === "off";
       const streamParams = {
         model: this.model,
         max_tokens: this.config.maxOutputTokens,
@@ -191,35 +228,15 @@ export class OpenRouterProvider implements LLMProvider {
             parameters: t.input_schema,
           },
         })),
-        // A call flagged reasoning-off spends its whole budget on visible text.
-        // Gated on reasoningEffort so deployments that never speak the reasoning
-        // dialect keep sending nothing.
-        ...(reasoningOff &&
-          this.config.reasoningEffort && {
-            reasoning_effort: "none" as const,
-          }),
+        ...this.reasoningParam(),
       };
-      // OpenRouter-only param requesting reasoning_details on the stream; the
-      // official SDK types don't know it, hence the cast through unknown.
-      if (!reasoningOff && this.config.reasoningEffort) {
-        (streamParams as unknown as Record<string, unknown>)["reasoning"] = {
-          effort: this.config.reasoningEffort,
-        };
-      }
       const stream = this.client.chat.completions.stream(streamParams, {
         signal,
       });
-      // SDK types omit reasoning_details, hence the cast via unknown; listened
-      // for unconditionally so accumulated text survives the no-callback wrap-up turn.
+      // Listened for unconditionally so accumulated text survives the
+      // no-callback wrap-up turn.
       stream.on("chunk", (chunk) => {
-        const rawDelta = (
-          chunk as unknown as {
-            choices?: Array<{ delta?: Record<string, unknown> }>;
-          }
-        ).choices?.[0]?.delta;
-        const entries = rawDelta?.["reasoning_details"] as
-          Array<{ type: string; text?: string }> | undefined;
-        for (const entry of entries ?? []) {
+        for (const entry of reasoningDetails(chunk)) {
           if (
             (entry.type === "reasoning.text" ||
               entry.type === "reasoning.summary") &&
@@ -269,6 +286,19 @@ export class OpenRouterProvider implements LLMProvider {
       toolUses,
       text: choice.message.content ?? "",
     };
+  }
+
+  // OpenRouter's own param, absent from the OpenAI SDK's types. Requesting it is
+  // also what makes reasoning_details stream back.
+  private reasoningParam(): { reasoning?: OpenRouterReasoningParam } {
+    const level = this.config.reasoningLevel;
+    if (this.opts?.reasoning === "off") {
+      // A mandatory model rejects being switched off, and OpenRouter's docs say
+      // not to ask: hide the control and never send effort "none".
+      if (!this.config.reasoningCanDisable) return {};
+      return { reasoning: { enabled: false } };
+    }
+    return level === null ? {} : { reasoning: { effort: level } };
   }
 
   appendToolResults(results: ToolResult[], additionalText?: string): void {

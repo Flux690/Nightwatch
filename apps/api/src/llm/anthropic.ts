@@ -32,7 +32,9 @@ const ANTHROPIC_DEFAULT_EFFORT = "high";
 
 // Strongest first. Every rung is checked independently because the ladder has
 // holes: Opus 4.6 supports max but not xhigh.
-const ANTHROPIC_EFFORT_LADDER: readonly ReasoningLevel[] = [
+const ANTHROPIC_EFFORT_LADDER: readonly (ReasoningLevel & {
+  value: AnthropicEffort;
+})[] = [
   { value: "max", label: "Max" },
   { value: "xhigh", label: "Extra high" },
   { value: "high", label: "High" },
@@ -42,6 +44,22 @@ const ANTHROPIC_EFFORT_LADDER: readonly ReasoningLevel[] = [
 
 export function anthropicAuthHeaders(apiKey: string): Record<string, string> {
   return { "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
+}
+
+type ThinkingParams = Pick<
+  Anthropic.Messages.MessageCreateParams,
+  "thinking" | "output_config"
+>;
+type AnthropicEffort = NonNullable<Anthropic.Messages.OutputConfig["effort"]>;
+
+// The stored level is a plain string; matching it against the ladder narrows it
+// to what the SDK accepts without asserting anything.
+function toEffort(level: string | null): AnthropicEffort | undefined {
+  return ANTHROPIC_EFFORT_LADDER.find((l) => l.value === level)?.value;
+}
+
+function effortParam(effort: AnthropicEffort | undefined): ThinkingParams {
+  return effort === undefined ? {} : { output_config: { effort } };
 }
 
 // Both `capabilities` and the individual `xhigh` rung are nullable in the
@@ -166,14 +184,7 @@ export class AnthropicProvider implements LLMProvider {
               cache_control: { type: "ephemeral" },
             },
           ],
-          // Adaptive thinking lets the model decide when and how deeply to reason; thinking
-          // blocks are preserved in response.content below for multi-turn continuity.
-          // Omitting the param entirely is Anthropic's "off" - used by calls
-          // flagged reasoning-off (one-shot titles) regardless of config.
-          ...(this.config.thinking === "adaptive" &&
-            this.opts?.reasoning !== "off" && {
-              thinking: { type: "adaptive" as const },
-            }),
+          ...this.thinkingParams(),
           // ToolSchema is structurally compatible with Anthropic.Tool.
           tools: tools as Anthropic.Tool[],
           messages: this.messagesWithCacheBreakpoint(),
@@ -231,6 +242,29 @@ export class AnthropicProvider implements LLMProvider {
       stopReason: mapStopReason(response.stop_reason),
       toolUses,
       text,
+    };
+  }
+
+  // Thinking and effort are separate controls here: `thinking` decides whether
+  // the model reasons at all, `output_config.effort` how hard it works.
+  private thinkingParams(): ThinkingParams {
+    const effort = toEffort(this.config.reasoningLevel);
+    // A model that cannot be told to stop reasoning keeps its normal config;
+    // the caller's small token budget is the remaining brake.
+    if (this.opts?.reasoning !== "off" || !this.config.reasoningCanDisable) {
+      // display "summarized" is the opt-in that makes reasoning visible: it
+      // defaults to "omitted" on current models, which streams no thinking
+      // deltas at all. The raw chain of thought is never returned either way.
+      return {
+        thinking: { type: "adaptive", display: "summarized" },
+        ...effortParam(effort),
+      };
+    }
+    return {
+      thinking: { type: "disabled" },
+      // Opus 5 rejects disabled thinking at xhigh or max with a 400, so the
+      // effort steps down to the strongest level that accepts it.
+      ...effortParam(effort === "xhigh" || effort === "max" ? "high" : effort),
     };
   }
 

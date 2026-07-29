@@ -11,15 +11,16 @@ import { catalogSource, fetchModels } from "../llm/catalog.js";
 import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { LLMProviderName } from "@nightwarden/shared";
+import type { LLMProviderName, ModelOption } from "@nightwarden/shared";
 
 // One provider's settings. Nested under `providers` on the patch so a change to
 // one cannot touch the other's model, endpoint, or credential.
+// reasoningLevel is a free string: the legal values are whatever the chosen
+// model advertises, so the descriptor is the authority, not an enum here.
 const ProviderPatchSchema = z.object({
   model: z.string().min(1).nullable().optional(),
   baseUrl: z.string().url().nullable().optional(),
-  thinking: z.enum(["adaptive", "off"]).optional(),
-  reasoningEffort: z.enum(["low", "medium", "high"]).nullable().optional(),
+  reasoningLevel: z.string().min(1).nullable().optional(),
 });
 
 const ConfigPatchSchema = z.object({
@@ -30,7 +31,6 @@ const ConfigPatchSchema = z.object({
       openrouter: ProviderPatchSchema.optional(),
     })
     .optional(),
-  maxOutputTokens: z.number().int().positive().optional(),
   maxRetries: z.number().int().min(0).optional(),
   requestTimeoutMs: z.number().int().positive().optional(),
   hardTimeoutMs: z.number().int().positive().optional(),
@@ -76,6 +76,44 @@ interface ProbeTarget {
   provider: LLMProviderName;
   baseUrl?: string;
   model?: string | null;
+}
+
+// Picking a model captures what its catalog says about it, so starting a run
+// never has to reach the network. Derived here rather than taken from the
+// request: what a model supports is the provider's answer, not the browser's.
+async function withModelFacts(
+  provider: LLMProviderName,
+  patch: ProviderPatch,
+): Promise<ProviderPatch> {
+  if (patch.model === undefined || patch.model === null) return patch;
+
+  const config = loadConfig();
+  const models = await fetchModels(
+    provider,
+    patch.baseUrl ?? config.providers[provider].baseUrl,
+    loadApiKey(provider) ?? "",
+  );
+  const chosen = models.find((m) => m.id === patch.model);
+  // An unreachable catalog leaves the facts unset rather than inventing them;
+  // the readiness gate falls back to the constant ceiling.
+  if (chosen === undefined) return patch;
+
+  const level =
+    patch.reasoningLevel ?? config.providers[provider].reasoningLevel;
+  return {
+    ...patch,
+    maxOutputTokens: chosen.maxOutputTokens,
+    reasoningCanDisable: chosen.reasoning?.canDisable ?? true,
+    // A level carried over from the previous model may not exist on this one,
+    // so it re-resolves rather than being stored as something unsendable.
+    reasoningLevel: validLevel(chosen, level),
+  };
+}
+
+function validLevel(model: ModelOption, level: string | null): string | null {
+  if (model.reasoning === null) return null;
+  const supported = model.reasoning.levels.some((l) => l.value === level);
+  return supported ? level : model.reasoning.defaultLevel;
 }
 
 type TestError = "bad_key" | "unreachable" | "unknown_model";
@@ -135,7 +173,7 @@ export async function registerConfigRoutes(
       for (const name of ["anthropic", "openrouter"] as const) {
         const block = providers?.[name];
         if (block !== undefined)
-          updateProvider(name, block satisfies ProviderPatch);
+          updateProvider(name, await withModelFacts(name, block));
       }
       const updated = updateConfig(global);
       logger.info(

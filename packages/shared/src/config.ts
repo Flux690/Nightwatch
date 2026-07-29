@@ -2,8 +2,6 @@
 // value here is API-seeded and safe to send to the console; keys are masked.
 
 export type LLMProviderName = "anthropic" | "openrouter";
-export type ThinkingMode = "adaptive" | "off";
-export type ReasoningEffort = "low" | "medium" | "high";
 // "allowlist" routes all sandbox egress through an enforcing proxy that only
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
@@ -47,27 +45,27 @@ export interface ProviderSettings {
   baseUrl?: string;
   // Computed server-side on read and never stored; the plaintext never leaves.
   apiKeyMasked?: string | null;
+  // The operator's pick from this model's ladder. A plain string, validated
+  // against the model's descriptor rather than a fixed union: the levels differ
+  // per provider and per model, so an enum here could only ever be a guess.
+  reasoningLevel: string | null;
+  // Captured from the catalog when the model is saved, so nothing has to reach
+  // the network to start a run. Null means the catalog published no ceiling.
+  maxOutputTokens: number | null;
+  // False when the chosen model rejects being told not to reason, which the
+  // one-shot title call has to respect.
+  reasoningCanDisable: boolean;
 }
 
-export interface AnthropicSettings extends ProviderSettings {
-  thinking: ThinkingMode;
-}
-
-export interface OpenRouterSettings extends ProviderSettings {
-  reasoningEffort: ReasoningEffort | null;
-}
-
-export interface ProviderSettingsMap {
-  anthropic: AnthropicSettings;
-  openrouter: OpenRouterSettings;
-}
+// Both providers hold the same shape: the operator's choice plus the facts
+// captured about the model they chose.
+export type ProviderSettingsMap = Record<LLMProviderName, ProviderSettings>;
 
 export interface AgentConfig {
   // Which provider block is live; null until an operator picks one. There is no
   // default: a fresh install must not look configured when it can reach no LLM.
   provider: LLMProviderName | null;
   providers: ProviderSettingsMap;
-  maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
   hardTimeoutMs: number;
@@ -97,13 +95,14 @@ export interface ResolvedLLMConfig {
   provider: LLMProviderName;
   model: string;
   baseUrl?: string;
+  // The chosen model's own ceiling, or a constant when it published none.
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
-  // Provider-native tuning: thinking is Anthropic's, reasoningEffort is
-  // OpenRouter's. Each is inert for the other adapter.
-  thinking: ThinkingMode;
-  reasoningEffort: ReasoningEffort | null;
+  // The operator's pick, in the provider's vocabulary; each adapter translates
+  // it into its own wire param. Null means send nothing and take the default.
+  reasoningLevel: string | null;
+  reasoningCanDisable: boolean;
 }
 
 // A setup problem the console surfaces app-wide (a banner), computed server-side

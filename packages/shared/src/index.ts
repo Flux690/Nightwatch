@@ -136,16 +136,12 @@ export type {
 } from "./remediation.js";
 export type {
   LLMProviderName,
-  ThinkingMode,
-  ReasoningEffort,
   ReasoningLevel,
   ReasoningDescriptor,
   ModelOption,
   SandboxNetwork,
   AgentConfig,
   ProviderSettings,
-  AnthropicSettings,
-  OpenRouterSettings,
   ProviderSettingsMap,
   ResolvedLLMConfig,
   ConfigHealthKind,

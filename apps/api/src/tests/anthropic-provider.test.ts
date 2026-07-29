@@ -26,8 +26,8 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
-  thinking: "off",
-  reasoningEffort: null,
+  reasoningLevel: null,
+  reasoningCanDisable: true,
 };
 
 const READ_TOOL = {
@@ -97,6 +97,80 @@ describe("AnthropicProvider", () => {
       "ListDockerServices",
     ]);
     expect(callArgs.output_config).toBeUndefined();
+  });
+
+  describe("thinking and effort", () => {
+    // Anthropic keeps these on two separate params: `thinking` decides whether
+    // the model reasons, `output_config.effort` how hard it works.
+    async function sentParams(
+      config: ResolvedLLMConfig,
+      opts?: { reasoning: "off" },
+    ): Promise<{ thinking?: unknown; output_config?: { effort?: string } }> {
+      mockFinalMessage.mockResolvedValueOnce({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "done", citations: null }],
+        usage: makeUsage(),
+      });
+      const p = new AnthropicProvider("sys", config, undefined, opts);
+      p.start("go");
+      await p.chat([]);
+      return mockMessagesStream.mock.calls[0]?.[0] as {
+        thinking?: unknown;
+        output_config?: { effort?: string };
+      };
+    }
+
+    it("asks for summarized thinking, without which current models stream no thinking text at all", async () => {
+      const params = await sentParams(BASE_CONFIG);
+
+      expect(params.thinking).toEqual({
+        type: "adaptive",
+        display: "summarized",
+      });
+    });
+
+    it("sends the chosen effort under output_config, which is where Anthropic takes it", async () => {
+      const params = await sentParams({
+        ...BASE_CONFIG,
+        reasoningLevel: "xhigh",
+      });
+
+      expect(params.output_config).toEqual({ effort: "xhigh" });
+    });
+
+    it("sends no effort at all when the operator has picked no level", async () => {
+      const params = await sentParams(BASE_CONFIG);
+
+      expect(params.output_config).toBeUndefined();
+    });
+
+    it("disables thinking for a reasoning-off call, which omitting the param would not do", async () => {
+      const params = await sentParams(BASE_CONFIG, { reasoning: "off" });
+
+      expect(params.thinking).toEqual({ type: "disabled" });
+    });
+
+    it("steps effort down to high when disabling thinking, which Opus 5 rejects at xhigh or max", async () => {
+      const params = await sentParams(
+        { ...BASE_CONFIG, reasoningLevel: "max" },
+        { reasoning: "off" },
+      );
+
+      expect(params.thinking).toEqual({ type: "disabled" });
+      expect(params.output_config).toEqual({ effort: "high" });
+    });
+
+    it("keeps thinking on for a reasoning-off call when the model refuses to be switched off", async () => {
+      const params = await sentParams(
+        { ...BASE_CONFIG, reasoningCanDisable: false },
+        { reasoning: "off" },
+      );
+
+      expect(params.thinking).toEqual({
+        type: "adaptive",
+        display: "summarized",
+      });
+    });
   });
 
   it("passes through real tool_use blocks unchanged when the model uses tools", async () => {

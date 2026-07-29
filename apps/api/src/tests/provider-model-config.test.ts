@@ -278,6 +278,100 @@ describe("provider/model config seam", () => {
     expect(body.models).toEqual([]);
   });
 
+  // --- what picking a model captures ---
+
+  describe("saving a model", () => {
+    afterEach(() => {
+      configureTestLLM();
+    });
+
+    async function patchModel(
+      model: string,
+      reasoningLevel?: string,
+    ): Promise<AgentConfig> {
+      const res = await server.inject({
+        method: "PATCH",
+        url: "/api/config",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: {
+          providers: {
+            anthropic: { model, ...(reasoningLevel && { reasoningLevel }) },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      return JSON.parse(res.body) as AgentConfig;
+    }
+
+    it("captures the model's own ceiling, so starting a run never has to reach the network", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              ...anthropicModel("claude-opus-5", { max: true }),
+              max_tokens: 128_000,
+            },
+          ],
+        }),
+      );
+
+      const config = await patchModel("claude-opus-5");
+
+      expect(config.providers.anthropic.maxOutputTokens).toBe(128_000);
+      expect(config.providers.anthropic.reasoningCanDisable).toBe(true);
+    });
+
+    it("re-resolves a level the new model does not support, rather than storing something unsendable", async () => {
+      // max is legal on the first model and absent from the second.
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-opus-5", { max: true })],
+        }),
+      );
+      const first = await patchModel("claude-opus-5", "max");
+      expect(first.providers.anthropic.reasoningLevel).toBe("max");
+
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-small", {})],
+        }),
+      );
+      const second = await patchModel("claude-small");
+
+      expect(second.providers.anthropic.reasoningLevel).toBe("high");
+    });
+
+    it("leaves the level unset when the new model advertises no reasoning at all", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-opus-5", { max: true })],
+        }),
+      );
+      await patchModel("claude-opus-5", "max");
+
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [{ id: "claude-plain", capabilities: null }],
+        }),
+      );
+      const config = await patchModel("claude-plain");
+
+      expect(config.providers.anthropic.reasoningLevel).toBeNull();
+    });
+
+    it("stores the model anyway when the catalog cannot be reached, rather than refusing the save", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("fetch failed")),
+      );
+
+      const config = await patchModel("claude-opus-5");
+
+      expect(config.providers.anthropic.model).toBe("claude-opus-5");
+      expect(config.providers.anthropic.maxOutputTokens).toBeNull();
+    });
+  });
+
   // --- reasoning descriptors, derived from each provider's own catalog ---
 
   describe("reasoning descriptors", () => {
@@ -541,7 +635,6 @@ describe("provider/model config seam", () => {
       expect(body.providers.anthropic.apiKeyMasked).toBeNull();
       // Timeouts and sandbox limits are engineering choices, not the operator's;
       // a provider's own tuning defaults the same way inside its block.
-      expect(body.providers.anthropic.thinking).toBe("adaptive");
       expect(body.sandboxNetwork).toBe("allowlist");
       expect(body.hardTimeoutMs).toEqual(expect.any(Number));
     });

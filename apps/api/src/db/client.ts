@@ -23,7 +23,6 @@ const SCHEMA = `
     -- yet, which the run gate refuses on; a default would make a fresh install
     -- look configured while holding no API key.
     active_provider    TEXT,
-    max_output_tokens  INTEGER NOT NULL DEFAULT 32000,
     max_retries        INTEGER NOT NULL DEFAULT 2,
     request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
     hard_timeout_ms    INTEGER NOT NULL DEFAULT 300000,
@@ -44,15 +43,18 @@ repo.yarnpkg.com',
 
   -- One row per provider, each owning its own credentials and endpoint, so
   -- switching the active provider cannot carry the previous one's key or base
-  -- URL across. thinking is Anthropic's knob, reasoning_effort OpenRouter's.
+  -- URL across. reasoning_level is the operator's pick in that provider's own
+  -- vocabulary; the two columns after it are facts captured from the catalog
+  -- when the model was saved, so starting a run never has to reach the network.
   CREATE TABLE IF NOT EXISTS provider_config (
-    provider          TEXT PRIMARY KEY,
-    model             TEXT,
-    base_url          TEXT,
-    api_key_encrypted TEXT,
-    thinking          TEXT NOT NULL DEFAULT 'adaptive',
-    reasoning_effort  TEXT,
-    updated_at        TEXT NOT NULL
+    provider             TEXT PRIMARY KEY,
+    model                TEXT,
+    base_url             TEXT,
+    api_key_encrypted    TEXT,
+    reasoning_level      TEXT,
+    max_output_tokens    INTEGER,
+    reasoning_can_disable INTEGER NOT NULL DEFAULT 1,
+    updated_at           TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS user (
