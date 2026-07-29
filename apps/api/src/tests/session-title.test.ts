@@ -29,7 +29,16 @@ function configuredConfig(): ResolvedLLMConfig {
     maxRetries: 0,
     requestTimeoutMs: 10_000,
     reasoningLevel: null,
-    reasoningCanDisable: true,
+    reasoning: {
+      label: "Effort",
+      levels: [
+        { value: "high", label: "High" },
+        { value: "medium", label: "Medium" },
+        { value: "low", label: "Low" },
+      ],
+      defaultLevel: "high",
+      canDisable: true,
+    },
   };
 }
 import {

@@ -7,11 +7,15 @@ import {
   updateProvider,
   type ProviderPatch,
 } from "./store.js";
-import { catalogSource, fetchModels } from "../llm/catalog.js";
+import { PROVIDER_OPTIONS, fetchCatalog, fetchModels } from "../llm/catalog.js";
 import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
-import type { LLMProviderName, ModelOption } from "@nightwarden/shared";
+import type {
+  LLMProviderName,
+  ModelCatalog,
+  ModelOption,
+} from "@nightwarden/shared";
 
 // One provider's settings. Nested under `providers` on the patch so a change to
 // one cannot touch the other's model, endpoint, or credential.
@@ -55,11 +59,14 @@ const ConfigPatchSchema = z.object({
     .optional(),
 });
 
-const TestBodySchema = z.object({
-  apiKey: z.string().min(1),
-  model: z.string().optional(),
+// The provider block being edited, which is not necessarily the one on disk.
+// Each field falls back to the stored value, so a half-typed form still asks
+// about something coherent. POST because the key travels in the body: a
+// credential must never reach a URL.
+const CatalogBodySchema = z.object({
   provider: z.enum(["anthropic", "openrouter"]).optional(),
   baseUrl: z.string().url().optional(),
+  apiKey: z.string().min(1).optional(),
 });
 
 // The provider is explicit: a key belongs to one provider's block, and inferring
@@ -68,14 +75,6 @@ const KeyBodySchema = z.object({
   provider: z.enum(["anthropic", "openrouter"]),
   apiKey: z.string().min(1),
 });
-
-// What listing or probing an endpoint actually needs: which dialect to speak,
-// where to speak it, and (for a probe) which model to look for.
-interface ProbeTarget {
-  provider: LLMProviderName;
-  baseUrl?: string;
-  model?: string | null;
-}
 
 // Picking a model captures what its catalog says about it, so starting a run
 // never has to reach the network. Derived here rather than taken from the
@@ -102,7 +101,7 @@ async function withModelFacts(
   return {
     ...patch,
     maxOutputTokens: chosen.maxOutputTokens,
-    reasoningCanDisable: chosen.reasoning?.canDisable ?? true,
+    reasoning: chosen.reasoning,
     // A level carried over from the previous model may not exist on this one,
     // so it re-resolves rather than being stored as something unsendable.
     reasoningLevel: validLevel(chosen, level),
@@ -113,39 +112,6 @@ function validLevel(model: ModelOption, level: string | null): string | null {
   if (model.reasoning === null) return null;
   const supported = model.reasoning.levels.some((l) => l.value === level);
   return supported ? level : model.reasoning.defaultLevel;
-}
-
-type TestError = "bad_key" | "unreachable" | "unknown_model";
-type TestResult = { ok: true } | { ok: false; error: TestError };
-
-async function probeEndpoint(
-  target: ProbeTarget,
-  apiKey: string,
-): Promise<TestResult> {
-  const source = catalogSource(target.provider, target.baseUrl, apiKey);
-  let responseData: unknown;
-  try {
-    const res = await fetch(source.url, { headers: source.headers });
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "bad_key" };
-    }
-    if (!res.ok) {
-      return { ok: false, error: "unreachable" };
-    }
-    responseData = await res.json();
-  } catch {
-    return { ok: false, error: "unreachable" };
-  }
-
-  const models = source.describe(responseData).map((m) => m.id);
-  // Only flag unknown_model against a non-empty list; an empty list means the
-  // endpoint doesn't support listing, so treat that as a successful connection.
-  // An unset model means the form is testing a key before picking one.
-  const wanted = target.model;
-  if (wanted && models.length > 0 && !models.includes(wanted)) {
-    return { ok: false, error: "unknown_model" };
-  }
-  return { ok: true };
 }
 
 export async function registerConfigRoutes(
@@ -183,49 +149,49 @@ export async function registerConfigRoutes(
     },
   );
 
-  // Proxies the catalog so the browser never calls the LLM endpoint directly:
-  // the key lives in this process and must never reach the console. Each model
-  // carries its own reasoning descriptor, so the form can offer exactly the
-  // levels that model accepts instead of a hardcoded list.
-  fastify.get("/config/models", { preHandler: requireSession }, async () => {
-    const config = loadConfig();
-    // Nothing to list before a provider is picked; the DB is the only key source.
-    const provider = config.provider;
-    if (provider === null) return { models: [] };
-    const models = await fetchModels(
-      provider,
-      config.providers[provider].baseUrl,
-      loadApiKey(provider) ?? "",
-    );
-    return { models };
-  });
+  // Which providers this build can reach, so the picker is data rather than a
+  // list the console maintains. No secrets, but gated with the rest of config.
+  fastify.get("/config/providers", { preHandler: requireSession }, () => ({
+    providers: PROVIDER_OPTIONS,
+  }));
 
-  // Tests only - never persists. Provider/baseUrl overrides let the caller
-  // probe against unsaved form edits instead of whatever is on disk.
+  // Proxied here because the key lives in this process and must never reach the
+  // console. Answers about the block being edited rather than the one on disk,
+  // so the list fills in before anything is saved, and reading it is also how
+  // the setup is verified: models coming back prove the endpoint and the key.
+  // Never persists.
   fastify.post(
-    "/config/test",
+    "/config/models",
     { preHandler: requireSession },
     async (request, reply) => {
-      const parsed = TestBodySchema.safeParse(request.body);
+      const parsed = CatalogBodySchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const { apiKey, model, provider, baseUrl } = parsed.data;
+      const { provider, baseUrl, apiKey } = parsed.data;
 
-      // Falls back to the stored block only for what the form did not override,
-      // so a probe can test an unsaved provider/endpoint/model combination.
       const config = loadConfig();
-      const target: ProbeTarget = {
-        provider: provider ?? config.provider ?? "anthropic",
-        baseUrl,
-        model,
-      };
-      if (baseUrl === undefined && provider === undefined && config.provider) {
-        target.baseUrl = config.providers[config.provider].baseUrl;
+      const target = provider ?? config.provider;
+      // Nothing to list until a provider is chosen.
+      if (target === null || target === undefined) {
+        return { ok: true, models: [] } satisfies ModelCatalog;
       }
-      const result = await probeEndpoint(target, apiKey);
-      logger.info({ ok: result.ok }, "config/test probe completed");
-      return result;
+      const stored = config.providers[target];
+      // A typed key wins; otherwise the saved one, so changing a model or an
+      // endpoint needs no re-pasting. Whether an empty key is a problem is the
+      // provider's answer, given below.
+      const effectiveKey = apiKey ?? loadApiKey(target) ?? "";
+
+      const catalog = await fetchCatalog(
+        target,
+        baseUrl ?? stored.baseUrl,
+        effectiveKey,
+      );
+      logger.info(
+        { provider: target, ok: catalog.ok },
+        "model catalog requested",
+      );
+      return catalog;
     },
   );
 

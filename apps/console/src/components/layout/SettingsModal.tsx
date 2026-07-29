@@ -2,27 +2,22 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AgentConfig,
+  CatalogError,
   LLMProviderName,
+  ModelCatalog,
   ModelOption,
+  ProviderOption,
   ProviderSettings,
 } from "@nightwarden/shared";
 import { X } from "lucide-react";
 
-import { StatusText } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,31 +25,43 @@ import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { AccountSection } from "@/components/layout/settings/AccountSection";
+import { LimitsSection } from "@/components/layout/settings/LimitsSection";
+import {
+  ProviderSection,
+  type CatalogState,
+} from "@/components/layout/settings/ProviderSection";
+import { SandboxSection } from "@/components/layout/settings/SandboxSection";
+import { useDebounced } from "@/hooks/useDebounced";
 import { useAuth } from "@/auth/AuthContext";
 
-type TestResult =
-  | { ok: true }
-  | { ok: false; error: "bad_key" | "unreachable" | "unknown_model" };
-
-const ERROR_LABELS: Record<string, string> = {
-  bad_key: "Invalid API key",
-  unreachable: "Endpoint unreachable",
-  unknown_model: "Model not found on endpoint",
+// Loading the catalog is what verifies a provider block, so these are the ways
+// it can go wrong. Each is the server's answer, never inferred here: guessing
+// from a blank key field cannot tell a provider that publishes its catalog from
+// one that demands a credential for it.
+const CATALOG_ERRORS: Record<CatalogError, string> = {
+  needs_key: "Add an API key to load models.",
+  bad_key: "That key was rejected. Check it and try again.",
+  unreachable: "Could not reach that endpoint. Check the Base URL.",
 };
 
-type SectionId = "model" | "loop" | "sandbox" | "account";
+// Long enough that typing a key fires one request, short enough to feel instant.
+const CATALOG_DEBOUNCE_MS = 500;
+
+type SectionId = "model" | "limits" | "sandbox" | "account";
 
 const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   {
     id: "model",
     label: "Provider",
     description:
-      "Provider, endpoint, API key and generation limits for the investigation agent.",
+      "Which model answers, how to reach it, and how hard it works on each request.",
   },
   {
-    id: "loop",
-    label: "Loop",
-    description: "Retry and timeout budgets for a single investigation run.",
+    id: "limits",
+    label: "Limits",
+    description:
+      "How long a single investigation may run, and how many times it retries before giving up.",
   },
   {
     id: "sandbox",
@@ -98,7 +105,8 @@ function buildDelta(form: AgentConfig, base: AgentConfig): ConfigDelta {
     }
   }
 
-  for (const name of PROVIDERS) {
+  // Every block the config carries, so a new provider needs no list updating.
+  for (const name of Object.keys(form.providers) as LLMProviderName[]) {
     const formBlock = form.providers[name];
     const baseBlock = base.providers[name];
     const blockDelta: Record<string, unknown> = {};
@@ -113,8 +121,6 @@ function buildDelta(form: AgentConfig, base: AgentConfig): ConfigDelta {
   }
   return delta;
 }
-
-const PROVIDERS: readonly LLMProviderName[] = ["anthropic", "openrouter"];
 
 export function SettingsModal({
   opened,
@@ -133,22 +139,21 @@ export function SettingsModal({
     enabled: opened,
   });
 
-  const { data: modelsData } = useQuery<{ models: ModelOption[] }>({
-    queryKey: ["config/models"],
+  const { data: providersData } = useQuery<{ providers: ProviderOption[] }>({
+    queryKey: ["config/providers"],
     queryFn: () =>
-      apiFetch<{ models: ModelOption[] }>("/api/config/models").catch(() => ({
-        models: [],
-      })),
-    staleTime: 30_000,
+      apiFetch<{ providers: ProviderOption[] }>("/api/config/providers").catch(
+        () => ({ providers: [] }),
+      ),
+    staleTime: Infinity,
     enabled: opened,
   });
 
-  const availableModels = modelsData?.models ?? [];
+  const availableProviders = providersData?.providers ?? [];
 
   const queryClient = useQueryClient();
   const [form, setForm] = useState<AgentConfig | null>(null);
   const [newApiKey, setNewApiKey] = useState("");
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   // Seeded once per opening, never re-seeded while open: a background refetch
   // (window focus is enough) would otherwise replace whatever is being typed with
@@ -160,6 +165,42 @@ export function SettingsModal({
     }
     setForm((prev) => prev ?? config ?? null);
   }, [opened, config]);
+
+  // The catalog describes the block being edited, so it reloads whenever the
+  // provider, endpoint or key changes. Debounced because the key is typed a
+  // character at a time and each change would otherwise be its own request.
+  const editedProvider = form?.provider ?? null;
+  const editedBaseUrl = editedProvider
+    ? (form?.providers[editedProvider].baseUrl ?? "")
+    : "";
+  const catalogInput = useDebounced(
+    { provider: editedProvider, baseUrl: editedBaseUrl, apiKey: newApiKey },
+    CATALOG_DEBOUNCE_MS,
+  );
+
+  const { data: catalogData, isPending: catalogPending } =
+    useQuery<ModelCatalog>({
+      queryKey: [
+        "config/models",
+        catalogInput.provider,
+        catalogInput.baseUrl,
+        catalogInput.apiKey,
+      ],
+      queryFn: () =>
+        apiFetch<ModelCatalog>("/api/config/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(catalogInput.provider && { provider: catalogInput.provider }),
+            ...(catalogInput.baseUrl && { baseUrl: catalogInput.baseUrl }),
+            ...(catalogInput.apiKey.trim() && {
+              apiKey: catalogInput.apiKey.trim(),
+            }),
+          }),
+        }).catch<ModelCatalog>(() => ({ ok: false, error: "unreachable" })),
+      staleTime: 30_000,
+      enabled: opened && catalogInput.provider !== null,
+    });
 
   const saveConfig = useMutation({
     mutationFn: (delta: ConfigDelta) =>
@@ -197,17 +238,18 @@ export function SettingsModal({
     if (keyToSave && keyProvider === null) return;
 
     try {
-      await Promise.all([
-        Object.keys(delta).length > 0
-          ? saveConfig.mutateAsync(delta)
-          : undefined,
-        keyToSave && keyProvider
-          ? saveApiKey.mutateAsync({ provider: keyProvider, apiKey: keyToSave })
-          : undefined,
-      ]);
+      // The key goes first and alone: saving the config looks the chosen model
+      // up in the catalog, which needs that key already stored. In parallel the
+      // lookup races the write and the model's limits come back empty.
+      if (keyToSave && keyProvider) {
+        await saveApiKey.mutateAsync({
+          provider: keyProvider,
+          apiKey: keyToSave,
+        });
+      }
+      if (Object.keys(delta).length > 0) await saveConfig.mutateAsync(delta);
       await queryClient.invalidateQueries({ queryKey: ["config"] });
       setNewApiKey("");
-      setTestResult(null);
       toast.show({
         title: "Settings saved",
         message: "Your changes have been saved.",
@@ -220,34 +262,6 @@ export function SettingsModal({
         variant: "error",
       });
     }
-  }
-
-  const testConnection = useMutation({
-    mutationFn: (vars: {
-      apiKey: string;
-      model: string | undefined;
-      provider: AgentConfig["provider"] | undefined;
-      baseUrl: string | undefined;
-    }) =>
-      apiFetch<TestResult>("/api/config/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(vars),
-      }),
-    onSuccess: (data) => setTestResult(data),
-    onError: () => setTestResult({ ok: false, error: "unreachable" }),
-  });
-
-  function handleTestConnection(): void {
-    if (!newApiKey.trim() || !form || form.provider === null) return;
-    setTestResult(null);
-    const block = form.providers[form.provider];
-    testConnection.mutate({
-      apiKey: newApiKey,
-      model: block.model ?? undefined,
-      provider: form.provider,
-      baseUrl: block.baseUrl,
-    });
   }
 
   function setField<K extends keyof AgentConfig>(
@@ -272,9 +286,6 @@ export function SettingsModal({
           }
         : prev,
     );
-    // Only the endpoint invalidates a verdict about reaching it; the model is
-    // checked by the request itself, so picking one keeps a passing test.
-    if ("baseUrl" in patch || "apiKey" in patch) setTestResult(null);
   }
 
   // Fields every provider has, applied to whichever is selected, so switching
@@ -287,17 +298,59 @@ export function SettingsModal({
     patchProvider(form.provider, { [key]: value });
   }
 
-  function numberValue(value: string | number): number {
-    return typeof value === "number" ? value : Number(value);
-  }
-
   // Everything below the provider picker describes one provider, so it only has
   // meaning once one is chosen.
   const block = form?.provider ? form.providers[form.provider] : null;
-  // The controls describe the chosen model, not the provider: an id we have no
-  // catalog entry for gets no reasoning control rather than a guessed one.
-  const chosenModel = availableModels.find((m) => m.id === block?.model);
-  const reasoning = chosenModel?.reasoning ?? null;
+  // What the server holds for that provider, read live rather than from the
+  // frozen form: a key saved a moment ago must show as saved, and the form is
+  // deliberately not re-seeded while it is open.
+  const savedBlock = form?.provider
+    ? (config?.providers[form.provider] ?? null)
+    : null;
+  // One value carries the catalog's whole state, so the dropdown never shows one
+  // half-arrived answer while another is still on its way.
+  const catalog: CatalogState = ((): CatalogState => {
+    // The debounced input still trails the form, so the answer on hand is about
+    // a provider the operator has already moved away from.
+    const settled = catalogInput.provider === form?.provider;
+    if (!settled || catalogPending || catalogData === undefined) {
+      return { kind: "loading" };
+    }
+    if (!catalogData.ok) {
+      return { kind: "empty", message: CATALOG_ERRORS[catalogData.error] };
+    }
+    if (catalogData.models.length === 0) {
+      return {
+        kind: "empty",
+        message: "This endpoint listed no models. You can still type an id.",
+      };
+    }
+    return { kind: "ready", models: catalogData.models };
+  })();
+
+  const availableModels = catalog.kind === "ready" ? catalog.models : [];
+
+  // The ladder belongs to the model, so it is captured alongside it and the
+  // control is drawn from the config rather than from a request. An id with no
+  // catalog entry carries no ladder rather than the previous model's.
+  function setModel(id: string): void {
+    if (!form?.provider) return;
+    const reasoning =
+      availableModels.find((m) => m.id === id)?.reasoning ?? null;
+    const keeps = reasoning?.levels.some(
+      (l) => l.value === block?.reasoningLevel,
+    );
+    patchProvider(form.provider, {
+      model: id,
+      reasoning,
+      reasoningLevel: reasoning
+        ? keeps
+          ? block?.reasoningLevel
+          : reasoning.defaultLevel
+        : null,
+    });
+  }
+
   const keyDirty = newApiKey.trim() !== "";
   const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
@@ -310,14 +363,12 @@ export function SettingsModal({
       return;
     }
     setNewApiKey("");
-    setTestResult(null);
     onClose();
   }
 
   function confirmDiscardEdits(): void {
     setForm(config ?? null);
     setNewApiKey("");
-    setTestResult(null);
     setConfirmDiscard(false);
     onClose();
   }
@@ -337,7 +388,7 @@ export function SettingsModal({
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Configure the investigation agent's provider, API key, loop budgets,
+          Configure the investigation agent's provider, API key, run limits,
           sandbox and account.
         </DialogDescription>
 
@@ -394,406 +445,38 @@ export function SettingsModal({
 
                   <TabsContent value="model">
                     {form && (
-                      <div className="flex flex-col items-start gap-4 [&>*]:w-full">
-                        <Field className="max-w-120">
-                          <FieldLabel htmlFor="settings-provider">
-                            Provider
-                          </FieldLabel>
-                          <NativeSelect
-                            id="settings-provider"
-                            className="w-full"
-                            value={form.provider ?? ""}
-                            onChange={(e) => {
-                              setField(
-                                "provider",
-                                (e.currentTarget.value ||
-                                  null) as AgentConfig["provider"],
-                              );
-                              setTestResult(null);
-                            }}
-                          >
-                            {/* A fresh install has picked nothing; the empty
-                                option is what "not chosen yet" looks like. */}
-                            <NativeSelectOption value="">
-                              Select a provider
-                            </NativeSelectOption>
-                            <NativeSelectOption value="anthropic">
-                              Anthropic
-                            </NativeSelectOption>
-                            <NativeSelectOption value="openrouter">
-                              OpenRouter
-                            </NativeSelectOption>
-                          </NativeSelect>
-                        </Field>
-
-                        <Field className="max-w-120">
-                          <FieldLabel htmlFor="settings-base-url">
-                            Base URL
-                          </FieldLabel>
-                          <Input
-                            id="settings-base-url"
-                            disabled={block === null}
-                            placeholder={
-                              form.provider === "anthropic"
-                                ? "https://api.anthropic.com"
-                                : "https://openrouter.ai/api/v1"
-                            }
-                            value={block?.baseUrl ?? ""}
-                            onChange={(e) =>
-                              setProviderField(
-                                "baseUrl",
-                                e.currentTarget.value || undefined,
-                              )
-                            }
-                          />
-                        </Field>
-
-                        <div className="w-full">
-                          <p className="text-sm text-muted-foreground">
-                            Current key
-                          </p>
-                          <p className="mt-0.5 text-sm">
-                            {block?.apiKeyMasked
-                              ? block.apiKeyMasked
-                              : "Not configured"}
-                          </p>
-                        </div>
-                        <Field className="max-w-120">
-                          <FieldLabel htmlFor="settings-api-key">
-                            New API key
-                          </FieldLabel>
-                          <Input
-                            id="settings-api-key"
-                            type="password"
-                            disabled={block === null}
-                            placeholder="Paste API key"
-                            value={newApiKey}
-                            onChange={(e) => {
-                              setNewApiKey(e.currentTarget.value);
-                              setTestResult(null);
-                            }}
-                          />
-                        </Field>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="xs"
-                            variant="secondary"
-                            disabled={testConnection.isPending || !keyDirty}
-                            onClick={() => handleTestConnection()}
-                          >
-                            {testConnection.isPending && (
-                              <Spinner className="size-3" />
-                            )}
-                            Test connection
-                          </Button>
-                          {testResult?.ok && (
-                            <StatusText tone="ok">Connected</StatusText>
-                          )}
-                          {testResult && !testResult.ok && (
-                            <StatusText tone="fail">
-                              {ERROR_LABELS[testResult.error] ??
-                                testResult.error}
-                            </StatusText>
-                          )}
-                        </div>
-
-                        <Field className="max-w-120">
-                          <FieldLabel htmlFor="settings-model">
-                            Model
-                          </FieldLabel>
-                          <Input
-                            id="settings-model"
-                            list="settings-model-options"
-                            disabled={block === null}
-                            value={block?.model ?? ""}
-                            placeholder={
-                              block === null
-                                ? "Choose a protocol first"
-                                : "Pick a model"
-                            }
-                            onChange={(e) =>
-                              setProviderField("model", e.currentTarget.value)
-                            }
-                          />
-                          <datalist id="settings-model-options">
-                            {availableModels.map((m) => (
-                              <option key={m.id} value={m.id} />
-                            ))}
-                          </datalist>
-                        </Field>
-
-                        {/* Rendered from the chosen model's own descriptor:
-                            the provider's word arrives in `label`, so nothing
-                            here branches on which provider is selected. */}
-                        {reasoning && (
-                          <Field className="max-w-40">
-                            <FieldLabel htmlFor="settings-reasoning">
-                              {reasoning.label}
-                            </FieldLabel>
-                            <NativeSelect
-                              id="settings-reasoning"
-                              className="w-full"
-                              value={block?.reasoningLevel ?? ""}
-                              onChange={(e) =>
-                                setProviderField(
-                                  "reasoningLevel",
-                                  e.currentTarget.value || null,
-                                )
-                              }
-                            >
-                              {reasoning.canDisable && (
-                                <NativeSelectOption value="">
-                                  Off
-                                </NativeSelectOption>
-                              )}
-                              {reasoning.levels.map((l) => (
-                                <NativeSelectOption
-                                  key={l.value}
-                                  value={l.value}
-                                >
-                                  {l.label}
-                                </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
-                          </Field>
-                        )}
-
-                        {/* Whatever the provider's adapter wants said about
-                            this model. Shown as-is; the meaning is theirs. */}
-                        {chosenModel?.notice && (
-                          <p className="max-w-120 text-sm text-muted-foreground">
-                            {chosenModel.notice}
-                          </p>
-                        )}
-                      </div>
+                      <ProviderSection
+                        form={form}
+                        block={block}
+                        savedApiKeyMasked={savedBlock?.apiKeyMasked ?? null}
+                        catalog={catalog}
+                        providers={availableProviders}
+                        newApiKey={newApiKey}
+                        onProviderChange={(provider) =>
+                          setField("provider", provider)
+                        }
+                        onProviderField={setProviderField}
+                        onModelChange={setModel}
+                        onApiKeyChange={setNewApiKey}
+                      />
                     )}
                   </TabsContent>
 
-                  <TabsContent value="loop">
-                    {form && (
-                      <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
-                        <Field>
-                          <FieldLabel htmlFor="settings-max-retries">
-                            Max retries
-                          </FieldLabel>
-                          <Input
-                            id="settings-max-retries"
-                            type="number"
-                            step={1}
-                            value={form.maxRetries}
-                            onChange={(e) =>
-                              setField(
-                                "maxRetries",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-request-timeout">
-                            Request timeout (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-request-timeout"
-                            type="number"
-                            step={1000}
-                            value={form.requestTimeoutMs}
-                            onChange={(e) =>
-                              setField(
-                                "requestTimeoutMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-check-in">
-                            Check in after (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-check-in"
-                            type="number"
-                            step={60000}
-                            value={form.checkInAfterMs}
-                            onChange={(e) =>
-                              setField(
-                                "checkInAfterMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="settings-tool-ceiling">
-                            Max tool call (ms)
-                          </FieldLabel>
-                          <Input
-                            id="settings-tool-ceiling"
-                            type="number"
-                            step={1000}
-                            value={form.toolCallCeilingMs}
-                            onChange={(e) =>
-                              setField(
-                                "toolCallCeilingMs",
-                                numberValue(e.currentTarget.value),
-                              )
-                            }
-                          />
-                        </Field>
-                      </div>
-                    )}
+                  <TabsContent value="limits">
+                    {form && <LimitsSection form={form} setField={setField} />}
                   </TabsContent>
 
                   <TabsContent value="sandbox">
-                    {form && (
-                      <div className="flex flex-col gap-3">
-                        <div className="grid grid-cols-[repeat(2,minmax(0,160px))] gap-x-4 gap-y-3">
-                          <Field>
-                            <FieldLabel htmlFor="settings-sandbox-idle">
-                              Idle cleanup (ms)
-                            </FieldLabel>
-                            <Input
-                              id="settings-sandbox-idle"
-                              type="number"
-                              step={60000}
-                              value={form.sandboxIdleTimeoutMs}
-                              onChange={(e) =>
-                                setField(
-                                  "sandboxIdleTimeoutMs",
-                                  numberValue(e.currentTarget.value),
-                                )
-                              }
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="settings-sandbox-cpus">
-                              CPU limit (cores)
-                            </FieldLabel>
-                            <Input
-                              id="settings-sandbox-cpus"
-                              type="number"
-                              step={1}
-                              value={form.sandboxCpus}
-                              onChange={(e) =>
-                                setField(
-                                  "sandboxCpus",
-                                  numberValue(e.currentTarget.value),
-                                )
-                              }
-                            />
-                          </Field>
-                          <Field>
-                            <FieldLabel htmlFor="settings-sandbox-memory">
-                              Memory limit (MB)
-                            </FieldLabel>
-                            <Input
-                              id="settings-sandbox-memory"
-                              type="number"
-                              step={256}
-                              value={form.sandboxMemoryMb}
-                              onChange={(e) =>
-                                setField(
-                                  "sandboxMemoryMb",
-                                  numberValue(e.currentTarget.value),
-                                )
-                              }
-                            />
-                          </Field>
-                        </div>
-                        <label className="flex items-start gap-2 text-sm">
-                          <Checkbox
-                            className="mt-0.5"
-                            checked={form.sandboxRequireGvisor === true}
-                            onCheckedChange={(checked) =>
-                              setField("sandboxRequireGvisor", checked === true)
-                            }
-                          />
-                          <span>
-                            Require gVisor
-                            <span className="block text-muted-foreground">
-                              Refuse to start a sandbox unless the Docker host
-                              provides the gVisor (runsc) runtime. Off by
-                              default: gVisor is used automatically when
-                              present.
-                            </span>
-                          </span>
-                        </label>
-                        <div className="mt-2 flex flex-col gap-3">
-                          <Field className="max-w-52">
-                            <FieldLabel htmlFor="settings-sandbox-network">
-                              Agent network
-                            </FieldLabel>
-                            <NativeSelect
-                              id="settings-sandbox-network"
-                              value={form.sandboxNetwork}
-                              onChange={(e) =>
-                                setField(
-                                  "sandboxNetwork",
-                                  e.currentTarget.value === "open"
-                                    ? "open"
-                                    : e.currentTarget.value === "none"
-                                      ? "none"
-                                      : "allowlist",
-                                )
-                              }
-                            >
-                              <NativeSelectOption value="allowlist">
-                                Allowlist (recommended)
-                              </NativeSelectOption>
-                              <NativeSelectOption value="open">
-                                Open (unrestricted)
-                              </NativeSelectOption>
-                              <NativeSelectOption value="none">
-                                None (no network)
-                              </NativeSelectOption>
-                            </NativeSelect>
-                          </Field>
-                          <p className="text-sm text-muted-foreground">
-                            {form.sandboxNetwork === "allowlist"
-                              ? "All sandbox traffic is forced through an enforcing proxy that reaches only the hosts below. The agent installs dependencies itself."
-                              : form.sandboxNetwork === "none"
-                                ? "The sandbox gets no network at all: read/edit sessions only - dependencies can never install, so tests will not run."
-                                : "The agent keeps full internet access for the whole session. A prompt-injected agent could exfiltrate repository content."}
-                          </p>
-                          {form.sandboxNetwork === "allowlist" && (
-                            <Field>
-                              <FieldLabel htmlFor="settings-sandbox-allowlist">
-                                Allowed hosts (one per line)
-                              </FieldLabel>
-                              <textarea
-                                id="settings-sandbox-allowlist"
-                                className="min-h-24 w-full max-w-96 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
-                                value={form.sandboxAllowlistHosts.join("\n")}
-                                onChange={(e) =>
-                                  setField(
-                                    "sandboxAllowlistHosts",
-                                    e.currentTarget.value.split("\n"),
-                                  )
-                                }
-                              />
-                            </Field>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    {form && <SandboxSection form={form} setField={setField} />}
                   </TabsContent>
 
                   <TabsContent value="account">
-                    <div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => void logoutAll()}
-                      >
-                        Log out all devices
-                      </Button>
-                    </div>
+                    <AccountSection onLogoutAll={() => void logoutAll()} />
                   </TabsContent>
                 </div>
               </ScrollArea>
 
-              <div className="flex justify-end gap-2 px-6 py-2">
+              <div className="flex items-center justify-end gap-2 px-6 py-2">
                 <Button
                   type="submit"
                   disabled={

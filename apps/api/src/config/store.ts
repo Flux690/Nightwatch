@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { getDb } from "../db/client.js";
 import {
   DEFAULT_CHECK_IN_AFTER_MS,
@@ -20,6 +21,7 @@ import type {
   LLMProviderName,
   ProviderSettings,
   ProviderSettingsMap,
+  ReasoningDescriptor,
   SandboxNetwork,
 } from "@nightwarden/shared";
 
@@ -55,7 +57,7 @@ type ProviderRow = {
   apiKeyEncrypted: string | null;
   reasoningLevel: string | null;
   maxOutputTokens: number | null;
-  reasoningCanDisable: number;
+  reasoning: string | null;
 };
 
 const SELECT_CONFIG = `
@@ -81,7 +83,7 @@ const SELECT_PROVIDER = `
          api_key_encrypted     AS apiKeyEncrypted,
          reasoning_level       AS reasoningLevel,
          max_output_tokens     AS maxOutputTokens,
-         reasoning_can_disable AS reasoningCanDisable
+         reasoning
   FROM provider_config WHERE provider = ?
 `;
 
@@ -113,6 +115,27 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
   }
 }
 
+// Stored as JSON because the ladder is the catalog's shape, not ours: its length
+// and vocabulary differ per model, so columns could only ever hold one provider's.
+const ReasoningDescriptorSchema = z.object({
+  label: z.string(),
+  levels: z.array(z.object({ value: z.string(), label: z.string() })),
+  defaultLevel: z.string(),
+  canDisable: z.boolean(),
+});
+
+// A row written by an older shape, or hand-edited, reads as no ladder rather
+// than crashing the whole config read.
+function parseReasoning(json: string | null): ReasoningDescriptor | null {
+  if (json === null) return null;
+  try {
+    const parsed = ReasoningDescriptorSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 function toSettings(row: ProviderRow | undefined): ProviderSettings {
   return {
     model: row?.model ?? null,
@@ -120,8 +143,7 @@ function toSettings(row: ProviderRow | undefined): ProviderSettings {
     apiKeyMasked: maskStored(row?.apiKeyEncrypted ?? null),
     reasoningLevel: row?.reasoningLevel ?? null,
     maxOutputTokens: row?.maxOutputTokens ?? null,
-    // Unset reads as "can disable": nothing is refused until a model says so.
-    reasoningCanDisable: row?.reasoningCanDisable !== 0,
+    reasoning: parseReasoning(row?.reasoning ?? null),
   };
 }
 
@@ -249,7 +271,7 @@ export interface ProviderPatch {
   baseUrl?: string | null;
   reasoningLevel?: string | null;
   maxOutputTokens?: number | null;
-  reasoningCanDisable?: boolean;
+  reasoning?: ReasoningDescriptor | null;
   // Plaintext; encrypted here so no caller has to remember to.
   apiKey?: string;
 }
@@ -257,10 +279,10 @@ export interface ProviderPatch {
 const UPSERT_PROVIDER = `
   INSERT INTO provider_config (
     provider, model, base_url, api_key_encrypted,
-    reasoning_level, max_output_tokens, reasoning_can_disable, updated_at
+    reasoning_level, max_output_tokens, reasoning, updated_at
   ) VALUES (
     @provider, @model, @baseUrl, @apiKeyEncrypted,
-    @reasoningLevel, @maxOutputTokens, @reasoningCanDisable, @updatedAt
+    @reasoningLevel, @maxOutputTokens, @reasoning, @updatedAt
   )
   ON CONFLICT(provider) DO UPDATE SET
     model = excluded.model,
@@ -268,7 +290,7 @@ const UPSERT_PROVIDER = `
     api_key_encrypted = excluded.api_key_encrypted,
     reasoning_level = excluded.reasoning_level,
     max_output_tokens = excluded.max_output_tokens,
-    reasoning_can_disable = excluded.reasoning_can_disable,
+    reasoning = excluded.reasoning,
     updated_at = excluded.updated_at
 `;
 
@@ -301,12 +323,10 @@ export function updateProvider(
         patch.maxOutputTokens !== undefined
           ? patch.maxOutputTokens
           : (existing?.maxOutputTokens ?? null),
-      reasoningCanDisable:
-        patch.reasoningCanDisable !== undefined
-          ? patch.reasoningCanDisable
-            ? 1
-            : 0
-          : (existing?.reasoningCanDisable ?? 1),
+      reasoning:
+        patch.reasoning !== undefined
+          ? patch.reasoning && JSON.stringify(patch.reasoning)
+          : (existing?.reasoning ?? null),
       updatedAt: new Date().toISOString(),
     });
   return loadConfig();

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResolvedLLMConfig } from "@nightwarden/shared";
+import type {
+  ReasoningDescriptor,
+  ResolvedLLMConfig,
+} from "@nightwarden/shared";
 import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
@@ -24,6 +27,17 @@ vi.mock("openai", () => ({
 
 import { OpenRouterProvider } from "../llm/openrouter.js";
 
+const LADDER: ReasoningDescriptor = {
+  label: "Reasoning",
+  levels: [
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" },
+  ],
+  defaultLevel: "high",
+  canDisable: true,
+};
+
 const BASE_CONFIG: ResolvedLLMConfig = {
   provider: "openrouter",
   model: "anthropic/claude-opus-5",
@@ -31,7 +45,7 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   maxRetries: 0,
   requestTimeoutMs: 10_000,
   reasoningLevel: null,
-  reasoningCanDisable: true,
+  reasoning: LADDER,
 };
 
 const READ_TOOL = {
@@ -121,7 +135,7 @@ describe("OpenRouterProvider", () => {
         {
           ...BASE_CONFIG,
           reasoningLevel: "medium",
-          reasoningCanDisable: false,
+          reasoning: { ...LADDER, canDisable: false },
         },
         { reasoning: "off" },
       );

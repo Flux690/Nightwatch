@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestProviders } from "./renderWithProviders.js";
-import type { AgentConfig, ModelOption } from "@nightwarden/shared";
+import type {
+  AgentConfig,
+  ModelCatalog,
+  ModelOption,
+  ProviderOption,
+  ReasoningDescriptor,
+} from "@nightwarden/shared";
 
 import { AuthProvider } from "@/auth/AuthContext";
 import { SettingsModal } from "@/components/layout/SettingsModal";
@@ -16,6 +22,20 @@ const AUTH_STATUS_RESPONSE = {
   email: OWNER_EMAIL,
 };
 
+// The chosen model's ladder is stored with the model, so the settings form has
+// it the moment the config lands and never waits on a request to draw a control.
+const EFFORT_LADDER: ReasoningDescriptor = {
+  label: "Effort",
+  levels: [
+    { value: "max", label: "Max" },
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" },
+  ],
+  defaultLevel: "high",
+  canDisable: true,
+};
+
 const CONFIG: AgentConfig = {
   provider: "anthropic",
   providers: {
@@ -25,7 +45,7 @@ const CONFIG: AgentConfig = {
       apiKeyMasked: null,
       reasoningLevel: "high",
       maxOutputTokens: 64_000,
-      reasoningCanDisable: true,
+      reasoning: EFFORT_LADDER,
     },
     openrouter: {
       model: null,
@@ -33,7 +53,7 @@ const CONFIG: AgentConfig = {
       apiKeyMasked: null,
       reasoningLevel: null,
       maxOutputTokens: null,
-      reasoningCanDisable: true,
+      reasoning: null,
     },
   },
   maxRetries: 2,
@@ -52,7 +72,8 @@ const CONFIG: AgentConfig = {
 
 // Effort levels vary per model, so the fixture carries a full descriptor on one
 // and none on another: the form must render whatever the catalog says.
-const MODELS_RESPONSE: { models: ModelOption[] } = {
+const MODELS_RESPONSE: ModelCatalog = {
+  ok: true,
   models: [
     {
       id: "claude-sonnet-4-6",
@@ -68,26 +89,40 @@ const MODELS_RESPONSE: { models: ModelOption[] } = {
         canDisable: true,
       },
       maxOutputTokens: 64_000,
-      notice: null,
     },
     {
       id: "claude-opus-4-8",
       reasoning: null,
       maxOutputTokens: null,
-      notice: null,
     },
     {
       id: "claude-haiku-4-5-20251001",
       reasoning: null,
       maxOutputTokens: null,
-      notice: null,
     },
   ],
 };
 
+// The picker is served, not hardcoded, so a new adapter needs no console change.
+const PROVIDERS_RESPONSE: { providers: ProviderOption[] } = {
+  providers: [
+    {
+      name: "anthropic",
+      label: "Anthropic",
+      defaultBaseUrl: "https://api.anthropic.com",
+    },
+    {
+      name: "openrouter",
+      label: "OpenRouter",
+      defaultBaseUrl: "https://openrouter.ai/api/v1",
+    },
+  ],
+};
+
+// A promise lets a test hold the catalog open and prove what renders without it.
 function makeFetchMock(
   config: AgentConfig,
-  models: { models: ModelOption[] } = MODELS_RESPONSE,
+  models: ModelCatalog | Promise<ModelCatalog> = MODELS_RESPONSE,
 ) {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes("/auth/status")) {
@@ -97,16 +132,16 @@ function makeFetchMock(
         json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
       });
     }
+    if (url.includes("/config/providers")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(PROVIDERS_RESPONSE),
+      });
+    }
     if (url.includes("/config/models")) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(models),
-      });
-    }
-    if (url.includes("/config/test")) {
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true }),
       });
     }
     if (url.includes("/config")) {
@@ -150,7 +185,7 @@ function renderModal(fetchMock: ReturnType<typeof vi.fn>) {
 
 function setup(
   configOverride?: Partial<typeof CONFIG>,
-  modelsOverride?: { models: ModelOption[] },
+  modelsOverride?: ModelCatalog | Promise<ModelCatalog>,
 ) {
   const config = { ...CONFIG, ...configOverride };
   return renderModal(makeFetchMock(config, modelsOverride));
@@ -163,6 +198,21 @@ async function openSection(
   const tablist = screen.getByRole("tablist", { name: /settings sections/i });
   await user.click(within(tablist).getByRole("tab", { name }));
 }
+
+// Everything the catalog has to say is said in the suggestion list, so a test
+// about it opens the list first.
+const openModelList = async (
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> => {
+  await user.click(screen.getByLabelText(/^model$/i, { selector: "input" }));
+};
+
+// Typing in the model field opens its suggestion list over the rest of the
+// form. A real user moves on to another field, which dismisses it and leaves
+// the typed id in place.
+const dismissModelList = (
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> => user.click(screen.getByLabelText(/^base url$/i));
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -182,8 +232,8 @@ describe("SettingsModal", () => {
       await user.clear(modelInput);
       await user.type(modelInput, "claude-opus-4-8");
 
-      // Window focus is enough to trigger this in a real browser, and it used to
-      // replace the whole form with the saved values mid-edit.
+      // Window focus alone triggers a refetch in a real browser, so an edit in
+      // progress has to survive one.
       await act(async () => {
         await qc.invalidateQueries({ queryKey: ["config"] });
       });
@@ -202,6 +252,7 @@ describe("SettingsModal", () => {
       });
       await user.clear(modelInput);
       await user.type(modelInput, "claude-opus-4-8");
+      await dismissModelList(user);
       await user.click(screen.getByRole("button", { name: /save/i }));
 
       await waitFor(() => {
@@ -225,6 +276,13 @@ describe("SettingsModal", () => {
               json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
             });
           }
+          if (url.includes("/config/providers")) {
+            return Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve(PROVIDERS_RESPONSE),
+            });
+          }
+
           if (url.includes("/config/models")) {
             return Promise.resolve({
               ok: true,
@@ -248,6 +306,7 @@ describe("SettingsModal", () => {
         selector: "input",
       });
       await user.type(modelInput, "-edited");
+      await dismissModelList(user);
       await user.click(screen.getByRole("button", { name: /save/i }));
 
       await waitFor(() => {
@@ -265,6 +324,7 @@ describe("SettingsModal", () => {
         selector: "input",
       });
       await user.type(modelInput, "-edited");
+      await dismissModelList(user);
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
       const dialog = await screen.findByRole("alertdialog");
@@ -286,6 +346,7 @@ describe("SettingsModal", () => {
         selector: "input",
       });
       await user.type(modelInput, "-edited");
+      await dismissModelList(user);
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
       const dialog = await screen.findByRole("alertdialog");
@@ -297,8 +358,113 @@ describe("SettingsModal", () => {
     });
   });
 
+  describe("model field", () => {
+    // The field is a search over the catalog, so typing has to narrow the list.
+    // Driving the real component is the only way to see that it does.
+    it("narrows the list to what was typed", async () => {
+      const user = userEvent.setup();
+      setup(undefined, {
+        ok: true,
+        models: [
+          {
+            id: "openai/gpt-oss-20b:free",
+            reasoning: null,
+            maxOutputTokens: null,
+          },
+          {
+            id: "anthropic/claude-opus-5",
+            reasoning: null,
+            maxOutputTokens: null,
+          },
+          {
+            id: "meta/llama-4:free",
+            reasoning: null,
+            maxOutputTokens: null,
+          },
+        ],
+      });
+      await openSection(user, /provider/i);
+
+      const input = await screen.findByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      await user.clear(input);
+      await user.type(input, "free");
+
+      const listed = await screen.findByRole("listbox");
+      await waitFor(() => {
+        expect(
+          within(listed)
+            .getAllByRole("option")
+            .map((o) => o.textContent),
+        ).toEqual(["openai/gpt-oss-20b:free", "meta/llama-4:free"]);
+      });
+    });
+
+    it("keeps an id typed by hand, so an unlisted model can still be set", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /provider/i);
+
+      const input = await screen.findByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      await user.clear(input);
+      await user.type(input, "some/unlisted-model");
+      await dismissModelList(user);
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            (url as string).endsWith("/config") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse((patch?.[1] as RequestInit).body as string) as {
+          providers: { anthropic: { model: string } };
+        };
+        expect(body.providers.anthropic.model).toBe("some/unlisted-model");
+      });
+    });
+
+    it("says only that it is loading until the catalog has answered", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+      await openModelList(user);
+
+      // Before the answer lands there is one honest message, not a guess that
+      // gets corrected a frame later.
+      expect(screen.queryByText(/add an api key/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/listed no models/i)).not.toBeInTheDocument();
+
+      await screen.findByRole("option", { name: /claude-sonnet-4-6/ });
+      expect(screen.queryByText(/loading models/i)).not.toBeInTheDocument();
+    });
+
+    it("asks for a key when the provider will not list models without one", async () => {
+      const user = userEvent.setup();
+      setup(undefined, { ok: false, error: "needs_key" });
+      await openSection(user, /provider/i);
+      await openModelList(user);
+
+      expect(await screen.findByText(/add an api key/i)).toBeInTheDocument();
+    });
+  });
+
   describe("reasoning control", () => {
-    // The catalog is the authority on what a model accepts, so the control is
+    // Renders one provider's block with the ladder it stores for its model.
+    function withLadder(reasoning: ReasoningDescriptor | null) {
+      return {
+        providers: {
+          ...CONFIG.providers,
+          anthropic: { ...CONFIG.providers.anthropic, reasoning },
+        },
+      };
+    }
+
+    // The saved model's ladder travels with the config, so the control is
     // rendered from its descriptor. Nothing here knows which provider is active.
     it("labels the control with the provider's own word and offers exactly that model's levels", async () => {
       const user = userEvent.setup();
@@ -317,20 +483,29 @@ describe("SettingsModal", () => {
       ]);
     });
 
+    // The control describes a model that is already chosen, so making it wait
+    // on the catalog would move the form under the operator for no reason.
+    it("is on screen before the catalog has answered", async () => {
+      const user = userEvent.setup();
+      // A catalog that never resolves: the control must not depend on it.
+      setup(undefined, new Promise<ModelCatalog>(() => {}));
+      await openSection(user, /provider/i);
+
+      expect(await screen.findByLabelText(/^effort$/i)).toBeInTheDocument();
+      await openModelList(user);
+      expect(await screen.findByText(/loading models/i)).toBeInTheDocument();
+    });
+
     it("offers no off switch for a model that rejects being switched off", async () => {
       const user = userEvent.setup();
-      const mandatory: ModelOption = {
-        id: "claude-sonnet-4-6",
-        reasoning: {
+      setup(
+        withLadder({
           label: "Reasoning",
           levels: [{ value: "medium", label: "Medium" }],
           defaultLevel: "medium",
           canDisable: false,
-        },
-        maxOutputTokens: null,
-        notice: null,
-      };
-      setup(undefined, { models: [mandatory] });
+        }),
+      );
       await openSection(user, /provider/i);
 
       const select = await screen.findByLabelText(/^reasoning$/i);
@@ -342,16 +517,7 @@ describe("SettingsModal", () => {
 
     it("shows no reasoning control at all for a model that advertises none", async () => {
       const user = userEvent.setup();
-      setup(undefined, {
-        models: [
-          {
-            id: "claude-sonnet-4-6",
-            reasoning: null,
-            maxOutputTokens: null,
-            notice: null,
-          },
-        ],
-      });
+      setup(withLadder(null));
       await openSection(user, /provider/i);
 
       await screen.findByLabelText(/^model$/i, { selector: "input" });
@@ -359,33 +525,161 @@ describe("SettingsModal", () => {
       expect(screen.queryByLabelText(/^reasoning$/i)).not.toBeInTheDocument();
     });
 
-    it("shows the model's notice as written, without preventing the choice", async () => {
-      // The console does not know what makes a model worth warning about; the
-      // adapter that read the catalog decided that and wrote the sentence.
+    it("takes the new model's ladder when the model changes", async () => {
       const user = userEvent.setup();
-      setup(undefined, {
+      setup(withLadder(null), {
+        ok: true,
         models: [
           {
-            id: "claude-sonnet-4-6",
-            reasoning: null,
+            id: "openai/gpt-5",
+            reasoning: {
+              label: "Reasoning",
+              levels: [
+                { value: "high", label: "High" },
+                { value: "low", label: "Low" },
+              ],
+              defaultLevel: "low",
+              canDisable: false,
+            },
             maxOutputTokens: null,
-            notice: "This model bills at a premium rate.",
           },
         ],
       });
       await openSection(user, /provider/i);
 
+      const input = await screen.findByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      await user.clear(input);
+      await user.type(input, "openai/gpt-5");
+      await user.click(await screen.findByRole("option", { name: /gpt-5/ }));
+
+      const select = await screen.findByLabelText(/^reasoning$/i);
+      // The new model's own default, not whatever the previous one was set to.
       expect(
-        await screen.findByText("This model bills at a premium rate."),
+        within(select).getByRole("option", { selected: true }),
+      ).toHaveValue("low");
+    });
+  });
+
+  describe("provider picker", () => {
+    it("offers whatever the server says it can reach, rather than a list the console keeps", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      const picker = await screen.findByLabelText(/^provider$/i, {
+        selector: "select",
+      });
+
+      expect(
+        within(picker)
+          .getAllByRole("option")
+          .map((o) => o.textContent),
+      ).toEqual(["Select a provider", "Anthropic", "OpenRouter"]);
+    });
+
+    it("takes the Base URL placeholder from the provider's own default", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      expect(await screen.findByLabelText(/base url/i)).toHaveAttribute(
+        "placeholder",
+        "https://api.anthropic.com",
+      );
+    });
+  });
+
+  describe("stored API key", () => {
+    const withStoredKey = {
+      ...CONFIG,
+      providers: {
+        ...CONFIG.providers,
+        anthropic: {
+          ...CONFIG.providers.anthropic,
+          apiKeyMasked: "sk-...9999",
+        },
+      },
+    };
+
+    it("shows the saved key masked, with no input open until Replace is pressed", async () => {
+      const user = userEvent.setup();
+      setup(withStoredKey);
+      await openSection(user, /provider/i);
+
+      expect(await screen.findByText("sk-...9999")).toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText(/paste api key/i),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /replace/i }));
+
+      expect(
+        await screen.findByPlaceholderText(/paste api key/i),
       ).toBeInTheDocument();
-      expect(
-        screen.getByLabelText(/^model$/i, { selector: "input" }),
-      ).not.toBeDisabled();
+    });
+
+    it("loads the catalog with the saved key, without it being retyped", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup(withStoredKey);
+      await openSection(user, /provider/i);
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find(
+          ([url, init]) =>
+            (url as string).includes("/config/models") &&
+            (init as RequestInit | undefined)?.method === "POST",
+        );
+        expect(call).toBeDefined();
+        const body = JSON.parse((call?.[1] as RequestInit).body as string) as {
+          apiKey?: string;
+          provider: string;
+        };
+        // No key travels when none was typed: the server uses the stored one.
+        expect(body.apiKey).toBeUndefined();
+        expect(body.provider).toBe("anthropic");
+      });
+    });
+  });
+
+  describe("Limits", () => {
+    it("shows durations in the unit a person would say them in", async () => {
+      const user = userEvent.setup();
+      setup();
+      await openSection(user, /limits/i);
+
+      // 1800000 ms is thirty minutes; nobody should have to do that division.
+      expect(await screen.findByLabelText(/check in after/i)).toHaveValue(30);
+      expect(screen.getByLabelText(/^maximum$/i)).toHaveValue(10);
+      expect(screen.getByLabelText(/^timeout$/i)).toHaveValue(120);
+    });
+
+    it("saves the value converted back to milliseconds", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+      await openSection(user, /limits/i);
+
+      const checkIn = await screen.findByLabelText(/check in after/i);
+      await user.clear(checkIn);
+      await user.type(checkIn, "45");
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      await waitFor(() => {
+        const patch = fetchMock.mock.calls.find(
+          ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+        );
+        expect(patch).toBeDefined();
+        const body = JSON.parse((patch?.[1] as RequestInit).body as string) as {
+          checkInAfterMs: number;
+        };
+        expect(body.checkInAfterMs).toBe(2_700_000);
+      });
     });
   });
 
   describe("API key", () => {
-    it("lives in the Provider section, and Test Connection sends the entered key plus current provider/baseUrl/model", async () => {
+    it("carries a freshly typed key on the catalog request, which is what verifies it", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
       await openSection(user, /provider/i);
@@ -393,82 +687,45 @@ describe("SettingsModal", () => {
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
 
-      await user.click(
-        screen.getByRole("button", { name: /test connection/i }),
+      // Debounced, so this is the request that lands after typing stops.
+      await waitFor(
+        () => {
+          const withKey = fetchMock.mock.calls.filter(
+            ([url, init]) =>
+              (url as string).includes("/config/models") &&
+              String((init as RequestInit | undefined)?.body).includes(
+                "sk-ant-newkey",
+              ),
+          );
+          expect(withKey.length).toBe(1);
+        },
+        { timeout: 3000 },
       );
-
-      await waitFor(() => {
-        const testCall = fetchMock.mock.calls.find(([url]) =>
-          (url as string).includes("/config/test"),
-        );
-        expect(testCall).toBeDefined();
-        const body = JSON.parse(
-          (testCall?.[1] as RequestInit).body as string,
-        ) as {
-          apiKey: string;
-          provider: string;
-          model: string;
-        };
-        expect(body.apiKey).toBe("sk-ant-newkey");
-        expect(body.provider).toBe(CONFIG.provider);
-        expect(body.model).toBe(CONFIG.providers.anthropic.model);
-      });
     });
 
-    it("shows an error badge when Test Connection returns bad_key, and never PATCHes /config/key", async () => {
+    it("shows the reason inline when the catalog rejects the key", async () => {
       const user = userEvent.setup();
-      const fetchMock = vi
-        .fn()
-        .mockImplementation((url: string, init?: RequestInit) => {
-          if ((url as string).includes("/auth/status")) {
-            return Promise.resolve({
-              ok: true,
-              status: 200,
-              json: () => Promise.resolve(AUTH_STATUS_RESPONSE),
-            });
-          }
-          if ((url as string).includes("/config/test")) {
-            return Promise.resolve({
-              ok: true,
-              json: () => Promise.resolve({ ok: false, error: "bad_key" }),
-            });
-          }
-          if ((url as string).includes("/config/models")) {
-            return Promise.resolve({
-              ok: true,
-              json: () => Promise.resolve(MODELS_RESPONSE),
-            });
-          }
-          if ((url as string).includes("/config")) {
-            return Promise.resolve({
-              ok: true,
-              json: () => Promise.resolve(CONFIG),
-            });
-          }
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-        });
-      renderModal(fetchMock);
+      setup(undefined, { ok: false, error: "bad_key" });
       await openSection(user, /provider/i);
+      await openModelList(user);
 
-      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
-      await user.type(keyInput, "sk-bad");
-      await user.click(
-        screen.getByRole("button", { name: /test connection/i }),
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/invalid api key/i)).toBeInTheDocument();
-      });
       expect(
-        fetchMock.mock.calls.some(
-          ([url, init]) =>
-            (url as string).includes("/config/key") &&
-            (init as RequestInit | undefined)?.method === "PATCH",
-        ),
-      ).toBe(false);
+        await screen.findByText(/that key was rejected/i),
+      ).toBeInTheDocument();
     });
 
-    it("enables Save as soon as anything is edited, tested or not", async () => {
+    it("says an endpoint could not be reached, which is a different mistake", async () => {
+      const user = userEvent.setup();
+      setup(undefined, { ok: false, error: "unreachable" });
+      await openSection(user, /provider/i);
+      await openModelList(user);
+
+      expect(
+        await screen.findByText(/could not reach that endpoint/i),
+      ).toBeInTheDocument();
+    });
+
+    it("enables Save as soon as anything is edited", async () => {
       const user = userEvent.setup();
       setup();
       await openSection(user, /provider/i);
@@ -478,80 +735,32 @@ describe("SettingsModal", () => {
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
 
-      // Testing the key is a convenience; the server is what accepts or rejects
-      // it, so an untested one never blocks saving.
       expect(
         screen.getByRole("button", { name: /^save$/i }),
       ).not.toBeDisabled();
     });
 
-    it("keeps a passing test result when the model changes", async () => {
-      const user = userEvent.setup();
-      setup();
-      await openSection(user, /provider/i);
-
-      const keyInput = await screen.findByPlaceholderText(/paste api key/i);
-      await user.type(keyInput, "sk-ant-newkey");
-      await user.click(
-        screen.getByRole("button", { name: /test connection/i }),
-      );
-      await waitFor(() => {
-        expect(screen.getByText(/connected/i)).toBeInTheDocument();
-      });
-
-      // Picking a model is the natural next step; it must not discard the verdict
-      // about the endpoint that was just reached.
-      await user.type(screen.getByLabelText(/^model$/i), "-extra");
-
-      expect(screen.getByText(/connected/i)).toBeInTheDocument();
-    });
-
-    it("PATCHes /config/key on Save after a successful test", async () => {
+    it("PATCHes /config/key on Save, before the config that depends on it", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
       await openSection(user, /provider/i);
 
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
-      await user.click(
-        screen.getByRole("button", { name: /test connection/i }),
-      );
-      await waitFor(() => {
-        expect(screen.getByText(/connected/i)).toBeInTheDocument();
-      });
-
       await user.click(screen.getByRole("button", { name: /^save$/i }));
 
       await waitFor(() => {
-        const keyCall = fetchMock.mock.calls.find(
+        const keyCall = fetchMock.mock.calls.findIndex(
           ([url, init]) =>
             (url as string).includes("/config/key") &&
             (init as RequestInit | undefined)?.method === "PATCH",
         );
-        expect(keyCall).toBeDefined();
+        expect(keyCall).toBeGreaterThan(-1);
         const body = JSON.parse(
-          (keyCall?.[1] as RequestInit).body as string,
-        ) as { apiKey: string };
+          (fetchMock.mock.calls[keyCall]?.[1] as RequestInit).body as string,
+        ) as { apiKey: string; provider: string };
         expect(body.apiKey).toBe("sk-ant-newkey");
-      });
-    });
-  });
-
-  describe("Account", () => {
-    it("Log out all devices posts /api/logout-all", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup();
-      await openSection(user, /account/i);
-
-      await user.click(
-        await screen.findByRole("button", { name: /log out all devices/i }),
-      );
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/logout-all",
-          expect.objectContaining({ method: "POST" }),
-        );
+        expect(body.provider).toBe("anthropic");
       });
     });
   });

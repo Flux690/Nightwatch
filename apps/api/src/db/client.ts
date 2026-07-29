@@ -52,7 +52,7 @@ repo.yarnpkg.com',
     api_key_encrypted    TEXT,
     reasoning_level      TEXT,
     max_output_tokens    INTEGER,
-    reasoning_can_disable INTEGER NOT NULL DEFAULT 1,
+    reasoning            TEXT,
     updated_at           TEXT NOT NULL
   );
 

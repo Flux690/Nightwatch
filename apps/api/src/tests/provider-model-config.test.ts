@@ -14,7 +14,12 @@ import { registerConfigRoutes } from "../config/routes.js";
 import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { updateConfig, updateProvider } from "../config/store.js";
-import type { AgentConfig, ModelOption } from "@nightwarden/shared";
+import type {
+  AgentConfig,
+  ModelCatalog,
+  ModelOption,
+  ProviderOption,
+} from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
@@ -88,12 +93,25 @@ describe("provider/model config seam", () => {
 
   async function getModels(): Promise<ModelOption[]> {
     const res = await server.inject({
-      method: "GET",
+      method: "POST",
       url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
-    return (JSON.parse(res.body) as { models: ModelOption[] }).models;
+    const body = JSON.parse(res.body) as ModelCatalog;
+    if (!body.ok) throw new Error(`catalog failed: ${body.error}`);
+    return body.models;
+  }
+
+  async function storedMask(): Promise<string | null> {
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/config",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    const config = JSON.parse(res.body) as AgentConfig;
+    return config.providers.anthropic.apiKeyMasked ?? null;
   }
 
   // Switches the active block so the route derives through OpenRouter's rules.
@@ -105,14 +123,15 @@ describe("provider/model config seam", () => {
     updateConfig({ provider: "openrouter" });
   }
 
-  // --- POST /config/test ---
+  // --- POST /config/models ---
+  // Listing the catalog is also how a block is verified, so these cover both.
 
-  it("POST /config/test: returns { ok: false, error: bad_key } when upstream responds 401", async () => {
+  it("POST /config/models: rejects a bad key, which is how a wrong key is reported", async () => {
     stubFetch(() => mockResponse(401, {}));
 
     const res = await server.inject({
       method: "POST",
-      url: "/api/config/test",
+      url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-bad-key" },
     });
@@ -121,43 +140,7 @@ describe("provider/model config seam", () => {
     expect(JSON.parse(res.body)).toEqual({ ok: false, error: "bad_key" });
   });
 
-  it("POST /config/test: returns { ok: true } when upstream responds 200 and model is in the list", async () => {
-    stubFetch(() =>
-      mockResponse(200, {
-        data: [{ id: "claude-sonnet-4-6" }, { id: "claude-opus-4-8" }],
-      }),
-    );
-
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/config/test",
-      headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { apiKey: "sk-ant-valid-key", model: "claude-sonnet-4-6" },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true });
-  });
-
-  it("POST /config/test: returns { ok: false, error: unknown_model } when model not in list", async () => {
-    stubFetch(() =>
-      mockResponse(200, {
-        data: [{ id: "claude-sonnet-4-6" }],
-      }),
-    );
-
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/config/test",
-      headers: { cookie: `nw_auth=${SESSION}` },
-      payload: { apiKey: "sk-ant-valid-key", model: "gpt-99-not-real" },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: false, error: "unknown_model" });
-  });
-
-  it("POST /config/test: returns { ok: false, error: unreachable } on network failure", async () => {
+  it("POST /config/models: reports an endpoint that never answered", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockRejectedValue(new TypeError("fetch failed")),
@@ -165,77 +148,172 @@ describe("provider/model config seam", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: "/api/config/test",
+      url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: { apiKey: "sk-any-key" },
     });
 
-    expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ ok: false, error: "unreachable" });
   });
 
-  it("POST /config/test: never persists the key, even on a successful probe", async () => {
-    stubFetch(() => mockResponse(200, { data: [{ id: "claude-sonnet-4-6" }] }));
-
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/config/test",
-      headers: { cookie: `nw_auth=${SESSION}` },
-      payload: {
-        apiKey: "sk-ant-should-not-persist",
-        model: "claude-sonnet-4-6",
-      },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true });
-
-    const configRes = await server.inject({
-      method: "GET",
-      url: "/api/config",
-      headers: { cookie: `nw_auth=${SESSION}` },
-    });
-    const body = JSON.parse(configRes.body) as {
-      providers: { anthropic: { apiKeyMasked: string | null } };
-    };
-    expect(body.providers.anthropic.apiKeyMasked).toBeNull();
-  });
-
-  it("POST /config/test: probes against a provider/baseUrl override instead of the persisted config", async () => {
+  it("POST /config/models: answers about an unsaved block, so the list fills in before Save", async () => {
     let requestedUrl = "";
-    stubFetch((url) => {
-      requestedUrl = url;
-      return mockResponse(200, { data: [{ id: "some-model" }] });
-    });
+    let sawAuth = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        requestedUrl = url;
+        sawAuth = String(
+          (init?.headers as Record<string, string> | undefined)?.[
+            "Authorization"
+          ],
+        );
+        return Promise.resolve(
+          mockResponse(200, { data: [{ id: "some/model" }] }),
+        );
+      }),
+    );
 
+    // Nothing here is stored: the active provider is still Anthropic.
     const res = await server.inject({
       method: "POST",
-      url: "/api/config/test",
+      url: "/api/config/models",
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {
-        apiKey: "sk-or-key",
         provider: "openrouter",
         baseUrl: "https://openrouter.ai/api/v1",
-        model: "some-model",
+        apiKey: "sk-or-typed",
       },
     });
 
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true });
+    const body = JSON.parse(res.body) as { ok: true; models: ModelOption[] };
+    expect(body.models.map((m) => m.id)).toEqual(["some/model"]);
     expect(requestedUrl).toBe("https://openrouter.ai/api/v1/models");
+    expect(sawAuth).toBe("Bearer sk-or-typed");
   });
 
-  // --- GET /config/models ---
+  it("POST /config/models: falls back to the saved key when none is typed", async () => {
+    // Written here rather than relying on the fixture: the stored key is
+    // encrypted with whichever SECRET_KEY was live when it was written.
+    updateProvider("anthropic", { apiKey: "saved-key" });
+    let sawAuth = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        sawAuth = String(
+          (init?.headers as Record<string, string> | undefined)?.["x-api-key"],
+        );
+        return Promise.resolve(mockResponse(200, { data: [{ id: "m" }] }));
+      }),
+    );
 
-  it("GET /config/models: returns 401 without a valid nw_auth cookie", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/config/models",
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: {},
+    });
+
+    expect((JSON.parse(res.body) as { ok: boolean }).ok).toBe(true);
+    expect(sawAuth).toBe("saved-key");
+  });
+
+  // Whether a catalog can be read without a key is the provider's rule, so each
+  // one answers for itself and the console is told which case it is in.
+  it("POST /config/models: Anthropic asks for a key rather than being called with none", async () => {
+    clearTestLLM();
+    const calls = vi.fn();
+    vi.stubGlobal("fetch", calls);
+    try {
+      const res = await server.inject({
+        method: "POST",
+        url: "/api/config/models",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { provider: "anthropic" },
+      });
+
+      expect(JSON.parse(res.body)).toEqual({ ok: false, error: "needs_key" });
+      // Asking anyway would come back 401 and be reported as a rejected key.
+      expect(calls).not.toHaveBeenCalled();
+    } finally {
+      configureTestLLM();
+    }
+  });
+
+  it("POST /config/models: OpenRouter lists models with no key, because it publishes them", async () => {
+    clearTestLLM();
+    stubFetch(() => mockResponse(200, { data: [{ id: "openai/gpt-5" }] }));
+    try {
+      const res = await server.inject({
+        method: "POST",
+        url: "/api/config/models",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { provider: "openrouter" },
+      });
+
+      expect(JSON.parse(res.body)).toMatchObject({ ok: true });
+    } finally {
+      configureTestLLM();
+    }
+  });
+
+  it("POST /config/models: never persists what it was asked about", async () => {
+    stubFetch(() => mockResponse(200, { data: [{ id: "claude-sonnet-4-6" }] }));
+    const maskBefore = await storedMask();
+
+    await server.inject({
+      method: "POST",
+      url: "/api/config/models",
+      headers: { cookie: `nw_auth=${SESSION}` },
+      payload: { apiKey: "sk-ant-should-not-persist", provider: "anthropic" },
+    });
+
+    expect(await storedMask()).toBe(maskBefore);
+    expect(await storedMask()).not.toContain("persist");
+  });
+
+  // --- GET /config/providers ---
+
+  it("GET /config/providers: serves the picker so the console keeps no provider list of its own", async () => {
     const res = await server.inject({
       method: "GET",
-      url: "/api/config/models",
+      url: "/api/config/providers",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { providers: ProviderOption[] };
+    expect(body.providers.map((p) => p.name)).toEqual([
+      "anthropic",
+      "openrouter",
+    ]);
+    // The endpoint each adapter falls back to, so the form can show it as a
+    // placeholder without knowing either provider's address.
+    expect(
+      body.providers.find((p) => p.name === "openrouter")?.defaultBaseUrl,
+    ).toBe("https://openrouter.ai/api/v1");
+  });
+
+  it("GET /config/providers: returns 401 without a valid nw_auth cookie", async () => {
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/config/providers",
     });
 
     expect(res.statusCode).toBe(401);
   });
 
-  it("GET /config/models: returns models proxied from upstream endpoint", async () => {
+  it("POST /config/models: returns 401 without a valid nw_auth cookie", async () => {
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/config/models",
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("POST /config/models: lists what the endpoint returned", async () => {
     stubFetch(() =>
       mockResponse(200, {
         data: [
@@ -246,36 +324,11 @@ describe("provider/model config seam", () => {
       }),
     );
 
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/config/models",
-      headers: { cookie: `nw_auth=${SESSION}` },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { models: ModelOption[] };
-    expect(body.models.map((m) => m.id)).toEqual([
+    expect((await getModels()).map((m) => m.id)).toEqual([
       "claude-sonnet-4-6",
       "claude-opus-4-8",
       "claude-haiku-4-5-20251001",
     ]);
-  });
-
-  it("GET /config/models: returns empty models array when upstream call fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new TypeError("fetch failed")),
-    );
-
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/config/models",
-      headers: { cookie: `nw_auth=${SESSION}` },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { models: ModelOption[] };
-    expect(body.models).toEqual([]);
   });
 
   // --- what picking a model captures ---
@@ -318,7 +371,19 @@ describe("provider/model config seam", () => {
       const config = await patchModel("claude-opus-5");
 
       expect(config.providers.anthropic.maxOutputTokens).toBe(128_000);
-      expect(config.providers.anthropic.reasoningCanDisable).toBe(true);
+      // The whole ladder is captured with the model, so the settings form draws
+      // its control from the config instead of asking the catalog again.
+      expect(config.providers.anthropic.reasoning).toEqual({
+        label: "Effort",
+        levels: [
+          { value: "max", label: "Max" },
+          { value: "high", label: "High" },
+          { value: "medium", label: "Medium" },
+          { value: "low", label: "Low" },
+        ],
+        defaultLevel: "high",
+        canDisable: true,
+      });
     });
 
     it("re-resolves a level the new model does not support, rather than storing something unsendable", async () => {
@@ -524,35 +589,6 @@ describe("provider/model config seam", () => {
       expect(models[0]?.reasoning?.canDisable).toBe(false);
     });
 
-    it("OpenRouter: carries its own free-tier caution, so the console never has to know what :free means", async () => {
-      useOpenRouter();
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [
-            { id: "openai/gpt-oss-20b:free", reasoning: { mandatory: true } },
-            { id: "openai/gpt-oss-20b", reasoning: { mandatory: true } },
-          ],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.notice).toContain("20 requests a minute");
-      expect(models[1]?.notice).toBeNull();
-    });
-
-    it("Anthropic: has no free tier, so no model carries a caution", async () => {
-      stubFetch(() =>
-        mockResponse(200, {
-          data: [anthropicModel("claude-opus-5", { max: true })],
-        }),
-      );
-
-      const models = await getModels();
-
-      expect(models[0]?.notice).toBeNull();
-    });
-
     it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {
       useOpenRouter();
       stubFetch(() =>
@@ -668,18 +704,19 @@ describe("provider/model config seam", () => {
       expect(body.checkInAfterMs).toEqual(expect.any(Number));
     });
 
-    it("GET /config/models returns nothing instead of probing a guessed endpoint", async () => {
+    it("POST /config/models returns nothing instead of probing a guessed endpoint", async () => {
       const fetchSpy = vi.fn();
       vi.stubGlobal("fetch", fetchSpy);
 
       const res = await server.inject({
-        method: "GET",
+        method: "POST",
         url: "/api/config/models",
         headers: { cookie: `nw_auth=${SESSION}` },
+        payload: {},
       });
 
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body)).toEqual({ models: [] });
+      expect(JSON.parse(res.body)).toEqual({ ok: true, models: [] });
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 

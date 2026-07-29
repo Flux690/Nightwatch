@@ -125,8 +125,6 @@ export function describeAnthropicModels(data: unknown): ModelOption[] {
               },
         maxOutputTokens:
           typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : null,
-        // Anthropic has no free tier to caution anyone about.
-        notice: null,
       },
     ];
   });
@@ -252,10 +250,13 @@ export class AnthropicProvider implements LLMProvider {
   // Thinking and effort are separate controls here: `thinking` decides whether
   // the model reasons at all, `output_config.effort` how hard it works.
   private thinkingParams(): ThinkingParams {
+    // A model that publishes no ladder is sent neither param: there is nothing
+    // to ask it for, and a guess would be a 400.
+    if (this.config.reasoning === null) return {};
     const effort = toEffort(this.config.reasoningLevel);
     // A model that cannot be told to stop reasoning keeps its normal config;
     // the caller's small token budget is the remaining brake.
-    if (this.opts?.reasoning !== "off" || !this.config.reasoningCanDisable) {
+    if (this.opts?.reasoning !== "off" || !this.config.reasoning.canDisable) {
       // display "summarized" is the opt-in that makes reasoning visible: it
       // defaults to "omitted" on current models, which streams no thinking
       // deltas at all. The raw chain of thought is never returned either way.

@@ -6,6 +6,26 @@ export type LLMProviderName = "anthropic" | "openrouter";
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
 
+// What the settings picker needs to offer a provider: its stored name, the name
+// a person reads, and the endpoint it uses when none is given. Served rather
+// than hardcoded so a new adapter appears in the console without a UI change.
+export interface ProviderOption {
+  name: LLMProviderName;
+  label: string;
+  defaultBaseUrl: string;
+}
+
+// Why a catalog could not be read. `needs_key` is the provider's own rule, not
+// a policy of ours: OpenRouter publishes its catalog to anyone, Anthropic
+// answers 401 without a key.
+export type CatalogError = "needs_key" | "bad_key" | "unreachable";
+
+// Listing a provider's catalog is also how its setup is verified: models coming
+// back proves the endpoint is reachable and the key works, so there is nothing
+// separate to press.
+export type ModelCatalog =
+  { ok: true; models: ModelOption[] } | { ok: false; error: CatalogError };
+
 // One rung of a provider's reasoning ladder, in that provider's own vocabulary.
 export interface ReasoningLevel {
   value: string;
@@ -34,10 +54,6 @@ export interface ModelOption {
   reasoning: ReasoningDescriptor | null;
   // The model's own output ceiling, null when its catalog does not publish one.
   maxOutputTokens: number | null;
-  // A caution worth showing before this model is chosen, written by the adapter
-  // that understands the catalog. The console shows it without knowing what it
-  // means, so no naming convention of one provider's leaks into the UI.
-  notice: string | null;
 }
 
 // How to reach one provider. Each keeps its own credentials, so switching the
@@ -56,9 +72,11 @@ export interface ProviderSettings {
   // Captured from the catalog when the model is saved, so nothing has to reach
   // the network to start a run. Null means the catalog published no ceiling.
   maxOutputTokens: number | null;
-  // False when the chosen model rejects being told not to reason, which the
-  // one-shot title call has to respect.
-  reasoningCanDisable: boolean;
+  // The chosen model's ladder, captured with it. Held here rather than looked up
+  // again so the settings form draws its reasoning control from the config it
+  // already has, and a run knows whether reasoning can be turned off without
+  // asking the provider. Null when the model exposes no reasoning control.
+  reasoning: ReasoningDescriptor | null;
 }
 
 // Both providers hold the same shape: the operator's choice plus the facts
@@ -106,7 +124,9 @@ export interface ResolvedLLMConfig {
   // The operator's pick, in the provider's vocabulary; each adapter translates
   // it into its own wire param. Null means send nothing and take the default.
   reasoningLevel: string | null;
-  reasoningCanDisable: boolean;
+  // The ladder the pick came from. Null means the model publishes none, and an
+  // adapter with no ladder sends no reasoning params at all rather than guessing.
+  reasoning: ReasoningDescriptor | null;
 }
 
 // A setup problem the console surfaces app-wide (a banner), computed server-side

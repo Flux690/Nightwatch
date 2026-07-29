@@ -129,19 +129,9 @@ export function describeOpenRouterModels(data: unknown): ModelOption[] {
         id,
         reasoning: reasoning === null ? null : describeReasoning(reasoning),
         maxOutputTokens: maxCompletionTokens(entry["top_provider"]),
-        notice: freeModelNotice(id),
       },
     ];
   });
-}
-
-// The ":free" suffix is OpenRouter's own convention for its no-cost variants,
-// which carry a hard daily cap. Knowing that is this adapter's job, not the
-// console's, so the warning travels as finished text.
-function freeModelNotice(id: string): string | null {
-  return id.endsWith(":free")
-    ? "Free models are capped at 20 requests a minute and 50 a day, or 1000 a day once the account has bought credits. Investigations fail once that runs out."
-    : null;
 }
 
 function describeReasoning(
@@ -307,7 +297,7 @@ export class OpenRouterProvider implements LLMProvider {
     if (this.opts?.reasoning === "off") {
       // A mandatory model rejects being switched off, and OpenRouter's docs say
       // not to ask: hide the control and never send effort "none".
-      if (!this.config.reasoningCanDisable) return {};
+      if (!this.config.reasoning?.canDisable) return {};
       return { reasoning: { enabled: false } };
     }
     return level === null ? {} : { reasoning: { effort: level } };

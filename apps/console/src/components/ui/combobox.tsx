@@ -1,5 +1,6 @@
 "use client";
 
+import { Autocomplete as AutocompletePrimitive } from "@base-ui/react/autocomplete";
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
 import { ChevronDownIcon, XIcon, CheckIcon } from "lucide-react";
 
@@ -12,6 +13,12 @@ import {
 } from "@/components/ui/input-group";
 
 const Combobox = ComboboxPrimitive.Root;
+
+// The same primitive with one difference: nothing is ever "selected", so the
+// text in the input is the value and any text is valid. Use it where a list is
+// a suggestion rather than the set of allowed answers. Every part below is
+// shared between the two, which is how Base UI ships them as well.
+const Autocomplete = AutocompletePrimitive.Root;
 
 function ComboboxValue({ ...props }: ComboboxPrimitive.Value.Props) {
   return <ComboboxPrimitive.Value data-slot="combobox-value" {...props} />;
@@ -89,11 +96,17 @@ function ComboboxContent({
   align = "start",
   alignOffset = 0,
   anchor,
+  collisionAvoidance,
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
-    "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
+    | "side"
+    | "align"
+    | "sideOffset"
+    | "alignOffset"
+    | "anchor"
+    | "collisionAvoidance"
   >) {
   return (
     <ComboboxPrimitive.Portal>
@@ -103,6 +116,7 @@ function ComboboxContent({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
+        collisionAvoidance={collisionAvoidance}
         className="isolate z-50"
       >
         <ComboboxPrimitive.Popup
@@ -180,4 +194,10 @@ export {
   ComboboxEmpty,
   ComboboxTrigger,
   ComboboxValue,
+  Autocomplete,
+  ComboboxInput as AutocompleteInput,
+  ComboboxContent as AutocompleteContent,
+  ComboboxList as AutocompleteList,
+  ComboboxItem as AutocompleteItem,
+  ComboboxEmpty as AutocompleteEmpty,
 };

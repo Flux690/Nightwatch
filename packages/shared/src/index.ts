@@ -135,7 +135,10 @@ export type {
   RemediationActionRecord,
 } from "./remediation.js";
 export type {
+  CatalogError,
   LLMProviderName,
+  ModelCatalog,
+  ProviderOption,
   ReasoningLevel,
   ReasoningDescriptor,
   ModelOption,

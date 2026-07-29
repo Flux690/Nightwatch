@@ -44,7 +44,7 @@ export function checkLLMReadiness(): LLMReadiness {
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs,
       reasoningLevel: settings.reasoningLevel,
-      reasoningCanDisable: settings.reasoningCanDisable,
+      reasoning: settings.reasoning,
     },
   };
 }

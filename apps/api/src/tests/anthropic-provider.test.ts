@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResolvedLLMConfig } from "@nightwarden/shared";
+import type {
+  ReasoningDescriptor,
+  ResolvedLLMConfig,
+} from "@nightwarden/shared";
 
 const mockFinalMessage = vi.fn();
 const mockAnthropicOn = vi.fn().mockReturnThis();
@@ -20,6 +23,17 @@ vi.mock("@anthropic-ai/sdk", () => ({
 
 import { AnthropicProvider } from "../llm/anthropic.js";
 
+const LADDER: ReasoningDescriptor = {
+  label: "Effort",
+  levels: [
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" },
+  ],
+  defaultLevel: "high",
+  canDisable: true,
+};
+
 const BASE_CONFIG: ResolvedLLMConfig = {
   provider: "anthropic",
   model: "claude-sonnet-4-6",
@@ -27,7 +41,7 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   maxRetries: 0,
   requestTimeoutMs: 10_000,
   reasoningLevel: null,
-  reasoningCanDisable: true,
+  reasoning: LADDER,
 };
 
 const READ_TOOL = {
@@ -162,7 +176,10 @@ describe("AnthropicProvider", () => {
 
     it("keeps thinking on for a reasoning-off call when the model refuses to be switched off", async () => {
       const params = await sentParams(
-        { ...BASE_CONFIG, reasoningCanDisable: false },
+        {
+          ...BASE_CONFIG,
+          reasoning: { ...LADDER, canDisable: false },
+        },
         { reasoning: "off" },
       );
 
