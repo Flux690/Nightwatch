@@ -34,7 +34,7 @@ export type MessagePart =
 // The wire shape a native message is written in, not the configured provider:
 // one provider can speak several dialects whose messages are not interchangeable.
 export type WireDialect =
-  "anthropic-messages" | "openai-chat" | "openai-responses";
+  "anthropic-messages" | "openrouter-chat" | "openai-responses";
 
 export interface NativeEnvelope {
   dialect: WireDialect;

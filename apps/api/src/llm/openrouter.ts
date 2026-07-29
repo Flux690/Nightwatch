@@ -17,11 +17,12 @@ import type {
   ToolUse,
 } from "./types.js";
 
-const DIALECT: WireDialect = "openai-chat";
+const DIALECT: WireDialect = "openrouter-chat";
 
-// Works against any OpenAI-compatible endpoint (OpenAI, OpenRouter, Groq, ...).
-// OPENAI_BASE_URL selects the host; the model comes from the global config.
-export class OpenAIProvider implements LLMProvider {
+// OpenRouter speaks the OpenAI chat-completions wire format, so the `openai`
+// npm package is the transport OpenRouter itself recommends. Everything else
+// here is OpenRouter's own dialect, not a generic compatibility shim.
+export class OpenRouterProvider implements LLMProvider {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly system: string;
@@ -29,7 +30,7 @@ export class OpenAIProvider implements LLMProvider {
   private readonly opts?: ProviderCallOptions;
   private messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   // Reasoning per turn, keyed by message index; finalChatCompletion() drops the
-  // streamed OpenRouter reasoning_details, so it's captured separately here.
+  // streamed reasoning_details, so it's captured separately here.
   private readonly thinkingByIndex = new Map<number, string>();
 
   constructor(
@@ -42,8 +43,7 @@ export class OpenAIProvider implements LLMProvider {
     this.config = config;
     this.opts = opts;
     // The DB is the only runtime source for the key and base URL: env seeds that
-    // row once at first boot, never again. An unset baseUrl means the SDK's own
-    // default endpoint, which is the correct value for OpenAI proper.
+    // row once at first boot, never again.
     this.client = new OpenAI({
       apiKey,
       baseURL: config.baseUrl,
@@ -54,7 +54,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   start(firstMessage: string): void {
-    // OpenAI carries the system prompt as the first message, not a top-level field.
+    // This dialect carries the system prompt as the first message, not a top-level field.
     this.messages = [
       { role: "system", content: this.system },
       { role: "user", content: firstMessage },
@@ -84,10 +84,9 @@ export class OpenAIProvider implements LLMProvider {
             parameters: t.input_schema,
           },
         })),
-        // A call flagged reasoning-off spends its whole budget on visible text;
-        // flat reasoning_effort is OpenAI-standard and OpenRouter accepts it as
-        // an alias. Gated on reasoningEffort so deployments that never speak the
-        // reasoning dialect keep sending nothing.
+        // A call flagged reasoning-off spends its whole budget on visible text.
+        // Gated on reasoningEffort so deployments that never speak the reasoning
+        // dialect keep sending nothing.
         ...(reasoningOff &&
           this.config.reasoningEffort && {
             reasoning_effort: "none" as const,
@@ -103,7 +102,7 @@ export class OpenAIProvider implements LLMProvider {
       const stream = this.client.chat.completions.stream(streamParams, {
         signal,
       });
-      // SDK types omit OpenRouter's reasoning_details, hence the cast via unknown; listened
+      // SDK types omit reasoning_details, hence the cast via unknown; listened
       // for unconditionally so accumulated text survives the no-callback wrap-up turn.
       stream.on("chunk", (chunk) => {
         const rawDelta = (
@@ -129,15 +128,15 @@ export class OpenAIProvider implements LLMProvider {
       }
       response = await stream.finalChatCompletion();
     } catch (err) {
-      // Surface OpenRouter/OpenAI status (429 rate limit, 503 provider down,
-      // timeout) instead of a bare stack, then rethrow to fail the job.
+      // Surface the status (429 rate limit, 502 provider down, timeout) instead
+      // of a bare stack, then rethrow to fail the job.
       if (err instanceof OpenAI.APIError) {
         logger.error(
           { model: this.model, status: err.status, code: err.code, err },
-          "OpenAI-compatible request failed",
+          "OpenRouter request failed",
         );
       } else {
-        logger.error({ model: this.model, err }, "OpenAI request failed");
+        logger.error({ model: this.model, err }, "OpenRouter request failed");
       }
       throw err;
     }
@@ -167,7 +166,7 @@ export class OpenAIProvider implements LLMProvider {
 
   appendToolResults(results: ToolResult[], additionalText?: string): void {
     for (const r of results) {
-      // OpenAI has no is_error flag; fold it into the content the model reads.
+      // This dialect has no is_error flag; fold it into the content the model reads.
       this.messages.push({
         role: "tool",
         tool_call_id: r.tool_use_id,

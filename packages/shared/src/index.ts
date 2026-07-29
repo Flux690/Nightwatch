@@ -142,7 +142,7 @@ export type {
   AgentConfig,
   ProviderSettings,
   AnthropicSettings,
-  OpenAISettings,
+  OpenRouterSettings,
   ProviderSettingsMap,
   ResolvedLLMConfig,
   ConfigHealthKind,

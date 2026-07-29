@@ -1,7 +1,7 @@
 // Global agent config: how the one brain reasons (no per-runner dimension). Every
 // value here is API-seeded and safe to send to the console; keys are masked.
 
-export type LLMProviderName = "anthropic" | "openai";
+export type LLMProviderName = "anthropic" | "openrouter";
 export type ThinkingMode = "adaptive" | "off";
 export type ReasoningEffort = "low" | "medium" | "high";
 // "allowlist" routes all sandbox egress through an enforcing proxy that only
@@ -12,8 +12,8 @@ export type SandboxNetwork = "allowlist" | "open" | "none";
 // active provider cannot carry the previous one's key or endpoint across.
 export interface ProviderSettings {
   model: string | null;
-  // Unset means the provider's own endpoint. Set it for a gateway or an
-  // OpenAI-compatible host (OpenRouter, Groq, Ollama).
+  // Unset means the provider's own endpoint. Set it to reach a gateway or a
+  // self-hosted deployment of the same API.
   baseUrl?: string;
   // Computed server-side on read and never stored; the plaintext never leaves.
   apiKeyMasked?: string | null;
@@ -23,13 +23,13 @@ export interface AnthropicSettings extends ProviderSettings {
   thinking: ThinkingMode;
 }
 
-export interface OpenAISettings extends ProviderSettings {
+export interface OpenRouterSettings extends ProviderSettings {
   reasoningEffort: ReasoningEffort | null;
 }
 
 export interface ProviderSettingsMap {
   anthropic: AnthropicSettings;
-  openai: OpenAISettings;
+  openrouter: OpenRouterSettings;
 }
 
 export interface AgentConfig {
@@ -71,7 +71,7 @@ export interface ResolvedLLMConfig {
   maxRetries: number;
   requestTimeoutMs: number;
   // Provider-native tuning: thinking is Anthropic's, reasoningEffort is
-  // OpenAI-class. Each is inert for the other adapter.
+  // OpenRouter's. Each is inert for the other adapter.
   thinking: ThinkingMode;
   reasoningEffort: ReasoningEffort | null;
 }

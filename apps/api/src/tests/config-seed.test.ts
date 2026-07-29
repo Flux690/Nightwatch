@@ -17,14 +17,14 @@ const PROVIDER_FAMILIES = [
     baseUrl: "https://gateway.internal/anthropic",
   },
   {
-    provider: "openai",
+    provider: "openrouter",
     env: {
-      OPENAI_MODEL: "gpt-5",
-      OPENAI_API_KEY: "sk-openai-seeded",
-      OPENAI_BASE_URL: "https://openrouter.ai/api/v1",
+      OPENROUTER_MODEL: "anthropic/claude-opus-5",
+      OPENROUTER_API_KEY: "sk-or-seeded",
+      OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
     },
-    model: "gpt-5",
-    apiKey: "sk-openai-seeded",
+    model: "anthropic/claude-opus-5",
+    apiKey: "sk-or-seeded",
     baseUrl: "https://openrouter.ai/api/v1",
   },
 ] as const;
@@ -64,7 +64,7 @@ describe("first-boot config seed from the environment", () => {
   );
 
   it("fills both blocks when both are specified, and activates only the one LLM_PROVIDER names", () => {
-    vi.stubEnv("LLM_PROVIDER", "openai");
+    vi.stubEnv("LLM_PROVIDER", "openrouter");
     for (const family of PROVIDER_FAMILIES) {
       for (const [name, value] of Object.entries(family.env)) {
         vi.stubEnv(name, value);
@@ -74,7 +74,7 @@ describe("first-boot config seed from the environment", () => {
     seedConfigFromEnv();
 
     const config = loadConfig();
-    expect(config.provider).toBe("openai");
+    expect(config.provider).toBe("openrouter");
     // The unselected provider keeps its own credentials, ready to switch to.
     expect(config.providers.anthropic.model).toBe("claude-sonnet-4-6");
     expect(loadApiKey("anthropic")).toBe("sk-ant-seeded");

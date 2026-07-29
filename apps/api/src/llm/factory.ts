@@ -1,5 +1,5 @@
 import { AnthropicProvider } from "./anthropic.js";
-import { OpenAIProvider } from "./openai.js";
+import { OpenRouterProvider } from "./openrouter.js";
 import type { Provider } from "./provider.js";
 import type { ProviderCallOptions } from "./types.js";
 import type { ResolvedLLMConfig } from "@nightwarden/shared";
@@ -16,11 +16,11 @@ export function createProvider(
   switch (config.provider) {
     case "anthropic":
       return new AnthropicProvider(system, config, apiKey, opts);
-    case "openai":
-      return new OpenAIProvider(system, config, apiKey, opts);
+    case "openrouter":
+      return new OpenRouterProvider(system, config, apiKey, opts);
     default:
       throw new Error(
-        `Unknown provider "${String(config.provider)}" (expected "anthropic" or "openai")`,
+        `Unknown provider "${String(config.provider)}" (expected "anthropic" or "openrouter")`,
       );
   }
 }

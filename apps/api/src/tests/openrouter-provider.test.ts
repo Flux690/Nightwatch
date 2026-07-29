@@ -22,11 +22,11 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { OpenAIProvider } from "../llm/openai.js";
+import { OpenRouterProvider } from "../llm/openrouter.js";
 
 const BASE_CONFIG: ResolvedLLMConfig = {
-  provider: "openai",
-  model: "gpt-5",
+  provider: "openrouter",
+  model: "anthropic/claude-opus-5",
   maxOutputTokens: 4096,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
@@ -64,14 +64,14 @@ function buildCapturingStream(completionResponse: unknown) {
   return stream;
 }
 
-describe("OpenAIProvider", () => {
-  let provider: OpenAIProvider;
+describe("OpenRouterProvider", () => {
+  let provider: OpenRouterProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockStream.on.mockReturnThis();
     mockCompletionsStream.mockReturnValue(mockStream);
-    provider = new OpenAIProvider("You are NightWarden.", BASE_CONFIG);
+    provider = new OpenRouterProvider("You are NightWarden.", BASE_CONFIG);
     provider.start("CPU spike detected.");
   });
 

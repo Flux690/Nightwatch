@@ -22,11 +22,11 @@ const ProviderPatchSchema = z.object({
 });
 
 const ConfigPatchSchema = z.object({
-  provider: z.enum(["anthropic", "openai"]).nullable().optional(),
+  provider: z.enum(["anthropic", "openrouter"]).nullable().optional(),
   providers: z
     .object({
       anthropic: ProviderPatchSchema.optional(),
-      openai: ProviderPatchSchema.optional(),
+      openrouter: ProviderPatchSchema.optional(),
     })
     .optional(),
   maxOutputTokens: z.number().int().positive().optional(),
@@ -58,14 +58,14 @@ const ConfigPatchSchema = z.object({
 const TestBodySchema = z.object({
   apiKey: z.string().min(1),
   model: z.string().optional(),
-  provider: z.enum(["anthropic", "openai"]).optional(),
+  provider: z.enum(["anthropic", "openrouter"]).optional(),
   baseUrl: z.string().url().optional(),
 });
 
 // The provider is explicit: a key belongs to one provider's block, and inferring
 // it from whichever is active would file the key under the wrong one mid-switch.
 const KeyBodySchema = z.object({
-  provider: z.enum(["anthropic", "openai"]),
+  provider: z.enum(["anthropic", "openrouter"]),
   apiKey: z.string().min(1),
 });
 
@@ -82,10 +82,8 @@ function modelsUrl(target: ProbeTarget): string {
     const base = target.baseUrl ?? "https://api.anthropic.com";
     return `${base}/v1/models`;
   }
-  const base = target.baseUrl ?? "https://api.openai.com/v1";
-  // Ollama uses /api/tags; all others use /models. baseUrl is always the full
-  // versioned base (e.g. https://openrouter.ai/api/v1), so append /models only.
-  if (base.endsWith("/api")) return `${base}/tags`;
+  // baseUrl is always the full versioned base, so append /models only.
+  const base = target.baseUrl ?? "https://openrouter.ai/api/v1";
   return `${base}/models`;
 }
 
@@ -105,16 +103,10 @@ function authHeaders(
 function extractModels(data: unknown): string[] {
   if (typeof data !== "object" || data === null) return [];
   const d = data as Record<string, unknown>;
-  // Standard OpenAI / Anthropic: { data: [{ id: "..." }] }
+  // Both catalogs answer { data: [{ id: "..." }] }.
   if (Array.isArray(d["data"])) {
     return (d["data"] as Array<Record<string, unknown>>)
       .map((m) => (typeof m["id"] === "string" ? m["id"] : null))
-      .filter((id): id is string => id !== null);
-  }
-  // Ollama /api/tags: { models: [{ name: "..." }] }
-  if (Array.isArray(d["models"])) {
-    return (d["models"] as Array<Record<string, unknown>>)
-      .map((m) => (typeof m["name"] === "string" ? m["name"] : null))
       .filter((id): id is string => id !== null);
   }
   return [];
@@ -175,7 +167,7 @@ export async function registerConfigRoutes(
       // Provider blocks are written per provider so one cannot disturb the other;
       // everything else is global and goes through the single config row.
       const { providers, ...global } = parsed.data;
-      for (const name of ["anthropic", "openai"] as const) {
+      for (const name of ["anthropic", "openrouter"] as const) {
         const block = providers?.[name];
         if (block !== undefined)
           updateProvider(name, block satisfies ProviderPatch);

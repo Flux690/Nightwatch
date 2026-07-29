@@ -168,7 +168,7 @@ describe("provider/model config seam", () => {
       headers: { cookie: `nw_auth=${SESSION}` },
       payload: {
         apiKey: "sk-or-key",
-        provider: "openai",
+        provider: "openrouter",
         baseUrl: "https://openrouter.ai/api/v1",
         model: "some-model",
       },
@@ -320,7 +320,7 @@ describe("provider/model config seam", () => {
       const body = JSON.parse(res.body) as AgentConfig;
       expect(body.provider).toBeNull();
       expect(body.providers.anthropic.model).toBeNull();
-      expect(body.providers.openai.model).toBeNull();
+      expect(body.providers.openrouter.model).toBeNull();
       expect(body.providers.anthropic.apiKeyMasked).toBeNull();
       // Timeouts and sandbox limits are engineering choices, not the operator's;
       // a provider's own tuning defaults the same way inside its block.

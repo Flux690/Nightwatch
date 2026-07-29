@@ -30,7 +30,7 @@ const CONFIG_ID = "global";
 
 export const PROVIDER_NAMES: readonly LLMProviderName[] = [
   "anthropic",
-  "openai",
+  "openrouter",
 ];
 
 type ConfigRow = {
@@ -120,7 +120,7 @@ function maskStored(apiKeyEncrypted: string | null): string | null {
 
 function loadProviders(): ProviderSettingsMap {
   const anthropic = readProviderRow("anthropic");
-  const openai = readProviderRow("openai");
+  const openrouter = readProviderRow("openrouter");
   return {
     anthropic: {
       model: anthropic?.model ?? null,
@@ -128,12 +128,13 @@ function loadProviders(): ProviderSettingsMap {
       apiKeyMasked: maskStored(anthropic?.apiKeyEncrypted ?? null),
       thinking: (anthropic?.thinking as ThinkingMode | undefined) ?? "adaptive",
     },
-    openai: {
-      model: openai?.model ?? null,
-      baseUrl: openai?.baseUrl ?? undefined,
-      apiKeyMasked: maskStored(openai?.apiKeyEncrypted ?? null),
+    openrouter: {
+      model: openrouter?.model ?? null,
+      baseUrl: openrouter?.baseUrl ?? undefined,
+      apiKeyMasked: maskStored(openrouter?.apiKeyEncrypted ?? null),
       reasoningEffort:
-        (openai?.reasoningEffort as ReasoningEffort | null | undefined) ?? null,
+        (openrouter?.reasoningEffort as ReasoningEffort | null | undefined) ??
+        null,
     },
   };
 }
@@ -323,10 +324,10 @@ export function seedConfigFromEnv(): void {
 
   const requested = process.env["LLM_PROVIDER"];
   if (requested === undefined || requested === "") return;
-  if (requested !== "anthropic" && requested !== "openai") {
+  if (requested !== "anthropic" && requested !== "openrouter") {
     logger.warn(
       { requested },
-      "LLM_PROVIDER is not 'anthropic' or 'openai'; leaving the active provider unset",
+      "LLM_PROVIDER is not 'anthropic' or 'openrouter'; leaving the active provider unset",
     );
     return;
   }
@@ -355,7 +356,7 @@ function seedProviderFromEnv(provider: LLMProviderName): void {
   const existing = readProviderRow(provider);
   if (existing?.model || existing?.apiKeyEncrypted) return;
 
-  const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENAI";
+  const prefix = provider === "anthropic" ? "ANTHROPIC" : "OPENROUTER";
   const model = process.env[`${prefix}_MODEL`];
   const apiKey = process.env[`${prefix}_API_KEY`];
   const baseUrl = process.env[`${prefix}_BASE_URL`];

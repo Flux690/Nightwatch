@@ -44,7 +44,7 @@ repo.yarnpkg.com',
 
   -- One row per provider, each owning its own credentials and endpoint, so
   -- switching the active provider cannot carry the previous one's key or base
-  -- URL across. thinking is Anthropic's knob, reasoning_effort OpenAI's.
+  -- URL across. thinking is Anthropic's knob, reasoning_effort OpenRouter's.
   CREATE TABLE IF NOT EXISTS provider_config (
     provider          TEXT PRIMARY KEY,
     model             TEXT,

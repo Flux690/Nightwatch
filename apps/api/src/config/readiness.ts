@@ -44,7 +44,9 @@ export function checkLLMReadiness(): LLMReadiness {
       thinking:
         provider === "anthropic" ? config.providers.anthropic.thinking : "off",
       reasoningEffort:
-        provider === "openai" ? config.providers.openai.reasoningEffort : null,
+        provider === "openrouter"
+          ? config.providers.openrouter.reasoningEffort
+          : null,
     },
   };
 }

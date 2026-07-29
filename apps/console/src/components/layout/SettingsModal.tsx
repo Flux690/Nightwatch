@@ -4,7 +4,7 @@ import type {
   AgentConfig,
   AnthropicSettings,
   LLMProviderName,
-  OpenAISettings,
+  OpenRouterSettings,
   ProviderSettings,
   ReasoningEffort,
 } from "@nightwarden/shared";
@@ -51,7 +51,7 @@ const SECTIONS: { id: SectionId; label: string; description: string }[] = [
     id: "model",
     label: "Provider",
     description:
-      "Protocol, endpoint, API key and generation limits for the investigation agent.",
+      "Provider, endpoint, API key and generation limits for the investigation agent.",
   },
   {
     id: "loop",
@@ -105,7 +105,7 @@ function buildDelta(form: AgentConfig, base: AgentConfig): ConfigDelta {
   return delta;
 }
 
-const PROVIDERS: readonly LLMProviderName[] = ["anthropic", "openai"];
+const PROVIDERS: readonly LLMProviderName[] = ["anthropic", "openrouter"];
 
 export function SettingsModal({
   opened,
@@ -287,11 +287,11 @@ export function SettingsModal({
     patchProvider("anthropic", { [key]: value });
   }
 
-  function setOpenAIField<K extends keyof OpenAISettings>(
+  function setOpenRouterField<K extends keyof OpenRouterSettings>(
     key: K,
-    value: OpenAISettings[K],
+    value: OpenRouterSettings[K],
   ): void {
-    patchProvider("openai", { [key]: value });
+    patchProvider("openrouter", { [key]: value });
   }
 
   function numberValue(value: string | number): number {
@@ -401,7 +401,7 @@ export function SettingsModal({
                       <div className="flex flex-col items-start gap-4 [&>*]:w-full">
                         <Field className="max-w-120">
                           <FieldLabel htmlFor="settings-provider">
-                            Protocol
+                            Provider
                           </FieldLabel>
                           <NativeSelect
                             id="settings-provider"
@@ -422,10 +422,10 @@ export function SettingsModal({
                               Select a provider
                             </NativeSelectOption>
                             <NativeSelectOption value="anthropic">
-                              Anthropic native
+                              Anthropic
                             </NativeSelectOption>
-                            <NativeSelectOption value="openai">
-                              OpenAI-compatible
+                            <NativeSelectOption value="openrouter">
+                              OpenRouter
                             </NativeSelectOption>
                           </NativeSelect>
                         </Field>
@@ -440,7 +440,7 @@ export function SettingsModal({
                             placeholder={
                               form.provider === "anthropic"
                                 ? "https://api.anthropic.com"
-                                : "https://api.openai.com/v1"
+                                : "https://openrouter.ai/api/v1"
                             }
                             value={block?.baseUrl ?? ""}
                             onChange={(e) =>
@@ -581,10 +581,10 @@ export function SettingsModal({
                               id="settings-reasoning"
                               className="w-full"
                               value={
-                                form.providers.openai.reasoningEffort ?? ""
+                                form.providers.openrouter.reasoningEffort ?? ""
                               }
                               onChange={(e) =>
-                                setOpenAIField(
+                                setOpenRouterField(
                                   "reasoningEffort",
                                   (e.currentTarget.value ||
                                     null) as ReasoningEffort | null,

@@ -25,7 +25,7 @@ const CONFIG: AgentConfig = {
       apiKeyMasked: null,
       thinking: "adaptive",
     },
-    openai: {
+    openrouter: {
       model: null,
       baseUrl: undefined,
       apiKeyMasked: null,
