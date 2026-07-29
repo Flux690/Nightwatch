@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TestProviders } from "./renderWithProviders.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import type { AgentConfig, ModelOption } from "@nightwarden/shared";
 
 import { AuthProvider } from "@/auth/AuthContext";
 import { SettingsModal } from "@/components/layout/SettingsModal";
@@ -48,8 +48,32 @@ const CONFIG: AgentConfig = {
   sandboxAllowlistHosts: ["registry.npmjs.org"],
 };
 
-const MODELS_RESPONSE = {
-  models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5-20251001"],
+// Effort levels vary per model, so the fixture carries a full descriptor on one
+// and none on another: the form must render whatever the catalog says.
+const MODELS_RESPONSE: { models: ModelOption[] } = {
+  models: [
+    {
+      id: "claude-sonnet-4-6",
+      reasoning: {
+        label: "Effort",
+        levels: [
+          { value: "max", label: "Max" },
+          { value: "high", label: "High" },
+          { value: "medium", label: "Medium" },
+          { value: "low", label: "Low" },
+        ],
+        defaultLevel: "high",
+        canDisable: true,
+      },
+      maxOutputTokens: 64_000,
+    },
+    { id: "claude-opus-4-8", reasoning: null, maxOutputTokens: null },
+    {
+      id: "claude-haiku-4-5-20251001",
+      reasoning: null,
+      maxOutputTokens: null,
+    },
+  ],
 };
 
 function makeFetchMock(config: AgentConfig) {

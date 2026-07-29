@@ -8,6 +8,36 @@ export type ReasoningEffort = "low" | "medium" | "high";
 // reaches approved hosts; "none" gives no network at all; "open" is unrestricted.
 export type SandboxNetwork = "allowlist" | "open" | "none";
 
+// One rung of a provider's reasoning ladder, in that provider's own vocabulary.
+export interface ReasoningLevel {
+  value: string;
+  label: string;
+}
+
+// What one model advertises about reasoning, normalised from whichever catalog
+// it came from. The console renders this and never branches on the provider
+// name: the provider's own word arrives in `label`, its logic stays server-side.
+export interface ReasoningDescriptor {
+  // "Effort" for Anthropic, "Reasoning" for OpenRouter.
+  label: string;
+  // Ordered strongest to weakest. Ladders have holes (Opus 4.6 has max but not
+  // xhigh), so this is the authority rather than any assumed ordering.
+  levels: ReasoningLevel[];
+  defaultLevel: string;
+  // False when the model rejects being asked not to reason, so no off is offered.
+  canDisable: boolean;
+}
+
+// One entry of a provider's model catalog, with everything the settings form
+// needs to render controls that fit that exact model.
+export interface ModelOption {
+  id: string;
+  // null when the model exposes no reasoning control at all.
+  reasoning: ReasoningDescriptor | null;
+  // The model's own output ceiling, null when its catalog does not publish one.
+  maxOutputTokens: number | null;
+}
+
 // How to reach one provider. Each keeps its own credentials, so switching the
 // active provider cannot carry the previous one's key or endpoint across.
 export interface ProviderSettings {

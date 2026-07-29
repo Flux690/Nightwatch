@@ -4,6 +4,7 @@ import type {
   AgentConfig,
   AnthropicSettings,
   LLMProviderName,
+  ModelOption,
   OpenRouterSettings,
   ProviderSettings,
   ReasoningEffort,
@@ -124,10 +125,10 @@ export function SettingsModal({
     enabled: opened,
   });
 
-  const { data: modelsData } = useQuery<{ models: string[] }>({
+  const { data: modelsData } = useQuery<{ models: ModelOption[] }>({
     queryKey: ["config/models"],
     queryFn: () =>
-      apiFetch<{ models: string[] }>("/api/config/models").catch(() => ({
+      apiFetch<{ models: ModelOption[] }>("/api/config/models").catch(() => ({
         models: [],
       })),
     staleTime: 30_000,
@@ -522,7 +523,7 @@ export function SettingsModal({
                           />
                           <datalist id="settings-model-options">
                             {availableModels.map((m) => (
-                              <option key={m} value={m} />
+                              <option key={m.id} value={m.id} />
                             ))}
                           </datalist>
                         </Field>

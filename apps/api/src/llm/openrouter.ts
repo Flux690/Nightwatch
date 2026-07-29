@@ -3,9 +3,12 @@ import { logger } from "../logger.js";
 import { messagePartsToText } from "@nightwarden/shared";
 import type {
   MessagePart,
+  ModelOption,
+  ReasoningLevel,
   ResolvedLLMConfig,
   WireDialect,
 } from "@nightwarden/shared";
+import { resolveDefault } from "./reasoning.js";
 import type {
   ChatResponse,
   LLMProvider,
@@ -18,6 +21,110 @@ import type {
 } from "./types.js";
 
 const DIALECT: WireDialect = "openrouter-chat";
+
+export const OPENROUTER_MODELS_PATH = "/models";
+export const OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
+
+// The gateway's full ladder, strongest first. "none" is omitted: disabling is
+// expressed by canDisable, so it never doubles as a rung the form could send.
+const OPENROUTER_LADDER: readonly ReasoningLevel[] = [
+  { value: "max", label: "Max" },
+  { value: "xhigh", label: "Extra high" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+  { value: "minimal", label: "Minimal" },
+];
+
+// Every model publishing levels also publishes its own default, so this only
+// stands in for the models that publish neither, where the gateway accepts
+// anything. Positional picks would be wrong at both ends: the ladder descends,
+// so first is max and last is off.
+const OPENROUTER_FALLBACK_EFFORT = "medium";
+
+export function openRouterAuthHeaders(apiKey: string): Record<string, string> {
+  return { Authorization: `Bearer ${apiKey}` };
+}
+
+// A model's reasoning block, as OpenRouter's catalog publishes it. Only
+// `mandatory` is present on every entry; the rest are absent on most models.
+interface OpenRouterReasoning {
+  mandatory?: boolean;
+  default_enabled?: boolean;
+  supported_efforts?: string[];
+  default_effort?: string;
+  supports_max_tokens?: boolean;
+}
+
+function readReasoning(raw: unknown): OpenRouterReasoning | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const efforts = r["supported_efforts"];
+  const defaultEffort = r["default_effort"];
+  return {
+    ...(typeof r["mandatory"] === "boolean" && { mandatory: r["mandatory"] }),
+    ...(Array.isArray(efforts) && {
+      supported_efforts: efforts.filter(
+        (e): e is string => typeof e === "string",
+      ),
+    }),
+    ...(typeof defaultEffort === "string" && { default_effort: defaultEffort }),
+  };
+}
+
+// Normalises one page of OpenRouter's /models into the neutral shape the
+// settings form renders.
+export function describeOpenRouterModels(data: unknown): ModelOption[] {
+  if (typeof data !== "object" || data === null) return [];
+  const entries = (data as Record<string, unknown>)["data"];
+  if (!Array.isArray(entries)) return [];
+
+  return entries.flatMap((raw): ModelOption[] => {
+    if (typeof raw !== "object" || raw === null) return [];
+    const entry = raw as Record<string, unknown>;
+    const id = entry["id"];
+    if (typeof id !== "string") return [];
+
+    const reasoning = readReasoning(entry["reasoning"]);
+    return [
+      {
+        id,
+        reasoning: reasoning === null ? null : describeReasoning(reasoning),
+        maxOutputTokens: maxCompletionTokens(entry["top_provider"]),
+      },
+    ];
+  });
+}
+
+function describeReasoning(
+  reasoning: OpenRouterReasoning,
+): ModelOption["reasoning"] {
+  // An absent list means the gateway accepts every value it knows.
+  const listed = reasoning.supported_efforts;
+  const levels =
+    listed === undefined
+      ? [...OPENROUTER_LADDER]
+      : OPENROUTER_LADDER.filter((l) => listed.includes(l.value));
+  if (levels.length === 0) return null;
+
+  return {
+    label: "Reasoning",
+    levels,
+    defaultLevel: resolveDefault(
+      levels,
+      reasoning.default_effort ?? OPENROUTER_FALLBACK_EFFORT,
+    ),
+    // OpenRouter's docs are explicit: for a mandatory model, hide the disable
+    // control and never send effort "none", because the model rejects it.
+    canDisable: reasoning.mandatory !== true,
+  };
+}
+
+function maxCompletionTokens(topProvider: unknown): number | null {
+  if (typeof topProvider !== "object" || topProvider === null) return null;
+  const max = (topProvider as Record<string, unknown>)["max_completion_tokens"];
+  return typeof max === "number" && max > 0 ? max : null;
+}
 
 // OpenRouter speaks the OpenAI chat-completions wire format, so the `openai`
 // npm package is the transport OpenRouter itself recommends. Everything else

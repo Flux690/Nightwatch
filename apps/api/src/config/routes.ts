@@ -7,6 +7,7 @@ import {
   updateProvider,
   type ProviderPatch,
 } from "./store.js";
+import { catalogSource, fetchModels } from "../llm/catalog.js";
 import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -77,41 +78,6 @@ interface ProbeTarget {
   model?: string | null;
 }
 
-function modelsUrl(target: ProbeTarget): string {
-  if (target.provider === "anthropic") {
-    const base = target.baseUrl ?? "https://api.anthropic.com";
-    return `${base}/v1/models`;
-  }
-  // baseUrl is always the full versioned base, so append /models only.
-  const base = target.baseUrl ?? "https://openrouter.ai/api/v1";
-  return `${base}/models`;
-}
-
-function authHeaders(
-  provider: LLMProviderName,
-  apiKey: string,
-): Record<string, string> {
-  if (provider === "anthropic") {
-    return {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    };
-  }
-  return { Authorization: `Bearer ${apiKey}` };
-}
-
-function extractModels(data: unknown): string[] {
-  if (typeof data !== "object" || data === null) return [];
-  const d = data as Record<string, unknown>;
-  // Both catalogs answer { data: [{ id: "..." }] }.
-  if (Array.isArray(d["data"])) {
-    return (d["data"] as Array<Record<string, unknown>>)
-      .map((m) => (typeof m["id"] === "string" ? m["id"] : null))
-      .filter((id): id is string => id !== null);
-  }
-  return [];
-}
-
 type TestError = "bad_key" | "unreachable" | "unknown_model";
 type TestResult = { ok: true } | { ok: false; error: TestError };
 
@@ -119,11 +85,10 @@ async function probeEndpoint(
   target: ProbeTarget,
   apiKey: string,
 ): Promise<TestResult> {
-  const url = modelsUrl(target);
-  const headers = authHeaders(target.provider, apiKey);
+  const source = catalogSource(target.provider, target.baseUrl, apiKey);
   let responseData: unknown;
   try {
-    const res = await fetch(url, { headers });
+    const res = await fetch(source.url, { headers: source.headers });
     if (res.status === 401 || res.status === 403) {
       return { ok: false, error: "bad_key" };
     }
@@ -135,7 +100,7 @@ async function probeEndpoint(
     return { ok: false, error: "unreachable" };
   }
 
-  const models = extractModels(responseData);
+  const models = source.describe(responseData).map((m) => m.id);
   // Only flag unknown_model against a non-empty list; an empty list means the
   // endpoint doesn't support listing, so treat that as a successful connection.
   // An unset model means the form is testing a key before picking one.
@@ -181,26 +146,21 @@ export async function registerConfigRoutes(
     },
   );
 
-  // proxies model list so the browser never calls the LLM endpoint directly
+  // Proxies the catalog so the browser never calls the LLM endpoint directly:
+  // the key lives in this process and must never reach the console. Each model
+  // carries its own reasoning descriptor, so the form can offer exactly the
+  // levels that model accepts instead of a hardcoded list.
   fastify.get("/config/models", { preHandler: requireSession }, async () => {
     const config = loadConfig();
     // Nothing to list before a provider is picked; the DB is the only key source.
     const provider = config.provider;
     if (provider === null) return { models: [] };
-    const apiKey = loadApiKey(provider) ?? "";
-    const url = modelsUrl({
+    const models = await fetchModels(
       provider,
-      baseUrl: config.providers[provider].baseUrl,
-    });
-    const headers = authHeaders(provider, apiKey);
-    try {
-      const res = await fetch(url, { headers });
-      if (!res.ok) return { models: [] };
-      const data = await res.json();
-      return { models: extractModels(data) };
-    } catch {
-      return { models: [] };
-    }
+      config.providers[provider].baseUrl,
+      loadApiKey(provider) ?? "",
+    );
+    return { models };
   });
 
   // Tests only - never persists. Provider/baseUrl overrides let the caller

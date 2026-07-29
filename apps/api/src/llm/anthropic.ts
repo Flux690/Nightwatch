@@ -1,8 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "../logger.js";
+import { resolveDefault } from "./reasoning.js";
 import { messagePartsToText } from "@nightwarden/shared";
 import type {
   MessagePart,
+  ModelOption,
+  ReasoningLevel,
   ResolvedLLMConfig,
   WireDialect,
 } from "@nightwarden/shared";
@@ -18,6 +21,96 @@ import type {
 } from "./types.js";
 
 const DIALECT: WireDialect = "anthropic-messages";
+
+export const ANTHROPIC_MODELS_PATH = "/v1/models";
+export const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com";
+
+// Anthropic's catalog publishes which levels a model accepts but never a
+// default, so the API-wide documented default stands in: sending "high" is
+// identical to omitting the parameter.
+const ANTHROPIC_DEFAULT_EFFORT = "high";
+
+// Strongest first. Every rung is checked independently because the ladder has
+// holes: Opus 4.6 supports max but not xhigh.
+const ANTHROPIC_EFFORT_LADDER: readonly ReasoningLevel[] = [
+  { value: "max", label: "Max" },
+  { value: "xhigh", label: "Extra high" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+];
+
+export function anthropicAuthHeaders(apiKey: string): Record<string, string> {
+  return { "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
+}
+
+// Both `capabilities` and the individual `xhigh` rung are nullable in the
+// schema, so every hop is checked rather than assumed present.
+function effortLevels(capabilities: unknown): ReasoningLevel[] {
+  if (typeof capabilities !== "object" || capabilities === null) return [];
+  const effort = (capabilities as Record<string, unknown>)["effort"];
+  if (typeof effort !== "object" || effort === null) return [];
+  const e = effort as Record<string, unknown>;
+  if (e["supported"] !== true) return [];
+  return ANTHROPIC_EFFORT_LADDER.filter((level) => {
+    const rung = e[level.value];
+    return (
+      typeof rung === "object" &&
+      rung !== null &&
+      (rung as Record<string, unknown>)["supported"] === true
+    );
+  });
+}
+
+// A model that accepts thinking type "enabled" also accepts "disabled"; one
+// that does not has no way to be told to stop reasoning.
+function canDisableThinking(capabilities: unknown): boolean {
+  if (typeof capabilities !== "object" || capabilities === null) return false;
+  const thinking = (capabilities as Record<string, unknown>)["thinking"];
+  if (typeof thinking !== "object" || thinking === null) return false;
+  const types = (thinking as Record<string, unknown>)["types"];
+  if (typeof types !== "object" || types === null) return false;
+  const enabled = (types as Record<string, unknown>)["enabled"];
+  return (
+    typeof enabled === "object" &&
+    enabled !== null &&
+    (enabled as Record<string, unknown>)["supported"] === true
+  );
+}
+
+// Normalises one page of Anthropic's /v1/models into the neutral shape the
+// settings form renders.
+export function describeAnthropicModels(data: unknown): ModelOption[] {
+  if (typeof data !== "object" || data === null) return [];
+  const entries = (data as Record<string, unknown>)["data"];
+  if (!Array.isArray(entries)) return [];
+
+  return entries.flatMap((raw): ModelOption[] => {
+    if (typeof raw !== "object" || raw === null) return [];
+    const entry = raw as Record<string, unknown>;
+    const id = entry["id"];
+    if (typeof id !== "string") return [];
+
+    const levels = effortLevels(entry["capabilities"]);
+    const maxTokens = entry["max_tokens"];
+    return [
+      {
+        id,
+        reasoning:
+          levels.length === 0
+            ? null
+            : {
+                label: "Effort",
+                levels,
+                defaultLevel: resolveDefault(levels, ANTHROPIC_DEFAULT_EFFORT),
+                canDisable: canDisableThinking(entry["capabilities"]),
+              },
+        maxOutputTokens:
+          typeof maxTokens === "number" && maxTokens > 0 ? maxTokens : null,
+      },
+    ];
+  });
+}
 
 export class AnthropicProvider implements LLMProvider {
   private readonly client: Anthropic;

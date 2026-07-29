@@ -13,7 +13,8 @@ import type { FastifyInstance } from "fastify";
 import { registerConfigRoutes } from "../config/routes.js";
 import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
-import type { AgentConfig } from "@nightwarden/shared";
+import { updateConfig, updateProvider } from "../config/store.js";
+import type { AgentConfig, ModelOption } from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
 
 // Builds a mock Response-like object for stubbing global fetch.
@@ -34,6 +35,31 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
     "fetch",
     vi.fn().mockImplementation((url: string) => Promise.resolve(impl(url))),
   );
+}
+
+// One entry of Anthropic's /v1/models, with the effort levels under test.
+// low/medium/high are non-null in the schema; xhigh is nullable.
+function anthropicModel(
+  id: string,
+  effort: { xhigh?: boolean; max?: boolean },
+): Record<string, unknown> {
+  return {
+    id,
+    capabilities: {
+      effort: {
+        supported: true,
+        low: { supported: true },
+        medium: { supported: true },
+        high: { supported: true },
+        max: { supported: effort.max ?? false },
+        xhigh: effort.xhigh === undefined ? null : { supported: effort.xhigh },
+      },
+      thinking: {
+        supported: true,
+        types: { adaptive: { supported: true }, enabled: { supported: true } },
+      },
+    },
+  };
 }
 
 describe("provider/model config seam", () => {
@@ -59,6 +85,25 @@ describe("provider/model config seam", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  async function getModels(): Promise<ModelOption[]> {
+    const res = await server.inject({
+      method: "GET",
+      url: "/api/config/models",
+      headers: { cookie: `nw_auth=${SESSION}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return (JSON.parse(res.body) as { models: ModelOption[] }).models;
+  }
+
+  // Switches the active block so the route derives through OpenRouter's rules.
+  function useOpenRouter(): void {
+    updateProvider("openrouter", {
+      model: "anthropic/claude-opus-5",
+      apiKey: "sk-or-key",
+    });
+    updateConfig({ provider: "openrouter" });
+  }
 
   // --- POST /config/test ---
 
@@ -190,7 +235,7 @@ describe("provider/model config seam", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("GET /config/models: returns models array proxied from upstream endpoint", async () => {
+  it("GET /config/models: returns models proxied from upstream endpoint", async () => {
     stubFetch(() =>
       mockResponse(200, {
         data: [
@@ -208,8 +253,8 @@ describe("provider/model config seam", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { models: string[] };
-    expect(body.models).toEqual([
+    const body = JSON.parse(res.body) as { models: ModelOption[] };
+    expect(body.models.map((m) => m.id)).toEqual([
       "claude-sonnet-4-6",
       "claude-opus-4-8",
       "claude-haiku-4-5-20251001",
@@ -229,8 +274,180 @@ describe("provider/model config seam", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { models: string[] };
+    const body = JSON.parse(res.body) as { models: ModelOption[] };
     expect(body.models).toEqual([]);
+  });
+
+  // --- reasoning descriptors, derived from each provider's own catalog ---
+
+  describe("reasoning descriptors", () => {
+    // Anthropic is the baseline useTempDb installs; a test that switches to
+    // OpenRouter must not leak that choice into the next one.
+    afterEach(() => {
+      configureTestLLM();
+    });
+
+    it("Anthropic: derives levels from capabilities.effort and defaults to high, which is the documented API default", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-opus-5", { xhigh: true, max: true })],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning).toEqual({
+        label: "Effort",
+        levels: [
+          { value: "max", label: "Max" },
+          { value: "xhigh", label: "Extra high" },
+          { value: "high", label: "High" },
+          { value: "medium", label: "Medium" },
+          { value: "low", label: "Low" },
+        ],
+        defaultLevel: "high",
+        canDisable: true,
+      });
+    });
+
+    it("Anthropic: omits a level the model does not support, so a ladder with holes stays honest", async () => {
+      // Opus 4.6 supports max but not xhigh: the ladder is not monotonic.
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            anthropicModel("claude-opus-4-6", { xhigh: false, max: true }),
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
+        "max",
+        "high",
+        "medium",
+        "low",
+      ]);
+    });
+
+    it("Anthropic: reports no reasoning control when capabilities is null", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [{ id: "claude-legacy", capabilities: null }],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning).toBeNull();
+    });
+
+    it("Anthropic: carries the model's own max_tokens ceiling", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            { ...anthropicModel("claude-opus-5", {}), max_tokens: 128_000 },
+            { ...anthropicModel("claude-old", {}), max_tokens: null },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.maxOutputTokens).toBe(128_000);
+      expect(models[1]?.maxOutputTokens).toBeNull();
+    });
+
+    it("OpenRouter: uses the model's stated levels and its own default, never a guessed one", async () => {
+      useOpenRouter();
+      // kimi-k3 publishes no medium at all, and states max as its default.
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              id: "moonshotai/kimi-k3",
+              reasoning: {
+                mandatory: false,
+                supported_efforts: ["max", "high", "low"],
+                default_effort: "max",
+              },
+            },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning?.label).toBe("Reasoning");
+      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
+        "max",
+        "high",
+        "low",
+      ]);
+      expect(models[0]?.reasoning?.defaultLevel).toBe("max");
+    });
+
+    it("OpenRouter: offers the full gateway ladder and medium when the model publishes no levels", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [{ id: "some/model", reasoning: { mandatory: false } }],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning?.levels.map((l) => l.value)).toEqual([
+        "max",
+        "xhigh",
+        "high",
+        "medium",
+        "low",
+        "minimal",
+      ]);
+      expect(models[0]?.reasoning?.defaultLevel).toBe("medium");
+    });
+
+    it("OpenRouter: refuses to offer an off switch for a mandatory model, which rejects it", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              id: "openai/gpt-oss-20b:free",
+              reasoning: {
+                mandatory: true,
+                supported_efforts: ["high", "medium", "low"],
+                default_effort: "medium",
+              },
+            },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning?.canDisable).toBe(false);
+    });
+
+    it("OpenRouter: reports no reasoning control for a model with no reasoning object", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              id: "plain/model",
+              top_provider: { max_completion_tokens: 8192 },
+            },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.reasoning).toBeNull();
+      expect(models[0]?.maxOutputTokens).toBe(8192);
+    });
   });
 
   // --- requireSession gate ---
