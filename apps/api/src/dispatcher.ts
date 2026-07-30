@@ -78,10 +78,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
     void run({ ...input, signal: controller.signal })
       .then((outcome) => {
-        // Single lifecycle owner: exactly one terminal event per run. A completed
-        // run has none yet (the loop only streamed messages); a stopped run needs
-        // its terminal here too. Suspended runs already ended via the interrupt
-        // event the loop emitted; failed runs terminate in the catch below.
+        // Single lifecycle owner: exactly one terminal event per run. Completed and
+        // stopped runs need theirs here; suspended runs already ended via the loop's
+        // interrupt event, and failed runs terminate in the catch below.
         if (outcome === "completed") publishRunFinished(input.sessionId);
         else if (outcome === "stopped") publishRunStopped(input.sessionId);
       })

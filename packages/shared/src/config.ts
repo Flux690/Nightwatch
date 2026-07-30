@@ -72,10 +72,9 @@ export interface ProviderSettings {
   // Captured from the catalog when the model is saved, so nothing has to reach
   // the network to start a run. Null means the catalog published no ceiling.
   maxOutputTokens: number | null;
-  // The chosen model's ladder, captured with it. Held here rather than looked up
-  // again so the settings form draws its reasoning control from the config it
-  // already has, and a run knows whether reasoning can be turned off without
-  // asking the provider. Null when the model exposes no reasoning control.
+  // The chosen model's ladder, captured with it rather than looked up again, so the
+  // settings form draws its reasoning control from the config it already has.
+  // Null when the model exposes no reasoning control.
   reasoning: ReasoningDescriptor | null;
 }
 

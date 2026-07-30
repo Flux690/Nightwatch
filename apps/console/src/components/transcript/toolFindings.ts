@@ -1,11 +1,6 @@
-// The one-line answer a tool row shows without being expanded.
-//
-// Every finding is COMPUTED from the tool's own structured result. None of it is
-// written by the model, for the same reason the report's action log is not: a
-// sentence the model composes about data the system already holds is a sentence
-// nothing can check. `redis-cli info memory` returning used_memory is a fact;
-// "memory looks high" is a claim. We only ever render the fact, and when we
-// quote a log line we quote it verbatim rather than summarising it.
+// The one-line answer a tool row shows unexpanded, COMPUTED from the tool's own
+// structured result and never written by the model: a sentence it composes about
+// data we already hold is one nothing can check. Quoted log lines stay verbatim.
 
 export type FindingTone = "normal" | "bad";
 

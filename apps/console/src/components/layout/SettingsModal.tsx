@@ -35,10 +35,9 @@ import { SandboxSection } from "@/components/layout/settings/SandboxSection";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useAuth } from "@/auth/AuthContext";
 
-// Loading the catalog is what verifies a provider block, so these are the ways
-// it can go wrong. Each is the server's answer, never inferred here: guessing
-// from a blank key field cannot tell a provider that publishes its catalog from
-// one that demands a credential for it.
+// Loading the catalog is what verifies a provider block, so these are the ways it
+// can go wrong. Each is the server's answer: guessing from a blank key field cannot
+// tell a provider that publishes its catalog from one that demands a credential.
 const CATALOG_ERRORS: Record<CatalogError, string> = {
   needs_key: "Add an API key to load models.",
   bad_key: "That key was rejected. Check it and try again.",

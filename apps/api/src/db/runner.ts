@@ -28,8 +28,7 @@ export function hashToken(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-// Generate a new runner token. Returns the plaintext exactly once; the DB
-// stores only the SHA-256 hash. Format: nwr_ + 32 random bytes (base64url).
+// Returns the plaintext exactly once; the DB stores only the SHA-256 hash.
 // platform has no default on purpose: a runner that does not know what it is at
 // mint time is the bug this whole shape exists to make impossible.
 export function generateRunnerToken(

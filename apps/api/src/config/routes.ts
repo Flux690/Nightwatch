@@ -17,10 +17,9 @@ import type {
   ModelOption,
 } from "@nightwarden/shared";
 
-// One provider's settings. Nested under `providers` on the patch so a change to
-// one cannot touch the other's model, endpoint, or credential.
-// reasoningLevel is a free string: the legal values are whatever the chosen
-// model advertises, so the descriptor is the authority, not an enum here.
+// One provider's settings, nested under `providers` so a change to one cannot touch
+// the other's model, endpoint or credential. reasoningLevel is a free string: the
+// chosen model's descriptor is the authority, not an enum here.
 const ProviderPatchSchema = z.object({
   model: z.string().min(1).nullable().optional(),
   baseUrl: z.string().url().nullable().optional(),
@@ -57,10 +56,9 @@ const ConfigPatchSchema = z.object({
     .optional(),
 });
 
-// The provider block being edited, which is not necessarily the one on disk.
-// Each field falls back to the stored value, so a half-typed form still asks
-// about something coherent. POST because the key travels in the body: a
-// credential must never reach a URL.
+// The provider block being edited, not necessarily the one on disk; each field falls
+// back to the stored value so a half-typed form still asks something coherent. POST
+// because the key travels in the body: a credential must never reach a URL.
 const CatalogBodySchema = z.object({
   provider: z.enum(["anthropic", "openrouter"]).optional(),
   baseUrl: z.string().url().optional(),
@@ -153,11 +151,9 @@ export async function registerConfigRoutes(
     providers: PROVIDER_OPTIONS,
   }));
 
-  // Proxied here because the key lives in this process and must never reach the
-  // console. Answers about the block being edited rather than the one on disk,
-  // so the list fills in before anything is saved, and reading it is also how
-  // the setup is verified: models coming back prove the endpoint and the key.
-  // Never persists.
+  // Proxied because the key lives here and must never reach the console. Answers
+  // about the block being edited, not the one on disk, so listing is also what
+  // verifies it: models coming back prove the endpoint and the key. Never persists.
   fastify.post(
     "/config/models",
     { preHandler: requireSession },

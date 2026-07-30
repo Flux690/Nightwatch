@@ -58,23 +58,18 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
-// Which pull-integrations are connected this turn. Each field defaults to true
-// so a caller that only cares about fleet capabilities still gets every library;
-// the loop passes the live connection state so a disconnected integration strips
-// its tools from the very next turn.
+// Which pull-integrations are connected this turn. Each defaults to true so a
+// caller that only cares about platforms still gets every library; the loop passes
+// live state, so a disconnected integration strips its tools from the next turn.
 export interface IntegrationConnections {
   github?: boolean;
   prometheus?: boolean;
   loki?: boolean;
 }
 
-// Single source of truth for both the offered schemas and the names the loop resolves,
-// so hiding a tool and gating it are one op. Each platform's library is injected whole
-// when the fleet has a runner of that platform. Integrations gate their own libraries the
-// same way: GitHub gates the repo tools (sandbox checkout) plus the GitHub evidence tools,
-// Prometheus gates the metrics tools, Loki the log tools.
-// `platforms` undefined means every library, which only callers that want the whole
-// catalogue (schema dumps) pass; the loop always supplies the live set.
+// Single source of truth for both the offered schemas and the names the loop
+// resolves, so hiding a tool and gating it are one op. `platforms` undefined means
+// every library, which only a caller wanting the whole catalogue passes.
 export function effectiveToolset(
   platforms: Set<Platform> | undefined,
   connections: IntegrationConnections = {},

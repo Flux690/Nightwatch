@@ -25,11 +25,9 @@ async function pinnedManager(dir: string): Promise<string | null> {
   }
 }
 
-// A pinned pnpm/yarn goes through corepack, which reads the packageManager
-// field itself and runs that exact version (yarn classic and berry alike).
-// Unpinned repos get the image's own binaries keyed off the lockfile - except
-// yarn, which stays on corepack so nothing depends on the base image shipping
-// it. Null means there is nothing to install.
+// A pinned pnpm/yarn goes through corepack, which runs that exact version. Unpinned
+// repos get the image's own binaries keyed off the lockfile, except yarn, which
+// stays on corepack so nothing depends on the base image shipping it.
 export async function resolveInstallPlan(
   dir: string,
 ): Promise<InstallPlan | null> {

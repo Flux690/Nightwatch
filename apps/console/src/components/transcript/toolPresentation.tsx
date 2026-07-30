@@ -212,10 +212,9 @@ function ToolBody({
       return <KeyValues rows={rows} />;
     }
 
-    // Shell tools: the command, then its output. Keyed on the tool name, not on
-    // the presence of an exitCode - plenty of results carry one without being a
-    // shell command, and they deserve their own shape rather than an empty
-    // terminal.
+    // Shell tools: the command, then its output. Keyed on the tool name, not on the
+    // presence of an exitCode - plenty of results carry one without being a shell
+    // command, and deserve their own shape rather than an empty terminal.
     if (SHELL_TOOLS.has(toolName)) {
       const argv = Array.isArray(input["command"])
         ? (input["command"] as unknown[]).map(String).join(" ")

@@ -1,10 +1,8 @@
 import React from "react";
 
-// Shown when a run is active but nothing is streaming into the transcript yet -
-// right after send, and in the gaps between turns. Three dots hop in sequence (a
-// "typing"-style affordance) as a content-free "assistant is working" signal,
-// distinct from a thinking block. The motion lives in styles.css; reduced-motion
-// holds the dots static.
+// Shown when a run is active but nothing is streaming yet, as a content-free
+// "working" signal distinct from a thinking block. The motion lives in styles.css
+// so reduced-motion can hold the dots static.
 export function WorkingIndicator(): React.JSX.Element {
   return (
     <div

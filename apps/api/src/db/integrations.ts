@@ -1,10 +1,8 @@
 import { getDb } from "./client.js";
 
-// One physical table, one row per integration kind. Each kind owns a private
-// config shape (JSON) and an optional encrypted secret; the typed accessors
-// below are the only way the rest of the app reads them, so the JSON stays an
-// implementation detail. Adding an integration is a new accessor block, never a
-// new table.
+// One table, one row per integration kind, each owning a private config shape and
+// an optional encrypted secret. The accessors below are the only readers, so the
+// JSON stays an implementation detail and a new integration is never a new table.
 
 interface IntegrationRow {
   config: string;

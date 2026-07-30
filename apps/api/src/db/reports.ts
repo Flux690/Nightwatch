@@ -57,10 +57,9 @@ export function listReportSummaries(): ReportSummary[] {
   });
 }
 
-// The gate predicate as a pure function so it is unit-testable in isolation.
+// The gate predicate as a pure function so it is testable in isolation.
 // investigation_incomplete is the non-terminal state the exit gate rejects;
-// inconclusive is a legal honest terminal; root_cause_identified must be fully
-// resolved and evidence-backed.
+// inconclusive is a legal honest terminal.
 export function isReportComplete(report: Report): boolean {
   if (report.status === "investigation_incomplete") return false;
   if (report.status === "inconclusive") return true;

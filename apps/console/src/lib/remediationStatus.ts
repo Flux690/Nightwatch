@@ -1,13 +1,9 @@
 import type { RemediationStatus } from "@nightwarden/shared";
 import type { StatusTone } from "@/components/ui/status";
 
-// One vocabulary for an action's outcome, shared by the audit log and the
-// report's action list. Both read the same rows, so they must not describe them
-// differently: an action the audit log calls "Ran" cannot read as "Executed"
-// two screens away.
-//
-// Past tense throughout, because every one of these is written by the executor
-// after the fact. Nothing here is a prediction.
+// One vocabulary shared by the audit log and the report's action list, so the same
+// row cannot read as "Ran" on one screen and "Executed" on another. Past tense
+// throughout: the executor writes every one of these after the fact.
 export const ACTION_LABEL: Record<RemediationStatus, string> = {
   executed: "Ran",
   failed: "Failed",

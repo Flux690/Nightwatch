@@ -39,10 +39,9 @@ export function hideContainer(id: string): void {
   hidden.add(id);
 }
 
-// The only sanctioned way to enumerate containers. Everything the agent can see
-// arrives through here - the manifest it is told about, the list tool it can call,
-// and the resolver that turns a target into something addressable - so the control
-// plane is absent from all three by construction rather than by three filters.
+// The only sanctioned way to enumerate containers: the manifest, the list tool and
+// the resolver all arrive through here, so the control plane is absent from all
+// three by construction rather than by three filters.
 export async function listVisibleContainers(
   docker: Dockerode,
 ): Promise<Dockerode.ContainerInfo[]> {

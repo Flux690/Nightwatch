@@ -14,10 +14,9 @@ import {
 
 const Combobox = ComboboxPrimitive.Root;
 
-// The same primitive with one difference: nothing is ever "selected", so the
-// text in the input is the value and any text is valid. Use it where a list is
-// a suggestion rather than the set of allowed answers. Every part below is
-// shared between the two, which is how Base UI ships them as well.
+// The same primitive with one difference: nothing is ever "selected", so the input's
+// text is the value and any text is valid. Use it where a list is a suggestion
+// rather than the set of allowed answers.
 const Autocomplete = AutocompletePrimitive.Root;
 
 function ComboboxValue({ ...props }: ComboboxPrimitive.Value.Props) {

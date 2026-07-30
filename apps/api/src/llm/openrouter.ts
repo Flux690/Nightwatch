@@ -36,10 +36,9 @@ const OPENROUTER_LADDER: readonly ReasoningLevel[] = [
   { value: "minimal", label: "Minimal" },
 ];
 
-// Every model publishing levels also publishes its own default, so this only
-// stands in for the models that publish neither, where the gateway accepts
-// anything. Positional picks would be wrong at both ends: the ladder descends,
-// so first is max and last is off.
+// Only stands in for models publishing neither levels nor a default, where the
+// gateway accepts anything. Positional picks would be wrong at both ends: the
+// ladder descends, so first is max and last is off.
 const OPENROUTER_FALLBACK_EFFORT = "medium";
 
 export function openRouterAuthHeaders(apiKey: string): Record<string, string> {

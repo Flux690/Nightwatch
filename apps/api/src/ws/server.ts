@@ -86,10 +86,9 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
-          // The row decided this runner's platform at onboarding; the manifest says
-          // which binary actually connected. A disagreement means a real operator
-          // error (the Docker install line pasted into a cluster), so refuse rather
-          // than serve a fleet whose entries lie about what they are.
+          // The row decided this platform at onboarding; the manifest says which binary
+          // connected. A disagreement is a real operator error, so refuse rather than
+          // serve a fleet whose entries lie about what they are.
           if (msg.payload.platform !== tokenRecord.platform) {
             fastify.log.error(
               {

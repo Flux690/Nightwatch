@@ -15,9 +15,8 @@ export type RouteBy = "service" | "runner";
 const MAX_FANOUT = 8;
 
 // The owning runner plus the advertised identity behind a target key, so the
-// transport can expand the flat key back into the structured runner payload. The
-// identity is only ever passed through to the runner that advertised it, which is
-// why one field can hold either: nothing here narrows it.
+// transport can expand the flat key back into the structured payload. Nothing here
+// narrows it: the identity only ever returns to the runner that advertised it.
 export interface ResolvedService {
   conn: RunnerConnection;
   identity: DockerServiceIdentity | KubernetesWorkloadIdentity;

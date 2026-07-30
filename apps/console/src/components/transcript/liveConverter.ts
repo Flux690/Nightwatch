@@ -2,10 +2,9 @@ import type { ConsoleEvent } from "@nightwarden/shared";
 import { transcriptItemKey } from "@nightwarden/shared";
 import type { TranscriptItem, ThinkingItem } from "./types.js";
 
-// A non-thinking event finalizes the most recent streaming thinking burst;
-// a later thinking delta opens a fresh item rather than reopening this one.
-// A burst that carried only whitespace (no real reasoning) is dropped outright
-// so no empty "Thinking" line survives it - the working animation covers that gap.
+// A non-thinking event finalizes the most recent streaming thinking burst; a later
+// delta opens a fresh item rather than reopening this one. A whitespace-only burst
+// is dropped so no empty "Thinking" line survives it.
 function finalizeTrailingThinking(items: TranscriptItem[]): TranscriptItem[] {
   const last = items[items.length - 1];
   if (last?.kind === "thinking" && last.streaming) {

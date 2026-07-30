@@ -101,10 +101,9 @@ const start = async (): Promise<void> => {
     // Same first-boot rule for the evidence integrations, so a fresh install can
     // come up fully configured without anyone opening a browser.
     await seedIntegrationsFromEnv();
-    // Containers first (kills any still-running writer), then salvage: the
-    // checkout is a host bind mount, so work orphaned by any death mode is
-    // committed and pushed here, before listen() lets a session provision over
-    // it. Best-effort throughout - a host without Docker has nothing to reap.
+    // Containers first (kills any still-running writer), then salvage: work orphaned
+    // by any death mode is committed and pushed here, before listen() lets a session
+    // provision over it. Best-effort throughout.
     try {
       const reaped = await reapOrphans();
       if (reaped > 0) {

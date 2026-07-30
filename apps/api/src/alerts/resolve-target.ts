@@ -92,11 +92,9 @@ function describesDockerService(
   labels: Record<string, string>,
   identity: DockerServiceIdentity,
 ): boolean {
-  // An alert carries no platform, only labels that imply one, and a mixed fleet
-  // offers every alert to both matchers. `namespace` means Kubernetes, which Docker
-  // and Compose alerts never carry: without this, a Kubernetes alert's `container`
-  // label matches a Docker host running a container of that name, and the second
-  // key forces a perfectly resolvable alert to unresolved.
+  // `namespace` means Kubernetes, which Docker and Compose alerts never carry.
+  // Without it a Kubernetes alert's `container` label matches a Docker host running
+  // a container of that name, forcing a perfectly resolvable alert to unresolved.
   if (labels["namespace"] !== undefined) return false;
 
   // Compose labels are re-stamped on every recreate, so when present they are the
