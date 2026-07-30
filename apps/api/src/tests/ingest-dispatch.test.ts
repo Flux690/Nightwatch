@@ -95,20 +95,22 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   // ingest and give the mixed-batch test a matched and an unmatched identity.
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    connA = registerRunner(
-      "dispatch-runner-a-token",
-      () => {},
-      () => {},
-    );
+    connA = registerRunner({
+      runnerId: "dispatch-runner-a-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest(
       "dispatch-runner-a-token",
       manifest("host-web-01", [dockerService("web-01")]),
     );
-    connB = registerRunner(
-      "dispatch-runner-b-token",
-      () => {},
-      () => {},
-    );
+    connB = registerRunner({
+      runnerId: "dispatch-runner-b-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest(
       "dispatch-runner-b-token",
       manifest("host-web-02", [dockerService("web-02")]),

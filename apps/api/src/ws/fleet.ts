@@ -4,6 +4,7 @@ import type {
   CapabilityManifest,
   FleetRunner,
   HideContainerMessage,
+  Platform,
 } from "@nightwarden/shared";
 
 const LIVENESS_TTL_MS = 120_000;
@@ -11,6 +12,9 @@ const LIVENESS_TTL_MS = 120_000;
 // Single map keyed by runnerId — the stable DB primary key assigned at onboarding.
 export interface RunnerConnection {
   runnerId: string;
+  // Read from the runner's row at authentication, so it is known before any
+  // manifest arrives and cannot be contradicted by what the runner reports.
+  platform: Platform;
   // Operator-assigned server name (unique by DB constraint) — the model-visible
   // address for host routing. Null for legacy tokens minted without one.
   serverName: string | null;
@@ -23,6 +27,7 @@ export interface RunnerConnection {
 
 export interface RunnerView {
   runnerId: string;
+  platform: Platform;
   serverName: string | null;
   hostname: string | null;
   manifest: CapabilityManifest | null;
@@ -45,17 +50,27 @@ export function addressName(conn: RunnerConnection): string | null {
   return conn.serverName ?? conn.hostname;
 }
 
-export function registerRunner(
-  runnerId: string,
-  send: (msg: string) => void,
-  close: () => void,
-  serverName: string | null = null,
-): RunnerConnection {
+export interface RunnerRegistration {
+  runnerId: string;
+  platform: Platform;
+  send: (msg: string) => void;
+  close: () => void;
+  serverName?: string | null;
+}
+
+export function registerRunner({
+  runnerId,
+  platform,
+  send,
+  close,
+  serverName = null,
+}: RunnerRegistration): RunnerConnection {
   // A reconnect can beat the old socket's close event; displace the stale
   // socket loudly instead of trusting close ordering.
   connectionsByRunnerId.get(runnerId)?.close();
   const conn: RunnerConnection = {
     runnerId,
+    platform,
     serverName,
     send,
     close,
@@ -105,6 +120,7 @@ export function listRunners(): RunnerView[] {
   for (const conn of connectionsByRunnerId.values()) {
     views.push({
       runnerId: conn.runnerId,
+      platform: conn.platform,
       serverName: conn.serverName,
       hostname: conn.hostname,
       manifest: conn.manifest,

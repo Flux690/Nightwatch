@@ -64,11 +64,12 @@ describe("clarification interrupts", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("clarification-023").id;
+    TEST_TOKEN = generateRunnerToken("docker", "clarification-023").id;
 
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
         if (commandName === "RestartDockerService") {
@@ -82,8 +83,8 @@ describe("clarification interrupts", () => {
           resolveCommand({ correlationId, success: true, result: [] });
         }
       },
-      () => {},
-    );
+      close: () => {},
+    });
     setRunnerManifest(TEST_TOKEN, {
       hostname: "clarification-host",
       runnerVersion: "2.0.0",

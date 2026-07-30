@@ -59,11 +59,12 @@ describe("access-gate: gating is driven by tool access level", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("access-gate-001").id;
+    TEST_TOKEN = generateRunnerToken("docker", "access-gate-001").id;
 
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, correlationId } = msg.payload;
         executedCommands.push(commandName);
@@ -74,8 +75,8 @@ describe("access-gate: gating is driven by tool access level", () => {
             commandName === "RestartDockerService" ? { restarted: true } : [],
         });
       },
-      () => {},
-    );
+      close: () => {},
+    });
     setRunnerManifest(TEST_TOKEN, {
       hostname: "access-gate-host",
       runnerVersion: "2.0.0",

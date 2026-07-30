@@ -14,8 +14,7 @@ import { seedIntegrationsFromEnv } from "./integrations/seed.js";
 import { registerConfigHealthRoutes } from "./config/health.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
-import { registerConnectRoutes } from "./runners/connect.js";
-import { registerManifestRoutes } from "./runners/manifest.js";
+import { registerInstallRoutes } from "./runners/install.js";
 import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { registerConsoleRoutes } from "./console/serve.js";
@@ -79,8 +78,7 @@ await fastify.register(
     await registerConfigHealthRoutes(api);
     await registerSessionRoutes(api);
     await registerRunnerRoutes(api);
-    await registerConnectRoutes(api);
-    await registerManifestRoutes(api);
+    await registerInstallRoutes(api);
     await registerRemediationRoutes(api);
     await registerIntegrationRoutes(api);
   },

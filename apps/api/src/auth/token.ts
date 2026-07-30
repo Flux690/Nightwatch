@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { isPlatform, PLATFORMS } from "@nightwarden/shared";
 import {
   generateRunnerToken,
   deleteRunner,
@@ -18,46 +19,54 @@ export async function registerTokenRoutes(
 ): Promise<void> {
   // Generate a new runner token. The plaintext nwr_... value is returned
   // exactly once here and never stored — the DB holds only the SHA-256 hash.
-  fastify.post<{ Body: { label?: string; serverName?: string } }>(
-    "/tokens",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const label =
-        typeof request.body?.label === "string"
-          ? request.body.label.trim() || undefined
-          : undefined;
+  fastify.post<{
+    Body: { platform?: unknown; label?: string; serverName?: string };
+  }>("/tokens", { preHandler: requireSession }, async (request, reply) => {
+    // Refused rather than defaulted: guessing here is exactly how the platform
+    // used to get thrown away between the console and the row.
+    const platform = request.body?.platform;
+    if (!isPlatform(platform)) {
+      return reply.code(400).send({
+        error: `platform is required and must be one of: ${PLATFORMS.join(", ")}`,
+      });
+    }
 
-      const rawServerName = request.body?.serverName;
-      let serverName: string | undefined;
-      if (rawServerName !== undefined) {
-        if (typeof rawServerName !== "string") {
-          return reply.code(400).send({ error: "serverName must be a string" });
-        }
-        const err = validateServerName(rawServerName);
-        if (err) return reply.code(400).send({ error: err });
-        serverName = rawServerName.trim();
-      }
+    const label =
+      typeof request.body?.label === "string"
+        ? request.body.label.trim() || undefined
+        : undefined;
 
-      try {
-        const generated = generateRunnerToken(label, serverName);
-        return reply.code(201).send({
-          id: generated.id,
-          token: generated.plaintext,
-          label: generated.label,
-          serverName: generated.serverName,
-          createdAt: generated.createdAt,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("UNIQUE constraint failed: runner.server_name")) {
-          return reply
-            .code(409)
-            .send({ error: "A runner with that server name already exists" });
-        }
-        throw err;
+    const rawServerName = request.body?.serverName;
+    let serverName: string | undefined;
+    if (rawServerName !== undefined) {
+      if (typeof rawServerName !== "string") {
+        return reply.code(400).send({ error: "serverName must be a string" });
       }
-    },
-  );
+      const err = validateServerName(rawServerName);
+      if (err) return reply.code(400).send({ error: err });
+      serverName = rawServerName.trim();
+    }
+
+    try {
+      const generated = generateRunnerToken(platform, label, serverName);
+      return reply.code(201).send({
+        id: generated.id,
+        token: generated.plaintext,
+        platform: generated.platform,
+        label: generated.label,
+        serverName: generated.serverName,
+        createdAt: generated.createdAt,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("UNIQUE constraint failed: runner.server_name")) {
+        return reply
+          .code(409)
+          .send({ error: "A runner with that server name already exists" });
+      }
+      throw err;
+    }
+  });
 
   // List all tokens (active and revoked). No plaintext is ever returned.
   fastify.get("/tokens", { preHandler: requireSession }, async () => ({

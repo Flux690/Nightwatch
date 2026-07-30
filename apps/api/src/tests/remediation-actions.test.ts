@@ -59,11 +59,12 @@ describe("remediation action record", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("remediation-007").id;
+    TEST_TOKEN = generateRunnerToken("docker", "remediation-007").id;
 
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { commandName, commandInput, correlationId } = msg.payload;
         if (commandName === "RestartDockerService") {
@@ -77,8 +78,8 @@ describe("remediation action record", () => {
           resolveCommand({ correlationId, success: true, result: [] });
         }
       },
-      () => {},
-    );
+      close: () => {},
+    });
 
     setRunnerManifest(TEST_TOKEN, {
       hostname: "remediation-host",

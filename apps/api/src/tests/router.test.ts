@@ -88,12 +88,13 @@ describe("router", () => {
       commandInput: Record<string, unknown>;
     }> = [];
     conns.push(
-      registerRunner(
-        runnerId,
-        opts.silent === true ? () => {} : makeSend(commands),
-        () => {},
-        opts.serverName ?? null,
-      ),
+      registerRunner({
+        runnerId: runnerId,
+        platform: "docker",
+        send: opts.silent === true ? () => {} : makeSend(commands),
+        close: () => {},
+        serverName: opts.serverName ?? null,
+      }),
     );
     setRunnerManifest(
       runnerId,

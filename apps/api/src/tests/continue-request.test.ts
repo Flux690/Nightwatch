@@ -55,11 +55,12 @@ describe("continue-request interrupts", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("continue-032").id;
+    TEST_TOKEN = generateRunnerToken("docker", "continue-032").id;
 
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const {
           commandName: _cn,
@@ -68,8 +69,8 @@ describe("continue-request interrupts", () => {
         } = msg.payload;
         resolveCommand({ correlationId, success: true, result: [] });
       },
-      () => {},
-    );
+      close: () => {},
+    });
     setRunnerManifest(TEST_TOKEN, {
       hostname: "continue-host",
       runnerVersion: "2.0.0",

@@ -1,4 +1,5 @@
 import { randomBytes, createHash, randomUUID } from "node:crypto";
+import { isPlatform, type Platform } from "@nightwarden/shared";
 import { getDb } from "./client.js";
 
 // Runner record stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
@@ -6,6 +7,7 @@ import { getDb } from "./client.js";
 export type RunnerRow = {
   id: string;
   tokenHash: string;
+  platform: Platform;
   label: string | null;
   serverName: string | null;
   createdAt: string;
@@ -15,6 +17,7 @@ export type RunnerRow = {
 // Public view returned by the list endpoint: no hash, no plaintext.
 export type RunnerMeta = {
   id: string;
+  platform: Platform;
   label: string | null;
   serverName: string | null;
   createdAt: string;
@@ -27,7 +30,10 @@ export function hashToken(plaintext: string): string {
 
 // Generate a new runner token. Returns the plaintext exactly once; the DB
 // stores only the SHA-256 hash. Format: nwr_ + 32 random bytes (base64url).
+// platform has no default on purpose: a runner that does not know what it is at
+// mint time is the bug this whole shape exists to make impossible.
 export function generateRunnerToken(
+  platform: Platform,
   label?: string,
   serverName?: string,
 ): { plaintext: string } & RunnerMeta {
@@ -45,11 +51,12 @@ export function generateRunnerToken(
       ).run(serverName);
     }
     db.prepare(
-      `INSERT INTO runner (id, token, label, server_name, created_at)
-       VALUES (@id, @tokenHash, @label, @serverName, @createdAt)`,
+      `INSERT INTO runner (id, token, platform, label, server_name, created_at)
+       VALUES (@id, @tokenHash, @platform, @label, @serverName, @createdAt)`,
     ).run({
       id,
       tokenHash: hashToken(plaintext),
+      platform,
       label: label ?? null,
       serverName: serverName ?? null,
       createdAt,
@@ -60,6 +67,7 @@ export function generateRunnerToken(
   return {
     plaintext,
     id,
+    platform,
     label: label ?? null,
     serverName: serverName ?? null,
     createdAt,
@@ -70,20 +78,44 @@ export function generateRunnerToken(
 const SELECT_ROW = `
   id,
   token             AS tokenHash,
+  platform,
   label,
   server_name       AS serverName,
   created_at        AS createdAt,
   last_used_at      AS lastUsedAt
 `;
 
+function text(raw: Record<string, unknown>, column: string): string {
+  const value = raw[column];
+  if (typeof value !== "string") {
+    throw new Error(`runner.${column} is missing or not text`);
+  }
+  return value;
+}
+
+function nullableText(
+  raw: Record<string, unknown>,
+  column: string,
+): string | null {
+  const value = raw[column];
+  return typeof value === "string" ? value : null;
+}
+
 function mapRow(raw: Record<string, unknown>): RunnerRow {
+  const platform = raw["platform"];
+  // The CHECK constraint already refuses anything else, so this can only fire on
+  // a database edited by hand. Failing beats silently onboarding an unroutable runner.
+  if (!isPlatform(platform)) {
+    throw new Error(`runner.platform holds an unrecognised value`);
+  }
   return {
-    id: raw["id"] as string,
-    tokenHash: raw["tokenHash"] as string,
-    label: (raw["label"] as string | null) ?? null,
-    serverName: (raw["serverName"] as string | null) ?? null,
-    createdAt: raw["createdAt"] as string,
-    lastUsedAt: (raw["lastUsedAt"] as string | null) ?? null,
+    id: text(raw, "id"),
+    tokenHash: text(raw, "tokenHash"),
+    platform,
+    label: nullableText(raw, "label"),
+    serverName: nullableText(raw, "serverName"),
+    createdAt: text(raw, "createdAt"),
+    lastUsedAt: nullableText(raw, "lastUsedAt"),
   };
 }
 

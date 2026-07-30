@@ -1,9 +1,4 @@
-import type { FastifyInstance } from "fastify";
-import { requireSession } from "../auth/session.js";
-import { extractBearerToken } from "../auth/bearer.js";
-import { findRunnerByToken } from "../db/runner.js";
-import { publicWsUrl } from "../env/public-url.js";
-import { RUNNER_IMAGE } from "./image.js";
+import { runnerImage } from "./image.js";
 
 const TEMPLATE = `\
 apiVersion: v1
@@ -96,38 +91,11 @@ spec:
               value: "{{WS_URL}}"
 `;
 
-export function buildManifest(wsUrl: string, token: string): string {
-  return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)
+export function kubernetesInstallManifest(
+  wsUrl: string,
+  token: string,
+): string {
+  return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", runnerImage("kubernetes"))
     .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
     .replaceAll("{{WS_URL}}", wsUrl);
-}
-
-export async function registerManifestRoutes(
-  fastify: FastifyInstance,
-): Promise<void> {
-  fastify.get(
-    "/manifest.yaml",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (!token) {
-        return reply.code(400).send({
-          error: "runner token required in Authorization: Bearer header",
-        });
-      }
-
-      const record = findRunnerByToken(token);
-      if (!record) {
-        return reply.code(404).send({ error: "token not found" });
-      }
-
-      const yaml = buildManifest(
-        publicWsUrl(request, "/api/clients/connect"),
-        token,
-      );
-
-      reply.header("Content-Type", "application/yaml; charset=utf-8");
-      return reply.code(200).send(yaml);
-    },
-  );
 }

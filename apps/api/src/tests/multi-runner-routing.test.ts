@@ -159,21 +159,49 @@ describe("multi-runner routing", () => {
     vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-routing-tests-32b");
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    runnerIdA = generateRunnerToken("routing-a").id;
-    runnerIdB = generateRunnerToken("routing-b").id;
+    runnerIdA = generateRunnerToken("docker", "routing-a").id;
+    runnerIdB = generateRunnerToken("docker", "routing-b").id;
 
-    conns.push(registerRunner(runnerIdA, makeSend(commandsA), () => {}));
+    conns.push(
+      registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: makeSend(commandsA),
+        close: () => {},
+      }),
+    );
     setRunnerManifest(runnerIdA, makeManifest("web-01", ["nginx", "api"]));
 
-    conns.push(registerRunner(runnerIdB, makeSend(commandsB), () => {}));
+    conns.push(
+      registerRunner({
+        runnerId: runnerIdB,
+        platform: "docker",
+        send: makeSend(commandsB),
+        close: () => {},
+      }),
+    );
     setRunnerManifest(runnerIdB, makeManifest("db-02", ["postgres"]));
 
-    runnerId2 = generateRunnerToken("routing-cross").id;
-    conns.push(registerRunner(runnerId2, makeSend(commandsC), () => {}));
+    runnerId2 = generateRunnerToken("docker", "routing-cross").id;
+    conns.push(
+      registerRunner({
+        runnerId: runnerId2,
+        platform: "docker",
+        send: makeSend(commandsC),
+        close: () => {},
+      }),
+    );
     setRunnerManifest(runnerId2, makeManifest("cache-01", ["redis"]));
 
-    runnerIdK = generateRunnerToken("routing-k8s").id;
-    conns.push(registerRunner(runnerIdK, makeSend(commandsK), () => {}));
+    runnerIdK = generateRunnerToken("kubernetes", "routing-k8s").id;
+    conns.push(
+      registerRunner({
+        runnerId: runnerIdK,
+        platform: "docker",
+        send: makeSend(commandsK),
+        close: () => {},
+      }),
+    );
     setRunnerManifest(
       runnerIdK,
       makeK8sManifest("k8s-cluster-01", [

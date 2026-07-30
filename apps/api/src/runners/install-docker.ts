@@ -1,6 +1,8 @@
+import { runnerImage } from "./image.js";
+
 // Inlined because walking up from the module's own path breaks under bundling.
 // Shell ${...} is escaped as \${...}; {{...}} is substituted at serve time.
-export const CONNECT_SCRIPT_TEMPLATE = `#!/usr/bin/env bash
+const TEMPLATE = `#!/usr/bin/env bash
 # NIGHTWARDEN_TOKEN is this runner's own nwr_ credential.
 set -euo pipefail
 
@@ -47,3 +49,9 @@ echo "  Container: \${CONTAINER_NAME}"
 echo ""
 echo "Logs: docker logs -f \${CONTAINER_NAME}"
 `;
+
+export function dockerInstallScript(wsUrl: string, token: string): string {
+  return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", runnerImage("docker"))
+    .replaceAll("{{WS_URL}}", wsUrl)
+    .replaceAll("{{NIGHTWARDEN_TOKEN}}", token);
+}

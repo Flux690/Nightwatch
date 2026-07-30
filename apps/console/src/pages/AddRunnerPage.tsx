@@ -35,12 +35,9 @@ interface MintedToken {
 
 const RUNNER_POLL_MS = 3000;
 
-// Docker installs by running a container; Kubernetes by applying a manifest. The
-// substrate comes from the route, so the wizard never has to ask which one this is.
-const INSTALL_URL: Record<Substrate, string> = {
-  docker: "/api/connect.sh",
-  kubernetes: "/api/manifest.yaml",
-};
+// One endpoint for both: the platform was stored when the token was minted, so
+// the artifact that comes back is the one this runner's row already names.
+const INSTALL_URL = "/api/runners/install";
 
 export function AddRunnerPage({
   substrate,
@@ -116,15 +113,17 @@ export function AddRunnerPage({
       const minted = await apiFetch<MintedToken>("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serverName: displayName.trim() }),
+        body: JSON.stringify({
+          platform: substrate,
+          serverName: displayName.trim(),
+        }),
       });
       setMintedToken(minted);
 
-      const installUrl = INSTALL_URL[substrate];
-      const res = await fetch(installUrl, {
+      const res = await fetch(INSTALL_URL, {
         headers: { Authorization: `Bearer ${minted.token}` },
       });
-      if (!res.ok) throw new Error(`${installUrl} ${res.status}`);
+      if (!res.ok) throw new Error(`${INSTALL_URL} ${res.status}`);
       setInstallText(await res.text());
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {

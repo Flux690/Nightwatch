@@ -19,16 +19,18 @@ import { AddRunnerPage } from "../pages/AddRunnerPage.js";
 const GENERATED_TOKEN = {
   id: "new-token-uuid",
   token: "nwr_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345",
+  platform: "docker" as const,
   label: null,
   createdAt: new Date().toISOString(),
 };
 
-const CONNECT_SCRIPT = "#!/bin/sh\necho install-docker";
-const MANIFEST_YAML = "kind: Deployment\nname: nightwarden-runner";
+// Whatever the row's platform calls for; the wizard renders it without reading it.
+const INSTALL_SCRIPT = "#!/bin/sh\necho install-docker";
 
 const AWAITING_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
+  platform: "docker" as const,
   serverName: null,
   hostname: null,
   createdAt: "2024-01-01T00:00:00Z",
@@ -40,6 +42,7 @@ const AWAITING_RUNNER: RunnerRecord = {
 const CONNECTED_RUNNER: RunnerRecord = {
   id: "new-token-uuid",
   token: "new-token-uuid",
+  platform: "docker" as const,
   serverName: null,
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",
@@ -136,8 +139,7 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
         return jsonOk(GENERATED_TOKEN, 201);
       if (url.startsWith("/api/tokens/") && init?.method === "DELETE")
         return jsonOk({}, 204);
-      if (url === "/api/connect.sh") return textOk(CONNECT_SCRIPT);
-      if (url === "/api/manifest.yaml") return textOk(MANIFEST_YAML);
+      if (url === "/api/runners/install") return textOk(INSTALL_SCRIPT);
       if (url === "/api/alerts/test" && init?.method === "POST")
         return jsonOk({
           ok: true,
@@ -210,6 +212,41 @@ describe("AddRunnerPage", () => {
           expect.objectContaining({
             method: "POST",
             body: expect.stringContaining('"prod-web-01"'),
+          }),
+        );
+      });
+    });
+
+    // The route already knows which platform this is, and the row is the only
+    // place that knowledge survives. Dropping it here is the bug this replaced.
+    it("mints the token against the platform the route names", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+
+      await startInstall(user, { name: "web-01" });
+
+      await waitFor(() => {
+        const mint = fetchMock.mock.calls.find(
+          ([url, init]) => url === "/api/tokens" && init?.method === "POST",
+        );
+        expect(mint).toBeDefined();
+        expect(JSON.parse(String(mint?.[1]?.body))).toMatchObject({
+          platform: "docker",
+        });
+      });
+    });
+
+    it("fetches the install artifact from the one platform-agnostic endpoint", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup();
+
+      await startInstall(user, { name: "web-01" });
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/runners/install",
+          expect.objectContaining({
+            headers: { Authorization: `Bearer ${GENERATED_TOKEN.token}` },
           }),
         );
       });

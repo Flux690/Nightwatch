@@ -1,5 +1,15 @@
 import type { K8sWorkloadKind, ServiceIdentity } from "./service-identity.js";
 
+// What a runner is, decided at onboarding and stored on its row. A runner serves
+// exactly one of these; it is never probed, and never negotiated at runtime.
+export type Platform = "docker" | "kubernetes";
+
+export const PLATFORMS: readonly Platform[] = ["docker", "kubernetes"];
+
+export function isPlatform(value: unknown): value is Platform {
+  return typeof value === "string" && PLATFORMS.some((p) => p === value);
+}
+
 export interface ServiceManifestEntry {
   identity: ServiceIdentity;
   status: string;
@@ -23,6 +33,7 @@ export interface CapabilityManifest {
 export interface RunnerRecord {
   id: string;
   token: string;
+  platform: Platform;
   serverName: string | null;
   hostname: string | null;
   createdAt: string;

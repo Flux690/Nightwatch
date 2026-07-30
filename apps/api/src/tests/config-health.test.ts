@@ -85,12 +85,13 @@ describe("config health", () => {
   }
 
   function connectDocker(id: string, serverName: string): void {
-    const conn = registerRunner(
-      id,
-      () => {},
-      () => {},
-      serverName,
-    );
+    const conn = registerRunner({
+      runnerId: id,
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+      serverName: serverName,
+    });
     setRunnerManifest(id, dockerManifest(`${serverName}-host`));
     runners.push(conn);
   }

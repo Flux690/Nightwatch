@@ -26,6 +26,7 @@ export async function registerRunnerRoutes(
         records.push({
           id: t.id,
           token: t.id,
+          platform: t.platform,
           serverName: t.serverName,
           hostname: null,
           createdAt: t.createdAt,
@@ -39,6 +40,7 @@ export async function registerRunnerRoutes(
         records.push({
           id: t.id,
           token: t.id,
+          platform: t.platform,
           serverName: t.serverName,
           hostname: r.hostname,
           createdAt: t.createdAt,

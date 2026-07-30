@@ -38,13 +38,14 @@ describe("console SSE pipeline", () => {
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    const TEST_TOKEN = generateRunnerToken("test-runner").id;
+    const TEST_TOKEN = generateRunnerToken("docker", "test-runner").id;
 
     // Persistence is local; the scripted provider calls no runner tool here, so
     // the runner receives nothing. Resolve defensively for any stray command.
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
           correlationId: msg.payload.correlationId,
@@ -52,8 +53,8 @@ describe("console SSE pipeline", () => {
           result: [],
         });
       },
-      () => {},
-    );
+      close: () => {},
+    });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
     await mountApi(server, registerConsoleEventRoutes);

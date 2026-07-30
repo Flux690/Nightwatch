@@ -116,23 +116,25 @@ describe("fleet summary injection", () => {
 
   describe("multi-runner fleet", () => {
     beforeAll(() => {
-      runnerIdA = generateRunnerToken("fleet-summary-a").id;
-      runnerIdB = generateRunnerToken("fleet-summary-b").id;
+      runnerIdA = generateRunnerToken("docker", "fleet-summary-a").id;
+      runnerIdB = generateRunnerToken("docker", "fleet-summary-b").id;
     });
 
     it("first user message lists every server and its advertised services", async () => {
-      connA = registerRunner(
-        runnerIdA,
-        () => {},
-        () => {},
-      );
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
-      connB = registerRunner(
-        runnerIdB,
-        () => {},
-        () => {},
-      );
+      connB = registerRunner({
+        runnerId: runnerIdB,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
@@ -155,18 +157,20 @@ describe("fleet summary injection", () => {
     });
 
     it("marks a key two runners advertise, so the model learns it needs `runner` before burning a turn", async () => {
-      connA = registerRunner(
-        runnerIdA,
-        () => {},
-        () => {},
-      );
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
-      connB = registerRunner(
-        runnerIdB,
-        () => {},
-        () => {},
-      );
+      connB = registerRunner({
+        runnerId: runnerIdB,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdB, dockerManifest("db-02", ["nginx"]));
 
       setScript([FINISH]);
@@ -186,18 +190,20 @@ describe("fleet summary injection", () => {
     });
 
     it("a neighbouring server's service identity appears so the agent can reference it", async () => {
-      connA = registerRunner(
-        runnerIdA,
-        () => {},
-        () => {},
-      );
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
-      connB = registerRunner(
-        runnerIdB,
-        () => {},
-        () => {},
-      );
+      connB = registerRunner({
+        runnerId: runnerIdB,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdB, dockerManifest("cache-01", ["redis"]));
 
       setScript([FINISH]);
@@ -216,18 +222,20 @@ describe("fleet summary injection", () => {
     });
 
     it("does not send the raw capability manifest to the model", async () => {
-      connA = registerRunner(
-        runnerIdA,
-        () => {},
-        () => {},
-      );
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx"]));
 
-      connB = registerRunner(
-        runnerIdB,
-        () => {},
-        () => {},
-      );
+      connB = registerRunner({
+        runnerId: runnerIdB,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdB, dockerManifest("db-02", ["postgres"]));
 
       setScript([FINISH]);
@@ -248,15 +256,16 @@ describe("fleet summary injection", () => {
 
   describe("graceful degradation", () => {
     beforeAll(() => {
-      runnerIdA = generateRunnerToken("fleet-summary-single").id;
+      runnerIdA = generateRunnerToken("docker", "fleet-summary-single").id;
     });
 
     it("single-runner fleet: fleet summary still lists the one server", async () => {
-      connA = registerRunner(
-        runnerIdA,
-        () => {},
-        () => {},
-      );
+      connA = registerRunner({
+        runnerId: runnerIdA,
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
 
       setScript([FINISH]);

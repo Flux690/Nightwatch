@@ -74,11 +74,12 @@ describe("alert batching (REST seam + fake timers)", () => {
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    conn = registerRunner(
-      "batching-runner-token",
-      () => {},
-      () => {},
-    );
+    conn = registerRunner({
+      runnerId: "batching-runner-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("batching-runner-token", WEB_01_MANIFEST);
     server = Fastify({ logger: false });
     await mountApi(server, registerAlertRoutes);

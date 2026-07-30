@@ -47,17 +47,18 @@ describe("termination paths: every run ends in model text, no escalation", () =>
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
-    TEST_TOKEN = generateRunnerToken("test-esc-runner").id;
+    TEST_TOKEN = generateRunnerToken("docker", "test-esc-runner").id;
 
-    conn = registerRunner(
-      TEST_TOKEN,
-      (raw: string) => {
+    conn = registerRunner({
+      runnerId: TEST_TOKEN,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         const { correlationId } = msg.payload;
         resolveCommand({ correlationId, success: true, result: [] });
       },
-      () => {},
-    );
+      close: () => {},
+    });
     setRunnerManifest(TEST_TOKEN, {
       hostname: "esc-host",
       runnerVersion: "2.0.0",

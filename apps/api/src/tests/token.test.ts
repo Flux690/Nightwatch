@@ -47,6 +47,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(201);
@@ -61,6 +62,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const res = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(res.body) as {
@@ -75,12 +77,56 @@ describe("Runner token lifecycle (issue 038)", () => {
       expect(row!.token).not.toContain("nwr_");
     });
 
+    // A runner that does not know what it is at mint time is the defect this
+    // column exists to prevent, so there is no default to fall back on.
+    it("refuses to mint without a platform", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { serverName: "no-platform" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body)).toMatchObject({
+        error: expect.stringContaining("platform"),
+      });
+    });
+
+    it("refuses a platform it does not recognise", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { platform: "nomad" },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("stores the platform on the row and returns it", async () => {
+      const res = await server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        headers: { cookie: `nw_auth=${SESSION}` },
+        payload: { platform: "kubernetes", serverName: "prod-cluster" },
+      });
+      expect(res.statusCode).toBe(201);
+      const { id, platform } = JSON.parse(res.body) as {
+        id: string;
+        platform: string;
+      };
+      expect(platform).toBe("kubernetes");
+      const row = getDb()
+        .prepare("SELECT platform FROM runner WHERE id = ?")
+        .get(id) as { platform: string } | undefined;
+      expect(row?.platform).toBe("kubernetes");
+    });
+
     it("stores an optional label", async () => {
       const res = await server.inject({
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { label: "prod-server" },
+        payload: { platform: "docker", label: "prod-server" },
       });
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.body) as { label: string };
@@ -91,11 +137,13 @@ describe("Runner token lifecycle (issue 038)", () => {
       const a = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const b = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const tokenA = (JSON.parse(a.body) as { token: string }).token;
@@ -108,7 +156,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "web-01" },
+        payload: { platform: "docker", serverName: "web-01" },
       });
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.body) as { serverName: string };
@@ -120,7 +168,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "" },
+        payload: { platform: "docker", serverName: "" },
       });
       expect(res.statusCode).toBe(400);
     });
@@ -130,7 +178,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "prod/web-01" },
+        payload: { platform: "docker", serverName: "prod/web-01" },
       });
       expect(res.statusCode).toBe(400);
     });
@@ -140,7 +188,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "db-server-01" },
+        payload: { platform: "docker", serverName: "db-server-01" },
       });
       const { id: firstId } = JSON.parse(first.body) as { id: string };
 
@@ -148,7 +196,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "db-server-01" },
+        payload: { platform: "docker", serverName: "db-server-01" },
       });
       expect(second.statusCode).toBe(201);
 
@@ -165,7 +213,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "web-prod-01" },
+        payload: { platform: "docker", serverName: "web-prod-01" },
       });
       const { id } = JSON.parse(first.body) as { id: string };
       // Simulate the runner manifesting (manifest handler sets last_used_at).
@@ -175,7 +223,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { serverName: "web-prod-01" },
+        payload: { platform: "docker", serverName: "web-prod-01" },
       });
       expect(res.statusCode).toBe(409);
     });
@@ -187,13 +235,14 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { label: "list-test" },
+        payload: { platform: "docker", label: "list-test" },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
 
       const res = await server.inject({
         method: "GET",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       expect(res.statusCode).toBe(200);
@@ -205,13 +254,14 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { label: "meta-test" },
+        payload: { platform: "docker", label: "meta-test" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
 
       const res = await server.inject({
         method: "GET",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(res.body) as {
@@ -236,7 +286,7 @@ describe("Runner token lifecycle (issue 038)", () => {
         method: "POST",
         url: "/api/tokens",
         headers: { cookie: `nw_auth=${SESSION}` },
-        payload: { label: "to-delete" },
+        payload: { platform: "docker", label: "to-delete" },
       });
       const { id } = JSON.parse(mint.body) as { id: string };
 
@@ -250,6 +300,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const list = await server.inject({
         method: "GET",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
@@ -271,6 +322,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -302,6 +354,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token } = JSON.parse(mint.body) as { token: string };
@@ -350,6 +403,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -384,6 +438,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const mint = await server.inject({
         method: "POST",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { token, id } = JSON.parse(mint.body) as {
@@ -429,6 +484,7 @@ describe("Runner token lifecycle (issue 038)", () => {
       const list = await server.inject({
         method: "GET",
         url: "/api/tokens",
+        payload: { platform: "docker" },
         headers: { cookie: `nw_auth=${SESSION}` },
       });
       const { tokens } = JSON.parse(list.body) as {
@@ -441,7 +497,7 @@ describe("Runner token lifecycle (issue 038)", () => {
 
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
-      const { id: runnerId } = generateRunnerToken("history-test");
+      const { id: runnerId } = generateRunnerToken("docker", "history-test");
       createSession(
         {
           sessionId: "sess-history-1",

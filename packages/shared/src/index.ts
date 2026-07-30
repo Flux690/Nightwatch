@@ -110,9 +110,11 @@ export type {
 export type {
   CapabilityManifest,
   FleetRunner,
+  Platform,
   RunnerRecord,
   ServiceManifestEntry,
 } from "./runner.js";
+export { PLATFORMS, isPlatform } from "./runner.js";
 export type {
   SessionRole,
   SessionMeta,

@@ -77,11 +77,12 @@ describe("POST /alerts/ingest auth", () => {
 
     // Resolution matches the alert's labels against the fleet, so a runner advertising
     // the matching service must be connected for the 200-path tests to mean anything.
-    connAuth = registerRunner(
-      "auth-test-runner-token",
-      () => {},
-      () => {},
-    );
+    connAuth = registerRunner({
+      runnerId: "auth-test-runner-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest(
       "auth-test-runner-token",
       manifest("host-auth-test", [WEB_01_SERVICE]),
@@ -114,7 +115,10 @@ describe("POST /alerts/ingest auth", () => {
   });
 
   it("rejects runner tokens - a runner credential grants runner things, never ingest", async () => {
-    const runnerToken = generateRunnerToken("not-an-alert-source").plaintext;
+    const runnerToken = generateRunnerToken(
+      "docker",
+      "not-an-alert-source",
+    ).plaintext;
     const res = await server.inject({
       method: "POST",
       url: "/api/alerts/ingest",
@@ -285,11 +289,12 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("resolves to the only connected runner when its manifest advertises the matching service", async () => {
-    connA = registerRunner(
-      "runner-a-token",
-      () => {},
-      () => {},
-    );
+    connA = registerRunner({
+      runnerId: "runner-a-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
 
     const res = await server.inject({
@@ -306,17 +311,19 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   // The alert's labels are matched against the fleet, so the right runner among
   // several is found deterministically.
   it("resolves correctly among multiple connected runners by matching the advertised service", async () => {
-    connA = registerRunner(
-      "runner-a-token",
-      () => {},
-      () => {},
-    );
+    connA = registerRunner({
+      runnerId: "runner-a-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-a-token", manifest("host-a"));
-    connB = registerRunner(
-      "runner-b-token",
-      () => {},
-      () => {},
-    );
+    connB = registerRunner({
+      runnerId: "runner-b-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-b-token", manifest("host-b", [WEB_01_SERVICE]));
 
     const res = await server.inject({
@@ -332,11 +339,12 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("enqueues an alert whose identity no runner advertises - the agent triages it from the fleet map", async () => {
-    connA = registerRunner(
-      "runner-a-token",
-      () => {},
-      () => {},
-    );
+    connA = registerRunner({
+      runnerId: "runner-a-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-a-token", manifest("host-a"));
 
     const res = await server.inject({
@@ -355,17 +363,19 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
   });
 
   it("enqueues an alert whose identity two runners advertise - no ambiguity gate at ingest", async () => {
-    connA = registerRunner(
-      "runner-a-token",
-      () => {},
-      () => {},
-    );
+    connA = registerRunner({
+      runnerId: "runner-a-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-a-token", manifest("host-a", [WEB_01_SERVICE]));
-    connB = registerRunner(
-      "runner-b-token",
-      () => {},
-      () => {},
-    );
+    connB = registerRunner({
+      runnerId: "runner-b-token",
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
     setRunnerManifest("runner-b-token", manifest("host-b", [WEB_01_SERVICE]));
 
     const res = await server.inject({

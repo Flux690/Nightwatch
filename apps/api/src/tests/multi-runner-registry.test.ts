@@ -109,8 +109,14 @@ describe("flat runner registry", () => {
   }
 
   it("lists two runners each on their own token with correct manifests", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken("one-up-a");
-    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken("one-up-b");
+    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+      "docker",
+      "one-up-a",
+    );
+    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+      "docker",
+      "one-up-b",
+    );
     const a = await connectRunner(
       port,
       tokenA,
@@ -171,10 +177,14 @@ describe("flat runner registry", () => {
   });
 
   it("drops a runner from the fleet when its socket closes, leaving the other", async () => {
-    const { plaintext: tokenA, id: tokenAId } =
-      generateRunnerToken("close-one-a");
-    const { plaintext: tokenB, id: tokenBId } =
-      generateRunnerToken("close-one-b");
+    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+      "docker",
+      "close-one-a",
+    );
+    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+      "docker",
+      "close-one-b",
+    );
     const a = await connectRunner(port, tokenA, manifest("web-01", ["nginx"]));
     const b = await connectRunner(
       port,
@@ -203,7 +213,10 @@ describe("flat runner registry", () => {
   });
 
   it("a reconnect on the same token displaces the old socket and survives its late close", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken("displace");
+    const { plaintext: token, id: tokenId } = generateRunnerToken(
+      "docker",
+      "displace",
+    );
 
     const a = await connectRunner(
       port,
@@ -247,8 +260,14 @@ describe("flat runner registry", () => {
   });
 
   it("two runners on different tokens both appear in the fleet", async () => {
-    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken("cross-a");
-    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken("cross-b");
+    const { plaintext: tokenA, id: tokenAId } = generateRunnerToken(
+      "docker",
+      "cross-a",
+    );
+    const { plaintext: tokenB, id: tokenBId } = generateRunnerToken(
+      "docker",
+      "cross-b",
+    );
 
     const a = await connectRunner(port, tokenA, manifest("host-a", ["nginx"]));
     const b = await connectRunner(
@@ -279,7 +298,10 @@ describe("flat runner registry", () => {
 
   describe("in-flight commands on socket close", () => {
     it("rejects an in-flight command promptly when the runner socket closes, and drops the late result", async () => {
-      const { plaintext: token, id: tokenId } = generateRunnerToken("inflight");
+      const { plaintext: token, id: tokenId } = generateRunnerToken(
+        "docker",
+        "inflight",
+      );
       const ws = await connectRunner(
         port,
         token,
@@ -330,8 +352,10 @@ describe("flat runner registry", () => {
     });
 
     it("a displaced socket's in-flight command rejects while the replacement stays online", async () => {
-      const { plaintext: token, id: tokenId } =
-        generateRunnerToken("inflight-displace");
+      const { plaintext: token, id: tokenId } = generateRunnerToken(
+        "docker",
+        "inflight-displace",
+      );
       const a = await connectRunner(
         port,
         token,
@@ -381,8 +405,8 @@ describe("flat runner registry", () => {
   });
 
   it("GET /fleet returns connected runners with their service identities, with no token-management fields", async () => {
-    const { plaintext: tokenA } = generateRunnerToken("fleet-a");
-    const { plaintext: tokenB } = generateRunnerToken("fleet-b");
+    const { plaintext: tokenA } = generateRunnerToken("docker", "fleet-a");
+    const { plaintext: tokenB } = generateRunnerToken("docker", "fleet-b");
 
     const a = await connectRunner(
       port,
@@ -474,7 +498,10 @@ describe("protocol ping/pong liveness", () => {
   }
 
   it("terminates a socket that stops answering pings and drops the runner offline", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken("no-pong");
+    const { plaintext: token, id: tokenId } = generateRunnerToken(
+      "docker",
+      "no-pong",
+    );
     // Fake timers before connecting: the per-connection ping interval must be
     // created under fake timers to be advanceable. Date stays real.
     vi.useFakeTimers({
@@ -510,7 +537,10 @@ describe("protocol ping/pong liveness", () => {
   });
 
   it("pongs keep the runner online past the liveness TTL", async () => {
-    const { plaintext: token, id: tokenId } = generateRunnerToken("pong-live");
+    const { plaintext: token, id: tokenId } = generateRunnerToken(
+      "docker",
+      "pong-live",
+    );
     // Date is faked here so fake time can outrun the 120s TTL; pongs must be
     // what keeps lastSeen fresh.
     vi.useFakeTimers({

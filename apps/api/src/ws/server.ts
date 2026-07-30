@@ -42,14 +42,15 @@ export async function registerWsRoutes(
 
       const { id: runnerId } = tokenRecord;
 
-      const conn = registerRunner(
+      const conn = registerRunner({
         runnerId,
-        (msg) => {
+        platform: tokenRecord.platform,
+        serverName: tokenRecord.serverName,
+        send: (msg) => {
           if (socket.readyState === socket.OPEN) socket.send(msg);
         },
-        () => socket.close(4003, "Token revoked"),
-        tokenRecord.serverName,
-      );
+        close: () => socket.close(4003, "Token revoked"),
+      });
 
       fastify.log.info({ runnerId: runnerId.slice(0, 8) }, "runner connected");
 

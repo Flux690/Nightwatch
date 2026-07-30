@@ -138,10 +138,11 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("alert injected mid-run appears in the next tool_results user message", async () => {
-    const runnerId = generateRunnerToken("inject-midrun").id;
-    const conn = registerRunner(
-      runnerId,
-      (raw: string) => {
+    const runnerId = generateRunnerToken("docker", "inject-midrun").id;
+    const conn = registerRunner({
+      runnerId: runnerId,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
           correlationId: msg.payload.correlationId,
@@ -149,8 +150,8 @@ describe("mid-run alert injection (loop seam)", () => {
           result: [{ name: "web-01", status: "running" }],
         });
       },
-      () => {},
-    );
+      close: () => {},
+    });
 
     // One run, two turns: runner read tool, then free-form finish.
     queueRuns([READ, FINISH]);
@@ -192,13 +193,14 @@ describe("mid-run alert injection (loop seam)", () => {
   });
 
   it("an alert for a suspended session starts a new session instead of injecting", async () => {
-    const runnerId = generateRunnerToken("inject-sus").id;
+    const runnerId = generateRunnerToken("docker", "inject-sus").id;
     // connection with a synced cache is required, mirroring ws/server.ts's reconciliation.
-    const susConn = registerRunner(
-      runnerId,
-      () => {},
-      () => {},
-    );
+    const susConn = registerRunner({
+      runnerId: runnerId,
+      platform: "docker",
+      send: () => {},
+      close: () => {},
+    });
 
     // R1: gated tool → run suspends. R2 (new session): free-form finish.
     queueRuns(
@@ -304,11 +306,12 @@ describe("mid-run alert injection (loop seam)", () => {
   // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
   // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
-    const runnerId = generateRunnerToken("inject-resume").id;
+    const runnerId = generateRunnerToken("docker", "inject-resume").id;
     const tokenPlaintext = generateAlertSourceToken("inject-resume");
-    const conn = registerRunner(
-      runnerId,
-      (raw: string) => {
+    const conn = registerRunner({
+      runnerId: runnerId,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
           correlationId: msg.payload.correlationId,
@@ -316,8 +319,8 @@ describe("mid-run alert injection (loop seam)", () => {
           result: { restarted: true },
         });
       },
-      () => {},
-    );
+      close: () => {},
+    });
     setRunnerManifest(runnerId, webOneManifest());
     // Sync the DB mode into the connection cache, as reconciliation would.
 

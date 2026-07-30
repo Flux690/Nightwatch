@@ -58,11 +58,12 @@ describe("toolset assembly by fleet capabilities", () => {
         kubernetes: false,
       });
 
-      const conn = registerRunner(
-        "caps-unit-docker",
-        () => {},
-        () => {},
-      );
+      const conn = registerRunner({
+        runnerId: "caps-unit-docker",
+        platform: "docker",
+        send: () => {},
+        close: () => {},
+      });
       // Connected but manifest not arrived: undefined offers all for the handshake.
       expect(currentFleetCapabilities()).toBeUndefined();
 
@@ -230,11 +231,12 @@ describe("toolset assembly by fleet capabilities", () => {
     beforeAll(async () => {
       cleanupDb = useTempDb();
       SESSION = await mintTestSession();
-      K8S_TOKEN = generateRunnerToken("toolset-k8s-001").id;
+      K8S_TOKEN = generateRunnerToken("kubernetes", "toolset-k8s-001").id;
 
-      connK8s = registerRunner(
-        K8S_TOKEN,
-        (raw: string) => {
+      connK8s = registerRunner({
+        runnerId: K8S_TOKEN,
+        platform: "docker",
+        send: (raw: string) => {
           const msg = JSON.parse(raw) as RunnerCommandMessage;
           const { commandName, correlationId } = msg.payload;
           executedCommands.push(commandName);
@@ -244,8 +246,8 @@ describe("toolset assembly by fleet capabilities", () => {
             result: { success: true },
           });
         },
-        () => {},
-      );
+        close: () => {},
+      });
       setRunnerManifest(K8S_TOKEN, {
         hostname: "k8s-host",
         runnerVersion: "2.0.0",

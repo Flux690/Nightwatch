@@ -79,10 +79,11 @@ describe("a suspended session serves its pending row with its transcript", () =>
   function connectRunner(label: string): {
     conn: ReturnType<typeof registerRunner>;
   } {
-    const token = generateRunnerToken(label).id;
-    const conn = registerRunner(
-      token,
-      (raw: string) => {
+    const token = generateRunnerToken("docker", label).id;
+    const conn = registerRunner({
+      runnerId: token,
+      platform: "docker",
+      send: (raw: string) => {
         const msg = JSON.parse(raw) as RunnerCommandMessage;
         resolveCommand({
           correlationId: msg.payload.correlationId,
@@ -90,8 +91,8 @@ describe("a suspended session serves its pending row with its transcript", () =>
           result: [],
         });
       },
-      () => {},
-    );
+      close: () => {},
+    });
     return { conn };
   }
 

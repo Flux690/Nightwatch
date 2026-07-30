@@ -22,6 +22,7 @@ function dockerRunner(name: string): RunnerRecord {
   return {
     id: name,
     token: name,
+    platform: "docker" as const,
     serverName: name,
     hostname: `${name}-host`,
     createdAt: "2024-01-01T00:00:00Z",

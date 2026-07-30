@@ -34,6 +34,7 @@ const CONFIGURED: GitHubIntegrationStatus = {
 const CONNECTED_RUNNER: RunnerRecord = {
   id: "runner-1",
   token: "runner-1",
+  platform: "docker" as const,
   serverName: "prod-web-01",
   hostname: "web-01",
   createdAt: "2024-01-01T00:00:00Z",

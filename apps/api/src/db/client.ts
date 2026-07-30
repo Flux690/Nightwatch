@@ -6,9 +6,13 @@ import { dbPath } from "../env/paths.js";
 // No upgrade migrations: pre-production, so a schema change is applied by
 // recreating the database, not by migrating data.
 const SCHEMA = `
+  -- platform is what this runner IS, fixed at onboarding. It is never derived from
+  -- what the runner reports, so the row is authoritative before it ever connects;
+  -- the CHECK makes a typo a write failure rather than a runner that matches nothing.
   CREATE TABLE IF NOT EXISTS runner (
     id                TEXT PRIMARY KEY,
     token             TEXT NOT NULL UNIQUE,
+    platform          TEXT NOT NULL CHECK (platform IN ('docker', 'kubernetes')),
     label             TEXT,
     server_name       TEXT UNIQUE,
     created_at        TEXT NOT NULL,
