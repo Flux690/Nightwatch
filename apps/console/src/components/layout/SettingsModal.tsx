@@ -133,10 +133,14 @@ export function SettingsModal({
   const [section, setSection] = useState<SectionId>("model");
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
+  // Never refetched while the modal is open. The form seeds from this once and then
+  // holds what was typed, so a background refetch on window focus would be a read
+  // whose only possible effect is to race the operator mid-edit.
   const { data: config } = useQuery<AgentConfig>({
     queryKey: ["config"],
     queryFn: () => apiFetch<AgentConfig>("/api/config"),
     enabled: opened,
+    staleTime: Infinity,
   });
 
   const { data: providersData } = useQuery<{ providers: ProviderOption[] }>({
