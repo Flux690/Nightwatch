@@ -14,7 +14,6 @@ const WINDOW_START_24H = "2026-07-15T12:00:00.000Z";
 const ALERT: NormalizedAlert = {
   sourceAlertId: "alert-1",
   labels: {},
-  targetIdentifier: { provider: "docker", project: "shop", service: "api" },
   alertType: "OOMKill",
   severity: "critical",
   firedAt: FIRED_AT,

@@ -73,13 +73,6 @@ function k8sSvc(
   return { provider: "kubernetes", namespace, workload };
 }
 
-function scopedSvc(
-  name: string,
-  server: string,
-): { provider: "docker"; project: string; service: string; server: string } {
-  return { provider: "docker", project: name, service: name, server };
-}
-
 function makeManifest(
   hostname: string,
   containers: string[],
@@ -96,8 +89,6 @@ function makeManifest(
       })),
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: true,
-      fileRead: true,
     },
   };
 }
@@ -118,8 +109,6 @@ function makeK8sManifest(
       })),
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: true,
-      fileRead: true,
     },
   };
 }
@@ -298,7 +287,7 @@ describe("multi-runner routing", () => {
     expect(errorMsg?.content).toMatch(/postgres/);
   });
 
-  it("host command with a server name routes to that runner", async () => {
+  it("a host command naming a runner reaches only that runner", async () => {
     setScript([
       {
         text: "Checking db-02 host memory.",
@@ -306,7 +295,7 @@ describe("multi-runner routing", () => {
           {
             id: "tu-4",
             name: "GetHostMemory",
-            input: { server: "db-02" },
+            input: { runner: "db-02" },
           },
         ],
       },
@@ -320,7 +309,7 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
   });
 
-  it("host command without a server produces a tool error listing available server names", async () => {
+  it("a host command with no runner reads every Docker host and names each answer", async () => {
     setScript([
       {
         text: "Checking host memory.",
@@ -331,17 +320,17 @@ describe("multi-runner routing", () => {
 
     const sessionId = await runSession();
 
-    // Neither runner should have received the command.
-    expect(commandsA).toHaveLength(0);
-    expect(commandsB).toHaveLength(0);
+    // Omitting the runner is a fan-out, not a mistake to correct.
+    expect(commandsA).toHaveLength(1);
+    expect(commandsB).toHaveLength(1);
 
-    // The error names the registered servers so the model can retry in one step.
+    // Each answer is attributed, so the model can tell which host is the sick one.
     const messages = getSessionMessages(sessionId);
-    const errorMsg = messages.find(
-      (m) => m.role === "user" && m.content.includes("'server' parameter"),
+    const result = messages.find(
+      (m) => m.role === "user" && m.content.includes("byRunner"),
     );
-    expect(errorMsg?.content).toMatch(/web-01/);
-    expect(errorMsg?.content).toMatch(/db-02/);
+    expect(result?.content).toMatch(/web-01/);
+    expect(result?.content).toMatch(/db-02/);
   });
 
   it("approved remediation executes on the runner that owns the target container", async () => {
@@ -464,153 +453,5 @@ describe("multi-runner routing", () => {
     expect(commandsA).toHaveLength(0);
     expect(commandsB).toHaveLength(0);
     expect(commandsC).toHaveLength(0);
-  });
-});
-
-describe("assigned-name server-scoped routing", () => {
-  // Manifests carry server-scoped Docker identities (NIGHTWARDEN_SERVER_NAME set); routing
-  // must match exclusively on the full (server, project, service) key.
-  let cleanupDb2: () => void;
-  let runnerIdS1: string;
-  let runnerIdS2: string;
-  let connS1: RunnerConnection;
-  let connS2: RunnerConnection;
-
-  const commandsS1: Array<{
-    commandName: string;
-    commandInput: Record<string, unknown>;
-  }> = [];
-  const commandsS2: Array<{
-    commandName: string;
-    commandInput: Record<string, unknown>;
-  }> = [];
-
-  function makeScopedManifest(
-    server: string,
-    services: string[],
-  ): CapabilityManifest {
-    return {
-      hostname: server,
-      runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: services.map((name) => ({
-          identity: scopedSvc(name, server),
-          status: "running",
-        })),
-        postgres: { available: false },
-        redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
-      },
-    };
-  }
-
-  beforeAll(async () => {
-    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-scoped-tests-32byte");
-    cleanupDb2 = useTempDb();
-    await mintTestSession();
-
-    runnerIdS1 = generateRunnerToken("scoped-runner-1").id;
-    connS1 = registerRunner(runnerIdS1, makeSend(commandsS1), () => {});
-    setRunnerManifest(
-      runnerIdS1,
-      makeScopedManifest("prod-server-01", ["api", "worker"]),
-    );
-
-    runnerIdS2 = generateRunnerToken("scoped-runner-2").id;
-    connS2 = registerRunner(runnerIdS2, makeSend(commandsS2), () => {});
-    setRunnerManifest(
-      runnerIdS2,
-      makeScopedManifest("prod-server-02", ["api", "db"]),
-    );
-  });
-
-  afterAll(() => {
-    unregisterRunner(connS1);
-    unregisterRunner(connS2);
-    cleanupDb2();
-    vi.unstubAllEnvs();
-  });
-
-  beforeEach(() => {
-    commandsS1.length = 0;
-    commandsS2.length = 0;
-  });
-
-  async function runScopedSession(): Promise<string> {
-    const sessionId = randomUUID();
-    dispatcher.dispatch({ sessionId, userMessage: "investigate" });
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-    return sessionId;
-  }
-
-  it("routes to the runner whose assigned server name matches the target identity", async () => {
-    setScript([
-      {
-        text: "Checking api on prod-server-01.",
-        toolUses: [
-          {
-            id: "tu-scoped-1",
-            name: "GetDockerLogs",
-            input: { target: "docker/prod-server-01/api/api" },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
-    await runScopedSession();
-
-    expect(commandsS1).toHaveLength(1);
-    expect(commandsS1[0].commandName).toBe("GetDockerLogs");
-    expect(commandsS2).toHaveLength(0);
-  });
-
-  it("routes to the other runner when the server name differs", async () => {
-    setScript([
-      {
-        text: "Checking db on prod-server-02.",
-        toolUses: [
-          {
-            id: "tu-scoped-2",
-            name: "GetDockerLogs",
-            input: { target: "docker/prod-server-02/db/db" },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
-    await runScopedSession();
-
-    expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("GetDockerLogs");
-    expect(commandsS1).toHaveLength(0);
-  });
-
-  it("same service name on different servers routes independently — server scope prevents ambiguity", async () => {
-    // Both runners advertise "api" — server scope is what disambiguates them.
-    // Targeting prod-server-02/api must not reach prod-server-01.
-    setScript([
-      {
-        text: "Checking api on prod-server-02.",
-        toolUses: [
-          {
-            id: "tu-scoped-3",
-            name: "GetDockerLogs",
-            input: { target: "docker/prod-server-02/api/api" },
-          },
-        ],
-      },
-      FINISH_TURN,
-    ]);
-
-    await runScopedSession();
-
-    expect(commandsS2).toHaveLength(1);
-    expect(commandsS2[0].commandName).toBe("GetDockerLogs");
-    expect(commandsS1).toHaveLength(0);
   });
 });

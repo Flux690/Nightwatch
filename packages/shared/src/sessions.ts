@@ -29,7 +29,6 @@ export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;
   investigation: boolean;
   severity: AlertSeverity | null;
-  target: string | null;
   status: SessionRunStatus | null;
   rootCauseLine: string | null;
   // Its own field rather than a reading of `status`, which is null on

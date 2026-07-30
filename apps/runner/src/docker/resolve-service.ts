@@ -1,10 +1,9 @@
 import type Dockerode from "dockerode";
 import { listVisibleContainers } from "./client.js";
-import {
-  notRunningResult,
-  type DockerServiceIdentity,
-  type NoRunningInstanceResult,
-  type ServiceIdentity,
+import type {
+  DockerServiceIdentity,
+  NotFoundResult,
+  ServiceIdentity,
 } from "@nightwarden/shared";
 
 export interface ResolvedContainer {
@@ -14,7 +13,21 @@ export interface ResolvedContainer {
   live: boolean;
 }
 
-export { notRunningResult, type NoRunningInstanceResult };
+// Docker's own vocabulary for a miss. Built here rather than by a shared helper so
+// no one function has to branch on provider to phrase a finding.
+export function noContainerResult(
+  service: ServiceIdentity,
+  reason?: string,
+): NotFoundResult {
+  const label =
+    service.provider === "docker"
+      ? `${service.project}/${service.service}`
+      : `${service.namespace}/${service.workload}`;
+  return {
+    found: false,
+    reason: reason ?? `No running container found for ${label}`,
+  };
+}
 
 // Tool inputs carry the cross-provider ServiceIdentity union; a Docker runner can only ever resolve
 // the Docker arm. A non-docker identity reaching here is a routing/model bug, not a missing-container finding.

@@ -11,7 +11,7 @@ import {
 } from "./prompts/system.js";
 import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
-import { resolveAgainstFleet } from "../alerts/resolve-target.js";
+import { resolveAlertTarget } from "../alerts/resolve-target.js";
 
 export interface InitialContext {
   systemPrompt: string;
@@ -77,29 +77,45 @@ Begin your investigation. Start with the most targeted read tool given the alert
   };
 }
 
-// Always rendered when any runner is connected, even a single one: the map carries the
-// addressable server names the required `server` param needs.
+// Rendered whenever any runner is connected: it carries the addresses the optional
+// `runner` parameter is drawn from. A key two runners advertise is marked so the model
+// learns it needs that parameter; which runner to pass comes from a list result.
 function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   if (!fleetView || fleetView.length === 0) return "";
+
+  const holders = new Map<string, number>();
+  for (const runner of fleetView) {
+    for (const key of new Set(
+      runner.services.map((s) => serviceIdentityKey(s.identity)),
+    )) {
+      holders.set(key, (holders.get(key) ?? 0) + 1);
+    }
+  }
+
   const lines = fleetView.map((r) => {
     const name = r.serverName ?? r.hostname;
     const identities =
-      r.services.map((s) => serviceIdentityKey(s.identity)).join(", ") ||
-      "no services advertised";
+      r.services
+        .map((s) => {
+          const key = serviceIdentityKey(s.identity);
+          return (holders.get(key) ?? 0) > 1 ? `${key} (shared)` : key;
+        })
+        .join(", ") || "no services advertised";
     return `  ${name}: ${identities}`;
   });
   return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }
 
-// Resolve the alert's candidate identity against the fleet: a resolved target names the key
-// to act on; ambiguous/unresolved hand the agent the raw labels to match itself, never a guess.
+// Match the alert's labels against the fleet: a resolved target names the key to act on;
+// ambiguous names the runners to choose between; unresolved hands the agent the raw labels
+// to match itself, never a guess. Every label is rendered below either way.
 function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
-  const resolution = resolveAgainstFleet(alert.targetIdentifier, fleet);
+  const resolution = resolveAlertTarget(alert.labels, fleet);
   const targetLine =
     resolution.kind === "resolved"
       ? resolution.key
       : resolution.kind === "ambiguous"
-        ? `ambiguous — "${resolution.key}" runs on ${resolution.servers.join(", ")}; identify which server before acting`
+        ? `${resolution.key} — advertised by ${resolution.runners.join(", ")}. Pass runner="<name>" on your calls to pick one.`
         : "unidentified — match the labels below to a known service, or use a list tool";
   const labels = Object.entries(alert.labels)
     .map(([k, v]) => `${k}=${v}`)

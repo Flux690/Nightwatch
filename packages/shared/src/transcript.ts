@@ -73,6 +73,9 @@ export interface ApprovalCardItem {
   toolName: string;
   input: Record<string, unknown>;
   risk?: string;
+  // How often this exact write already landed recently, computed from the audit log.
+  // Present only when it has happened before; the card informs, it never refuses.
+  recent?: { count: number; windowMinutes: number };
   state: ToolCallState;
 }
 

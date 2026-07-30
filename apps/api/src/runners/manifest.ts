@@ -38,7 +38,7 @@ metadata:
   name: nightwarden-runner-write
 rules:
   - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
     verbs: ["patch"]
   - apiGroups: [""]
     resources: ["pods/exec"]
@@ -94,19 +94,12 @@ spec:
               value: "{{NIGHTWARDEN_TOKEN}}"
             - name: WS_URL
               value: "{{WS_URL}}"
-            - name: NIGHTWARDEN_SERVER_NAME
-              value: "{{NIGHTWARDEN_SERVER_NAME}}"
 `;
 
-export function buildManifest(
-  wsUrl: string,
-  token: string,
-  serverName = "",
-): string {
+export function buildManifest(wsUrl: string, token: string): string {
   return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)
     .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
-    .replaceAll("{{WS_URL}}", wsUrl)
-    .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
+    .replaceAll("{{WS_URL}}", wsUrl);
 }
 
 export async function registerManifestRoutes(
@@ -131,7 +124,6 @@ export async function registerManifestRoutes(
       const yaml = buildManifest(
         publicWsUrl(request, "/api/clients/connect"),
         token,
-        record.serverName ?? "",
       );
 
       reply.header("Content-Type", "application/yaml; charset=utf-8");

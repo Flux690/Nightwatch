@@ -2,6 +2,7 @@ import { executeRunnerTool } from "../executor.js";
 import { DEFAULT_TOOL_TIMEOUT_MS } from "../../llm/config.js";
 import { DOCKER_TOOLS } from "./docker.js";
 import { GITHUB_TOOLS } from "./github.js";
+import { HOST_TOOLS } from "./host.js";
 import { K8S_TOOLS } from "./kubernetes.js";
 import { INTERRUPT_TOOLS } from "./interrupts.js";
 import { LOKI_TOOLS } from "./loki.js";
@@ -22,6 +23,7 @@ import type { RunMode } from "@nightwarden/shared";
 // route; an api tool's execute IS its implementation - no mapping table.
 export const TOOL_REGISTRY: Tool[] = [
   ...DOCKER_TOOLS,
+  ...HOST_TOOLS,
   ...K8S_TOOLS,
   ...INTERRUPT_TOOLS,
   ...REPO_TOOLS,
@@ -48,7 +50,7 @@ export function executeTool(
     ),
   };
   if (tool.on === "api") return tool.execute(input, effectiveCtx);
-  return executeRunnerTool(tool.schema.name, tool.route, input, effectiveCtx);
+  return executeRunnerTool(tool, input, effectiveCtx);
 }
 
 // The single resolver used by both the loop and human-input (resuming a stored
@@ -79,7 +81,11 @@ export function effectiveToolset(
 ): Tool[] {
   const { github = true, prometheus = true, loki = true } = connections;
   return [
-    ...(caps === undefined || caps.docker ? DOCKER_TOOLS : []),
+    // Host tools ride with Docker: they gate on the substrate, since host facts
+    // only mean something on a runner that is 1:1 with its machine.
+    ...(caps === undefined || caps.docker
+      ? [...DOCKER_TOOLS, ...HOST_TOOLS]
+      : []),
     ...(caps === undefined || caps.kubernetes ? K8S_TOOLS : []),
     ...INTERRUPT_TOOLS,
     ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),

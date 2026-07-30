@@ -13,7 +13,11 @@ import {
 } from "../agent/report.js";
 import { getPendingHumanInputWithSessionBySessionId } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
-import { listRemediationActionsForSession } from "../db/remediation-actions.js";
+import {
+  countExecutedRemediations,
+  listRemediationActionsForSession,
+  targetKeyFromInput,
+} from "../db/remediation-actions.js";
 
 // Markers the index can resolve become citations; the rest stay literal text, so
 // a tag the model invented can never render as a link to nothing.
@@ -67,16 +71,45 @@ export function toolCallCard(
   }
   if (awaitingKind === "approval") {
     const risk = input["risk"];
+    const recent = recentActionCount(toolName, input);
     return {
       kind: "approval_card",
       toolUseId,
       toolName,
       input,
       ...(typeof risk === "string" && { risk }),
+      ...(recent !== null && { recent }),
       state,
     };
   }
   return { kind: "tool_card", toolUseId, toolName, input, state };
+}
+
+// How long back the approval card looks when telling the operator how often this
+// exact write already landed. A constant, not config: it informs a decision rather
+// than gating one, so there is nothing here for an operator to tune.
+const RECENT_ACTION_WINDOW_MINUTES = 30;
+
+// Computed from the audit log, never authored: repeating a restart is a pattern the
+// human should see before approving another. It reports, it does not refuse - a
+// person who restarts a fifth time has made a decision, not a mistake.
+function recentActionCount(
+  toolName: string,
+  input: Record<string, unknown>,
+): { count: number; windowMinutes: number } | null {
+  const serviceIdentityKey = targetKeyFromInput(input);
+  if (serviceIdentityKey === null) return null;
+  const since = new Date(
+    Date.now() - RECENT_ACTION_WINDOW_MINUTES * 60_000,
+  ).toISOString();
+  const count = countExecutedRemediations({
+    serviceIdentityKey,
+    toolName,
+    since,
+  });
+  return count > 0
+    ? { count, windowMinutes: RECENT_ACTION_WINDOW_MINUTES }
+    : null;
 }
 
 // A tool call's state, in precedence order: what the session is suspended on

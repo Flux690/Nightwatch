@@ -35,6 +35,13 @@ function serviceOf(input: Record<string, unknown>): string | null {
   return inputString(input, "server");
 }
 
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
 // A verb and its object beat "Approve": a generic label is the one users learn
 // to click without reading. Derived from the tool, so it cannot overstate.
 function actionLabel(toolName: string, input: Record<string, unknown>): string {
@@ -97,6 +104,15 @@ export function ApprovalCardPanel({
             <span className="text-ink-subtle select-none">$ </span>
             {command}
           </pre>
+        )}
+
+        {/* Counted from the audit log, never authored. Repeating a fix is rarely
+            fixing it, and 3am is exactly when that pattern is easiest to miss. */}
+        {item.recent !== undefined && !resolved && (
+          <p className="text-sm text-warning">
+            {ordinal(item.recent.count + 1)} time in the last{" "}
+            {item.recent.windowMinutes} minutes.
+          </p>
         )}
 
         {/* Facts about the call, plus the agent's own risk assessment. Its

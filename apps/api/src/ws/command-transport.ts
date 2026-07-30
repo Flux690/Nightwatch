@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type {
+  FleetResult,
   RunnerCommandMessage,
   RunnerResultMessage,
 } from "@nightwarden/shared";
 import { logger } from "../logger.js";
-import { resolveByHost, resolveByService } from "./router.js";
-import type { CommandRoute } from "./router.js";
+import { resolveByRunner, resolveByService } from "./router.js";
+import { addressName } from "./fleet.js";
 import type { RunnerConnection } from "./fleet.js";
 
 // Request/reply correlation for runner commands, owned entirely by this
@@ -57,34 +58,18 @@ export function rejectPendingForConnection(conn: RunnerConnection): void {
   }
 }
 
-export function sendCommand(
+// One runner, one command, one reply.
+function dispatch(
+  conn: RunnerConnection,
   commandName: string,
   commandInput: Record<string, unknown>,
-  route: CommandRoute,
-  timeoutMs = 15_000,
+  timeoutMs: number,
 ): Promise<unknown> {
-  // Resolve synchronously, before the Promise constructor: routing errors are
-  // caller mistakes and should throw, not settle a pending command. Service routes
-  // expand the target key into the structured `service` the runner resolves against,
-  // folding an optional container sub-selector into it.
-  let conn: RunnerConnection;
-  let payloadInput = commandInput;
-  if (route === "service") {
-    const { conn: resolved, identity } = resolveByService(commandInput);
-    conn = resolved;
-    const { target: _target, container, ...rest } = commandInput;
-    const service =
-      container !== undefined ? { ...identity, container } : identity;
-    payloadInput = { ...rest, service };
-  } else {
-    conn = resolveByHost(commandInput);
-  }
-
   const correlationId = randomUUID();
   const msg: RunnerCommandMessage = {
     messageId: randomUUID(),
     type: "command",
-    payload: { commandName, commandInput: payloadInput, correlationId },
+    payload: { commandName, commandInput, correlationId },
   };
 
   return new Promise((resolve, reject) => {
@@ -98,4 +83,54 @@ export function sendCommand(
     pending.set(correlationId, { resolve, reject, timer, conn, commandName });
     conn.send(JSON.stringify(msg));
   });
+}
+
+// A service-routed command finds its one owner and returns that runner's result
+// unwrapped: the model asked about one service and gets one answer.
+export function sendCommand(
+  commandName: string,
+  commandInput: Record<string, unknown>,
+  timeoutMs = 15_000,
+): Promise<unknown> {
+  // Resolved synchronously, before the Promise: a routing error is a caller mistake and
+  // should throw rather than settle a pending command. The target key expands into the
+  // structured `service`; both addressing parameters are stripped before dispatch.
+  const { conn, identity } = resolveByService(commandInput);
+  const { target: _target, runner: _runner, container, ...rest } = commandInput;
+  const service =
+    container !== undefined ? { ...identity, container } : identity;
+  return dispatch(conn, commandName, { ...rest, service }, timeoutMs);
+}
+
+// Reaches every runner that can serve it, in parallel, so a fan-out costs one timeout
+// rather than N. The result is ALWAYS enveloped, single runner included, so the model
+// and the console each have one shape to read.
+export async function sendFleetCommand(
+  commandName: string,
+  commandInput: Record<string, unknown>,
+  substrate: "docker" | "kubernetes",
+  timeoutMs = 15_000,
+): Promise<{ envelope: FleetResult<unknown>; anySucceeded: boolean }> {
+  const conns = resolveByRunner(commandInput, substrate);
+  const { runner: _runner, ...payloadInput } = commandInput;
+
+  const settled = await Promise.allSettled(
+    conns.map((conn) => dispatch(conn, commandName, payloadInput, timeoutMs)),
+  );
+
+  let anySucceeded = false;
+  const byRunner = settled.map((outcome, i) => {
+    const runner = addressName(conns[i]!) ?? conns[i]!.runnerId;
+    if (outcome.status === "fulfilled") {
+      anySucceeded = true;
+      return { runner, result: outcome.value };
+    }
+    // One runner's failure is that entry's result, not the whole call's: the
+    // others still carry evidence.
+    const err: unknown = outcome.reason;
+    const message = err instanceof Error ? err.message : String(err);
+    return { runner, result: `Error: ${message}` };
+  });
+
+  return { envelope: { byRunner }, anySucceeded };
 }

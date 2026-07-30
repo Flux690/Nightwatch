@@ -92,6 +92,23 @@ function worstLine(lines: string[]): { line: string; severe: boolean } | null {
   return last === undefined ? null : { line: last, severe: false };
 }
 
+// A runner-routed result is always enveloped, even for one runner, so a formatter
+// for such a tool reads the entries rather than the shape underneath. Entries whose
+// runner failed carry an error string instead of a record and are skipped here.
+function byRunner(
+  record: Record<string, unknown>,
+): Array<{ runner: string; result: Record<string, unknown> }> | null {
+  const entries = arr(record, "byRunner");
+  if (!entries) return null;
+  return entries.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const { runner, result } = entry as Record<string, unknown>;
+    if (typeof runner !== "string") return [];
+    if (typeof result !== "object" || result === null) return [];
+    return [{ runner, result: result as Record<string, unknown> }];
+  });
+}
+
 type Formatter = (record: Record<string, unknown>) => ToolFinding | null;
 
 const FORMATTERS: Record<string, Formatter> = {
@@ -133,16 +150,45 @@ const FORMATTERS: Record<string, Formatter> = {
     return { text: parts.join(" · "), tone: "normal" };
   },
 
-  GetHostMemory: (r) => {
-    const total = num(r, "totalBytes");
-    const available = num(r, "availableBytes");
-    if (total === null || available === null) return null;
-    // An OOM kill is the whole answer when it happened, so it leads.
-    const oom = r["oomKillerFiredRecently"] === true;
-    const text = `${formatBytes(available)} free of ${formatBytes(total)}`;
-    return oom
-      ? { text: `OOM killer fired · ${text}`, tone: "bad" }
-      : { text, tone: "normal" };
+  GetHostMemory: (record) => {
+    // A fan-out answers for several runners at once. The worst reading is the
+    // finding, and it is named, because "which host" is half the answer.
+    const readings = byRunner(record);
+    if (readings === null) return null;
+    // Counted from the envelope, not from the readings: a runner that errored was
+    // still asked, so its neighbour's answer still needs attributing.
+    const fannedOut = (arr(record, "byRunner") ?? []).length > 1;
+
+    const scored = readings.flatMap(({ runner, result }) => {
+      const total = num(result, "totalBytes");
+      const available = num(result, "availableBytes");
+      if (total === null || available === null) return [];
+      return [
+        {
+          runner,
+          text: `${formatBytes(available)} free of ${formatBytes(total)}`,
+          oom: result["oomKillerFiredRecently"] === true,
+          freeRatio: total > 0 ? available / total : 1,
+        },
+      ];
+    });
+
+    // An OOM kill outranks any amount of free memory; below that, least free wins.
+    const worst = scored.reduce<(typeof scored)[number] | null>(
+      (acc, r) =>
+        acc === null ||
+        (r.oom && !acc.oom) ||
+        (r.oom === acc.oom && r.freeRatio < acc.freeRatio)
+          ? r
+          : acc,
+      null,
+    );
+    if (worst === null) return null;
+
+    const named = fannedOut ? `${worst.runner}: ` : "";
+    return worst.oom
+      ? { text: `${named}OOM killer fired · ${worst.text}`, tone: "bad" }
+      : { text: `${named}${worst.text}`, tone: "normal" };
   },
 
   GetDockerConfig: (r) => {

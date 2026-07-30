@@ -53,8 +53,6 @@ function dockerManifest(
       })),
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: false,
-      fileRead: false,
     },
   };
 }
@@ -62,8 +60,13 @@ function dockerManifest(
 function makeAlert(service: string): NormalizedAlert {
   return {
     sourceAlertId: `alert-${randomUUID()}`,
-    labels: {},
-    targetIdentifier: { provider: "docker", project: service, service },
+    // The labels are the whole record of what the alert named; the Compose pair
+    // is what the manifest fixtures below advertise.
+    labels: {
+      alertname: "HighCPU",
+      "com.docker.compose.project": service,
+      "com.docker.compose.service": service,
+    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),
@@ -149,6 +152,37 @@ describe("fleet summary injection", () => {
       expect(msg).toContain("nginx");
       expect(msg).toContain("api");
       expect(msg).toContain("postgres");
+    });
+
+    it("marks a key two runners advertise, so the model learns it needs `runner` before burning a turn", async () => {
+      connA = registerRunner(
+        runnerIdA,
+        () => {},
+        () => {},
+      );
+      setRunnerManifest(runnerIdA, dockerManifest("web-01", ["nginx", "api"]));
+
+      connB = registerRunner(
+        runnerIdB,
+        () => {},
+        () => {},
+      );
+      setRunnerManifest(runnerIdB, dockerManifest("db-02", ["nginx"]));
+
+      setScript([FINISH]);
+
+      const sessionId = randomUUID();
+      dispatcher.dispatch({ sessionId, alert: makeAlert("nginx") });
+      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+      const msg = captureStartMessage();
+
+      // Constant-size on purpose: naming the other holders would annotate every
+      // key on a homogeneous fleet with all of its peers.
+      expect(msg).toContain("docker/nginx/nginx (shared)");
+      // A key only one runner has carries no marker.
+      expect(msg).toContain("docker/api/api");
+      expect(msg).not.toContain("docker/api/api (shared)");
     });
 
     it("a neighbouring server's service identity appears so the agent can reference it", async () => {

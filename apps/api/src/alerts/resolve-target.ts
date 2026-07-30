@@ -1,89 +1,169 @@
 import {
+  composeServiceLabels,
   serviceIdentityKey,
   type FleetRunner,
-  type NormalizedAlert,
+  type K8sWorkloadKind,
   type ServiceIdentity,
+  type ServiceManifestEntry,
 } from "@nightwarden/shared";
 
-// The alert's candidate target key, for display (session titles, PR body).
-// "unidentified" when the labels named no service.
-export function displayIdentity(alert: NormalizedAlert): string {
-  return alert.targetIdentifier
-    ? serviceIdentityKey(alert.targetIdentifier)
-    : "unidentified";
-}
-
-// The outcome of matching an alert's candidate identity against the live fleet.
-// resolved routes and names; ambiguous/unresolved hand the agent the raw labels.
+// The outcome of matching an alert's labels against the live fleet. Resolved names the key to
+// act on; ambiguous names the runners to disambiguate between; unresolved hands the agent the
+// raw labels, which formatAlert renders in full alongside the fleet summary.
 export type AlertResolution =
   | { kind: "resolved"; identity: ServiceIdentity; key: string }
-  | { kind: "ambiguous"; key: string; servers: string[] }
-  | { kind: "unresolved"; key: string | null };
+  | { kind: "ambiguous"; key: string; runners: string[] }
+  | { kind: "unresolved" };
 
-// The key with the server/cluster scope segment dropped, for the scope-tolerant match.
-function unscopedKey(id: ServiceIdentity): string {
-  return id.provider === "docker"
-    ? `docker/${id.project}/${id.service}`
-    : `kubernetes/${id.namespace}/${id.workload}`;
-}
-
-function hasScope(id: ServiceIdentity): boolean {
-  return id.provider === "docker"
-    ? id.server !== undefined
-    : id.cluster !== undefined;
-}
-
-interface FleetService {
-  identity: ServiceIdentity;
-  server: string | null;
-}
-
-function fleetServices(fleet: FleetRunner[]): FleetService[] {
-  return fleet.flatMap((r) =>
-    r.services.map((s) => ({
-      identity: s.identity,
-      server: r.serverName ?? r.hostname,
-    })),
-  );
-}
-
-// Exact key first; then, when the candidate carries no server/cluster scope, match on
-// the unscoped key - a unique hit resolves (scope was optional), several is ambiguous
-// (this is where nw_server is needed). No match, or no candidate, is unresolved.
-export function resolveAgainstFleet(
-  candidate: ServiceIdentity | null,
+// Walks what the fleet actually advertises and asks, per entry, whether these labels describe it.
+// The other direction - minting every identity the labels could name, then filtering - invents keys
+// nothing advertises, and each phantom then has to be reasoned about.
+export function resolveAlertTarget(
+  labels: Record<string, string>,
   fleet: FleetRunner[],
 ): AlertResolution {
-  if (candidate === null) return { kind: "unresolved", key: null };
-  const candKey = serviceIdentityKey(candidate);
-  const services = fleetServices(fleet);
+  const matches: Array<{
+    key: string;
+    identity: ServiceIdentity;
+    runner: string;
+  }> = [];
 
-  const exact = services.filter(
-    (s) => serviceIdentityKey(s.identity) === candKey,
+  for (const runner of fleet) {
+    const runnerName = runner.serverName ?? runner.hostname;
+    for (const entry of runner.services) {
+      if (!alertDescribes(labels, entry)) continue;
+      matches.push({
+        key: serviceIdentityKey(entry.identity),
+        identity: entry.identity,
+        runner: runnerName,
+      });
+    }
+  }
+
+  const keys = new Set(matches.map((m) => m.key));
+  // More than one distinct service, or none: no candidate outranks another, so we
+  // say nothing rather than pick. The agent has every label and a list tool.
+  if (keys.size !== 1) return { kind: "unresolved" };
+
+  const first = matches[0]!;
+  const runners = [...new Set(matches.map((m) => m.runner))];
+  if (runners.length > 1) {
+    return { kind: "ambiguous", key: first.key, runners };
+  }
+  return { kind: "resolved", identity: first.identity, key: first.key };
+}
+
+function alertDescribes(
+  labels: Record<string, string>,
+  entry: ServiceManifestEntry,
+): boolean {
+  return entry.identity.provider === "docker"
+    ? describesDockerService(labels, entry.identity)
+    : describesK8sWorkload(labels, entry.identity, entry.kind);
+}
+
+function describesDockerService(
+  labels: Record<string, string>,
+  identity: { project: string; service: string },
+): boolean {
+  // A namespace means Kubernetes, which Docker and Compose alerts never carry. Without
+  // this, a Kubernetes alert's `container` label would match a Docker host that happens to
+  // run an anonymous container of the same name, and the second key would force unresolved.
+  if (labels["namespace"] !== undefined) return false;
+
+  // Compose labels are re-stamped on every recreate, so when present they are the
+  // authority; a non-match here is a no, never a reason to fall through to a name.
+  const compose = composeServiceLabels(labels);
+  if (compose !== null) {
+    return (
+      compose.project === identity.project &&
+      compose.service === identity.service
+    );
+  }
+
+  // No Compose labels: the only thing left is the live container name, which is
+  // exactly the shape an anonymous `docker run` container is advertised under.
+  const liveName = labels["name"] ?? labels["container"];
+  return (
+    liveName !== undefined &&
+    liveName !== "" &&
+    liveName === identity.project &&
+    liveName === identity.service
   );
-  if (exact.length === 1) {
-    return { kind: "resolved", identity: exact[0]!.identity, key: candKey };
+}
+
+// Which label named the workload also names its kind, so a `statefulset` label can
+// never match a Deployment that happens to share the name.
+const WORKLOAD_LABELS: Array<[string, K8sWorkloadKind]> = [
+  ["deployment", "Deployment"],
+  ["statefulset", "StatefulSet"],
+  ["daemonset", "DaemonSet"],
+];
+
+function describesK8sWorkload(
+  labels: Record<string, string>,
+  identity: { namespace: string; workload: string },
+  kind: K8sWorkloadKind | undefined,
+): boolean {
+  if (labels["namespace"] !== identity.namespace) return false;
+
+  for (const [label, labelKind] of WORKLOAD_LABELS) {
+    const named = labels[label];
+    if (named === undefined) continue;
+    if (kind !== undefined && kind !== labelKind) return false;
+    return named === identity.workload;
   }
 
-  if (!hasScope(candidate)) {
-    const matches = services.filter((s) => unscopedKey(s.identity) === candKey);
-    if (matches.length === 1) {
-      const m = matches[0]!;
-      return {
-        kind: "resolved",
-        identity: m.identity,
-        key: serviceIdentityKey(m.identity),
-      };
-    }
-    if (matches.length > 1) {
-      const servers = [
-        ...new Set(
-          matches.map((m) => m.server).filter((s): s is string => s !== null),
-        ),
-      ];
-      return { kind: "ambiguous", key: candKey, servers };
-    }
+  // Only a pod name: recoverable from its shape, but every shape rule below is a
+  // statement about a kind, so an entry that does not declare one cannot be matched.
+  const pod = labels["pod"];
+  if (pod === undefined || kind === undefined) return false;
+  return podBelongsToWorkload(pod, identity.workload, kind);
+}
+
+// rand.String(5) in k8s.io/apimachinery/pkg/util/rand: the random suffix every
+// generated pod name ends with.
+const POD_SUFFIX_ALPHABET = "bcdfghjklmnpqrstvwxz2456789";
+// A ReplicaSet's pod-template-hash is rand.SafeEncodeString(fmt.Sprint(fnv32a.Sum32())),
+// which maps each BYTE of a decimal string through alphanums[b % 27]. The input bytes are
+// only ever '0'-'9', so the output is only ever these ten characters.
+const TEMPLATE_HASH_ALPHABET = "456789bcdf";
+
+function allFrom(text: string, alphabet: string): boolean {
+  for (const char of text) {
+    if (!alphabet.includes(char)) return false;
+  }
+  return text.length > 0;
+}
+
+// Kubernetes generates pod names from the owning object, so the owner is recoverable from the
+// name's shape - but only against a known kind. Matching bare names would resolve pod `web-0` to
+// a Deployment named `web`, and a Job's pod `backup-x9k2m` to a Deployment named `backup`.
+export function podBelongsToWorkload(
+  podName: string,
+  workload: string,
+  kind: K8sWorkloadKind,
+): boolean {
+  const prefix = `${workload}-`;
+  if (!podName.startsWith(prefix)) return false;
+  const remainder = podName.slice(prefix.length);
+
+  if (kind === "StatefulSet") return /^\d+$/.test(remainder);
+  if (kind === "DaemonSet") {
+    return remainder.length === 5 && allFrom(remainder, POD_SUFFIX_ALPHABET);
   }
 
-  return { kind: "unresolved", key: candKey };
+  // Deployment: <pod-template-hash>-<5 random>. The narrow hash alphabet closes the
+  // CronJob case: `backup-<unix-minutes>-<5 random>` fits this shape structurally, but
+  // a unix-minute timestamp begins with `2`, which is not a template-hash character.
+  const split = remainder.lastIndexOf("-");
+  if (split <= 0) return false;
+  const hash = remainder.slice(0, split);
+  const suffix = remainder.slice(split + 1);
+  return (
+    hash.length <= 10 &&
+    allFrom(hash, TEMPLATE_HASH_ALPHABET) &&
+    suffix.length === 5 &&
+    allFrom(suffix, POD_SUFFIX_ALPHABET)
+  );
 }

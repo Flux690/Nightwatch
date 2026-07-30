@@ -36,8 +36,6 @@ function dockerRunner(name: string): RunnerRecord {
         services: [],
         postgres: { available: false },
         redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
       },
     },
   };
@@ -190,7 +188,7 @@ describe("AlertmanagerPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("configured: receiver stays visible with a masked token until Show token, which also enables the test", async () => {
+  it("configured: receiver stays visible with a masked token until Show token", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ configured: true });
 
@@ -201,9 +199,6 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /test webhook/i }),
-    ).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /show token/i }));
     await waitFor(() => {
@@ -218,7 +213,6 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.getByRole("button", { name: /copy alertmanager receiver/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /test webhook/i })).toBeEnabled();
     // Revealing is not setup: the status line stays put, no layout jump.
     expect(screen.getByText(/waiting for first alert/i)).toBeInTheDocument();
 
@@ -280,112 +274,5 @@ describe("AlertmanagerPage", () => {
       screen.queryByText(/waiting for first alert/i),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/receiving/i)).not.toBeInTheDocument();
-  });
-
-  it("test webhook posts the nw_server-labelled sample with the credential and shows the fleet match", async () => {
-    const user = userEvent.setup();
-    const { fetchMock } = setup({ configured: true });
-
-    await user.click(
-      await screen.findByRole("button", { name: /show token/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /test webhook/i }),
-    );
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/alerts/validate",
-        expect.objectContaining({
-          method: "POST",
-          headers: expect.objectContaining({
-            Authorization: `Bearer ${INGEST_TOKEN}`,
-          }),
-        }),
-      );
-    });
-    const validateCall = fetchMock.mock.calls.find(
-      (call) => call[0] === "/api/alerts/validate",
-    )!;
-    expect(String((validateCall[1] as RequestInit).body)).toContain(
-      '"nw_server":"prod-web-01"',
-    );
-    expect(
-      await screen.findByText(/resolved to one server/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/advertised on prod-web-01/i)).toBeInTheDocument();
-  });
-
-  it("an unmatched sample explains the fleet-map triage instead of claiming failure", async () => {
-    const user = userEvent.setup();
-    setup({
-      configured: true,
-      validate: {
-        alerts: [
-          {
-            sourceAlertId: "sample",
-            identityKey: "docker/sample-service/sample-service",
-            advertisedOn: [],
-            exactMatch: false,
-          },
-        ],
-      },
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: /show token/i }),
-    );
-    await user.click(
-      await screen.findByRole("button", { name: /test webhook/i }),
-    );
-
-    expect(await screen.findByText(/no exact match/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/the agent triages it from the fleet map/i),
-    ).toBeInTheDocument();
-  });
-
-  it("offers the label only once a server carries a name", async () => {
-    const { view } = setup({ configured: true, runners: [] });
-    await screen.findByText(/waiting for first alert/i);
-    expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
-    view.unmount();
-    vi.unstubAllGlobals();
-
-    // An unnamed runner scopes nothing, so its alerts need no label.
-    const unnamed = { ...dockerRunner("prod-web-01"), serverName: null };
-    const second = setup({ configured: true, runners: [unnamed] });
-    expect(await screen.findByText(/no server is named/i)).toBeInTheDocument();
-    expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
-    second.view.unmount();
-    vi.unstubAllGlobals();
-
-    // Naming it is what makes the label necessary, so that is when it appears.
-    setup({ configured: true, runners: [dockerRunner("prod-web-01")] });
-    expect(
-      await screen.findByText(/nw_server: "prod-web-01"/),
-    ).toBeInTheDocument();
-  });
-
-  it("with two servers: dropdown of runner names drives external_labels, per-target snippet as the aside", async () => {
-    const user = userEvent.setup();
-    setup({
-      configured: true,
-      runners: [dockerRunner("prod-web-01"), dockerRunner("prod-web-02")],
-    });
-
-    expect(
-      await screen.findByText(/say which server they're about/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/nw_server: "prod-web-01"/)).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByLabelText(/^server$/i), "prod-web-02");
-    expect(screen.getByText(/nw_server: "prod-web-02"/)).toBeInTheDocument();
-    // external_labels is the primary snippet: one line, right for the common
-    // case of one Prometheus per server.
-    expect(
-      screen.getByRole("button", { name: /copy external_labels/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/label each target instead/i)).toBeInTheDocument();
   });
 });

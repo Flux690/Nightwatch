@@ -16,8 +16,6 @@ export function manifest(
       services,
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: false,
-      fileRead: false,
     },
   };
 }

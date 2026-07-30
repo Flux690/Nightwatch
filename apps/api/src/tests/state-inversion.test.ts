@@ -202,11 +202,6 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: "src-9",
       labels: {},
-      targetIdentifier: {
-        provider: "docker",
-        project: "web-01",
-        service: "web-01",
-      },
       alertType: "HighMemory",
       severity: "warning",
       firedAt: new Date().toISOString(),

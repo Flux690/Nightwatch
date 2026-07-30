@@ -126,7 +126,7 @@ describe("execCommand handler", () => {
 
     expect(result).toEqual({
       found: false,
-      reason: "No running instance found for myapp/web-01",
+      reason: "No running container found for myapp/web-01",
     });
     expect(exec).not.toHaveBeenCalled();
   });

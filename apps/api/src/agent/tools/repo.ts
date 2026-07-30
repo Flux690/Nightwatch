@@ -1,4 +1,3 @@
-import { displayIdentity } from "../../alerts/resolve-target.js";
 import { decrypt } from "../../secrets.js";
 import { proxyDir, workspacesDir } from "../../env/paths.js";
 import { loadConfig } from "../../config/store.js";
@@ -33,17 +32,12 @@ import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
 import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
-import type { ServiceIdentity } from "@nightwarden/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
 export const COMMIT_AUTHOR = {
   name: "NightWarden",
   email: "noreply@nightwarden.local",
 };
-
-function slugTarget(identity: ServiceIdentity): string {
-  return identity.provider === "docker" ? identity.service : identity.workload;
-}
 
 function slugify(text: string): string {
   const slug = text
@@ -55,18 +49,12 @@ function slugify(text: string): string {
   return slug.length > 0 ? slug : "incident";
 }
 
-// A pure function of the session row: any resume recomputes the identical
-// branch with nothing persisted, so one session maps to one branch forever.
+// Pure function of the session row, so any resume recomputes the identical branch and
+// openPullRequest finds its existing PR instead of opening a second one. The alert type
+// is decoration, for a human scanning the branch list.
 export function branchNameFor(sessionId: string): string {
   const alert = getSession(sessionId)?.originatingAlert ?? null;
-  const slug =
-    alert === null
-      ? "chat"
-      : slugify(
-          alert.targetIdentifier
-            ? `${alert.alertType}-${slugTarget(alert.targetIdentifier)}`
-            : alert.alertType,
-        );
+  const slug = alert === null ? "chat" : slugify(alert.alertType);
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
 
@@ -193,7 +181,7 @@ function composePrBody(
   sections.push(
     alert === null
       ? "## Incident\n\nStarted from a NightWarden chat session."
-      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Target: ${displayIdentity(alert)}\n- Fired at: ${alert.firedAt}`,
+      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Fired at: ${alert.firedAt}`,
   );
 
   if (filesChanged.length > 0) {

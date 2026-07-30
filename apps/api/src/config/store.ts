@@ -2,8 +2,6 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import {
   DEFAULT_CHECK_IN_AFTER_MS,
-  DEFAULT_REMEDIATION_BREAKER_LIMIT,
-  DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
   DEFAULT_SANDBOX_ALLOWLIST_HOSTS,
   DEFAULT_SANDBOX_CPUS,
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
@@ -38,8 +36,6 @@ type ConfigRow = {
   requestTimeoutMs: number;
   checkInAfterMs: number;
   toolCallCeilingMs: number;
-  remediationBreakerLimit: number;
-  remediationBreakerWindowMs: number;
   sandboxIdleTimeoutMs: number;
   sandboxCpus: number;
   sandboxMemoryMb: number;
@@ -66,8 +62,6 @@ const SELECT_CONFIG = `
          request_timeout_ms AS requestTimeoutMs,
          check_in_after_ms  AS checkInAfterMs,
          tool_call_ceiling_ms AS toolCallCeilingMs,
-         remediation_breaker_limit     AS remediationBreakerLimit,
-         remediation_breaker_window_ms AS remediationBreakerWindowMs,
          sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
          sandbox_cpus            AS sandboxCpus,
          sandbox_memory_mb       AS sandboxMemoryMb,
@@ -167,8 +161,6 @@ export function loadConfig(): AgentConfig {
       requestTimeoutMs: REQUEST_TIMEOUT_MS,
       checkInAfterMs: DEFAULT_CHECK_IN_AFTER_MS,
       toolCallCeilingMs: DEFAULT_TOOL_CALL_CEILING_MS,
-      remediationBreakerLimit: DEFAULT_REMEDIATION_BREAKER_LIMIT,
-      remediationBreakerWindowMs: DEFAULT_REMEDIATION_BREAKER_WINDOW_MS,
       sandboxIdleTimeoutMs: DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
       sandboxCpus: DEFAULT_SANDBOX_CPUS,
       sandboxMemoryMb: DEFAULT_SANDBOX_MEMORY_MB,
@@ -185,8 +177,6 @@ export function loadConfig(): AgentConfig {
     requestTimeoutMs: row.requestTimeoutMs,
     checkInAfterMs: row.checkInAfterMs,
     toolCallCeilingMs: row.toolCallCeilingMs,
-    remediationBreakerLimit: row.remediationBreakerLimit,
-    remediationBreakerWindowMs: row.remediationBreakerWindowMs,
     sandboxIdleTimeoutMs: row.sandboxIdleTimeoutMs,
     sandboxCpus: row.sandboxCpus,
     sandboxMemoryMb: row.sandboxMemoryMb,
@@ -211,13 +201,11 @@ const UPSERT_CONFIG = `
   INSERT INTO config (
     id, active_provider, max_retries,
     request_timeout_ms, check_in_after_ms, tool_call_ceiling_ms,
-    remediation_breaker_limit, remediation_breaker_window_ms,
     sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
     sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts, updated_at
   ) VALUES (
     @id, @activeProvider, @maxRetries,
     @requestTimeoutMs, @checkInAfterMs, @toolCallCeilingMs,
-    @remediationBreakerLimit, @remediationBreakerWindowMs,
     @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
     @sandboxRequireGvisor, @sandboxNetwork, @sandboxAllowlistHosts, @updatedAt
   )
@@ -227,8 +215,6 @@ const UPSERT_CONFIG = `
     request_timeout_ms = excluded.request_timeout_ms,
     check_in_after_ms = excluded.check_in_after_ms,
     tool_call_ceiling_ms = excluded.tool_call_ceiling_ms,
-    remediation_breaker_limit = excluded.remediation_breaker_limit,
-    remediation_breaker_window_ms = excluded.remediation_breaker_window_ms,
     sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
     sandbox_cpus = excluded.sandbox_cpus,
     sandbox_memory_mb = excluded.sandbox_memory_mb,
@@ -253,8 +239,6 @@ export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
       requestTimeoutMs: next.requestTimeoutMs,
       checkInAfterMs: next.checkInAfterMs,
       toolCallCeilingMs: next.toolCallCeilingMs,
-      remediationBreakerLimit: next.remediationBreakerLimit,
-      remediationBreakerWindowMs: next.remediationBreakerWindowMs,
       sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,
       sandboxCpus: next.sandboxCpus,
       sandboxMemoryMb: next.sandboxMemoryMb,

@@ -28,11 +28,6 @@ function alert(sourceAlertId: string): NormalizedAlert {
   return {
     sourceAlertId,
     labels: {},
-    targetIdentifier: {
-      provider: "docker",
-      project: "web-01",
-      service: "web-01",
-    },
     alertType: "HighMemory",
     severity: "warning",
     firedAt: new Date().toISOString(),

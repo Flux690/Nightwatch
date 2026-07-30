@@ -1,12 +1,10 @@
 import { executeTool } from "./tools/toolset.js";
 import type { Tool, ToolDispatchContext } from "./tools/types.js";
-import { circuitBreakerRejection } from "./breaker.js";
 import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence, stripEvidenceTag } from "./report.js";
 import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
-import type { AgentConfig } from "@nightwarden/shared";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
 export interface GatedTool {
@@ -32,10 +30,9 @@ export async function processToolUses(params: {
   // toolUseId is per call, so the loop hands over a turn-scoped base context
   // and each execution below completes it with its own tool_use id.
   execCtx: Omit<ToolDispatchContext, "toolUseId">;
-  config: AgentConfig;
   log: typeof logger;
 }): Promise<TurnOutcome> {
-  const { toolUses, toolset, sessionId, execCtx, config, log } = params;
+  const { toolUses, toolset, sessionId, execCtx, log } = params;
 
   const toolResults: ToolResult[] = [];
   // Positional evidence tags for citation: derived from the persisted transcript
@@ -69,18 +66,6 @@ export async function processToolUses(params: {
           is_error: true,
         });
         continue;
-      }
-
-      if (entry.access === "write") {
-        const breakerRejection = circuitBreakerRejection(tool, config);
-        if (breakerRejection) {
-          log.warn(
-            { tool: tool.name },
-            "circuit breaker tripped: write refused without approval",
-          );
-          toolResults.push(breakerRejection);
-          continue;
-        }
       }
 
       gatedTool = tool;

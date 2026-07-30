@@ -25,9 +25,8 @@ import {
   ownerIsOrganization,
   validateRepoAccess,
 } from "./github.js";
-import { PrometheusApiError, instantQuery, labelValues } from "./prometheus.js";
-import { LokiApiError, labelNames } from "./loki.js";
-import { getFleetView } from "../ws/fleet.js";
+import { PrometheusApiError, instantQuery } from "./prometheus.js";
+import { LokiApiError, probeLoki } from "./loki.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import { logger } from "../logger.js";
@@ -157,19 +156,6 @@ async function sendLokiError(
     return reply.code(status).send({ error: err.message, code: err.code });
   }
   throw err;
-}
-
-// Cheap, auth- and tenant-exercising probe used at connect and test time: a
-// recent-window label listing proves the URL, credential, and X-Scope-OrgID all
-// work and that discovery will function.
-async function probeLoki(
-  url: string,
-  authHeader: string | null,
-  orgId: string | null,
-): Promise<void> {
-  const end = new Date();
-  const start = new Date(end.getTime() - 60 * 60 * 1000);
-  await labelNames(url, authHeader, orgId, start, end);
 }
 
 export async function registerIntegrationRoutes(

@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import {
-  deriveServiceIdentity,
-  type NormalizedAlert,
-} from "@nightwarden/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 import { logger } from "../../logger.js";
 
-// Parsing IS normalization now: no location is ever stamped on an alert, so
-// the parser's output is the full NormalizedAlert.
+// Parsing IS normalization: no location and no target is ever stamped on an alert.
+// The labels are the whole record of what it named; matching them to a service is
+// the fleet's job, at the moment the agent needs an answer.
 export type ParsedAlert = NormalizedAlert;
 
 // Only the envelope is validated up front; each alert is parsed defensively in the loop, so
@@ -47,7 +45,6 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
 
     parsed.push({
       sourceAlertId: fingerprint,
-      targetIdentifier: deriveServiceIdentity(labels),
       labels,
       alertType: labels["alertname"] ?? "unknown",
       severity: normalizeSeverity(labels["severity"]),

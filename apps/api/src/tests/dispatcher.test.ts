@@ -24,11 +24,6 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
   return {
     sourceAlertId,
     labels: {},
-    targetIdentifier: {
-      provider: "docker",
-      project: "web-01",
-      service: "web-01",
-    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt,

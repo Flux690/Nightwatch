@@ -27,8 +27,6 @@ const SCHEMA = `
     request_timeout_ms INTEGER NOT NULL DEFAULT 120000,
     check_in_after_ms  INTEGER NOT NULL DEFAULT 1800000,
     tool_call_ceiling_ms INTEGER NOT NULL DEFAULT 600000,
-    remediation_breaker_limit     INTEGER NOT NULL DEFAULT 5,
-    remediation_breaker_window_ms INTEGER NOT NULL DEFAULT 600000,
     sandbox_idle_timeout_ms INTEGER NOT NULL DEFAULT 3600000,
     sandbox_cpus            INTEGER NOT NULL DEFAULT 2,
     sandbox_memory_mb       INTEGER NOT NULL DEFAULT 4096,
@@ -131,12 +129,15 @@ repo.yarnpkg.com',
     result               TEXT,
     created_at           TEXT NOT NULL,
     resolved_at          TEXT,
+    -- Write-ahead idempotency: this is what refuses to re-execute an approved write
+    -- after a crash. It must never be widened - a service that moved runners between
+    -- the crash and the retry would then run twice, which is the exact case it exists for.
     UNIQUE (session_id, tool_use_id)
   );
 
-  -- Covers the circuit-breaker count, which filters on exactly these columns on
-  -- every write-approval; without it that check full-scans the audit history.
-  CREATE INDEX IF NOT EXISTS idx_remediation_breaker
+  -- Covers the recent-action count the approval card shows, which filters on exactly
+  -- these columns; without it that read full-scans the audit history.
+  CREATE INDEX IF NOT EXISTS idx_remediation_recent
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
   -- The investigation report, maintained live by the agent during an Investigate

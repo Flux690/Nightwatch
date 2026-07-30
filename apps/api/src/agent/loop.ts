@@ -43,7 +43,6 @@ import {
   buildAlertTitleSource,
 } from "../session/title.js";
 import { dispatcher } from "../dispatcher.js";
-import { displayIdentity } from "../alerts/resolve-target.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
@@ -94,19 +93,19 @@ function persistNewTurns(
   return snap.length;
 }
 
-// null alert = chat session; title from user message. alert session = alert type + target.
+// null alert = chat session; title from user message. A placeholder either way: the
+// title model replaces it seconds later, so the alert type alone is enough here.
 function buildSessionMeta(
   sessionId: string,
   alert: NormalizedAlert | null,
   userMessage: string | undefined,
 ): SessionMeta {
-  const target = alert ? displayIdentity(alert) : "chat";
   return {
     sessionId,
     title:
       alert == null && userMessage
         ? userMessage.slice(0, 80)
-        : `${alert?.alertType ?? "chat"} - ${target}`,
+        : (alert?.alertType ?? "chat"),
     createdAt: new Date().toISOString(),
   };
 }
@@ -250,7 +249,7 @@ export async function runInvestigation(
 
   log.info(
     {
-      target: alert?.targetIdentifier ?? "chat",
+      alertLabels: alert?.labels ?? null,
       severity: alert?.severity ?? "info",
       isChat: alert == null,
     },
@@ -452,7 +451,6 @@ export async function runInvestigation(
       toolset,
       sessionId,
       execCtx,
-      config,
       log,
     });
 
@@ -563,6 +561,15 @@ export async function runInvestigation(
   return "suspended";
 }
 
+// An injected alert names itself by its labels: the run is already under way, so
+// the fleet summary it was opened with is the map the agent matches them against.
+function formatLabels(labels: Record<string, string>): string {
+  const rendered = Object.entries(labels)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+  return rendered || "no labels";
+}
+
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
   const header =
     alerts.length === 1
@@ -574,7 +581,7 @@ function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
     alerts
       .map(
         (a) =>
-          `- [${a.alertType}] ${JSON.stringify(a.targetIdentifier)} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
+          `- [${a.alertType}] ${formatLabels(a.labels)} (${a.severity}) fired at ${a.firedAt} [id: ${a.sourceAlertId}]`,
       )
       .join("\n")
   );

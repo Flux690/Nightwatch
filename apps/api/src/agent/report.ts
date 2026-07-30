@@ -7,7 +7,6 @@ import type {
   Report,
   ReportStatus,
 } from "@nightwarden/shared";
-import { serviceIdentityKey } from "@nightwarden/shared";
 import { getReport, upsertReport } from "../db/reports.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { publishReportUpdated } from "../session/stream.js";
@@ -152,6 +151,15 @@ export function validateReportInput(
   return candidate;
 }
 
+// Labels every alert carries: they identify the rule, not the service, so matching
+// on them would pick an arbitrary series rather than the one under investigation.
+const IGNORED_MATCH_LABELS = new Set([
+  "alertname",
+  "severity",
+  "job",
+  "prometheus",
+]);
+
 function parseJson<T>(content: string): T | null {
   try {
     return JSON.parse(content) as T;
@@ -160,16 +168,18 @@ function parseJson<T>(content: string): T | null {
   }
 }
 
-// Prefer the series whose labels mention the alert target; a query can return
-// several labelsets and the chart should show the one under investigation.
+// Prefer the series whose labels mention the alert, so the chart shows the one under
+// investigation. Matched on the alert's own label values, which came from Prometheus
+// and so are the vocabulary the series already carry.
 function pickSeries(
   series: PrometheusSeries[],
   alert: NormalizedAlert | null,
 ): PrometheusSeries {
   const first = series[0]!;
-  if (alert === null || alert.targetIdentifier === null) return first;
-  const tokens = serviceIdentityKey(alert.targetIdentifier)
-    .split(/[^a-zA-Z0-9-]+/)
+  if (alert === null) return first;
+  const tokens = Object.entries(alert.labels)
+    .filter(([key]) => !IGNORED_MATCH_LABELS.has(key))
+    .map(([, value]) => value)
     .filter((t) => t.length > 2);
   if (tokens.length === 0) return first;
   return (

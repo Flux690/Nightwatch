@@ -16,6 +16,14 @@ const CONTAINER_PROPERTY = {
     "Optional: the specific container in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; omitting it then returns the list of choices.",
 } as const;
 
+// Consulted only when the target key is ambiguous. Supplied by the model from the fleet
+// summary, stripped by the transport before dispatch, never stored, and never part of a key.
+const RUNNER_PROPERTY = {
+  type: "string",
+  description:
+    "Runner name from the FLEET SUMMARY. Required only when the fleet summary marks this target as shared.",
+} as const;
+
 // Read tools: run unattended, so each is a narrow typed question - never
 // arbitrary shell. Safety comes from the shape, not from review.
 export const K8S_TOOLS: Tool[] = [
@@ -23,7 +31,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "ListK8sWorkloads",
       description:
-        "List Kubernetes workloads (Deployments and StatefulSets) with status, image, and health.",
+        "List Kubernetes workloads (Deployments, StatefulSets and DaemonSets) with replica counts, image, and rollout status.",
       input_schema: {
         type: "object",
         properties: {
@@ -32,18 +40,18 @@ export const K8S_TOOLS: Tool[] = [
             description:
               "Kubernetes namespace to list (optional; defaults to 'default').",
           },
-          server: {
+          runner: {
             type: "string",
             description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
+              "Runner name from the FLEET SUMMARY. Omit to read every Kubernetes cluster.",
           },
         },
-        required: ["server"],
       },
     },
     access: "read",
     on: "runner",
-    route: "host",
+    routeBy: "runner",
+    substrate: "kubernetes",
   },
   {
     schema: {
@@ -54,6 +62,7 @@ export const K8S_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           tailLines: {
             type: "number",
@@ -65,58 +74,71 @@ export const K8S_TOOLS: Tool[] = [
             description:
               "ISO 8601 timestamp. Lines within ±30s are always included.",
           },
-          stderrOnly: { type: "boolean" },
         },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
       name: "GetK8sConfig",
       description:
-        "Get a Kubernetes workload's configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
+        "Get a Kubernetes workload's configuration: image, update strategy, resource requests and limits, probes, and volume mounts. Env var and ConfigMap/Secret names only (never values).",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        properties: {
+          target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
+          container: CONTAINER_PROPERTY,
+        },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
       name: "GetK8sStats",
       description:
-        "Get real-time resource usage for a Kubernetes workload: CPU and memory as raw quantified values (e.g. 100m cores, 128Mi), plus network and block I/O.",
+        "Get per-pod resource usage for every pod of a Kubernetes workload: CPU millicores and memory bytes, against each container's requests and limits, plus restart counts and the last termination reason (e.g. OOMKilled). Usage is null when the cluster has no metrics-server; everything else still reports.",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        properties: {
+          target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
+          container: CONTAINER_PROPERTY,
+        },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
       name: "GetK8sEvents",
       description:
-        "Get Kubernetes cluster events for a workload (Pulled, BackOff, OOMKilling, etc.).",
+        "Get Kubernetes events for a workload AND its pods, merged oldest first (FailedCreate, BackOff, OOMKilling, etc.).",
       input_schema: {
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
+          },
+          warningsOnly: {
+            type: "boolean",
+            description:
+              "Default true. Kubernetes emits Normal events constantly; set false only when you need them.",
           },
         },
         required: ["target"],
@@ -124,7 +146,7 @@ export const K8S_TOOLS: Tool[] = [
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -132,28 +154,32 @@ export const K8S_TOOLS: Tool[] = [
       description: "List processes running inside a Kubernetes workload's pod.",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY, container: CONTAINER_PROPERTY },
+        properties: {
+          target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
+          container: CONTAINER_PROPERTY,
+        },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
       name: "GetK8sRolloutStatus",
       description:
-        "Get the rollout status of a Deployment or StatefulSet - desired/ready/updated replica counts and conditions.",
+        "Get the rollout status of a Deployment, StatefulSet or DaemonSet - desired/ready/updated/available counts, conditions, and why it is not complete.",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY },
+        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -163,33 +189,30 @@ export const K8S_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          server: {
+          runner: {
             type: "string",
             description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
+              "Runner name from the FLEET SUMMARY. Omit to read every Kubernetes cluster.",
           },
         },
-        required: ["server"],
       },
     },
     access: "read",
     on: "runner",
-    route: "host",
+    routeBy: "runner",
+    substrate: "kubernetes",
   },
   {
     schema: {
       name: "RestartK8sWorkload",
       description:
-        "WRITE: Restart a Kubernetes workload (rollout restart). Requires human approval. Causes a rolling replacement of pods.",
+        "WRITE: Restart a Kubernetes workload (rollout restart of a Deployment, StatefulSet or DaemonSet). Requires human approval. Causes a rolling replacement of pods.",
       input_schema: {
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
-          delaySeconds: {
-            type: "number",
-            description: "Delay before restart (default 0).",
-          },
           rationale: {
             type: "string",
             description: "Why this restart is the correct remediation.",
@@ -205,7 +228,7 @@ export const K8S_TOOLS: Tool[] = [
     },
     access: "write",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -216,6 +239,7 @@ export const K8S_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
           command: {
             type: "array",
@@ -230,6 +254,6 @@ export const K8S_TOOLS: Tool[] = [
     },
     access: "write",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
 ];

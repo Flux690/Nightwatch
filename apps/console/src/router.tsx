@@ -10,8 +10,8 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
-import { AddServerPage } from "./pages/AddServerPage.js";
-import { RunnerServersPage } from "./pages/RunnerServers.js";
+import { AddRunnerPage } from "./pages/AddRunnerPage.js";
+import { RunnerListPage } from "./pages/RunnerListPage.js";
 import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 import { PrometheusPage } from "./pages/PrometheusPage.js";
 import { LokiPage } from "./pages/LokiPage.js";
@@ -85,18 +85,31 @@ const githubConnectRoute = createRoute({
   component: GitHubConnectPage,
 });
 
-// The runner is one integration among several, so its server list and install
-// wizard live under /integrations rather than as a top-level fleet section.
-const runnerServersRoute = createRoute({
+// Docker hosts and Kubernetes clusters are two integrations, not one: they install
+// differently and are addressed differently. One list and one wizard serve both,
+// parameterized by the substrate the route names.
+const dockerHostsRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/integrations/runner",
-  component: RunnerServersPage,
+  path: "/integrations/docker",
+  component: () => <RunnerListPage substrate="docker" />,
 });
 
-const addServerRoute = createRoute({
+const addDockerHostRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/integrations/runner/add",
-  component: AddServerPage,
+  path: "/integrations/docker/add",
+  component: () => <AddRunnerPage substrate="docker" />,
+});
+
+const kubernetesClustersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/kubernetes",
+  component: () => <RunnerListPage substrate="kubernetes" />,
+});
+
+const addKubernetesClusterRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/kubernetes/add",
+  component: () => <AddRunnerPage substrate="kubernetes" />,
 });
 
 const alertmanagerRoute = createRoute({
@@ -126,8 +139,10 @@ const routeTree = rootRoute.addChildren([
     auditRoute,
     integrationsRoute,
     githubConnectRoute,
-    runnerServersRoute,
-    addServerRoute,
+    dockerHostsRoute,
+    addDockerHostRoute,
+    kubernetesClustersRoute,
+    addKubernetesClusterRoute,
     alertmanagerRoute,
     prometheusRoute,
     lokiRoute,

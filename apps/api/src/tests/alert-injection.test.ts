@@ -108,11 +108,6 @@ function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
   return {
     sourceAlertId,
     labels: {},
-    targetIdentifier: {
-      provider: "docker",
-      project: "web-01",
-      service: "web-01",
-    },
     alertType: "HighCPU",
     severity: "warning",
     firedAt: firedAt ?? new Date().toISOString(),

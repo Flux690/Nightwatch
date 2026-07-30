@@ -295,3 +295,16 @@ export async function series(
   const data = await readData(res);
   return Array.isArray(data) ? data.map(narrowLabels) : [];
 }
+
+// Cheap, auth- and tenant-exercising probe used wherever a Loki connection is
+// established: a recent-window label listing proves the URL, credential, and
+// X-Scope-OrgID all work and that discovery will function.
+export async function probeLoki(
+  url: string,
+  authHeader: string | null,
+  orgId: string | null,
+): Promise<void> {
+  const end = new Date();
+  const start = new Date(end.getTime() - 60 * 60 * 1000);
+  await labelNames(url, authHeader, orgId, start, end);
+}

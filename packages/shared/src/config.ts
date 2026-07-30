@@ -95,10 +95,6 @@ export interface AgentConfig {
   checkInAfterMs: number;
   // Upper bound on any single tool call. Tools declare their own lower limits.
   toolCallCeilingMs: number;
-  // Remediation circuit breaker: refuses a write once this many executed/failed writes to
-  // the same (service identity, action) landed within the window, so a crash-loop fix cannot become a restart storm.
-  remediationBreakerLimit: number;
-  remediationBreakerWindowMs: number;
   sandboxIdleTimeoutMs: number;
   sandboxCpus: number;
   sandboxMemoryMb: number;
@@ -130,13 +126,9 @@ export interface ResolvedLLMConfig {
 }
 
 // A setup problem the console surfaces app-wide (a banner), computed server-side
-// from the config, fleet, integrations, and observed metric labels. Mostly advisory,
-// but llm-not-configured is also enforced: without a model nothing can run at all.
-export type ConfigHealthKind =
-  | "llm-not-configured"
-  | "no-evidence-source"
-  | "missing-server-label"
-  | "unknown-server-label";
+// from the config, fleet and integrations. Advisory except llm-not-configured,
+// which is also enforced: without a model nothing can run at all.
+export type ConfigHealthKind = "llm-not-configured" | "no-evidence-source";
 
 export interface ConfigHealthIssue {
   kind: ConfigHealthKind;

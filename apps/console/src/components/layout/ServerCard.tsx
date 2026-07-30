@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 // The operator-assigned server name is the primary label everywhere; the
 // self-reported OS hostname is the fallback when no name was given.
-export function serverDisplayName(runner: RunnerRecord): string {
+export function runnerDisplayName(runner: RunnerRecord): string {
   return runner.serverName ?? runner.hostname ?? runner.id;
 }
 
@@ -44,7 +44,7 @@ export function ServerCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium">{serverDisplayName(runner)}</p>
+          <p className="font-medium">{runnerDisplayName(runner)}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">
             {runner.hostname !== null && runner.hostname !== runner.serverName
               ? `host ${runner.hostname}`

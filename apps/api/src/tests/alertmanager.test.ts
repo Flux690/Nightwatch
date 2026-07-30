@@ -26,8 +26,9 @@ describe("parseAlertmanager", () => {
       severity: "warning",
       firedAt: "2026-06-21T10:00:00Z",
     });
-    // labels were wired through to the identity deriver.
-    expect(parsed?.targetIdentifier).toMatchObject({ provider: "docker" });
+    // The labels are the whole record of what the alert named; nothing is derived
+    // from them at parse time, so no speculative identity is ever stored.
+    expect(parsed?.labels).toMatchObject({ alertname: "HighCPU" });
   });
 
   it("normalizes severity aliases and defaults unknown to info", () => {

@@ -1,20 +1,37 @@
 import { ApiException } from "@kubernetes/client-node";
 import type * as k8s from "@kubernetes/client-node";
-import {
-  notRunningResult,
-  type KubernetesServiceIdentity,
-  type NoRunningInstanceResult,
-  type ServiceIdentity,
+import type {
+  K8sWorkloadKind,
+  KubernetesServiceIdentity,
+  NotFoundResult,
+  ServiceIdentity,
 } from "@nightwarden/shared";
 
 export interface ResolvedK8sPod {
   podName: string;
   namespace: string;
   containerName: string | undefined;
+  // The pod's own phase, which every Kubernetes read reports so the agent can see
+  // whether the evidence came from a healthy pod or a dead one.
+  podPhase: string;
   live: boolean;
 }
 
-export { notRunningResult, type NoRunningInstanceResult };
+// Kubernetes' own vocabulary for a miss. Built here rather than by a shared helper
+// so no one function has to branch on provider to phrase a finding.
+export function noWorkloadResult(
+  service: ServiceIdentity,
+  reason?: string,
+): NotFoundResult {
+  const label =
+    service.provider === "kubernetes"
+      ? `${service.namespace}/${service.workload}`
+      : `${service.project}/${service.service}`;
+  return {
+    found: false,
+    reason: reason ?? `No running pod found for ${label}`,
+  };
+}
 
 // A non-kubernetes identity reaching a Kubernetes runner is a routing/model
 // bug, not a missing-pod finding.
@@ -36,14 +53,15 @@ export function isNotFoundError(err: unknown): boolean {
 }
 
 export interface ResolvedWorkloadKind {
-  kind: "Deployment" | "StatefulSet";
+  kind: K8sWorkloadKind;
   // Desired replicas: a restart gates on this (a scaled-to-0 workload has nothing
-  // to restart), while still allowing a running-but-unhealthy one to be rolled.
+  // to restart), while still allowing a running-but-unhealthy one to be rolled. A
+  // DaemonSet's equivalent is how many nodes it is scheduled onto.
   replicas: number;
 }
 
-// Resolve Deployment vs StatefulSet (or neither) in one set of reads, returning kind+replicas, so the
-// caller patches the exact resource instead of trying Deployment first and rolling the wrong one on a name clash.
+// Resolve the exact kind (or none) in one set of reads, returning kind+replicas, so the caller
+// patches the exact resource instead of trying Deployment first and rolling the wrong one on a name clash.
 export async function resolveWorkloadKind(
   appsApi: k8s.AppsV1Api,
   namespace: string,
@@ -67,6 +85,18 @@ export async function resolveWorkloadKind(
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
   }
+  try {
+    const ds = await appsApi.readNamespacedDaemonSet({
+      name: workload,
+      namespace,
+    });
+    return {
+      kind: "DaemonSet",
+      replicas: ds.status?.desiredNumberScheduled ?? 0,
+    };
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+  }
   return null;
 }
 
@@ -78,7 +108,7 @@ export async function resolveWorkload(
   namespace: string,
   workload: string,
   opts: { container?: string; requireLive: boolean },
-): Promise<ResolvedK8sPod | NoRunningInstanceResult> {
+): Promise<ResolvedK8sPod | NotFoundResult> {
   const identity: KubernetesServiceIdentity = {
     provider: "kubernetes",
     namespace,
@@ -86,40 +116,42 @@ export async function resolveWorkload(
   };
 
   const labelSelector = await getWorkloadSelector(appsApi, namespace, workload);
-  if (labelSelector === null) return notRunningResult(identity);
+  if (labelSelector === null) return noWorkloadResult(identity);
 
   const podList = await coreApi.listNamespacedPod({ namespace, labelSelector });
-  if (podList.items.length === 0) return notRunningResult(identity);
+  if (podList.items.length === 0) return noWorkloadResult(identity);
 
   const livePods = podList.items.filter((p) => p.status?.phase === "Running");
   if (opts.requireLive && livePods.length === 0) {
-    return notRunningResult(identity);
+    return noWorkloadResult(identity);
   }
 
   const chosen =
     livePods.length > 0 ? newestPod(livePods) : newestPod(podList.items);
   const podName = chosen.metadata?.name ?? "";
-  if (!podName) return notRunningResult(identity);
+  if (!podName) return noWorkloadResult(identity);
 
   const choice = selectContainer(chosen.spec?.containers ?? [], opts.container);
   if (choice.kind === "ambiguous") {
-    return notRunningResult(
+    return noWorkloadResult(
       identity,
       `Pod ${podName} has multiple containers (${choice.available.join(", ")}); set the "container" field to choose one.`,
     );
   }
   if (choice.kind === "not-found") {
-    return notRunningResult(
+    return noWorkloadResult(
       identity,
       `Container "${opts.container}" is not in pod ${podName}; available: ${choice.available.join(", ")}.`,
     );
   }
 
+  const phase = chosen.status?.phase ?? "Unknown";
   return {
     podName,
     namespace,
     containerName: choice.name,
-    live: chosen.status?.phase === "Running",
+    podPhase: phase,
+    live: phase === "Running",
   };
 }
 
@@ -142,7 +174,7 @@ function selectContainer(
   return { kind: "ambiguous", available: names };
 }
 
-async function getWorkloadSelector(
+export async function getWorkloadSelector(
   appsApi: k8s.AppsV1Api,
   namespace: string,
   workload: string,
@@ -168,11 +200,23 @@ async function getWorkloadSelector(
     if (sel) return sel;
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
-    // Not a StatefulSet either.
+    // Not a StatefulSet; try DaemonSet.
   }
 
-  // The workload is neither a Deployment nor a StatefulSet; caller returns a
-  // not-running finding rather than a guessed selector.
+  try {
+    const ds = await appsApi.readNamespacedDaemonSet({
+      name: workload,
+      namespace,
+    });
+    const sel = labelSelectorString(ds.spec?.selector ?? {});
+    if (sel) return sel;
+  } catch (err) {
+    if (!isNotFoundError(err)) throw err;
+    // None of the three kinds.
+  }
+
+  // The name matches no workload we manage; caller returns a not-found finding
+  // rather than a guessed selector.
   return null;
 }
 

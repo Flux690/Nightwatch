@@ -75,8 +75,6 @@ describe("toolset assembly by fleet capabilities", () => {
           services: [],
           postgres: { available: false },
           redis: { available: false },
-          hostMetrics: false,
-          fileRead: false,
         },
       });
       expect(currentFleetCapabilities()).toEqual({
@@ -262,8 +260,6 @@ describe("toolset assembly by fleet capabilities", () => {
           ],
           postgres: { available: false },
           redis: { available: false },
-          hostMetrics: false,
-          fileRead: false,
         },
       });
 

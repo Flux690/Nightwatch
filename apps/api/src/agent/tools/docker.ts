@@ -8,12 +8,16 @@ const TARGET_PROPERTY = {
     "The service's target key, copied exactly from the FLEET SUMMARY or a ListDockerServices result (e.g. docker/web/api).",
 } as const;
 
+// Consulted only when the target key is ambiguous. Supplied by the model from the fleet
+// summary, stripped by the transport before dispatch, never stored, and never part of a key.
+const RUNNER_PROPERTY = {
+  type: "string",
+  description:
+    "Runner name from the FLEET SUMMARY. Required only when the fleet summary marks this target as shared.",
+} as const;
+
 // Read tools: run unattended, so each is a narrow typed question - never
 // arbitrary shell. Safety comes from the shape, not from review.
-//
-// Host tools live in this library because a Docker runner is 1:1 with its
-// host, so "the host" is a truthful concept. A Kubernetes runner is one pod
-// on one arbitrary node; GetK8sNodeStatus is the cluster-level answer there.
 export const DOCKER_TOOLS: Tool[] = [
   {
     schema: {
@@ -23,18 +27,18 @@ export const DOCKER_TOOLS: Tool[] = [
       input_schema: {
         type: "object",
         properties: {
-          server: {
+          runner: {
             type: "string",
             description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
+              "Runner name from the FLEET SUMMARY. Omit to list every Docker host.",
           },
         },
-        required: ["server"],
       },
     },
     access: "read",
     on: "runner",
-    route: "host",
+    routeBy: "runner",
+    substrate: "docker",
   },
   {
     schema: {
@@ -45,6 +49,7 @@ export const DOCKER_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           tailLines: {
             type: "number",
             description:
@@ -62,7 +67,7 @@ export const DOCKER_TOOLS: Tool[] = [
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -71,13 +76,13 @@ export const DOCKER_TOOLS: Tool[] = [
         "Get a Docker service's configuration: image, restart policy, mounts, ports, healthcheck. Env var names only (no values).",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY },
+        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -86,13 +91,13 @@ export const DOCKER_TOOLS: Tool[] = [
         "Get real-time resource usage for a Docker service: CPU %, memory used/limit/%, network I/O, and block I/O.",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY },
+        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -103,6 +108,7 @@ export const DOCKER_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           sinceMinutes: {
             type: "number",
             description: "Look back this many minutes (default 60).",
@@ -113,7 +119,7 @@ export const DOCKER_TOOLS: Tool[] = [
     },
     access: "read",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -122,153 +128,13 @@ export const DOCKER_TOOLS: Tool[] = [
         "List processes running inside a Docker service (like docker top).",
       input_schema: {
         type: "object",
-        properties: { target: TARGET_PROPERTY },
+        properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
         required: ["target"],
       },
     },
     access: "read",
     on: "runner",
-    route: "service",
-  },
-  {
-    schema: {
-      name: "GetHostMemory",
-      description:
-        "Get host memory stats (total, available, swap) and whether the OOM killer has fired recently.",
-      input_schema: {
-        type: "object",
-        properties: {
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "GetHostCPU",
-      description:
-        "Get per-core and overall CPU usage, I/O wait %, and load averages (1m, 5m, 15m).",
-      input_schema: {
-        type: "object",
-        properties: {
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "GetHostDisk",
-      description:
-        "Get filesystem usage for all mounts and disk I/O rates per device.",
-      input_schema: {
-        type: "object",
-        properties: {
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "GetHostNetwork",
-      description:
-        "Get listening ports, TCP connection state counts, and total connection count.",
-      input_schema: {
-        type: "object",
-        properties: {
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "GetHostDmesg",
-      description:
-        "Read kernel ring buffer (dmesg) for hardware errors, OOM kills, and filesystem errors.",
-      input_schema: {
-        type: "object",
-        properties: {
-          tailLines: {
-            type: "number",
-            description: "Number of most recent lines to return (default 100).",
-          },
-          filterLevel: {
-            type: "string",
-            enum: ["err", "warn", "all"],
-            description: "Log level filter (default: err).",
-          },
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
-  },
-  {
-    schema: {
-      name: "ReadHostFile",
-      description:
-        "Read a file from the host filesystem (allowlisted paths only). Secrets are automatically redacted.",
-      input_schema: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "Absolute path to the file." },
-          maxLines: {
-            type: "number",
-            description: "Maximum lines to return (default 500).",
-          },
-          server: {
-            type: "string",
-            description:
-              "Server name exactly as shown in the FLEET SUMMARY. Required.",
-          },
-        },
-        required: ["path", "server"],
-      },
-    },
-    access: "read",
-    on: "runner",
-    route: "host",
+    routeBy: "service",
   },
   {
     schema: {
@@ -279,6 +145,7 @@ export const DOCKER_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           delaySeconds: {
             type: "number",
             description: "Delay before restart (default 0).",
@@ -298,7 +165,7 @@ export const DOCKER_TOOLS: Tool[] = [
     },
     access: "write",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
   {
     schema: {
@@ -309,6 +176,7 @@ export const DOCKER_TOOLS: Tool[] = [
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
+          runner: RUNNER_PROPERTY,
           command: {
             type: "array",
             items: { type: "string" },
@@ -322,6 +190,6 @@ export const DOCKER_TOOLS: Tool[] = [
     },
     access: "write",
     on: "runner",
-    route: "service",
+    routeBy: "service",
   },
 ];

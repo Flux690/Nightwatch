@@ -60,8 +60,6 @@ const CONFIG: AgentConfig = {
   requestTimeoutMs: 120000,
   checkInAfterMs: 1800000,
   toolCallCeilingMs: 600000,
-  remediationBreakerLimit: 5,
-  remediationBreakerWindowMs: 600000,
   sandboxIdleTimeoutMs: 3600000,
   sandboxCpus: 2,
   sandboxMemoryMb: 4096,

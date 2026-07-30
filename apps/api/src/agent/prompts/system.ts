@@ -15,7 +15,7 @@ How you operate:
 - Tool results carry an [evidence: eN] tag. When you assert something a tool showed you, cite its tag inline so the claim is traceable to the call that produced it. Never cite a tag you were not given.
 - Each tool targets one substrate: Docker tools (GetDockerLogs, RestartDockerService, ...) and Kubernetes tools (GetK8sLogs, RestartK8sWorkload, ...). Only the tools for substrates the fleet actually runs are offered to you, so use the ones you are given.
 - Service-level tools (GetDockerLogs, RestartDockerService, GetK8sLogs, RestartK8sWorkload, ...) require a "target" parameter: the service's target key exactly as shown in the FLEET SUMMARY or a list result (e.g. docker/web/api). Copy it verbatim; never assemble one by hand.
-- Host-level tools (GetHostMemory, GetHostCPU, GetHostDisk, GetHostNetwork, GetHostDmesg, ReadHostFile, ListDockerServices, ListK8sWorkloads, GetK8sNodeStatus) require a "server" parameter: the server name exactly as listed in the FLEET SUMMARY.
+- Fleet-level tools (GetHostMemory, GetHostCPU, GetHostDisk, GetHostNetwork, GetHostDmesg, ListDockerServices, ListK8sWorkloads, GetK8sNodeStatus) take an optional "runner" parameter, named exactly as listed in the FLEET SUMMARY; omit it to read every runner at once. ReadHostFile requires one, since a file read is targeted by nature. On a service-level tool, pass "runner" only when the FLEET SUMMARY marks that target as shared.
 - When you are done, reply in plain text: summarize the root cause and the remediation you took or recommend. Stop replying when the investigation is complete.`;
 
 export function budgetLine(opts: PromptOptions): string {

@@ -172,39 +172,22 @@ describe("GET /connect.sh", () => {
     }
   });
 
-  it("script contains NIGHTWARDEN_SERVER_NAME baked in from the token's server name", async () => {
-    const namedToken = generateRunnerToken(
-      "named-server",
-      "prod-web-01",
-    ).plaintext;
+  it("passes only what the runner reads: token, ws url, and the host /proc mount", async () => {
     const res = await server.inject({
       method: "GET",
       url: "/api/connect.sh",
       headers: {
         cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${namedToken}`,
+        authorization: `Bearer ${TOKEN}`,
       },
     });
-    expect(res.body).toContain('NIGHTWARDEN_SERVER_NAME="prod-web-01"');
-  });
 
-  it("script passes NIGHTWARDEN_SERVER_NAME env var to the Docker container", async () => {
-    const namedToken = generateRunnerToken(
-      "named-server-2",
-      "staging-api-01",
-    ).plaintext;
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/connect.sh",
-      headers: {
-        cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${namedToken}`,
-      },
-    });
-    expect(res.body).toContain(
-      "NIGHTWARDEN_SERVER_NAME=${NIGHTWARDEN_SERVER_NAME}",
-    );
-    // The container reports the host's real name, never its container id.
-    expect(res.body).toContain('--hostname "$(hostname)"');
+    expect(res.body).toContain('-e "NIGHTWARDEN_TOKEN=');
+    expect(res.body).toContain('-e "WS_URL=');
+    expect(res.body).toContain('-e "HOST_PROC=/host/proc"');
+    // The runner takes its advertised name from the host's own /proc, so the
+    // script needs no name baked in and none can be copied wrong.
+    expect(res.body).not.toContain("--hostname");
+    expect(res.body).toContain("-v /proc:/host/proc:ro");
   });
 });

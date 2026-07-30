@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTestLLM, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
+import { seedIntegrationsFromEnv } from "../integrations/seed.js";
+import {
+  getLokiIntegration,
+  getPrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/integrations.js";
 
 // Every supported provider, as data: a new one is a row here, not a copied test,
 // so it cannot be added without the seed being proven for it.
@@ -119,5 +125,89 @@ describe("first-boot config seed from the environment", () => {
 
     expect(loadConfig().providers.anthropic.model).toBe("claude-sonnet-4-6");
     expect(loadApiKey("anthropic")).toBe("sk-ant-first");
+  });
+});
+
+// The evidence integrations follow the same rule, so a fresh install can come up
+// fully configured without anyone opening a browser.
+describe("first-boot integration seed from the environment", () => {
+  let cleanupDb: () => void;
+
+  beforeEach(() => {
+    cleanupDb = useTempDb();
+    vi.stubEnv("SECRET_KEY", "test-only-secret-key-for-seed-tests-32bytes");
+  });
+
+  afterEach(() => {
+    cleanupDb();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function answering(ok: boolean): ReturnType<typeof vi.fn> {
+    return vi.fn(async () =>
+      ok
+        ? new Response(JSON.stringify({ status: "success", data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        : new Response("nope", { status: 502 }),
+    );
+  }
+
+  it("seeds Prometheus and Loki once the probe answers", async () => {
+    vi.stubEnv("PROMETHEUS_URL", "http://prom.internal:9090");
+    vi.stubEnv("PROMETHEUS_AUTH_HEADER", "Bearer prom-secret");
+    vi.stubEnv("LOKI_URL", "http://loki.internal:3100");
+    vi.stubEnv("LOKI_ORG_ID", "tenant-a");
+    vi.stubGlobal("fetch", answering(true));
+
+    await seedIntegrationsFromEnv();
+
+    expect(getPrometheusIntegration()).toMatchObject({
+      baseUrl: "http://prom.internal:9090",
+    });
+    expect(getLokiIntegration()).toMatchObject({
+      baseUrl: "http://loki.internal:3100",
+      orgId: "tenant-a",
+    });
+    // The credential is stored encrypted, never in the clear.
+    expect(getPrometheusIntegration()?.authHeaderEncrypted).not.toContain(
+      "prom-secret",
+    );
+  });
+
+  it("leaves an unreachable URL unconfigured rather than saving something broken", async () => {
+    vi.stubEnv("PROMETHEUS_URL", "http://prom.internal:9090");
+    vi.stubGlobal("fetch", answering(false));
+
+    await seedIntegrationsFromEnv();
+
+    expect(getPrometheusIntegration()).toBeNull();
+  });
+
+  it("never overwrites an integration the operator already connected", async () => {
+    savePrometheusIntegration({
+      baseUrl: "http://chosen-by-operator:9090",
+      authHeaderEncrypted: null,
+    });
+    vi.stubEnv("PROMETHEUS_URL", "http://from-stale-compose-file:9090");
+    const fetchMock = answering(true);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await seedIntegrationsFromEnv();
+
+    expect(getPrometheusIntegration()?.baseUrl).toBe(
+      "http://chosen-by-operator:9090",
+    );
+    // Not even probed: the database already owns this one.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the variables are absent", async () => {
+    await seedIntegrationsFromEnv();
+
+    expect(getPrometheusIntegration()).toBeNull();
+    expect(getLokiIntegration()).toBeNull();
   });
 });

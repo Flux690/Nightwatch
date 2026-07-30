@@ -128,24 +128,17 @@ describe("buildManifest", () => {
     expect(yaml).toContain(token);
   });
 
-  it("includes NIGHTWARDEN_SERVER_NAME when a server name is provided", () => {
+  it("passes only what the runner reads: its token and the ws url", () => {
     const yaml = buildManifest(
       "wss://api.example.com/api/clients/connect",
       "nwr_tok",
-      "prod-web-01",
     );
-    expect(yaml).toContain("NIGHTWARDEN_SERVER_NAME");
-    expect(yaml).toContain("prod-web-01");
-  });
-
-  it("still contains no unreplaced placeholders when a server name is provided", () => {
-    const yaml = buildManifest(
-      "wss://api.example.com/api/clients/connect",
-      "nwr_tok",
-      "web-01",
+    // Env entries are the `- name:` lines that carry a value; the container's
+    // own name has none.
+    const envNames = [...yaml.matchAll(/- name: (\w+)\n\s+value:/g)].map(
+      (m) => m[1],
     );
-    expect(yaml).not.toContain("{{");
-    expect(yaml).not.toContain("}}");
+    expect(envNames).toEqual(["NIGHTWARDEN_TOKEN", "WS_URL"]);
   });
 });
 
@@ -267,23 +260,5 @@ describe("GET /manifest.yaml", () => {
     });
     expect(res.body).not.toContain("{{");
     expect(res.body).not.toContain("}}");
-  });
-
-  it("manifest contains NIGHTWARDEN_SERVER_NAME from the token's server name", async () => {
-    const namedToken = generateRunnerToken(
-      "named-k8s",
-      "prod-cluster",
-    ).plaintext;
-    const res = await server.inject({
-      method: "GET",
-      url: "/api/manifest.yaml",
-      headers: {
-        cookie: `nw_auth=${SESSION}`,
-        authorization: `Bearer ${namedToken}`,
-        host: "control.example.com",
-      },
-    });
-    expect(res.body).toContain("NIGHTWARDEN_SERVER_NAME");
-    expect(res.body).toContain("prod-cluster");
   });
 });

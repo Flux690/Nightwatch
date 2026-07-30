@@ -68,7 +68,7 @@ function SessionRow({
 }): React.JSX.Element {
   const chip = session.status !== null ? STATUS_VIEW[session.status] : null;
   const subline = session.investigation
-    ? (session.rootCauseLine ?? session.target ?? "started by you")
+    ? (session.rootCauseLine ?? "started by you")
     : null;
 
   return (

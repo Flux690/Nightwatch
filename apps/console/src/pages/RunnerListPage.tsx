@@ -9,14 +9,40 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/native-select";
-import { ServerCard, serverDisplayName } from "@/components/layout/ServerCard";
+import { ServerCard, runnerDisplayName } from "@/components/layout/ServerCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { apiFetch } from "@/api/client";
 
-type SortField = "hostname" | "status" | "lastSeen" | "services";
+// The two substrates are genuinely different things - a machine running
+// containers, and a cluster - so each gets its own noun, page and install path.
+export type Substrate = "docker" | "kubernetes";
+
+export const SUBSTRATE_COPY: Record<
+  Substrate,
+  { plural: string; singular: string; blurb: string; emptyHint: string }
+> = {
+  docker: {
+    plural: "Docker hosts",
+    singular: "Docker host",
+    blurb:
+      "A runner sits on each host and collects the evidence investigations need. Read-only by default; every write waits for your approval.",
+    emptyHint:
+      "The runner connected but sees no containers. That usually means the Docker socket is not mounted.",
+  },
+  kubernetes: {
+    plural: "Kubernetes clusters",
+    singular: "Kubernetes cluster",
+    blurb:
+      "One runner per cluster, not per node. It collects the evidence investigations need, read-only by default; every write waits for your approval.",
+    emptyHint:
+      "The runner connected but sees no workloads. That usually means its service account cannot list them.",
+  },
+};
+
+type SortField = "name" | "status" | "lastSeen" | "services";
 type SortDir = "asc" | "desc";
 
 function compareRunners(
@@ -27,13 +53,11 @@ function compareRunners(
 ): number {
   let cmp = 0;
   switch (field) {
-    case "hostname":
-      cmp = serverDisplayName(a).localeCompare(serverDisplayName(b));
+    case "name":
+      cmp = runnerDisplayName(a).localeCompare(runnerDisplayName(b));
       break;
     case "status": {
-      const aOnline = a.online ? 1 : 0;
-      const bOnline = b.online ? 1 : 0;
-      cmp = aOnline - bOnline;
+      cmp = (a.online ? 1 : 0) - (b.online ? 1 : 0);
       break;
     }
     case "lastSeen": {
@@ -52,13 +76,28 @@ function compareRunners(
   return dir === "asc" ? cmp : -cmp;
 }
 
-export function RunnerServersPage(): React.JSX.Element {
+// A runner belongs to the substrate it advertises, so the two lists can never
+// disagree with what the fleet itself reports.
+export function runsSubstrate(
+  runner: RunnerRecord,
+  substrate: Substrate,
+): boolean {
+  return runner.manifest?.capabilities[substrate] === true;
+}
+
+export function RunnerListPage({
+  substrate,
+}: {
+  substrate: Substrate;
+}): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<SortField>("hostname");
+  const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const copy = SUBSTRATE_COPY[substrate];
 
   const {
     data: runners,
@@ -70,8 +109,10 @@ export function RunnerServersPage(): React.JSX.Element {
     refetchInterval: 30_000,
   });
 
-  const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
-  const sorted = [...connectedRunners].sort((a, b) =>
+  const connected = (runners ?? []).filter(
+    (r) => r.hostname !== null && runsSubstrate(r, substrate),
+  );
+  const sorted = [...connected].sort((a, b) =>
     compareRunners(a, b, sortField, sortDir),
   );
 
@@ -92,7 +133,7 @@ export function RunnerServersPage(): React.JSX.Element {
       await queryClient.invalidateQueries({ queryKey: ["runners"] });
     } catch (err) {
       setRemoveError(
-        err instanceof Error ? err.message : "Failed to remove server",
+        err instanceof Error ? err.message : "Failed to remove runner",
       );
     } finally {
       setRemoving(null);
@@ -102,19 +143,20 @@ export function RunnerServersPage(): React.JSX.Element {
   return (
     <Page>
       <PageHeader>
-        <PageTitle>Runner servers</PageTitle>
+        <PageTitle>{copy.plural}</PageTitle>
         <Button
           size="sm"
-          onClick={() => void navigate({ to: "/integrations/runner/add" })}
+          onClick={() =>
+            void navigate({ to: `/integrations/${substrate}/add` })
+          }
         >
           <Plus {...ICON_INLINE} />
-          Add a server
+          Add a {copy.singular.toLowerCase()}
         </Button>
       </PageHeader>
 
       <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
-        Runners sit on your own hosts and collect the evidence investigations
-        need. Read-only by default; remediation is enabled per server.
+        {copy.blurb}
       </p>
 
       {removeError !== null && (
@@ -125,30 +167,33 @@ export function RunnerServersPage(): React.JSX.Element {
       )}
 
       {isLoading && (
-        <div role="status" aria-label="Loading servers" className="py-6">
+        <div
+          role="status"
+          aria-label={`Loading ${copy.plural.toLowerCase()}`}
+          className="py-6"
+        >
           <Spinner className="size-4" />
         </div>
       )}
 
       {isError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertTitle>Failed to load servers</AlertTitle>
+          <AlertTitle>Failed to load {copy.plural.toLowerCase()}</AlertTitle>
           <AlertDescription>
-            Something went wrong loading your servers. It will retry
-            automatically.
+            Something went wrong loading them. It will retry automatically.
           </AlertDescription>
         </Alert>
       )}
 
-      {!isLoading && !isError && connectedRunners.length > 1 && (
+      {!isLoading && !isError && connected.length > 1 && (
         <Field className="mb-3 max-w-60">
-          <FieldLabel htmlFor="server-sort">Sort by</FieldLabel>
+          <FieldLabel htmlFor="runner-sort">Sort by</FieldLabel>
           <NativeSelect
-            id="server-sort"
+            id="runner-sort"
             value={sortField}
             onChange={(e) => handleSort(e.currentTarget.value as SortField)}
           >
-            <NativeSelectOption value="hostname">Name</NativeSelectOption>
+            <NativeSelectOption value="name">Name</NativeSelectOption>
             <NativeSelectOption value="status">Status</NativeSelectOption>
             <NativeSelectOption value="services">Services</NativeSelectOption>
             <NativeSelectOption value="lastSeen">Last seen</NativeSelectOption>
@@ -156,7 +201,7 @@ export function RunnerServersPage(): React.JSX.Element {
         </Field>
       )}
 
-      {!isLoading && !isError && connectedRunners.length > 0 && (
+      {!isLoading && !isError && connected.length > 0 && (
         <div className="flex flex-col gap-3">
           {sorted.map((runner) => (
             <ServerCard
@@ -167,7 +212,7 @@ export function RunnerServersPage(): React.JSX.Element {
                   variant="outline"
                   size="xs"
                   disabled={removing === runner.token}
-                  aria-label={`Remove server ${serverDisplayName(runner)}`}
+                  aria-label={`Remove ${runnerDisplayName(runner)}`}
                   onClick={() => void handleRemove(runner.token)}
                 >
                   {removing === runner.token && <Spinner className="size-3" />}

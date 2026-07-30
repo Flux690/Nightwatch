@@ -1,25 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RunnerRecord } from "@nightwarden/shared";
-import { ChevronRight, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
-import { ICON_INLINE, ICON_UI } from "@/lib/iconProps";
+import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -29,35 +17,7 @@ interface CredentialStatus {
   lastReceivedAt: string | null;
 }
 
-// The API's real /alerts/validate shape: an advisory fleet match per alert.
-interface ValidateAlertResult {
-  sourceAlertId: string;
-  identityKey: string;
-  advertisedOn: string[];
-  exactMatch: boolean;
-}
-
 const MASKED_TOKEN = "nwi_ ••••••••";
-
-function sampleWebhookPayload(serverName: string): unknown {
-  return {
-    alerts: [
-      {
-        status: "firing",
-        labels: {
-          alertname: "TestAlert",
-          severity: "warning",
-          container: "sample-service",
-          ...(serverName && { nw_server: serverName }),
-        },
-        annotations: { summary: "Sample alert from the Alertmanager page" },
-        startsAt: new Date().toISOString(),
-        endsAt: "0001-01-01T00:00:00Z",
-        fingerprint: "alertmanager-test-webhook",
-      },
-    ],
-  };
-}
 
 function receiverSnippet(ingestUrl: string, token: string): string {
   return [
@@ -70,23 +30,6 @@ function receiverSnippet(ingestUrl: string, token: string): string {
     "            type: Bearer",
     `            credentials: '${token}'`,
   ].join("\n");
-}
-
-function perTargetSnippet(name: string): string {
-  return [
-    "scrape_configs:",
-    `  - job_name: node               # each job that scrapes ${name}`,
-    "    static_configs:",
-    '      - targets: ["10.0.0.5:9100"]   # your existing target line',
-    "        labels:",
-    `          nw_server: "${name}"`,
-  ].join("\n");
-}
-
-function externalLabelsSnippet(name: string): string {
-  return ["global:", "  external_labels:", `    nw_server: "${name}"`].join(
-    "\n",
-  );
 }
 
 function relativeTime(iso: string): string {
@@ -102,39 +45,12 @@ function relativeTime(iso: string): string {
 export function AlertmanagerPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
-  const [selectedServer, setSelectedServer] = useState("");
   const [confirmRotate, setConfirmRotate] = useState(false);
-  const [webhookTestResult, setWebhookTestResult] = useState<
-    | { ok: true; results: ValidateAlertResult[] }
-    | { ok: false; error: string }
-    | null
-  >(null);
 
   const { data: status, isLoading } = useQuery<CredentialStatus>({
     queryKey: ["alertmanager-integration"],
     queryFn: () => apiFetch<CredentialStatus>("/api/integrations/alertmanager"),
   });
-
-  const { data: runners } = useQuery<RunnerRecord[]>({
-    queryKey: ["runners"],
-    queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-  });
-
-  const connected = (runners ?? []).filter(
-    (r) => r.online && r.hostname !== null,
-  );
-  const dockerRunners = connected.filter(
-    (r) => r.manifest?.capabilities.docker === true,
-  );
-  // Only an explicit name scopes a runner's identities, so only a named runner
-  // needs its alerts labelled to match.
-  const namedServers = dockerRunners
-    .map((r) => r.serverName)
-    .filter((n): n is string => n !== null);
-  const k8sRunnerCount = connected.filter(
-    (r) => r.manifest?.capabilities.kubernetes === true,
-  ).length;
-  const effectiveServer = selectedServer || (namedServers[0] ?? "");
 
   const generate = useMutation({
     mutationFn: () =>
@@ -144,7 +60,6 @@ export function AlertmanagerPage(): React.JSX.Element {
     onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
-      setWebhookTestResult(null);
       if (rotating) {
         toast.success(
           "Credential rotated - paste the updated receiver into your Alertmanager",
@@ -176,32 +91,6 @@ export function AlertmanagerPage(): React.JSX.Element {
         title: "Could not show the token",
         message: err instanceof Error ? err.message : "Try again.",
         variant: "error",
-      }),
-  });
-
-  const testWebhook = useMutation({
-    mutationFn: async (): Promise<ValidateAlertResult[]> => {
-      if (token === null) throw new Error("Show the token first");
-      const body = await apiFetch<{
-        alerts?: ValidateAlertResult[];
-        error?: string;
-      }>("/api/alerts/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(sampleWebhookPayload(effectiveServer)),
-      });
-      if (!body.alerts) throw new Error(body.error ?? "Test webhook failed");
-      return body.alerts;
-    },
-    onMutate: () => setWebhookTestResult(null),
-    onSuccess: (results) => setWebhookTestResult({ ok: true, results }),
-    onError: (err) =>
-      setWebhookTestResult({
-        ok: false,
-        error: err instanceof Error ? err.message : "Failed to test webhook",
       }),
   });
 
@@ -287,19 +176,14 @@ export function AlertmanagerPage(): React.JSX.Element {
 
             {configured && (
               <section className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  2. Reload Alertmanager, then prove the pipe
+                <p className="text-sm font-semibold">2. Reload Alertmanager</p>
+                {/* Delivery is observed, never probed: Alertmanager dials in, so
+                    the status line is the proof. A button posting from this
+                    browser would exercise a leg that already demonstrably works. */}
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  The status line above reports your first delivery.
                 </p>
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    disabled={token === null || testWebhook.isPending}
-                    onClick={() => testWebhook.mutate()}
-                  >
-                    {testWebhook.isPending && <Spinner className="size-3" />}
-                    Test webhook
-                  </Button>
                   <Button
                     size="xs"
                     variant="secondary"
@@ -309,119 +193,6 @@ export function AlertmanagerPage(): React.JSX.Element {
                     Rotate credential
                   </Button>
                 </div>
-                {token === null && (
-                  <p className="text-sm text-muted-foreground">
-                    Show the token to enable the test.
-                  </p>
-                )}
-
-                {webhookTestResult?.ok === true &&
-                  webhookTestResult.results.map((result) => (
-                    <Alert key={result.sourceAlertId}>
-                      <AlertTitle>
-                        {result.exactMatch
-                          ? "Resolved to one server"
-                          : "No exact match"}
-                      </AlertTitle>
-                      <AlertDescription>
-                        <span className="block">{result.identityKey}</span>
-                        <span className="block">
-                          {result.advertisedOn.length > 0
-                            ? `Advertised on ${result.advertisedOn.join(", ")}.`
-                            : "No runner advertises this identity - the agent triages it from the fleet map."}
-                        </span>
-                      </AlertDescription>
-                    </Alert>
-                  ))}
-                {webhookTestResult?.ok === false && (
-                  <Alert variant="destructive">
-                    <AlertTitle>Test webhook failed</AlertTitle>
-                    <AlertDescription>
-                      {webhookTestResult.error}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </section>
-            )}
-
-            {configured && namedServers.length === 0 && (
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                No server is named, so alerts resolve by service alone. Name a
-                server when the same service runs on more than one, then come
-                back here for the label to add.
-              </p>
-            )}
-
-            {configured && namedServers.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  Make your alerts say which server they&apos;re about
-                </p>
-                <p className="max-w-3xl text-sm text-muted-foreground">
-                  A named server scopes every service it advertises, so your
-                  alerts have to carry that name to match. One line in your
-                  Prometheus stamps it on everything that Prometheus alerts on.
-                </p>
-                <Field className="max-w-120">
-                  <FieldLabel htmlFor="server-select">Server</FieldLabel>
-                  <FieldDescription>
-                    Names come from your connected runners.
-                  </FieldDescription>
-                  <NativeSelect
-                    id="server-select"
-                    value={effectiveServer}
-                    onChange={(e) => setSelectedServer(e.currentTarget.value)}
-                  >
-                    {namedServers.map((name) => (
-                      <NativeSelectOption key={name} value={name}>
-                        {name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </Field>
-                <CopyableSnippet
-                  label="Copy external_labels"
-                  text={externalLabelsSnippet(effectiveServer)}
-                />
-                <Collapsible>
-                  <CollapsibleTrigger className="group flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-                    One Prometheus watching several servers? Label each target
-                    instead
-                    <ChevronRight
-                      {...ICON_INLINE}
-                      className="transition-transform group-aria-expanded:rotate-90"
-                    />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="pt-2">
-                      <CopyableSnippet
-                        label="Copy Prometheus labels"
-                        text={perTargetSnippet(effectiveServer)}
-                      />
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              </section>
-            )}
-
-            {configured && k8sRunnerCount >= 2 && (
-              <section className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">
-                  Multiple Kubernetes clusters
-                </p>
-                <p className="max-w-3xl text-sm text-muted-foreground">
-                  Give each cluster&apos;s alerts a cluster label (in that
-                  cluster&apos;s Prometheus external_labels) and set
-                  NIGHTWARDEN_CLUSTER_NAME to the same value on its runner.
-                </p>
-                <CopyableSnippet
-                  label="Copy cluster external_labels"
-                  text={[
-                    "global:",
-                    "  external_labels:",
-                    '    cluster: "prod-cluster"',
-                  ].join("\n")}
-                />
               </section>
             )}
           </>

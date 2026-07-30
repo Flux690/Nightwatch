@@ -39,7 +39,19 @@ const CONNECTED_RUNNER: RunnerRecord = {
   createdAt: "2024-01-01T00:00:00Z",
   online: true,
   lastSeen: new Date().toISOString(),
-  manifest: null,
+  // A connected runner always has a manifest: the hostname above comes from it,
+  // and its substrate flags are what decide which of the two lists it belongs to.
+  manifest: {
+    hostname: "web-01",
+    runnerVersion: "2.0.0",
+    capabilities: {
+      docker: true,
+      kubernetes: false,
+      services: [],
+      postgres: { available: false },
+      redis: { available: false },
+    },
+  },
 };
 
 /* The rail navigates to each integration's own route, so it renders under a
@@ -56,15 +68,25 @@ function renderRailRoute(qc: QueryClient) {
     path: "/integrations/github",
     component: () => <div>GitHub connect destination</div>,
   });
-  const runnerRoute = createRoute({
+  const dockerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner",
-    component: () => <div>Runner servers destination</div>,
+    path: "/integrations/docker",
+    component: () => <div>Docker hosts destination</div>,
   });
-  const addServerRoute = createRoute({
+  const addDockerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner/add",
-    component: () => <div>Add server destination</div>,
+    path: "/integrations/docker/add",
+    component: () => <div>Add Docker host destination</div>,
+  });
+  const kubernetesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/kubernetes",
+    component: () => <div>Kubernetes clusters destination</div>,
+  });
+  const addKubernetesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/integrations/kubernetes/add",
+    component: () => <div>Add Kubernetes cluster destination</div>,
   });
   const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -85,8 +107,10 @@ function renderRailRoute(qc: QueryClient) {
     routeTree: rootRoute.addChildren([
       integrationsRoute,
       connectRoute,
-      runnerRoute,
-      addServerRoute,
+      dockerRoute,
+      addDockerRoute,
+      kubernetesRoute,
+      addKubernetesRoute,
       alertmanagerRoute,
       prometheusRoute,
       lokiRoute,
@@ -205,28 +229,39 @@ describe("IntegrationsRail", () => {
     });
   });
 
-  describe("NightWarden Runner", () => {
-    it("routes an empty fleet straight to the add-server wizard", async () => {
+  describe("Docker hosts and Kubernetes clusters", () => {
+    it("offers both, since they install and are addressed differently", async () => {
+      setup({ runners: [] });
+
+      expect(await screen.findByText("Docker hosts")).toBeInTheDocument();
+      expect(screen.getByText("Kubernetes clusters")).toBeInTheDocument();
+    });
+
+    it("routes an empty fleet straight to that substrate's add wizard", async () => {
       const user = userEvent.setup();
       setup({ runners: [] });
 
-      await screen.findByText("NightWarden Runner");
-      await user.click(rowFor("NightWarden Runner"));
+      await screen.findByText("Kubernetes clusters");
+      await user.click(rowFor("Kubernetes clusters"));
 
       expect(
-        await screen.findByText(/add server destination/i),
+        await screen.findByText(/add kubernetes cluster destination/i),
       ).toBeInTheDocument();
     });
 
-    it("shows the connected server count and opens the server list", async () => {
+    it("counts a runner under the substrate it advertises, and opens that list", async () => {
       const user = userEvent.setup();
       setup({ runners: [CONNECTED_RUNNER] });
 
-      expect(await screen.findByText("1 server")).toBeInTheDocument();
-
-      await user.click(rowFor("NightWarden Runner"));
+      expect(await screen.findByText("1 host")).toBeInTheDocument();
+      // The Docker host is not also counted as a cluster.
       expect(
-        await screen.findByText(/runner servers destination/i),
+        await within(rowFor("Kubernetes clusters")).findByText("Not connected"),
+      ).toBeInTheDocument();
+
+      await user.click(rowFor("Docker hosts"));
+      expect(
+        await screen.findByText(/docker hosts destination/i),
       ).toBeInTheDocument();
     });
   });

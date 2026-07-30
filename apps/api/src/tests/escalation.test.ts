@@ -76,8 +76,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         ],
         postgres: { available: false },
         redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
       },
     });
 
@@ -210,11 +208,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-${randomUUID()}`,
       labels: {},
-      targetIdentifier: {
-        provider: "docker",
-        project: "web-01",
-        service: "web-01",
-      },
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),

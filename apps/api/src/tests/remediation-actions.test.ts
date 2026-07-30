@@ -42,6 +42,7 @@ import {
   insertRejectedRemediationAction,
 } from "../db/remediation-actions.js";
 import { getDb } from "../db/client.js";
+import { toolCallCard } from "../session/transcript.js";
 import { mountApi } from "./api-server.js";
 
 const FINISH_TURN = { text: "Done.", toolUses: [] };
@@ -93,8 +94,6 @@ describe("remediation action record", () => {
         ],
         postgres: { available: false },
         redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
       },
     });
 
@@ -454,5 +453,69 @@ describe("remediation action record", () => {
     expect(findRemediationAction(sessionId, toolUseId)).toBeUndefined();
 
     close();
+  });
+
+  describe("the approval card's recent-action count", () => {
+    function seedExecuted(target: string, minutesAgo: number): void {
+      getDb()
+        .prepare(
+          `INSERT INTO remediation_actions
+             (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at)
+           VALUES (?, ?, 'RestartDockerService', ?, 'executed', '{}', ?)`,
+        )
+        .run(
+          randomUUID(),
+          randomUUID(),
+          target,
+          new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+        );
+    }
+
+    function cardFor(target: string) {
+      return toolCallCard({
+        toolUseId: randomUUID(),
+        toolName: "RestartDockerService",
+        input: { target },
+        state: { phase: "awaiting_human" },
+        awaitingKind: "approval",
+      });
+    }
+
+    it("counts the executed writes to this service in the window", () => {
+      const target = "docker/recent/counted";
+      seedExecuted(target, 5);
+      seedExecuted(target, 20);
+
+      expect(cardFor(target)).toMatchObject({
+        kind: "approval_card",
+        recent: { count: 2, windowMinutes: 30 },
+      });
+    });
+
+    it("carries nothing when this write has not landed before", () => {
+      expect(cardFor("docker/recent/first-time")).not.toHaveProperty("recent");
+    });
+
+    it("ignores writes to a different service, and ones outside the window", () => {
+      const target = "docker/recent/scoped";
+      seedExecuted(target, 5);
+      seedExecuted("docker/recent/other", 5);
+      seedExecuted(target, 90);
+
+      expect(cardFor(target)).toMatchObject({ recent: { count: 1 } });
+    });
+
+    it("ignores a rejected attempt, which changed nothing", () => {
+      const target = "docker/recent/rejected-only";
+      getDb()
+        .prepare(
+          `INSERT INTO remediation_actions
+             (tool_use_id, session_id, tool_name, service_identity_key, status, input, created_at)
+           VALUES (?, ?, 'RestartDockerService', ?, 'rejected', '{}', ?)`,
+        )
+        .run(randomUUID(), randomUUID(), target, new Date().toISOString());
+
+      expect(cardFor(target)).not.toHaveProperty("recent");
+    });
   });
 });

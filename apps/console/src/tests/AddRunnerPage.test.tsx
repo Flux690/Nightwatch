@@ -14,7 +14,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwarden/shared";
 
-import { AddServerPage } from "../pages/AddServerPage.js";
+import { AddRunnerPage } from "../pages/AddRunnerPage.js";
 
 const GENERATED_TOKEN = {
   id: "new-token-uuid",
@@ -74,12 +74,12 @@ function renderAddServerRoute() {
   });
   const addRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner/add",
-    component: AddServerPage,
+    path: "/integrations/docker/add",
+    component: () => <AddRunnerPage substrate="docker" />,
   });
   const runnerServersRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner",
+    path: "/integrations/docker",
     component: () => <div>Runner servers destination</div>,
   });
   const integrationsRoute = createRoute({
@@ -100,7 +100,7 @@ function renderAddServerRoute() {
       alertmanagerRoute,
     ]),
     history: createMemoryHistory({
-      initialEntries: ["/integrations/runner/add"],
+      initialEntries: ["/integrations/docker/add"],
     }),
   });
 
@@ -151,24 +151,16 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
   return { fetchMock, ...renderAddServerRoute() };
 }
 
-async function fillServerStep(
-  user: ReturnType<typeof userEvent.setup>,
-  opts: { provider?: "docker" | "kubernetes"; name?: string } = {},
-): Promise<void> {
-  const { provider = "docker", name = "test-server" } = opts;
-  await user.click(
-    await screen.findByRole("radio", {
-      name: provider === "docker" ? /docker/i : /kubernetes/i,
-    }),
-  );
-  await user.type(screen.getByRole("textbox", { name: /server name/i }), name);
-}
-
+// The substrate comes from the route, so the first step only asks for a name.
 async function startInstall(
   user: ReturnType<typeof userEvent.setup>,
-  opts?: { provider?: "docker" | "kubernetes"; name?: string },
+  opts: { name?: string } = {},
 ): Promise<void> {
-  await fillServerStep(user, opts);
+  const { name = "test-runner" } = opts;
+  await user.type(
+    await screen.findByRole("textbox", { name: /display name/i }),
+    name,
+  );
   await user.click(screen.getByRole("button", { name: /continue/i }));
 }
 
@@ -187,7 +179,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AddServerPage", () => {
+describe("AddRunnerPage", () => {
   describe("install step", () => {
     it("mints a runner token and shows the docker run script", async () => {
       const user = userEvent.setup();
@@ -261,8 +253,6 @@ describe("AddServerPage", () => {
                 ],
                 postgres: { available: false },
                 redis: { available: false },
-                hostMetrics: true,
-                fileRead: true,
               },
             },
           },
@@ -285,44 +275,6 @@ describe("AddServerPage", () => {
       await advanceToVerify(user);
 
       expect(screen.getByText(/no services detected/i)).toBeInTheDocument();
-    });
-
-    it("points to the Alertmanager page once a second docker server exists - a link, never a snippet", async () => {
-      const user = userEvent.setup();
-      const dockerManifest = {
-        hostname: "web-host",
-        runnerVersion: "2.0.0",
-        capabilities: {
-          docker: true,
-          kubernetes: false,
-          services: [],
-          postgres: { available: false },
-          redis: { available: false },
-          hostMetrics: true,
-          fileRead: true,
-        },
-      };
-      setup({
-        runners: [
-          { ...CONNECTED_RUNNER, manifest: dockerManifest },
-          {
-            ...CONNECTED_RUNNER,
-            id: "older-runner",
-            token: "older-runner",
-            serverName: "prod-web-01",
-            manifest: dockerManifest,
-          },
-        ],
-      });
-      await advanceToVerify(user);
-
-      const signpost = await screen.findByText(/finish alert routing/i);
-      expect(signpost).toHaveTextContent(/2 servers/);
-      expect(
-        screen.getByRole("link", { name: /alertmanager page/i }),
-      ).toBeInTheDocument();
-      // One-owner rule: the wizard never dispenses the yaml itself.
-      expect(screen.queryByText(/nw_server/)).not.toBeInTheDocument();
     });
 
     it("confirms, deletes the minted token, and navigates when leaving before the runner connects", async () => {
@@ -369,7 +321,7 @@ describe("AddServerPage", () => {
       );
 
       expect(
-        screen.getByRole("heading", { name: /add a server/i }),
+        screen.getByRole("heading", { name: /add a docker host/i }),
       ).toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalledWith(
         expect.stringContaining("/api/tokens/"),

@@ -5,8 +5,7 @@ import { batchWindow } from "./batch-window.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 
-// Shared by /alerts/ingest and the verify-test-alert endpoint so both flows
-// go through one dedup/rate-limit/dispatch path.
+// The one dedup/rate-limit/dispatch path an inbound alert takes.
 export function routeAlert(alert: NormalizedAlert): "enqueued" | "skipped" {
   if (isDuplicate(alert)) return "skipped";
 

@@ -6,7 +6,7 @@ import type {
   PrometheusIntegrationStatus,
   RunnerRecord,
 } from "@nightwarden/shared";
-import { Server } from "lucide-react";
+import { Boxes, Server } from "lucide-react";
 
 import {
   SidebarGroup,
@@ -119,21 +119,37 @@ export function IntegrationsRail(): React.JSX.Element {
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
-  const rows: IntegrationRow[] = [
-    {
-      title: "NightWarden Runner",
-      logo: <Server className="size-5 text-muted-foreground" />,
-      // An empty fleet routes straight to the add-server wizard.
+  // Two entries, not one: a Docker host and a Kubernetes cluster install
+  // differently and are addressed differently, so each is its own integration.
+  function substrateRow(
+    substrate: "docker" | "kubernetes",
+    title: string,
+    noun: string,
+  ): IntegrationRow {
+    const count = connectedRunners.filter(
+      (r) => r.manifest?.capabilities[substrate] === true,
+    ).length;
+    return {
+      title,
+      logo:
+        substrate === "docker" ? (
+          <Server className="size-5 text-muted-foreground" />
+        ) : (
+          <Boxes className="size-5 text-muted-foreground" />
+        ),
+      // Nothing connected routes straight to the add wizard.
       to:
-        connectedRunners.length > 0
-          ? "/integrations/runner"
-          : "/integrations/runner/add",
+        count > 0
+          ? `/integrations/${substrate}`
+          : `/integrations/${substrate}/add`,
       isLoading: runnersLoading,
-      status:
-        connectedRunners.length > 0
-          ? `${connectedRunners.length} ${connectedRunners.length === 1 ? "server" : "servers"}`
-          : null,
-    },
+      status: count > 0 ? `${count} ${count === 1 ? noun : `${noun}s`}` : null,
+    };
+  }
+
+  const rows: IntegrationRow[] = [
+    substrateRow("docker", "Docker hosts", "host"),
+    substrateRow("kubernetes", "Kubernetes clusters", "cluster"),
     {
       title: "Alertmanager",
       logo: <img src="/logos/alertmanager.svg" alt="" className="size-5" />,

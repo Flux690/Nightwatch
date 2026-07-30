@@ -6,11 +6,10 @@ import { CONNECT_SCRIPT_TEMPLATE as TEMPLATE } from "./connect-script.js";
 import { RUNNER_IMAGE } from "./image.js";
 import { publicWsUrl } from "../env/public-url.js";
 
-function buildScript(wsUrl: string, token: string, serverName: string): string {
+function buildScript(wsUrl: string, token: string): string {
   return TEMPLATE.replaceAll("{{RUNNER_IMAGE}}", RUNNER_IMAGE)
     .replaceAll("{{WS_URL}}", wsUrl)
-    .replaceAll("{{NIGHTWARDEN_TOKEN}}", token)
-    .replaceAll("{{NIGHTWARDEN_SERVER_NAME}}", serverName);
+    .replaceAll("{{NIGHTWARDEN_TOKEN}}", token);
 }
 
 export async function registerConnectRoutes(
@@ -33,7 +32,7 @@ export async function registerConnectRoutes(
       }
 
       const wsUrl = publicWsUrl(request, "/api/clients/connect");
-      const script = buildScript(wsUrl, token, record.serverName ?? "");
+      const script = buildScript(wsUrl, token);
 
       reply.header("Content-Type", "text/x-shellscript");
       return reply.code(200).send(script);

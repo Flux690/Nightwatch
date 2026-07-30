@@ -1,8 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { serviceIdentityKey } from "@nightwarden/shared";
 import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
-import { resolveAgainstFleet } from "./resolve-target.js";
 import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
@@ -79,66 +77,6 @@ export async function registerAlertRoutes(
 
     return reply.code(200).send({ received: parsed.length, enqueued, skipped });
   });
-
-  // Same auth/normalizer as ingest but never routes; the fleet match is
-  // advisory, telling the operator whether the agent will find an exact match.
-  fastify.post<{ Body: unknown }>(
-    "/alerts/validate",
-    async (request, reply) => {
-      const plaintext = extractToken(request.headers);
-      if (!plaintext) {
-        return reply.code(401).send({
-          error: "X-NightWarden-Token or Authorization: Bearer token required",
-        });
-      }
-      if (findAlertSourceKindByToken(plaintext) === null) {
-        return reply.code(401).send({ error: "unknown or revoked token" });
-      }
-
-      let parsed: ParsedAlert[];
-      try {
-        parsed = parseSource(request.body);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return reply.code(400).send({ error: msg });
-      }
-
-      if (parsed.length === 0) {
-        return reply.code(400).send({
-          error:
-            "no alerts found in payload - expected an Alertmanager webhook or a generic { alerts: [...] } body",
-        });
-      }
-
-      const fleet = getFleetView();
-      const alerts = parsed.map((p) => {
-        // Advisory: the same scope-tolerant resolution the investigation uses,
-        // so setup shows exactly what routing will do with this alert's labels.
-        const resolution = resolveAgainstFleet(p.targetIdentifier, fleet);
-        const advertisedOn =
-          resolution.kind === "resolved"
-            ? fleet
-                .filter((r) =>
-                  r.services.some(
-                    (s) => serviceIdentityKey(s.identity) === resolution.key,
-                  ),
-                )
-                .map((r) => r.serverName ?? r.hostname)
-                .filter((n): n is string => n !== null)
-            : resolution.kind === "ambiguous"
-              ? resolution.servers
-              : [];
-        return {
-          sourceAlertId: p.sourceAlertId,
-          identityKey: resolution.key ?? "unidentified",
-          advertisedOn,
-          exactMatch: resolution.kind === "resolved",
-        };
-      });
-
-      return reply.code(200).send({ alerts });
-    },
-  );
 }
 
 function extractToken(

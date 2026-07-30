@@ -94,8 +94,6 @@ describe("access-gate: gating is driven by tool access level", () => {
         ],
         postgres: { available: false },
         redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
       },
     });
 

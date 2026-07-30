@@ -165,11 +165,10 @@ describe("session title generation", () => {
   it("builds an alert title source capped to the first ten alerts", () => {
     const alerts = Array.from({ length: 14 }, (_, i): NormalizedAlert => ({
       sourceAlertId: `a-${i}`,
-      labels: {},
-      targetIdentifier: {
-        provider: "docker",
-        project: "web",
-        service: `svc-${i}`,
+      labels: {
+        alertname: "cpu_high",
+        severity: "critical",
+        container: `svc-${i}`,
       },
       alertType: "cpu_high",
       severity: "critical",
@@ -180,7 +179,9 @@ describe("session title generation", () => {
     const lines = buildAlertTitleSource(alerts).split("\n");
 
     expect(lines).toHaveLength(10);
-    expect(lines[0]).toBe("[cpu_high] docker/web/svc-0 (critical)");
+    // The labels themselves, not a resolved key: the title model gets more to
+    // work with from what the alert said than from a key assembled after the fact.
+    expect(lines[0]).toBe("[cpu_high] container=svc-0 (critical)");
   });
 
   it("refines the title end-to-end when a chat session starts", async () => {

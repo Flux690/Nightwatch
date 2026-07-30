@@ -11,7 +11,9 @@ import type {
 } from "@nightwarden/shared";
 
 const exec = promisify(execFile);
-const PROC_PATH = process.env["HOST_PROC"] ?? "/proc";
+// Host /proc when the runner is containerized. Also read by manifest detection,
+// which takes the runner's advertised name from the same mount.
+export const PROC_PATH = process.env["HOST_PROC"] ?? "/proc";
 
 export async function getHostMemory(): Promise<HostMemoryResult> {
   const [meminfo, dmesgOut] = await Promise.all([

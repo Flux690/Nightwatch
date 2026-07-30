@@ -50,25 +50,84 @@ describe("findingFor", () => {
   });
 
   describe("GetHostMemory", () => {
-    it("reports free against total", () => {
-      const finding = findingFor("GetHostMemory", {
-        totalBytes: 8326942720,
-        availableBytes: 7025766400,
-        usedPercent: 15.6,
-        oomKillerFiredRecently: false,
-      });
+    // Runner-routed results are always enveloped, even for one runner.
+    const envelope = (
+      entries: Array<{ runner: string; result: unknown }>,
+    ): unknown => ({ byRunner: entries });
+
+    it("reports free against total, unqualified when one runner answered", () => {
+      const finding = findingFor(
+        "GetHostMemory",
+        envelope([
+          {
+            runner: "prod-1",
+            result: {
+              totalBytes: 8326942720,
+              availableBytes: 7025766400,
+              usedPercent: 15.6,
+              oomKillerFiredRecently: false,
+            },
+          },
+        ]),
+      );
       expect(finding?.text).toBe("6.5 GB free of 7.8 GB");
       expect(finding?.tone).toBe("normal");
     });
 
+    it("names the worst host across a fan-out, since which host is half the answer", () => {
+      const finding = findingFor(
+        "GetHostMemory",
+        envelope([
+          {
+            runner: "healthy-1",
+            result: { totalBytes: 8326942720, availableBytes: 7025766400 },
+          },
+          {
+            runner: "starved-2",
+            result: { totalBytes: 8326942720, availableBytes: 83269427 },
+          },
+        ]),
+      );
+      expect(finding?.text).toContain("starved-2");
+      expect(finding?.text).not.toContain("healthy-1");
+    });
+
     it("leads with an OOM kill, because that is the whole answer", () => {
-      const finding = findingFor("GetHostMemory", {
-        totalBytes: 8326942720,
-        availableBytes: 100,
-        oomKillerFiredRecently: true,
-      });
+      const finding = findingFor(
+        "GetHostMemory",
+        envelope([
+          {
+            runner: "roomy-1",
+            result: { totalBytes: 8326942720, availableBytes: 8000000000 },
+          },
+          {
+            runner: "oom-2",
+            result: {
+              totalBytes: 8326942720,
+              availableBytes: 8000000000,
+              oomKillerFiredRecently: true,
+            },
+          },
+        ]),
+      );
+      // An OOM kill outranks any amount of free memory.
+      expect(finding?.text).toContain("oom-2");
       expect(finding?.text).toContain("OOM killer fired");
       expect(finding?.tone).toBe("bad");
+    });
+
+    it("reads the runners that answered, ignoring one that errored", () => {
+      const finding = findingFor(
+        "GetHostMemory",
+        envelope([
+          { runner: "down-1", result: "Error: timed out after 15000ms" },
+          {
+            runner: "up-2",
+            result: { totalBytes: 8326942720, availableBytes: 7025766400 },
+          },
+        ]),
+      );
+      expect(finding?.text).toContain("up-2");
     });
   });
 

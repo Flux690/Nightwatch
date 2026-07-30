@@ -16,8 +16,6 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import {
@@ -28,8 +26,7 @@ import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { ApiError, apiFetch } from "@/api/client";
-
-export type Provider = "docker" | "kubernetes";
+import { SUBSTRATE_COPY, type Substrate } from "./RunnerListPage.js";
 
 interface MintedToken {
   id: string;
@@ -38,27 +35,35 @@ interface MintedToken {
 
 const RUNNER_POLL_MS = 3000;
 
-const STEP_TITLES = [
-  "Server details",
-  "Install the runner",
-  "Confirm what it sees",
-];
+// Docker installs by running a container; Kubernetes by applying a manifest. The
+// substrate comes from the route, so the wizard never has to ask which one this is.
+const INSTALL_URL: Record<Substrate, string> = {
+  docker: "/api/connect.sh",
+  kubernetes: "/api/manifest.yaml",
+};
 
-export function AddServerPage(): React.JSX.Element {
+export function AddRunnerPage({
+  substrate,
+}: {
+  substrate: Substrate;
+}): React.JSX.Element {
   const navigate = useNavigate();
+  const copy = SUBSTRATE_COPY[substrate];
+  const listPath = `/integrations/${substrate}`;
+
   const [step, setStep] = useState(0);
-  const [provider, setProvider] = useState<Provider | null>(null);
-  const [serverName, setServerName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [minting, setMinting] = useState(false);
   const [mintedToken, setMintedToken] = useState<MintedToken | null>(null);
   const [installText, setInstallText] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   const [committed, setCommitted] = useState(false);
 
-  const serverNameError = serverName.includes("/")
-    ? "Server name must not contain '/'"
+  const STEP_TITLES = ["Name it", "Install the runner", "Confirm what it sees"];
+
+  const nameError = displayName.includes("/")
+    ? "Display name must not contain '/'"
     : null;
-  const canContinueFromServer = provider !== null && serverNameError === null;
 
   const { data: runners } = useQuery<RunnerRecord[]>({
     queryKey: ["wizard-runners"],
@@ -76,15 +81,6 @@ export function AddServerPage(): React.JSX.Element {
   const advertised = (
     connectedRunner?.manifest?.capabilities.services ?? []
   ).map((entry) => serviceIdentityKey(entry.identity));
-
-  // Snippets live only on the Alertmanager page (one owner); the wizard just
-  // points there the moment routing ambiguity becomes possible.
-  const connectedDockerServers = (runners ?? []).filter(
-    (r) =>
-      r.online &&
-      r.hostname !== null &&
-      r.manifest?.capabilities.docker === true,
-  ).length;
 
   useEffect(() => {
     if (connectedRunner) setCommitted(true);
@@ -112,7 +108,7 @@ export function AddServerPage(): React.JSX.Element {
   }
 
   async function handleStartInstall(): Promise<void> {
-    if (!canContinueFromServer) return;
+    if (nameError !== null) return;
     setStep(1);
     setMinting(true);
     setInstallError(null);
@@ -120,12 +116,11 @@ export function AddServerPage(): React.JSX.Element {
       const minted = await apiFetch<MintedToken>("/api/tokens", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serverName: serverName.trim() }),
+        body: JSON.stringify({ serverName: displayName.trim() }),
       });
       setMintedToken(minted);
 
-      const installUrl =
-        provider === "docker" ? "/api/connect.sh" : "/api/manifest.yaml";
+      const installUrl = INSTALL_URL[substrate];
       const res = await fetch(installUrl, {
         headers: { Authorization: `Bearer ${minted.token}` },
       });
@@ -150,62 +145,44 @@ export function AddServerPage(): React.JSX.Element {
       {/* The wizard is reachable directly from an empty fleet, so browser back
           may leave the console entirely. This always returns to the list. */}
       <Link
-        to="/integrations/runner"
+        to={listPath}
         className="mb-2 inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft {...ICON_INLINE} />
-        Connected servers
+        {copy.plural}
       </Link>
       <PageHeader>
-        <PageTitle>Add a server</PageTitle>
+        <PageTitle>Add a {copy.singular.toLowerCase()}</PageTitle>
       </PageHeader>
 
       <WizardStepper step={step} total={3} title={STEP_TITLES[step]} />
 
       {step === 0 && (
         <div className="flex flex-col gap-8">
-          <Field>
-            <FieldLabel>Which substrate is this server running?</FieldLabel>
-            <RadioGroup
-              className="mt-2 flex flex-row gap-6"
-              value={provider ?? ""}
-              onValueChange={(v) => setProvider(v as Provider)}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="docker" id="provider-docker" />
-                <Label htmlFor="provider-docker" className="font-normal">
-                  Docker
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="kubernetes" id="provider-kubernetes" />
-                <Label htmlFor="provider-kubernetes" className="font-normal">
-                  Kubernetes
-                </Label>
-              </div>
-            </RadioGroup>
-          </Field>
-
           <Field className="max-w-120">
-            <FieldLabel htmlFor="server-name">
-              Server name (optional)
+            <FieldLabel htmlFor="display-name">
+              Display name (optional)
             </FieldLabel>
             <FieldDescription>
-              Only needed to tell the same service apart across several servers.
-              Naming one means your alerts must carry that name too, and the
-              Alertmanager page hands you the snippet for it.
+              Only tells connected runners apart, in the console and when the
+              agent addresses one directly. It affects nothing else: services
+              are identified by what your infrastructure already publishes.
             </FieldDescription>
             <Input
-              id="server-name"
-              placeholder="e.g. prod-web-01"
-              value={serverName}
-              aria-invalid={serverNameError !== null}
-              onChange={(e) => setServerName(e.currentTarget.value)}
+              id="display-name"
+              placeholder={
+                substrate === "docker"
+                  ? "e.g. prod-web-01"
+                  : "e.g. prod-cluster"
+              }
+              value={displayName}
+              aria-invalid={nameError !== null}
+              onChange={(e) => setDisplayName(e.currentTarget.value)}
             />
-            {serverNameError && (
+            {nameError && (
               <FieldError>
                 <AlertCircle {...ICON_INLINE} />
-                {serverNameError}
+                {nameError}
               </FieldError>
             )}
           </Field>
@@ -220,7 +197,7 @@ export function AddServerPage(): React.JSX.Element {
           <WizardActions>
             <Button
               className="ml-auto"
-              disabled={!canContinueFromServer}
+              disabled={nameError !== null}
               onClick={() => void handleStartInstall()}
             >
               Continue
@@ -251,7 +228,9 @@ export function AddServerPage(): React.JSX.Element {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <p className="text-sm">
-                  Run this on the target server to install the runner:
+                  {substrate === "docker"
+                    ? "Run this on the host to install the runner:"
+                    : "Apply this to the cluster to install the runner:"}
                 </p>
                 <CopyableSnippet
                   text={installText}
@@ -288,32 +267,18 @@ export function AddServerPage(): React.JSX.Element {
       {step === 2 && (
         <div className="flex flex-col gap-4">
           <p className="text-sm">
-            What this server advertises. An alert reaches a service by carrying
-            labels that produce one of these keys.
+            What this runner advertises. An alert reaches a service by carrying
+            labels that match one of these keys.
           </p>
 
           {advertised.length === 0 && (
             <Alert variant="warning">
               <AlertTitle>No services detected</AlertTitle>
-              <AlertDescription>
-                The runner connected but sees no containers or workloads. On
-                Docker that usually means the socket is not mounted.
-              </AlertDescription>
+              <AlertDescription>{copy.emptyHint}</AlertDescription>
             </Alert>
           )}
 
           {connectedRunner && <ServerCard runner={connectedRunner} />}
-
-          {connectedDockerServers >= 2 && (
-            <p className="text-sm text-muted-foreground">
-              You now have {connectedDockerServers} servers - finish alert
-              routing on the{" "}
-              <Link to="/integrations/alertmanager" className="underline">
-                Alertmanager page
-              </Link>
-              .
-            </p>
-          )}
 
           <WizardActions>
             <Button variant="outline" onClick={() => setStep(1)}>
@@ -321,7 +286,7 @@ export function AddServerPage(): React.JSX.Element {
             </Button>
             <Button
               variant="secondary"
-              onClick={() => void navigate({ to: "/integrations/runner" })}
+              onClick={() => void navigate({ to: listPath })}
             >
               Done
             </Button>
@@ -335,7 +300,7 @@ export function AddServerPage(): React.JSX.Element {
           if (!o) cancelLeaveSetup();
         }}
         title="Leave setup?"
-        description="The server token you generated will be revoked."
+        description="The runner token you generated will be revoked."
         confirmLabel="Leave setup"
         destructive
         onConfirm={confirmLeaveSetup}

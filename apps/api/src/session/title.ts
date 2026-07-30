@@ -1,5 +1,4 @@
 import type { ResolvedLLMConfig, NormalizedAlert } from "@nightwarden/shared";
-import { displayIdentity } from "../alerts/resolve-target.js";
 import { createTitleProvider } from "../llm/factory.js";
 import { updateSessionTitle } from "../db/sessions.js";
 import { publishSessionTitleUpdated } from "./stream.js";
@@ -10,10 +9,18 @@ const MAX_TITLE_WORDS = 4;
 // A batched incident can carry many alerts; bound what reaches the prompt.
 const MAX_ALERTS_IN_SOURCE = 10;
 
+// Labels rather than a resolved key: the title model gets more to work with from
+// what the alert actually said than from a key assembled after the fact.
 export function buildAlertTitleSource(alerts: NormalizedAlert[]): string {
   return alerts
     .slice(0, MAX_ALERTS_IN_SOURCE)
-    .map((a) => `[${a.alertType}] ${displayIdentity(a)} (${a.severity})`)
+    .map((a) => {
+      const labels = Object.entries(a.labels)
+        .filter(([key]) => key !== "alertname" && key !== "severity")
+        .map(([key, value]) => `${key}=${value}`)
+        .join(" ");
+      return `[${a.alertType}] ${labels} (${a.severity})`.replace(/\s+/g, " ");
+    })
     .join("\n");
 }
 

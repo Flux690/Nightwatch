@@ -88,6 +88,22 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText(/writes are being rejected/)).toBeInTheDocument();
     });
 
+    it("says how often this write already landed, so a tired operator sees the pattern", () => {
+      wrap({ ...approvalItem, recent: { count: 3, windowMinutes: 12 } });
+
+      // Counted from the audit log: it informs the decision, never overrides it.
+      expect(
+        screen.getByText(/4th time in the last 12 minutes/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /restart/i })).toBeEnabled();
+    });
+
+    it("says nothing when this is the first time", () => {
+      wrap(approvalItem);
+
+      expect(screen.queryByText(/time in the last/)).not.toBeInTheDocument();
+    });
+
     it("sends a rejection reason so the agent learns why", async () => {
       const onResolve = vi.fn();
       wrap(approvalItem, { onResolve });

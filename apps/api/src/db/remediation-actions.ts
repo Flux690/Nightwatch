@@ -181,8 +181,9 @@ export function listRemediationActions(): RemediationAction[] {
     .all() as RemediationAction[];
 }
 
-// For the breaker: counts only 'executed' writes, since a transient failure
-// must not burn the budget, and 'rejected'/'executing' aren't successes.
+// What the approval card reports back to the human: how many times this exact write
+// already landed recently. Counts only 'executed' - a rejected or failed attempt
+// changed nothing, so it is not something the operator is repeating.
 export function countExecutedRemediations(params: {
   serviceIdentityKey: string;
   toolName: string;

@@ -1,4 +1,3 @@
-import { serviceIdentityKey } from "@nightwarden/shared";
 import type { SessionListRow, SessionRunStatus } from "@nightwarden/shared";
 import { listAllPendingHumanInput } from "../db/interrupts.js";
 import { listSessionSources, type SessionListSource } from "../db/sessions.js";
@@ -33,10 +32,6 @@ export function listSessionRows(): SessionListRow[] {
       title: source.report?.headline.trim() || source.title,
       investigation,
       severity: source.originatingAlert?.severity ?? null,
-      target:
-        source.originatingAlert?.targetIdentifier != null
-          ? serviceIdentityKey(source.originatingAlert.targetIdentifier)
-          : null,
       status: investigation ? deriveStatus(source, pendingSessions) : null,
       rootCauseLine: source.report?.rootCause.summary.trim() || null,
       awaitingHumanInput: pendingSessions.has(source.sessionId),

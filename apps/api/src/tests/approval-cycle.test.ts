@@ -113,8 +113,6 @@ describe("durable approval interrupts", () => {
         ],
         postgres: { available: false },
         redis: { available: false },
-        hostMetrics: true,
-        fileRead: true,
       },
     });
 
@@ -866,11 +864,6 @@ describe("durable approval interrupts", () => {
     const alert: NormalizedAlert = {
       sourceAlertId: `crit-022-${randomUUID()}`,
       labels: {},
-      targetIdentifier: {
-        provider: "docker",
-        project: "web-01",
-        service: "web-01",
-      },
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),

@@ -32,8 +32,6 @@ function manifest(hostname: string, containers: string[]): CapabilityManifest {
       })),
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: true,
-      fileRead: true,
     },
   };
 }
@@ -305,13 +303,9 @@ describe("flat runner registry", () => {
         if (msg.type === "command") correlationId = msg.payload?.correlationId;
       });
 
-      const settled = sendCommand(
-        "GetDockerLogs",
-        {
-          target: "docker/inflight-svc/inflight-svc",
-        },
-        "service",
-      ).catch((err: unknown) => err);
+      const settled = sendCommand("GetDockerLogs", {
+        target: "docker/inflight-svc/inflight-svc",
+      }).catch((err: unknown) => err);
 
       await waitFor(() => (correlationId ? true : undefined));
       ws.close();
@@ -356,13 +350,9 @@ describe("flat runner registry", () => {
         if (msg.type === "command") sawCommand = true;
       });
 
-      const settled = sendCommand(
-        "GetDockerLogs",
-        {
-          target: "docker/displace-svc/displace-svc",
-        },
-        "service",
-      ).catch((err: unknown) => err);
+      const settled = sendCommand("GetDockerLogs", {
+        target: "docker/displace-svc/displace-svc",
+      }).catch((err: unknown) => err);
       await waitFor(() => (sawCommand ? true : undefined));
 
       const aClosed = new Promise<void>((resolve) => {

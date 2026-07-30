@@ -12,7 +12,7 @@ import {
 import { TestProviders } from "./renderWithProviders.js";
 import type { RunnerRecord } from "@nightwarden/shared";
 
-import { RunnerServersPage } from "../pages/RunnerServers.js";
+import { RunnerListPage } from "../pages/RunnerListPage.js";
 
 const NOW = new Date("2024-01-01T12:00:00Z").getTime();
 
@@ -42,8 +42,6 @@ const WEB_RUNNER: RunnerRecord = {
       ],
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: false,
-      fileRead: true,
     },
   },
 };
@@ -59,12 +57,12 @@ function renderRunnerServersRoute(qc: QueryClient) {
   });
   const runnerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner",
-    component: RunnerServersPage,
+    path: "/integrations/docker",
+    component: () => <RunnerListPage substrate="docker" />,
   });
   const addServerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/runner/add",
+    path: "/integrations/docker/add",
     component: () => <div>Add server destination</div>,
   });
   const router = createRouter({
@@ -73,7 +71,7 @@ function renderRunnerServersRoute(qc: QueryClient) {
       runnerRoute,
       addServerRoute,
     ]),
-    history: createMemoryHistory({ initialEntries: ["/integrations/runner"] }),
+    history: createMemoryHistory({ initialEntries: ["/integrations/docker"] }),
   });
   return render(
     <TestProviders>
@@ -120,7 +118,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("RunnerServersPage", () => {
+describe("RunnerListPage", () => {
   describe("server list", () => {
     it("shows every advertised identity key in full", async () => {
       setup([WEB_RUNNER]);
@@ -153,17 +151,19 @@ describe("RunnerServersPage", () => {
       renderRunnerServersRoute(qc);
 
       await waitFor(() => {
-        expect(screen.getByText(/failed to load servers/i)).toBeInTheDocument();
+        expect(
+          screen.getByText(/failed to load docker hosts/i),
+        ).toBeInTheDocument();
       });
     });
   });
 
   describe("Add a server", () => {
-    it("navigates to the add-server page from the header action", async () => {
+    it("navigates to the add wizard from the header action", async () => {
       const user = userEvent.setup();
       setup([]);
       await user.click(
-        await screen.findByRole("button", { name: /add a server/i }),
+        await screen.findByRole("button", { name: /add a docker host/i }),
       );
       expect(
         await screen.findByText(/add server destination/i),

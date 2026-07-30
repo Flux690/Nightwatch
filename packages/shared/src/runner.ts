@@ -1,8 +1,11 @@
-import type { ServiceIdentity } from "./service-identity.js";
+import type { K8sWorkloadKind, ServiceIdentity } from "./service-identity.js";
 
 export interface ServiceManifestEntry {
   identity: ServiceIdentity;
   status: string;
+  // Kubernetes only. The runner knows it when it builds the manifest, and the
+  // pod-name shape rules that resolve an alert are meaningless without it.
+  kind?: K8sWorkloadKind;
 }
 
 export interface CapabilityManifest {
@@ -14,8 +17,6 @@ export interface CapabilityManifest {
     services: ServiceManifestEntry[];
     postgres: { available: boolean; via?: string };
     redis: { available: boolean; via?: string };
-    hostMetrics: boolean;
-    fileRead: boolean;
   };
 }
 

@@ -1,89 +1,368 @@
 import { describe, expect, it } from "vitest";
-import type { FleetRunner, ServiceIdentity } from "@nightwarden/shared";
-import { resolveAgainstFleet } from "../alerts/resolve-target.js";
+import type {
+  FleetRunner,
+  K8sWorkloadKind,
+  ServiceManifestEntry,
+} from "@nightwarden/shared";
+import { resolveAlertTarget } from "../alerts/resolve-target.js";
 
-function runner(
-  serverName: string,
-  identities: ServiceIdentity[],
-): FleetRunner {
+function runner(name: string, services: ServiceManifestEntry[]): FleetRunner {
   return {
-    runnerId: `r-${serverName}`,
-    serverName,
-    hostname: `${serverName}-host`,
+    runnerId: `r-${name}`,
+    serverName: name,
+    hostname: `${name}-host`,
     online: true,
     lastSeen: Date.now(),
-    services: identities.map((identity) => ({
-      identity,
-      status: "running" as const,
-    })),
+    services,
   };
 }
 
-const svc = (server: string, service: string): ServiceIdentity => ({
-  provider: "docker",
-  project: "clipper",
-  service,
-  server,
-});
+function docker(project: string, service: string): ServiceManifestEntry {
+  return {
+    identity: { provider: "docker", project, service },
+    status: "running",
+  };
+}
 
-// Two servers, both running clipper/cache; only prod-1 runs clipper/api.
-const FLEET: FleetRunner[] = [
-  runner("prod-1", [svc("prod-1", "cache"), svc("prod-1", "api")]),
-  runner("prod-2", [svc("prod-2", "cache")]),
-];
+function k8s(
+  namespace: string,
+  workload: string,
+  kind: K8sWorkloadKind,
+): ServiceManifestEntry {
+  return {
+    identity: { provider: "kubernetes", namespace, workload },
+    status: "running",
+    kind,
+  };
+}
 
-describe("resolveAgainstFleet", () => {
-  it("resolves an exact scoped match", () => {
-    const res = resolveAgainstFleet(
-      {
-        provider: "docker",
-        project: "clipper",
-        service: "cache",
-        server: "prod-1",
-      },
-      FLEET,
-    );
-    expect(res.kind).toBe("resolved");
-    expect(res.kind === "resolved" && res.key).toBe(
-      "docker/prod-1/clipper/cache",
-    );
-  });
+describe("resolveAlertTarget", () => {
+  describe("Docker", () => {
+    const FLEET = [
+      runner("prod-1", [docker("clipper", "cache"), docker("clipper", "api")]),
+      runner("prod-2", [docker("clipper", "cache")]),
+    ];
 
-  it("resolves an unscoped candidate when exactly one server matches", () => {
-    const res = resolveAgainstFleet(
-      { provider: "docker", project: "clipper", service: "api" },
-      FLEET,
-    );
-    expect(res.kind).toBe("resolved");
-    expect(res.kind === "resolved" && res.key).toBe(
-      "docker/prod-1/clipper/api",
-    );
-  });
+    it("resolves an alert carrying only Compose labels, with nothing an operator configured", () => {
+      const res = resolveAlertTarget(
+        {
+          alertname: "ContainerHighMemory",
+          "com.docker.compose.project": "clipper",
+          "com.docker.compose.service": "api",
+        },
+        FLEET,
+      );
 
-  it("is ambiguous when an unscoped candidate matches several servers", () => {
-    const res = resolveAgainstFleet(
-      { provider: "docker", project: "clipper", service: "cache" },
-      FLEET,
-    );
-    expect(res.kind).toBe("ambiguous");
-    expect(res.kind === "ambiguous" && res.servers.sort()).toEqual([
-      "prod-1",
-      "prod-2",
-    ]);
-  });
-
-  it("is unresolved when nothing matches", () => {
-    const res = resolveAgainstFleet(
-      { provider: "docker", project: "clipper", service: "ghost" },
-      FLEET,
-    );
-    expect(res).toEqual({ kind: "unresolved", key: "docker/clipper/ghost" });
-  });
-
-  it("is unresolved for a null candidate (labels named no service)", () => {
-    expect(resolveAgainstFleet(null, FLEET)).toEqual({
-      kind: "unresolved",
-      key: null,
+      expect(res).toEqual({
+        kind: "resolved",
+        key: "docker/clipper/api",
+        identity: { provider: "docker", project: "clipper", service: "api" },
+      });
     });
+
+    it("reads cAdvisor's rendering of the same Compose labels", () => {
+      const res = resolveAlertTarget(
+        {
+          job: "cadvisor",
+          container_label_com_docker_compose_project: "clipper",
+          container_label_com_docker_compose_service: "api",
+        },
+        FLEET,
+      );
+
+      expect(res).toMatchObject({
+        kind: "resolved",
+        key: "docker/clipper/api",
+      });
+    });
+
+    it("names both runners when the same service runs on each, rather than picking one", () => {
+      const res = resolveAlertTarget(
+        {
+          "com.docker.compose.project": "clipper",
+          "com.docker.compose.service": "cache",
+        },
+        FLEET,
+      );
+
+      expect(res).toMatchObject({
+        kind: "ambiguous",
+        key: "docker/clipper/cache",
+      });
+      expect((res as { runners: string[] }).runners.sort()).toEqual([
+        "prod-1",
+        "prod-2",
+      ]);
+    });
+
+    it("matches an anonymous container by its live name", () => {
+      const fleet = [runner("prod-1", [docker("redis-cache", "redis-cache")])];
+
+      expect(resolveAlertTarget({ name: "redis-cache" }, fleet)).toMatchObject({
+        kind: "resolved",
+        key: "docker/redis-cache/redis-cache",
+      });
+    });
+
+    it("does not fall back to the live name when Compose labels are present but do not match", () => {
+      // cAdvisor commonly sends both forms at once. The Compose pair is the
+      // durable one, so a mismatch there is an answer, not a reason to try again.
+      const res = resolveAlertTarget(
+        {
+          name: "clipper_api_1",
+          "com.docker.compose.project": "clipper",
+          "com.docker.compose.service": "ghost",
+        },
+        FLEET,
+      );
+
+      expect(res).toEqual({ kind: "unresolved" });
+    });
+
+    it("is unresolved when nothing advertised matches", () => {
+      expect(
+        resolveAlertTarget(
+          {
+            "com.docker.compose.project": "clipper",
+            "com.docker.compose.service": "ghost",
+          },
+          FLEET,
+        ),
+      ).toEqual({ kind: "unresolved" });
+    });
+
+    it("is unresolved when the labels name no service at all", () => {
+      expect(
+        resolveAlertTarget(
+          { alertname: "SomethingBroke", instance: "10.0.0.4:8080" },
+          FLEET,
+        ),
+      ).toEqual({ kind: "unresolved" });
+    });
+  });
+
+  describe("Kubernetes", () => {
+    const FLEET = [
+      runner("cluster-1", [
+        k8s("shop", "api", "Deployment"),
+        k8s("shop", "db", "StatefulSet"),
+        k8s("kube-system", "node-exporter", "DaemonSet"),
+      ]),
+    ];
+
+    it("resolves a workload named outright by its controller label", () => {
+      expect(
+        resolveAlertTarget({ namespace: "shop", deployment: "api" }, FLEET),
+      ).toMatchObject({ kind: "resolved", key: "kubernetes/shop/api" });
+    });
+
+    it("resolves KubePodCrashLooping, which carries only namespace, pod and container", () => {
+      const res = resolveAlertTarget(
+        {
+          alertname: "KubePodCrashLooping",
+          namespace: "shop",
+          pod: "api-7d9f4c8b6-x2k4m",
+          container: "api",
+        },
+        FLEET,
+      );
+
+      expect(res).toMatchObject({
+        kind: "resolved",
+        key: "kubernetes/shop/api",
+      });
+    });
+
+    it("resolves a StatefulSet pod by its ordinal suffix", () => {
+      expect(
+        resolveAlertTarget({ namespace: "shop", pod: "db-0" }, FLEET),
+      ).toMatchObject({ kind: "resolved", key: "kubernetes/shop/db" });
+    });
+
+    it("resolves a DaemonSet pod, whose name has no template hash", () => {
+      expect(
+        resolveAlertTarget(
+          { namespace: "kube-system", pod: "node-exporter-x9k2m" },
+          FLEET,
+        ),
+      ).toMatchObject({
+        kind: "resolved",
+        key: "kubernetes/kube-system/node-exporter",
+      });
+    });
+
+    it("resolves KubeDaemonSetRolloutStuck by its daemonset label", () => {
+      expect(
+        resolveAlertTarget(
+          {
+            alertname: "KubeDaemonSetRolloutStuck",
+            namespace: "kube-system",
+            daemonset: "node-exporter",
+          },
+          FLEET,
+        ),
+      ).toMatchObject({ kind: "resolved" });
+    });
+
+    it("will not match a workload in another namespace", () => {
+      expect(
+        resolveAlertTarget({ namespace: "other", deployment: "api" }, FLEET),
+      ).toEqual({ kind: "unresolved" });
+    });
+
+    it("will not match a statefulset label against a same-named Deployment", () => {
+      // The label that named the workload also names its kind.
+      expect(
+        resolveAlertTarget({ namespace: "shop", statefulset: "api" }, FLEET),
+      ).toEqual({ kind: "unresolved" });
+    });
+
+    it("will not resolve a pod against a workload whose kind gives it the wrong shape", () => {
+      // `db-0` is a StatefulSet shape; a Deployment named `db` is not its owner.
+      const fleet = [runner("c", [k8s("shop", "db", "Deployment")])];
+
+      expect(
+        resolveAlertTarget({ namespace: "shop", pod: "db-0" }, fleet),
+      ).toEqual({ kind: "unresolved" });
+    });
+
+    it("cannot match a pod name against an entry that declares no kind", () => {
+      // Every shape rule is a statement about a kind; without one there is no rule
+      // to apply, so only an exact workload label can reach it.
+      const fleet = [
+        runner("c", [
+          {
+            identity: {
+              provider: "kubernetes",
+              namespace: "shop",
+              workload: "api",
+            },
+            status: "running",
+          },
+        ]),
+      ];
+
+      expect(
+        resolveAlertTarget(
+          { namespace: "shop", pod: "api-7d9f4c8b6-x2k4m" },
+          fleet,
+        ),
+      ).toEqual({ kind: "unresolved" });
+      expect(
+        resolveAlertTarget({ namespace: "shop", deployment: "api" }, fleet),
+      ).toMatchObject({ kind: "resolved" });
+    });
+
+    describe("no wrong confident answer", () => {
+      it("resolves a CronJob's pod to neither, though its name fits a Deployment structurally", () => {
+        // A CronJob's pod is backup-<unix-minutes>-<5 random>: eight digits then five
+        // characters, which is structurally the Deployment shape. It is rejected because
+        // a unix-minute timestamp begins with `2`, not a template-hash character.
+        const fleet = [runner("c", [k8s("batch", "backup", "Deployment")])];
+
+        expect(
+          resolveAlertTarget(
+            { namespace: "batch", pod: "backup-29383920-x9k2m" },
+            fleet,
+          ),
+        ).toEqual({ kind: "unresolved" });
+      });
+
+      it("accepts a real template hash, which uses only the ten characters Kubernetes emits", () => {
+        const fleet = [runner("c", [k8s("batch", "backup", "Deployment")])];
+
+        expect(
+          resolveAlertTarget(
+            { namespace: "batch", pod: "backup-5f7d9bc4c-x9k2m" },
+            fleet,
+          ),
+        ).toMatchObject({ kind: "resolved" });
+      });
+
+      it("refuses to choose when two advertised workloads both claim the pod name", () => {
+        const fleet = [
+          runner("c", [
+            k8s("shop", "api", "Deployment"),
+            k8s("shop", "api-7d9f4c8b6", "DaemonSet"),
+          ]),
+        ];
+
+        expect(
+          resolveAlertTarget(
+            { namespace: "shop", pod: "api-7d9f4c8b6-x2k4m" },
+            fleet,
+          ),
+        ).toEqual({ kind: "unresolved" });
+      });
+
+      it("rejects a suffix that is not exactly five pod-alphabet characters", () => {
+        const fleet = [runner("c", [k8s("shop", "api", "Deployment")])];
+
+        for (const pod of [
+          "api-5f7d9bc4c-x2k4", // four
+          "api-5f7d9bc4c-x2k4mm", // six
+          "api-5f7d9bc4c-x2k4a", // 'a' is not in the pod-suffix alphabet
+        ]) {
+          expect(resolveAlertTarget({ namespace: "shop", pod }, fleet)).toEqual(
+            { kind: "unresolved" },
+          );
+        }
+      });
+    });
+  });
+
+  describe("mixed fleet", () => {
+    it("does not let a Docker container of the same name spoil a Kubernetes match", () => {
+      // A Kubernetes alert carries `container`, which is also how an anonymous
+      // Docker container is named. Matching both would produce two distinct keys
+      // and force a perfectly resolvable alert to unresolved.
+      const fleet = [
+        runner("docker-host", [docker("api", "api")]),
+        runner("cluster-1", [k8s("shop", "api", "Deployment")]),
+      ];
+
+      const res = resolveAlertTarget(
+        {
+          alertname: "KubePodCrashLooping",
+          namespace: "shop",
+          pod: "api-7d9f4c8b6-x2k4m",
+          container: "api",
+        },
+        fleet,
+      );
+
+      expect(res).toMatchObject({
+        kind: "resolved",
+        key: "kubernetes/shop/api",
+      });
+    });
+
+    it("still resolves a Docker alert, which carries no namespace", () => {
+      const fleet = [
+        runner("docker-host", [docker("api", "api")]),
+        runner("cluster-1", [k8s("shop", "api", "Deployment")]),
+      ];
+
+      expect(resolveAlertTarget({ container: "api" }, fleet)).toMatchObject({
+        kind: "resolved",
+        key: "docker/api/api",
+      });
+    });
+  });
+
+  it("is unresolved against an empty fleet, since nothing is advertised to match", () => {
+    expect(
+      resolveAlertTarget({ namespace: "shop", deployment: "api" }, []),
+    ).toEqual({ kind: "unresolved" });
+  });
+
+  it("keys a resolved Kubernetes target with three segments, like every other key", () => {
+    const fleet = [runner("c", [k8s("shop", "api", "Deployment")])];
+    const res = resolveAlertTarget(
+      { namespace: "shop", deployment: "api" },
+      fleet,
+    );
+
+    expect((res as { key: string }).key.split("/")).toHaveLength(3);
   });
 });

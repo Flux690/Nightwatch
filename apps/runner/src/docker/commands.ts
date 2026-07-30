@@ -2,47 +2,41 @@ import type Dockerode from "dockerode";
 import {
   deriveDockerServiceIdentity,
   serviceIdentityKey,
+  type DockerBashInput,
+  type DockerBashResult,
+  type DockerConfigInput,
+  type DockerConfigResult,
+  type DockerEvent,
+  type DockerEventsInput,
+  type DockerEventsResult,
+  type DockerLogsInput,
+  type DockerLogsResult,
+  type DockerProcess,
+  type DockerProcessesInput,
+  type DockerProcessesResult,
+  type DockerRestartInput,
   type DockerRestartResult,
-  type ServiceBashInput,
-  type ServiceBashResult,
-  type ServiceConfigInput,
-  type ServiceConfigResult,
-  type ServiceEvent,
-  type ServiceEventsInput,
-  type ServiceEventsResult,
-  type ServiceListInput,
-  type ServiceListResult,
-  type ServiceLogsInput,
-  type ServiceLogsResult,
-  type ServiceProcess,
-  type ServiceProcessesInput,
-  type ServiceProcessesResult,
-  type ServiceRestartInput,
-  type ServiceStatsInput,
-  type ServiceStatsResult,
+  type DockerServiceListResult,
+  type DockerStatsInput,
+  type DockerStatsResult,
+  type NotFoundResult,
 } from "@nightwarden/shared";
 import { getDocker, listVisibleContainers, parseDockerMux } from "./client.js";
-import {
-  notRunningResult,
-  resolveService,
-  type NoRunningInstanceResult,
-} from "./resolve-service.js";
+import { noContainerResult, resolveService } from "./resolve-service.js";
 import { sanitizeExecOutput } from "../safety/allowlist.js";
 
-export async function getContainerList(
-  _input: ServiceListInput,
-): Promise<ServiceListResult> {
+// Takes no input: a Docker runner is 1:1 with its host, so there is nothing to
+// scope the listing by.
+export async function getContainerList(): Promise<DockerServiceListResult> {
   const docker = getDocker();
   const raw = await listVisibleContainers(docker);
-  // Scoped like the manifest (detect.ts): the server env is the caller-added scope,
-  // so a discovered target keys identically to the advertised one.
-  const server = process.env["NIGHTWARDEN_SERVER_NAME"];
   const containers = raw.map((c) => {
     const status = c.Status;
     const image = c.Image;
     const name = (c.Names[0] ?? "").replace(/^\//, "");
-    const base = deriveDockerServiceIdentity(c.Labels, name);
-    const identity = server ? { ...base, server } : base;
+    // Keys exactly as the manifest advertises it (detect.ts), so a discovered
+    // target resolves back to the entry it came from.
+    const identity = deriveDockerServiceIdentity(c.Labels, name);
     return {
       name,
       id: c.Id.slice(0, 12),
@@ -65,11 +59,11 @@ export async function getContainerList(
 }
 
 export async function getContainerLogs(
-  input: ServiceLogsInput,
-): Promise<ServiceLogsResult | NoRunningInstanceResult> {
+  input: DockerLogsInput,
+): Promise<DockerLogsResult | NotFoundResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved) return notRunningResult(input.service);
+  if (!resolved) return noContainerResult(input.service);
   const container = resolved.container;
 
   const since = input.sinceTimestamp
@@ -114,11 +108,11 @@ export async function getContainerLogs(
 }
 
 export async function getContainerInspect(
-  input: ServiceConfigInput,
-): Promise<ServiceConfigResult | NoRunningInstanceResult> {
+  input: DockerConfigInput,
+): Promise<DockerConfigResult | NotFoundResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved) return notRunningResult(input.service);
+  if (!resolved) return noContainerResult(input.service);
   const raw = await resolved.container.inspect();
 
   const envVarNames = (raw.Config.Env ?? []).map((e) => e.split("=")[0] ?? e);
@@ -143,11 +137,11 @@ export async function getContainerInspect(
 }
 
 export async function getContainerStats(
-  input: ServiceStatsInput,
-): Promise<ServiceStatsResult | NoRunningInstanceResult> {
+  input: DockerStatsInput,
+): Promise<DockerStatsResult | NotFoundResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if (!resolved || !resolved.live) return noContainerResult(input.service);
   const raw = await resolved.container.stats({ stream: false });
 
   const cpuDelta =
@@ -199,11 +193,11 @@ export async function getContainerStats(
 }
 
 export async function getContainerEvents(
-  input: ServiceEventsInput,
-): Promise<ServiceEventsResult | NoRunningInstanceResult> {
+  input: DockerEventsInput,
+): Promise<DockerEventsResult | NotFoundResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved) return notRunningResult(input.service);
+  if (!resolved) return noContainerResult(input.service);
 
   const now = Math.floor(Date.now() / 1000);
   const since = now - (input.sinceMinutes ?? 60) * 60;
@@ -222,7 +216,7 @@ export async function getContainerEvents(
   });
 
   const text = Buffer.concat(chunks).toString("utf8");
-  const events: ServiceEvent[] = text
+  const events: DockerEvent[] = text
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -242,11 +236,11 @@ export async function getContainerEvents(
 }
 
 export async function getContainerProcesses(
-  input: ServiceProcessesInput,
-): Promise<ServiceProcessesResult | NoRunningInstanceResult> {
+  input: DockerProcessesInput,
+): Promise<DockerProcessesResult | NotFoundResult> {
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if (!resolved || !resolved.live) return noContainerResult(input.service);
   const top = (await resolved.container.top()) as {
     Titles: string[];
     Processes: string[][];
@@ -259,7 +253,7 @@ export async function getContainerProcesses(
   const cIdx = titles.indexOf("C");
   const cmdIdx = titles.indexOf("CMD");
 
-  const processes: ServiceProcess[] = (top.Processes ?? []).map((row) => ({
+  const processes: DockerProcess[] = (top.Processes ?? []).map((row) => ({
     pid: parseInt(row[pidIdx] ?? "0", 10),
     ppid: parseInt(row[ppidIdx] ?? "0", 10),
     user: row[uidIdx] ?? "unknown",
@@ -272,12 +266,12 @@ export async function getContainerProcesses(
 }
 
 export async function restartContainer(
-  input: ServiceRestartInput,
-): Promise<DockerRestartResult | NoRunningInstanceResult> {
+  input: DockerRestartInput,
+): Promise<DockerRestartResult | NotFoundResult> {
   const startedAt = new Date().toISOString();
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if (!resolved || !resolved.live) return noContainerResult(input.service);
   const container = resolved.container;
 
   const before = await container.inspect();
@@ -319,15 +313,15 @@ async function waitForSettledStatus(
 }
 
 export async function execCommand(
-  input: ServiceBashInput,
-): Promise<ServiceBashResult | NoRunningInstanceResult> {
+  input: DockerBashInput,
+): Promise<DockerBashResult | NotFoundResult> {
   const executedAt = new Date().toISOString();
   const [cmd, ...args] = input.command;
   if (!cmd) throw new Error("command array must not be empty");
 
   const docker = getDocker();
   const resolved = await resolveService(docker, input.service);
-  if (!resolved || !resolved.live) return notRunningResult(input.service);
+  if (!resolved || !resolved.live) return noContainerResult(input.service);
   const container = resolved.container;
 
   const exec = await container.exec({

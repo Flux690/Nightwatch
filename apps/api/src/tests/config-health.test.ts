@@ -46,8 +46,6 @@ function dockerManifest(hostname: string) {
       ],
       postgres: { available: false },
       redis: { available: false },
-      hostMetrics: false,
-      fileRead: false,
     },
   };
 }
@@ -110,7 +108,9 @@ describe("config health", () => {
     expect(issues.map((i) => i.kind)).not.toContain("no-evidence-source");
   });
 
-  it("flags a server missing its nw_server label on a multi-server fleet", async () => {
+  it("raises nothing about labels on a multi-server fleet, and costs no Prometheus round-trip", async () => {
+    // Alerts resolve from the labels the infrastructure already stamps, so there
+    // is no label for an operator to get wrong and nothing here to check.
     generateAlertSourceToken("alertmanager");
     connectDocker("ch-runner-1", "prod-1");
     connectDocker("ch-runner-2", "prod-2");
@@ -118,25 +118,13 @@ describe("config health", () => {
       baseUrl: "http://prom.test",
       authHeaderEncrypted: null,
     });
-    // Prometheus reports only prod-1 carries nw_server; prod-2 is missing.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({ status: "success", data: ["prod-1"] }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          ),
-      ),
-    );
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
 
     const { issues } = await fetchHealth();
-    const missing = issues.find((i) => i.kind === "missing-server-label");
-    expect(missing).toBeDefined();
-    expect(missing?.message).toContain("prod-2");
+
+    expect(issues).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   describe("with no language model configured", () => {

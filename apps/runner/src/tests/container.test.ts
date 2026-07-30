@@ -93,7 +93,7 @@ describe("getContainerLogs", () => {
 
     expect(result).toEqual({
       found: false,
-      reason: "No running instance found for myapp/postgres",
+      reason: "No running container found for myapp/postgres",
     });
   });
 

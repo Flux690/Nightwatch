@@ -39,8 +39,6 @@ const ConfigPatchSchema = z.object({
   requestTimeoutMs: z.number().int().positive().optional(),
   checkInAfterMs: z.number().int().positive().optional(),
   toolCallCeilingMs: z.number().int().positive().optional(),
-  remediationBreakerLimit: z.number().int().positive().optional(),
-  remediationBreakerWindowMs: z.number().int().positive().optional(),
   sandboxIdleTimeoutMs: z.number().int().positive().optional(),
   sandboxCpus: z.number().int().positive().optional(),
   sandboxMemoryMb: z.number().int().positive().optional(),
