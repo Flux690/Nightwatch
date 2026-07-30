@@ -70,10 +70,10 @@ describe("composeServiceLabels", () => {
     expect(
       composeServiceLabels({
         job: "cadvisor",
-        container_label_com_docker_compose_project: "clipper",
+        container_label_com_docker_compose_project: "encodr",
         container_label_com_docker_compose_service: "cache",
       }),
-    ).toEqual({ project: "clipper", service: "cache" });
+    ).toEqual({ project: "encodr", service: "cache" });
   });
 
   it("is null unless both halves of the pair are present", () => {

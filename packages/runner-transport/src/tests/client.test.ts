@@ -111,6 +111,44 @@ describe("runner WS client", () => {
     });
   });
 
+  describe("reconnect backoff", () => {
+    // A runner the API accepts and then rejects (revoked token, wrong platform)
+    // opens successfully every time. Clearing the backoff on open would pin it to
+    // the first rung, so it would retry every two seconds forever and the API
+    // would log the rejection just as often.
+    it("escalates when the API keeps closing an opened connection", async () => {
+      const { wss, port } = await listen();
+      let opened = 0;
+      wss.on("connection", (socket) => {
+        opened++;
+        socket.close(4004, "wrong platform");
+      });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const stop = startWebSocketClient(options(port));
+      try {
+        await vi.waitFor(() => expect(opened).toBe(1));
+        await flushIo();
+
+        // First rung is 2s.
+        await vi.advanceTimersByTimeAsync(2_000);
+        await vi.waitFor(() => expect(opened).toBe(2));
+        await flushIo();
+
+        // Second rung is 4s, so 2s more must NOT be enough.
+        await vi.advanceTimersByTimeAsync(2_000);
+        await flushIo();
+        expect(opened).toBe(2);
+
+        await vi.advanceTimersByTimeAsync(2_000);
+        await vi.waitFor(() => expect(opened).toBe(3));
+      } finally {
+        vi.useRealTimers();
+        stop();
+        wss.close();
+      }
+    });
+  });
+
   describe("liveness", () => {
     it("answers a server ping with a protocol pong", async () => {
       const { wss, port } = await listen();

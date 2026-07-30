@@ -175,7 +175,6 @@ export function startWebSocketClient(options: TransportOptions): () => void {
     });
 
     ws.on("open", () => {
-      retryCount = 0;
       logger.info({}, "ws connected");
       sendManifest(ws!).catch((err: unknown) =>
         logger.error({ err }, "manifest send failed"),
@@ -186,8 +185,13 @@ export function startWebSocketClient(options: TransportOptions): () => void {
     });
 
     // ws auto-pongs at the protocol level; receiving the ping is itself the
-    // proof the API can reach us, so it just re-arms the watchdog.
+    // proof the API can reach us, so it re-arms the watchdog and is also what
+    // clears the backoff. Opening is not enough: a runner the API accepts and
+    // then rejects (revoked token, wrong platform) opens every time, so resetting
+    // on open would hold it at the first rung and hammer every two seconds
+    // forever. Only a connection the API is willing to keep gets pinged.
     ws.on("ping", () => {
+      retryCount = 0;
       armWatchdog(ws!);
     });
 

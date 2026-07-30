@@ -50,15 +50,15 @@ function k8s(
 describe("resolveAlertTarget", () => {
   describe("Docker", () => {
     const FLEET = [
-      runner("prod-1", [docker("clipper", "cache"), docker("clipper", "api")]),
-      runner("prod-2", [docker("clipper", "cache")]),
+      runner("prod-1", [docker("encodr", "cache"), docker("encodr", "api")]),
+      runner("prod-2", [docker("encodr", "cache")]),
     ];
 
     it("resolves an alert carrying only Compose labels, with nothing an operator configured", () => {
       const res = resolveAlertTarget(
         {
           alertname: "ContainerHighMemory",
-          "com.docker.compose.project": "clipper",
+          "com.docker.compose.project": "encodr",
           "com.docker.compose.service": "api",
         },
         FLEET,
@@ -66,8 +66,8 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toEqual({
         kind: "resolved",
-        key: "docker/clipper/api",
-        identity: { project: "clipper", service: "api" },
+        key: "docker/encodr/api",
+        identity: { project: "encodr", service: "api" },
       });
     });
 
@@ -75,7 +75,7 @@ describe("resolveAlertTarget", () => {
       const res = resolveAlertTarget(
         {
           job: "cadvisor",
-          container_label_com_docker_compose_project: "clipper",
+          container_label_com_docker_compose_project: "encodr",
           container_label_com_docker_compose_service: "api",
         },
         FLEET,
@@ -83,14 +83,14 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toMatchObject({
         kind: "resolved",
-        key: "docker/clipper/api",
+        key: "docker/encodr/api",
       });
     });
 
     it("names both runners when the same service runs on each, rather than picking one", () => {
       const res = resolveAlertTarget(
         {
-          "com.docker.compose.project": "clipper",
+          "com.docker.compose.project": "encodr",
           "com.docker.compose.service": "cache",
         },
         FLEET,
@@ -98,7 +98,7 @@ describe("resolveAlertTarget", () => {
 
       expect(res).toMatchObject({
         kind: "ambiguous",
-        key: "docker/clipper/cache",
+        key: "docker/encodr/cache",
       });
       expect((res as { runners: string[] }).runners.sort()).toEqual([
         "prod-1",
@@ -120,8 +120,8 @@ describe("resolveAlertTarget", () => {
       // durable one, so a mismatch there is an answer, not a reason to try again.
       const res = resolveAlertTarget(
         {
-          name: "clipper_api_1",
-          "com.docker.compose.project": "clipper",
+          name: "encodr_api_1",
+          "com.docker.compose.project": "encodr",
           "com.docker.compose.service": "ghost",
         },
         FLEET,
@@ -134,7 +134,7 @@ describe("resolveAlertTarget", () => {
       expect(
         resolveAlertTarget(
           {
-            "com.docker.compose.project": "clipper",
+            "com.docker.compose.project": "encodr",
             "com.docker.compose.service": "ghost",
           },
           FLEET,
