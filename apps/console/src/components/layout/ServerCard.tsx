@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { serviceIdentityKey, type RunnerRecord } from "@nightwarden/shared";
+import type { RunnerRecord } from "@nightwarden/shared";
 import { StatusText } from "@/components/ui/status";
 import { Card } from "@/components/ui/card";
 import { timeAgo } from "@/lib/time";
@@ -24,17 +24,9 @@ export function ServerCard({
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const online = runner.online;
-  const capabilities = runner.manifest?.capabilities;
-  const keys = (capabilities?.services ?? []).map((entry) =>
-    serviceIdentityKey(entry.identity),
-  );
+  const keys = (runner.manifest?.services ?? []).map((entry) => entry.target);
   const shown = expanded ? keys : keys.slice(0, COLLAPSED_SERVICES);
   const hidden = keys.length - shown.length;
-
-  const substrates = [
-    capabilities?.docker === true ? "docker" : null,
-    capabilities?.kubernetes === true ? "kubernetes" : null,
-  ].filter((s): s is string => s !== null);
 
   return (
     <Card
@@ -49,12 +41,10 @@ export function ServerCard({
             {runner.hostname !== null && runner.hostname !== runner.serverName
               ? `host ${runner.hostname}`
               : null}
-            {runner.hostname !== null &&
-            runner.hostname !== runner.serverName &&
-            substrates.length > 0
+            {runner.hostname !== null && runner.hostname !== runner.serverName
               ? " · "
               : null}
-            {substrates.join(" · ")}
+            {runner.platform}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

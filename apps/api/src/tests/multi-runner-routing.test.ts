@@ -12,7 +12,8 @@ import {
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type {
-  CapabilityManifest,
+  DockerServiceIdentity,
+  RunnerManifest,
   RunnerCommandMessage,
 } from "@nightwarden/shared";
 
@@ -50,6 +51,12 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { mountApi } from "./api-server.js";
+import {
+  dockerService,
+  kubernetesManifest,
+  kubernetesWorkload,
+  manifest,
+} from "./manifest-helper.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -58,59 +65,24 @@ const FINISH_TURN = {
 };
 
 // Anonymous-container convention (no Compose labels): project === service === name.
-function svc(name: string): {
-  provider: "docker";
-  project: string;
-  service: string;
-} {
-  return { provider: "docker", project: name, service: name };
+function svc(name: string): DockerServiceIdentity {
+  return { project: name, service: name };
 }
 
-function k8sSvc(
-  workload: string,
-  namespace = "default",
-): { provider: "kubernetes"; namespace: string; workload: string } {
-  return { provider: "kubernetes", namespace, workload };
-}
-
-function makeManifest(
-  hostname: string,
-  containers: string[],
-): CapabilityManifest {
-  return {
-    hostname,
-    runnerVersion: "2.0.0",
-    capabilities: {
-      docker: true,
-      kubernetes: false,
-      services: containers.map((name) => ({
-        identity: svc(name),
-        status: "running",
-      })),
-      postgres: { available: false },
-      redis: { available: false },
-    },
-  };
+function makeManifest(hostname: string, containers: string[]): RunnerManifest {
+  return manifest(hostname, containers.map(dockerService));
 }
 
 function makeK8sManifest(
   hostname: string,
   workloads: Array<{ workload: string; namespace: string }>,
-): CapabilityManifest {
-  return {
+): RunnerManifest {
+  return kubernetesManifest(
     hostname,
-    runnerVersion: "2.0.0",
-    capabilities: {
-      docker: false,
-      kubernetes: true,
-      services: workloads.map(({ workload, namespace }) => ({
-        identity: k8sSvc(workload, namespace),
-        status: "running",
-      })),
-      postgres: { available: false },
-      redis: { available: false },
-    },
-  };
+    workloads.map(({ workload, namespace }) =>
+      kubernetesWorkload(namespace, workload),
+    ),
+  );
 }
 
 function makeSend(
@@ -197,7 +169,7 @@ describe("multi-runner routing", () => {
     conns.push(
       registerRunner({
         runnerId: runnerIdK,
-        platform: "docker",
+        platform: "kubernetes",
         send: makeSend(commandsK),
         close: () => {},
       }),

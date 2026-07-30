@@ -38,6 +38,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { mountApi } from "./api-server.js";
+import { dockerService } from "./manifest-helper.js";
 
 const CLARIFICATION_OPTIONS = [
   { label: "Memory pressure", description: "OOM conditions observed" },
@@ -78,24 +79,10 @@ describe("access-gate: gating is driven by tool access level", () => {
       close: () => {},
     });
     setRunnerManifest(TEST_TOKEN, {
+      platform: "docker",
       hostname: "access-gate-host",
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [
-          {
-            identity: {
-              provider: "docker",
-              project: "svc-01",
-              service: "svc-01",
-            },
-            status: "running",
-          },
-        ],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [dockerService("svc-01")],
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });

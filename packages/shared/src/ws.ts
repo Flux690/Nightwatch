@@ -24,7 +24,7 @@ export interface HideContainerMessage extends WsEnvelope {
 // Runner → API: capability manifest on connect
 export interface RunnerManifestMessage extends WsEnvelope {
   type: "manifest";
-  payload: import("./runner.js").CapabilityManifest;
+  payload: import("./runner.js").RunnerManifest;
 }
 
 // Runner → API: result of a command execution

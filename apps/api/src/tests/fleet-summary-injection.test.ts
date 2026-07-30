@@ -33,28 +33,16 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dispatcher } from "../dispatcher.js";
-import type { CapabilityManifest, NormalizedAlert } from "@nightwarden/shared";
+import type { RunnerManifest, NormalizedAlert } from "@nightwarden/shared";
+import { dockerService, manifest } from "./manifest-helper.js";
 
 const FINISH: ScriptedTurn = { toolUses: [], text: "Investigation complete." };
 
 function dockerManifest(
   hostname: string,
   serviceNames: string[],
-): CapabilityManifest {
-  return {
-    hostname,
-    runnerVersion: "2.0.0",
-    capabilities: {
-      docker: true,
-      kubernetes: false,
-      services: serviceNames.map((name) => ({
-        identity: { provider: "docker" as const, project: name, service: name },
-        status: "running",
-      })),
-      postgres: { available: false },
-      redis: { available: false },
-    },
-  };
+): RunnerManifest {
+  return manifest(hostname, serviceNames.map(dockerService));
 }
 
 function makeAlert(service: string): NormalizedAlert {

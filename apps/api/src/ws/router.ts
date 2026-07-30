@@ -1,4 +1,8 @@
-import { serviceIdentityKey, type ServiceIdentity } from "@nightwarden/shared";
+import type {
+  DockerServiceIdentity,
+  KubernetesWorkloadIdentity,
+  Platform,
+} from "@nightwarden/shared";
 import { addressName, manifestedConnections } from "./fleet.js";
 import type { RunnerConnection } from "./fleet.js";
 
@@ -11,30 +15,31 @@ export type RouteBy = "service" | "runner";
 const MAX_FANOUT = 8;
 
 // The owning runner plus the advertised identity behind a target key, so the
-// transport can expand the flat key back into the structured runner payload.
+// transport can expand the flat key back into the structured runner payload. The
+// identity is only ever passed through to the runner that advertised it, which is
+// why one field can hold either: nothing here narrows it.
 export interface ResolvedService {
   conn: RunnerConnection;
-  identity: ServiceIdentity;
+  identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
 }
 
-// Raised when runners are connected but none runs this substrate. Distinct from
+// Raised when runners are connected but none runs this platform. Distinct from
 // RunnerOfflineError, which means no runner at all - the two need different fixes.
-export class NoSubstrateRunnerError extends Error {
-  constructor(substrate: string) {
+export class NoPlatformRunnerError extends Error {
+  constructor(platform: Platform) {
     super(
-      `No connected runner runs ${substrate}. This command is only available on a ${substrate} runner.`,
+      `No connected runner runs ${platform}. This command is only available on a ${platform} runner.`,
     );
-    this.name = "NoSubstrateRunnerError";
+    this.name = "NoPlatformRunnerError";
   }
 }
 
-// Every runner advertising a target key, in fleet order.
+// Every runner advertising a target key, in fleet order. Each entry carries the key
+// its own runner built, so this compares strings and never rebuilds one.
 function ownersOf(target: string): ResolvedService[] {
   const owners: ResolvedService[] = [];
   for (const conn of manifestedConnections()) {
-    const match = conn.manifest?.capabilities.services.find(
-      (s) => serviceIdentityKey(s.identity) === target,
-    );
+    const match = conn.manifest?.services.find((s) => s.target === target);
     if (match) owners.push({ conn, identity: match.identity });
   }
   return owners;
@@ -75,26 +80,28 @@ export function resolveByService(
     );
   }
 
+  // Annotated because `services` is a union of two array types, which flatMap
+  // cannot widen on its own; only the key is read here, which both arms carry.
   const known = manifestedConnections()
-    .flatMap((c) => c.manifest?.capabilities.services ?? [])
-    .map((s) => serviceIdentityKey(s.identity))
+    .flatMap((c): Array<{ target: string }> => c.manifest?.services ?? [])
+    .map((s) => s.target)
     .join(", ");
   throw new Error(
     `No runner has target '${target}'. Known targets: ${known || "none"}`,
   );
 }
 
-// Runner-routed: `runner` names one, and its absence fans out to every runner that
-// can serve this substrate. A fan-out reaches only runners advertising it, so a
-// Kubernetes cluster is never asked for a Docker host's filesystems.
+// Runner-routed: `runner` names one, and its absence fans out to every runner of
+// this platform. A fan-out reaches only runners of that platform, so a Kubernetes
+// cluster is never asked for a Docker host's filesystems.
 export function resolveByRunner(
   commandInput: Record<string, unknown>,
-  substrate: "docker" | "kubernetes",
+  platform: Platform,
 ): RunnerConnection[] {
   const capable = manifestedConnections().filter(
-    (c) => c.manifest?.capabilities[substrate] === true,
+    (c) => c.platform === platform,
   );
-  if (capable.length === 0) throw new NoSubstrateRunnerError(substrate);
+  if (capable.length === 0) throw new NoPlatformRunnerError(platform);
 
   const available = (): string =>
     capable
@@ -115,7 +122,7 @@ export function resolveByRunner(
     );
   }
   throw new Error(
-    `No ${substrate} runner named '${requested}'. Available: ${available()}`,
+    `No ${platform} runner named '${requested}'. Available: ${available()}`,
   );
 }
 

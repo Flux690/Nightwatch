@@ -32,8 +32,10 @@ jobs:
         include:
           - name: nightwarden
             dockerfile: Dockerfile
-          - name: nightwarden-runner
-            dockerfile: apps/runner/Dockerfile
+          - name: nightwarden-docker-runner
+            dockerfile: apps/docker-runner/Dockerfile
+          - name: nightwarden-kubernetes-runner
+            dockerfile: apps/kubernetes-runner/Dockerfile
     steps:
       - uses: actions/checkout@v7
 

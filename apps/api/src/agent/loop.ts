@@ -5,7 +5,7 @@ import { GATE_NUDGE } from "./prompts/report.js";
 import { finalizeInconclusive } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
-import { currentFleetCapabilities } from "./policy.js";
+import { connectedPlatforms } from "./policy.js";
 import { processToolUses } from "./turn.js";
 import { retrySummary, withLLMRetries } from "../llm/failures.js";
 import { retryDelaysMs } from "../llm/config.js";
@@ -349,11 +349,11 @@ export async function runInvestigation(
   while (Date.now() < deadline) {
     turn++;
 
-    const fleetCapabilities = currentFleetCapabilities();
+    const platforms = connectedPlatforms();
     // Re-read per turn: disconnecting an integration strips its tools from the
     // very next turn.
     const toolset = effectiveToolset(
-      fleetCapabilities,
+      platforms,
       {
         github: getGitHubIntegration() !== null,
         prometheus: getPrometheusIntegration() !== null,

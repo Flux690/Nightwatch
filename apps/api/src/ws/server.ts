@@ -86,6 +86,25 @@ export async function registerWsRoutes(
 
         if (type === "manifest") {
           const msg = parsed as unknown as RunnerManifestMessage;
+          // The row decided this runner's platform at onboarding; the manifest says
+          // which binary actually connected. A disagreement means a real operator
+          // error (the Docker install line pasted into a cluster), so refuse rather
+          // than serve a fleet whose entries lie about what they are.
+          if (msg.payload.platform !== tokenRecord.platform) {
+            fastify.log.error(
+              {
+                runnerId: runnerId.slice(0, 8),
+                expected: tokenRecord.platform,
+                reported: msg.payload.platform,
+              },
+              "runner platform does not match its row; closing",
+            );
+            socket.close(
+              4004,
+              `This token is registered as a ${tokenRecord.platform} runner, but a ${msg.payload.platform} runner connected with it.`,
+            );
+            return;
+          }
           touchLastUsed(runnerId);
           setRunnerManifest(runnerId, msg.payload);
           fastify.log.info(

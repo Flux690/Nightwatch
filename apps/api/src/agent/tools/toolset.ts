@@ -10,14 +10,13 @@ import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
 import { REPORT_TOOLS } from "./report.js";
 import type {
-  FleetCapabilities,
   Tool,
   ToolDispatchContext,
   ToolExecuteContext,
   ToolExecuteResult,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
-import type { RunMode } from "@nightwarden/shared";
+import type { Platform, RunMode } from "@nightwarden/shared";
 
 // A runner tool's schema.name IS the wire command, addressed by its declared
 // route; an api tool's execute IS its implementation - no mapping table.
@@ -70,23 +69,25 @@ export interface IntegrationConnections {
 }
 
 // Single source of truth for both the offered schemas and the names the loop resolves,
-// so hiding a tool and gating it are one op. Each provider library is injected whole when
-// the fleet advertises that provider; a tool cannot be offered for a substrate no runner runs.
-// Integrations gate their own libraries the same way: GitHub gates the repo tools (sandbox
-// checkout) plus the GitHub evidence tools, Prometheus gates the metrics tools, Loki the log tools.
+// so hiding a tool and gating it are one op. Each platform's library is injected whole
+// when the fleet has a runner of that platform. Integrations gate their own libraries the
+// same way: GitHub gates the repo tools (sandbox checkout) plus the GitHub evidence tools,
+// Prometheus gates the metrics tools, Loki the log tools.
+// `platforms` undefined means every library, which only callers that want the whole
+// catalogue (schema dumps) pass; the loop always supplies the live set.
 export function effectiveToolset(
-  caps: FleetCapabilities | undefined,
+  platforms: Set<Platform> | undefined,
   connections: IntegrationConnections = {},
   mode: RunMode = "investigate",
 ): Tool[] {
   const { github = true, prometheus = true, loki = true } = connections;
+  const has = (platform: Platform): boolean =>
+    platforms === undefined || platforms.has(platform);
   return [
-    // Host tools ride with Docker: they gate on the substrate, since host facts
+    // Host tools ride with Docker: they gate on the platform, since host facts
     // only mean something on a runner that is 1:1 with its machine.
-    ...(caps === undefined || caps.docker
-      ? [...DOCKER_TOOLS, ...HOST_TOOLS]
-      : []),
-    ...(caps === undefined || caps.kubernetes ? K8S_TOOLS : []),
+    ...(has("docker") ? [...DOCKER_TOOLS, ...HOST_TOOLS] : []),
+    ...(has("kubernetes") ? K8S_TOOLS : []),
     ...INTERRUPT_TOOLS,
     ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
     ...(prometheus ? PROMETHEUS_TOOLS : []),
@@ -99,8 +100,8 @@ export function effectiveToolset(
 // Schemas only, for callers that just need the wire shape (e.g. tests); the loop uses
 // effectiveToolset directly.
 export function getToolSchemas(
-  caps?: FleetCapabilities,
+  platforms?: Set<Platform>,
   connections?: IntegrationConnections,
 ): ToolSchema[] {
-  return effectiveToolset(caps, connections ?? {}).map((t) => t.schema);
+  return effectiveToolset(platforms, connections ?? {}).map((t) => t.schema);
 }

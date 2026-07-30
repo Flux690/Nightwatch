@@ -39,24 +39,26 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { getToolSchemas } from "../agent/tools/toolset.js";
-import { currentFleetCapabilities } from "../agent/policy.js";
+import { connectedPlatforms } from "../agent/policy.js";
 import { mountApi } from "./api-server.js";
+import {
+  kubernetesManifest,
+  kubernetesWorkload,
+  manifest,
+} from "./manifest-helper.js";
 
 const K8S_SERVICE = {
-  provider: "kubernetes" as const,
   namespace: "production",
   workload: "api-server",
 };
 
 describe("toolset assembly by fleet capabilities", () => {
   describe("provider library injection (unit)", () => {
-    it("capabilities: none with no runner, undefined mid-handshake, concrete once manifested", () => {
-      // No runner connected: concrete all-false, so an integration-only session is
-      // never offered runner tools (not the "offer everything" undefined case).
-      expect(currentFleetCapabilities()).toEqual({
-        docker: false,
-        kubernetes: false,
-      });
+    // Platform comes from the runner's row, so it is known the instant a socket
+    // authenticates. There is no handshake window in which the fleet's platforms
+    // are unknown, which is what the old probe-and-report manifest created.
+    it("knows a runner's platform from the moment it connects, before any manifest", () => {
+      expect(connectedPlatforms()).toEqual(new Set([]));
 
       const conn = registerRunner({
         runnerId: "caps-unit-docker",
@@ -64,30 +66,13 @@ describe("toolset assembly by fleet capabilities", () => {
         send: () => {},
         close: () => {},
       });
-      // Connected but manifest not arrived: undefined offers all for the handshake.
-      expect(currentFleetCapabilities()).toBeUndefined();
+      expect(connectedPlatforms()).toEqual(new Set(["docker" as const]));
 
-      setRunnerManifest("caps-unit-docker", {
-        hostname: "caps-unit-host",
-        runnerVersion: "2.0.0",
-        capabilities: {
-          docker: true,
-          kubernetes: false,
-          services: [],
-          postgres: { available: false },
-          redis: { available: false },
-        },
-      });
-      expect(currentFleetCapabilities()).toEqual({
-        docker: true,
-        kubernetes: false,
-      });
+      setRunnerManifest("caps-unit-docker", manifest("caps-unit-host", []));
+      expect(connectedPlatforms()).toEqual(new Set(["docker" as const]));
 
       unregisterRunner(conn);
-      expect(currentFleetCapabilities()).toEqual({
-        docker: false,
-        kubernetes: false,
-      });
+      expect(connectedPlatforms()).toEqual(new Set([]));
     });
 
     it("offers both provider libraries when capabilities are unknown", () => {
@@ -99,7 +84,7 @@ describe("toolset assembly by fleet capabilities", () => {
     });
 
     it("a Docker-only fleet gets Docker tools and no Kubernetes tools", () => {
-      const names = getToolSchemas({ docker: true, kubernetes: false }).map(
+      const names = getToolSchemas(new Set(["docker" as const])).map(
         (s) => s.name,
       );
       expect(names).toContain("GetDockerLogs");
@@ -113,7 +98,7 @@ describe("toolset assembly by fleet capabilities", () => {
     });
 
     it("a Kubernetes-only fleet gets Kubernetes tools and no Docker tools", () => {
-      const names = getToolSchemas({ docker: false, kubernetes: true }).map(
+      const names = getToolSchemas(new Set(["kubernetes" as const])).map(
         (s) => s.name,
       );
       expect(names).toContain("GetK8sLogs");
@@ -134,11 +119,10 @@ describe("toolset assembly by fleet capabilities", () => {
         "GetHostDmesg",
         "ReadHostFile",
       ];
-      const dockerNames = getToolSchemas({
-        docker: true,
-        kubernetes: false,
-      }).map((s) => s.name);
-      const k8sNames = getToolSchemas({ docker: false, kubernetes: true }).map(
+      const dockerNames = getToolSchemas(new Set(["docker" as const])).map(
+        (s) => s.name,
+      );
+      const k8sNames = getToolSchemas(new Set(["kubernetes" as const])).map(
         (s) => s.name,
       );
       for (const name of hostTools) {
@@ -148,9 +132,9 @@ describe("toolset assembly by fleet capabilities", () => {
     });
 
     it("a mixed fleet gets both libraries", () => {
-      const names = getToolSchemas({ docker: true, kubernetes: true }).map(
-        (s) => s.name,
-      );
+      const names = getToolSchemas(
+        new Set(["docker" as const, "kubernetes" as const]),
+      ).map((s) => s.name);
       expect(names).toContain("GetDockerLogs");
       expect(names).toContain("GetK8sLogs");
     });
@@ -169,26 +153,20 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(disconnected).not.toContain("Read");
     });
 
-    it("GetRecentChanges is offered with no runner substrate at all", () => {
-      const names = getToolSchemas(
-        { docker: false, kubernetes: false },
-        {
-          github: true,
-        },
-      ).map((s) => s.name);
+    it("GetRecentChanges is offered with no runner platform at all", () => {
+      const names = getToolSchemas(new Set([]), {
+        github: true,
+      }).map((s) => s.name);
       expect(names).toContain("GetRecentChanges");
       expect(names).not.toContain("GetDockerLogs");
       expect(names).not.toContain("GetK8sLogs");
     });
 
-    it("the Prometheus gate controls the metrics tools, independent of substrate", () => {
-      const connected = getToolSchemas(
-        { docker: false, kubernetes: false },
-        {
-          github: false,
-          prometheus: true,
-        },
-      ).map((s) => s.name);
+    it("the Prometheus gate controls the metrics tools, independent of platform", () => {
+      const connected = getToolSchemas(new Set([]), {
+        github: false,
+        prometheus: true,
+      }).map((s) => s.name);
       expect(connected).toContain("QueryMetrics");
       expect(connected).toContain("QueryMetricsRange");
       const disconnected = getToolSchemas(undefined, {
@@ -198,15 +176,12 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(disconnected).not.toContain("QueryMetricsRange");
     });
 
-    it("the Loki gate controls the log tools, independent of substrate", () => {
-      const connected = getToolSchemas(
-        { docker: false, kubernetes: false },
-        {
-          github: false,
-          prometheus: false,
-          loki: true,
-        },
-      ).map((s) => s.name);
+    it("the Loki gate controls the log tools, independent of platform", () => {
+      const connected = getToolSchemas(new Set([]), {
+        github: false,
+        prometheus: false,
+        loki: true,
+      }).map((s) => s.name);
       expect(connected).toContain("QueryLogs");
       expect(connected).toContain("QueryLogMetrics");
       expect(connected).toContain("DiscoverLogLabels");
@@ -235,7 +210,7 @@ describe("toolset assembly by fleet capabilities", () => {
 
       connK8s = registerRunner({
         runnerId: K8S_TOKEN,
-        platform: "docker",
+        platform: "kubernetes",
         send: (raw: string) => {
           const msg = JSON.parse(raw) as RunnerCommandMessage;
           const { commandName, correlationId } = msg.payload;
@@ -248,22 +223,12 @@ describe("toolset assembly by fleet capabilities", () => {
         },
         close: () => {},
       });
-      setRunnerManifest(K8S_TOKEN, {
-        hostname: "k8s-host",
-        runnerVersion: "2.0.0",
-        capabilities: {
-          docker: false,
-          kubernetes: true,
-          services: [
-            {
-              identity: K8S_SERVICE,
-              status: "running",
-            },
-          ],
-          postgres: { available: false },
-          redis: { available: false },
-        },
-      });
+      setRunnerManifest(
+        K8S_TOKEN,
+        kubernetesManifest("k8s-host", [
+          kubernetesWorkload(K8S_SERVICE.namespace, K8S_SERVICE.workload),
+        ]),
+      );
 
       server = Fastify({ logger: false, forceCloseConnections: true });
       await mountApi(server, registerConsoleEventRoutes);

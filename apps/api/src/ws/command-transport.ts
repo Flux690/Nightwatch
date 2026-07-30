@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   FleetResult,
+  Platform,
   RunnerCommandMessage,
   RunnerResultMessage,
 } from "@nightwarden/shared";
@@ -108,10 +109,10 @@ export function sendCommand(
 export async function sendFleetCommand(
   commandName: string,
   commandInput: Record<string, unknown>,
-  substrate: "docker" | "kubernetes",
+  platform: Platform,
   timeoutMs = 15_000,
 ): Promise<{ envelope: FleetResult<unknown>; anySucceeded: boolean }> {
-  const conns = resolveByRunner(commandInput, substrate);
+  const conns = resolveByRunner(commandInput, platform);
   const { runner: _runner, ...payloadInput } = commandInput;
 
   const settled = await Promise.allSettled(

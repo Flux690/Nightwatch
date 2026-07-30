@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import type { RunnerRecord } from "@nightwarden/shared";
+import type { Platform, RunnerRecord } from "@nightwarden/shared";
 import { Plus } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -16,12 +16,11 @@ import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { apiFetch } from "@/api/client";
 
-// The two substrates are genuinely different things - a machine running
+// The two platforms are genuinely different things - a machine running
 // containers, and a cluster - so each gets its own noun, page and install path.
-export type Substrate = "docker" | "kubernetes";
 
-export const SUBSTRATE_COPY: Record<
-  Substrate,
+export const PLATFORM_COPY: Record<
+  Platform,
   { plural: string; singular: string; blurb: string; emptyHint: string }
 > = {
   docker: {
@@ -67,8 +66,8 @@ function compareRunners(
       break;
     }
     case "services": {
-      const aCount = a.manifest?.capabilities.services.length ?? 0;
-      const bCount = b.manifest?.capabilities.services.length ?? 0;
+      const aCount = a.manifest?.services.length ?? 0;
+      const bCount = b.manifest?.services.length ?? 0;
       cmp = aCount - bCount;
       break;
     }
@@ -76,19 +75,19 @@ function compareRunners(
   return dir === "asc" ? cmp : -cmp;
 }
 
-// A runner belongs to the substrate it advertises, so the two lists can never
-// disagree with what the fleet itself reports.
-export function runsSubstrate(
+// A runner belongs to the platform its row names, decided at onboarding, so the
+// two lists can never disagree with what the runner actually is.
+export function runsPlatform(
   runner: RunnerRecord,
-  substrate: Substrate,
+  platform: Platform,
 ): boolean {
-  return runner.manifest?.capabilities[substrate] === true;
+  return runner.platform === platform;
 }
 
 export function RunnerListPage({
-  substrate,
+  platform,
 }: {
-  substrate: Substrate;
+  platform: Platform;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -97,7 +96,7 @@ export function RunnerListPage({
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const copy = SUBSTRATE_COPY[substrate];
+  const copy = PLATFORM_COPY[platform];
 
   const {
     data: runners,
@@ -110,7 +109,7 @@ export function RunnerListPage({
   });
 
   const connected = (runners ?? []).filter(
-    (r) => r.hostname !== null && runsSubstrate(r, substrate),
+    (r) => r.hostname !== null && runsPlatform(r, platform),
   );
   const sorted = [...connected].sort((a, b) =>
     compareRunners(a, b, sortField, sortDir),
@@ -146,9 +145,7 @@ export function RunnerListPage({
         <PageTitle>{copy.plural}</PageTitle>
         <Button
           size="sm"
-          onClick={() =>
-            void navigate({ to: `/integrations/${substrate}/add` })
-          }
+          onClick={() => void navigate({ to: `/integrations/${platform}/add` })}
         >
           <Plus {...ICON_INLINE} />
           Add a {copy.singular.toLowerCase()}

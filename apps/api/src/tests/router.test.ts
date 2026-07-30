@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
-  CapabilityManifest,
+  DockerServiceIdentity,
+  Platform,
+  RunnerManifest,
   RunnerCommandMessage,
 } from "@nightwarden/shared";
 import {
@@ -17,13 +19,10 @@ import {
   sendFleetCommand,
 } from "../ws/command-transport.js";
 import { isSharedTarget } from "../ws/router.js";
+import { dockerService, kubernetesWorkload } from "./manifest-helper.js";
 
-function svc(name: string): {
-  provider: "docker";
-  project: string;
-  service: string;
-} {
-  return { provider: "docker", project: name, service: name };
+function svc(name: string): DockerServiceIdentity {
+  return { project: name, service: name };
 }
 
 // The flat target key svc(name) advertises: docker/<project>/<service>.
@@ -34,22 +33,21 @@ function key(name: string): string {
 function makeManifest(
   hostname: string,
   containers: string[],
-  substrate: "docker" | "kubernetes" = "docker",
-): CapabilityManifest {
-  return {
-    hostname,
-    runnerVersion: "2.0.0",
-    capabilities: {
-      docker: substrate === "docker",
-      kubernetes: substrate === "kubernetes",
-      services: containers.map((name) => ({
-        identity: svc(name),
-        status: "running",
-      })),
-      postgres: { available: false },
-      redis: { available: false },
-    },
-  };
+  platform: Platform = "docker",
+): RunnerManifest {
+  return platform === "docker"
+    ? {
+        platform,
+        hostname,
+        runnerVersion: "3.0.0",
+        services: containers.map((name) => dockerService(name)),
+      }
+    : {
+        platform,
+        hostname,
+        runnerVersion: "3.0.0",
+        services: containers.map((name) => kubernetesWorkload("default", name)),
+      };
 }
 
 function makeSend(
@@ -71,7 +69,7 @@ describe("router", () => {
     containers: string[],
     opts: {
       serverName?: string;
-      substrate?: "docker" | "kubernetes";
+      platform?: Platform;
       // Accepts the command and never answers, so the caller times out.
       silent?: boolean;
     } = {},
@@ -90,7 +88,7 @@ describe("router", () => {
     conns.push(
       registerRunner({
         runnerId: runnerId,
-        platform: "docker",
+        platform: opts.platform ?? "docker",
         send: opts.silent === true ? () => {} : makeSend(commands),
         close: () => {},
         serverName: opts.serverName ?? null,
@@ -98,7 +96,7 @@ describe("router", () => {
     );
     setRunnerManifest(
       runnerId,
-      makeManifest(hostname, containers, opts.substrate),
+      makeManifest(hostname, containers, opts.platform),
     );
     return { runnerId, commands };
   }
@@ -116,11 +114,11 @@ describe("router", () => {
     const byHostname = new Map(fleet.map((r) => [r.hostname, r]));
 
     expect(byHostname.get("web-01")?.services).toEqual([
-      { identity: svc("nginx"), status: "running" },
-      { identity: svc("api"), status: "running" },
+      dockerService("nginx"),
+      dockerService("api"),
     ]);
     expect(byHostname.get("db-02")?.services).toEqual([
-      { identity: svc("postgres"), status: "running" },
+      dockerService("postgres"),
     ]);
     expect(byHostname.get("web-01")?.online).toBe(true);
   });
@@ -217,7 +215,7 @@ describe("router", () => {
   });
 
   describe("runner routes", () => {
-    it("fans out to every runner of the substrate when no runner is named", async () => {
+    it("fans out to every runner of the platform when no runner is named", async () => {
       const a = connect("web-01", ["nginx"]);
       const b = connect("db-02", ["postgres"]);
 
@@ -245,9 +243,9 @@ describe("router", () => {
       ]);
     });
 
-    it("reaches only runners advertising the substrate", async () => {
+    it("reaches only runners of that platform", async () => {
       const dockerHost = connect("web-01", ["nginx"]);
-      const cluster = connect("k8s-01", ["api"], { substrate: "kubernetes" });
+      const cluster = connect("k8s-01", ["api"], { platform: "kubernetes" });
 
       await sendFleetCommand("GetHostDisk", {}, "docker");
 
@@ -255,8 +253,8 @@ describe("router", () => {
       expect(cluster.commands).toHaveLength(0);
     });
 
-    it("says which substrate is missing, rather than claiming no runner is connected", async () => {
-      connect("k8s-01", ["api"], { substrate: "kubernetes" });
+    it("says which platform is missing, rather than claiming no runner is connected", async () => {
+      connect("k8s-01", ["api"], { platform: "kubernetes" });
 
       await expect(
         sendFleetCommand("GetHostDisk", {}, "docker"),

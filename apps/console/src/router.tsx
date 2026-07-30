@@ -87,29 +87,29 @@ const githubConnectRoute = createRoute({
 
 // Docker hosts and Kubernetes clusters are two integrations, not one: they install
 // differently and are addressed differently. One list and one wizard serve both,
-// parameterized by the substrate the route names.
+// parameterized by the platform the route names.
 const dockerHostsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/docker",
-  component: () => <RunnerListPage substrate="docker" />,
+  component: () => <RunnerListPage platform="docker" />,
 });
 
 const addDockerHostRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/docker/add",
-  component: () => <AddRunnerPage substrate="docker" />,
+  component: () => <AddRunnerPage platform="docker" />,
 });
 
 const kubernetesClustersRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/kubernetes",
-  component: () => <RunnerListPage substrate="kubernetes" />,
+  component: () => <RunnerListPage platform="kubernetes" />,
 });
 
 const addKubernetesClusterRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/kubernetes/add",
-  component: () => <AddRunnerPage substrate="kubernetes" />,
+  component: () => <AddRunnerPage platform="kubernetes" />,
 });
 
 const alertmanagerRoute = createRoute({

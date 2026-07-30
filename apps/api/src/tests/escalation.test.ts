@@ -35,6 +35,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { mountApi } from "./api-server.js";
+import { dockerService } from "./manifest-helper.js";
 
 describe("termination paths: every run ends in model text, no escalation", () => {
   let server: FastifyInstance;
@@ -60,24 +61,10 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       close: () => {},
     });
     setRunnerManifest(TEST_TOKEN, {
+      platform: "docker",
       hostname: "esc-host",
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [
-          {
-            identity: {
-              provider: "docker",
-              project: "web-01",
-              service: "web-01",
-            },
-            status: "running",
-          },
-        ],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [dockerService("web-01")],
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });

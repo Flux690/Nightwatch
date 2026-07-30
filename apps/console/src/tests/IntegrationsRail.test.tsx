@@ -41,17 +41,12 @@ const CONNECTED_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date().toISOString(),
   // A connected runner always has a manifest: the hostname above comes from it,
-  // and its substrate flags are what decide which of the two lists it belongs to.
+  // and its platform flags are what decide which of the two lists it belongs to.
   manifest: {
+    platform: "docker" as const,
     hostname: "web-01",
     runnerVersion: "2.0.0",
-    capabilities: {
-      docker: true,
-      kubernetes: false,
-      services: [],
-      postgres: { available: false },
-      redis: { available: false },
-    },
+    services: [],
   },
 };
 
@@ -238,7 +233,7 @@ describe("IntegrationsRail", () => {
       expect(screen.getByText("Kubernetes clusters")).toBeInTheDocument();
     });
 
-    it("routes an empty fleet straight to that substrate's add wizard", async () => {
+    it("routes an empty fleet straight to that platform's add wizard", async () => {
       const user = userEvent.setup();
       setup({ runners: [] });
 
@@ -250,7 +245,7 @@ describe("IntegrationsRail", () => {
       ).toBeInTheDocument();
     });
 
-    it("counts a runner under the substrate it advertises, and opens that list", async () => {
+    it("counts a runner under the platform it advertises, and opens that list", async () => {
       const user = userEvent.setup();
       setup({ runners: [CONNECTED_RUNNER] });
 

@@ -51,7 +51,7 @@ export const K8S_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "kubernetes",
+    platform: "kubernetes",
   },
   {
     schema: {
@@ -200,7 +200,7 @@ export const K8S_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "kubernetes",
+    platform: "kubernetes",
   },
   {
     schema: {

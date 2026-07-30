@@ -121,18 +121,18 @@ export function IntegrationsRail(): React.JSX.Element {
 
   // Two entries, not one: a Docker host and a Kubernetes cluster install
   // differently and are addressed differently, so each is its own integration.
-  function substrateRow(
-    substrate: "docker" | "kubernetes",
+  function platformRow(
+    platform: "docker" | "kubernetes",
     title: string,
     noun: string,
   ): IntegrationRow {
     const count = connectedRunners.filter(
-      (r) => r.manifest?.capabilities[substrate] === true,
+      (r) => r.platform === platform,
     ).length;
     return {
       title,
       logo:
-        substrate === "docker" ? (
+        platform === "docker" ? (
           <Server className="size-5 text-muted-foreground" />
         ) : (
           <Boxes className="size-5 text-muted-foreground" />
@@ -140,16 +140,16 @@ export function IntegrationsRail(): React.JSX.Element {
       // Nothing connected routes straight to the add wizard.
       to:
         count > 0
-          ? `/integrations/${substrate}`
-          : `/integrations/${substrate}/add`,
+          ? `/integrations/${platform}`
+          : `/integrations/${platform}/add`,
       isLoading: runnersLoading,
       status: count > 0 ? `${count} ${count === 1 ? noun : `${noun}s`}` : null,
     };
   }
 
   const rows: IntegrationRow[] = [
-    substrateRow("docker", "Docker hosts", "host"),
-    substrateRow("kubernetes", "Kubernetes clusters", "cluster"),
+    platformRow("docker", "Docker hosts", "host"),
+    platformRow("kubernetes", "Kubernetes clusters", "cluster"),
     {
       title: "Alertmanager",
       logo: <img src="/logos/alertmanager.svg" alt="" className="size-5" />,

@@ -2,7 +2,10 @@
 // apps/api. A Kubernetes workload is not a container: every result identifies the
 // pod it was read from, and every read reports names and shapes, never secret values.
 
-import type { K8sWorkloadKind, ServiceIdentity } from "../service-identity.js";
+import type {
+  K8sWorkloadKind,
+  KubernetesWorkloadIdentity,
+} from "../service-identity.js";
 import type { RiskLevel } from "./common.js";
 
 export interface K8sWorkloadListInput {
@@ -33,7 +36,7 @@ export interface K8sWorkloadListResult {
 
 // No stderrOnly: the Kubernetes log API merges the streams and cannot filter them.
 export interface K8sLogsInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
   tailLines?: number;
   sinceTimestamp?: string;
 }
@@ -76,7 +79,7 @@ export interface K8sContainerSpec {
 }
 
 export interface K8sConfigInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
 }
 export interface K8sConfigResult {
   name: string;
@@ -99,7 +102,7 @@ export interface K8sConfigResult {
 }
 
 export interface K8sStatsInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
 }
 
 export interface K8sContainerStats {
@@ -137,7 +140,7 @@ export interface K8sStatsResult {
 }
 
 export interface K8sEventsInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
   sinceMinutes?: number;
   // Kubernetes Normal events are high-volume; default true.
   warningsOnly?: boolean;
@@ -173,7 +176,7 @@ export interface K8sProcess {
 }
 
 export interface K8sProcessesInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
 }
 export interface K8sProcessesResult {
   podName: string;
@@ -183,7 +186,7 @@ export interface K8sProcessesResult {
 
 // No delaySeconds: a rollout restart is an annotation patch with no delay to honour.
 export interface K8sRestartInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
   rationale: string;
   risk: RiskLevel;
   estimatedDowntimeSeconds: number;
@@ -196,7 +199,7 @@ export interface K8sRestartResult {
 }
 
 export interface K8sRolloutStatusInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
 }
 export interface K8sRolloutStatusResult {
   workload: string;
@@ -223,7 +226,7 @@ export interface K8sRolloutStatusResult {
 }
 
 export interface K8sBashInput {
-  service: ServiceIdentity;
+  service: KubernetesWorkloadIdentity;
   command: string[];
   reason: string;
   risk: RiskLevel;

@@ -38,7 +38,7 @@ export const DOCKER_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {

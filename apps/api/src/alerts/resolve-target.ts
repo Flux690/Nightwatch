@@ -1,19 +1,30 @@
 import {
   composeServiceLabels,
-  serviceIdentityKey,
+  type DockerFleetRunner,
+  type DockerServiceIdentity,
   type FleetRunner,
   type K8sWorkloadKind,
-  type ServiceIdentity,
-  type ServiceManifestEntry,
+  type KubernetesFleetRunner,
+  type KubernetesWorkloadIdentity,
 } from "@nightwarden/shared";
 
 // The outcome of matching an alert's labels against the live fleet. Resolved names the key to
 // act on; ambiguous names the runners to disambiguate between; unresolved hands the agent the
 // raw labels, which formatAlert renders in full alongside the fleet summary.
 export type AlertResolution =
-  | { kind: "resolved"; identity: ServiceIdentity; key: string }
+  | {
+      kind: "resolved";
+      identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
+      key: string;
+    }
   | { kind: "ambiguous"; key: string; runners: string[] }
   | { kind: "unresolved" };
+
+interface Match {
+  key: string;
+  identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
+  runner: string;
+}
 
 // Walks what the fleet actually advertises and asks, per entry, whether these labels describe it.
 // The other direction - minting every identity the labels could name, then filtering - invents keys
@@ -22,22 +33,16 @@ export function resolveAlertTarget(
   labels: Record<string, string>,
   fleet: FleetRunner[],
 ): AlertResolution {
-  const matches: Array<{
-    key: string;
-    identity: ServiceIdentity;
-    runner: string;
-  }> = [];
-
+  // Partitioned by platform, so each matcher only ever sees identities of its own
+  // kind and neither has to ask what it was handed. The labels are still offered to
+  // both, which is why each matcher keeps its own precondition on them.
+  const matches: Match[] = [];
   for (const runner of fleet) {
-    const runnerName = runner.serverName ?? runner.hostname;
-    for (const entry of runner.services) {
-      if (!alertDescribes(labels, entry)) continue;
-      matches.push({
-        key: serviceIdentityKey(entry.identity),
-        identity: entry.identity,
-        runner: runnerName,
-      });
-    }
+    matches.push(
+      ...(runner.platform === "docker"
+        ? dockerMatches(labels, runner)
+        : kubernetesMatches(labels, runner)),
+    );
   }
 
   const keys = new Set(matches.map((m) => m.key));
@@ -53,22 +58,45 @@ export function resolveAlertTarget(
   return { kind: "resolved", identity: first.identity, key: first.key };
 }
 
-function alertDescribes(
+function runnerName(runner: FleetRunner): string {
+  return runner.serverName ?? runner.hostname;
+}
+
+function dockerMatches(
   labels: Record<string, string>,
-  entry: ServiceManifestEntry,
-): boolean {
-  return entry.identity.provider === "docker"
-    ? describesDockerService(labels, entry.identity)
-    : describesK8sWorkload(labels, entry.identity, entry.kind);
+  runner: DockerFleetRunner,
+): Match[] {
+  return runner.services
+    .filter((entry) => describesDockerService(labels, entry.identity))
+    .map((entry) => ({
+      key: entry.target,
+      identity: entry.identity,
+      runner: runnerName(runner),
+    }));
+}
+
+function kubernetesMatches(
+  labels: Record<string, string>,
+  runner: KubernetesFleetRunner,
+): Match[] {
+  return runner.services
+    .filter((entry) => describesK8sWorkload(labels, entry.identity, entry.kind))
+    .map((entry) => ({
+      key: entry.target,
+      identity: entry.identity,
+      runner: runnerName(runner),
+    }));
 }
 
 function describesDockerService(
   labels: Record<string, string>,
-  identity: { project: string; service: string },
+  identity: DockerServiceIdentity,
 ): boolean {
-  // A namespace means Kubernetes, which Docker and Compose alerts never carry. Without
-  // this, a Kubernetes alert's `container` label would match a Docker host that happens to
-  // run an anonymous container of the same name, and the second key would force unresolved.
+  // An alert carries no platform, only labels that imply one, and a mixed fleet
+  // offers every alert to both matchers. `namespace` means Kubernetes, which Docker
+  // and Compose alerts never carry: without this, a Kubernetes alert's `container`
+  // label matches a Docker host running a container of that name, and the second
+  // key forces a perfectly resolvable alert to unresolved.
   if (labels["namespace"] !== undefined) return false;
 
   // Compose labels are re-stamped on every recreate, so when present they are the
@@ -102,22 +130,22 @@ const WORKLOAD_LABELS: Array<[string, K8sWorkloadKind]> = [
 
 function describesK8sWorkload(
   labels: Record<string, string>,
-  identity: { namespace: string; workload: string },
-  kind: K8sWorkloadKind | undefined,
+  identity: KubernetesWorkloadIdentity,
+  kind: K8sWorkloadKind,
 ): boolean {
   if (labels["namespace"] !== identity.namespace) return false;
 
   for (const [label, labelKind] of WORKLOAD_LABELS) {
     const named = labels[label];
     if (named === undefined) continue;
-    if (kind !== undefined && kind !== labelKind) return false;
+    if (kind !== labelKind) return false;
     return named === identity.workload;
   }
 
-  // Only a pod name: recoverable from its shape, but every shape rule below is a
-  // statement about a kind, so an entry that does not declare one cannot be matched.
+  // Only a pod name: recoverable from its shape, every rule below being a
+  // statement about the kind the entry already declares.
   const pod = labels["pod"];
-  if (pod === undefined || kind === undefined) return false;
+  if (pod === undefined) return false;
   return podBelongsToWorkload(pod, identity.workload, kind);
 }
 

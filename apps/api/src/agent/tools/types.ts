@@ -1,11 +1,5 @@
+import type { Platform } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
-
-// What the connected fleet can do, derived from runner manifests. Drives which
-// provider libraries the toolset offers; a false substrate is never offered.
-export interface FleetCapabilities {
-  docker: boolean;
-  kubernetes: boolean;
-}
 
 export interface ToolExecuteResult {
   content: unknown;
@@ -42,8 +36,8 @@ interface ToolCommon {
 }
 
 // Where a tool executes is declared, never inferred. A service-routed command finds its
-// owner from the target key; a runner-routed one names its substrate, so a fan-out
-// reaches only runners that can serve it.
+// owner from the target key; a runner-routed one names its platform, so a fan-out
+// reaches only runners of that platform.
 export type Tool = ToolCommon &
   (
     | {
@@ -54,5 +48,5 @@ export type Tool = ToolCommon &
         ): Promise<ToolExecuteResult>;
       }
     | { on: "runner"; routeBy: "service" }
-    | { on: "runner"; routeBy: "runner"; substrate: "docker" | "kubernetes" }
+    | { on: "runner"; routeBy: "runner"; platform: Platform }
   );

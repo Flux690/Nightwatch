@@ -2,14 +2,14 @@ export type { AlertSeverity, NormalizedAlert } from "./alerts.js";
 export type { AuthStatusResponse } from "./auth.js";
 export type {
   DockerServiceIdentity,
-  KubernetesServiceIdentity,
+  KubernetesWorkloadIdentity,
   K8sWorkloadKind,
-  ServiceIdentity,
 } from "./service-identity.js";
 export {
   composeServiceLabels,
   deriveDockerServiceIdentity,
-  serviceIdentityKey,
+  dockerServiceKey,
+  kubernetesWorkloadKey,
 } from "./service-identity.js";
 export type {
   RiskLevel,
@@ -108,11 +108,16 @@ export type {
   RespondRequest,
 } from "./approvals.js";
 export type {
-  CapabilityManifest,
+  DockerFleetRunner,
+  DockerManifest,
+  DockerServiceEntry,
   FleetRunner,
+  KubernetesFleetRunner,
+  KubernetesManifest,
+  KubernetesWorkloadEntry,
   Platform,
+  RunnerManifest,
   RunnerRecord,
-  ServiceManifestEntry,
 } from "./runner.js";
 export { PLATFORMS, isPlatform } from "./runner.js";
 export type {

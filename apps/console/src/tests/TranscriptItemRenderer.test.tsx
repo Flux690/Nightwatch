@@ -49,7 +49,7 @@ describe("TranscriptItemRenderer", () => {
       toolUseId: "tu-gate",
       toolName: "RestartDockerService",
       input: {
-        service: { provider: "docker", project: "web-01", service: "web-01" },
+        service: { project: "web-01", service: "web-01" },
       },
       risk: "high",
       state: { phase: "awaiting_human" },

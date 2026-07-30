@@ -12,7 +12,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev": "pnpm --filter @nightwarden/api --filter @nightwarden/console --parallel dev",
-    "dev:runner": "pnpm --filter @nightwarden/runner dev",
+    "dev:docker-runner": "pnpm --filter @nightwarden/docker-runner dev",
+    "dev:kubernetes-runner": "pnpm --filter @nightwarden/kubernetes-runner dev",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

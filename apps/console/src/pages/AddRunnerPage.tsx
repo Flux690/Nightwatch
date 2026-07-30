@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
-import type { RunnerRecord } from "@nightwarden/shared";
-import { serviceIdentityKey } from "@nightwarden/shared";
+import type { Platform, RunnerRecord } from "@nightwarden/shared";
 import { ServerCard } from "@/components/layout/ServerCard";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 
@@ -26,7 +25,7 @@ import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { ApiError, apiFetch } from "@/api/client";
-import { SUBSTRATE_COPY, type Substrate } from "./RunnerListPage.js";
+import { PLATFORM_COPY } from "./RunnerListPage.js";
 
 interface MintedToken {
   id: string;
@@ -40,13 +39,13 @@ const RUNNER_POLL_MS = 3000;
 const INSTALL_URL = "/api/runners/install";
 
 export function AddRunnerPage({
-  substrate,
+  platform,
 }: {
-  substrate: Substrate;
+  platform: Platform;
 }): React.JSX.Element {
   const navigate = useNavigate();
-  const copy = SUBSTRATE_COPY[substrate];
-  const listPath = `/integrations/${substrate}`;
+  const copy = PLATFORM_COPY[platform];
+  const listPath = `/integrations/${platform}`;
 
   const [step, setStep] = useState(0);
   const [displayName, setDisplayName] = useState("");
@@ -75,9 +74,9 @@ export function AddRunnerPage({
 
   // Read from the manifest the runner already sent: nothing is dispatched, so
   // checking the wiring cannot start an investigation or spend a token.
-  const advertised = (
-    connectedRunner?.manifest?.capabilities.services ?? []
-  ).map((entry) => serviceIdentityKey(entry.identity));
+  const advertised = (connectedRunner?.manifest?.services ?? []).map(
+    (entry) => entry.target,
+  );
 
   useEffect(() => {
     if (connectedRunner) setCommitted(true);
@@ -114,7 +113,7 @@ export function AddRunnerPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          platform: substrate,
+          platform: platform,
           serverName: displayName.trim(),
         }),
       });
@@ -170,9 +169,7 @@ export function AddRunnerPage({
             <Input
               id="display-name"
               placeholder={
-                substrate === "docker"
-                  ? "e.g. prod-web-01"
-                  : "e.g. prod-cluster"
+                platform === "docker" ? "e.g. prod-web-01" : "e.g. prod-cluster"
               }
               value={displayName}
               aria-invalid={nameError !== null}
@@ -227,7 +224,7 @@ export function AddRunnerPage({
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <p className="text-sm">
-                  {substrate === "docker"
+                  {platform === "docker"
                     ? "Run this on the host to install the runner:"
                     : "Apply this to the cluster to install the runner:"}
                 </p>

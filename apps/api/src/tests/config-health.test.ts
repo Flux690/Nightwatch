@@ -26,28 +26,10 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { mountApi } from "./api-server.js";
+import { dockerService, manifest } from "./manifest-helper.js";
 
 function dockerManifest(hostname: string) {
-  return {
-    hostname,
-    runnerVersion: "2.0.0",
-    capabilities: {
-      docker: true,
-      kubernetes: false,
-      services: [
-        {
-          identity: {
-            provider: "docker" as const,
-            project: "app",
-            service: "svc",
-          },
-          status: "running",
-        },
-      ],
-      postgres: { available: false },
-      redis: { available: false },
-    },
-  };
+  return manifest(hostname, [dockerService("svc")]);
 }
 
 describe("config health", () => {

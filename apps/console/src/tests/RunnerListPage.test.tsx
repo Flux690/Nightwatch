@@ -26,24 +26,21 @@ const WEB_RUNNER: RunnerRecord = {
   online: true,
   lastSeen: new Date(NOW - 30 * 1000).toISOString(),
   manifest: {
+    platform: "docker" as const,
     hostname: "web-01",
     runnerVersion: "0.1.0",
-    capabilities: {
-      docker: true,
-      kubernetes: false,
-      services: [
-        {
-          identity: { provider: "docker", project: "nginx", service: "nginx" },
-          status: "running",
-        },
-        {
-          identity: { provider: "docker", project: "api", service: "api" },
-          status: "running",
-        },
-      ],
-      postgres: { available: false },
-      redis: { available: false },
-    },
+    services: [
+      {
+        identity: { project: "nginx", service: "nginx" },
+        target: "docker/nginx/nginx",
+        status: "running",
+      },
+      {
+        identity: { project: "api", service: "api" },
+        target: "docker/api/api",
+        status: "running",
+      },
+    ],
   },
 };
 
@@ -59,7 +56,7 @@ function renderRunnerServersRoute(qc: QueryClient) {
   const runnerRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations/docker",
-    component: () => <RunnerListPage substrate="docker" />,
+    component: () => <RunnerListPage platform="docker" />,
   });
   const addServerRoute = createRoute({
     getParentRoute: () => rootRoute,

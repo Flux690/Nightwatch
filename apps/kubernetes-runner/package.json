@@ -1,0 +1,25 @@
+{
+  "name": "@nightwarden/kubernetes-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/build-app.mjs .",
+    "dev": "tsx watch --clear-screen=false --include ../../packages/shared/src --include ../../packages/runner-transport/src src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kubernetes/client-node": "1.4.0",
+    "dotenv": "17.4.2",
+    "pino": "10.3.1",
+    "ws": "8.21.1"
+  },
+  "devDependencies": {
+    "@nightwarden/runner-transport": "workspace:*",
+    "@nightwarden/shared": "workspace:*",
+    "@types/ws": "8.18.1",
+    "tsx": "4.23.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

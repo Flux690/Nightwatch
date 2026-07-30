@@ -44,6 +44,7 @@ import {
 import { getDb } from "../db/client.js";
 import { toolCallCard } from "../session/transcript.js";
 import { mountApi } from "./api-server.js";
+import { dockerServiceKey } from "@nightwarden/shared";
 
 const FINISH_TURN = { text: "Done.", toolUses: [] };
 
@@ -82,20 +83,16 @@ describe("remediation action record", () => {
     });
 
     setRunnerManifest(TEST_TOKEN, {
+      platform: "docker",
       hostname: "remediation-host",
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [
-          {
-            identity: { provider: "docker", project: "svc-01", service: "api" },
-            status: "running",
-          },
-        ],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [
+        {
+          identity: { project: "svc-01", service: "api" },
+          target: dockerServiceKey({ project: "svc-01", service: "api" }),
+          status: "running",
+        },
+      ],
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });

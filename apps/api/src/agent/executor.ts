@@ -21,7 +21,7 @@ export async function executeRunnerTool(
     const { envelope, anySucceeded } = await sendFleetCommand(
       name,
       input,
-      tool.substrate,
+      tool.platform,
       ctx.toolTimeoutMs,
     );
     // One runner failing inside a fan-out is that entry's result. Every runner

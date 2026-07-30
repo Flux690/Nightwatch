@@ -78,7 +78,7 @@ function renderAddServerRoute() {
   const addRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations/docker/add",
-    component: () => <AddRunnerPage substrate="docker" />,
+    component: () => <AddRunnerPage platform="docker" />,
   });
   const runnerServersRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -153,7 +153,7 @@ function setup(opts: { runners?: RunnerRecord[] } = {}) {
   return { fetchMock, ...renderAddServerRoute() };
 }
 
-// The substrate comes from the route, so the first step only asks for a name.
+// The platform comes from the route, so the first step only asks for a name.
 async function startInstall(
   user: ReturnType<typeof userEvent.setup>,
   opts: { name?: string } = {},
@@ -273,24 +273,16 @@ describe("AddRunnerPage", () => {
           {
             ...CONNECTED_RUNNER,
             manifest: {
+              platform: "docker" as const,
               hostname: "web-host",
               runnerVersion: "2.0.0",
-              capabilities: {
-                docker: true,
-                kubernetes: false,
-                services: [
-                  {
-                    identity: {
-                      provider: "docker",
-                      project: "encodr",
-                      service: "cache",
-                    },
-                    status: "running",
-                  },
-                ],
-                postgres: { available: false },
-                redis: { available: false },
-              },
+              services: [
+                {
+                  identity: { project: "encodr", service: "cache" },
+                  target: "docker/encodr/cache",
+                  status: "running",
+                },
+              ],
             },
           },
         ],

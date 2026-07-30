@@ -1,8 +1,7 @@
-import {
-  serviceIdentityKey,
-  type FleetRunner,
-  type NormalizedAlert,
-  type RunMode,
+import type {
+  FleetRunner,
+  NormalizedAlert,
+  RunMode,
 } from "@nightwarden/shared";
 import {
   budgetLine,
@@ -85,23 +84,20 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
 
   const holders = new Map<string, number>();
   for (const runner of fleetView) {
-    for (const key of new Set(
-      runner.services.map((s) => serviceIdentityKey(s.identity)),
-    )) {
-      holders.set(key, (holders.get(key) ?? 0) + 1);
+    for (const target of new Set(runner.services.map((s) => s.target))) {
+      holders.set(target, (holders.get(target) ?? 0) + 1);
     }
   }
 
   const lines = fleetView.map((r) => {
     const name = r.serverName ?? r.hostname;
-    const identities =
+    const targets =
       r.services
-        .map((s) => {
-          const key = serviceIdentityKey(s.identity);
-          return (holders.get(key) ?? 0) > 1 ? `${key} (shared)` : key;
-        })
+        .map((s) =>
+          (holders.get(s.target) ?? 0) > 1 ? `${s.target} (shared)` : s.target,
+        )
         .join(", ") || "no services advertised";
-    return `  ${name}: ${identities}`;
+    return `  ${name}: ${targets}`;
   });
   return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
 }

@@ -22,7 +22,7 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {
@@ -37,7 +37,7 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {
@@ -52,7 +52,7 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {
@@ -67,7 +67,7 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {
@@ -93,7 +93,7 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
   {
     schema: {
@@ -120,6 +120,6 @@ export const HOST_TOOLS: Tool[] = [
     access: "read",
     on: "runner",
     routeBy: "runner",
-    substrate: "docker",
+    platform: "docker",
   },
 ];

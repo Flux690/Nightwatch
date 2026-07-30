@@ -29,15 +29,10 @@ function dockerRunner(name: string): RunnerRecord {
     online: true,
     lastSeen: new Date().toISOString(),
     manifest: {
+      platform: "docker" as const,
       hostname: `${name}-host`,
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [],
     },
   };
 }

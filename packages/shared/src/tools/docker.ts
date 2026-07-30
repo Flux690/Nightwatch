@@ -1,8 +1,7 @@
 // LLM tool payload types for the Docker tools. A Docker service is a container;
-// nothing here describes a workload. Inputs carry the ServiceIdentity union because
-// the wire is untrusted, and the runner's resolver narrows it at runtime.
+// nothing here describes a workload, and no input can hold a Kubernetes identity.
 
-import type { ServiceIdentity } from "../service-identity.js";
+import type { DockerServiceIdentity } from "../service-identity.js";
 import type { RiskLevel } from "./common.js";
 
 export interface DockerContainerInstance {
@@ -25,7 +24,7 @@ export interface DockerServiceListResult {
 }
 
 export interface DockerLogsInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
   tailLines?: number;
   sinceTimestamp?: string;
   stderrOnly?: boolean;
@@ -38,7 +37,7 @@ export interface DockerLogsResult {
 }
 
 export interface DockerConfigInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
 }
 export interface DockerConfigResult {
   name: string;
@@ -59,7 +58,7 @@ export interface DockerConfigResult {
 }
 
 export interface DockerStatsInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
 }
 export interface DockerStatsResult {
   cpuPercent: number;
@@ -74,7 +73,7 @@ export interface DockerStatsResult {
 }
 
 export interface DockerEventsInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
   sinceMinutes?: number;
 }
 export interface DockerEvent {
@@ -88,7 +87,7 @@ export interface DockerEventsResult {
 }
 
 export interface DockerProcessesInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
 }
 export interface DockerProcess {
   pid: number;
@@ -103,7 +102,7 @@ export interface DockerProcessesResult {
 }
 
 export interface DockerRestartInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
   delaySeconds?: number;
   rationale: string;
   risk: RiskLevel;
@@ -117,7 +116,7 @@ export interface DockerRestartResult {
 }
 
 export interface DockerBashInput {
-  service: ServiceIdentity;
+  service: DockerServiceIdentity;
   command: string[];
   reason: string;
   risk: RiskLevel;

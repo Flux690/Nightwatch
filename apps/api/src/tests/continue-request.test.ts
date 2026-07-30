@@ -37,6 +37,7 @@ import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { updateConfig } from "../config/store.js";
 import { mountApi } from "./api-server.js";
+import { dockerServiceKey } from "@nightwarden/shared";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN: ScriptedTurn = {
@@ -72,24 +73,16 @@ describe("continue-request interrupts", () => {
       close: () => {},
     });
     setRunnerManifest(TEST_TOKEN, {
+      platform: "docker",
       hostname: "continue-host",
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [
-          {
-            identity: {
-              provider: "docker",
-              project: "web-01",
-              service: "api",
-            },
-            status: "running",
-          },
-        ],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [
+        {
+          identity: { project: "web-01", service: "api" },
+          target: dockerServiceKey({ project: "web-01", service: "api" }),
+          status: "running",
+        },
+      ],
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });

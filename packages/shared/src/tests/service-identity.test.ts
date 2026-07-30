@@ -2,24 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   composeServiceLabels,
   deriveDockerServiceIdentity,
-  serviceIdentityKey,
+  dockerServiceKey,
+  kubernetesWorkloadKey,
 } from "../service-identity.js";
 
-describe("serviceIdentityKey", () => {
+describe("target keys", () => {
   it("produces docker/<project>/<service>", () => {
-    expect(
-      serviceIdentityKey({
-        provider: "docker",
-        project: "myapp",
-        service: "postgres",
-      }),
-    ).toBe("docker/myapp/postgres");
+    expect(dockerServiceKey({ project: "myapp", service: "postgres" })).toBe(
+      "docker/myapp/postgres",
+    );
   });
 
   it("produces kubernetes/<namespace>/<workload>", () => {
     expect(
-      serviceIdentityKey({
-        provider: "kubernetes",
+      kubernetesWorkloadKey({
         namespace: "production",
         workload: "api-server",
       }),
@@ -28,13 +24,8 @@ describe("serviceIdentityKey", () => {
 
   it("every key has exactly three segments, so nothing an operator typed can widen one", () => {
     const keys = [
-      serviceIdentityKey({
-        provider: "docker",
-        project: "myapp",
-        service: "postgres",
-      }),
-      serviceIdentityKey({
-        provider: "kubernetes",
+      dockerServiceKey({ project: "myapp", service: "postgres" }),
+      kubernetesWorkloadKey({
         namespace: "production",
         workload: "api-server",
       }),
@@ -42,26 +33,16 @@ describe("serviceIdentityKey", () => {
     for (const key of keys) expect(key.split("/")).toHaveLength(3);
   });
 
-  it("the container sub-selector is excluded, so calls differing only by container address one service", () => {
-    const base = {
-      provider: "kubernetes" as const,
-      namespace: "shop",
-      workload: "api",
-    };
-    expect(serviceIdentityKey({ ...base, container: "sidecar" })).toBe(
-      serviceIdentityKey(base),
+  it("the container sub-selector is excluded, so calls differing only by container address one workload", () => {
+    const base = { namespace: "shop", workload: "api" };
+    expect(kubernetesWorkloadKey({ ...base, container: "sidecar" })).toBe(
+      kubernetesWorkloadKey(base),
     );
   });
 
-  it("the two providers cannot collide on a shared name", () => {
-    expect(
-      serviceIdentityKey({ provider: "docker", project: "a", service: "b" }),
-    ).not.toBe(
-      serviceIdentityKey({
-        provider: "kubernetes",
-        namespace: "a",
-        workload: "b",
-      }),
+  it("the two platforms cannot collide on a shared name", () => {
+    expect(dockerServiceKey({ project: "a", service: "b" })).not.toBe(
+      kubernetesWorkloadKey({ namespace: "a", workload: "b" }),
     );
   });
 });
@@ -114,12 +95,11 @@ describe("deriveDockerServiceIdentity", () => {
         },
         "myapp_postgres_1",
       ),
-    ).toEqual({ provider: "docker", project: "myapp", service: "postgres" });
+    ).toEqual({ project: "myapp", service: "postgres" });
   });
 
   it("falls back to the live name for an anonymous `docker run` container", () => {
     expect(deriveDockerServiceIdentity({}, "redis-cache")).toEqual({
-      provider: "docker",
       project: "redis-cache",
       service: "redis-cache",
     });
@@ -139,6 +119,6 @@ describe("deriveDockerServiceIdentity", () => {
         },
         "myapp_postgres_1",
       ),
-    ).toEqual({ provider: "docker", project: "myapp", service: "postgres" });
+    ).toEqual({ project: "myapp", service: "postgres" });
   });
 });

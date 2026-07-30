@@ -376,6 +376,48 @@ describe("Runner token lifecycle (issue 038)", () => {
       });
     });
 
+    // The row decided the platform at onboarding; the manifest says which binary
+    // actually dialled in. A disagreement is a real operator error - the Docker
+    // install line pasted into a cluster - so it is refused, not half-served.
+    it("refuses a runner whose manifest contradicts its row", async () => {
+      const mint = await server.inject({
+        method: "POST",
+        url: "/api/tokens",
+        payload: { platform: "docker", serverName: "mismatch-host" },
+        headers: { cookie: `nw_auth=${SESSION}` },
+      });
+      const { token } = JSON.parse(mint.body) as { token: string };
+
+      const { code, reason } = await new Promise<{
+        code: number;
+        reason: string;
+      }>((resolve) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        ws.on("open", () => {
+          ws.send(
+            JSON.stringify({
+              messageId: "m1",
+              type: "manifest",
+              payload: {
+                platform: "kubernetes",
+                hostname: "some-cluster",
+                runnerVersion: "3.0.0",
+                services: [],
+              },
+            }),
+          );
+        });
+        ws.on("close", (c, r) => resolve({ code: c, reason: String(r) }));
+        ws.on("error", () => resolve({ code: 0, reason: "" }));
+      });
+
+      expect(code).toBe(4004);
+      expect(reason).toMatch(/docker/);
+      expect(reason).toMatch(/kubernetes/);
+    });
+
     it("closes with 4003 for an unknown token", async () => {
       const code = await new Promise<number>((resolve) => {
         const ws = new WebSocket(`ws://127.0.0.1:${port}/api/clients/connect`, {
@@ -459,15 +501,10 @@ describe("Runner token lifecycle (issue 038)", () => {
               JSON.stringify({
                 type: "manifest",
                 payload: {
+                  platform: "docker",
                   hostname: "test-host",
                   runnerVersion: "2.0.0",
-                  capabilities: {
-                    docker: false,
-                    kubernetes: false,
-                    services: [],
-                    postgres: { available: false },
-                    redis: { available: false },
-                  },
+                  services: [],
                 },
               }),
             );

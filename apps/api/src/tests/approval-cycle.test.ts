@@ -56,6 +56,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { mountApi } from "./api-server.js";
+import { dockerService } from "./manifest-helper.js";
 
 // A free-form text finish: no tool call ends the run successfully.
 const FINISH_TURN = {
@@ -97,24 +98,10 @@ describe("durable approval interrupts", () => {
       close: () => {},
     });
     setRunnerManifest(TEST_TOKEN, {
+      platform: "docker",
       hostname: "approval-host",
       runnerVersion: "2.0.0",
-      capabilities: {
-        docker: true,
-        kubernetes: false,
-        services: [
-          {
-            identity: {
-              provider: "docker",
-              project: "web-01",
-              service: "web-01",
-            },
-            status: "running",
-          },
-        ],
-        postgres: { available: false },
-        redis: { available: false },
-      },
+      services: [dockerService("web-01")],
     });
 
     server = Fastify({ logger: false, forceCloseConnections: true });
@@ -271,7 +258,6 @@ describe("durable approval interrupts", () => {
     // Runner executed restart exactly once
     expect(restartCommands).toHaveLength(1);
     expect(restartCommands[0]["service"]).toEqual({
-      provider: "docker",
       project: "web-01",
       service: "web-01",
     });

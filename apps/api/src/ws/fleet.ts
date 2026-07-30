@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type {
-  CapabilityManifest,
   FleetRunner,
   HideContainerMessage,
   Platform,
+  RunnerManifest,
 } from "@nightwarden/shared";
 
 const LIVENESS_TTL_MS = 120_000;
@@ -20,7 +20,7 @@ export interface RunnerConnection {
   serverName: string | null;
   send: (msg: string) => void;
   close: () => void;
-  manifest: CapabilityManifest | null;
+  manifest: RunnerManifest | null;
   hostname: string | null;
   lastSeen: number;
 }
@@ -30,7 +30,7 @@ export interface RunnerView {
   platform: Platform;
   serverName: string | null;
   hostname: string | null;
-  manifest: CapabilityManifest | null;
+  manifest: RunnerManifest | null;
   lastSeen: number;
   online: boolean;
 }
@@ -99,7 +99,7 @@ export function closeRunnerConnections(runnerId: string): void {
 
 export function setRunnerManifest(
   runnerId: string,
-  manifest: CapabilityManifest,
+  manifest: RunnerManifest,
 ): void {
   const conn = connectionsByRunnerId.get(runnerId);
   if (!conn) return;
@@ -137,24 +137,24 @@ export function getFleetView(): FleetRunner[] {
   const now = Date.now();
   const views: FleetRunner[] = [];
   for (const conn of connectionsByRunnerId.values()) {
-    if (!conn.manifest) continue;
-    views.push({
+    const manifest = conn.manifest;
+    if (!manifest) continue;
+    const base = {
       runnerId: conn.runnerId,
       serverName: addressName(conn),
-      hostname: conn.manifest.hostname,
+      hostname: manifest.hostname,
       online: now - conn.lastSeen < LIVENESS_TTL_MS,
       lastSeen: conn.lastSeen,
-      services: conn.manifest.capabilities.services,
-    });
+    };
+    // Projecting one discriminated union onto another: the arms differ only in
+    // which entry type `services` holds, which is exactly what callers narrow on.
+    views.push(
+      manifest.platform === "docker"
+        ? { ...base, platform: "docker", services: manifest.services }
+        : { ...base, platform: "kubernetes", services: manifest.services },
+    );
   }
   return views;
-}
-
-// Current manifest for a runner given the runnerId stamped on an alert.
-export function getRunnerManifestForAlert(
-  runnerId: string,
-): CapabilityManifest | null {
-  return connectionsByRunnerId.get(runnerId)?.manifest ?? null;
 }
 
 // This process's own container id, or null when it is not containerized. The
@@ -180,8 +180,9 @@ const apiContainerId = ownContainerId();
 
 // Told on connect, so the runner can keep NightWarden out of everything it
 // enumerates. The runner already excludes itself; this covers the API beside it.
+// Docker only: a cluster runner lists workloads, and the API is not one of them.
 export function pushHiddenContainer(conn: RunnerConnection): void {
-  if (!apiContainerId) return;
+  if (!apiContainerId || conn.platform !== "docker") return;
   const msg: HideContainerMessage = {
     messageId: randomUUID(),
     type: "hide_container",
