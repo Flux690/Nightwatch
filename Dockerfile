@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:24-slim AS base
 
 RUN corepack enable pnpm
@@ -20,10 +22,15 @@ RUN apt-get update \
 # until a dependency actually changes rather than on every source edit.
 FROM toolchain AS manifests
 
+# --frozen-lockfile resolves the whole workspace, so every member's manifest must
+# be here even when this image ships none of its code.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/console/package.json apps/console/
+COPY apps/docker-runner/package.json apps/docker-runner/
+COPY apps/kubernetes-runner/package.json apps/kubernetes-runner/
 COPY packages/shared/package.json packages/shared/
+COPY packages/runner-transport/package.json packages/runner-transport/
 
 
 # The tree the image ships: it never sees a devDependency, so nothing needs
@@ -31,13 +38,21 @@ COPY packages/shared/package.json packages/shared/
 # the api, or it also installs the console's React tree that Vite has bundled.
 FROM manifests AS prod-deps
 
-RUN pnpm install --frozen-lockfile --prod --filter @nightwarden/api
+# The store is a build cache, so a package is fetched once across every stage of
+# every image rather than once per install.
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod --store-dir=/pnpm/store \
+      --filter @nightwarden/api
 
 
-# The full install, used only to produce dist and then discarded.
+# The full install, used only to produce dist and then discarded. Filtered to the
+# two workspaces this image builds, so no runner's dependencies are fetched.
 FROM manifests AS build
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store \
+      --filter @nightwarden/api... --filter @nightwarden/console...
 
 COPY tsconfig.base.json ./
 COPY scripts/ scripts/

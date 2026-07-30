@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:24-slim AS base
 
 RUN corepack enable pnpm
@@ -8,6 +10,8 @@ ENV CI=true
 WORKDIR /build
 
 
+# ssh2 compiles an optional crypto binding, reached through dockerode. Only the
+# install stages descend from here, so no compiler reaches the shipped image.
 FROM base AS toolchain
 
 RUN apt-get update \
@@ -29,13 +33,19 @@ COPY packages/runner-transport/package.json packages/runner-transport/
 # to prune afterwards - `--prod` decides what to install, and cannot uninstall.
 FROM manifests AS prod-deps
 
-RUN pnpm install --frozen-lockfile --prod --filter @nightwarden/docker-runner
+# The store is a build cache, so a package is fetched once across every stage of
+# every image rather than once per install.
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod --store-dir=/pnpm/store \
+      --filter @nightwarden/docker-runner
 
 
 # The full install, used only to produce dist and then discarded.
 FROM manifests AS build
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
 COPY tsconfig.base.json ./
 COPY scripts/ scripts/
@@ -72,4 +82,6 @@ ENV HOST_PROC=/host/proc
 # bundle instead of the file it came from.
 ENV NODE_OPTIONS=--enable-source-maps
 
+# Root, because the Docker socket and host /proc are root-owned and this runner
+# reads both. The socket is mounted read-only and no capability is added.
 ENTRYPOINT ["node", "apps/docker-runner/dist/index.js"]

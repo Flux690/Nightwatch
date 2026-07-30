@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM node:24-slim AS base
 
 RUN corepack enable pnpm
@@ -8,16 +10,10 @@ ENV CI=true
 WORKDIR /build
 
 
-FROM base AS toolchain
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-
+# No compiler stage: nothing in this runner's tree has a native binding to build.
 # Manifests alone are what pnpm resolves against, so this layer stays cached
 # until a dependency actually changes rather than on every source edit.
-FROM toolchain AS manifests
+FROM base AS manifests
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/kubernetes-runner/package.json apps/kubernetes-runner/
@@ -29,13 +25,19 @@ COPY packages/runner-transport/package.json packages/runner-transport/
 # to prune afterwards - `--prod` decides what to install, and cannot uninstall.
 FROM manifests AS prod-deps
 
-RUN pnpm install --frozen-lockfile --prod --filter @nightwarden/kubernetes-runner
+# The store is a build cache, so a package is fetched once across every stage of
+# every image rather than once per install.
+
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod --store-dir=/pnpm/store \
+      --filter @nightwarden/kubernetes-runner
 
 
 # The full install, used only to produce dist and then discarded.
 FROM manifests AS build
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --store-dir=/pnpm/store
 
 COPY tsconfig.base.json ./
 COPY scripts/ scripts/
@@ -59,12 +61,16 @@ WORKDIR /app
 
 # pnpm links each package as a relative symlink into the virtual store, so these
 # must land at the same depth they had under /build or they resolve to nothing.
-COPY --from=prod-deps /build/node_modules ./node_modules
-COPY --from=prod-deps /build/apps/kubernetes-runner/node_modules ./apps/kubernetes-runner/node_modules
-COPY --from=build /build/apps/kubernetes-runner/dist ./apps/kubernetes-runner/dist
+COPY --from=prod-deps --chown=node:node /build/node_modules ./node_modules
+COPY --from=prod-deps --chown=node:node /build/apps/kubernetes-runner/node_modules ./apps/kubernetes-runner/node_modules
+COPY --from=build --chown=node:node /build/apps/kubernetes-runner/dist ./apps/kubernetes-runner/dist
 
 # The bundle ships a sourcemap; without this a stack trace names a line in the
 # bundle instead of the file it came from.
 ENV NODE_OPTIONS=--enable-source-maps
+
+# Unprivileged, unlike the Docker runner: this one reaches its cluster through the
+# API server with a ServiceAccount token and touches no host socket or filesystem.
+USER node
 
 ENTRYPOINT ["node", "apps/kubernetes-runner/dist/index.js"]

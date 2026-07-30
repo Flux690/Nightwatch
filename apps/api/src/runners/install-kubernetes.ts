@@ -81,9 +81,22 @@ spec:
         app: nightwarden-runner
     spec:
       serviceAccountName: nightwarden-runner
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: runner
           image: {{RUNNER_IMAGE}}
+          # The runner reads its cluster through the API server and writes nothing,
+          # so it needs no capability, no escalation and no writable root.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: NIGHTWARDEN_TOKEN
               value: "{{NIGHTWARDEN_TOKEN}}"
