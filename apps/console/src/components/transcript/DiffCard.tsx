@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { cn } from "@/lib/utils";
+import { asRecord } from "@/lib/toolResult";
 
 export type DiffLineType = "added" | "removed" | "unchanged";
 export interface DiffLine {
@@ -17,19 +18,11 @@ export interface FileChange {
   hunks: DiffHunk[];
 }
 
-/* Live results arrive as objects, persisted ones as the JSON string the
-   tool_result carried; accept both, reject anything else (e.g. plain error strings). */
+// A result shaped like a file change, or nothing: a plain error string is not
+// one, and neither is a tool that answered something else.
 export function parseFileChange(result: unknown): FileChange | null {
-  let value = result;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Record<string, unknown>;
+  const record = asRecord(result);
+  if (record === null) return null;
   if (typeof record["path"] !== "string" || !Array.isArray(record["hunks"])) {
     return null;
   }

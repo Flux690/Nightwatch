@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
+import { asRecord, stringAt as inputString } from "@/lib/toolResult";
 import type { ToolCallState, ToolCardItem, ToolOutcome } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
@@ -20,16 +21,9 @@ const BODY_MAX_LINES = 8;
 
 const SHELL_TOOLS = new Set(["DockerBash", "K8sBash", "Bash"]);
 
-function inputString(
-  input: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = input[key];
-  return typeof value === "string" ? value : null;
-}
-
-// Fleet tools address a service by target key; host tools name a server.
-function targetOf(input: Record<string, unknown>): string | null {
+// Fleet tools address a service by target key; host tools name a server. Shared
+// with the report, so a cited call names its target the same way there.
+export function targetOf(input: Record<string, unknown>): string | null {
   const target = input["target"];
   if (typeof target === "string") {
     const parts = target.split("/");
@@ -42,20 +36,6 @@ function outcomeOf(state: ToolCallState): ToolOutcome | undefined {
   return state.phase === "complete" || state.phase === "resolved"
     ? state.outcome
     : undefined;
-}
-
-function parseResult(result: unknown): Record<string, unknown> | null {
-  let value = result;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function stringList(value: unknown): string[] {
@@ -84,6 +64,26 @@ const OUTCOME_TONE: Record<ToolOutcome, string> = {
   permission: "text-wait",
   system: "text-fail",
 };
+
+// The one-line reading of a settled call, shared with the report so a cited
+// result says there exactly what its row in the transcript says. The class
+// outranks the finding's own tone: the finding is read off the result, and a
+// result that never arrived has nothing to read.
+export function resultSummary(
+  toolName: string,
+  result: unknown,
+  outcome: ToolOutcome | undefined,
+): { text: string; tone: string } {
+  const finding = findingFor(toolName, result);
+  const tone =
+    outcome !== undefined
+      ? OUTCOME_TONE[outcome]
+      : finding?.tone === "bad"
+        ? "text-fail"
+        : "text-muted-foreground";
+  const label = outcome === undefined ? "" : OUTCOME_LABEL[outcome];
+  return { text: [label, finding?.text].filter(Boolean).join(" · "), tone };
+}
 
 // Capped text with an explicit, counted opt-in. "Show all" reveals exactly what
 // the runner returned, already redacted and already size-capped upstream.
@@ -173,8 +173,9 @@ function EventList({
 }
 
 // Per-tool bodies. A tool with no entry falls back to its raw result, which is
-// honest: better a JSON block than a shape we pretended to understand.
-function ToolBody({
+// honest: better a JSON block than a shape we pretended to understand. The
+// report quotes a cited call through this too, so one result renders one way.
+export function ToolBody({
   toolName,
   input,
   result,
@@ -183,7 +184,7 @@ function ToolBody({
   input: Record<string, unknown>;
   result: unknown;
 }): React.JSX.Element {
-  const record = parseResult(result);
+  const record = asRecord(result);
 
   if (record !== null) {
     if (toolName === "GetDockerLogs" || toolName === "GetK8sLogs") {
@@ -284,13 +285,13 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   const [revealed, setRevealed] = useState(false);
   const { toolName, input } = item;
 
-  // The report can point at this exact call. Opening it is the whole signal:
-  // a collapsed row scrolled into view looks like every other collapsed row.
+  // The report can point at this exact call. Marking it is the whole signal: a
+  // collapsed row scrolled into view looks like every other collapsed row, and
+  // opening it would push the neighbouring steps the reader came for off screen.
   useEffect(
     () =>
       onRevealToolCall((id) => {
         if (id !== item.toolUseId) return;
-        setOpen(true);
         setRevealed(true);
         window.setTimeout(() => setRevealed(false), REVEAL_MS);
       }),
@@ -304,19 +305,12 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
         : null;
 
   const running = result === null;
-  const finding = findingFor(toolName, result);
   const target = targetOf(input) ?? inputString(input, "path");
-  const outcome = outcomeOf(item.state);
-  // The class outranks the finding's own tone: the finding is read off the
-  // result, and a result that never arrived has nothing to read.
-  const tone =
-    outcome !== undefined
-      ? OUTCOME_TONE[outcome]
-      : finding?.tone === "bad"
-        ? "text-fail"
-        : "text-muted-foreground";
-  const label = outcome === undefined ? "" : OUTCOME_LABEL[outcome];
-  const summary = [label, finding?.text].filter(Boolean).join(" · ");
+  const { text: summary, tone } = resultSummary(
+    toolName,
+    result,
+    outcomeOf(item.state),
+  );
 
   return (
     // Anchor for the report's evidence links: a citation there names the tool

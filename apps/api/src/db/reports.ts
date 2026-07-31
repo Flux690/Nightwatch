@@ -1,4 +1,4 @@
-import type { Report, ReportSummary } from "@nightwarden/shared";
+import type { Report } from "@nightwarden/shared";
 import { getDb } from "./client.js";
 
 // Full-replace: every UpdateReport carries the complete document, so a re-run or
@@ -35,26 +35,6 @@ export function hasReport(sessionId: string): boolean {
     .prepare(`SELECT 1 FROM reports WHERE session_id = ?`)
     .get(sessionId);
   return row !== undefined;
-}
-
-// Newest first, capped like the other list readers. Parses each blob down to the
-// row fields the Sessions queue needs.
-export function listReportSummaries(): ReportSummary[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT session_id AS sessionId, report FROM reports
-       ORDER BY updated_at DESC LIMIT 200`,
-    )
-    .all() as Array<{ sessionId: string; report: string }>;
-  return rows.map((r) => {
-    const report = JSON.parse(r.report) as Report;
-    return {
-      sessionId: r.sessionId,
-      status: report.status,
-      headline: report.headline,
-      rootCauseSummary: report.rootCause.summary,
-    };
-  });
 }
 
 // The gate predicate as a pure function so it is testable in isolation.

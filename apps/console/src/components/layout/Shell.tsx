@@ -308,6 +308,8 @@ function ShellContent({
                   <ReportPanel
                     report={report?.report ?? null}
                     actions={report?.actions ?? []}
+                    evidence={report?.evidence ?? []}
+                    alert={session?.originatingAlert ?? null}
                   />
                 </div>
                 {/* Width, not presence, so it closes like the sidebar. Closed

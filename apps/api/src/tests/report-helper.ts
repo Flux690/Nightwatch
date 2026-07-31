@@ -10,7 +10,6 @@ export function seedCompleteReport(sessionId: string): void {
     headline: "seeded by test",
     rootCause: { summary: "", detail: "" },
     hypotheses: [],
-    evidence: [],
     recommendedFix: { summary: "", evidenceIds: [] },
     updatedAt: new Date().toISOString(),
     model: "test",

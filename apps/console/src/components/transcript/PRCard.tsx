@@ -4,6 +4,7 @@ import { MetaText, StatusText } from "@/components/ui/status";
 import { Card, CardContent } from "@/components/ui/card";
 import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { ICON_UI } from "@/lib/iconProps";
+import { asRecord } from "@/lib/toolResult";
 
 export interface PullRequestResult {
   action: "created" | "updated";
@@ -13,20 +14,11 @@ export interface PullRequestResult {
   message?: string;
 }
 
-/* Object live, JSON string on transcript reload - see DiffCard.parseFileChange. */
 export function parsePullRequestResult(
   result: unknown,
 ): PullRequestResult | null {
-  let value = result;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const record = value as Record<string, unknown>;
+  const record = asRecord(result);
+  if (record === null) return null;
   if (
     (record["action"] !== "created" && record["action"] !== "updated") ||
     typeof record["number"] !== "number" ||

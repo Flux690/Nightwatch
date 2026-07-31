@@ -3,7 +3,6 @@
 export type {
   ToolOutcome,
   ToolCallState,
-  Citation,
   UserTurnItem,
   AgentTextItem,
   ErrorTextItem,

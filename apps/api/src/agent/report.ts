@@ -1,95 +1,24 @@
 import type {
-  ChangesSnapshot,
-  ChartSnapshot,
-  EvidenceItem,
   Hypothesis,
-  NormalizedAlert,
   Report,
   ReportStatus,
+  ResolvedEvidence,
 } from "@nightwarden/shared";
 import { getReport, upsertReport } from "../db/reports.js";
 import { getSessionMessages } from "../db/sessions.js";
+import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
-import type { GetRecentChangesResult } from "./tools/github.js";
-import type { MetricsQueryResult } from "./tools/prometheus.js";
-import type { PrometheusSeries } from "../integrations/prometheus.js";
 
-// The report domain service: the ONLY place a report is saved, and the single
-// owner of the evidence-tag format shared by result stamping and enrichment.
+// The report domain service: the ONLY place a report is saved, and the owner of
+// the rule that a citation is the id of the tool call that produced it.
 
-const EVIDENCE_TAG_SUFFIX = /\n\n\[evidence: e\d+\]$/;
-const EVIDENCE_MARKER = /\[evidence: (e\d+)\]/g;
-const MAX_CHART_POINTS = 80;
-
-export function evidenceTag(n: number): string {
-  return `e${n}`;
-}
-
-export function stampEvidence(content: string, n: number): string {
-  return `${content}\n\n[evidence: ${evidenceTag(n)}]`;
-}
-
-// The tag is the model's citation handle, never operator-facing text.
-export function stripEvidenceTag(content: string): string {
-  return content.replace(EVIDENCE_TAG_SUFFIX, "");
-}
-
-// Tags cited inline, in the order they appear.
-export function evidenceTagsIn(text: string): string[] {
-  return [...text.matchAll(EVIDENCE_MARKER)].flatMap((m) => m[1] ?? []);
-}
-
-export interface EvidenceIndexEntry {
-  tag: string;
-  toolUseId: string;
-  toolName: string;
-  resultContent: string | null;
-}
-
-// Walks the persisted transcript in order, numbering EVERY tool call (errored and
-// gated included) so ordinals never shift, and pairing each with its result. The
-// assistant turn is persisted before its tools execute, so the walk is current.
-export function buildEvidenceIndex(sessionId: string): EvidenceIndexEntry[] {
-  const entries: EvidenceIndexEntry[] = [];
-  const byToolUseId = new Map<string, EvidenceIndexEntry>();
-  for (const message of getSessionMessages(sessionId)) {
-    for (const part of message.parts) {
-      if (part.type === "tool_call") {
-        const entry: EvidenceIndexEntry = {
-          tag: evidenceTag(entries.length + 1),
-          toolUseId: part.id,
-          toolName: part.name,
-          resultContent: null,
-        };
-        entries.push(entry);
-        byToolUseId.set(part.id, entry);
-      } else if (part.type === "tool_result") {
-        const entry = byToolUseId.get(part.toolCallId);
-        if (entry) entry.resultContent = stripEvidenceTag(part.output);
-      }
-    }
-  }
-  return entries;
-}
-
-// Ordinal lookup for stamping: the same walk enrichment uses, so the two sides
-// can never drift.
-export function evidenceOrdinals(sessionId: string): Map<string, number> {
-  const ordinals = new Map<string, number>();
-  buildEvidenceIndex(sessionId).forEach((entry, i) =>
-    ordinals.set(entry.toolUseId, i + 1),
-  );
-  return ordinals;
-}
-
-// What the model emits via UpdateReport (§1a): evidence cited by tag, no tool
-// ids, no data arrays. The server enriches this into the stored Report.
+// What the model emits via UpdateReport: claims, each citing the tool calls that
+// back it. Everything else the report shows is resolved from the transcript.
 export interface ReportInput {
   status: ReportStatus;
   headline: string;
   rootCause: { summary: string; detail: string };
   hypotheses: Hypothesis[];
-  evidence: { id: string; evidenceTag: string; summary: string }[];
   recommendedFix: { summary: string; evidenceIds: string[] };
 }
 
@@ -132,17 +61,6 @@ export function validateReportInput(
     return null;
   }
   if (
-    !Array.isArray(candidate.evidence) ||
-    !candidate.evidence.every(
-      (e) =>
-        typeof e?.id === "string" &&
-        typeof e.evidenceTag === "string" &&
-        typeof e.summary === "string",
-    )
-  ) {
-    return null;
-  }
-  if (
     typeof candidate.recommendedFix?.summary !== "string" ||
     !stringArray(candidate.recommendedFix?.evidenceIds)
   ) {
@@ -151,137 +69,84 @@ export function validateReportInput(
   return candidate;
 }
 
-// Labels every alert carries: they identify the rule, not the service, so matching
-// on them would pick an arbitrary series rather than the one under investigation.
-const IGNORED_MATCH_LABELS = new Set([
-  "alertname",
-  "severity",
-  "job",
-  "prometheus",
-]);
-
-function parseJson<T>(content: string): T | null {
-  try {
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
+interface ToolCall {
+  toolUseId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  result: string | null;
 }
 
-// Prefer the series whose labels mention the alert, so the chart shows the one under
-// investigation. Matched on the alert's own label values, which came from Prometheus
-// and so are the vocabulary the series already carry.
-function pickSeries(
-  series: PrometheusSeries[],
-  alert: NormalizedAlert | null,
-): PrometheusSeries {
-  const first = series[0]!;
-  if (alert === null) return first;
-  const tokens = Object.entries(alert.labels)
-    .filter(([key]) => !IGNORED_MATCH_LABELS.has(key))
-    .map(([, value]) => value)
-    .filter((t) => t.length > 2);
-  if (tokens.length === 0) return first;
-  return (
-    series.find((s) => {
-      const labels = JSON.stringify(s.metric);
-      return tokens.some((t) => labels.includes(t));
-    }) ?? first
-  );
-}
-
-function seriesLabel(metric: Record<string, string>): string {
-  const name = metric["__name__"] ?? "series";
-  const qualifier =
-    metric["container"] ?? metric["pod"] ?? metric["job"] ?? metric["instance"];
-  return qualifier ? `${name} (${qualifier})` : name;
-}
-
-function downsample<T>(values: T[], max: number): T[] {
-  if (values.length <= max) return values;
-  const stride = (values.length - 1) / (max - 1);
-  return Array.from({ length: max }, (_, i) => values[Math.round(i * stride)]!);
-}
-
-function chartSnapshotFrom(
-  resultContent: string,
-  alert: NormalizedAlert | null,
-): ChartSnapshot | null {
-  const parsed = parseJson<MetricsQueryResult>(resultContent);
-  if (!parsed || !Array.isArray(parsed.series) || parsed.series.length === 0) {
-    return null;
-  }
-  const series = pickSeries(parsed.series, alert);
-  const points = downsample(series.values ?? [], MAX_CHART_POINTS)
-    .filter((v) => Array.isArray(v) && v.length === 2)
-    .map(
-      ([sec, val]) =>
-        [new Date(sec * 1000).toISOString(), Number(val)] as [string, number],
-    );
-  if (points.length === 0) return null;
-  return { seriesLabel: seriesLabel(series.metric), points };
-}
-
-function changesSnapshotFrom(resultContent: string): ChangesSnapshot | null {
-  const parsed = parseJson<GetRecentChangesResult>(resultContent);
-  if (!parsed || !Array.isArray(parsed.pullRequests)) return null;
-  return {
-    pullRequests: parsed.pullRequests.map((pr) => ({
-      number: pr.number,
-      title: pr.title,
-      author: pr.author,
-      mergedAt: pr.mergedAt,
-      url: pr.url,
-    })),
-  };
-}
-
-function snapshotsFor(
-  entry: EvidenceIndexEntry,
-  alert: NormalizedAlert | null,
-): Partial<Pick<EvidenceItem, "chartSnapshot" | "changesSnapshot">> {
-  if (entry.resultContent === null) return {};
-  if (
-    entry.toolName === "QueryMetrics" ||
-    entry.toolName === "QueryMetricsRange"
-  ) {
-    const chartSnapshot = chartSnapshotFrom(entry.resultContent, alert);
-    return chartSnapshot ? { chartSnapshot } : {};
-  }
-  if (entry.toolName === "GetRecentChanges") {
-    const changesSnapshot = changesSnapshotFrom(entry.resultContent);
-    return changesSnapshot ? { changesSnapshot } : {};
-  }
-  return {};
-}
-
-// Citations resolved and snapshots attached (§1c). An unknown tag drops the
-// evidence entry and every reference to it - never a fabricated citation.
-export function enrichReport(
-  input: ReportInput,
-  index: EvidenceIndexEntry[],
-  alert: NormalizedAlert | null,
-  model: string,
-): Report {
-  const byTag = new Map(index.map((entry) => [entry.tag, entry]));
-  const evidence: EvidenceItem[] = [];
-  const dropped = new Set<string>();
-  for (const item of input.evidence) {
-    const entry = byTag.get(item.evidenceTag);
-    if (!entry) {
-      dropped.add(item.id);
-      continue;
+// One walk of the durable transcript, which is the only record of what ran. The
+// provider's own call id is the citation handle, so nothing here numbers,
+// renames or copies anything.
+function toolCallsIn(sessionId: string): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const byToolUseId = new Map<string, ToolCall>();
+  for (const message of getSessionMessages(sessionId)) {
+    for (const part of message.parts) {
+      if (part.type === "tool_call") {
+        const call: ToolCall = {
+          toolUseId: part.id,
+          toolName: part.name,
+          input: part.input,
+          result: null,
+        };
+        calls.push(call);
+        byToolUseId.set(part.id, call);
+      } else if (part.type === "tool_result") {
+        const call = byToolUseId.get(part.toolCallId);
+        if (call) call.result = part.output;
+      }
     }
-    evidence.push({
-      id: item.id,
-      toolUseId: entry.toolUseId,
-      toolName: entry.toolName,
-      summary: item.summary,
-      ...snapshotsFor(entry, alert),
+  }
+  return calls;
+}
+
+function citedIds(report: Report): Set<string> {
+  return new Set([
+    ...report.hypotheses.flatMap((h) => h.evidenceIds),
+    ...report.recommendedFix.evidenceIds,
+  ]);
+}
+
+// In the order the calls happened, which is the order they are worth reading.
+// A citation whose call has not answered yet resolves to nothing: there is
+// nothing to quote, and an invented id must stay unrenderable. The outcome
+// rides along because a cited miss and a cited crash are not the same evidence.
+export function resolveEvidence(
+  sessionId: string,
+  report: Report,
+): ResolvedEvidence[] {
+  const cited = citedIds(report);
+  if (cited.size === 0) return [];
+  const outcomes = getToolOutcomes(sessionId);
+  const resolved: ResolvedEvidence[] = [];
+  for (const { toolUseId, toolName, input, result } of toolCallsIn(sessionId)) {
+    if (!cited.has(toolUseId) || result === null) continue;
+    const outcome = outcomes.get(toolUseId);
+    resolved.push({
+      toolUseId,
+      toolName,
+      input,
+      result,
+      ...(outcome !== undefined && { outcome }),
     });
   }
-  const keep = (ids: string[]): string[] =>
-    ids.filter((id) => !dropped.has(id));
+  return resolved;
+}
+
+// Citations kept only where they name a call this session actually made, so a
+// fabricated one stays unrenderable. The claim itself always survives: an
+// overreach must read as a missing citation, never as a missing sentence.
+export function enrichReport(
+  input: ReportInput,
+  sessionId: string,
+  model: string,
+): Report {
+  // Existence, not completion: the model may cite a call from the same turn,
+  // whose result is persisted only once the turn ends.
+  const known = new Set(toolCallsIn(sessionId).map((c) => c.toolUseId));
+  const keep = (ids: string[]): string[] => ids.filter((id) => known.has(id));
   return {
     status: input.status,
     headline: input.headline,
@@ -290,7 +155,6 @@ export function enrichReport(
       ...h,
       evidenceIds: keep(h.evidenceIds),
     })),
-    evidence,
     recommendedFix: {
       ...input.recommendedFix,
       evidenceIds: keep(input.recommendedFix.evidenceIds),
@@ -326,7 +190,6 @@ export function finalizeInconclusive(sessionId: string, model: string): void {
         headline: "",
         rootCause: { summary: "", detail: "" },
         hypotheses: [],
-        evidence: [],
         recommendedFix: { summary: "", evidenceIds: [] },
         updatedAt: new Date().toISOString(),
         model,

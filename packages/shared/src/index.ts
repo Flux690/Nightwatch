@@ -143,7 +143,6 @@ export { messagePartsToText } from "./messages.js";
 export type {
   ToolOutcome,
   ToolCallState,
-  Citation,
   UserTurnItem,
   AgentTextItem,
   ErrorTextItem,
@@ -164,11 +163,8 @@ export type {
   HypothesisState,
   Confidence,
   Hypothesis,
-  ChartSnapshot,
-  ChangesSnapshot,
-  EvidenceItem,
   Report,
-  ReportSummary,
+  ResolvedEvidence,
   SessionReportResponse,
 } from "./reports.js";
 export type {

@@ -1,17 +1,11 @@
 import type {
   ApprovalRequest,
   ApprovalStatus,
-  Citation,
   SessionMessage,
   ToolCallState,
   ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
-import {
-  buildEvidenceIndex,
-  evidenceTagsIn,
-  stripEvidenceTag,
-} from "../agent/report.js";
 import { getPendingHumanInputWithSessionBySessionId } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
@@ -20,20 +14,6 @@ import {
   listRemediationActionsForSession,
   targetKeyFromInput,
 } from "../db/remediation-actions.js";
-
-// Markers the index can resolve become citations; the rest stay literal text, so
-// a tag the model invented can never render as a link to nothing.
-function resolveCitations(
-  text: string,
-  byTag: Map<string, Citation>,
-): Record<string, Citation> | undefined {
-  const found: Record<string, Citation> = {};
-  for (const tag of evidenceTagsIn(text)) {
-    const citation = byTag.get(tag);
-    if (citation) found[citation.tag] = citation;
-  }
-  return Object.keys(found).length > 0 ? found : undefined;
-}
 
 // The only place a tool call becomes a card. Both the transcript fetch and the
 // live stream call it, which is what keeps a streamed card and a reloaded one
@@ -156,13 +136,6 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       }
     : null;
 
-  const byTag = new Map<string, Citation>(
-    buildEvidenceIndex(sessionId).map((entry) => [
-      entry.tag,
-      { tag: entry.tag, toolUseId: entry.toolUseId, toolName: entry.toolName },
-    ]),
-  );
-
   // A decision the operator already made. Without this a reloaded transcript
   // shows the tool's output but forgets who released it.
   const decisions = new Map<
@@ -182,7 +155,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool_result") {
-        results.set(part.toolCallId, stripEvidenceTag(part.output));
+        results.set(part.toolCallId, part.output);
       }
     }
   }
@@ -216,17 +189,11 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       const id = `${msg.role}-${msg.seq}-${idx++}`;
       if (part.type === "text") {
         if (!part.text) continue;
-        if (msg.role === "user") {
-          items.push({ kind: "user_turn", id, text: part.text });
-        } else {
-          const citations = resolveCitations(part.text, byTag);
-          items.push({
-            kind: "agent_text",
-            id,
-            text: part.text,
-            ...(citations && { citations }),
-          });
-        }
+        items.push({
+          kind: msg.role === "user" ? "user_turn" : "agent_text",
+          id,
+          text: part.text,
+        });
       } else if (part.type === "reasoning") {
         if (part.text.trim()) {
           items.push({

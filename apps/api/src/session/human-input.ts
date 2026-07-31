@@ -8,7 +8,6 @@ import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { publishInterruptResolved, publishTranscriptItem } from "./stream.js";
-import { stripEvidenceTag } from "../agent/report.js";
 import { toolCallCard } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
@@ -84,9 +83,7 @@ function unpause(
         phase: "resolved",
         decision: status,
         by: resolvedBy,
-        ...(status === "approved" && {
-          result: stripEvidenceTag(gatedResult.content),
-        }),
+        ...(status === "approved" && { result: gatedResult.content }),
         ...(outcome !== undefined && { outcome }),
       },
     }),

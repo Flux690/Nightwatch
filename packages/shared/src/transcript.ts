@@ -43,14 +43,6 @@ export type ToolCallState =
     }
   | { phase: "complete"; result: unknown; outcome?: ToolOutcome };
 
-// A resolved [evidence: eN] marker: the tool call it points at. Markers that
-// resolve to nothing are left as literal text rather than linked.
-export interface Citation {
-  tag: string;
-  toolUseId: string;
-  toolName: string;
-}
-
 export interface UserTurnItem {
   kind: "user_turn";
   id: string;
@@ -64,8 +56,6 @@ export interface AgentTextItem {
   kind: "agent_text";
   id: string;
   text: string;
-  // Keyed by tag, for the markers left inline in `text`.
-  citations?: Record<string, Citation>;
 }
 
 // NightWarden's own failure note (role "error"), rendered exactly like agent text.

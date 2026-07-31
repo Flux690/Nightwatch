@@ -17,7 +17,7 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 import type { NormalizedAlert, Report } from "@nightwarden/shared";
 import { runInvestigation } from "../agent/loop.js";
 import { GATE_NUDGE } from "../agent/prompts/report.js";
-import { finalizeInconclusive } from "../agent/report.js";
+import { finalizeInconclusive, resolveEvidence } from "../agent/report.js";
 import { REPORT_TOOLS } from "../agent/tools/report.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport, isReportComplete } from "../db/reports.js";
@@ -47,15 +47,7 @@ function baseReport(overrides: Partial<Report>): Report {
         state: "root_cause",
         confidence: "high",
         reason: "rss climbed",
-        evidenceIds: ["ev1"],
-      },
-    ],
-    evidence: [
-      {
-        id: "ev1",
-        toolUseId: "tu-1",
-        toolName: "QueryMetricsRange",
-        summary: "climb",
+        evidenceIds: ["tu-1"],
       },
     ],
     recommendedFix: { summary: "restart", evidenceIds: [] },
@@ -131,8 +123,8 @@ describe("report storage and enrichment", () => {
     mockCreateProvider.mockReset();
   });
 
-  // Seeds a session whose transcript holds two tool calls: [evidence: e1] a
-  // QueryMetricsRange and [evidence: e2] a GetRecentChanges, in Anthropic block shape.
+  // Seeds a session whose transcript holds two tool calls, tu-1 a
+  // QueryMetricsRange and tu-2 a GetRecentChanges, in Anthropic block shape.
   function seedTranscript(sessionId: string): void {
     createSession(
       { sessionId, title: "t", createdAt: new Date().toISOString() },
@@ -190,13 +182,7 @@ describe("report storage and enrichment", () => {
         seq: 1,
         role: "user",
         content: "results",
-        parts: [
-          {
-            type: "tool_result",
-            toolCallId: "tu-1",
-            output: `${metrics}\n\n[evidence: e1]`,
-          },
-        ],
+        parts: [{ type: "tool_result", toolCallId: "tu-1", output: metrics }],
         createdAt: now,
       },
       {
@@ -219,75 +205,93 @@ describe("report storage and enrichment", () => {
         seq: 3,
         role: "user",
         content: "results",
-        parts: [
-          {
-            type: "tool_result",
-            toolCallId: "tu-2",
-            output: `${changes}\n\n[evidence: e2]`,
-          },
-        ],
+        parts: [{ type: "tool_result", toolCallId: "tu-2", output: changes }],
         createdAt: now,
       },
     ]);
   }
 
-  it("UpdateReport resolves citations, attaches snapshots, and drops unknown tags", async () => {
+  async function updateReport(
+    sessionId: string,
+    input: Record<string, unknown>,
+  ): Promise<void> {
+    const result = await executeTool(REPORT_TOOLS[0]!, input, {
+      sessionId,
+      toolUseId: "tu-report",
+      toolCallCeilingMs: 15_000,
+    });
+    expect(result.outcome).toBeUndefined();
+  }
+
+  it("keeps a claim whose citation resolves to nothing, and drops only the citation", async () => {
     const sessionId = randomUUID();
     seedTranscript(sessionId);
 
-    const result = await executeTool(
-      REPORT_TOOLS[0]!,
-      {
-        status: "root_cause_identified",
-        headline: "web-01 memory leak",
-        rootCause: { summary: "leak after PR #482", detail: "rss climbed" },
-        hypotheses: [
-          {
-            id: "h1",
-            statement: "cache bump leaks",
-            state: "root_cause",
-            confidence: "high",
-            reason: "climb starts at merge",
-            evidenceIds: ["ev1", "ev2", "ev-bogus"],
-          },
-        ],
-        evidence: [
-          { id: "ev1", evidenceTag: "e1", summary: "rss climbing" },
-          { id: "ev2", evidenceTag: "e2", summary: "PR #482 merged" },
-          { id: "ev-bogus", evidenceTag: "e99", summary: "phantom" },
-        ],
-        recommendedFix: {
-          summary: "revert PR #482",
-          evidenceIds: ["ev2", "ev-bogus"],
+    await updateReport(sessionId, {
+      status: "root_cause_identified",
+      headline: "web-01 memory leak",
+      rootCause: { summary: "leak after PR #482", detail: "rss climbed" },
+      hypotheses: [
+        {
+          id: "h1",
+          statement: "cache bump leaks",
+          state: "root_cause",
+          confidence: "high",
+          reason: "climb starts at merge",
+          evidenceIds: ["tu-1", "tu-2", "tu-invented"],
         },
+      ],
+      recommendedFix: {
+        summary: "revert PR #482",
+        evidenceIds: ["tu-2", "tu-invented"],
       },
-      { sessionId, toolUseId: "tu-report", toolCallCeilingMs: 15_000 },
-    );
-    expect(result.outcome).toBeUndefined();
+    });
 
     const report = getReport(sessionId)!;
     expect(report.status).toBe("root_cause_identified");
-    // Unknown tag e99: the entry is dropped and every reference to it stripped.
-    expect(report.evidence.map((e) => e.id)).toEqual(["ev1", "ev2"]);
-    expect(report.hypotheses[0]!.evidenceIds).toEqual(["ev1", "ev2"]);
-    expect(report.recommendedFix.evidenceIds).toEqual(["ev2"]);
-    // Citations resolved to real transcript tool calls.
-    expect(report.evidence[0]).toMatchObject({
-      toolUseId: "tu-1",
-      toolName: "QueryMetricsRange",
-    });
-    expect(report.evidence[0]!.chartSnapshot).toMatchObject({
-      seriesLabel: "container_memory_rss (web-01)",
-    });
-    expect(report.evidence[0]!.chartSnapshot!.points).toEqual([
-      ["2024-07-03T09:46:40.000Z", 100],
-      ["2024-07-03T09:47:40.000Z", 200],
-    ]);
-    expect(report.evidence[1]!.changesSnapshot!.pullRequests[0]).toMatchObject({
-      number: 482,
-      url: "https://github.com/o/r/pull/482",
-    });
+    // The overreach is visible as a missing citation, never as a missing claim.
+    expect(report.hypotheses[0]!.statement).toBe("cache bump leaks");
+    expect(report.hypotheses[0]!.evidenceIds).toEqual(["tu-1", "tu-2"]);
+    expect(report.recommendedFix.summary).toBe("revert PR #482");
+    expect(report.recommendedFix.evidenceIds).toEqual(["tu-2"]);
     expect(isReportComplete(report)).toBe(true);
+  });
+
+  it("resolves a citation to the call that produced it, quoting the result verbatim", async () => {
+    const sessionId = randomUUID();
+    seedTranscript(sessionId);
+
+    await updateReport(sessionId, {
+      status: "root_cause_identified",
+      headline: "web-01 memory leak",
+      rootCause: { summary: "leak after PR #482", detail: "rss climbed" },
+      hypotheses: [
+        {
+          id: "h1",
+          statement: "cache bump leaks",
+          state: "root_cause",
+          confidence: "high",
+          reason: "climb starts at merge",
+          evidenceIds: ["tu-1"],
+        },
+      ],
+      recommendedFix: { summary: "revert PR #482", evidenceIds: ["tu-2"] },
+    });
+
+    const evidence = resolveEvidence(sessionId, getReport(sessionId)!);
+    expect(evidence.map((e) => e.toolUseId)).toEqual(["tu-1", "tu-2"]);
+    expect(evidence[0]).toMatchObject({
+      toolName: "QueryMetricsRange",
+      input: { query: "container_memory_rss" },
+    });
+    // Verbatim: the result carries no tag to strip, so what the tool returned is
+    // what the report quotes and what the model was shown.
+    expect(JSON.parse(evidence[0]!.result as string)).toMatchObject({
+      resultType: "matrix",
+    });
+    expect(JSON.parse(evidence[1]!.result as string)).toMatchObject({
+      pullRequests: [{ number: 482 }],
+    });
   });
 
   it("finalizeInconclusive stamps an existing report and creates a minimal one when absent", () => {

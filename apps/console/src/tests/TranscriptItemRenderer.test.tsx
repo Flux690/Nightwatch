@@ -423,7 +423,7 @@ describe("TranscriptItemRenderer", () => {
     });
   });
   describe("reveal from the report", () => {
-    it("opens the named tool row and marks it, leaving the others shut", async () => {
+    it("marks the named tool row without opening it, leaving the others untouched", async () => {
       const { revealToolCall } =
         await import("@/components/transcript/revealToolCall");
 
@@ -467,16 +467,13 @@ describe("TranscriptItemRenderer", () => {
 
       act(() => revealToolCall("tu-logs"));
 
-      // The named row opens and is marked; its neighbour is untouched, which is
-      // the whole point of the mark - ten collapsed rows look identical.
+      // The named row is marked and stays shut: the reader has already read the
+      // output under the claim and came here for the steps around it, which
+      // expanding would push off screen. The neighbour is untouched.
       await waitFor(() => {
-        expect(logs!.querySelector("button")).toHaveAttribute(
-          "aria-expanded",
-          "true",
-        );
+        expect(logs).toHaveAttribute("data-revealed");
       });
-      expect(logs).toHaveAttribute("data-revealed");
-      expect(stats!.querySelector("button")).toHaveAttribute(
+      expect(logs!.querySelector("button")).toHaveAttribute(
         "aria-expanded",
         "false",
       );

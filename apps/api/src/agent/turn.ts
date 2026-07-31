@@ -2,8 +2,6 @@ import { executeTool } from "./tools/toolset.js";
 import { isToolFailure } from "./tools/types.js";
 import type { Tool, ToolDispatchContext } from "./tools/types.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
-import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
-import { evidenceOrdinals, stampEvidence, stripEvidenceTag } from "./report.js";
 import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
@@ -37,9 +35,6 @@ export async function processToolUses(params: {
   const { toolUses, toolset, sessionId, execCtx, log } = params;
 
   const toolResults: ToolResult[] = [];
-  // Positional evidence tags for citation: derived from the persisted transcript
-  // (the assistant turn is already persisted), so ordinals survive a resume.
-  const ordinals = evidenceOrdinals(sessionId);
   let gatedTool: ToolUse | null = null;
   let gatedEntry: Tool | null = null;
 
@@ -95,14 +90,9 @@ export async function processToolUses(params: {
       typeof result.content === "string"
         ? result.content
         : JSON.stringify(result.content);
-    const ordinal = ordinals.get(tool.id);
     toolResults.push({
       tool_use_id: tool.id,
-      // UpdateReport's own ack is not evidence; every other read result is citable.
-      content:
-        ordinal === undefined || tool.name === REPORT_TOOL_SCHEMA.name
-          ? content
-          : stampEvidence(content, ordinal),
+      content,
       is_error: isToolFailure(result.outcome),
     });
     if (result.outcome !== undefined) {
@@ -114,11 +104,11 @@ export async function processToolUses(params: {
         toolUseId: tool.id,
         toolName: tool.name,
         input: tool.input,
-        // The same string the transcript fetch would show, tag stripped, so a
-        // reload cannot render this result differently from the live card.
+        // The same string the transcript fetch would show, so a reload cannot
+        // render this result differently from the live card.
         state: {
           phase: "complete",
-          result: stripEvidenceTag(content),
+          result: content,
           ...(result.outcome !== undefined && { outcome: result.outcome }),
         },
       }),

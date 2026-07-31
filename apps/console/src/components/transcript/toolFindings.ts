@@ -1,3 +1,5 @@
+import { asRecord, numberAt as num, stringAt as str } from "@/lib/toolResult";
+
 // The one-line answer a tool row shows unexpanded, COMPUTED from the tool's own
 // structured result and never written by the model: a sentence it composes about
 // data we already hold is one nothing can check. Quoted log lines stay verbatim.
@@ -12,31 +14,6 @@ export interface ToolFinding {
 // Runner errors arrive as a plain string with this prefix, not as a shaped
 // object, so every formatter has to survive one.
 const ERROR_PREFIX = "ERROR:";
-
-function asRecord(result: unknown): Record<string, unknown> | null {
-  let value = result;
-  if (typeof value === "string") {
-    if (value.startsWith(ERROR_PREFIX)) return null;
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  return typeof value === "object" && value !== null
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function num(record: Record<string, unknown>, key: string): number | null {
-  const value = record[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function str(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key];
-  return typeof value === "string" ? value : null;
-}
 
 function arr(record: Record<string, unknown>, key: string): unknown[] | null {
   const value = record[key];
