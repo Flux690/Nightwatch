@@ -124,7 +124,7 @@ export type {
   SessionRole,
   SessionMeta,
   SessionMessage,
-  RunMode,
+  SessionDetail,
   SessionRunStatus,
   SessionListRow,
 } from "./sessions.js";

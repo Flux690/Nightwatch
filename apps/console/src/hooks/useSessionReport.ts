@@ -1,16 +1,13 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  ConsoleEvent,
-  Report,
-  SessionReportResponse,
-} from "@nightwarden/shared";
+import type { ConsoleEvent, SessionReportResponse } from "@nightwarden/shared";
 import { apiFetch, ApiError } from "@/api/client";
 import { useConsoleEvents } from "./ConsoleEventsProvider.js";
 
 // The session's stored report, kept live: REPORT_UPDATED invalidates, and the
-// provider's reconnect invalidation self-heals a missed event. A 404 is the
-// legal "this is a conversation" answer, not an error.
+// provider's reconnect invalidation self-heals a missed event. A 404 means no
+// finding has been recorded yet, which useSession answers separately - this
+// hook never says what a session is.
 export function useSessionReport(
   sessionId: string | null,
 ): SessionReportResponse | null {
@@ -36,28 +33,10 @@ export function useSessionReport(
         throw err;
       }),
     enabled: sessionId !== null,
-    // The report only changes via REPORT_UPDATED (plus the provider's
-    // reconnect invalidation), so event-driven freshness is the model - and it
-    // lets an optimistic seed survive until a real event replaces it.
+    // The report only changes via REPORT_UPDATED (plus the provider's reconnect
+    // invalidation), so event-driven freshness is the model.
     staleTime: Infinity,
   });
 
   return data;
-}
-
-// Seeded into the query cache the moment a send commits to investigate, so the
-// layout morphs immediately; the first real REPORT_UPDATED replaces it, and a
-// failed send rolls it back.
-export function optimisticReport(): SessionReportResponse {
-  const report: Report = {
-    status: "investigation_incomplete",
-    headline: "",
-    rootCause: { summary: "", detail: "" },
-    hypotheses: [],
-    evidence: [],
-    recommendedFix: { summary: "", evidenceIds: [] },
-    updatedAt: new Date().toISOString(),
-    model: "",
-  };
-  return { report, actions: [] };
 }

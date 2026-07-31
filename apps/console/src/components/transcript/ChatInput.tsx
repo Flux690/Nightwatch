@@ -1,21 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUp, ChevronDown, Square } from "lucide-react";
-import type { RunMode } from "@nightwarden/shared";
+import { ArrowUp, Square } from "lucide-react";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -24,86 +16,20 @@ import { apiFetch } from "@/api/client";
 export interface ChatInputProps {
   sessionId: string | null;
   isRunning: boolean;
-  // Hides the mode picker: an investigation can never demote (one-way ratchet),
-  // so the chat input has nothing to choose.
-  investigation?: boolean;
-  onSessionCreated?: (
-    sessionId: string,
-    firstMessage: string,
-    mode: RunMode,
-  ) => void;
-  onSend?: (text: string, mode: RunMode) => void;
+  onSessionCreated?: (sessionId: string, firstMessage: string) => void;
+  onSend?: (text: string) => void;
   // The POST never reached the API: the view rolls back its optimistic state.
   onSendFailed?: () => void;
-}
-
-const MODE_LABEL: Record<RunMode, string> = {
-  ask: "Ask",
-  investigate: "Investigate",
-};
-
-/* Chat input mode dropdown. On an existing conversation, choosing Investigate
-   escalates it on the next send; descriptions explain what each mode does. */
-function ModePicker({
-  mode,
-  onChange,
-  disabled,
-}: {
-  mode: RunMode;
-  onChange: (mode: RunMode) => void;
-  disabled: boolean;
-}): React.JSX.Element {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Session mode"
-        disabled={disabled}
-        className="group/mode inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:border-ring disabled:pointer-events-none disabled:opacity-50 data-popup-open:text-foreground"
-      >
-        {MODE_LABEL[mode]}
-        <ChevronDown
-          className="size-3.5 text-muted-foreground transition-transform group-data-popup-open/mode:rotate-180"
-          aria-hidden="true"
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        <DropdownMenuRadioGroup
-          value={mode}
-          onValueChange={(value) => onChange(value as RunMode)}
-        >
-          <DropdownMenuRadioItem value="ask">
-            <span className="flex flex-col gap-0.5">
-              <span className="font-medium text-foreground">Ask</span>
-              <span className="text-sm text-muted-foreground">
-                Chat with the agent. It can look things up, but writes no
-                report.
-              </span>
-            </span>
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="investigate">
-            <span className="flex flex-col gap-0.5">
-              <span className="font-medium text-foreground">Investigate</span>
-              <span className="text-sm text-muted-foreground">
-                Run a full investigation with a live root-cause report.
-              </span>
-            </span>
-          </DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 export function ChatInput({
   sessionId,
   isRunning,
-  investigation = false,
   onSessionCreated,
   onSend,
   onSendFailed,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<RunMode>("ask");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
   const navigate = useNavigate();
@@ -114,21 +40,15 @@ export function ChatInput({
         const data = await apiFetch<{ sessionId: string }>("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed, mode }),
+          body: JSON.stringify({ message: trimmed }),
         });
-        onSessionCreated?.(data.sessionId, trimmed, mode);
+        onSessionCreated?.(data.sessionId, trimmed);
         return data.sessionId;
       }
-      // Only escalation is sent; otherwise the server derives the mode
-      // (one-way ratchet - a follow-up can never demote an investigation).
       await apiFetch<void>(`/api/sessions/${sessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: trimmed,
-          ...(mode === "investigate" &&
-            !investigation && { mode: "investigate" as const }),
-        }),
+        body: JSON.stringify({ message: trimmed }),
       });
       return null;
     },
@@ -171,9 +91,9 @@ export function ChatInput({
     if (!trimmed || isRunning || submit.isPending) return;
     // Cleared at submit, not on success: the echoed bubble is the message now.
     setText("");
-    onSend?.(trimmed, mode);
+    onSend?.(trimmed);
     submit.mutate(trimmed);
-  }, [text, isRunning, submit, onSend, mode]);
+  }, [text, isRunning, submit, onSend]);
 
   const canSend = text.trim().length > 0 && !isRunning && !submit.isPending;
 
@@ -215,11 +135,9 @@ export function ChatInput({
           align="block-end"
           className="justify-between gap-2 px-2 pb-2"
         >
-          {investigation ? (
-            <span />
-          ) : (
-            <ModePicker mode={mode} onChange={setMode} disabled={isRunning} />
-          )}
+          {/* Holds the send button against the trailing edge now that nothing
+              occupies the leading one. */}
+          <span />
           {isRunning ? (
             <InputGroupButton
               type="button"

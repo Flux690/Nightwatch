@@ -225,9 +225,26 @@ export function ReportPanel({
   report,
   actions,
 }: {
-  report: Report;
+  // Null until the agent records its first finding. The investigation view is
+  // drawn from the session, not from this, so the panel outlives its absence.
+  report: Report | null;
   actions: RemediationActionRecord[];
 }): React.JSX.Element {
+  if (report === null) {
+    return (
+      <div className="mx-auto w-full max-w-page px-8 py-6">
+        <header>
+          <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
+            Investigation
+          </h1>
+          <p className="m-0 mt-2 text-sm text-muted-foreground">
+            The agent has not recorded a finding yet.
+          </p>
+        </header>
+      </div>
+    );
+  }
+
   const resolved = report.hypotheses.filter((h) => h.state !== "open").length;
   const { evidence } = report;
 

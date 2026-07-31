@@ -69,10 +69,17 @@ function setup(pendingCount = 0) {
     pendingApprovals = makePending(n);
   };
 
-  // Mutable report: null = conversation (404), set = investigation (morph).
+  // The report is a finding the agent may not have recorded yet; null = 404.
+  // It no longer decides the layout, so a test can set either independently.
   let sessionReport: Record<string, unknown> | null = null;
   const setSessionReport = (r: Record<string, unknown> | null): void => {
     sessionReport = r;
+  };
+
+  // What the session says it is. This is what the layout keys on.
+  let investigation = false;
+  const setInvestigation = (value: boolean): void => {
+    investigation = value;
   };
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
@@ -119,7 +126,15 @@ function setup(pendingCount = 0) {
     if (/\/sessions\/[^?]+/.test(url)) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve([]),
+        json: () =>
+          Promise.resolve({
+            sessionId: "new-s1",
+            title: "Check disk",
+            createdAt: "2026-06-13T00:00:00.000Z",
+            investigation,
+            originatingAlert: null,
+            transcript: [],
+          }),
       });
     }
     if (url.includes("/sessions")) {
@@ -183,7 +198,14 @@ function setup(pendingCount = 0) {
     </TestProviders>,
   );
 
-  return { router, qc, fetchMock, setPendingCount, setSessionReport };
+  return {
+    router,
+    qc,
+    fetchMock,
+    setPendingCount,
+    setSessionReport,
+    setInvestigation,
+  };
 }
 
 afterEach(() => {
@@ -327,9 +349,12 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    it("morphs to the investigation layout without remounting the chat", async () => {
+    // The layout follows what the session says it is, so it appears with no
+    // report row present - which is the state an alert-opened session is in
+    // for the whole of the first minute.
+    it("morphs to the investigation layout on the session's own flag, with no report", async () => {
       const user = userEvent.setup();
-      const { router, setSessionReport } = setup();
+      const { router, setInvestigation } = setup();
 
       await screen.findByRole("textbox");
       await user.type(screen.getByRole("textbox"), "Check disk");
@@ -339,8 +364,50 @@ describe("Shell", () => {
       });
       const streamBefore = MockEventSource.latest;
 
-      // The agent's first UpdateReport: the report row now exists and the
-      // console hears REPORT_UPDATED - chat moves to the rail, report to main.
+      // The agent called OpenInvestigation; its turn lands and the console
+      // refetches the session.
+      setInvestigation(true);
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "m-1",
+          type: "MESSAGE",
+          payload: {
+            sessionId: "new-s1",
+            message: {
+              role: "assistant",
+              content: "Opening an investigation.",
+            },
+          },
+        });
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("complementary", { name: /investigation chat/i }),
+        ).toBeInTheDocument();
+      });
+      // No report row exists, and the panel says so rather than rendering blank.
+      expect(
+        screen.getByText(/has not recorded a finding yet/i),
+      ).toBeInTheDocument();
+
+      // The morph is a DOM re-parent, never a remount: same stream, same input.
+      expect(MockEventSource.latest).toBe(streamBefore);
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    });
+
+    it("renders the report in the investigation layout once one exists", async () => {
+      const user = userEvent.setup();
+      const { router, setInvestigation, setSessionReport } = setup();
+
+      await screen.findByRole("textbox");
+      await user.type(screen.getByRole("textbox"), "Check disk");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/sessions/new-s1");
+      });
+
+      setInvestigation(true);
       setSessionReport({
         status: "investigation_incomplete",
         headline: "web-01 memory leak",
@@ -353,6 +420,14 @@ describe("Shell", () => {
       });
       act(() => {
         MockEventSource.broadcast({
+          messageId: "m-1",
+          type: "MESSAGE",
+          payload: {
+            sessionId: "new-s1",
+            message: { role: "assistant", content: "Found it." },
+          },
+        });
+        MockEventSource.broadcast({
           messageId: "m-rep",
           type: "REPORT_UPDATED",
           payload: { sessionId: "new-s1" },
@@ -360,15 +435,8 @@ describe("Shell", () => {
       });
 
       await waitFor(() => {
-        expect(
-          screen.getByRole("complementary", { name: /investigation chat/i }),
-        ).toBeInTheDocument();
         expect(screen.getByText("web-01 memory leak")).toBeInTheDocument();
       });
-
-      // The morph is a DOM re-parent, never a remount: same stream, same input.
-      expect(MockEventSource.latest).toBe(streamBefore);
-      expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
     it("captures deltas arriving after session creation", async () => {

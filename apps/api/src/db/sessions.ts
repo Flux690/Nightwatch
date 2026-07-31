@@ -1,6 +1,5 @@
 import type {
   MessagePart,
-  RunMode,
   NativeEnvelope,
   NormalizedAlert,
   Report,
@@ -14,7 +13,7 @@ import type { PendingHumanInput } from "./interrupts.js";
 // a run that no longer carries it in its job can recover it from here.
 export type StoredSession = SessionMeta & {
   originatingAlert: NormalizedAlert | null;
-  mode: RunMode;
+  investigation: boolean;
 };
 
 // Create the session row once. Idempotent: a resume re-enters the loop with the
@@ -22,12 +21,12 @@ export type StoredSession = SessionMeta & {
 export function createSession(
   meta: SessionMeta,
   originatingAlert: NormalizedAlert | null,
-  mode: RunMode = "ask",
+  investigation = false,
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO sessions (session_id, title, originating_alert, mode, created_at)
-       VALUES (@sessionId, @title, @originatingAlert, @mode, @createdAt)
+      `INSERT INTO sessions (session_id, title, originating_alert, investigation, created_at)
+       VALUES (@sessionId, @title, @originatingAlert, @investigation, @createdAt)
        ON CONFLICT(session_id) DO NOTHING`,
     )
     .run({
@@ -35,18 +34,27 @@ export function createSession(
       title: meta.title,
       originatingAlert:
         originatingAlert != null ? JSON.stringify(originatingAlert) : null,
-      mode,
+      investigation: investigation ? 1 : 0,
       createdAt: meta.createdAt,
     });
 }
 
-// One-way: an ask session that escalates stays an investigation for good.
-export function promoteSessionToInvestigate(sessionId: string): void {
+// One-way: a session put under investigation stays under one for good.
+export function openInvestigation(sessionId: string): void {
   getDb()
     .prepare(
-      `UPDATE sessions SET mode = 'investigate' WHERE session_id = ? AND mode <> 'investigate'`,
+      `UPDATE sessions SET investigation = 1 WHERE session_id = ? AND investigation = 0`,
     )
     .run(sessionId);
+}
+
+// Read per turn by the loop, so OpenInvestigation takes effect on the next turn
+// of the run that called it rather than the next run.
+export function isUnderInvestigation(sessionId: string): boolean {
+  const row = getDb()
+    .prepare(`SELECT investigation FROM sessions WHERE session_id = ?`)
+    .get(sessionId) as { investigation: number } | undefined;
+  return row?.investigation === 1;
 }
 
 // Overwrites unconditionally: the refined title deliberately replaces the
@@ -205,7 +213,7 @@ export interface SessionListSource {
   createdAt: string;
   lastActivityAt: string;
   originatingAlert: NormalizedAlert | null;
-  mode: RunMode;
+  investigation: boolean;
   report: Report | null;
   lastRole: string | null;
 }
@@ -214,7 +222,7 @@ export function listSessionSources(): SessionListSource[] {
   const rows = getDb()
     .prepare(
       `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-              s.originating_alert AS originatingAlert, s.mode, r.report,
+              s.originating_alert AS originatingAlert, s.investigation, r.report,
               (SELECT m.role FROM session_messages m
                 WHERE m.session_id = s.session_id
                 ORDER BY m.seq DESC LIMIT 1) AS lastRole,
@@ -230,7 +238,7 @@ export function listSessionSources(): SessionListSource[] {
     createdAt: string;
     lastActivityAt: string;
     originatingAlert: string | null;
-    mode: string;
+    investigation: number;
     report: string | null;
     lastRole: string | null;
   }>;
@@ -243,7 +251,7 @@ export function listSessionSources(): SessionListSource[] {
       r.originatingAlert !== null
         ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
         : null,
-    mode: r.mode === "investigate" ? "investigate" : "ask",
+    investigation: r.investigation === 1,
     report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
     lastRole: r.lastRole,
   }));
@@ -252,18 +260,19 @@ export function listSessionSources(): SessionListSource[] {
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, title, mode,
+      `SELECT session_id AS sessionId, title, investigation,
               originating_alert AS originatingAlert, created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
     .get(sessionId) as
-    (StoredSession & { originatingAlert: string | null }) | undefined;
+    | (SessionMeta & { originatingAlert: string | null; investigation: number })
+    | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,
     title: row.title,
     createdAt: row.createdAt,
-    mode: row.mode === "investigate" ? "investigate" : "ask",
+    investigation: row.investigation === 1,
     // Stored as JSON text; only this layer deserializes it.
     originatingAlert:
       row.originatingAlert != null

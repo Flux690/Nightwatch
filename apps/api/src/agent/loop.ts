@@ -22,14 +22,14 @@ import {
 } from "../db/integrations.js";
 import {
   createSession,
-  promoteSessionToInvestigate,
+  isUnderInvestigation,
   appendErrorMessage,
   appendSessionMessages,
   appendMessagesAndInterrupt,
   getNextSeq,
   getSession,
 } from "../db/sessions.js";
-import { hasReport, reportComplete } from "../db/reports.js";
+import { reportComplete } from "../db/reports.js";
 import {
   publishTextMessageContent,
   publishMessage,
@@ -47,7 +47,6 @@ import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
-  RunMode,
   SessionMessage,
   SessionMeta,
 } from "@nightwarden/shared";
@@ -135,9 +134,6 @@ export interface RunInvestigationInput {
   // When true: seed prior transcript and run exactly one wrap-up turn (no tools),
   // then finish. Used when the operator declines a continue-request interrupt.
   wrapUp?: boolean;
-  // "investigate" adds the report tool and the finish gate; "ask" is a plain
-  // chat. Omitted: derived from the session (alert or existing report -> investigate).
-  mode?: RunMode;
 }
 
 export async function runInvestigation(
@@ -145,24 +141,19 @@ export async function runInvestigation(
 ): Promise<RunOutcome> {
   const { sessionId, signal } = input;
 
-  const alert = input.alert ?? getSession(sessionId)?.originatingAlert ?? null;
+  const stored = getSession(sessionId);
+  const alert = input.alert ?? stored?.originatingAlert ?? null;
 
-  // Mode is a one-way ratchet, recorded on the session. An alert always
-  // investigates; a chat keeps whatever it was last started as.
-  const mode: RunMode =
-    input.mode ??
-    (alert !== null
-      ? "investigate"
-      : (getSession(sessionId)?.mode ??
-        (hasReport(sessionId) ? "investigate" : "ask")));
+  // An alert opens an investigation; otherwise the session's own row answers,
+  // never an artifact a previous run happened to leave behind. The row is the
+  // one-way ratchet, so this can only ever turn on.
+  const opensInvestigation = alert !== null || (stored?.investigation ?? false);
 
   const log = logger.child({
     sessionId,
     alertType: alert?.alertType ?? "chat",
-    mode,
+    investigation: opensInvestigation,
   });
-
-  if (mode === "investigate") promoteSessionToInvestigate(sessionId);
 
   // Backstop, not the primary gate: the routes that start a run refuse first.
   // Reaching here unconfigured means a caller bypassed them, so fail loudly.
@@ -213,12 +204,16 @@ export async function runInvestigation(
   // Operator declined a continue-request: replay the transcript and run one free-form
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
-    const { systemPrompt } = buildChatContext(undefined, undefined, mode);
+    const { systemPrompt } = buildChatContext(
+      undefined,
+      undefined,
+      opensInvestigation,
+    );
     const provider = createProvider(systemPrompt, llm, apiKey);
     createSession(
       buildSessionMeta(sessionId, alert, input.userMessage),
       alert,
-      mode,
+      opensInvestigation,
     );
 
     let persistedCount = 0;
@@ -239,8 +234,9 @@ export async function runInvestigation(
       return "stopped";
     }
     // The operator is ending the run, so no nudge loop - just guarantee a
-    // complete report exists before the terminal event.
-    if (mode === "investigate" && !reportComplete(sessionId)) {
+    // complete report exists before the terminal event. The wrap-up turn runs
+    // no tools, so the flag read at run start cannot have changed under it.
+    if (opensInvestigation && !reportComplete(sessionId)) {
       finalizeInconclusive(sessionId, llm.model);
     }
     log.info("investigation ended after operator declined to continue");
@@ -272,13 +268,13 @@ export async function runInvestigation(
   const { systemPrompt, firstUserMessage } =
     allAlerts.length > 0
       ? buildInitialContext(allAlerts, fleetView, promptOptions)
-      : buildChatContext(fleetView, promptOptions, mode);
+      : buildChatContext(fleetView, promptOptions, opensInvestigation);
   const provider = createProvider(systemPrompt, llm, apiKey);
 
   createSession(
     buildSessionMeta(sessionId, alert, input.userMessage),
     alert,
-    mode,
+    opensInvestigation,
   );
 
   let persistedCount = 0;
@@ -351,7 +347,9 @@ export async function runInvestigation(
 
     const platforms = connectedPlatforms();
     // Re-read per turn: disconnecting an integration strips its tools from the
-    // very next turn.
+    // very next turn, and OpenInvestigation swaps in the report tools on the
+    // turn after it fires rather than waiting for the next run.
+    const investigation = isUnderInvestigation(sessionId);
     const toolset = effectiveToolset(
       platforms,
       {
@@ -359,7 +357,7 @@ export async function runInvestigation(
         prometheus: getPrometheusIntegration() !== null,
         loki: getLokiIntegration() !== null,
       },
-      mode,
+      investigation,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
@@ -416,9 +414,10 @@ export async function runInvestigation(
     }
 
     if (response.toolUses.length === 0) {
-      // Finish gate: an investigate run may only end with a complete report.
-      // Push back up to MAX_NUDGES times, then finalize honestly as inconclusive.
-      if (mode === "investigate" && !reportComplete(sessionId)) {
+      // Finish gate: a session under investigation may only end with a complete
+      // report. Push back up to MAX_NUDGES times, then finalize honestly as
+      // inconclusive.
+      if (investigation && !reportComplete(sessionId)) {
         if (nudges < MAX_NUDGES) {
           nudges++;
           log.info({ turn, nudges }, "finish gate: report incomplete, nudging");

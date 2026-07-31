@@ -29,7 +29,11 @@ import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { registerRunner, unregisterRunner } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import type { SessionListRow, TranscriptItem } from "@nightwarden/shared";
+import type {
+  SessionDetail,
+  SessionListRow,
+  TranscriptItem,
+} from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
 
 // A free-form text finish: no tool call ends the run successfully.
@@ -120,7 +124,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const r = await fetch(`http://127.0.0.1:${port}/api/sessions/${id}`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
-    return (await r.json()) as TranscriptItem[];
+    return ((await r.json()) as SessionDetail).transcript;
   }
 
   // The session id is discovered the way the console discovers it: from the list.

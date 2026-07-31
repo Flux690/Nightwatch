@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type { RunnerCommandMessage } from "@nightwarden/shared";
+import type { ToolSchema } from "../llm/types.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -24,13 +25,11 @@ import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
-import {
-  connectConsoleEvents,
-  type ConsoleEventFrame,
-} from "./console-events-helper.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
+import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { isUnderInvestigation } from "../db/sessions.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -38,7 +37,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
-import { getToolSchemas } from "../agent/tools/toolset.js";
+import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
 import { connectedPlatforms } from "../agent/policy.js";
 import { mountApi } from "./api-server.js";
 import {
@@ -192,6 +191,23 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(disconnected).not.toContain("QueryLogMetrics");
       expect(disconnected).not.toContain("DiscoverLogLabels");
     });
+
+    // The ratchet is one-way, so the two are mutually exclusive: a session
+    // under investigation has no correct reason to be offered the tool that
+    // opens one, and a session without one cannot be offered the report tools.
+    it("offers OpenInvestigation only to a session not under investigation", () => {
+      const plain = effectiveToolset(new Set([]), {}, false).map(
+        (t) => t.schema.name,
+      );
+      expect(plain).toContain("OpenInvestigation");
+      expect(plain).not.toContain("UpdateReport");
+
+      const investigating = effectiveToolset(new Set([]), {}, true).map(
+        (t) => t.schema.name,
+      );
+      expect(investigating).toContain("UpdateReport");
+      expect(investigating).not.toContain("OpenInvestigation");
+    });
   });
 
   describe("agentic loop seam: a K8s write suspends for approval", () => {
@@ -305,6 +321,85 @@ describe("toolset assembly by fleet capabilities", () => {
         },
       );
       await waitFor(() => !hasPendingHumanInput(sessionId));
+    });
+
+    // The loop rebuilds the toolset every turn but used to capture what the
+    // session was once, at run start - so the tool fired and nothing changed
+    // until the next run.
+    it("OpenInvestigation swaps in the report tools on the next turn of the same run", async () => {
+      mockCreateProvider.mockClear();
+      setScript([
+        {
+          text: "This is an incident.",
+          toolUses: [{ id: "tu-open-1", name: "OpenInvestigation", input: {} }],
+        },
+        { text: "Now investigating.", toolUses: [] },
+      ]);
+
+      const { events, close } = await connectConsoleEvents(port, SESSION);
+
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `nw_auth=${SESSION}`,
+        },
+        body: JSON.stringify({ message: "Why does redis keep restarting?" }),
+      });
+      const { sessionId } = (await res.json()) as { sessionId: string };
+
+      await waitFor(() =>
+        events.find(
+          (e) =>
+            e.type === "RUN_FINISHED" && e.payload["sessionId"] === sessionId,
+        ),
+      );
+      close();
+
+      expect(isUnderInvestigation(sessionId)).toBe(true);
+
+      // One provider serves the whole run, so its chat() calls are this run's
+      // successive turns.
+      const provider = mockCreateProvider.mock.results[0]
+        ?.value as ContractFakeProvider;
+      const namesOnTurn = (turn: number): string[] =>
+        (provider.chat.mock.calls[turn]?.[0] as ToolSchema[]).map(
+          (s) => s.name,
+        );
+
+      expect(namesOnTurn(0)).toContain("OpenInvestigation");
+      expect(namesOnTurn(0)).not.toContain("UpdateReport");
+
+      expect(namesOnTurn(1)).toContain("UpdateReport");
+      expect(namesOnTurn(1)).not.toContain("OpenInvestigation");
+
+      // The ratchet, across runs: this session has no alert, so the row is the
+      // only thing that can carry the fact into a follow-up run.
+      mockCreateProvider.mockClear();
+      setScript([{ text: "Still investigating.", toolUses: [] }]);
+      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+      const followUp = await fetch(
+        `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `nw_auth=${SESSION}`,
+          },
+          body: JSON.stringify({ message: "Anything else?" }),
+        },
+      );
+      expect(followUp.status).toBe(202);
+      await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+      const resumed = mockCreateProvider.mock.results[0]
+        ?.value as ContractFakeProvider;
+      const resumedNames = (
+        resumed.chat.mock.calls[0]?.[0] as ToolSchema[]
+      ).map((s) => s.name);
+      expect(resumedNames).toContain("UpdateReport");
+      expect(resumedNames).not.toContain("OpenInvestigation");
     });
   });
 });

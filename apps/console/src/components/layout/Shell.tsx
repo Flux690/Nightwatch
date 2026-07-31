@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
+import { useSession } from "@/hooks/useSession";
 import { useSessionReport } from "@/hooks/useSessionReport";
 import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
 import { useTheme } from "@/lib/theme";
@@ -177,10 +178,13 @@ function ShellContent({
   const { preference, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  // The morph: a session with a report is an investigation - chat moves to the
-  // right rail and the report owns main. Conversations keep the centered chat.
+  // The morph: a session under investigation moves the chat to the right rail
+  // and gives main to the report. It keys on what the session says it is, so
+  // the layout appears the instant the session exists rather than waiting for
+  // the model to write a report.
+  const session = useSession(routeSessionId ?? null);
   const report = useSessionReport(routeSessionId ?? null);
-  const investigationView = routeSessionId !== undefined && report !== null;
+  const investigationView = session?.investigation === true;
 
   const [chatRailOpen, setChatRailOpen] = useState(true);
   useEffect(() => {
@@ -441,8 +445,8 @@ function ShellContent({
               <>
                 <div className="min-w-0 flex-1 overflow-y-auto">
                   <ReportPanel
-                    report={report.report}
-                    actions={report.actions}
+                    report={report?.report ?? null}
+                    actions={report?.actions ?? []}
                   />
                 </div>
                 {chatRailOpen && (

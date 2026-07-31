@@ -58,6 +58,22 @@ function setup(initialItems: object[] = [USER_TURN]) {
           resolve({ ok: true, json: () => Promise.resolve({}) });
       });
     }
+    // The session answers what it is and carries its transcript; the report is
+    // a separate resource that may not exist yet.
+    if (url.endsWith("/sessions/s1")) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            sessionId: "s1",
+            title: "Service is down on web-01",
+            createdAt: "2026-06-13T00:00:00.000Z",
+            investigation: false,
+            originatingAlert: null,
+            transcript: items,
+          }),
+      });
+    }
     if (url.includes("/sessions/s1")) {
       return Promise.resolve({
         ok: true,

@@ -5,6 +5,7 @@ import { GITHUB_TOOLS } from "./github.js";
 import { HOST_TOOLS } from "./host.js";
 import { K8S_TOOLS } from "./kubernetes.js";
 import { INTERRUPT_TOOLS } from "./interrupts.js";
+import { OPEN_INVESTIGATION_TOOLS } from "./investigation.js";
 import { LOKI_TOOLS } from "./loki.js";
 import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
@@ -16,7 +17,7 @@ import type {
   ToolExecuteResult,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
-import type { Platform, RunMode } from "@nightwarden/shared";
+import type { Platform } from "@nightwarden/shared";
 
 // A runner tool's schema.name IS the wire command, addressed by its declared
 // route; an api tool's execute IS its implementation - no mapping table.
@@ -25,6 +26,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...HOST_TOOLS,
   ...K8S_TOOLS,
   ...INTERRUPT_TOOLS,
+  ...OPEN_INVESTIGATION_TOOLS,
   ...REPO_TOOLS,
   ...GITHUB_TOOLS,
   ...PROMETHEUS_TOOLS,
@@ -73,7 +75,7 @@ export interface IntegrationConnections {
 export function effectiveToolset(
   platforms: Set<Platform> | undefined,
   connections: IntegrationConnections = {},
-  mode: RunMode = "investigate",
+  investigation = true,
 ): Tool[] {
   const { github = true, prometheus = true, loki = true } = connections;
   const has = (platform: Platform): boolean =>
@@ -87,8 +89,10 @@ export function effectiveToolset(
     ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
     ...(prometheus ? PROMETHEUS_TOOLS : []),
     ...(loki ? LOKI_TOOLS : []),
-    // The report tool exists only where the finish gate does: investigate runs.
-    ...(mode === "investigate" ? REPORT_TOOLS : []),
+    // Exactly one of these is offered. The ratchet is one-way, so a session
+    // already under investigation has no correct reason to be shown the tool
+    // that opens one.
+    ...(investigation ? REPORT_TOOLS : OPEN_INVESTIGATION_TOOLS),
   ];
 }
 

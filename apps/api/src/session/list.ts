@@ -23,7 +23,7 @@ export function listSessionRows(): SessionListRow[] {
     listAllPendingHumanInput().map((p) => p.sessionId),
   );
   return listSessionSources().map((source) => {
-    const investigation = source.mode === "investigate";
+    const { investigation } = source;
     return {
       sessionId: source.sessionId,
       createdAt: source.createdAt,

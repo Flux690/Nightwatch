@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage, TranscriptItem } from "@nightwarden/shared";
+import type { RunnerCommandMessage, SessionDetail } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
@@ -129,8 +129,8 @@ describe("console SSE pipeline", () => {
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(transcriptRes.status).toBe(200);
-    const items = (await transcriptRes.json()) as TranscriptItem[];
-    expect(items.length).toBeGreaterThan(0);
+    const session = (await transcriptRes.json()) as SessionDetail;
+    expect(session.transcript.length).toBeGreaterThan(0);
   });
 
   it("resume of ended session seeds provider from persisted transcript", async () => {

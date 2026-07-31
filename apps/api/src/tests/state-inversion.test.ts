@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { NormalizedAlert, TranscriptItem } from "@nightwarden/shared";
+import type { NormalizedAlert, SessionDetail } from "@nightwarden/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
 // per-turn persistence writes real transcript rows.
@@ -30,7 +31,9 @@ import {
 } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
+import { dispatcher } from "../dispatcher.js";
 import { getSession } from "../db/sessions.js";
+import { hasReport } from "../db/reports.js";
 import { buildInitialContext } from "../agent/context.js";
 import { mountApi } from "./api-server.js";
 
@@ -102,9 +105,22 @@ describe("state inversion: persistence and reads are API-local", () => {
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(txRes.status).toBe(200);
-    const items = (await txRes.json()) as TranscriptItem[];
+    const session = (await txRes.json()) as SessionDetail;
     // One user turn in, one agent turn back: the projection drops nothing.
-    expect(items.map((i) => i.kind)).toEqual(["user_turn", "agent_text"]);
+    expect(session.transcript.map((i) => i.kind)).toEqual([
+      "user_turn",
+      "agent_text",
+    ]);
+  });
+
+  // A bare transcript answered `200 []` for any id at all, so a deleted session
+  // rendered as a real but empty one.
+  it("answers 404 for a session that does not exist", async () => {
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${randomUUID()}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    expect(res.status).toBe(404);
   });
 
   it("opens a chat session with no synthetic alert (originating alert is null, opening message is the human's)", async () => {
@@ -132,37 +148,56 @@ describe("state inversion: persistence and reads are API-local", () => {
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
-    const items = (await txRes.json()) as TranscriptItem[];
+    const session = (await txRes.json()) as SessionDetail;
+    // The session reports the same absence the row holds, so nothing downstream
+    // has to infer it.
+    expect(session.originatingAlert).toBeNull();
+    expect(session.investigation).toBe(false);
     // The opening message is the human's verbatim - not a fabricated INCIDENT
     // ALERT block.
-    expect(items[0]).toMatchObject({
+    expect(session.transcript[0]).toMatchObject({
       kind: "user_turn",
       text: "Why did web-01 restart?",
     });
-    expect(JSON.stringify(items[0])).not.toMatch(/INCIDENT ALERT/);
+    expect(JSON.stringify(session.transcript[0])).not.toMatch(/INCIDENT ALERT/);
   });
 
-  it("keeps a stopped investigation classified as one", async () => {
+  // An alert opens an investigation. The run below writes no report, so a
+  // classification inferred from the leftovers would file this as a plain
+  // conversation - which is the defect.
+  it("classifies an alert-opened session as an investigation with no report written", async () => {
     setScript([{ text: "Looking into it.", toolUses: [] }]);
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
+    const sessionId = randomUUID();
+    dispatcher.dispatch({
+      sessionId,
+      alert: {
+        sourceAlertId: `si-${randomUUID()}`,
+        labels: {},
+        alertType: "ContainerDown",
+        severity: "critical",
+        firedAt: new Date().toISOString(),
+        rawPayload: {},
       },
-      body: JSON.stringify({
-        message: "Look into web-01",
-        mode: "investigate",
-      }),
     });
-    const { sessionId } = (await res.json()) as { sessionId: string };
+    // The row carries the flag from the moment it exists - checked here, before
+    // the run has produced a report to infer anything from.
+    const created = await waitFor(() => getSession(sessionId));
+    expect(created.investigation).toBe(true);
+    expect(hasReport(sessionId)).toBe(false);
+
     await waitFor(() => hasAssistantMessage(events, sessionId));
     close();
 
-    // Stopping before the agent writes a report used to file the session as a
-    // conversation, because the classification was inferred from its leftovers.
+    const detailRes = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    const session = (await detailRes.json()) as SessionDetail;
+    expect(session.investigation).toBe(true);
+    expect(session.originatingAlert?.alertType).toBe("ContainerDown");
+
     const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });

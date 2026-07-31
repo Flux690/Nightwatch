@@ -1,7 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  RunMode,
   SessionListRow,
   ConsoleEvent,
   TranscriptItem,
@@ -20,7 +19,7 @@ import {
 import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
-import { optimisticReport, useSessionReport } from "@/hooks/useSessionReport";
+import { useSession } from "@/hooks/useSession";
 import { ChatInput } from "@/components/transcript/ChatInput";
 import {
   applyLiveEvent,
@@ -62,8 +61,8 @@ function ScrollToEndChatInput(
   const originalOnSend = props.onSend;
 
   const handleSend = useCallback(
-    (text: string, mode: RunMode) => {
-      originalOnSend?.(text, mode);
+    (text: string) => {
+      originalOnSend?.(text);
       requestAnimationFrame(() => {
         scrollToEnd({ behavior: "smooth" });
       });
@@ -203,11 +202,7 @@ export function SessionView({
   const queryClient = useQueryClient();
   const { phase } = useAuth();
 
-  // Locks the chat input's mode picker away once this is an investigation.
-  const investigation = useSessionReport(activeSessionId) !== null;
-  // The session whose report cache this view seeded optimistically, so a
-  // failed send can roll exactly that seed back.
-  const seededReportRef = useRef<string | null>(null);
+  const session = useSession(activeSessionId);
 
   const displayName =
     phase.kind === "authenticated" ? displayNameFromEmail(phase.email) : "";
@@ -241,34 +236,24 @@ export function SessionView({
     setActiveSessionId(curr);
   }, [sessionIdFromRoute]);
 
-  const { data: persistedItems = EMPTY_ITEMS } = useQuery<TranscriptItem[]>({
-    queryKey: ["session", activeSessionId],
-    queryFn: () =>
-      apiFetch<TranscriptItem[]>(`/api/sessions/${activeSessionId}`),
-    enabled: !!activeSessionId,
-  });
+  const persistedItems = session?.transcript ?? EMPTY_ITEMS;
 
   const handleSessionCreated = useCallback(
-    (newId: string, firstMessage: string, mode: RunMode) => {
+    (newId: string, firstMessage: string) => {
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      const investigate = mode === "investigate";
-      // An investigate start morphs the layout immediately: seed the report
-      // cache now; the agent's first UpdateReport replaces it.
-      if (investigate) {
-        queryClient.setQueryData(["report", newId], optimisticReport());
-      }
+      // A typed message opens a plain session. If the agent decides it is an
+      // incident it calls OpenInvestigation, and the row follows from the API.
       queryClient.setQueryData<SessionListRow[]>(["sessions"], (prev = []) => [
         {
           sessionId: newId,
           title: firstMessage.slice(0, 60),
           createdAt: new Date().toISOString(),
           lastActivityAt: new Date().toISOString(),
-          investigation: investigate,
+          investigation: false,
           severity: null,
-          target: null,
-          status: investigate ? "investigating" : null,
+          status: null,
           rootCauseLine: null,
           awaitingHumanInput: false,
         },
@@ -444,39 +429,22 @@ export function SessionView({
 
   useConsoleEvents(handleEnvelope);
 
-  const handleSend = useCallback(
-    (text: string, mode: RunMode) => {
-      setPendingEcho(text);
-      lastEchoRef.current = text;
-      // Escalation morphs optimistically: seed the report cache the moment the
-      // send commits, without waiting for the agent's first UpdateReport.
-      const sid = activeSessionIdRef.current;
-      if (mode === "investigate" && sid !== null) {
-        const existing = queryClient.getQueryData(["report", sid]);
-        if (existing == null) {
-          queryClient.setQueryData(["report", sid], optimisticReport());
-          seededReportRef.current = sid;
-        }
-      }
-      // No transcript item is seeded: the run being active with nothing streaming
-      // is what surfaces the working animation. A just-answered card still live
-      // (not yet flushed by the resumed run) is left untouched so it survives.
-      setIsRunning(true);
-    },
-    [queryClient],
-  );
+  const handleSend = useCallback((text: string) => {
+    setPendingEcho(text);
+    lastEchoRef.current = text;
+    // No transcript item is seeded: the run being active with nothing streaming
+    // is what surfaces the working animation. A just-answered card still live
+    // (not yet flushed by the resumed run) is left untouched so it survives.
+    setIsRunning(true);
+  }, []);
 
   // The POST never reached the API, so the server has no record of the
-  // message: undo the echo (ChatInput restores the text) and the morph seed.
+  // message: undo the echo (ChatInput restores the text).
   const handleSendFailed = useCallback(() => {
     setPendingEcho(null);
     setLiveItems([]);
     setIsRunning(false);
-    if (seededReportRef.current !== null) {
-      queryClient.setQueryData(["report", seededReportRef.current], null);
-      seededReportRef.current = null;
-    }
-  }, [queryClient]);
+  }, []);
 
   const awaitingItem = awaitingCard(persistedItems, liveItems);
   const submittingToolUseId = respond.isPending
@@ -553,7 +521,6 @@ export function SessionView({
         <ScrollToEndChatInput
           sessionId={activeSessionId}
           isRunning={isRunning}
-          investigation={investigation}
           onSend={handleSend}
           onSendFailed={handleSendFailed}
         />

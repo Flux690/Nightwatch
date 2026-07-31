@@ -2,9 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type {
   RespondRequest,
-  RunMode,
+  SessionDetail,
   SessionReportResponse,
-  TranscriptItem,
 } from "@nightwarden/shared";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
@@ -46,11 +45,27 @@ export async function registerSessionRoutes(
     listSessionRows(),
   );
 
+  // The session answers what it is. Returning a bare transcript meant an
+  // unknown id came back as `200 []`, which the console drew as a real but
+  // empty session.
   fastify.get<{ Params: { id: string } }>(
     "/sessions/:id",
     { preHandler: requireSession },
-    async (request): Promise<TranscriptItem[]> =>
-      buildTranscript(request.params.id),
+    async (request, reply) => {
+      const session = getSession(request.params.id);
+      if (session === undefined) {
+        return reply.code(404).send({ error: "unknown session" });
+      }
+      const response: SessionDetail = {
+        sessionId: session.sessionId,
+        title: session.title,
+        createdAt: session.createdAt,
+        investigation: session.investigation,
+        originatingAlert: session.originatingAlert,
+        transcript: buildTranscript(request.params.id),
+      };
+      return response;
+    },
   );
 
   fastify.get<{ Params: { id: string } }>(
@@ -118,7 +133,7 @@ export async function registerSessionRoutes(
     },
   );
 
-  fastify.post<{ Body: { message?: string; mode?: RunMode } }>(
+  fastify.post<{ Body: { message?: string } }>(
     "/chat",
     { preHandler: requireSession },
     async (request, reply) => {
@@ -133,18 +148,17 @@ export async function registerSessionRoutes(
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
       const sessionId = randomUUID();
-      // A new chat is a plain ask unless the composer explicitly investigates.
-      const mode: RunMode =
-        request.body?.mode === "investigate" ? "investigate" : "ask";
-      dispatcher.dispatch({ sessionId, userMessage: message, mode });
-      logger.info({ sessionId, mode }, "chat session started");
+      // A question opens a plain session. If it turns out to be an incident,
+      // the agent calls OpenInvestigation on this same session.
+      dispatcher.dispatch({ sessionId, userMessage: message });
+      logger.info({ sessionId }, "chat session started");
       return reply.code(202).send({ sessionId });
     },
   );
 
   fastify.post<{
     Params: { id: string };
-    Body: { message?: string; mode?: RunMode };
+    Body: { message?: string };
   }>(
     "/sessions/:id/messages",
     { preHandler: requireSession },
@@ -167,16 +181,7 @@ export async function registerSessionRoutes(
           .send({ error: "session is busy: running or awaiting approval" });
       }
       const seed = buildSeed(sessionId);
-      // Only escalation is accepted on a follow-up; otherwise the loop derives
-      // the mode (one-way ratchet - an investigation can never demote to ask).
-      dispatcher.dispatch({
-        sessionId,
-        seed,
-        userMessage: message,
-        ...(request.body?.mode === "investigate" && {
-          mode: "investigate" as const,
-        }),
-      });
+      dispatcher.dispatch({ sessionId, seed, userMessage: message });
       logger.info({ sessionId, seeded: seed.length }, "session resumed");
       return reply.code(202).send({ sessionId });
     },

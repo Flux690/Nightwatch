@@ -1,8 +1,4 @@
-import type {
-  FleetRunner,
-  NormalizedAlert,
-  RunMode,
-} from "@nightwarden/shared";
+import type { FleetRunner, NormalizedAlert } from "@nightwarden/shared";
 import {
   budgetLine,
   SYSTEM_PROMPT,
@@ -22,9 +18,9 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   repo: null,
 };
 
-function systemPromptFor(opts: PromptOptions, mode: RunMode): string {
+function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
   let prompt = SYSTEM_PROMPT + budgetLine(opts);
-  if (mode === "investigate") prompt += REPORT_PROTOCOL;
+  if (investigation) prompt += REPORT_PROTOCOL;
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
 }
@@ -32,12 +28,13 @@ function systemPromptFor(opts: PromptOptions, mode: RunMode): string {
 export function buildChatContext(
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
-  mode: RunMode = "ask",
+  investigation = false,
 ): InitialContext {
   // Chat has no alert message to carry the fleet map, so it rides the system
   // prompt - the model still needs server names for the required `server` param.
   return {
-    systemPrompt: systemPromptFor(opts, mode) + buildFleetSummary(fleetView),
+    systemPrompt:
+      systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),
     firstUserMessage: "",
   };
 }
@@ -50,7 +47,7 @@ export function buildInitialContext(
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
 ): InitialContext {
   if (!alerts[0]) {
-    return buildChatContext(fleetView, opts, "investigate");
+    return buildChatContext(fleetView, opts, true);
   }
 
   const fleet = fleetView ?? [];
@@ -71,7 +68,7 @@ ${fleetSection}
 Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
 
   return {
-    systemPrompt: systemPromptFor(opts, "investigate"),
+    systemPrompt: systemPromptFor(opts, true),
     firstUserMessage,
   };
 }
