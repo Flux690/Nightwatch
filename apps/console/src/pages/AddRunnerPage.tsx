@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useBlocker, useNavigate } from "@tanstack/react-router";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
 import type { Platform, RunnerRecord } from "@nightwarden/shared";
 import { ServerCard } from "@/components/layout/ServerCard";
-import { AlertCircle, ArrowLeft } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { StatusText } from "@/components/ui/status";
@@ -16,7 +16,12 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
+import {
+  BackLink,
+  Page,
+  PageHeader,
+  PageTitle,
+} from "@/components/layout/Page";
 import {
   WizardStepper,
   WizardActions,
@@ -140,15 +145,7 @@ export function AddRunnerPage({
 
   return (
     <Page>
-      {/* The wizard is reachable directly from an empty fleet, so browser back
-          may leave the console entirely. This always returns to the list. */}
-      <Link
-        to={listPath}
-        className="mb-2 inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft {...ICON_INLINE} />
-        {copy.plural}
-      </Link>
+      <BackLink to={listPath}>{copy.plural}</BackLink>
       <PageHeader>
         <PageTitle>Add a {copy.singular.toLowerCase()}</PageTitle>
       </PageHeader>

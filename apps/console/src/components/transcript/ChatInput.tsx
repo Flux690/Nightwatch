@@ -9,7 +9,6 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -113,12 +112,15 @@ export function ChatInput({
       <Label htmlFor="chat-textarea" className="sr-only">
         Message
       </Label>
-      <InputGroup className="rounded-2xl bg-card shadow-raised">
+      {/* A rung above the sidebar on the surface ladder, which is what reads as
+          a control without a border. Held through every state: focus is the
+          only thing that colours the edge. */}
+      <InputGroup className="rounded-2xl border-transparent bg-secondary shadow-raised has-disabled:bg-secondary has-disabled:opacity-100">
         <InputGroupTextarea
           ref={textareaRef}
           id="chat-textarea"
-          className="max-h-[200px] px-4 py-3"
-          placeholder={isRunning ? "Agent is running…" : "Write a message…"}
+          className="max-h-[200px] px-4 py-3 placeholder:text-foreground"
+          placeholder={isRunning ? "Agent is running" : "Write a message"}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -148,7 +150,7 @@ export function ChatInput({
               onClick={() => sessionId !== null && stop.mutate()}
               disabled={stop.isPending}
             >
-              <Square {...ICON_UI} />
+              <Square size={16} strokeWidth={2.25} aria-hidden />
             </InputGroupButton>
           ) : (
             <InputGroupButton
@@ -160,7 +162,7 @@ export function ChatInput({
               onClick={handleSubmit}
               disabled={!canSend}
             >
-              <ArrowUp {...ICON_UI} />
+              <ArrowUp size={16} strokeWidth={2.25} aria-hidden />
             </InputGroupButton>
           )}
         </InputGroupAddon>

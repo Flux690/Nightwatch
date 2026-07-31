@@ -1,21 +1,17 @@
 import { cn } from "@/lib/utils";
 
-/* One way to show state: a dot and a word.
- *
- * A filled pill is a shape that says "look at me" regardless of what it says,
- * so a screen with six of them has no hierarchy left. The dot carries the
- * colour, the word carries the meaning, and neither competes with the content
- * beside it. Colour is never the only signal - the label always states the
- * state in words. */
+/* One way to show state: a word, in the tone of the state it names. A dot
+   beside it carries nothing the word does not, and a column of them reads as a
+   pattern to decode. Colour is never the only signal. */
 
 export type StatusTone = "ok" | "run" | "warn" | "fail" | "muted";
 
-const DOT: Record<StatusTone, string> = {
-  ok: "bg-ok",
-  run: "bg-run",
-  warn: "bg-wait",
-  fail: "bg-fail",
-  muted: "bg-border-strong",
+const TONE: Record<StatusTone, string> = {
+  ok: "text-ok",
+  run: "text-run",
+  warn: "text-wait",
+  fail: "text-fail",
+  muted: "text-muted-foreground",
 };
 
 export function StatusText({
@@ -28,17 +24,7 @@ export function StatusText({
   className?: string;
 }): React.JSX.Element {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 text-sm whitespace-nowrap",
-        tone === "muted" ? "text-muted-foreground" : "text-foreground",
-        className,
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn("size-1.5 shrink-0 rounded-full", DOT[tone])}
-      />
+    <span className={cn("text-sm whitespace-nowrap", TONE[tone], className)}>
       {children}
     </span>
   );

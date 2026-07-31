@@ -15,7 +15,7 @@ import type {
 } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { IntegrationsRail } from "@/components/layout/IntegrationsRail";
+import { IntegrationsPage } from "@/pages/IntegrationsPage";
 
 const NOT_CONFIGURED: GitHubIntegrationStatus = {
   configured: false,
@@ -50,14 +50,14 @@ const CONNECTED_RUNNER: RunnerRecord = {
   },
 };
 
-/* The rail navigates to each integration's own route, so it renders under a
+/* The catalog navigates to each integration's own route, so it renders under a
    memory router with stub destinations. */
-function renderRailRoute(qc: QueryClient) {
+function renderCatalogRoute(qc: QueryClient) {
   const rootRoute = createRootRoute();
   const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations",
-    component: IntegrationsRail,
+    component: IntegrationsPage,
   });
   const connectRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -176,7 +176,7 @@ function setup(
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  const view = renderRailRoute(qc);
+  const view = renderCatalogRoute(qc);
   return { fetchMock, qc, view };
 }
 
@@ -189,7 +189,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IntegrationsRail", () => {
+describe("IntegrationsPage", () => {
   describe("GitHub", () => {
     it("shows Not connected and navigates to the GitHub connect route", async () => {
       const user = userEvent.setup();
@@ -233,15 +233,17 @@ describe("IntegrationsRail", () => {
       expect(screen.getByText("Kubernetes clusters")).toBeInTheDocument();
     });
 
-    it("routes an empty fleet straight to that platform's add wizard", async () => {
+    it("routes to the platform's own page, wizard or not", async () => {
       const user = userEvent.setup();
       setup({ runners: [] });
 
       await screen.findByText("Kubernetes clusters");
       await user.click(rowFor("Kubernetes clusters"));
 
+      // An empty fleet lands on the list, which offers the wizard. Landing in
+      // the wizard directly leaves a page with nowhere above it to return to.
       expect(
-        await screen.findByText(/add kubernetes cluster destination/i),
+        await screen.findByText(/kubernetes clusters destination/i),
       ).toBeInTheDocument();
     });
 

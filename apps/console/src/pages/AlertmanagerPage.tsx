@@ -4,7 +4,12 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
+import {
+  BackLink,
+  Page,
+  PageHeader,
+  PageTitle,
+} from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_UI } from "@/lib/iconProps";
@@ -128,6 +133,7 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   return (
     <Page>
+      <BackLink to="/integrations">Integrations</BackLink>
       <PageHeader>
         <PageTitle>Alertmanager</PageTitle>
         {showStatus && status && (

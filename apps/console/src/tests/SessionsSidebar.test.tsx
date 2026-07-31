@@ -22,44 +22,72 @@ const RUNNER = {
   createdAt: "2024-01-01T00:00:00Z",
 };
 
-// Investigation rows show on the default tab; conversations on the other.
+// One flat list: an alert-opened session, a session someone typed, a crashed
+// run and a live one all render side by side, in the order the API returned.
 const SESSION_1 = {
   sessionId: "s1",
-  token: "tok-1",
   title: "CPU spike on web-01",
-  createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
+  createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   investigation: true,
   severity: "warning",
-  target: "docker:web-01",
   status: "resolved",
-  rootCauseLine: "OOM after deploy",
+  awaitingHumanInput: false,
 };
 
 const SESSION_2 = {
   sessionId: "s2",
-  token: "tok-1",
   title: "Disk full on db-02",
-  createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5 min ago
+  createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
   investigation: true,
   severity: "critical",
-  target: "docker:db-02",
   status: "action_required",
-  rootCauseLine: null,
+  awaitingHumanInput: true,
 };
 
 const CHAT_1 = {
   sessionId: "c1",
-  token: "tok-1",
   title: "What does OOM mean?",
   createdAt: new Date(Date.now() - 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 60 * 1000).toISOString(),
   investigation: false,
   severity: null,
-  target: null,
   status: null,
-  rootCauseLine: null,
+  awaitingHumanInput: false,
+};
+
+const FAILED_1 = {
+  sessionId: "s3",
+  title: "Crashed run on api-03",
+  createdAt: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
+  lastActivityAt: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
+  investigation: true,
+  severity: "info",
+  status: "failed",
+  awaitingHumanInput: false,
+};
+
+const STOPPED_1 = {
+  sessionId: "s4",
+  title: "Abandoned run on cache-01",
+  createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+  lastActivityAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+  investigation: true,
+  severity: null,
+  status: "stopped",
+  awaitingHumanInput: false,
+};
+
+const RUNNING_1 = {
+  sessionId: "s5",
+  title: "Latency spike on edge-01",
+  createdAt: new Date(Date.now() - 30 * 1000).toISOString(),
+  lastActivityAt: new Date(Date.now() - 30 * 1000).toISOString(),
+  investigation: true,
+  severity: null,
+  status: "investigating",
+  awaitingHumanInput: false,
 };
 
 function setupWithSessionsError() {
@@ -301,40 +329,98 @@ describe("SessionsSidebar", () => {
     });
   });
 
-  describe("tabs", () => {
-    it("partitions investigations and conversations across the two tabs", async () => {
-      const user = userEvent.setup();
-      setup([[SESSION_1, CHAT_1]]);
+  describe("one flat list", () => {
+    it("shows every session together, whatever kind of work it is", async () => {
+      setup([[SESSION_1, CHAT_1, FAILED_1]]);
 
-      // Default tab: investigations only.
       await waitFor(() => {
         expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
       });
-      expect(screen.queryByText("What does OOM mean?")).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole("tab", { name: /conversations/i }));
+      // No tab was touched: a failed run and a typed question are simply there.
       expect(screen.getByText("What does OOM mean?")).toBeInTheDocument();
-      expect(screen.queryByText("CPU spike on web-01")).not.toBeInTheDocument();
+      expect(screen.getByText("Crashed run on api-03")).toBeInTheDocument();
+      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("listitem")).toHaveLength(3);
     });
 
-    it("keeps the API's order and shows status chips", async () => {
-      // The API floats SESSION_2 (action_required) above newer activity; the
-      // sidebar must render that order rather than sorting a page of its own.
-      setup([[SESSION_2, SESSION_1]]);
+    it("says so when there is nothing to list", async () => {
+      setup([[]]);
+
+      expect(await screen.findByText("No sessions yet")).toBeInTheDocument();
+    });
+
+    it("keeps the API's order, which leads with a session blocked on a human", async () => {
+      // The API floats SESSION_2 despite it being the oldest; the sidebar must
+      // render that order rather than sorting a page of its own.
+      setup([[SESSION_2, CHAT_1, SESSION_1]]);
 
       await waitFor(() => {
         expect(screen.getByText("Disk full on db-02")).toBeInTheDocument();
       });
       const rows = screen.getAllByRole("listitem");
       expect(rows[0]).toHaveTextContent("Disk full on db-02");
-      expect(rows[0]).toHaveTextContent("Action required");
-      expect(rows[1]).toHaveTextContent("CPU spike on web-01");
-      expect(rows[1]).toHaveTextContent("Resolved");
-      // Resolved rows lead with the root-cause line.
-      expect(rows[1]).toHaveTextContent("OOM after deploy");
+      expect(rows[1]).toHaveTextContent("What does OOM mean?");
+      expect(rows[2]).toHaveTextContent("CPU spike on web-01");
     });
   });
 
+  describe("the row", () => {
+    it("states the status as a word and carries no second line", async () => {
+      setup([[SESSION_1, SESSION_2, FAILED_1]]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Resolved")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Action required")).toBeInTheDocument();
+      expect(screen.getByText("Failed")).toBeInTheDocument();
+      // The root-cause line the second line used to carry is gone entirely.
+      expect(screen.queryByText(/started by you/i)).not.toBeInTheDocument();
+    });
+
+    it("says nothing for a session no word applies to", async () => {
+      setup([[CHAT_1, STOPPED_1]]);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Abandoned run on cache-01"),
+        ).toBeInTheDocument();
+      });
+      // "Stopped" is not one of the five words, and a plain session has none.
+      const rows = screen.getAllByRole("listitem");
+      for (const row of rows) {
+        expect(row).not.toHaveTextContent(
+          /action required|investigating|resolved|inconclusive|failed|stopped/i,
+        );
+      }
+    });
+
+    it("stays silent about a run the reader is already watching", async () => {
+      setup([[RUNNING_1]], true, "/sessions/s5");
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Latency spike on edge-01"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Investigating")).not.toBeInTheDocument();
+    });
+
+    it("reports the running session the reader is not watching", async () => {
+      setup([[RUNNING_1]], true, "/sessions/s1");
+
+      expect(await screen.findByText("Investigating")).toBeInTheDocument();
+    });
+
+    it("states Critical in words, and nothing for warning or info", async () => {
+      setup([[SESSION_1, SESSION_2, FAILED_1]]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Critical")).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/warning/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^info$/i)).not.toBeInTheDocument();
+    });
+  });
   describe("pagination", () => {
     it("reaches sessions beyond the first page and keeps the ones already shown", async () => {
       const user = userEvent.setup();

@@ -19,17 +19,16 @@ export type SessionRunStatus =
   | "failed"
   | "stopped";
 
-// One row of the console's session list. A session not under investigation
-// leaves the queue fields null. title is display-resolved (report headline
+// One row of the console's one session list. A session not under investigation
+// leaves the status fields null. title is display-resolved (report headline
 // supersedes the stored session title).
 export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;
   investigation: boolean;
   severity: AlertSeverity | null;
   status: SessionRunStatus | null;
-  rootCauseLine: string | null;
-  // Its own field rather than a reading of `status`, which is null on
-  // conversations - an Ask session awaiting a clarification still needs you.
+  // Its own field rather than a reading of `status`, which is null unless the
+  // session is under investigation - any session can be waiting on a human.
   awaitingHumanInput: boolean;
 }
 

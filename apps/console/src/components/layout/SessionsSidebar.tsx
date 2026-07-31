@@ -22,7 +22,6 @@ import {
   SidebarMenuButton,
   SidebarMenuAction,
 } from "@/components/ui/sidebar";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusText, type StatusTone } from "@/components/ui/status";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
@@ -30,27 +29,34 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-type Tab = "investigations" | "conversations";
-
-// Flat list, statuses not groups: state is a dot and a word on the row. The
-// order is the API's, so a page boundary cannot strand a waiting session.
+// The five words, and nothing else: a stopped run earns no sixth.
 const STATUS_VIEW: Record<
   SessionRunStatus,
-  { label: string; tone: StatusTone }
+  { label: string; tone: StatusTone } | null
 > = {
   action_required: { label: "Action required", tone: "warn" },
   investigating: { label: "Investigating", tone: "run" },
   resolved: { label: "Resolved", tone: "ok" },
   inconclusive: { label: "Inconclusive", tone: "muted" },
   failed: { label: "Failed", tone: "fail" },
-  stopped: { label: "Stopped", tone: "muted" },
+  stopped: null,
 };
 
-const SEVERITY_DOT: Record<AlertSeverity, string> = {
-  critical: "bg-fail",
-  warning: "bg-wait",
-  info: "bg-border-strong",
-};
+// A word earns its slot by being actionable, and this list reports work
+// nobody is watching.
+function statusFor(
+  session: SessionListRow,
+  active: boolean,
+): { label: string; tone: StatusTone } | null {
+  if (session.status === null) return null;
+  if (active && session.status === "investigating") return null;
+  return STATUS_VIEW[session.status];
+}
+
+// Only critical earns the space the word takes from the title.
+function severityWord(severity: AlertSeverity | null): string | null {
+  return severity === "critical" ? "Critical" : null;
+}
 
 function SessionRow({
   session,
@@ -65,29 +71,21 @@ function SessionRow({
   onOpen: () => void;
   onDelete: () => void;
 }): React.JSX.Element {
-  const chip = session.status !== null ? STATUS_VIEW[session.status] : null;
-  const subline = session.investigation
-    ? (session.rootCauseLine ?? "started by you")
-    : null;
+  const status = statusFor(session, active);
+  const severity = severityWord(session.severity);
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         // `!` beats the variant's always-on pr-8: reserve the gutter only
         // on hover/focus so short titles keep full width.
-        className="h-auto flex-col items-start gap-1 py-2 pr-2! group-hover/menu-item:pr-8! group-focus-within/menu-item:pr-8!"
+        className="pr-2! group-hover/menu-item:pr-8! group-focus-within/menu-item:pr-8!"
         isActive={active}
         onClick={onOpen}
       >
-        <span className="flex w-full min-w-0 items-center gap-2">
-          {session.severity !== null && (
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                SEVERITY_DOT[session.severity],
-              )}
-            />
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {severity !== null && (
+            <span className="shrink-0 text-fail">{severity}</span>
           )}
           <span
             // Remount on title change so the temp -> refined swap slides in.
@@ -98,19 +96,16 @@ function SessionRow({
             {session.title}
           </span>
         </span>
-        {(subline !== null || chip !== null) && (
-          <span className="flex w-full min-w-0 items-center gap-2">
-            {subline !== null && (
-              <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                {subline}
-              </span>
+        {status !== null && (
+          <StatusText
+            tone={status.tone}
+            className={cn(
+              "shrink-0",
+              session.awaitingHumanInput && "font-semibold",
             )}
-            {chip !== null && (
-              <StatusText tone={chip.tone} className="shrink-0">
-                {chip.label}
-              </StatusText>
-            )}
-          </span>
+          >
+            {status.label}
+          </StatusText>
         )}
       </SidebarMenuButton>
       <SidebarMenuAction
@@ -131,8 +126,9 @@ export function SessionsSidebar(): React.JSX.Element {
   const params = useParams({ strict: false }) as { id?: string };
   const activeSessionId = params.id ?? null;
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("investigations");
 
+  // The API orders the list, waiting sessions first, so a page boundary cannot
+  // strand one and there is nothing left to sort here.
   const { sessions, isLoading, hasMore, isLoadingMore, loadMore } =
     useSessions();
 
@@ -158,8 +154,8 @@ export function SessionsSidebar(): React.JSX.Element {
       renameSession(queryClient, sessionId, title);
       return;
     }
-    // Status, headline and tab membership are all server-derived, so any
-    // event that can change them refetches the authoritative list.
+    // Status and headline are both server-derived, so any event that can
+    // change them refetches the authoritative list.
     if (
       env.type === "REPORT_UPDATED" ||
       env.type === "RUN_FINISHED" ||
@@ -172,37 +168,15 @@ export function SessionsSidebar(): React.JSX.Element {
     }
   });
 
-  // Rows predating the queue fields count as conversations.
-  const investigations = sessions.filter((s) => s.investigation === true);
-  const conversations = sessions.filter((s) => s.investigation !== true);
-  const rows = tab === "investigations" ? investigations : conversations;
-
   return (
     <>
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as Tab)}
-        className="mb-3 px-2"
-      >
-        <TabsList variant="line" className="w-full">
-          <TabsTrigger value="investigations" className="flex-1">
-            Investigations
-          </TabsTrigger>
-          <TabsTrigger value="conversations" className="flex-1">
-            Conversations
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
       <SidebarMenu className="gap-0.5">
-        {!isLoading && rows.length === 0 && (
+        {!isLoading && sessions.length === 0 && (
           <p className="px-2 py-2 text-sm text-muted-foreground">
-            {tab === "investigations"
-              ? "Investigations appear when an alert fires or you escalate a chat."
-              : "No conversations yet - start one from New session."}
+            No sessions yet
           </p>
         )}
-        {rows.map((session) => (
+        {sessions.map((session) => (
           <SessionRow
             key={session.sessionId}
             session={session}

@@ -1,10 +1,4 @@
-import {
-  render,
-  screen,
-  waitFor,
-  act,
-  fireEvent,
-} from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -36,9 +30,13 @@ const OWNER_EMAIL = "admin@example.com";
 
 const SESSION_1 = {
   sessionId: "s1",
-  token: "tok-1",
   title: "CPU spike on web-01",
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+  lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+  investigation: false,
+  severity: null,
+  status: null,
+  awaitingHumanInput: false,
 };
 
 function setup(pendingCount = 0) {
@@ -58,7 +56,6 @@ function setup(pendingCount = 0) {
       severity: null,
       target: null,
       status: "action_required",
-      rootCauseLine: null,
       awaitingHumanInput: true,
     }));
 
@@ -218,103 +215,99 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// The icon rail is always present; only the list rail collapses. Its presence
-// is the expanded/collapsed signal (jsdom applies no CSS, so we test the DOM).
-function listRailPresent(): boolean {
-  return document.querySelector('[data-slot="list-rail"]') !== null;
+// jsdom applies no CSS, so the sessions zone leaves the DOM when the sidebar
+// collapses rather than being hidden by a class - which is also what makes
+// "collapsed shows destinations only" a fact a test can check.
+function sessionListPresent(): boolean {
+  return screen.queryByText("CPU spike on web-01") !== null;
 }
 
-// The list rail has no on-screen toggle: cmd/ctrl+B is the only control, handled
-// by a window keydown listener.
-function pressToggleShortcut(): void {
-  fireEvent.keyDown(document.body, { key: "b", metaKey: true });
+function precedes(a: HTMLElement, b: HTMLElement): boolean {
+  return (
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  );
 }
 
 describe("Shell", () => {
-  describe("list rail collapse (icon rail always visible)", () => {
-    it("cmd+B collapses only the list rail and writes false to localStorage", async () => {
+  describe("the one sidebar", () => {
+    it("renders three zones in order: destinations, sessions, account", async () => {
       setup();
 
-      await screen.findByRole("link", { name: /integrations/i });
-      expect(listRailPresent()).toBe(true);
+      const newSession = await screen.findByRole("button", {
+        name: /new session/i,
+      });
+      const sessionsHeading = screen.getByText("Sessions");
+      const settings = screen.getByRole("button", { name: /settings/i });
+      const logOut = screen.getByRole("button", { name: /log out/i });
+      const integrations = screen.getByRole("link", { name: /integrations/i });
+      const audit = screen.getByRole("link", { name: /audit log/i });
 
-      pressToggleShortcut();
+      expect(precedes(newSession, integrations)).toBe(true);
+      expect(precedes(audit, sessionsHeading)).toBe(true);
+      expect(precedes(sessionsHeading, settings)).toBe(true);
+      expect(precedes(settings, logOut)).toBe(true);
+    });
 
-      await waitFor(() =>
-        expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe(
-          "false",
-        ),
-      );
-      // The list rail is gone entirely; the icon rail is untouched.
-      expect(listRailPresent()).toBe(false);
+    it("shows every destination with a visible label", async () => {
+      setup();
+
+      for (const label of ["New session", "Integrations", "Audit log"]) {
+        expect(await screen.findByText(label)).toBeInTheDocument();
+      }
+    });
+
+    it("collapsing leaves the destinations reachable and drops the sessions", async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await waitFor(() => expect(sessionListPresent()).toBe(true));
+
+      await user.click(screen.getByRole("button", { name: /toggle sidebar/i }));
+
+      await waitFor(() => expect(sessionListPresent()).toBe(false));
+      expect(screen.queryByText("Sessions")).not.toBeInTheDocument();
+      // Every destination is still there, and still named for assistive tech.
       expect(
         screen.getByRole("link", { name: /integrations/i }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /audit log/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /new session/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /log out/i }),
+      ).toBeInTheDocument();
     });
 
-    it("cmd+B again reopens the list rail and writes true to localStorage", async () => {
+    it("expanding again brings the sessions back", async () => {
+      const user = userEvent.setup();
       setup();
 
-      await screen.findByRole("link", { name: /integrations/i });
-      pressToggleShortcut();
-      await waitFor(() => expect(listRailPresent()).toBe(false));
-      pressToggleShortcut();
+      await waitFor(() => expect(sessionListPresent()).toBe(true));
+      const toggle = screen.getByRole("button", { name: /toggle sidebar/i });
 
-      await waitFor(() =>
-        expect(window.localStorage.getItem("nw:sidebar-expanded")).toBe("true"),
-      );
-      expect(listRailPresent()).toBe(true);
-    });
+      await user.click(toggle);
+      await waitFor(() => expect(sessionListPresent()).toBe(false));
+      await user.click(toggle);
 
-    it("starts collapsed when localStorage has false", async () => {
-      window.localStorage.setItem("nw:sidebar-expanded", "false");
-      setup();
-
-      await waitFor(() => {
-        // The list rail is hidden entirely; the icon rail's links stay reachable.
-        expect(
-          screen.getByRole("link", { name: /integrations/i }),
-        ).toBeInTheDocument();
-      });
-      expect(listRailPresent()).toBe(false);
+      await waitFor(() => expect(sessionListPresent()).toBe(true));
     });
 
     it("New session button navigates to home", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
-      // Navigate away to /integrations first
       await waitFor(() => screen.getByRole("link", { name: /integrations/i }));
       await user.click(screen.getByRole("link", { name: /integrations/i }));
       await waitFor(() =>
         expect(router.state.location.pathname).toBe("/integrations"),
       );
 
-      // Click New session
-      const newSessionBtn = screen.getByRole("button", {
-        name: /new session/i,
-      });
-      await user.click(newSessionBtn);
+      await user.click(screen.getByRole("button", { name: /new session/i }));
 
       await waitFor(() => expect(router.state.location.pathname).toBe("/"));
-    });
-
-    it("Log out lives in the always-visible icon rail", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup();
-
-      // No collapse needed: the icon rail (and its Log out) is always present.
-      const logoutBtn = await screen.findByRole("button", {
-        name: /log out/i,
-      });
-      await user.click(logoutBtn);
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/logout",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
     });
   });
 
@@ -474,13 +467,68 @@ describe("Shell", () => {
     });
   });
 
+  describe("the chat rail", () => {
+    // The toggle is a sibling of the panel, so closing the panel cannot take
+    // the control that reopens it with it.
+    it("collapses and reopens without interrupting the live stream", async () => {
+      const user = userEvent.setup();
+      const { router, setInvestigation } = setup();
+
+      await screen.findByRole("textbox");
+      await user.type(screen.getByRole("textbox"), "Check disk");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/sessions/new-s1");
+      });
+
+      setInvestigation(true);
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "m-1",
+          type: "MESSAGE",
+          payload: {
+            sessionId: "new-s1",
+            message: {
+              role: "assistant",
+              content: "Opening an investigation.",
+            },
+          },
+        });
+      });
+      const railed = await screen.findByRole("complementary", {
+        name: /investigation chat/i,
+      });
+      expect(railed).toBeInTheDocument();
+      const streamBefore = MockEventSource.latest;
+
+      await user.click(screen.getByRole("button", { name: /hide the chat/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("complementary", { name: /investigation chat/i }),
+        ).not.toBeInTheDocument();
+      });
+      const reopen = screen.getByRole("button", { name: /show the chat/i });
+      await user.click(reopen);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("complementary", { name: /investigation chat/i }),
+        ).toBeInTheDocument();
+      });
+      // A DOM re-parent throughout: the stream is the same instance.
+      expect(MockEventSource.latest).toBe(streamBefore);
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    });
+  });
+
   describe("attention queue", () => {
     it("refetches and grows the count when INTERRUPT arrives", async () => {
       const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "1 awaiting approval",
+          screen.getByRole("link", {
+            name: /^1 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });
@@ -504,8 +552,8 @@ describe("Shell", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "2 awaiting approval",
+          screen.getByRole("link", {
+            name: /^2 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });
@@ -515,8 +563,8 @@ describe("Shell", () => {
       const { setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "1 awaiting approval",
+          screen.getByRole("link", {
+            name: /^1 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });
@@ -536,7 +584,7 @@ describe("Shell", () => {
 
       await waitFor(() => {
         expect(
-          screen.queryByRole("status", { name: /awaiting approval/i }),
+          screen.queryByRole("link", { name: /awaiting approval/i }),
         ).not.toBeInTheDocument();
       });
     });
@@ -545,8 +593,8 @@ describe("Shell", () => {
       const { qc, setPendingCount } = setup(1);
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "1 awaiting approval",
+          screen.getByRole("link", {
+            name: /^1 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });
@@ -568,8 +616,8 @@ describe("Shell", () => {
       });
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "2 awaiting approval",
+          screen.getByRole("link", {
+            name: /^2 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });
@@ -581,8 +629,8 @@ describe("Shell", () => {
       });
       await waitFor(() => {
         expect(
-          screen.getByRole("status", {
-            name: "2 awaiting approval",
+          screen.getByRole("link", {
+            name: /^2 awaiting approval/,
           }),
         ).toBeInTheDocument();
       });

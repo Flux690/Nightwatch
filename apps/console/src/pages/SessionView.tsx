@@ -250,7 +250,6 @@ export function SessionView({
         investigation: false,
         severity: null,
         status: null,
-        rootCauseLine: null,
         awaitingHumanInput: false,
       });
     },

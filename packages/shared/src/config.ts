@@ -127,15 +127,3 @@ export interface ResolvedLLMConfig {
 // A setup problem the console surfaces app-wide (a banner), computed server-side
 // from the config, fleet and integrations. Advisory except llm-not-configured,
 // which is also enforced: without a model nothing can run at all.
-export type ConfigHealthKind = "llm-not-configured" | "no-evidence-source";
-
-export interface ConfigHealthIssue {
-  kind: ConfigHealthKind;
-  message: string;
-  // Console route the banner's action links to.
-  href: string;
-}
-
-export interface ConfigHealth {
-  issues: ConfigHealthIssue[];
-}

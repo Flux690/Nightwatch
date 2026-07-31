@@ -422,7 +422,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
 
       expect(res.statusCode).toBe(503);
       const body = JSON.parse(res.body) as { error: string };
-      expect(body.error).toMatch(/no language model is configured/i);
+      expect(body.error).toMatch(/no LLM is configured/i);
       expect(body.error).toMatch(/provider/i);
     });
   });
