@@ -198,8 +198,8 @@ export function appendMessagesAndInterrupt(
   txn();
 }
 
-// Cascades to the transcript and pending approval; the remediation audit log
-// is not a child of sessions, so it survives.
+// Cascades to the transcript, the pending approval and the report; the
+// remediation audit log is not a child of sessions, so it survives.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
@@ -216,9 +216,22 @@ export interface SessionListSource {
   investigation: boolean;
   report: Report | null;
   lastRole: string | null;
+  awaitingHumanInput: boolean;
 }
 
-export function listSessionSources(): SessionListSource[] {
+// One page of it. nextOffset is the offset to ask for next, or null once the
+// list is exhausted.
+export interface SessionListSourcePage {
+  sources: SessionListSource[];
+  nextOffset: number | null;
+}
+
+// Ordering is the store's, not the console's: a waiting session leads the whole
+// list, and the id tiebreak stops a row swapping pages between fetches.
+export function listSessionSources(
+  limit: number,
+  offset: number,
+): SessionListSourcePage {
   const rows = getDb()
     .prepare(
       `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
@@ -227,12 +240,16 @@ export function listSessionSources(): SessionListSource[] {
                 WHERE m.session_id = s.session_id
                 ORDER BY m.seq DESC LIMIT 1) AS lastRole,
               COALESCE((SELECT MAX(m.created_at) FROM session_messages m
-                WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt
+                WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
+              (p.session_id IS NOT NULL) AS awaitingHumanInput
        FROM sessions s
        LEFT JOIN reports r ON r.session_id = s.session_id
-       ORDER BY lastActivityAt DESC LIMIT 100`,
+       LEFT JOIN pending_human_input p ON p.session_id = s.session_id
+       ORDER BY awaitingHumanInput DESC, lastActivityAt DESC, s.session_id ASC
+       LIMIT ? OFFSET ?`,
     )
-    .all() as Array<{
+    // One extra row answers "is there a next page?" without a second count query.
+    .all(limit + 1, offset) as Array<{
     sessionId: string;
     title: string;
     createdAt: string;
@@ -241,20 +258,26 @@ export function listSessionSources(): SessionListSource[] {
     investigation: number;
     report: string | null;
     lastRole: string | null;
+    awaitingHumanInput: number;
   }>;
-  return rows.map((r) => ({
-    sessionId: r.sessionId,
-    title: r.title,
-    createdAt: r.createdAt,
-    lastActivityAt: r.lastActivityAt,
-    originatingAlert:
-      r.originatingAlert !== null
-        ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
-        : null,
-    investigation: r.investigation === 1,
-    report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
-    lastRole: r.lastRole,
-  }));
+  const page = rows.slice(0, limit);
+  return {
+    sources: page.map((r) => ({
+      sessionId: r.sessionId,
+      title: r.title,
+      createdAt: r.createdAt,
+      lastActivityAt: r.lastActivityAt,
+      originatingAlert:
+        r.originatingAlert !== null
+          ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
+          : null,
+      investigation: r.investigation === 1,
+      report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
+      lastRole: r.lastRole,
+      awaitingHumanInput: r.awaitingHumanInput === 1,
+    })),
+    nextOffset: rows.length > limit ? offset + page.length : null,
+  };
 }
 
 export function getSession(sessionId: string): StoredSession | undefined {

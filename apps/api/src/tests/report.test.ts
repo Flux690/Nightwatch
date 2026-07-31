@@ -297,7 +297,12 @@ describe("report storage and enrichment", () => {
     const fresh = getReport(existingId)!;
     expect(fresh.status).toBe("inconclusive");
 
+    // A missing report, not a missing session: the report is a child of one.
     const missingId = randomUUID();
+    createSession(
+      { sessionId: missingId, title: "t", createdAt: new Date().toISOString() },
+      null,
+    );
     finalizeInconclusive(missingId, "test-model");
     const minimal = getReport(missingId)!;
     expect(minimal.status).toBe("inconclusive");

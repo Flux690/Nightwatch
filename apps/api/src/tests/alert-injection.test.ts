@@ -157,12 +157,13 @@ describe("mid-run alert injection (loop seam)", () => {
     queueRuns([READ, FINISH]);
 
     const sessionId = randomUUID();
-    // Injection mechanics only: a seeded report satisfies the finish gate.
-    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-mr"),
     });
+    // Injection mechanics only: a seeded report satisfies the finish gate. It
+    // is a child of the session, and dispatch() creates that row synchronously.
+    seedCompleteReport(sessionId);
 
     // createProvider is called synchronously in start() before the first await.
     const provider = mockCreateProvider.mock.results[0]!.value as {
@@ -242,11 +243,11 @@ describe("mid-run alert injection (loop seam)", () => {
     const callsBefore = mockCreateProvider.mock.calls.length;
     const newSessionId = randomUUID();
 
-    seedCompleteReport(newSessionId);
     dispatcher.dispatch({
       sessionId: newSessionId,
       alert: alert("new-after-sus"),
     });
+    seedCompleteReport(newSessionId);
 
     await waitFor(() => mockCreateProvider.mock.calls.length > callsBefore);
 
@@ -268,11 +269,11 @@ describe("mid-run alert injection (loop seam)", () => {
     queueRuns([FINISH], [FINISH]);
 
     const sessionId = randomUUID();
-    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-lo"),
     });
+    seedCompleteReport(sessionId);
 
     // Inject before releasing — alert sits in inbox
     dispatcher.injectAlert(sessionId, alert("leftover-lo"));
@@ -348,11 +349,11 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const primaryFiredAt = "2026-07-07T03:00:00.000Z";
     const sessionId = randomUUID();
-    seedCompleteReport(sessionId);
     dispatcher.dispatch({
       sessionId,
       alert: alert("primary-resume", primaryFiredAt),
     });
+    seedCompleteReport(sessionId);
 
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));

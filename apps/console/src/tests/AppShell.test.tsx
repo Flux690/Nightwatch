@@ -140,7 +140,11 @@ function setup(pendingCount = 0) {
     if (url.includes("/sessions")) {
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve([SESSION_1, ...pendingApprovals]),
+        json: () =>
+          Promise.resolve({
+            rows: [SESSION_1, ...pendingApprovals],
+            nextOffset: null,
+          }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });

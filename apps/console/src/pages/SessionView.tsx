@@ -1,10 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  SessionListRow,
-  ConsoleEvent,
-  TranscriptItem,
-} from "@nightwarden/shared";
+import type { ConsoleEvent, TranscriptItem } from "@nightwarden/shared";
 import { transcriptItemKey } from "@nightwarden/shared";
 
 import {
@@ -20,6 +16,7 @@ import { toast } from "@/lib/toast";
 import { useAuth } from "@/auth/AuthContext";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { useSession } from "@/hooks/useSession";
+import { prependSession } from "@/hooks/useSessions";
 import { ChatInput } from "@/components/transcript/ChatInput";
 import {
   applyLiveEvent,
@@ -245,20 +242,17 @@ export function SessionView({
 
       // A typed message opens a plain session. If the agent decides it is an
       // incident it calls OpenInvestigation, and the row follows from the API.
-      queryClient.setQueryData<SessionListRow[]>(["sessions"], (prev = []) => [
-        {
-          sessionId: newId,
-          title: firstMessage.slice(0, 60),
-          createdAt: new Date().toISOString(),
-          lastActivityAt: new Date().toISOString(),
-          investigation: false,
-          severity: null,
-          status: null,
-          rootCauseLine: null,
-          awaitingHumanInput: false,
-        },
-        ...prev,
-      ]);
+      prependSession(queryClient, {
+        sessionId: newId,
+        title: firstMessage.slice(0, 60),
+        createdAt: new Date().toISOString(),
+        lastActivityAt: new Date().toISOString(),
+        investigation: false,
+        severity: null,
+        status: null,
+        rootCauseLine: null,
+        awaitingHumanInput: false,
+      });
     },
     [queryClient],
   );

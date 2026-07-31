@@ -32,6 +32,7 @@ import { resolveCommand } from "../ws/command-transport.js";
 import type {
   SessionDetail,
   SessionListRow,
+  SessionListPage,
   TranscriptItem,
 } from "@nightwarden/shared";
 import { mountApi } from "./api-server.js";
@@ -117,7 +118,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const r = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
-    return (await r.json()) as SessionListRow[];
+    return ((await r.json()) as SessionListPage).rows;
   }
 
   async function getTranscript(id: string): Promise<TranscriptItem[]> {

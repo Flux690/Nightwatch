@@ -3,7 +3,11 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { NormalizedAlert, SessionDetail } from "@nightwarden/shared";
+import type {
+  NormalizedAlert,
+  SessionDetail,
+  SessionListPage,
+} from "@nightwarden/shared";
 
 // A stateful provider: snapshot() reflects everything accumulated, so the loop's
 // per-turn persistence writes real transcript rows.
@@ -97,8 +101,8 @@ describe("state inversion: persistence and reads are API-local", () => {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
     expect(listRes.status).toBe(200);
-    const sessions = (await listRes.json()) as Array<{ sessionId: string }>;
-    expect(sessions.some((s) => s.sessionId === sessionId)).toBe(true);
+    const { rows } = (await listRes.json()) as SessionListPage;
+    expect(rows.some((s) => s.sessionId === sessionId)).toBe(true);
 
     const txRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
@@ -201,13 +205,38 @@ describe("state inversion: persistence and reads are API-local", () => {
     const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
     });
-    const rows = (await listRes.json()) as Array<{
-      sessionId: string;
-      investigation: boolean;
-    }>;
+    const { rows } = (await listRes.json()) as SessionListPage;
     expect(rows.find((r) => r.sessionId === sessionId)?.investigation).toBe(
       true,
     );
+  });
+
+  describe("the session list pages rather than stopping", () => {
+    async function listPage(query: string): Promise<Response> {
+      return fetch(`http://127.0.0.1:${port}/api/sessions${query}`, {
+        headers: { Cookie: `nw_auth=${SESSION}` },
+      });
+    }
+
+    it("serves a second page whose rows the first page did not carry", async () => {
+      // Two sessions exist by now, which is enough to prove the offset moves.
+      const first = (await (
+        await listPage("?limit=1")
+      ).json()) as SessionListPage;
+      expect(first.rows).toHaveLength(1);
+      expect(first.nextOffset).toBe(1);
+
+      const second = (await (
+        await listPage(`?limit=1&offset=${first.nextOffset}`)
+      ).json()) as SessionListPage;
+      expect(second.rows[0].sessionId).not.toBe(first.rows[0].sessionId);
+    });
+
+    it("rejects a limit that is not a page size", async () => {
+      expect((await listPage("?limit=abc")).status).toBe(400);
+      expect((await listPage("?limit=0")).status).toBe(400);
+      expect((await listPage("?offset=-1")).status).toBe(400);
+    });
   });
 
   it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {

@@ -137,20 +137,6 @@ export function getPendingHumanInputWithSessionBySessionId(
   return row ? parseRowWithSession(row) : undefined;
 }
 
-export function listAllPendingHumanInput(): PendingHumanInputWithSession[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT pi.session_id AS sessionId, pi.tool_use_id AS toolUseId,
-              pi.kind, pi.tool_name AS toolName, pi.tool_input AS toolInput,
-              pi.completed_results AS completedResults, pi.claimed_at AS claimedAt,
-              pi.created_at AS createdAt, s.originating_alert AS originatingAlert
-       FROM pending_human_input pi
-       JOIN sessions s ON s.session_id = pi.session_id`,
-    )
-    .all() as RawRowWithSession[];
-  return rows.map(parseRowWithSession);
-}
-
 // Dedup: true if a session for this alert is durably suspended.
 export function hasPendingHumanInputForAlert(
   sourceAlertId: string,

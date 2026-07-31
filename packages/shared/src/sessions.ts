@@ -33,6 +33,14 @@ export interface SessionListRow extends SessionMeta {
   awaitingHumanInput: boolean;
 }
 
+// What GET /sessions answers. The list is ordered by the API, so a client
+// renders the rows in the order it received them and never re-sorts a page.
+export interface SessionListPage {
+  rows: SessionListRow[];
+  // The offset to request next, or null once the list is exhausted.
+  nextOffset: number | null;
+}
+
 export interface SessionMeta {
   sessionId: string;
   title: string;

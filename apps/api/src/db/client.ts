@@ -155,12 +155,11 @@ repo.yarnpkg.com',
   CREATE INDEX IF NOT EXISTS idx_remediation_recent
     ON remediation_actions(service_identity_key, tool_name, status, created_at);
 
-  -- The investigation report, maintained live by the agent during an Investigate
-  -- run. Like remediation_actions it is NOT a child of sessions: it is the durable
-  -- record of the conclusion and must outlive a deleted session, so session_id is a
-  -- plain reference. One row per session (full-replace on every UpdateReport).
+  -- The investigation report, maintained live by the agent. Unlike
+  -- remediation_actions it IS a child of sessions: a report nobody can reach is
+  -- not a record. One row per session, full-replace on every UpdateReport.
   CREATE TABLE IF NOT EXISTS reports (
-    session_id  TEXT PRIMARY KEY,
+    session_id  TEXT PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
     report      TEXT NOT NULL,
     model       TEXT,
     updated_at  TEXT NOT NULL

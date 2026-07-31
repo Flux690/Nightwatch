@@ -120,8 +120,10 @@ function setupWithSessionsError() {
   );
 }
 
+// The API serves one page at a time and owns the order; `pages` is what each
+// successive request answers, so a test can drive "Load older sessions".
 function setup(
-  sessions: object[] = [SESSION_1],
+  pages: object[][] = [[SESSION_1]],
   deleteOk = true,
   initialPath = "/sessions",
 ) {
@@ -157,9 +159,18 @@ function setup(
         });
       }
       if (url.includes("/sessions")) {
+        const offset = Number(
+          new URL(url, "http://test").searchParams.get("offset") ?? 0,
+        );
+        // Offsets are page indexes here: every page carries one row.
+        const rows = pages[offset] ?? [];
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve(sessions),
+          json: () =>
+            Promise.resolve({
+              rows,
+              nextOffset: offset + 1 < pages.length ? offset + 1 : null,
+            }),
         });
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
@@ -250,7 +261,7 @@ describe("SessionsSidebar", () => {
 
     it("keeps the session in the list when the delete request fails", async () => {
       const user = userEvent.setup();
-      setup([SESSION_1], false);
+      setup([[SESSION_1]], false);
 
       await waitFor(() => {
         expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
@@ -293,7 +304,7 @@ describe("SessionsSidebar", () => {
   describe("tabs", () => {
     it("partitions investigations and conversations across the two tabs", async () => {
       const user = userEvent.setup();
-      setup([SESSION_1, CHAT_1]);
+      setup([[SESSION_1, CHAT_1]]);
 
       // Default tab: investigations only.
       await waitFor(() => {
@@ -306,9 +317,10 @@ describe("SessionsSidebar", () => {
       expect(screen.queryByText("CPU spike on web-01")).not.toBeInTheDocument();
     });
 
-    it("floats action-required rows above newer activity and shows status chips", async () => {
-      // SESSION_2 (action_required) is OLDER than SESSION_1 but must lead.
-      setup([SESSION_1, SESSION_2]);
+    it("keeps the API's order and shows status chips", async () => {
+      // The API floats SESSION_2 (action_required) above newer activity; the
+      // sidebar must render that order rather than sorting a page of its own.
+      setup([[SESSION_2, SESSION_1]]);
 
       await waitFor(() => {
         expect(screen.getByText("Disk full on db-02")).toBeInTheDocument();
@@ -320,6 +332,60 @@ describe("SessionsSidebar", () => {
       expect(rows[1]).toHaveTextContent("Resolved");
       // Resolved rows lead with the root-cause line.
       expect(rows[1]).toHaveTextContent("OOM after deploy");
+    });
+  });
+
+  describe("pagination", () => {
+    it("reaches sessions beyond the first page and keeps the ones already shown", async () => {
+      const user = userEvent.setup();
+      setup([[SESSION_2], [SESSION_1]]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Disk full on db-02")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("CPU spike on web-01")).not.toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /load older sessions/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+      const rows = screen.getAllByRole("listitem");
+      expect(rows[0]).toHaveTextContent("Disk full on db-02");
+      expect(rows[1]).toHaveTextContent("CPU spike on web-01");
+    });
+
+    it("renders a session once when it shifts across a page boundary", async () => {
+      const user = userEvent.setup();
+      // Pages are fetched at fixed offsets, so a session that moves between the
+      // two fetches is served on both. It is still one session.
+      setup([[SESSION_2], [SESSION_2, SESSION_1]]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Disk full on db-02")).toBeInTheDocument();
+      });
+      await user.click(
+        screen.getByRole("button", { name: /load older sessions/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+      expect(screen.getAllByText("Disk full on db-02")).toHaveLength(1);
+      expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("offers nothing to load when the first page is the whole list", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(screen.getByText("CPU spike on web-01")).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole("button", { name: /load older sessions/i }),
+      ).not.toBeInTheDocument();
     });
   });
 });

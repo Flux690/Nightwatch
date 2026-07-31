@@ -23,6 +23,7 @@ import { waitFor } from "./wait.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { getSession } from "../db/sessions.js";
+import { seedCompleteReport } from "./report-helper.js";
 import { mountApi } from "./api-server.js";
 
 describe("DELETE /sessions/:id", () => {
@@ -75,6 +76,37 @@ describe("DELETE /sessions/:id", () => {
     );
     expect(delRes.status).toBe(204);
     expect(getSession(sessionId)).toBeUndefined();
+  });
+
+  it("leaves no report behind: the report route 404s once the session is gone", async () => {
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "What happened here?" }),
+    });
+    const { sessionId } = (await chatRes.json()) as { sessionId: string };
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    seedCompleteReport(sessionId);
+
+    const before = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    expect(before.status).toBe(200);
+
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { Cookie: `nw_auth=${SESSION}` },
+    });
+
+    const after = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/report`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    expect(after.status).toBe(404);
   });
 
   it("returns 409 and does not delete a session that is currently running", async () => {

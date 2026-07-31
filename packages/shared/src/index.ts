@@ -127,6 +127,7 @@ export type {
   SessionDetail,
   SessionRunStatus,
   SessionListRow,
+  SessionListPage,
 } from "./sessions.js";
 export type {
   TextPart,

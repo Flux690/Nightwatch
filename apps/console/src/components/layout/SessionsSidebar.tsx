@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import type {
   AlertSeverity,
@@ -9,6 +9,13 @@ import type {
 } from "@nightwarden/shared";
 import { ICON_UI } from "@/lib/iconProps";
 
+import {
+  SESSIONS_QUERY_KEY,
+  removeSession,
+  renameSession,
+  useSessions,
+} from "@/hooks/useSessions";
+import { Button } from "@/components/ui/button";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -25,9 +32,8 @@ import { apiFetch } from "@/api/client";
 
 type Tab = "investigations" | "conversations";
 
-// Flat list, statuses not groups: state is a dot and a word on the row, and the
-// one sort exception is that a paused agent floats to the top - it is waiting
-// on a human and must never be buried under newer resolved rows.
+// Flat list, statuses not groups: state is a dot and a word on the row. The
+// order is the API's, so a page boundary cannot strand a waiting session.
 const STATUS_VIEW: Record<
   SessionRunStatus,
   { label: string; tone: StatusTone }
@@ -45,13 +51,6 @@ const SEVERITY_DOT: Record<AlertSeverity, string> = {
   warning: "bg-wait",
   info: "bg-border-strong",
 };
-
-function floatActionRequired(rows: SessionListRow[]): SessionListRow[] {
-  return [
-    ...rows.filter((r) => r.status === "action_required"),
-    ...rows.filter((r) => r.status !== "action_required"),
-  ];
-}
 
 function SessionRow({
   session,
@@ -134,18 +133,14 @@ export function SessionsSidebar(): React.JSX.Element {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("investigations");
 
-  const { data: sessions = [], isLoading } = useQuery<SessionListRow[]>({
-    queryKey: ["sessions"],
-    queryFn: () => apiFetch<SessionListRow[]>("/api/sessions"),
-  });
+  const { sessions, isLoading, hasMore, isLoadingMore, loadMore } =
+    useSessions();
 
   const deleteSession = useMutation({
     mutationFn: (sessionId: string) =>
       apiFetch<void>(`/api/sessions/${sessionId}`, { method: "DELETE" }),
     onSuccess: (_result, sessionId) => {
-      queryClient.setQueryData<SessionListRow[]>(["sessions"], (prev = []) =>
-        prev.filter((s) => s.sessionId !== sessionId),
-      );
+      removeSession(queryClient, sessionId);
       if (activeSessionId === sessionId) void navigate({ to: "/" });
     },
     onError: (err) => {
@@ -160,9 +155,7 @@ export function SessionsSidebar(): React.JSX.Element {
   useConsoleEvents((env) => {
     if (env.type === "SESSION_TITLE_UPDATED") {
       const { sessionId, title } = env.payload;
-      queryClient.setQueryData<SessionListRow[]>(["sessions"], (prev = []) =>
-        prev.map((s) => (s.sessionId === sessionId ? { ...s, title } : s)),
-      );
+      renameSession(queryClient, sessionId, title);
       return;
     }
     // Status, headline and tab membership are all server-derived, so any
@@ -175,14 +168,12 @@ export function SessionsSidebar(): React.JSX.Element {
       env.type === "HUMAN_INPUT_REQUIRED" ||
       env.type === "HUMAN_INPUT_RESOLVED"
     ) {
-      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      void queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
     }
   });
 
   // Rows predating the queue fields count as conversations.
-  const investigations = floatActionRequired(
-    sessions.filter((s) => s.investigation === true),
-  );
+  const investigations = sessions.filter((s) => s.investigation === true);
   const conversations = sessions.filter((s) => s.investigation !== true);
   const rows = tab === "investigations" ? investigations : conversations;
 
@@ -230,6 +221,18 @@ export function SessionsSidebar(): React.JSX.Element {
           />
         ))}
       </SidebarMenu>
+
+      {hasMore && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-1 w-full justify-start text-muted-foreground"
+          disabled={isLoadingMore}
+          onClick={loadMore}
+        >
+          {isLoadingMore ? "Loading…" : "Load older sessions"}
+        </Button>
+      )}
 
       <ConfirmDialog
         open={confirmingId !== null}

@@ -12,7 +12,7 @@ import {
   toActionRecord,
 } from "../db/remediation-actions.js";
 import { getSession, deleteSession } from "../db/sessions.js";
-import { listSessionRows } from "./list.js";
+import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
@@ -23,6 +23,23 @@ import {
   checkLLMReadiness,
   notConfiguredMessage,
 } from "../config/readiness.js";
+
+const DEFAULT_PAGE_LIMIT = 50;
+const MAX_PAGE_LIMIT = 200;
+
+// A missing parameter takes the default; a nonsensical one is a client bug and
+// answers 400 rather than being clamped into a window nobody asked for.
+function parseBoundedInt(
+  raw: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number | null {
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) return null;
+  return value;
+}
 
 function sendHumanInputError(
   reply: {
@@ -41,8 +58,29 @@ function sendHumanInputError(
 export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
-  fastify.get("/sessions", { preHandler: requireSession }, async () =>
-    listSessionRows(),
+  // Paginated rather than truncated: a hundredth session used to be the last one
+  // the operator could reach, with nothing on screen saying so.
+  fastify.get<{ Querystring: { limit?: string; offset?: string } }>(
+    "/sessions",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const limit = parseBoundedInt(
+        request.query.limit,
+        DEFAULT_PAGE_LIMIT,
+        1,
+        MAX_PAGE_LIMIT,
+      );
+      const offset = parseBoundedInt(
+        request.query.offset,
+        0,
+        0,
+        Number.MAX_SAFE_INTEGER,
+      );
+      if (limit === null || offset === null) {
+        return reply.code(400).send({ error: "invalid limit or offset" });
+      }
+      return listSessionPage(limit, offset);
+    },
   );
 
   // The session answers what it is. Returning a bare transcript meant an
