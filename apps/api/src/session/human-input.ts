@@ -1,7 +1,7 @@
 import {
   claimPendingHumanInput,
   deletePendingHumanInput,
-  getPendingHumanInputWithSessionBySessionId,
+  getPendingHumanInputBySessionId,
 } from "../db/interrupts.js";
 import { insertRejectedRemediationAction } from "../db/remediation-actions.js";
 import { dispatcher } from "../dispatcher.js";
@@ -31,7 +31,7 @@ export interface HumanInputActionResult extends ApprovalResponse {
 }
 
 function requirePendingHumanInput(sessionId: string) {
-  const pending = getPendingHumanInputWithSessionBySessionId(sessionId);
+  const pending = getPendingHumanInputBySessionId(sessionId);
   if (!pending) {
     throw new HumanInputError(
       409,
@@ -62,7 +62,7 @@ function ensureDeleted(sessionId: string): void {
 function unpause(
   sessionId: string,
   toolUseId: string,
-  status: "approved" | "rejected" | "context_added" | "answered",
+  status: "approved" | "rejected" | "answered",
   resolvedBy: string,
   completedResults: ToolResult[],
   gatedResult: ToolResult,
@@ -209,14 +209,18 @@ export async function respondToPendingHumanInput(
   }
 
   if (decision === "reject") {
-    const isCritical =
-      (pending.originatingAlert?.severity ?? "info") === "critical";
+    // Only what is true: the operator said no. Why is either in their comment or
+    // unknown, and the alert's severity cannot answer it - inferring "too risky"
+    // from a critical alert hands the agent a motive nobody gave. A rejection
+    // redirects the work rather than stopping it, so this asks for a next move.
     const comment = text?.trim() ?? "";
     const gatedResult: ToolResult = {
       tool_use_id: pending.toolUseId,
-      content: isCritical
-        ? `The operator rejected this tool use as too risky. The action was NOT executed. Comment: ${comment || "no comment"}. Reassess the situation, summarize what you observed, and suggest a safer alternative.`
-        : `The operator rejected this tool use. The action was NOT executed - no changes were made to the system. Comment: ${comment || "no comment"}. Stop current remediation, explain why you chose this tool, and ask for guidance.`,
+      content: `The operator rejected this call, so it did not run and nothing on the system changed. ${
+        comment
+          ? `They said: "${comment}". Take that into account`
+          : "They gave no reason. Take the rejection itself as the signal"
+      }, then continue the investigation with a different approach. Do not call this tool again with the same arguments.`,
       is_error: true,
     };
     claimOrThrow(sessionId);
@@ -245,29 +249,8 @@ export async function respondToPendingHumanInput(
     );
   }
 
-  // No decision — treat as add-context (Other path)
-  const context = text?.trim();
-  if (!context) {
-    throw new HumanInputError(
-      400,
-      "approval interrupts require decision (approve/reject) or text (add context)",
-    );
-  }
-  claimOrThrow(sessionId);
-  logger.info(
-    { sessionId, tool: pending.toolName, resolvedBy },
-    "context added",
-  );
-  return unpause(
-    sessionId,
-    pending.toolUseId,
-    "context_added",
-    resolvedBy,
-    pending.completedResults,
-    {
-      tool_use_id: pending.toolUseId,
-      content: `Human added context: ${context}`,
-    },
-    { toolName: pending.toolName, input: pending.toolInput },
+  throw new HumanInputError(
+    400,
+    "an approval requires a decision of approve or reject",
   );
 }

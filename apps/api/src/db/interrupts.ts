@@ -1,6 +1,5 @@
 import { getDb } from "./client.js";
 import type { ToolResult } from "../llm/types.js";
-import type { NormalizedAlert } from "@nightwarden/shared";
 
 export interface PendingHumanInput {
   sessionId: string;
@@ -13,10 +12,6 @@ export interface PendingHumanInput {
   createdAt: string;
 }
 
-export interface PendingHumanInputWithSession extends PendingHumanInput {
-  originatingAlert: NormalizedAlert | null;
-}
-
 interface RawRow {
   sessionId: string;
   toolUseId: string;
@@ -26,10 +21,6 @@ interface RawRow {
   completedResults: string;
   claimedAt: string | null;
   createdAt: string;
-}
-
-interface RawRowWithSession extends RawRow {
-  originatingAlert: string | null;
 }
 
 function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
@@ -65,18 +56,6 @@ function parseRow(row: RawRow): PendingHumanInput {
     completedResults,
     claimedAt: row.claimedAt,
     createdAt: row.createdAt,
-  };
-}
-
-function parseRowWithSession(
-  row: RawRowWithSession,
-): PendingHumanInputWithSession {
-  return {
-    ...parseRow(row),
-    originatingAlert:
-      row.originatingAlert != null
-        ? (JSON.parse(row.originatingAlert) as NormalizedAlert)
-        : null,
   };
 }
 
@@ -120,21 +99,20 @@ export function deletePendingHumanInput(sessionId: string): boolean {
   return result.changes > 0;
 }
 
-export function getPendingHumanInputWithSessionBySessionId(
+export function getPendingHumanInputBySessionId(
   sessionId: string,
-): PendingHumanInputWithSession | undefined {
+): PendingHumanInput | undefined {
   const row = getDb()
     .prepare(
-      `SELECT pi.session_id AS sessionId, pi.tool_use_id AS toolUseId,
-              pi.kind, pi.tool_name AS toolName, pi.tool_input AS toolInput,
-              pi.completed_results AS completedResults, pi.claimed_at AS claimedAt,
-              pi.created_at AS createdAt, s.originating_alert AS originatingAlert
-       FROM pending_human_input pi
-       JOIN sessions s ON s.session_id = pi.session_id
-       WHERE pi.session_id = ?`,
+      `SELECT session_id AS sessionId, tool_use_id AS toolUseId,
+              kind, tool_name AS toolName, tool_input AS toolInput,
+              completed_results AS completedResults, claimed_at AS claimedAt,
+              created_at AS createdAt
+       FROM pending_human_input
+       WHERE session_id = ?`,
     )
-    .get(sessionId) as RawRowWithSession | undefined;
-  return row ? parseRowWithSession(row) : undefined;
+    .get(sessionId) as RawRow | undefined;
+  return row ? parseRow(row) : undefined;
 }
 
 // Dedup: true if a session for this alert is durably suspended.

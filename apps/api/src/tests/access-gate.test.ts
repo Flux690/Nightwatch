@@ -37,6 +37,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
+import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 import { mountApi } from "./api-server.js";
 import { dockerService } from "./manifest-helper.js";
 
@@ -47,6 +48,26 @@ const CLARIFICATION_OPTIONS = [
     description: "Recent deploy introduced the issue",
   },
 ];
+
+// The reason cannot be forgotten because it is part of the call's shape, the
+// same way approval cannot be forgotten because it is part of the registry
+// entry. A fifth write tool added without one would break this, not production.
+describe("access-gate: the reason rides every write call", () => {
+  it("every write tool requires a reason, and the ask tool declares none", () => {
+    const writes = TOOL_REGISTRY.filter((t) => t.access === "write");
+    expect(writes.length).toBeGreaterThan(0);
+    for (const tool of writes) {
+      expect(tool.schema.input_schema.required).toContain("reason");
+    }
+
+    const asks = TOOL_REGISTRY.filter((t) => t.access === "ask");
+    expect(asks.length).toBeGreaterThan(0);
+    for (const tool of asks) {
+      // AskUserQuestion's `question` already is the reason; a second would be noise.
+      expect(tool.schema.input_schema.properties).not.toHaveProperty("reason");
+    }
+  });
+});
 
 describe("access-gate: gating is driven by tool access level", () => {
   let server: FastifyInstance;
@@ -156,7 +177,7 @@ describe("access-gate: gating is driven by tool access level", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/svc-01/svc-01",
-              rationale: "service wedged",
+              reason: "service wedged",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },
@@ -301,7 +322,7 @@ describe("access-gate: gating is driven by tool access level", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/svc-01/svc-01",
-              rationale: "confirmed by operator",
+              reason: "confirmed by operator",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },

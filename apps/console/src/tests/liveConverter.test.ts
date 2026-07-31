@@ -76,7 +76,7 @@ function continueInterrupt(toolUseId: string): ConsoleEvent {
 
 function interruptResolved(
   toolUseId: string,
-  status: "approved" | "rejected" | "context_added" | "answered" | "continued",
+  status: "approved" | "rejected" | "answered" | "continued",
 ): ConsoleEvent {
   return itemEvent({
     kind: "continue_card",

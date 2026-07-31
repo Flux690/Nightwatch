@@ -157,13 +157,12 @@ describe("state inversion: persistence and reads are API-local", () => {
     // has to infer it.
     expect(session.originatingAlert).toBeNull();
     expect(session.investigation).toBe(false);
-    // The opening message is the human's verbatim - not a fabricated INCIDENT
-    // ALERT block.
+    // The opening message is the human's verbatim - not a fabricated alert block.
     expect(session.transcript[0]).toMatchObject({
       kind: "user_turn",
       text: "Why did web-01 restart?",
     });
-    expect(JSON.stringify(session.transcript[0])).not.toMatch(/INCIDENT ALERT/);
+    expect(JSON.stringify(session.transcript[0])).not.toMatch(/<alert>/);
   });
 
   // An alert opens an investigation. The run below writes no report, so a
@@ -273,7 +272,7 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
     };
 
     const { firstUserMessage } = buildInitialContext([alert]);
-    expect(firstUserMessage).toContain("INCIDENT ALERT");
+    expect(firstUserMessage).toContain("<alert>");
     expect(firstUserMessage).not.toContain("PAST INCIDENT HISTORY");
     expect(firstUserMessage).not.toContain("memory leak in image v12");
     expect(firstUserMessage).not.toContain("swap exhaustion under load");

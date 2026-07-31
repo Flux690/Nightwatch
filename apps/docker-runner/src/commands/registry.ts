@@ -78,7 +78,7 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
         restartContainer({
           service: service(input),
           delaySeconds: optionalNumber(input, "delaySeconds"),
-          rationale: requiredString(input, "rationale"),
+          reason: requiredString(input, "reason"),
           risk: risk(input),
           estimatedDowntimeSeconds:
             optionalNumber(input, "estimatedDowntimeSeconds") ?? 0,

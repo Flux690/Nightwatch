@@ -460,7 +460,7 @@ describe("clarification interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "mixed",
+              reason: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },
@@ -475,7 +475,7 @@ describe("clarification interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "confirmed",
+              reason: "confirmed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },

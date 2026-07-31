@@ -232,21 +232,24 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Read",
       description:
-        "Read a file from the connected repository's isolated checkout (never the production host). Returns numbered lines. Paths are relative to the repository root.",
+        "Read a file from the isolated checkout of the connected repository. This is never a production machine, so use ReadHostFile when you want a file from a Docker host. The result is numbered by line, and you must read a file with this before you may edit it.",
       input_schema: {
         type: "object",
         properties: {
           path: {
             type: "string",
-            description: "Repo-relative file path, e.g. src/server.ts.",
+            description:
+              "The file's path relative to the repository root, for example src/server.ts.",
           },
           offset: {
             type: "number",
-            description: "1-based line to start from (default 1).",
+            description:
+              "Which line to start reading from, counting from 1. Defaults to the first line.",
           },
           limit: {
             type: "number",
-            description: "Maximum lines to return (default and cap 2000).",
+            description:
+              "How many lines to return. Both the default and the maximum are 2000.",
           },
         },
         required: ["path"],
@@ -277,19 +280,27 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Edit",
       description:
-        "Replace an exact string in a repository file. old_string must match the current content exactly and appear exactly once (or pass replace_all: true). The file must have been read this session. Result is a unified diff.",
+        "Replace an exact piece of text in a repository file. The text you are replacing must match what is in the file exactly, and must appear exactly once unless you set replace_all. You must have read the file with Read earlier in this session. The result is a diff showing what changed.",
       input_schema: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repo-relative file path." },
+          path: {
+            type: "string",
+            description: "The file's path relative to the repository root.",
+          },
           old_string: {
             type: "string",
-            description: "Exact text to replace, copied from Read.",
+            description:
+              "The exact text to replace, copied from what Read returned, without the line numbers.",
           },
-          new_string: { type: "string", description: "Replacement text." },
+          new_string: {
+            type: "string",
+            description: "The text to put in its place.",
+          },
           replace_all: {
             type: "boolean",
-            description: "Replace every occurrence (default false).",
+            description:
+              "Set this to true to replace every occurrence rather than requiring exactly one. Defaults to false.",
           },
         },
         required: ["path", "old_string", "new_string"],
@@ -321,14 +332,18 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Write",
       description:
-        "Create a new repository file or fully overwrite an existing one (overwriting requires having read it this session). Parent directories are created. Result is a unified diff. Prefer Edit for targeted changes.",
+        "Create a new file in the repository, or replace an existing one completely. Replacing a file requires that you read it with Read earlier in this session. Any missing parent directories are created for you, and the result is a diff showing what changed. Prefer Edit whenever you are changing part of a file rather than all of it.",
       input_schema: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Repo-relative file path." },
+          path: {
+            type: "string",
+            description: "The file's path relative to the repository root.",
+          },
           content: {
             type: "string",
-            description: "Full file content to write.",
+            description:
+              "The file's complete contents. Anything already in the file is replaced.",
           },
         },
         required: ["path", "content"],
@@ -352,22 +367,23 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "Bash",
       description:
-        "Run a bash command inside the repository sandbox at the repo root (or cwd): build, test, grep, read-only git. This is the isolated checkout, never a production host. Use the structured repo tools for edits; Bash is for installing, observing and verifying. Output is capped head+tail.",
+        "Run a shell command inside the isolated checkout of the connected repository, to build it, test it, search it or inspect its git history. This is never a production machine, so use DockerBash or K8sBash when you want to run something there. Make changes with Edit and Write rather than with shell commands; this tool is for installing, observing and verifying. If the output is long, you are shown its beginning and its end.",
       input_schema: {
         type: "object",
         properties: {
           command: {
             type: "string",
-            description: "Bash command line to run.",
+            description: "The shell command line to run.",
           },
           cwd: {
             type: "string",
-            description: "Repo-relative working directory (default repo root).",
+            description:
+              "The directory to run in, relative to the repository root. Defaults to the repository root itself.",
           },
           description: {
             type: "string",
             description:
-              'One short sentence describing what this command does, shown to the operator (e.g. "Install dependencies").',
+              'One short sentence saying what this command does, which the operator sees, for example "Install dependencies".',
           },
         },
         required: ["command"],
@@ -401,18 +417,19 @@ export const REPO_TOOLS: Tool[] = [
     schema: {
       name: "OpenPullRequest",
       description:
-        "Propose this session's repository changes as a draft pull request for human review. Verify your change with Bash first and state in the body what you ran. Safe to call repeatedly: the session's branch has at most one open PR, so later calls update it with your latest commits. Incident context and a session reference are appended to the body automatically.",
+        "Propose the repository changes you made in this session as a draft pull request for a human to review. Verify your change with Bash before calling this, and say in the body what you ran. You can call it more than once: this session's branch has at most one open pull request, so a later call updates the existing one with your newest commits rather than opening a second. Details of the incident and a reference to this session are added to the body for you. If you have not committed any changes, it tells you there is nothing to propose, which is an answer about the branch rather than a failure.",
       input_schema: {
         type: "object",
         properties: {
           title: {
             type: "string",
-            description: "PR title: imperative summary of the fix.",
+            description:
+              "The pull request's title: a short imperative summary of the fix, such as 'Raise the worker memory limit'.",
           },
           body: {
             type: "string",
             description:
-              "Explanation of the root cause, why this change fixes it, and what you ran to verify it.",
+              "What the cause was, why this change addresses it, and what you ran to verify that it works.",
           },
         },
         required: ["title"],

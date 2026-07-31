@@ -3,7 +3,7 @@ import {
   insertExecutingRemediationAction,
   settleRemediationAction,
 } from "../db/remediation-actions.js";
-import type { PendingHumanInputWithSession } from "../db/interrupts.js";
+import type { PendingHumanInput } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
@@ -22,7 +22,7 @@ export interface ApprovedToolResult {
 // Never throws: any fault becomes a failure result so the run resumes instead
 // of the card wedging.
 export async function executeApprovedTool(
-  pending: PendingHumanInputWithSession,
+  pending: PendingHumanInput,
   resolvedBy: string,
 ): Promise<ApprovedToolResult> {
   const { sessionId, toolUseId, toolName, toolInput } = pending;

@@ -122,7 +122,7 @@ describe("remediation action record", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/svc-01/api",
-              rationale: "crash loop",
+              reason: "crash loop",
               risk: "low",
               estimatedDowntimeSeconds: 3,
             },
@@ -197,7 +197,7 @@ describe("remediation action record", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/svc-01/api",
-              rationale: "crash loop",
+              reason: "crash loop",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -281,7 +281,7 @@ describe("remediation action record", () => {
       toolName: "RestartDockerService",
       toolInput: {
         target: "docker/svc-01/api",
-        rationale: "wedged",
+        reason: "wedged",
         risk: "low",
         estimatedDowntimeSeconds: 2,
       },
@@ -352,7 +352,7 @@ describe("remediation action record", () => {
       toolName: "RestartDockerService",
       input: {
         target: "docker/svc-01/api",
-        rationale: "crash",
+        reason: "crash",
         risk: "low",
         estimatedDowntimeSeconds: 2,
       },
@@ -393,7 +393,7 @@ describe("remediation action record", () => {
       toolName: "RestartDockerService",
       input: {
         target: "docker/svc-01/api",
-        rationale: "cross-session test",
+        reason: "cross-session test",
         risk: "low",
         estimatedDowntimeSeconds: 2,
       },

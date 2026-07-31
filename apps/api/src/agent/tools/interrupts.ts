@@ -5,33 +5,38 @@ export const INTERRUPT_TOOLS: Tool[] = [
     schema: {
       name: "AskUserQuestion",
       description:
-        "Suspend the investigation and ask the on-call engineer a clarifying question. The UI always offers a free-text 'Other' answer alongside your options, do not add one of your own. List only the specific, named choices.",
+        "Pause and ask the on-call engineer a question you cannot answer from the tools. Use it when you need a decision or a piece of context only a human holds, not to check work you could verify yourself. Your question is the reason you are interrupting them, so make it specific enough to answer in one click.",
       input_schema: {
         type: "object",
         properties: {
           question: {
             type: "string",
-            description: "The specific question to ask.",
+            description:
+              "The question to ask, phrased so it can be answered directly.",
           },
           options: {
             type: "array",
             items: {
               type: "object",
               properties: {
-                label: { type: "string", description: "Short option label." },
+                label: {
+                  type: "string",
+                  description: "A short label for this answer.",
+                },
                 description: {
                   type: "string",
-                  description: "What this option means.",
+                  description: "What choosing this answer would mean.",
                 },
               },
               required: ["label", "description"],
             },
             description:
-              "Selectable answers for the question. Do not include a catch-all option like 'Other' or 'None of the above' - the UI adds that automatically.",
+              "The answers to offer. List only specific, named choices. Never add a catch-all such as 'Other' or 'None of the above': the operator is always given a free-text box alongside your options, so adding one of your own only duplicates it.",
           },
           multiSelect: {
             type: "boolean",
-            description: "True if multiple options may be selected.",
+            description:
+              "Set this to true if more than one option may be chosen at once.",
           },
         },
         required: ["question", "options"],

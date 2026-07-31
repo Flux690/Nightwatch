@@ -85,19 +85,19 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "QueryMetrics",
       description:
-        "Evaluate a PromQL expression at a single instant against the connected Prometheus. Use at='alert' to read the value as of the moment the alert fired, or the default 'now' for current state. For the shape over time (climbing vs spiking), use QueryMetricsRange instead.",
+        "Evaluate a PromQL expression against the connected Prometheus at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
       input_schema: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "PromQL expression to evaluate.",
+            description: "The PromQL expression to evaluate.",
           },
           at: {
             type: "string",
             enum: ["now", "alert"],
             description:
-              "Evaluation instant: 'now' (default) or 'alert' (the alert's firedAt).",
+              "Which moment to evaluate at. 'now' is the default and reads the current value; 'alert' reads the value as of the instant the alert fired.",
           },
         },
         required: ["query"],
@@ -135,28 +135,28 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "QueryMetricsRange",
       description:
-        "Evaluate a PromQL expression over a time window around the alert (or now, for chat sessions) against the connected Prometheus. This draws the timeline: whether a metric climbed slowly or spiked, and whether it recovered after the alert. Prefer rate()/aggregations that keep the series count small.",
+        "Evaluate a PromQL expression against the connected Prometheus across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
       input_schema: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "PromQL expression to evaluate.",
+            description: "The PromQL expression to evaluate.",
           },
           lookbackMinutes: {
             type: "number",
             description:
-              "Minutes before the alert to include (default 180, max 10080).",
+              "How many minutes before the alert to include. Defaults to 180, and the maximum is 10080, which is one week.",
           },
           lookforwardMinutes: {
             type: "number",
             description:
-              "Minutes after the alert to include, capped at now (default 30).",
+              "How many minutes after the alert to include, which is how you tell whether it recovered. Defaults to 30, and never extends past now.",
           },
           stepSeconds: {
             type: "number",
             description:
-              "Resolution step; omit to auto-fit ~200 points across the window.",
+              "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
           },
         },
         required: ["query"],

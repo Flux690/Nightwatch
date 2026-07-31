@@ -272,7 +272,7 @@ describe("toolset assembly by fleet capabilities", () => {
               name: "RestartK8sWorkload",
               input: {
                 target: "kubernetes/production/api-server",
-                rationale: "K8s workload wedged",
+                reason: "K8s workload wedged",
                 risk: "low",
                 estimatedDowntimeSeconds: 10,
               },

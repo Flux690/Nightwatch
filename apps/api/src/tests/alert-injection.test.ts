@@ -214,7 +214,7 @@ describe("mid-run alert injection (loop seam)", () => {
               name: "RestartDockerService",
               input: {
                 target: "docker/web-01/web-01",
-                rationale: "test",
+                reason: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
               },
@@ -336,7 +336,7 @@ describe("mid-run alert injection (loop seam)", () => {
               name: "RestartDockerService",
               input: {
                 target: "docker/web-01/web-01",
-                rationale: "test",
+                reason: "test",
                 risk: "low",
                 estimatedDowntimeSeconds: 1,
               },

@@ -53,6 +53,7 @@ describe("TranscriptItemRenderer", () => {
       toolName: "RestartDockerService",
       input: {
         service: { project: "web-01", service: "web-01" },
+        reason: "The health check has failed six times in a row.",
       },
       risk: "high",
       state: { phase: "awaiting_human" },
@@ -107,14 +108,23 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.queryByText(/time in the last/)).not.toBeInTheDocument();
     });
 
-    it("sends a rejection reason so the agent learns why", async () => {
+    it("sends a rejection reason so the agent learns why, as the answer to the agent's own", async () => {
       const onResolve = vi.fn();
       wrap(approvalItem, { onResolve });
 
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: /^reject$/i }));
+
+      // Two halves of one exchange: the agent states why it is asking, the
+      // operator answers in the same shape, and the answer is optional.
+      expect(screen.getByText(/agent.s reason/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/the health check has failed six times/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/your reason \(optional\)/i)).toBeInTheDocument();
+
       await user.type(
-        screen.getByRole("textbox", { name: /why are you rejecting/i }),
+        screen.getByRole("textbox", { name: /your reason for rejecting/i }),
         "restarting drops the cache",
       );
       await user.click(screen.getByRole("button", { name: /send rejection/i }));

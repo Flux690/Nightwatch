@@ -9,7 +9,7 @@ export const OPEN_INVESTIGATION_TOOLS: Tool[] = [
     schema: {
       name: "OpenInvestigation",
       description:
-        "Put this session under investigation, so that the report tools become available and the console draws the investigation view. Call this when the question you were asked turns out to describe an incident rather than a request for information. The change is permanent and there is no counterpart tool: a session under investigation cannot be returned to a plain conversation.",
+        "Put this session under investigation, which makes the report tools available to you and switches the operator's view to the investigation layout. Call this when what you were asked turns out to describe an incident rather than being a request for information. The change is permanent, and there is no tool that undoes it, so do not call it to restart or reset work that has stalled.",
       input_schema: {
         type: "object",
         additionalProperties: false,

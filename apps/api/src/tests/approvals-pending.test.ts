@@ -51,7 +51,7 @@ const RESTART_TURN = (): ScriptedTurn => ({
       name: "RestartDockerService",
       input: {
         target: "docker/web-01/web-01",
-        rationale: "r",
+        reason: "r",
         risk: "low",
         estimatedDowntimeSeconds: 1,
       },

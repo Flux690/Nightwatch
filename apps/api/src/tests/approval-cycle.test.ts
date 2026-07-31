@@ -134,7 +134,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -201,7 +201,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -299,7 +299,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -359,7 +359,7 @@ describe("durable approval interrupts", () => {
     close();
   });
 
-  it("add-context: text without decision feeds context, run resumes and model continues", async () => {
+  it("an approval with no decision is refused: it has exactly two outcomes", async () => {
     setScript([
       {
         text: "Restarting.",
@@ -369,7 +369,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -398,6 +398,8 @@ describe("durable approval interrupts", () => {
           e.payload["sessionId"] === sessionId,
       ),
     );
+    // Bare text used to resume the run as "context added", handing the agent a
+    // successful-looking result for a call that never ran.
     const ctxRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
@@ -409,20 +411,21 @@ describe("durable approval interrupts", () => {
         body: JSON.stringify({ text: "maintenance window active" }),
       },
     );
-    expect(ctxRes.status).toBe(200);
-    const body = (await ctxRes.json()) as { status: string };
-    expect(body.status).toBe("context_added");
+    expect(ctxRes.status).toBe(400);
+    expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-    await waitFor(() =>
-      events.some(
-        (e) =>
-          e.type === "HUMAN_INPUT_RESOLVED" &&
-          e.payload["status"] === "context_added",
-      ),
-    );
-
-    expect(hasPendingHumanInput(sessionId)).toBe(false);
     close();
+
+    // cleanup
+    await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+    });
+    await waitFor(() => !hasPendingHumanInput(sessionId));
   });
 
   it("second resolution of same interrupt returns 409", async () => {
@@ -435,7 +438,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -505,7 +508,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "concurrent",
+              reason: "concurrent",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -581,7 +584,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -648,7 +651,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "validation",
+              reason: "validation",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -715,7 +718,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -790,7 +793,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "mixed",
+              reason: "mixed",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },
@@ -866,7 +869,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "critical",
+              reason: "critical",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },
@@ -930,7 +933,7 @@ describe("durable approval interrupts", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/web-01/web-01",
-              rationale: "wedged",
+              reason: "wedged",
               risk: "high",
               estimatedDowntimeSeconds: 5,
             },

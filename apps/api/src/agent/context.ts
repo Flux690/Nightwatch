@@ -31,7 +31,8 @@ export function buildChatContext(
   investigation = false,
 ): InitialContext {
   // Chat has no alert message to carry the fleet map, so it rides the system
-  // prompt - the model still needs server names for the required `server` param.
+  // prompt instead - the model still needs the target keys and the names the
+  // `runner` parameter is drawn from.
   return {
     systemPrompt:
       systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),
@@ -54,18 +55,25 @@ export function buildInitialContext(
   const alertsSection =
     alerts.length === 1
       ? formatAlert(alerts[0]!, fleet)
-      : `BATCHED ALERTS — ${alerts.length} correlated alerts\n\n` +
-        alerts
-          .map((a, i) => `Alert ${i + 1}:\n${formatAlert(a, fleet)}`)
+      : alerts
+          .map(
+            (a, i) =>
+              `Alert ${i + 1} of ${alerts.length}:\n${formatAlert(a, fleet)}`,
+          )
           .join("\n\n");
 
-  const fleetSection = buildFleetSummary(fleetView);
+  const opening =
+    alerts.length === 1
+      ? "An alert has fired. Investigate it."
+      : `${alerts.length} correlated alerts have fired together. Investigate them as one incident.`;
 
-  const firstUserMessage = `INCIDENT ALERT${alerts.length > 1 ? "S" : ""}
---------------
+  const firstUserMessage = `${opening}
+
+<alert>
 ${alertsSection}
-${fleetSection}
-Begin your investigation. Start with the most targeted read tool given the alert type. When you have remediated or determined the fix, summarize the root cause and your recommended action in plain text.`;
+</alert>
+${buildFleetSummary(fleetView)}
+Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
   return {
     systemPrompt: systemPromptFor(opts, true),
@@ -94,9 +102,9 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
           (holders.get(s.target) ?? 0) > 1 ? `${s.target} (shared)` : s.target,
         )
         .join(", ") || "no services advertised";
-    return `  ${name}: ${targets}`;
+    return `${name}: ${targets}`;
   });
-  return `\nFLEET SUMMARY\n-------------\n${lines.join("\n")}\n`;
+  return `\n<fleet-summary>\nEach line names one Docker host or Kubernetes cluster, followed by the target keys it advertises. A key marked "(shared)" is advertised by more than one, so a call naming that key must also say which one you mean.\n${lines.join("\n")}\n</fleet-summary>\n`;
 }
 
 // Match the alert's labels against the fleet: a resolved target names the key to act on;
@@ -108,15 +116,15 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
     resolution.kind === "resolved"
       ? resolution.key
       : resolution.kind === "ambiguous"
-        ? `${resolution.key} — advertised by ${resolution.runners.join(", ")}. Pass runner="<name>" on your calls to pick one.`
-        : "unidentified — match the labels below to a known service, or use a list tool";
+        ? `${resolution.key}, which is advertised by more than one: ${resolution.runners.join(", ")}. Pass runner="<name>" on your calls to say which one you mean.`
+        : "not identified. Match the labels below against a known service, or call a list tool to find it.";
   const labels = Object.entries(alert.labels)
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
-  const labelLine = labels ? `\nLabels:       ${labels}` : "";
-  return `Alert ID:     ${alert.sourceAlertId}
-Target:       ${targetLine}
-Alert type:   ${alert.alertType}
-Severity:     ${alert.severity}
-Fired at:     ${alert.firedAt}${labelLine}`;
+  const labelLine = labels ? `\nlabels: ${labels}` : "";
+  return `id: ${alert.sourceAlertId}
+target: ${targetLine}
+type: ${alert.alertType}
+severity: ${alert.severity}
+fired at: ${alert.firedAt}${labelLine}`;
 }

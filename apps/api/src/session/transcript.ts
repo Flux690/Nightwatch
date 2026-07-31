@@ -6,7 +6,7 @@ import type {
   ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
-import { getPendingHumanInputWithSessionBySessionId } from "../db/interrupts.js";
+import { getPendingHumanInputBySessionId } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import {
@@ -123,7 +123,7 @@ function toolCallState(
 // here, so the browser never reconciles sources against each other.
 export function buildTranscript(sessionId: string): TranscriptItem[] {
   const messages: SessionMessage[] = getSessionMessages(sessionId);
-  const pendingRow = getPendingHumanInputWithSessionBySessionId(sessionId);
+  const pendingRow = getPendingHumanInputBySessionId(sessionId);
   const pending: ApprovalRequest | null = pendingRow
     ? {
         sessionId: pendingRow.sessionId,

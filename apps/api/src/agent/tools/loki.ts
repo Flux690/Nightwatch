@@ -162,29 +162,29 @@ export const LOKI_TOOLS: Tool[] = [
     schema: {
       name: "QueryLogs",
       description:
-        'Fetch log LINES from the connected Loki with a LogQL stream selector (e.g. {app="api"} |= "error"). Returns the newest lines first within a window around the alert (or now, for chat sessions). Every LogQL query must start with a label selector - if you do not know the labels, call DiscoverLogLabels first. Filter server-side in the query (|=, |~, json ...) rather than pulling everything.',
+        'Read individual log lines from the connected Loki, selected with a LogQL query such as {app="api"} |= "error". Lines come back newest first, from a window around the alert or around now if no alert started this session. Every LogQL query has to begin with a label selector in braces, so if you do not already know which labels select this service, call DiscoverLogLabels first. Narrow the query itself with filters such as |= and |~ rather than fetching everything and reading through it.',
       input_schema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              'LogQL log query, starting with a stream selector, e.g. {namespace="shop", app="api"} |= "error".',
+              'The LogQL query, which must begin with a stream selector in braces, for example {namespace="shop", app="api"} |= "error".',
           },
           limit: {
             type: "number",
             description:
-              "Max lines to return, newest first (default 100, max 1000).",
+              "How many lines to return at most, newest first. Defaults to 100, and the maximum is 1000.",
           },
           lookbackMinutes: {
             type: "number",
             description:
-              "Minutes before the alert to search (default 60, max 10080).",
+              "How many minutes before the alert to search. Defaults to 60, and the maximum is 10080, which is one week.",
           },
           lookforwardMinutes: {
             type: "number",
             description:
-              "Minutes after the alert to search, capped at now (default 5).",
+              "How many minutes after the alert to search. Defaults to 5, and never extends past now.",
           },
         },
         required: ["query"],
@@ -286,29 +286,29 @@ export const LOKI_TOOLS: Tool[] = [
     schema: {
       name: "QueryLogMetrics",
       description:
-        'Evaluate a metric-style LogQL expression (rate/count over logs, e.g. sum(rate({app="api"} |= "error" [5m]))) over a window around the alert against the connected Loki. Use this for log-derived numbers Prometheus does not have - the count or rate of a specific log pattern. For the raw lines, use QueryLogs. Prefer aggregations that keep the series count small.',
+        'Count or rate log lines in the connected Loki using a metric-style LogQL expression, for example sum(rate({app="api"} |= "error" [5m])), across a window around the alert. Use this when you want a number derived from logs that Prometheus does not record, such as how often a particular message appears. When you want to read the lines themselves, use QueryLogs. Keep the number of returned series small with aggregations, because only the first twenty are returned.',
       input_schema: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "Metric-style LogQL expression (must produce a range vector, i.e. use rate()/count_over_time() with a [range]).",
+              "The metric-style LogQL expression. It has to produce a range vector, which means using a function such as rate() or count_over_time() with a range in square brackets.",
           },
           lookbackMinutes: {
             type: "number",
             description:
-              "Minutes before the alert to include (default 180, max 10080).",
+              "How many minutes before the alert to include. Defaults to 180, and the maximum is 10080, which is one week.",
           },
           lookforwardMinutes: {
             type: "number",
             description:
-              "Minutes after the alert to include, capped at now (default 30).",
+              "How many minutes after the alert to include, which is how you tell whether it recovered. Defaults to 30, and never extends past now.",
           },
           stepSeconds: {
             type: "number",
             description:
-              "Resolution step; omit to auto-fit ~200 points across the window.",
+              "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
           },
         },
         required: ["query"],
@@ -380,19 +380,19 @@ export const LOKI_TOOLS: Tool[] = [
     schema: {
       name: "DiscoverLogLabels",
       description:
-        "Discover which labels select a service's logs in Loki, since log labels are not a fixed convention. With no arguments, lists label NAMES present around the alert. With 'label', lists that label's VALUES. With 'selector' (e.g. {namespace=\"shop\"}), lists the label sets of matching streams so you can narrow further. Use this before QueryLogs when you do not already know the selector.",
+        "Find out which labels select a particular service's logs in Loki. There is no fixed convention for these, so you cannot guess them reliably; call this before QueryLogs whenever you do not already know the selector. Called with no arguments it lists the label names present around the alert. Given a label name it lists that label's values. Given a partial selector it lists the label sets of the streams that match, so you can narrow down from there.",
       input_schema: {
         type: "object",
         properties: {
           label: {
             type: "string",
             description:
-              "A label name to list values for (e.g. 'app'). Omit to list label names.",
+              "A label name whose values you want listed, for example 'app'. Omit it to list the label names instead.",
           },
           selector: {
             type: "string",
             description:
-              'A partial LogQL selector (e.g. {namespace="shop"}) to list matching streams\' label sets.',
+              'A partial LogQL selector, for example {namespace="shop"}, whose matching streams you want the full label sets of.',
           },
         },
         required: [],

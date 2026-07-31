@@ -343,7 +343,7 @@ describe("multi-runner routing", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/postgres/postgres",
-              rationale: "OOM killed",
+              reason: "OOM killed",
               risk: "low",
               estimatedDowntimeSeconds: 5,
             },

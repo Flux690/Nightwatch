@@ -187,7 +187,7 @@ export interface K8sProcessesResult {
 // No delaySeconds: a rollout restart is an annotation patch with no delay to honour.
 export interface K8sRestartInput {
   service: KubernetesWorkloadIdentity;
-  rationale: string;
+  reason: string;
   risk: RiskLevel;
   estimatedDowntimeSeconds: number;
 }

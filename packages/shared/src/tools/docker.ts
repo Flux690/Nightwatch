@@ -104,7 +104,7 @@ export interface DockerProcessesResult {
 export interface DockerRestartInput {
   service: DockerServiceIdentity;
   delaySeconds?: number;
-  rationale: string;
+  reason: string;
   risk: RiskLevel;
   estimatedDowntimeSeconds: number;
 }

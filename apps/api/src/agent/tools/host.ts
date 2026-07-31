@@ -5,15 +5,22 @@ import type { Tool } from "./types.js";
 // GetK8sNodeStatus is the Kubernetes answer to node health, not these.
 const RUNNER_PROPERTY = {
   type: "string",
-  description: "Runner name from the FLEET SUMMARY. Omit to read every runner.",
+  description:
+    "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
 } as const;
+
+// Said on every one of the six, because a description sits next to the decision
+// while the system prompt is competing with a long context by turn fifteen.
+const DOCKER_ONLY =
+  " This reads a Docker host's own operating system and exists for Docker only; for the health of Kubernetes nodes, use GetK8sNodeStatus instead.";
 
 export const HOST_TOOLS: Tool[] = [
   {
     schema: {
       name: "GetHostMemory",
       description:
-        "Get host memory stats (total, available, swap) and whether the OOM killer has fired recently.",
+        "Read a Docker host's memory: total, available and swap, along with whether the kernel's out-of-memory killer has fired recently. Use this when a container died without explanation, since the host running out of memory is a common cause." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: { runner: RUNNER_PROPERTY },
@@ -28,7 +35,8 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostCPU",
       description:
-        "Get per-core and overall CPU usage, I/O wait %, and load averages (1m, 5m, 15m).",
+        "Read a Docker host's CPU usage per core and overall, its I/O wait percentage, and its load averages over one, five and fifteen minutes. A high I/O wait points at the disk rather than at the processor." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: { runner: RUNNER_PROPERTY },
@@ -43,7 +51,8 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostDisk",
       description:
-        "Get filesystem usage for all mounts and disk I/O rates per device.",
+        "Read a Docker host's filesystem usage for every mount, and its disk read and write rates per device. A full disk stops containers writing logs and databases accepting writes, so check it early when several services fail at once." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: { runner: RUNNER_PROPERTY },
@@ -58,7 +67,8 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostNetwork",
       description:
-        "Get listening ports, TCP connection state counts, and total connection count.",
+        "Read a Docker host's listening ports, how many TCP connections are in each state, and the total connection count. Use it to tell whether a service is actually listening where you expect, or whether connections are piling up." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: { runner: RUNNER_PROPERTY },
@@ -73,18 +83,21 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "GetHostDmesg",
       description:
-        "Read kernel ring buffer (dmesg) for hardware errors, OOM kills, and filesystem errors.",
+        "Read a Docker host's kernel log, the dmesg ring buffer, where hardware faults, out-of-memory kills and filesystem errors are recorded. This is where you confirm that the kernel, and not the application, killed a process." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: {
           tailLines: {
             type: "number",
-            description: "Number of most recent lines to return (default 100).",
+            description:
+              "How many of the most recent lines to return. Defaults to 100.",
           },
           filterLevel: {
             type: "string",
             enum: ["err", "warn", "all"],
-            description: "Log level filter (default: err).",
+            description:
+              "Which severity to include. Defaults to 'err'. Use 'all' only when the errors alone did not explain what happened.",
           },
           runner: RUNNER_PROPERTY,
         },
@@ -99,19 +112,23 @@ export const HOST_TOOLS: Tool[] = [
     schema: {
       name: "ReadHostFile",
       description:
-        "Read a file from the host filesystem (allowlisted paths only). Secrets are automatically redacted.",
+        "Read a file from a Docker host's filesystem, such as a service's configuration. Only files under an allowlist of paths can be read, so a path outside it is refused; that refusal is a normal answer about what you may read, not a fault. Anything that looks like a secret is removed from the content before you see it." +
+        DOCKER_ONLY,
       input_schema: {
         type: "object",
         properties: {
-          path: { type: "string", description: "Absolute path to the file." },
+          path: {
+            type: "string",
+            description: "The absolute path of the file to read.",
+          },
           maxLines: {
             type: "number",
-            description: "Maximum lines to return (default 500).",
+            description: "How many lines to return at most. Defaults to 500.",
           },
           runner: {
             type: "string",
             description:
-              "Runner name from the FLEET SUMMARY. Required: a file read is targeted by nature.",
+              "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. This is required, because reading a file only makes sense on one named machine.",
           },
         },
         required: ["path", "runner"],

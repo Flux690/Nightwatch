@@ -162,14 +162,14 @@ export const GITHUB_TOOLS: Tool[] = [
     schema: {
       name: "GetRecentChanges",
       description:
-        "List merged pull requests and mainline commits on the connected repository's default branch in a window ending at the alert (or now for chat sessions). This is evidence of what MERGED, not what deployed: correlate with the running image tag or restart times before naming a change as the cause. Use it early - missing change context is the top source of wrong root causes.",
+        "List the pull requests merged and the commits landed on the connected repository's default branch in the window ending when the alert fired, or ending now if no alert started this session. Call this early, because not knowing what changed is the most common reason an investigation reaches the wrong conclusion. Note carefully that this tells you what was merged, not what was deployed. Before you name a change as the cause, confirm it actually reached the running system by checking the running image tag or when the service last restarted.",
       input_schema: {
         type: "object",
         properties: {
           windowHours: {
             type: "number",
             description:
-              "Lookback window in hours before the alert (default 24, max 168).",
+              "How many hours before the alert to look back. Defaults to 24, and the maximum is 168, which is one week.",
           },
         },
         required: [],

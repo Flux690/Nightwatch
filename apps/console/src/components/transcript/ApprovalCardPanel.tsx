@@ -9,6 +9,9 @@ import { InterruptCard } from "./InterruptCard.js";
    without a colour wash. Approvals habituate when every request looks the same,
    so the weight lives here and ordinary tool calls are borderless rows. */
 
+// Shared by both halves of the exchange so neither can be styled as the louder one.
+const EXCHANGE_LABEL_CLASS = "text-sm text-ink-subtle";
+
 function inputString(
   input: Record<string, unknown>,
   key: string,
@@ -79,8 +82,9 @@ export function ApprovalCardPanel({
   const command = commandOf(input);
   const service = serviceOf(input);
   // The agent's own words for why, which is the one part of this card it is
-  // entitled to author.
-  const why = inputString(input, "reason") ?? inputString(input, "rationale");
+  // entitled to author. Required on every write tool, so it is absent only on a
+  // row written before that was true.
+  const why = inputString(input, "reason");
 
   return (
     <>
@@ -95,8 +99,14 @@ export function ApprovalCardPanel({
           {actionLabel(item.toolName, input)}
         </p>
 
+        {/* Labelled, and at full body weight, because this one sentence is what
+            the decision turns on. Its label pairs with "Your reason" below, so a
+            rejection reads as the answer to it rather than as a separate act. */}
         {why !== null && (
-          <p className="text-sm leading-relaxed text-muted-foreground">{why}</p>
+          <div className="flex flex-col gap-1">
+            <p className={EXCHANGE_LABEL_CLASS}>Agent&rsquo;s reason</p>
+            <p className="text-sm leading-relaxed text-foreground">{why}</p>
+          </div>
         )}
 
         {command !== null && (
@@ -130,14 +140,16 @@ export function ApprovalCardPanel({
             {state.by ? ` by ${state.by}` : ""}
           </p>
         ) : rejecting ? (
-          // Rejection has always accepted a comment server-side, where it is fed
-          // back to the agent so it can reassess instead of guessing why.
+          // The comment is fed back to the agent as this call's result, so it
+          // redirects the work rather than only recording a refusal. Optional,
+          // and said to be optional: a blank rejection is still a decision.
           <div className="flex flex-col gap-2">
+            <p className={EXCHANGE_LABEL_CLASS}>Your reason (optional)</p>
             <Textarea
               autoFocus
               rows={2}
-              aria-label="Why are you rejecting this?"
-              placeholder="What is wrong with it? The agent gets this."
+              aria-label="Your reason for rejecting this"
+              placeholder="Tell the agent what is wrong with this. It reads your reason and tries a different approach."
               value={reason}
               onChange={(e) => setReason(e.currentTarget.value)}
             />

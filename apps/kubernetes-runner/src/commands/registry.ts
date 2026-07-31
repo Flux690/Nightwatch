@@ -75,7 +75,7 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
       async (input) =>
         restartWorkload({
           service: service(input),
-          rationale: requiredString(input, "rationale"),
+          reason: requiredString(input, "reason"),
           risk: risk(input),
           estimatedDowntimeSeconds:
             optionalNumber(input, "estimatedDowntimeSeconds") ?? 0,

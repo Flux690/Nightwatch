@@ -862,7 +862,7 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await restartWorkload({
         service: K8S_SERVICE,
-        rationale: "service wedged",
+        reason: "service wedged",
         risk: "low",
         estimatedDowntimeSeconds: 5,
       });
@@ -901,7 +901,7 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await restartWorkload({
         service: K8S_SERVICE,
-        rationale: "service wedged",
+        reason: "service wedged",
         risk: "low",
         estimatedDowntimeSeconds: 5,
       });
@@ -922,7 +922,7 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await restartWorkload({
         service: K8S_SERVICE,
-        rationale: "log shipper wedged",
+        reason: "log shipper wedged",
         risk: "low",
         estimatedDowntimeSeconds: 5,
       });
@@ -942,7 +942,7 @@ describe("Kubernetes runner command handlers", () => {
 
       const result = await restartWorkload({
         service: K8S_SERVICE,
-        rationale: "service wedged",
+        reason: "service wedged",
         risk: "low",
         estimatedDowntimeSeconds: 5,
       });
@@ -965,7 +965,7 @@ describe("Kubernetes runner command handlers", () => {
       await expect(
         restartWorkload({
           service: K8S_SERVICE,
-          rationale: "test",
+          reason: "test",
           risk: "low",
           estimatedDowntimeSeconds: 0,
         }),
@@ -982,7 +982,7 @@ describe("Kubernetes runner command handlers", () => {
       await expect(
         restartWorkload({
           service: K8S_SERVICE,
-          rationale: "test",
+          reason: "test",
           risk: "low",
           estimatedDowntimeSeconds: 0,
         }),

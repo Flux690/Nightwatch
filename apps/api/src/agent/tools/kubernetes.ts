@@ -1,3 +1,4 @@
+import { REASON_PROPERTY } from "./reason.js";
 import type { Tool } from "./types.js";
 
 // The workload's target key, copied verbatim from the FLEET SUMMARY or a list
@@ -5,7 +6,7 @@ import type { Tool } from "./types.js";
 const TARGET_PROPERTY = {
   type: "string",
   description:
-    "The workload's target key, copied exactly from the FLEET SUMMARY or a ListK8sWorkloads result (e.g. kubernetes/shop/api).",
+    "The workload's target key, copied exactly as it appears in the FLEET SUMMARY or in a ListK8sWorkloads result, for example kubernetes/shop/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
 // The container sub-selector is not part of the key: it rides alongside `target`
@@ -13,7 +14,7 @@ const TARGET_PROPERTY = {
 const CONTAINER_PROPERTY = {
   type: "string",
   description:
-    "Optional: the specific container in a multi-container pod (e.g. the app container alongside a sidecar). Required only when the pod has more than one container; omitting it then returns the list of choices.",
+    "Which container to read, when the workload's pod runs more than one, for example an application container alongside a sidecar. Omit it for a single-container pod. If you omit it for a pod that has several, the result lists the containers you can choose from.",
 } as const;
 
 // Consulted only when the target key is ambiguous. Supplied by the model from the fleet
@@ -21,7 +22,7 @@ const CONTAINER_PROPERTY = {
 const RUNNER_PROPERTY = {
   type: "string",
   description:
-    "Runner name from the FLEET SUMMARY. Required only when the fleet summary marks this target as shared.",
+    "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Supply this only when the FLEET SUMMARY marks this target as shared, meaning two clusters advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -31,19 +32,19 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "ListK8sWorkloads",
       description:
-        "List Kubernetes workloads (Deployments, StatefulSets and DaemonSets) with replica counts, image, and rollout status.",
+        "List the Kubernetes workloads in a namespace, meaning its Deployments, StatefulSets and DaemonSets, with their replica counts, image and rollout status. Call this first when you do not yet know a workload's target key, because every service-level Kubernetes tool needs that key.",
       input_schema: {
         type: "object",
         properties: {
           namespace: {
             type: "string",
             description:
-              "Kubernetes namespace to list (optional; defaults to 'default').",
+              "Which Kubernetes namespace to list. Defaults to the namespace named 'default', so pass this whenever the workload you want lives elsewhere.",
           },
           runner: {
             type: "string",
             description:
-              "Runner name from the FLEET SUMMARY. Omit to read every Kubernetes cluster.",
+              "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
       },
@@ -57,7 +58,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sLogs",
       description:
-        "Fetch recent logs (from the workload's pods) for a Kubernetes service, pre-filtered to error/warn lines and lines near the alert timestamp.",
+        "Read a Kubernetes workload's recent logs, gathered from its pods. The result is filtered down to error and warning lines plus any line close to the alert's timestamp, so a quiet workload can return very little.",
       input_schema: {
         type: "object",
         properties: {
@@ -86,7 +87,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sConfig",
       description:
-        "Get a Kubernetes workload's configuration: image, update strategy, resource requests and limits, probes, and volume mounts. Env var and ConfigMap/Secret names only (never values).",
+        "Read a Kubernetes workload's configuration: its image, update strategy, resource requests and limits, probes and volume mounts. Environment variables, ConfigMaps and Secrets are reported by name only, never by value, so this cannot tell you what a setting is set to.",
       input_schema: {
         type: "object",
         properties: {
@@ -105,7 +106,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sStats",
       description:
-        "Get per-pod resource usage for every pod of a Kubernetes workload: CPU millicores and memory bytes, against each container's requests and limits, plus restart counts and the last termination reason (e.g. OOMKilled). Usage is null when the cluster has no metrics-server; everything else still reports.",
+        "Read resource usage for every pod of a Kubernetes workload: CPU in millicores and memory in bytes, set against each container's requests and limits, along with restart counts and why each container last terminated, such as OOMKilled. If the cluster runs no metrics-server the usage figures come back null, but the restart counts and termination reasons still report, and those alone often identify the problem.",
       input_schema: {
         type: "object",
         properties: {
@@ -124,7 +125,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sEvents",
       description:
-        "Get Kubernetes events for a workload AND its pods, merged oldest first (FailedCreate, BackOff, OOMKilling, etc.).",
+        "Read the Kubernetes events for a workload and for its pods, merged into one list with the oldest first. These are events such as FailedCreate, BackOff and OOMKilling, and they are usually the fastest way to learn why a workload will not come up.",
       input_schema: {
         type: "object",
         properties: {
@@ -133,12 +134,13 @@ export const K8S_TOOLS: Tool[] = [
           container: CONTAINER_PROPERTY,
           sinceMinutes: {
             type: "number",
-            description: "Look back this many minutes (default 60).",
+            description:
+              "How many minutes to look back from now. Defaults to 60.",
           },
           warningsOnly: {
             type: "boolean",
             description:
-              "Default true. Kubernetes emits Normal events constantly; set false only when you need them.",
+              "Whether to return only Warning events, which defaults to true. Kubernetes emits Normal events constantly, so set this to false only when you specifically need them.",
           },
         },
         required: ["target"],
@@ -151,7 +153,8 @@ export const K8S_TOOLS: Tool[] = [
   {
     schema: {
       name: "GetK8sProcesses",
-      description: "List processes running inside a Kubernetes workload's pod.",
+      description:
+        "List the processes running inside a Kubernetes workload's pod. Use it to see whether the process you expect is the one actually running, and what it is consuming.",
       input_schema: {
         type: "object",
         properties: {
@@ -170,7 +173,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sRolloutStatus",
       description:
-        "Get the rollout status of a Deployment, StatefulSet or DaemonSet - desired/ready/updated/available counts, conditions, and why it is not complete.",
+        "Read the rollout status of a Deployment, StatefulSet or DaemonSet: how many replicas are desired, ready, updated and available, the workload's conditions, and the reason a rollout has not finished. Use this when you suspect a deploy is stuck part-way rather than the application being at fault.",
       input_schema: {
         type: "object",
         properties: { target: TARGET_PROPERTY, runner: RUNNER_PROPERTY },
@@ -185,14 +188,14 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sNodeStatus",
       description:
-        "Get per-node health - Ready plus MemoryPressure/DiskPressure/PIDPressure conditions and allocatable-vs-capacity resources. Use to tell whether the node, not the pod, is the cause of an unhealthy workload. Reports every node; no service identity needed.",
+        "Read the health of every node in the cluster: whether each is Ready, its MemoryPressure, DiskPressure and PIDPressure conditions, and its allocatable resources against its capacity. Use this to tell whether an unhealthy workload is the node's fault rather than its own. It needs no target key, because it reports on every node.",
       input_schema: {
         type: "object",
         properties: {
           runner: {
             type: "string",
             description:
-              "Runner name from the FLEET SUMMARY. Omit to read every Kubernetes cluster.",
+              "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
       },
@@ -206,24 +209,27 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "RestartK8sWorkload",
       description:
-        "WRITE: Restart a Kubernetes workload (rollout restart of a Deployment, StatefulSet or DaemonSet). Requires human approval. Causes a rolling replacement of pods.",
+        "Restart a Kubernetes workload by performing a rollout restart of its Deployment, StatefulSet or DaemonSet, which replaces its pods one batch at a time. This changes the cluster, so calling it pauses you until a human approves or rejects it. If the human rejects the call, you will be told so and the restart will not have happened.",
       input_schema: {
         type: "object",
         properties: {
           target: TARGET_PROPERTY,
           runner: RUNNER_PROPERTY,
           container: CONTAINER_PROPERTY,
-          rationale: {
-            type: "string",
-            description: "Why this restart is the correct remediation.",
-          },
+          reason: REASON_PROPERTY,
           risk: {
             type: "string",
             enum: ["low", "medium", "high"],
+            description:
+              "Your own assessment of how much damage this restart could do if it goes wrong. The human sees it labelled as your opinion, beside the facts of the call.",
           },
-          estimatedDowntimeSeconds: { type: "number" },
+          estimatedDowntimeSeconds: {
+            type: "number",
+            description:
+              "How many seconds you expect the workload to be degraded or unavailable for.",
+          },
         },
-        required: ["target", "rationale", "risk", "estimatedDowntimeSeconds"],
+        required: ["target", "reason", "risk", "estimatedDowntimeSeconds"],
       },
     },
     access: "write",
@@ -234,7 +240,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "K8sBash",
       description:
-        "WRITE: Execute a shell command inside the target Kubernetes workload's pod (kubectl exec). Never runs on the host. Requires human approval. Only available when remediation is enabled.",
+        "Run a shell command inside a Kubernetes workload's pod, as kubectl exec does. It runs inside the pod and never on the node hosting it. Because such a command is able to change things, calling it pauses you until a human approves or rejects it, even when the command you are running only reads. Use it to answer questions the typed Kubernetes tools above do not cover, and to apply a fix once you know what the fix is.",
       input_schema: {
         type: "object",
         properties: {
@@ -244,10 +250,16 @@ export const K8S_TOOLS: Tool[] = [
           command: {
             type: "array",
             items: { type: "string" },
-            description: "Command and arguments as an array.",
+            description:
+              "The command and its arguments, split into an array of strings, for example ['redis-cli', 'info', 'memory']. The human sees exactly this, joined by spaces, and approves that.",
           },
-          reason: { type: "string" },
-          risk: { type: "string", enum: ["low", "medium", "high"] },
+          reason: REASON_PROPERTY,
+          risk: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description:
+              "Your own assessment of how much damage this command could do if it goes wrong. A command that only reads is low. The human sees it labelled as your opinion.",
+          },
         },
         required: ["target", "command", "reason", "risk"],
       },
