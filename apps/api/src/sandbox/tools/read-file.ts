@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { assertContained, resolveRepoPath } from "../paths.js";
+import { FileNotFoundError } from "../errors.js";
 import type { Workspace } from "../workspace.js";
 
 export interface ReadFileInput {
@@ -21,9 +22,7 @@ export async function readRepoFile(
   try {
     raw = await readFile(abs, "utf8");
   } catch {
-    throw new Error(
-      `File not found in the repository: ${input.path}. Check the path with Bash (ls, git ls-files).`,
-    );
+    throw new FileNotFoundError(input.path);
   }
 
   const lines = raw.split("\n");

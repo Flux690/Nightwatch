@@ -121,7 +121,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("permission");
     expect(String(result.content)).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
@@ -138,7 +138,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       { query: "up", at: "alert" },
       ctx,
     );
-    expect(atAlert.is_error).toBeUndefined();
+    expect(atAlert.outcome).toBeUndefined();
     expect(mock.requests[0]!.path).toBe("/api/v1/query");
     expect(mock.requests[0]!.params.get("time")).toBe(FIRED_AT);
     expect(mock.requests[0]!.params.get("query")).toBe("up");
@@ -155,7 +155,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
 
     const params = mock.requests[0]!.params;
     // 180min back, 30min forward, 12600s window -> ceil(12600/200) = 63s step.
@@ -212,7 +212,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       { query: "up{" },
       mintSession(ALERT),
     );
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("parse error");
   });
 });

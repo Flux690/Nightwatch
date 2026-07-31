@@ -259,7 +259,7 @@ describe("OpenPullRequest", () => {
       "opr-create",
     );
 
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
     const outcome = result.content as {
       action: string;
       number: number;
@@ -308,7 +308,7 @@ describe("OpenPullRequest", () => {
     );
     prState.open = [];
 
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
     const outcome = result.content as { action: string; message: string };
     expect(outcome.action).toBe("updated");
     expect(outcome.message).toContain("Updated existing PR #42");
@@ -328,13 +328,36 @@ describe("OpenPullRequest", () => {
     );
     prState.rejectDraft = false;
 
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
     const outcome = result.content as { draft: boolean; message: string };
     expect(outcome.draft).toBe(false);
     expect(outcome.message).toContain("draft mode is unavailable");
     const attempts = prState.createPayloads.slice(-2);
     expect(attempts[0]?.["draft"]).toBe(true);
     expect(attempts[1]?.["draft"]).toBe(false);
+  });
+
+  it("says there is nothing to propose, without asking GitHub, when the branch has no commits", async () => {
+    // GitHub answers an empty diff with a bare 422, which reads as a broken
+    // token; the operator then reconnects a credential that was working.
+    gitState.dirty = false;
+    gitState.unpushed = "0";
+    gitState.calls.length = 0;
+    const requestsBefore = prState.createPayloads.length;
+
+    const result = await runOpr({ title: "Fix it" }, SESSION_ID, "opr-nodiff");
+
+    expect(result.outcome).toBe("expected_miss");
+    const outcome = result.content as { action: string; message: string };
+    expect(outcome.action).toBe("nothing_to_propose");
+    expect(outcome.message).toContain("nothing to propose");
+    expect(prState.createPayloads).toHaveLength(requestsBefore);
+    expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
+
+    // The audit row still says why, so the report can state the reason.
+    const audit = auditRow(SESSION_ID, "opr-nodiff");
+    expect(audit?.status).toBe("failed");
+    expect(audit?.result).toContain("nothing to propose");
   });
 
   it("refuses to re-run a tool_use that was already attempted (crash recovery)", async () => {
@@ -351,7 +374,7 @@ describe("OpenPullRequest", () => {
       SESSION_ID,
       "opr-crash",
     );
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("already attempted");
     expect(prState.createPayloads).toHaveLength(before);
   });

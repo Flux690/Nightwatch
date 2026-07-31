@@ -123,20 +123,27 @@ function notConfigured(): ToolExecuteResult {
   return {
     content:
       "Loki integration is not configured. The operator can connect it from the Integrations page. Continue without log evidence.",
-    is_error: true,
+    outcome: "permission",
   };
 }
 
 function corrective(err: unknown): ToolExecuteResult {
-  const detail =
-    err instanceof LokiApiError
-      ? err.code === "bad_query"
-        ? `Loki rejected the query: ${err.message}. Fix the LogQL and retry.`
-        : `Loki request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`
-      : err instanceof Error
-        ? err.message
-        : String(err);
-  return { content: detail, is_error: true };
+  if (err instanceof LokiApiError) {
+    if (err.code === "bad_query") {
+      return {
+        content: `Loki rejected the query: ${err.message}. Fix the LogQL and retry.`,
+        outcome: "system",
+      };
+    }
+    return {
+      content: `Loki request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`,
+      outcome: err.code === "unauthorized" ? "permission" : "retryable",
+    };
+  }
+  return {
+    content: err instanceof Error ? err.message : String(err),
+    outcome: "system",
+  };
 }
 
 function capMetricSeries(data: LokiMetricData): {
@@ -191,7 +198,7 @@ export const LOKI_TOOLS: Tool[] = [
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a LogQL string", is_error: true };
+        return { content: "query must be a LogQL string", outcome: "system" };
       }
 
       const limit = Math.round(
@@ -315,7 +322,7 @@ export const LOKI_TOOLS: Tool[] = [
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a LogQL string", is_error: true };
+        return { content: "query must be a LogQL string", outcome: "system" };
       }
 
       const { start, end } = anchoredWindow(

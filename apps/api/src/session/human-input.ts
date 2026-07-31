@@ -12,7 +12,11 @@ import { stripEvidenceTag } from "../agent/report.js";
 import { toolCallCard } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
-import type { ApprovalResponse, RespondRequest } from "@nightwarden/shared";
+import type {
+  ApprovalResponse,
+  RespondRequest,
+  ToolOutcome,
+} from "@nightwarden/shared";
 
 export class HumanInputError extends Error {
   constructor(
@@ -64,6 +68,7 @@ function unpause(
   completedResults: ToolResult[],
   gatedResult: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
+  outcome?: ToolOutcome,
 ): HumanInputActionResult {
   ensureDeleted(sessionId);
 
@@ -82,6 +87,7 @@ function unpause(
         ...(status === "approved" && {
           result: stripEvidenceTag(gatedResult.content),
         }),
+        ...(outcome !== undefined && { outcome }),
       },
     }),
   });
@@ -191,7 +197,7 @@ export async function respondToPendingHumanInput(
     // executeApprovedTool never throws - every fault becomes an is_error result -
     // so the approve path always reaches unpause() and the run always resumes.
     claimOrThrow(sessionId);
-    const gatedResult = await executeApprovedTool(pending, resolvedBy);
+    const { result, outcome } = await executeApprovedTool(pending, resolvedBy);
     logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
     return unpause(
       sessionId,
@@ -199,8 +205,9 @@ export async function respondToPendingHumanInput(
       "approved",
       resolvedBy,
       pending.completedResults,
-      gatedResult,
+      result,
       { toolName: pending.toolName, input: pending.toolInput },
+      outcome,
     );
   }
 

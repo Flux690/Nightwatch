@@ -119,6 +119,22 @@ export async function commitAll(
   );
 }
 
+// Commits this branch has that its base does not. Deliberately not best-effort
+// like changedFiles below: "there is nothing to propose" is an answer given to
+// the operator, so an unresolvable base has to throw rather than read as zero.
+export async function commitsAgainstBase(dir: string): Promise<number> {
+  const out = await runGit(["rev-list", "--count", "origin/HEAD..HEAD"], {
+    cwd: dir,
+  });
+  const count = parseInt(out.trim(), 10);
+  if (Number.isNaN(count)) {
+    throw new GitOperationError(
+      `Could not count commits against the base branch: git answered "${out.trim()}"`,
+    );
+  }
+  return count;
+}
+
 // Counts checkpoint commits and commits whose earlier push failed alike; a
 // session that changed nothing pushes nothing.
 export async function hasUnpushedWork(dir: string): Promise<boolean> {

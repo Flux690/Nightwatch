@@ -15,11 +15,13 @@ import {
   settleRemediationAction,
 } from "../../db/remediation-actions.js";
 import {
+  FileNotFoundError,
   GitOperationError,
   PathEscapeError,
   ReadRequiredError,
   SandboxUnavailableError,
 } from "../../sandbox/errors.js";
+import { classifyGitHubError, gitHubErrorDetail } from "./github.js";
 import { logger } from "../../logger.js";
 import { publishSandboxStatus } from "../../session/stream.js";
 import {
@@ -32,6 +34,7 @@ import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
 import { execInRepo } from "../../sandbox/tools/exec.js";
 import { openPullRequest } from "../../sandbox/tools/open-pull-request.js";
+import type { ToolOutcome } from "@nightwarden/shared";
 import type { Tool, ToolExecuteContext, ToolExecuteResult } from "./types.js";
 
 export const COMMIT_AUTHOR = {
@@ -107,33 +110,56 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
   }
 }
 
-function correctiveMessage(err: unknown): string {
-  if (err instanceof PathEscapeError) {
-    return `${err.message}. Use a path relative to the repository root.`;
+// The sentence the model reads and the class the console renders are decided
+// together: a message that says "reconnect the token" while the class says
+// "expected miss" would be two answers to one question.
+function corrective(err: unknown): { content: string; outcome: ToolOutcome } {
+  if (err instanceof FileNotFoundError) {
+    return { content: err.message, outcome: "expected_miss" };
   }
-  if (err instanceof ReadRequiredError) return err.message;
+  if (err instanceof PathEscapeError) {
+    return {
+      content: `${err.message}. Use a path relative to the repository root.`,
+      outcome: "system",
+    };
+  }
+  if (err instanceof ReadRequiredError) {
+    return { content: err.message, outcome: "system" };
+  }
   if (err instanceof GitHubApiError) {
-    return `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page. Continue the investigation without repo tools.`;
+    return {
+      content: `${gitHubErrorDetail(err)} Continue the investigation without repo tools.`,
+      outcome: classifyGitHubError(err),
+    };
   }
   if (
     err instanceof SandboxUnavailableError ||
     err instanceof GitOperationError
   ) {
-    return `${err.message}. Repo tools are unavailable until the operator fixes this (Integrations page). Continue the investigation without them.`;
+    return {
+      content: `${err.message}. Repo tools are unavailable until the operator fixes this (Integrations page). Continue the investigation without them.`,
+      outcome: "system",
+    };
   }
-  return err instanceof Error ? err.message : String(err);
+  return {
+    content: err instanceof Error ? err.message : String(err),
+    outcome: "system",
+  };
 }
 
-async function runRepoTool(
+// Generic in what the tool returns: every failure here answers with a string, so
+// a caller that needs to read its own result back can tell the two apart instead
+// of re-deriving the shape it just produced.
+async function runRepoTool<T>(
   ctx: ToolExecuteContext,
-  fn: (ws: Workspace) => Promise<unknown>,
-): Promise<ToolExecuteResult> {
+  fn: (ws: Workspace) => Promise<T>,
+): Promise<{ content: T | string; outcome?: ToolOutcome }> {
   const options = workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
     return {
       content:
         "GitHub integration is not configured. The operator can connect a repository from the Integrations page. Continue without repo tools.",
-      is_error: true,
+      outcome: "permission",
     };
   }
   try {
@@ -141,7 +167,7 @@ async function runRepoTool(
       content: await withWorkspace(ctx.sessionId, options, fn),
     };
   } catch (err) {
-    return { content: correctiveMessage(err), is_error: true };
+    return corrective(err);
   }
 }
 
@@ -162,7 +188,7 @@ function optionalNumber(
 }
 
 function badInput(message: string): ToolExecuteResult {
-  return { content: message, is_error: true };
+  return { content: message, outcome: "system" };
 }
 
 // PR body section order (model text, then incident context, files) is host
@@ -397,13 +423,11 @@ export const REPO_TOOLS: Tool[] = [
     access: "read",
     timeoutMs: 600_000,
     on: "api",
-    execute: (input, ctx) => {
+    execute: async (input, ctx) => {
       const title = requireString(input, "title");
-      if (title === null) {
-        return Promise.resolve(badInput("title (string) is required."));
-      }
+      if (title === null) return badInput("title (string) is required.");
       const modelBody = requireString(input, "body") ?? "";
-      return runRepoTool(ctx, (ws) =>
+      const result = await runRepoTool(ctx, (ws) =>
         openPullRequest(
           ws,
           { title },
@@ -429,6 +453,13 @@ export const REPO_TOOLS: Tool[] = [
           },
         ),
       );
+      // Having nothing to propose is a true answer about the branch, not a
+      // fault, so it reads as a miss rather than as a failed pull request.
+      const { content } = result;
+      return typeof content !== "string" &&
+        content.action === "nothing_to_propose"
+        ? { ...result, outcome: "expected_miss" }
+        : result;
     },
   },
 ];

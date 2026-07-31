@@ -4,6 +4,7 @@ import type {
   Citation,
   SessionMessage,
   ToolCallState,
+  ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../agent/report.js";
 import { getPendingHumanInputWithSessionBySessionId } from "../db/interrupts.js";
 import { getSessionMessages } from "../db/sessions.js";
+import { getToolOutcomes } from "../db/tool-outcomes.js";
 import {
   countExecutedRemediations,
   listRemediationActionsForSession,
@@ -119,18 +121,21 @@ function toolCallState(
   result: string | undefined,
   awaiting: boolean,
   decided: { decision: ApprovalStatus; by?: string } | null,
+  outcome: ToolOutcome | undefined,
 ): ToolCallState {
   if (awaiting) return { phase: "awaiting_human" };
+  const classified = outcome === undefined ? {} : { outcome };
   if (decided)
     return {
       phase: "resolved",
       ...decided,
       ...(result !== undefined && { result }),
+      ...classified,
     };
   if (result === undefined) return { phase: "running" };
   if (toolName === "AskUserQuestion")
     return { phase: "resolved", decision: "answered", result };
-  return { phase: "complete", result };
+  return { phase: "complete", result, ...classified };
 }
 
 // The one place a transcript becomes something to draw. Everything the console
@@ -170,6 +175,8 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       ...(action.resolvedBy && { by: action.resolvedBy }),
     });
   }
+
+  const outcomes = getToolOutcomes(sessionId);
 
   const results = new Map<string, string>();
   for (const msg of messages) {
@@ -242,6 +249,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
               results.get(part.id),
               awaiting !== null,
               decided,
+              outcomes.get(part.id),
             ),
             // A decided call stays an approval card so its outcome has somewhere
             // to render, not just the tool output it produced.

@@ -33,7 +33,11 @@ import {
 } from "../agent/tools/toolset.js";
 import { REPO_TOOL_NAMES } from "../agent/tools/repo.js";
 import { teardownAll } from "../sandbox/workspace.js";
-import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
+import type {
+  Tool,
+  ToolDispatchContext,
+  ToolExecuteResult,
+} from "../agent/tools/types.js";
 import type { DiffHunk } from "../sandbox/tools/diff.js";
 
 const scriptRunner = createScriptRunner();
@@ -153,7 +157,7 @@ function tool(name: string): Tool {
 async function run(
   name: string,
   input: Record<string, unknown>,
-): Promise<{ content: unknown; is_error?: boolean }> {
+): Promise<ToolExecuteResult> {
   return executeTool(tool(name), input, CTX);
 }
 
@@ -200,7 +204,7 @@ describe("repo tools through registry dispatch", () => {
     deleteGitHubIntegration();
     try {
       const result = await run("Read", { path: "src/app.ts" });
-      expect(result.is_error).toBe(true);
+      expect(result.outcome).toBe("permission");
       expect(String(result.content)).toContain("Integrations page");
     } finally {
       saveGitHubIntegration({
@@ -214,7 +218,7 @@ describe("repo tools through registry dispatch", () => {
 
   it("reads a file as numbered lines and unlocks editing it", async () => {
     const read = await run("Read", { path: "src/app.ts" });
-    expect(read.is_error).toBeUndefined();
+    expect(read.outcome).toBeUndefined();
     expect(String(read.content)).toContain("1\tconst a = 1;");
 
     const edit = await run("Edit", {
@@ -222,7 +226,7 @@ describe("repo tools through registry dispatch", () => {
       old_string: "const a = 1;",
       new_string: "const a = 42;",
     });
-    expect(edit.is_error).toBeUndefined();
+    expect(edit.outcome).toBeUndefined();
     const change = edit.content as { path: string; hunks: DiffHunk[] };
     expect(change.path).toBe("src/app.ts");
     const lines = change.hunks.flatMap((h) => h.lines);
@@ -234,13 +238,22 @@ describe("repo tools through registry dispatch", () => {
     );
   });
 
+  it("reads a file that is not there as a miss, not as a fault", async () => {
+    // The canonical case: docker-compose.yml when the repo has .yaml. The tool
+    // worked, so this must not render in the same red as a crashed tool.
+    const result = await run("Read", { path: "docker-compose.yml" });
+
+    expect(result.outcome).toBe("expected_miss");
+    expect(String(result.content)).toContain("File not found");
+  });
+
   it("refuses to edit a file that was never read", async () => {
     const result = await run("Edit", {
       path: "package.json",
       old_string: "fixture",
       new_string: "renamed",
     });
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("Read");
   });
 
@@ -250,7 +263,7 @@ describe("repo tools through registry dispatch", () => {
       old_string: '"OLD"',
       new_string: '"NEW"',
     });
-    expect(ambiguous.is_error).toBe(true);
+    expect(ambiguous.outcome).toBe("system");
     expect(String(ambiguous.content)).toContain("replace_all");
 
     const all = await run("Edit", {
@@ -259,7 +272,7 @@ describe("repo tools through registry dispatch", () => {
       new_string: '"NEW"',
       replace_all: true,
     });
-    expect(all.is_error).toBeUndefined();
+    expect(all.outcome).toBeUndefined();
     const allLines = (all.content as { hunks: DiffHunk[] }).hunks.flatMap(
       (h) => h.lines,
     );
@@ -276,7 +289,7 @@ describe("repo tools through registry dispatch", () => {
       path: "docs/new-note.md",
       content: "hello\n",
     });
-    expect(created.is_error).toBeUndefined();
+    expect(created.outcome).toBeUndefined();
     const createdLines = (
       created.content as { hunks: DiffHunk[] }
     ).hunks.flatMap((h) => h.lines);
@@ -290,20 +303,20 @@ describe("repo tools through registry dispatch", () => {
       path: "package.json",
       content: "{}\n",
     });
-    expect(overwrite.is_error).toBe(true);
+    expect(overwrite.outcome).toBe("system");
     expect(String(overwrite.content)).toContain("Read");
   });
 
   it("rejects paths that escape the repository", async () => {
     const result = await run("Read", { path: "../../etc/passwd" });
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("escapes the repository");
   });
 
   it("the first Bash result opens with the provision-time install note, later ones don't", async () => {
     // This fixture has no lockfile, so the note is the honest skip variant.
     const first = await run("Bash", { command: "echo one" });
-    expect(first.is_error).toBeUndefined();
+    expect(first.outcome).toBeUndefined();
     const firstOut = (first.content as { output: string }).output;
     expect(firstOut).toContain("No Node lockfile");
     expect(firstOut).toContain("ok output");
@@ -316,7 +329,7 @@ describe("repo tools through registry dispatch", () => {
 
   it("execs in the container with its own timeout when that is under the ceiling", async () => {
     const result = await run("Bash", { command: "pnpm test" });
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
     const outcome = result.content as { exitCode: number; output: string };
     expect(outcome.exitCode).toBe(0);
     expect(outcome.output).toContain("ok output");
@@ -343,10 +356,10 @@ describe("repo tools through registry dispatch", () => {
 
   it("rejects a cwd that escapes and re-roots a valid one at /workspace", async () => {
     const escape = await run("Bash", { command: "ls", cwd: "../.." });
-    expect(escape.is_error).toBe(true);
+    expect(escape.outcome).toBe("system");
 
     const scoped = await run("Bash", { command: "ls", cwd: "src" });
-    expect(scoped.is_error).toBeUndefined();
+    expect(scoped.outcome).toBeUndefined();
     expect(dockerState.execCwds.at(-1)).toBe("/workspace/src");
   });
 });

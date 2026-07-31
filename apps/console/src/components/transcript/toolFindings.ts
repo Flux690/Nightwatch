@@ -213,6 +213,13 @@ const FORMATTERS: Record<string, Formatter> = {
   },
 };
 
+// A PR that opened renders as its own card, so this row is only ever reached by
+// the outcome that did not: the message is the whole answer.
+FORMATTERS["OpenPullRequest"] = (r) => {
+  const message = str(r, "message");
+  return message === null ? null : { text: clip(message), tone: "normal" };
+};
+
 // Prometheus and Loki share a series shape, and an empty result is the finding
 // that matters: it usually means the query named a metric that does not exist,
 // which is otherwise invisible until the report has no chart in it.

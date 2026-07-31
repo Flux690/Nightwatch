@@ -104,6 +104,16 @@ repo.yarnpkg.com',
     UNIQUE(session_id, seq)
   );
 
+  -- How a tool call ended, as the API classified it. It cannot ride the vendor
+  -- message the transcript is rebuilt from, so it is a session's own record and
+  -- cascades with it: it describes that transcript and nothing else.
+  CREATE TABLE IF NOT EXISTS tool_outcomes (
+    session_id  TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    tool_use_id TEXT NOT NULL,
+    outcome     TEXT NOT NULL,
+    PRIMARY KEY (session_id, tool_use_id)
+  );
+
   CREATE TABLE IF NOT EXISTS pending_human_input (
     session_id        TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
     tool_use_id       TEXT NOT NULL,

@@ -152,6 +152,7 @@ describe("ReportPanel", () => {
             toolName: "RestartDockerService",
             status: "executed",
             resolvedBy: "operator",
+            result: '{"restarted":true}',
             createdAt: "2026-07-26T17:43:00.000Z",
             resolvedAt: "2026-07-26T17:43:02.000Z",
           },
@@ -162,8 +163,21 @@ describe("ReportPanel", () => {
             toolName: "DockerBash",
             status: "rejected",
             resolvedBy: "operator",
+            result: null,
             createdAt: "2026-07-26T17:44:00.000Z",
             resolvedAt: "2026-07-26T17:44:01.000Z",
+          },
+          {
+            sessionId: "s1",
+            toolUseId: "tu-3",
+            serviceIdentityKey: null,
+            toolName: "OpenPullRequest",
+            status: "failed",
+            resolvedBy: "agent",
+            result:
+              "There is nothing to propose: this branch has no commits against the base branch.",
+            createdAt: "2026-07-26T17:45:00.000Z",
+            resolvedAt: "2026-07-26T17:45:01.000Z",
           },
         ]}
       />,
@@ -174,6 +188,10 @@ describe("ReportPanel", () => {
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("Declined")).toBeInTheDocument();
     expect(screen.getAllByText(/by operator/)).toHaveLength(2);
+
+    // A failure states its cause; a success does not repeat its own output here.
+    expect(screen.getByText(/nothing to propose/)).toBeInTheDocument();
+    expect(screen.queryByText(/restarted/)).not.toBeInTheDocument();
   });
 
   it("omits the actions section entirely when nothing ran", () => {

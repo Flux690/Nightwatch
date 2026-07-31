@@ -156,7 +156,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"}' },
       mintSession(ALERT),
     );
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("permission");
     expect(String(result.content)).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
@@ -181,7 +181,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"} |= "error"' },
       mintSession(ALERT),
     );
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
 
     const req = mock.requests[0]!;
     expect(req.path).toBe("/loki/api/v1/query_range");
@@ -286,7 +286,7 @@ describe("Loki tools through the tool dispatch", () => {
     mock.status = "error";
     mock.errorText = "parse error at line 1: unexpected }";
     const result = await executeTool(logs, { query: "{" }, mintSession(ALERT));
-    expect(result.is_error).toBe(true);
+    expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("parse error");
   });
 

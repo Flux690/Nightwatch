@@ -1,5 +1,7 @@
 import { executeTool } from "./tools/toolset.js";
+import { isToolFailure } from "./tools/types.js";
 import type { Tool, ToolDispatchContext } from "./tools/types.js";
+import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { REPORT_TOOL_SCHEMA } from "./prompts/report.js";
 import { evidenceOrdinals, stampEvidence, stripEvidenceTag } from "./report.js";
 import { publishTranscriptItem } from "../session/stream.js";
@@ -53,6 +55,7 @@ export async function processToolUses(params: {
         content: `Tool "${tool.name}" is not available in this investigation. Do not retry.`,
         is_error: true,
       });
+      recordToolOutcome(sessionId, tool.id, "system");
       continue;
     }
 
@@ -65,6 +68,7 @@ export async function processToolUses(params: {
           content: "Another gated action is pending. Retry after it resolves.",
           is_error: true,
         });
+        recordToolOutcome(sessionId, tool.id, "system");
         continue;
       }
 
@@ -99,8 +103,11 @@ export async function processToolUses(params: {
         ordinal === undefined || tool.name === REPORT_TOOL_SCHEMA.name
           ? content
           : stampEvidence(content, ordinal),
-      is_error: result.is_error,
+      is_error: isToolFailure(result.outcome),
     });
+    if (result.outcome !== undefined) {
+      recordToolOutcome(sessionId, tool.id, result.outcome);
+    }
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
@@ -109,7 +116,11 @@ export async function processToolUses(params: {
         input: tool.input,
         // The same string the transcript fetch would show, tag stripped, so a
         // reload cannot render this result differently from the live card.
-        state: { phase: "complete", result: stripEvidenceTag(content) },
+        state: {
+          phase: "complete",
+          result: stripEvidenceTag(content),
+          ...(result.outcome !== undefined && { outcome: result.outcome }),
+        },
       }),
     });
   }

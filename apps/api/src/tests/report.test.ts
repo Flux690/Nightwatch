@@ -263,7 +263,7 @@ describe("report storage and enrichment", () => {
       },
       { sessionId, toolUseId: "tu-report", toolCallCeilingMs: 15_000 },
     );
-    expect(result.is_error).toBeUndefined();
+    expect(result.outcome).toBeUndefined();
 
     const report = getReport(sessionId)!;
     expect(report.status).toBe("root_cause_identified");

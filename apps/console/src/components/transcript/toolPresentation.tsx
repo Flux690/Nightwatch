@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/lib/iconProps";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
-import type { ToolCardItem } from "./types.js";
+import type { ToolCallState, ToolCardItem, ToolOutcome } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { findingFor, formatBytes } from "./toolFindings.js";
@@ -38,6 +38,12 @@ function targetOf(input: Record<string, unknown>): string | null {
   return inputString(input, "server");
 }
 
+function outcomeOf(state: ToolCallState): ToolOutcome | undefined {
+  return state.phase === "complete" || state.phase === "resolved"
+    ? state.outcome
+    : undefined;
+}
+
 function parseResult(result: unknown): Record<string, unknown> | null {
   let value = result;
   if (typeof value === "string") {
@@ -59,6 +65,25 @@ function stringList(value: unknown): string[] {
 }
 
 const MONO = "font-mono text-sm leading-relaxed";
+
+/* What a non-success reads as. The word carries the distinction and the colour
+   only reinforces it, so a permission failure and a crash never look alike. A
+   miss is deliberately unlabelled and unmuted-red: the tool worked. */
+const OUTCOME_LABEL: Record<ToolOutcome, string> = {
+  partial: "Some runners failed",
+  expected_miss: "",
+  retryable: "Unavailable",
+  permission: "Permission denied",
+  system: "Failed",
+};
+
+const OUTCOME_TONE: Record<ToolOutcome, string> = {
+  partial: "text-wait",
+  expected_miss: "text-muted-foreground",
+  retryable: "text-wait",
+  permission: "text-wait",
+  system: "text-fail",
+};
 
 // Capped text with an explicit, counted opt-in. "Show all" reveals exactly what
 // the runner returned, already redacted and already size-capped upstream.
@@ -281,6 +306,17 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   const running = result === null;
   const finding = findingFor(toolName, result);
   const target = targetOf(input) ?? inputString(input, "path");
+  const outcome = outcomeOf(item.state);
+  // The class outranks the finding's own tone: the finding is read off the
+  // result, and a result that never arrived has nothing to read.
+  const tone =
+    outcome !== undefined
+      ? OUTCOME_TONE[outcome]
+      : finding?.tone === "bad"
+        ? "text-fail"
+        : "text-muted-foreground";
+  const label = outcome === undefined ? "" : OUTCOME_LABEL[outcome];
+  const summary = [label, finding?.text].filter(Boolean).join(" · ");
 
   return (
     // Anchor for the report's evidence links: a citation there names the tool
@@ -309,18 +345,13 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
             {target}
           </span>
         )}
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm",
-            finding?.tone === "bad" ? "text-fail" : "text-muted-foreground",
-          )}
-        >
+        <span className={cn("min-w-0 flex-1 truncate text-sm", tone)}>
           {running ? (
             <span data-testid="tool-card-pending" className="animate-pulse">
               running
             </span>
           ) : (
-            finding?.text
+            summary
           )}
         </span>
         {!running && (

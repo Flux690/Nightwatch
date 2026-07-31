@@ -1,9 +1,18 @@
-import type { Platform } from "@nightwarden/shared";
+import type { Platform, ToolOutcome } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
 
 export interface ToolExecuteResult {
   content: unknown;
-  is_error?: boolean;
+  // Absent means the call answered. Every failure path names its class instead
+  // of a boolean, and the wire's is_error is derived from it below, so the two
+  // can never disagree about whether something went wrong.
+  outcome?: ToolOutcome;
+}
+
+// A fan-out where some runners answered still carries an answer; everything
+// else the model must read as an error.
+export function isToolFailure(outcome: ToolOutcome | undefined): boolean {
+  return outcome !== undefined && outcome !== "partial";
 }
 
 interface ToolCallIdentity {

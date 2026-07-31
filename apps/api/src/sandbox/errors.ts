@@ -8,6 +8,17 @@ export class SandboxUnavailableError extends Error {
   }
 }
 
+// The tool worked and the file is not there, which is an ordinary answer while
+// exploring a repository - typed so it can be told apart from a fault.
+export class FileNotFoundError extends Error {
+  constructor(readonly path: string) {
+    super(
+      `File not found in the repository: ${path}. Check the path with Bash (ls, git ls-files).`,
+    );
+    this.name = "FileNotFoundError";
+  }
+}
+
 export class PathEscapeError extends Error {
   constructor(readonly path: string) {
     super(`Path escapes the repository: ${path}`);

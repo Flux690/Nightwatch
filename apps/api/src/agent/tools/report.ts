@@ -22,7 +22,7 @@ export const REPORT_TOOLS: Tool[] = [
         return {
           content:
             "Invalid report shape. Send the COMPLETE report matching the UpdateReport schema.",
-          is_error: true,
+          outcome: "system",
         };
       }
       const index = buildEvidenceIndex(ctx.sessionId);

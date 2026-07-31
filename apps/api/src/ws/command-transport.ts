@@ -24,6 +24,15 @@ interface PendingCommand {
 
 const pending = new Map<string, PendingCommand>();
 
+// The runner never answered - its socket closed or the command ran out of time.
+// Worth retrying, which is not true of a failure the runner reported back.
+export class RunnerUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RunnerUnreachableError";
+  }
+}
+
 export function resolveCommand(payload: RunnerResultMessage["payload"]): void {
   const entry = pending.get(payload.correlationId);
   if (!entry) {
@@ -52,7 +61,7 @@ export function rejectPendingForConnection(conn: RunnerConnection): void {
     clearTimeout(entry.timer);
     pending.delete(correlationId);
     entry.reject(
-      new Error(
+      new RunnerUnreachableError(
         `Command ${entry.commandName} failed: runner disconnected before responding`,
       ),
     );
@@ -77,7 +86,9 @@ function dispatch(
     const timer = setTimeout(() => {
       pending.delete(correlationId);
       reject(
-        new Error(`Command ${commandName} timed out after ${timeoutMs}ms`),
+        new RunnerUnreachableError(
+          `Command ${commandName} timed out after ${timeoutMs}ms`,
+        ),
       );
     }, timeoutMs);
 
@@ -111,7 +122,13 @@ export async function sendFleetCommand(
   commandInput: Record<string, unknown>,
   platform: Platform,
   timeoutMs = 15_000,
-): Promise<{ envelope: FleetResult<unknown>; anySucceeded: boolean }> {
+): Promise<{
+  envelope: FleetResult<unknown>;
+  // Counted rather than flagged: the caller has to tell a partial answer from a
+  // clean one and from a dead fan-out, which one boolean cannot say.
+  succeeded: number;
+  failed: number;
+}> {
   const conns = resolveByRunner(commandInput, platform);
   const { runner: _runner, ...payloadInput } = commandInput;
 
@@ -119,11 +136,11 @@ export async function sendFleetCommand(
     conns.map((conn) => dispatch(conn, commandName, payloadInput, timeoutMs)),
   );
 
-  let anySucceeded = false;
+  let succeeded = 0;
   const byRunner = settled.map((outcome, i) => {
     const runner = addressName(conns[i]!) ?? conns[i]!.runnerId;
     if (outcome.status === "fulfilled") {
-      anySucceeded = true;
+      succeeded++;
       return { runner, result: outcome.value };
     }
     // One runner's failure is that entry's result, not the whole call's: the
@@ -133,5 +150,9 @@ export async function sendFleetCommand(
     return { runner, result: `Error: ${message}` };
   });
 
-  return { envelope: { byRunner }, anySucceeded };
+  return {
+    envelope: { byRunner },
+    succeeded,
+    failed: byRunner.length - succeeded,
+  };
 }

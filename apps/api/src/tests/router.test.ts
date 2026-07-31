@@ -306,15 +306,15 @@ describe("router", () => {
         const ok = connect("web-01", ["nginx"], { serverName: "prod-1" });
         connect("web-02", ["nginx"], { serverName: "prod-2", silent: true });
 
-        const { envelope, anySucceeded } = await sendFleetCommand(
-          "GetHostDisk",
-          {},
-          "docker",
-          20,
-        );
+        const {
+          envelope,
+          succeeded,
+          failed: failedCount,
+        } = await sendFleetCommand("GetHostDisk", {}, "docker", 20);
 
         expect(ok.commands).toHaveLength(1);
-        expect(anySucceeded).toBe(true);
+        expect(succeeded).toBe(1);
+        expect(failedCount).toBe(1);
         const failed = envelope.byRunner.find((e) => e.runner === "prod-2");
         expect(failed?.result).toMatch(/timed out/);
       });
@@ -323,14 +323,14 @@ describe("router", () => {
         connect("web-01", ["nginx"], { serverName: "prod-1", silent: true });
         connect("web-02", ["nginx"], { serverName: "prod-2", silent: true });
 
-        const { anySucceeded, envelope } = await sendFleetCommand(
+        const { succeeded, envelope } = await sendFleetCommand(
           "GetHostDisk",
           {},
           "docker",
           20,
         );
 
-        expect(anySucceeded).toBe(false);
+        expect(succeeded).toBe(0);
         expect(envelope.byRunner).toHaveLength(2);
       });
     });

@@ -1,10 +1,25 @@
-import { sendCommand, sendFleetCommand } from "../ws/command-transport.js";
+import {
+  RunnerUnreachableError,
+  sendCommand,
+  sendFleetCommand,
+} from "../ws/command-transport.js";
+import { NoPlatformRunnerError } from "../ws/router.js";
 import { logger } from "../logger.js";
+import type { ToolOutcome } from "@nightwarden/shared";
 import type {
   Tool,
   ToolExecuteContext,
   ToolExecuteResult,
 } from "./tools/types.js";
+
+// A runner that never answered may answer next time; anything the runner itself
+// reported back, or a routing mistake, will not change on a retry.
+function classifyRunnerError(err: unknown): ToolOutcome {
+  return err instanceof RunnerUnreachableError ||
+    err instanceof NoPlatformRunnerError
+    ? "retryable"
+    : "system";
+}
 
 // Single dispatch + error-formatting primitive shared by the loop's read path and the
 // resolver's approve path, so error format and logging never drift apart.
@@ -18,20 +33,24 @@ export async function executeRunnerTool(
     if (tool.routeBy === "service") {
       return { content: await sendCommand(name, input, ctx.toolTimeoutMs) };
     }
-    const { envelope, anySucceeded } = await sendFleetCommand(
+    const { envelope, succeeded, failed } = await sendFleetCommand(
       name,
       input,
       tool.platform,
       ctx.toolTimeoutMs,
     );
-    // One runner failing inside a fan-out is that entry's result. Every runner
-    // failing is the call failing, so it must not render as a green row.
-    return anySucceeded
-      ? { content: envelope }
-      : { content: envelope, is_error: true };
+    // A fan-out has three answers, not two: every runner answered, some did, or
+    // none did. Each runner's own reason rides in the envelope either way.
+    if (failed === 0) return { content: envelope };
+    return succeeded > 0
+      ? { content: envelope, outcome: "partial" }
+      : { content: envelope, outcome: "system" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn({ tool: name, err }, "runner tool failed");
-    return { content: `Error executing ${name}: ${msg}`, is_error: true };
+    return {
+      content: `Error executing ${name}: ${msg}`,
+      outcome: classifyRunnerError(err),
+    };
   }
 }

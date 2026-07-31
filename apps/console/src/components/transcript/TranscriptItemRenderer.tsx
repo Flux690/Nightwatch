@@ -47,6 +47,21 @@ function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   );
 }
 
+// NightWarden speaking about the run, not the agent speaking. The heading says
+// whose problem it is before the sentence explains which one.
+function ErrorNotice({ text }: { text: string }): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      data-testid="error-notice"
+      className="animate-in fade-in flex flex-col gap-1 rounded-md border border-fail bg-fail-tint px-3 py-2 duration-300"
+    >
+      <span className="text-sm font-medium text-fail">The run stopped</span>
+      <p className="m-0 text-sm whitespace-pre-wrap">{text}</p>
+    </div>
+  );
+}
+
 function ThinkingBlock({
   item,
 }: {
@@ -121,8 +136,11 @@ export function TranscriptItemRenderer({
     case "agent_text":
       return <AgentMarkdown text={item.text} />;
     case "error_text":
-      // User's explicit choice: failures read like any other agent message.
-      return <AgentMarkdown text={item.text} />;
+      // Reversing the earlier choice to render these exactly like agent text:
+      // the text is already status-specific - 401 says the key was rejected,
+      // 429 says rate-limited - and prose erased the distinction, so a provider
+      // outage read as the agent reasoning badly.
+      return <ErrorNotice text={item.text} />;
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":

@@ -140,6 +140,7 @@ export type {
 } from "./messages.js";
 export { messagePartsToText } from "./messages.js";
 export type {
+  ToolOutcome,
   ToolCallState,
   Citation,
   UserTurnItem,
@@ -152,7 +153,11 @@ export type {
   ContinueCardItem,
   TranscriptItem,
 } from "./transcript.js";
-export { transcriptItemKey } from "./transcript.js";
+export {
+  transcriptItemKey,
+  TOOL_OUTCOMES,
+  isToolOutcome,
+} from "./transcript.js";
 export type {
   ReportStatus,
   HypothesisState,

@@ -23,6 +23,7 @@ function action(
     toolName: "RestartDockerService",
     status: "executed",
     resolvedBy: "console",
+    result: null,
     createdAt: new Date().toISOString(),
     resolvedAt: new Date().toISOString(),
     ...overrides,

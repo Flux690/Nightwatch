@@ -203,7 +203,9 @@ export function countExecutedRemediations(params: {
 }
 
 // Row to wire shape. Shared by the audit log and the session report so the two
-// views of one action can never drift apart.
+// views of one action can never drift apart. A write is addressed by its target
+// key, and that is what the audit names: which runner happened to serve it is a
+// routing detail that can differ between two attempts on the same service.
 export function toActionRecord(
   action: RemediationAction,
 ): RemediationActionRecord {
@@ -214,6 +216,7 @@ export function toActionRecord(
     toolName: action.toolName,
     status: action.status,
     resolvedBy: action.resolvedBy,
+    result: action.result,
     createdAt: action.createdAt,
     resolvedAt: action.resolvedAt,
   };

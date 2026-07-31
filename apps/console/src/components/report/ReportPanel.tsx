@@ -377,24 +377,33 @@ export function ReportPanel({
           <SectionHeading>Actions taken</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {actions.map((action) => (
-              <li key={action.toolUseId} className="flex items-baseline gap-2">
-                <StatusText tone={ACTION_TONE[action.status]}>
-                  {ACTION_LABEL[action.status]}
-                </StatusText>
-                <span className="min-w-0 flex-1 truncate font-mono text-sm">
-                  {action.toolName}
-                  {action.serviceIdentityKey ? (
-                    <span className="text-muted-foreground">
-                      {" "}
-                      {action.serviceIdentityKey}
-                    </span>
-                  ) : null}
-                </span>
-                {action.resolvedBy && (
-                  <span className="shrink-0 text-sm text-ink-subtle">
-                    {action.status === "rejected" ? "declined" : "approved"} by{" "}
-                    {action.resolvedBy}
+              <li key={action.toolUseId}>
+                <div className="flex items-baseline gap-2">
+                  <StatusText tone={ACTION_TONE[action.status]}>
+                    {ACTION_LABEL[action.status]}
+                  </StatusText>
+                  <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                    {action.toolName}
+                    {action.serviceIdentityKey ? (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        {action.serviceIdentityKey}
+                      </span>
+                    ) : null}
                   </span>
+                  {action.resolvedBy && (
+                    <span className="shrink-0 text-sm text-ink-subtle">
+                      {action.status === "rejected" ? "declined" : "approved"}{" "}
+                      by {action.resolvedBy}
+                    </span>
+                  )}
+                </div>
+                {/* Only on a failure: on a success the detail is the PR or the
+                    command's own output, which the transcript already shows. */}
+                {action.status === "failed" && action.result && (
+                  <p className="m-0 mt-0.5 text-sm text-muted-foreground">
+                    {action.result}
+                  </p>
                 )}
               </li>
             ))}

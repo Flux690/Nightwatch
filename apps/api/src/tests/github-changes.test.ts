@@ -170,7 +170,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    expect(outcome.is_error).toBeUndefined();
+    expect(outcome.outcome).toBeUndefined();
     const result = outcome.content as GetRecentChangesResult;
     expect(result.branch).toBe("main");
     expect(result.windowStart).toBe(WINDOW_START_24H);
@@ -266,7 +266,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    expect(outcome.is_error).toBeUndefined();
+    expect(outcome.outcome).toBeUndefined();
     const result = outcome.content as GetRecentChangesResult;
     expect(result.pullRequests).toEqual([]);
     expect(result.commits).toHaveLength(1);
@@ -281,7 +281,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    expect(outcome.is_error).toBeUndefined();
+    expect(outcome.outcome).toBeUndefined();
     const result = outcome.content as GetRecentChangesResult;
     expect(result.commits).toEqual([]);
   });
@@ -294,7 +294,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    expect(outcome.is_error).toBe(true);
+    expect(outcome.outcome).toBe("retryable");
     expect(outcome.content).toContain(
       "Continue the investigation without recent-change context",
     );
@@ -306,7 +306,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    expect(outcome.is_error).toBe(true);
+    expect(outcome.outcome).toBe("permission");
     expect(outcome.content).toContain("not configured");
     expect(mock.requests).toEqual([]);
   });

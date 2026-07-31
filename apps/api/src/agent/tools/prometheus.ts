@@ -57,20 +57,27 @@ function notConfigured(): ToolExecuteResult {
   return {
     content:
       "Prometheus integration is not configured. The operator can connect it from the Integrations page. Continue without metric evidence.",
-    is_error: true,
+    outcome: "permission",
   };
 }
 
 function corrective(err: unknown): ToolExecuteResult {
-  const detail =
-    err instanceof PrometheusApiError
-      ? err.code === "bad_query"
-        ? `Prometheus rejected the query: ${err.message}. Fix the PromQL and retry.`
-        : `Prometheus request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`
-      : err instanceof Error
-        ? err.message
-        : String(err);
-  return { content: detail, is_error: true };
+  if (err instanceof PrometheusApiError) {
+    if (err.code === "bad_query") {
+      return {
+        content: `Prometheus rejected the query: ${err.message}. Fix the PromQL and retry.`,
+        outcome: "system",
+      };
+    }
+    return {
+      content: `Prometheus request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`,
+      outcome: err.code === "unauthorized" ? "permission" : "retryable",
+    };
+  }
+  return {
+    content: err instanceof Error ? err.message : String(err),
+    outcome: "system",
+  };
 }
 
 export const PROMETHEUS_TOOLS: Tool[] = [
@@ -104,7 +111,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a PromQL string", is_error: true };
+        return { content: "query must be a PromQL string", outcome: "system" };
       }
       try {
         const data = await instantQuery(
@@ -163,7 +170,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
       if (integration === null) return notConfigured();
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a PromQL string", is_error: true };
+        return { content: "query must be a PromQL string", outcome: "system" };
       }
 
       const anchor = alertAnchorFor(ctx.sessionId);

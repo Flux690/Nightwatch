@@ -42,7 +42,7 @@ export const INTERRUPT_TOOLS: Tool[] = [
     execute: async () => ({
       content:
         "AskUserQuestion is an interrupt and cannot be executed directly.",
-      is_error: true,
+      outcome: "system",
     }),
   },
 ];

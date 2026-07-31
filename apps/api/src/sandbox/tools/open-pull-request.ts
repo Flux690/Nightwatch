@@ -1,19 +1,24 @@
 import {
   changedFiles,
   commitAll,
+  commitsAgainstBase,
   hasUnpushedWork,
   isDirty,
   push,
 } from "../git.js";
 import type { Workspace } from "../workspace.js";
 
-export interface OpenPullRequestOutcome {
-  action: "created" | "updated";
-  number: number;
-  url: string;
-  draft: boolean;
-  message: string;
-}
+export type OpenPullRequestOutcome =
+  | {
+      action: "created" | "updated";
+      number: number;
+      url: string;
+      draft: boolean;
+      message: string;
+    }
+  // No commits between the branch and its base. GitHub answers this with a bare
+  // 422 that reads as a broken token, so it is answered here instead.
+  | { action: "nothing_to_propose"; message: string };
 
 export interface OpenPullRequestHooks {
   // Host-side write-ahead audit. False means this tool_use already ran
@@ -42,6 +47,12 @@ export async function openPullRequest(
   try {
     if (await isDirty(ws.dir)) {
       await commitAll(ws.dir, input.title, ws.options.commitAuthor);
+    }
+    if ((await commitsAgainstBase(ws.dir)) === 0) {
+      const message =
+        "There is nothing to propose: this branch has no commits against the base branch. Make the change with Edit or Write first, then call OpenPullRequest.";
+      hooks.settleAudit(false, message);
+      return { action: "nothing_to_propose", message };
     }
     const files = await changedFiles(ws.dir);
     const body = hooks.composeBody(files);

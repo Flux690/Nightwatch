@@ -1,3 +1,4 @@
+import type { ToolOutcome } from "@nightwarden/shared";
 import { decrypt } from "../../secrets.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
 import { alertAnchorFor } from "./alert-anchor.js";
@@ -56,6 +57,43 @@ function isPermissionStatus(err: unknown): boolean {
   return (
     err instanceof GitHubApiError && (err.status === 403 || err.status === 404)
   );
+}
+
+// GitHub already tells us which kind of failure this is; the operator's next
+// move differs entirely between reconnecting a token and waiting out a 502, so
+// the code is what decides the class rather than the fact that something threw.
+export function classifyGitHubError(err: unknown): ToolOutcome {
+  if (!(err instanceof GitHubApiError)) return "system";
+  switch (err.code) {
+    case "invalid_token":
+    case "sso_required":
+      return "permission";
+    case "repo_not_found":
+      return "expected_miss";
+    case "network":
+      // 0 is the fetch never leaving; GitHub answers a scope it does not grant
+      // with 404 as readily as with 403, so both are the operator's to widen.
+      if (err.status === 0 || err.status >= 500) return "retryable";
+      return err.status === 403 || err.status === 404 ? "permission" : "system";
+  }
+}
+
+// The sentence follows the same code the class does, so what the model is told
+// and what the operator sees can never point at different causes.
+export function gitHubErrorDetail(err: GitHubApiError): string {
+  switch (err.code) {
+    case "invalid_token":
+      return `GitHub rejected the token: ${err.message}. The operator must reconnect the repository on the Integrations page.`;
+    case "sso_required":
+      return `GitHub requires SSO authorization for this token: ${err.message}. The operator must authorize it on GitHub, then retry.`;
+    case "repo_not_found":
+      return `GitHub has no such repository, or this token cannot see it: ${err.message}.`;
+    case "network":
+      if (err.status === 403 || err.status === 404) {
+        return `GitHub would not serve this: ${err.message}. The token authenticated, so this is its repository permissions rather than the credential.`;
+      }
+      return `GitHub could not serve the request: ${err.message}. The token authenticated; this is not a credentials problem.`;
+  }
 }
 
 async function pullRequestsWithFiles(
@@ -146,7 +184,7 @@ export const GITHUB_TOOLS: Tool[] = [
         return {
           content:
             "GitHub integration is not configured. The operator can connect a repository from the Integrations page. Continue without recent-change context.",
-          is_error: true,
+          outcome: "permission",
         };
       }
       const { repoOwner, repoName } = integration;
@@ -201,13 +239,13 @@ export const GITHUB_TOOLS: Tool[] = [
       } catch (err) {
         const detail =
           err instanceof GitHubApiError
-            ? `GitHub request failed: ${err.message}. If the token is invalid or expired the operator must reconnect on the Integrations page.`
+            ? gitHubErrorDetail(err)
             : err instanceof Error
               ? err.message
               : String(err);
         return {
           content: `${detail} Continue the investigation without recent-change context.`,
-          is_error: true,
+          outcome: classifyGitHubError(err),
         };
       }
     },

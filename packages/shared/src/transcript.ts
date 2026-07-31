@@ -4,6 +4,30 @@ import type { ApprovalStatus } from "./approvals.js";
 // with whatever the session is suspended on. The browser draws these; it never
 // works out what state a tool call is in.
 
+// Why a call did not simply answer, absent when it did. The console renders on
+// this rather than on a boolean, so a file that turned out to have a different
+// name reads as a miss instead of in the same red as a crash.
+// The list is the single definition and the type is derived from it, so a
+// reader checking a stored value against the classes cannot drift from them.
+export const TOOL_OUTCOMES = [
+  // Some runners in a fan-out answered and some did not; the envelope names which.
+  "partial",
+  // The tool worked and the thing asked for is not there.
+  "expected_miss",
+  // Transient: a timeout, an unreachable runner, an upstream that may recover.
+  "retryable",
+  // Credentials or scope refused it, so widening access is the fix.
+  "permission",
+  // The tool itself broke.
+  "system",
+] as const;
+
+export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
+
+export function isToolOutcome(value: unknown): value is ToolOutcome {
+  return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
+}
+
 // Explicit rather than an optional field, so "not set" is never a meaning. A
 // decision in flight is the component's own concern and never appears here.
 export type ToolCallState =
@@ -15,8 +39,9 @@ export type ToolCallState =
       decision: ApprovalStatus;
       by?: string;
       result?: unknown;
+      outcome?: ToolOutcome;
     }
-  | { phase: "complete"; result: unknown };
+  | { phase: "complete"; result: unknown; outcome?: ToolOutcome };
 
 // A resolved [evidence: eN] marker: the tool call it points at. Markers that
 // resolve to nothing are left as literal text rather than linked.

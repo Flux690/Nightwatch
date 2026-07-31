@@ -7,13 +7,24 @@ import type { PendingHumanInputWithSession } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
+import { isToolFailure } from "../agent/tools/types.js";
+import { recordToolOutcome } from "../db/tool-outcomes.js";
+import type { ToolOutcome } from "@nightwarden/shared";
 
-// Never throws: any fault becomes an is_error result so the run resumes
-// instead of the card wedging.
+// What the model is sent back, and how the console draws the settled card. The
+// two travel together so the transcript cannot say "failed" where the model was
+// told otherwise.
+export interface ApprovedToolResult {
+  result: ToolResult;
+  outcome?: ToolOutcome;
+}
+
+// Never throws: any fault becomes a failure result so the run resumes instead
+// of the card wedging.
 export async function executeApprovedTool(
   pending: PendingHumanInputWithSession,
   resolvedBy: string,
-): Promise<ToolResult> {
+): Promise<ApprovedToolResult> {
   const { sessionId, toolUseId, toolName, toolInput } = pending;
   try {
     // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict means
@@ -32,11 +43,11 @@ export async function executeApprovedTool(
         { sessionId, tool: toolName, toolUseId },
         "duplicate approve: action previously attempted, skipping execution",
       );
-      return {
-        tool_use_id: toolUseId,
-        content: `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
-        is_error: true,
-      };
+      return failed(
+        sessionId,
+        toolUseId,
+        `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
+      );
     }
 
     const toolEntry = findTool(toolName);
@@ -45,13 +56,9 @@ export async function executeApprovedTool(
         { sessionId, tool: toolName },
         "approved tool not found in registry",
       );
-      const result: ToolResult = {
-        tool_use_id: toolUseId,
-        content: `Tool "${toolName}" not found in registry. Platform configuration error.`,
-        is_error: true,
-      };
-      settleRemediationAction(sessionId, toolUseId, "failed", result.content);
-      return result;
+      const detail = `Tool "${toolName}" not found in registry. Platform configuration error.`;
+      settleRemediationAction(sessionId, toolUseId, "failed", detail);
+      return failed(sessionId, toolUseId, detail);
     }
 
     const execResult = await executeTool(toolEntry, toolInput, {
@@ -59,19 +66,26 @@ export async function executeApprovedTool(
       sessionId,
       toolUseId,
     });
+    const isFailure = isToolFailure(execResult.outcome);
     settleRemediationAction(
       sessionId,
       toolUseId,
-      execResult.is_error ? "failed" : "executed",
+      isFailure ? "failed" : "executed",
       execResult.content,
     );
+    if (execResult.outcome !== undefined) {
+      recordToolOutcome(sessionId, toolUseId, execResult.outcome);
+    }
     return {
-      tool_use_id: toolUseId,
-      content:
-        typeof execResult.content === "string"
-          ? execResult.content
-          : JSON.stringify(execResult.content),
-      is_error: execResult.is_error,
+      result: {
+        tool_use_id: toolUseId,
+        content:
+          typeof execResult.content === "string"
+            ? execResult.content
+            : JSON.stringify(execResult.content),
+        is_error: isFailure,
+      },
+      ...(execResult.outcome !== undefined && { outcome: execResult.outcome }),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -85,10 +99,30 @@ export async function executeApprovedTool(
       // The write-ahead row may not exist (the insert itself failed). Nothing
       // to settle; the run still resumes with the failure result below.
     }
-    return {
-      tool_use_id: toolUseId,
-      content: `Action failed to execute: ${msg}. No confirmed change was made. Reassess and decide whether to retry or escalate to the operator.`,
-      is_error: true,
-    };
+    return failed(
+      sessionId,
+      toolUseId,
+      `Action failed to execute: ${msg}. No confirmed change was made. Reassess and decide whether to retry or escalate to the operator.`,
+    );
   }
+}
+
+// The approve path's own faults: the write never reached its tool, so the class
+// is the harness breaking rather than anything the operator can widen or wait out.
+function failed(
+  sessionId: string,
+  toolUseId: string,
+  content: string,
+): ApprovedToolResult {
+  try {
+    recordToolOutcome(sessionId, toolUseId, "system");
+  } catch (err) {
+    // This path is already handling a fault, and a wedged card is worse than a
+    // reloaded row that renders unclassified. The live card still shows it.
+    logger.warn({ err, sessionId, toolUseId }, "tool outcome not recorded");
+  }
+  return {
+    result: { tool_use_id: toolUseId, content, is_error: true },
+    outcome: "system",
+  };
 }

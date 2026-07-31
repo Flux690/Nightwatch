@@ -1,10 +1,13 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { TestProviders } from "./renderWithProviders.js";
 
 import { TranscriptItemRenderer } from "@/components/transcript/TranscriptItemRenderer";
-import type { TranscriptItem } from "@/components/transcript/types";
+import type {
+  ToolOutcome,
+  TranscriptItem,
+} from "@/components/transcript/types";
 
 function wrap(
   item: TranscriptItem,
@@ -352,6 +355,71 @@ describe("TranscriptItemRenderer", () => {
 
       await user.click(screen.getByRole("button", { name: /show all 12/i }));
       expect(screen.getByText(/line-12/)).toBeInTheDocument();
+    });
+  });
+
+  describe("outcome classes", () => {
+    function finding(
+      outcome: ToolOutcome | undefined,
+      result: unknown,
+    ): HTMLElement {
+      wrap({
+        kind: "tool_card",
+        toolUseId: `tu-${outcome ?? "ok"}`,
+        toolName: "Read",
+        input: { path: "docker-compose.yml" },
+        state: {
+          phase: "complete",
+          result,
+          ...(outcome !== undefined && { outcome }),
+        },
+      });
+      // The finding is the row's third span: name, target, then the answer.
+      return screen.getByRole("button", { name: /Read/ })
+        .children[2] as HTMLElement;
+    }
+
+    it("reads a missing file as ordinary muted text, not as a failure", () => {
+      const cell = finding(
+        "expected_miss",
+        "File not found in the repository: docker-compose.yml.",
+      );
+      expect(cell).toHaveClass("text-muted-foreground");
+      expect(cell.textContent).toContain("File not found");
+      expect(cell.textContent).not.toContain("Failed");
+    });
+
+    it("tells a permission failure apart from a crashed tool by word and colour", () => {
+      const denied = finding("permission", "GitHub rejected the token.");
+      expect(denied.textContent).toContain("Permission denied");
+      expect(denied).toHaveClass("text-wait");
+
+      cleanup();
+      const crashed = finding("system", "Error executing Read: boom");
+      expect(crashed.textContent).toContain("Failed");
+      expect(crashed).toHaveClass("text-fail");
+    });
+
+    it("says so when only some runners in a fan-out answered", () => {
+      const cell = finding("partial", JSON.stringify({ byRunner: [] }));
+      expect(cell.textContent).toContain("Some runners failed");
+      expect(cell).not.toHaveClass("text-fail");
+    });
+  });
+
+  describe("error_text", () => {
+    it("renders a provider failure as NightWarden's notice, not as the agent talking", () => {
+      wrap({
+        kind: "error_text",
+        id: "err-1",
+        text: "The provider rate-limited the request (HTTP 429).",
+      });
+
+      const notice = screen.getByTestId("error-notice");
+      expect(notice).toHaveTextContent("The run stopped");
+      expect(notice).toHaveTextContent("rate-limited");
+      // An agent message is prose in the flow; this is not one.
+      expect(notice.querySelector(".prose")).toBeNull();
     });
   });
   describe("reveal from the report", () => {

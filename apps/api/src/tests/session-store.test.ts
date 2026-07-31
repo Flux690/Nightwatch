@@ -17,6 +17,8 @@ import {
   deleteSession,
 } from "../db/sessions.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import { recordToolOutcome } from "../db/tool-outcomes.js";
+import { buildTranscript } from "../session/transcript.js";
 import {
   insertExecutingRemediationAction,
   findRemediationAction,
@@ -107,6 +109,32 @@ describe("API-local session store", () => {
     expect(transcript[0].role).toBe("user");
     expect(transcript[1].role).toBe("assistant");
     expect(transcript[0].parts).toEqual([{ type: "text", text: "message 0" }]);
+  });
+
+  it("carries a tool call's outcome class into the rebuilt transcript", () => {
+    // The provider message a reloaded transcript is rebuilt from has nowhere to
+    // put our classification, so a reload would otherwise lose it.
+    const m = meta();
+    createSession(m, alert);
+    appendSessionMessages([
+      {
+        ...msg(m.sessionId, 0, { role: "assistant" }),
+        parts: [
+          { type: "tool_call", id: "tu-miss", name: "Read", input: {} },
+          { type: "tool_result", toolCallId: "tu-miss", output: "not found" },
+        ],
+      },
+    ]);
+    recordToolOutcome(m.sessionId, "tu-miss", "expected_miss");
+
+    const card = buildTranscript(m.sessionId).find(
+      (item) => item.kind === "tool_card",
+    );
+    expect(card?.state).toEqual({
+      phase: "complete",
+      result: "not found",
+      outcome: "expected_miss",
+    });
   });
 
   it("rejects a duplicate (session_id, seq) so a hole can never be re-filled", () => {
