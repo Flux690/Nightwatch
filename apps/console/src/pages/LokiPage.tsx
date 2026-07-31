@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
+import {
+  BackLink,
+  Page,
+  PageHeader,
+  PageTitle,
+} from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
@@ -71,6 +76,7 @@ export function LokiPage(): React.JSX.Element {
 
   return (
     <Page>
+      <BackLink to="/integrations">Integrations</BackLink>
       <PageHeader>
         <PageTitle>Loki</PageTitle>
       </PageHeader>

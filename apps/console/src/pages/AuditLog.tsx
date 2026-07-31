@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
 import type { RemediationActionRecord } from "@nightwarden/shared";
 import { ExternalLink, ScrollText } from "lucide-react";
-import { matchesScope, type AuditScope } from "@/components/layout/AuditRail";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Page,
@@ -32,6 +31,19 @@ import {
 } from "@/components/ui/table";
 import { apiFetch } from "@/api/client";
 import { timeAgo } from "@/lib/time";
+
+type AuditScope = "all" | "executed" | "rejected" | "pull-requests";
+
+// Scope rides the URL so a link can address one slice of the table directly.
+function matchesScope(
+  action: RemediationActionRecord,
+  scope: AuditScope,
+): boolean {
+  if (scope === "executed") return action.status === "executed";
+  if (scope === "rejected") return action.status === "rejected";
+  if (scope === "pull-requests") return action.toolName === "OpenPullRequest";
+  return true;
+}
 
 export function AuditLogPage(): React.JSX.Element {
   const search = useSearch({ strict: false }) as {

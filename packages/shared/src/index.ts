@@ -187,9 +187,6 @@ export type {
   ProviderSettings,
   ProviderSettingsMap,
   ResolvedLLMConfig,
-  ConfigHealthKind,
-  ConfigHealthIssue,
-  ConfigHealth,
 } from "./config.js";
 export type {
   GitHubErrorCode,

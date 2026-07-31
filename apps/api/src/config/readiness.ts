@@ -52,5 +52,5 @@ export function checkLLMReadiness(): LLMReadiness {
 // One wording for every surface that refuses a run, so the console banner, the
 // chat route and the alert webhook all name the same missing pieces.
 export function notConfiguredMessage(missing: LLMRequirement[]): string {
-  return `No language model is configured: choose a ${missing.join(", ")} in console Settings before NightWarden can investigate.`;
+  return `No LLM is configured. NightWarden needs a ${missing.join(", ")} before it can investigate.`;
 }

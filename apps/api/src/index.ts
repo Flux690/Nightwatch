@@ -11,7 +11,6 @@ import { registerAlertRoutes } from "./alerts/ingest.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { seedConfigFromEnv } from "./config/store.js";
 import { seedIntegrationsFromEnv } from "./integrations/seed.js";
-import { registerConfigHealthRoutes } from "./config/health.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerInstallRoutes } from "./runners/install.js";
@@ -75,7 +74,6 @@ await fastify.register(
     await registerConsoleEventRoutes(api);
     await registerAlertRoutes(api);
     await registerConfigRoutes(api);
-    await registerConfigHealthRoutes(api);
     await registerSessionRoutes(api);
     await registerRunnerRoutes(api);
     await registerInstallRoutes(api);

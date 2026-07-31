@@ -1,4 +1,8 @@
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+
 import { Card } from "@/components/ui/card";
+import { ICON_INLINE } from "@/lib/iconProps";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -77,9 +81,24 @@ export function PageTitle({
   );
 }
 
-/* Shared class for a back link (used with router <Link> to keep navigation). */
-export const backLinkClass =
-  "mb-2 inline-flex items-center gap-1 self-start rounded-sm text-sm font-medium text-muted-foreground no-underline hover:text-foreground hover:underline";
+/* The way back up. The catalog is a page, not a rail that stays on screen. */
+export function BackLink({
+  to,
+  children,
+}: {
+  to: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <Link
+      to={to}
+      className="mb-2 inline-flex w-fit items-center gap-1.5 self-start rounded-sm text-sm text-muted-foreground no-underline hover:text-foreground"
+    >
+      <ArrowLeft {...ICON_INLINE} />
+      {children}
+    </Link>
+  );
+}
 
 /* Bordered card wrapper for a data table. */
 export function PageTableWrap({

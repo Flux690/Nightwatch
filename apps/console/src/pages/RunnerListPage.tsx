@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { Platform, RunnerRecord } from "@nightwarden/shared";
-import { Plus } from "lucide-react";
+import { Boxes, Plus, Server } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
@@ -12,8 +12,20 @@ import {
 import { ServerCard, runnerDisplayName } from "@/components/layout/ServerCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
-import { ICON_INLINE } from "@/lib/iconProps";
+import {
+  BackLink,
+  Page,
+  PageHeader,
+  PageTitle,
+} from "@/components/layout/Page";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ICON_DISPLAY, ICON_INLINE } from "@/lib/iconProps";
 import { apiFetch } from "@/api/client";
 
 // The two platforms are genuinely different things - a machine running
@@ -141,6 +153,7 @@ export function RunnerListPage({
 
   return (
     <Page>
+      <BackLink to="/integrations">Integrations</BackLink>
       <PageHeader>
         <PageTitle>{copy.plural}</PageTitle>
         <Button
@@ -196,6 +209,35 @@ export function RunnerListPage({
             <NativeSelectOption value="lastSeen">Last seen</NativeSelectOption>
           </NativeSelect>
         </Field>
+      )}
+
+      {/* An empty fleet is the ordinary first state, so the list says what to
+          do next rather than sending you somewhere. */}
+      {!isLoading && !isError && connected.length === 0 && (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              {platform === "docker" ? (
+                <Server {...ICON_DISPLAY} />
+              ) : (
+                <Boxes {...ICON_DISPLAY} />
+              )}
+            </EmptyMedia>
+            <EmptyTitle>No {copy.plural.toLowerCase()} yet</EmptyTitle>
+            <EmptyDescription>
+              Install a runner to connect your first{" "}
+              {copy.singular.toLowerCase()}. It takes one command.
+            </EmptyDescription>
+          </EmptyHeader>
+          <Button
+            onClick={() =>
+              void navigate({ to: `/integrations/${platform}/add` })
+            }
+          >
+            <Plus {...ICON_INLINE} />
+            Add a {copy.singular.toLowerCase()}
+          </Button>
+        </Empty>
       )}
 
       {!isLoading && !isError && connected.length > 0 && (

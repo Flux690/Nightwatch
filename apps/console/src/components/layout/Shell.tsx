@@ -12,61 +12,50 @@ import {
   LogOut,
   ScrollText,
   Menu,
+  PanelRight,
   Plug,
-  MessagesSquare,
-  Sun,
-  Moon,
 } from "lucide-react";
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useAuth } from "@/auth/AuthContext";
 import { useAttentionCount } from "@/hooks/useAttentionCount";
 import { useSession } from "@/hooks/useSession";
 import { useSessionReport } from "@/hooks/useSessionReport";
-import { useSidebarExpanded } from "@/hooks/useSidebarExpanded";
-import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
-import { AuditRail } from "./AuditRail.js";
-import { ConfigHealthBanner } from "./ConfigHealthBanner.js";
-import { IntegrationsRail } from "./IntegrationsRail.js";
 import { SessionsSidebar } from "./SessionsSidebar.js";
 import { SettingsModal } from "./SettingsModal.js";
 import { ReportPanel } from "@/components/report/ReportPanel";
 import { SessionView } from "@/pages/SessionView";
+
+// Nowrap inside an overflow-hidden rail, and the fade finishes before the
+// width does, so a label is never legible at an intermediate width.
+const NAV_LABEL =
+  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-fast) motion-reduce:transition-none group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
 
 export function Shell({
   children,
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const [expanded, toggleExpanded] = useSidebarExpanded();
-
   return (
-    <SidebarProvider
-      open={expanded}
-      onOpenChange={(open) => {
-        if (open !== expanded) toggleExpanded();
-      }}
-    >
+    <SidebarProvider>
       <ShellContent>{children}</ShellContent>
     </SidebarProvider>
   );
@@ -95,68 +84,6 @@ function ChatSlot({
   return <div ref={hostRef} className={className} />;
 }
 
-/* One icon-rail entry: an icon-only control with a tooltip; navigation items
-   render as links so they stay links for assistive tech. */
-function RailItem({
-  label,
-  active = false,
-  onClick,
-  to,
-  badge,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-  to?: string;
-  badge?: number;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const className = cn(
-    "relative flex size-9 items-center justify-center rounded-md transition-colors",
-    active
-      ? "bg-surface-active text-foreground"
-      : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
-  );
-  // A dot, not a counted pill: the number was 10px, and the sessions list one
-  // click away already names every waiting session. The count survives for
-  // assistive tech, which is the reader that cannot see the list.
-  const badgeEl =
-    badge !== undefined && badge > 0 ? (
-      <span
-        role="status"
-        aria-label={`${badge} awaiting approval`}
-        className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-run ring-2 ring-sidebar"
-      />
-    ) : null;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          to !== undefined ? (
-            <Link to={to} aria-label={label} className={className}>
-              {children}
-              {badgeEl}
-            </Link>
-          ) : (
-            <button
-              type="button"
-              aria-label={label}
-              className={className}
-              onClick={onClick}
-            >
-              {children}
-              {badgeEl}
-            </button>
-          )
-        }
-      />
-      <TooltipContent side="right">{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 function ShellContent({
   children,
 }: {
@@ -164,7 +91,6 @@ function ShellContent({
 }): React.JSX.Element {
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const expanded = state === "expanded";
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Present only on /sessions/$id; Shell owns the one persistent SessionView so
@@ -175,13 +101,10 @@ function ShellContent({
   const { count: attentionCount, firstSessionId: attentionSessionId } =
     useAttentionCount();
   const { logout } = useAuth();
-  const { preference, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  // The morph: a session under investigation moves the chat to the right rail
-  // and gives main to the report. It keys on what the session says it is, so
-  // the layout appears the instant the session exists rather than waiting for
-  // the model to write a report.
+  // The morph keys on what the session says it is, so the layout appears the
+  // instant the session exists rather than waiting on the model.
   const session = useSession(routeSessionId ?? null);
   const report = useSessionReport(routeSessionId ?? null);
   const investigationView = session?.investigation === true;
@@ -219,126 +142,10 @@ function ShellContent({
     return pathname === to || pathname.startsWith(`${to}/`);
   }
 
-  // In the mobile overlay any navigation or action should also dismiss it.
+  // In the mobile sheet any navigation or action should also dismiss it.
   function dismissMobile(): void {
     if (isMobile) setOpenMobile(false);
   }
-
-  const panelTitle = isSessionArea
-    ? "Sessions"
-    : isActive("/integrations")
-      ? "Integrations"
-      : "Audit log";
-
-  const panelContent = isSessionArea ? (
-    <SessionsSidebar />
-  ) : isActive("/integrations") ? (
-    <IntegrationsRail />
-  ) : (
-    <AuditRail />
-  );
-
-  // The list rail's sections, shared by the desktop in-flow panel and the
-  // mobile sheet; `extraTop` carries the sheet-only primary nav.
-  const panelSections = (extraTop?: React.ReactNode): React.JSX.Element => (
-    <>
-      <SidebarHeader className="h-11 justify-center px-2">
-        <span className="min-w-0 truncate text-lg font-semibold tracking-tight">
-          {panelTitle}
-        </span>
-      </SidebarHeader>
-      <SidebarContent>
-        {extraTop}
-        {isSessionArea && attentionCount > 0 && attentionSessionId !== null && (
-          <div className="px-2 pt-1">
-            {/* A link, not a notice: knowing something waits is useless without a way to reach it. */}
-            <Link
-              to="/sessions/$id"
-              params={{ id: attentionSessionId }}
-              aria-label={`${attentionCount} awaiting approval - open the first`}
-              className="flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
-            >
-              <span className="flex h-full w-10 shrink-0 items-center justify-center">
-                {attentionCount > 99 ? "99+" : attentionCount}
-              </span>
-              <span className="min-w-0 truncate">awaiting approval</span>
-            </Link>
-          </div>
-        )}
-        <SidebarGroup className="min-h-0 flex-1">
-          <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
-            {panelContent}
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </>
-  );
-
-  const mobileNav = (
-    <SidebarGroup>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            aria-label="New session"
-            className="text-primary hover:text-primary-hover"
-            onClick={() => {
-              dismissMobile();
-              void navigate({ to: "/" });
-            }}
-          >
-            <Plus {...ICON_NAV} />
-            <span>New session</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            aria-label="Integrations"
-            isActive={isActive("/integrations")}
-            onClick={dismissMobile}
-            render={<Link to="/integrations" />}
-          >
-            <Plug {...ICON_NAV} />
-            <span>Integrations</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            aria-label="Audit log"
-            isActive={isActive("/audit")}
-            onClick={dismissMobile}
-            render={<Link to="/audit" />}
-          >
-            <ScrollText {...ICON_NAV} />
-            <span>Audit log</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            aria-label="Settings"
-            onClick={() => {
-              dismissMobile();
-              setSettingsOpen(true);
-            }}
-          >
-            <Settings {...ICON_NAV} />
-            <span>Settings</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            aria-label="Log out"
-            onClick={() => {
-              dismissMobile();
-              void logout();
-            }}
-          >
-            <LogOut {...ICON_NAV} />
-            <span>Log out</span>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroup>
-  );
 
   return (
     <>
@@ -349,73 +156,128 @@ function ShellContent({
         Skip to content
       </a>
 
-      {/* Icon rail: always visible on desktop, never collapses. The mobile
-          sheet carries the same destinations. */}
-      <nav
-        aria-label="Primary"
-        className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-sidebar py-2 md:flex"
-      >
-        <RailItem
-          label="New session"
-          onClick={() => void navigate({ to: "/" })}
-        >
-          <Plus {...ICON_NAV} className="text-primary" />
-        </RailItem>
-        <RailItem
-          label="Sessions"
-          to="/"
-          active={isSessionArea}
-          badge={attentionCount}
-        >
-          <MessagesSquare {...ICON_NAV} />
-        </RailItem>
-        <RailItem
-          label="Integrations"
-          to="/integrations"
-          active={isActive("/integrations")}
-        >
-          <Plug {...ICON_NAV} />
-        </RailItem>
-        <RailItem label="Audit log" to="/audit" active={isActive("/audit")}>
-          <ScrollText {...ICON_NAV} />
-        </RailItem>
-
-        <div className="mt-auto flex flex-col items-center gap-1">
-          <RailItem
-            label={preference === "dark" ? "Switch to light" : "Switch to dark"}
-            onClick={toggleTheme}
-          >
-            {preference === "dark" ? (
-              <Sun {...ICON_NAV} />
-            ) : (
-              <Moon {...ICON_NAV} />
+      <Sidebar collapsible="icon">
+        {/* The gap goes with the label: 8px of nothing pushes the collapsed
+            toggle off the icon column. */}
+        <SidebarHeader className="h-14 flex-row items-center justify-between gap-2 overflow-hidden p-2 group-data-[collapsible=icon]:gap-0">
+          <span
+            className={cn(
+              NAV_LABEL,
+              "min-w-0 flex-1 text-lg font-semibold tracking-tight",
             )}
-          </RailItem>
-          <RailItem label="Settings" onClick={() => setSettingsOpen(true)}>
-            <Settings {...ICON_NAV} />
-          </RailItem>
-          <RailItem label="Log out" onClick={() => void logout()}>
-            <LogOut {...ICON_NAV} />
-          </RailItem>
-        </div>
-      </nav>
+          >
+            NightWarden
+          </span>
+          <SidebarTrigger
+            size="icon"
+            aria-label="Toggle sidebar"
+            className="shrink-0 group-data-[collapsible=icon]:size-9"
+          />
+        </SidebarHeader>
 
-      {/* List rail: in-flow, starting after the icon rail (no overlap). It is a
-          plain sidebar - cmd/ctrl+B toggles it; when closed it is gone entirely
-          (no handle, nothing visible). The icon rail is never affected. */}
-      {!isMobile && expanded && (
-        <aside
-          data-slot="list-rail"
-          className="flex w-80 shrink-0 flex-col border-r border-border bg-sidebar"
-        >
-          {panelSections()}
-        </aside>
-      )}
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-label="New session"
+                  tooltip="New session"
+                  className="text-primary hover:text-primary-hover"
+                  onClick={() => {
+                    dismissMobile();
+                    void navigate({ to: "/" });
+                  }}
+                >
+                  <Plus {...ICON_NAV} />
+                  <span className={NAV_LABEL}>New session</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-label="Integrations"
+                  tooltip="Integrations"
+                  isActive={isActive("/integrations")}
+                  onClick={dismissMobile}
+                  render={<Link to="/integrations" />}
+                >
+                  <Plug {...ICON_NAV} />
+                  <span className={NAV_LABEL}>Integrations</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  aria-label="Audit log"
+                  tooltip="Audit log"
+                  isActive={isActive("/audit")}
+                  onClick={dismissMobile}
+                  render={<Link to="/audit" />}
+                >
+                  <ScrollText {...ICON_NAV} />
+                  <span className={NAV_LABEL}>Audit log</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
 
-      {/* Mobile: the same panel as an off-canvas sheet. */}
-      {isMobile && (
-        <Sidebar collapsible="offcanvas">{panelSections(mobileNav)}</Sidebar>
-      )}
+          {/* Sessions are not meaningful as icons, so the zone leaves the
+              collapsed rail entirely. A sheet is never an icon rail. */}
+          {(isMobile || state === "expanded") && (
+            <SidebarGroup className="min-h-0 flex-1">
+              <SidebarGroupLabel>Sessions</SidebarGroupLabel>
+              {attentionCount > 0 && attentionSessionId !== null && (
+                /* A link, not a notice: knowing something waits is useless
+                   without a way to reach it. */
+                <Link
+                  to="/sessions/$id"
+                  params={{ id: attentionSessionId }}
+                  aria-label={`${attentionCount} awaiting approval - open the first`}
+                  onClick={dismissMobile}
+                  className="mb-1 flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
+                >
+                  <span className="flex h-full w-10 shrink-0 items-center justify-center">
+                    {attentionCount > 99 ? "99+" : attentionCount}
+                  </span>
+                  <span className="min-w-0 truncate">awaiting approval</span>
+                </Link>
+              )}
+              <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
+                <SessionsSidebar />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </SidebarContent>
+
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                aria-label="Settings"
+                tooltip="Settings"
+                onClick={() => {
+                  dismissMobile();
+                  setSettingsOpen(true);
+                }}
+              >
+                <Settings {...ICON_NAV} />
+                <span className={NAV_LABEL}>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                aria-label="Log out"
+                tooltip="Log out"
+                onClick={() => {
+                  dismissMobile();
+                  void logout();
+                }}
+              >
+                <LogOut {...ICON_NAV} />
+                <span className={NAV_LABEL}>Log out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
 
       <SidebarInset
         id="main-content"
@@ -433,10 +295,9 @@ function ShellContent({
           </Button>
           <span className="text-sm font-semibold">NightWarden</span>
         </header>
-        <ConfigHealthBanner />
         <div
           className={cn(
-            "flex min-h-0 flex-1",
+            "relative flex min-h-0 flex-1",
             isSessionArea ? "overflow-hidden" : "flex-col overflow-auto",
           )}
         >
@@ -449,17 +310,34 @@ function ShellContent({
                     actions={report?.actions ?? []}
                   />
                 </div>
-                {chatRailOpen && (
-                  <aside
-                    aria-label="Investigation chat"
-                    className="flex w-(--container-rail) max-w-[45vw] shrink-0 flex-col border-l border-border"
-                  >
-                    <ChatSlot
-                      node={chatNodeRef.current}
-                      className="flex min-h-0 flex-1 flex-col"
-                    />
-                  </aside>
-                )}
+                {/* Width, not presence, so it closes like the sidebar. Closed
+                    it is zero-wide but present, so it leaves the accessibility
+                    tree and the tab order too. */}
+                <aside
+                  aria-label="Investigation chat"
+                  aria-hidden={!chatRailOpen}
+                  inert={!chatRailOpen}
+                  className={cn(
+                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-base) ease-linear motion-reduce:transition-none",
+                    // The edge says where the report stops. It fades out
+                    // rather than switching off, leaving no hairline.
+                    chatRailOpen
+                      ? "w-(--container-rail) border-border"
+                      : "w-0 border-transparent",
+                  )}
+                >
+                  {/* The chat holds its own width while the panel narrows past
+                      it, so nothing inside ever reflows. */}
+                  <ChatSlot
+                    node={chatNodeRef.current}
+                    className={cn(
+                      "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col pt-14 transition-opacity duration-(--duration-fast) motion-reduce:transition-none",
+                      chatRailOpen
+                        ? "opacity-100 delay-(--duration-fast)"
+                        : "opacity-0 delay-0",
+                    )}
+                  />
+                </aside>
               </>
             ) : (
               <ChatSlot
@@ -471,11 +349,25 @@ function ShellContent({
             children
           )}
         </div>
+
+        {/* A sibling, never a child: a panel that collapses cannot host the
+            control that reopens it. Anchored to the inset so it keeps the
+            sidebar toggle's centre line whatever sits above the content. */}
+        {isSessionArea && investigationView && (
+          <button
+            type="button"
+            aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
+            aria-expanded={chatRailOpen}
+            className="absolute top-3 right-3 z-20 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:top-14"
+            onClick={() => setChatRailOpen((prev) => !prev)}
+          >
+            <PanelRight className="size-4.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        )}
       </SidebarInset>
 
-      {/* Portaled once into the stable node: the / <-> /sessions/$id transition
-          and the conversation <-> investigation morph are both prop/DOM moves,
-          never a remount. */}
+      {/* Portaled once into the stable node, so the route change and the move
+          between slots are prop/DOM moves rather than a remount. */}
       {isSessionArea &&
         createPortal(
           <SessionView sessionId={routeSessionId ?? null} />,

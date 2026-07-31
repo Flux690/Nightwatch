@@ -5,7 +5,7 @@ import { dispatcher } from "../dispatcher.js";
 
 // Precedence: a paused agent outranks everything, then live, then the report's
 // terminal, then a crash row; an investigation that ended any other way without
-// a complete report was stopped. Conversations carry no status at all.
+// a complete report was stopped. A session not under investigation says nothing.
 function deriveStatus(
   source: SessionListSource,
   pendingSessions: Set<string>,
@@ -33,7 +33,6 @@ export function listSessionRows(): SessionListRow[] {
       investigation,
       severity: source.originatingAlert?.severity ?? null,
       status: investigation ? deriveStatus(source, pendingSessions) : null,
-      rootCauseLine: source.report?.rootCause.summary.trim() || null,
       awaitingHumanInput: pendingSessions.has(source.sessionId),
     };
   });

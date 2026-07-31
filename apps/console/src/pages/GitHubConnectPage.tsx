@@ -24,7 +24,12 @@ import { FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
+import {
+  BackLink,
+  Page,
+  PageHeader,
+  PageTitle,
+} from "@/components/layout/Page";
 import { expiryDaysFrom } from "@/hooks/useGitHubExpiryDays";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -388,6 +393,7 @@ export function GitHubConnectPage(): React.JSX.Element {
 
   return (
     <Page>
+      <BackLink to="/integrations">Integrations</BackLink>
       <PageHeader>
         <PageTitle>Connect GitHub</PageTitle>
       </PageHeader>

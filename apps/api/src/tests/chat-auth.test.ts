@@ -157,7 +157,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
   });
 
-  it("POST /chat refuses with 503 when no language model is configured, naming what to pick", async () => {
+  it("POST /chat refuses with 503 when no LLM is configured, naming what to pick", async () => {
     clearTestLLM();
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
@@ -171,7 +171,7 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
 
       expect(res.status).toBe(503);
       const body = (await res.json()) as { error: string };
-      expect(body.error).toMatch(/no language model is configured/i);
+      expect(body.error).toMatch(/no LLM is configured/i);
     } finally {
       configureTestLLM();
     }

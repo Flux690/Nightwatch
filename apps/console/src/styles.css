@@ -1,9 +1,7 @@
-/* NightWarden Console — Tailwind v4 + shadcn (base-nova).
-   Dual theme: raw values live on :root (light) and .dark, mapped into Tailwind
-   via @theme inline. Token philosophy: single accent (cobalt), surface ladder,
-   ink hierarchy, explicit state tokens — no opacity divisors anywhere.
-   Every text/border pair is validated against WCAG (AAA body ink, AA text,
-   3:1 UI) in both themes; values here are the validated ones. */
+/* NightWarden Console — Tailwind v4 + shadcn (base-nova). One dark palette on
+   :root, mapped into Tailwind via @theme inline. Single accent (cobalt),
+   surface ladder, ink hierarchy, explicit state tokens, no opacity divisors.
+   Every text/border pair is WCAG-validated; these are the validated values. */
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -11,77 +9,6 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  color-scheme: light;
-
-  /* Surfaces */
-  --background: #f6f9fc;
-  --foreground: #0d253d;
-  --card: #ffffff;
-  --card-foreground: #0d253d;
-  --popover: #ffffff;
-  --popover-foreground: #0d253d;
-  --secondary: #edf1f6;
-  --secondary-foreground: #0d253d;
-  --secondary-hover: #e3eaf1;
-  --muted: #edf1f6;
-  --muted-foreground: #56677f;
-  --muted-hover: #e3eaf1;
-  --surface: #edf1f6;
-  --surface-hover: #e3eaf1;
-  --surface-active: #d8e1ea;
-  --ink-subtle: #8291a6;
-
-  /* Primary (cobalt) */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-press: #1e40af;
-  --primary-foreground: #ffffff;
-  --ring: #2563eb;
-
-  /* Accent tint */
-  --accent-tint: #eff6ff;
-  --accent-wash: #bfdbfe;
-
-  /* Borders */
-  --border: #e3e8ee;
-  --border-strong: #6e859e;
-  --input: #b9c6d3;
-
-  /* Semantic status */
-  --success: #00552a;
-  --warning: #684000;
-  --destructive: #7a0e0e;
-  --success-tint: #e3ece8;
-  --warning-tint: #eeeae3;
-  --destructive-tint: #f0e4e4;
-  --destructive-wash: #e4cfcf;
-
-  /* Run-state status (queue chips, indicators) */
-  --run: #2563eb;
-  --wait: #684000;
-  --ok: #00552a;
-  --fail: #7a0e0e;
-  --run-tint: #eff6ff;
-  --wait-tint: #eeeae3;
-  --ok-tint: #e3ece8;
-  --fail-tint: #f0e4e4;
-
-  /* Sidebar */
-  --sidebar: #edf1f6;
-  --sidebar-foreground: #56677f;
-  --sidebar-accent: #e3eaf1;
-  --sidebar-accent-foreground: #0d253d;
-  --sidebar-border: #e3e8ee;
-
-  /* Scrim + shadows */
-  --scrim: rgba(13, 37, 61, 0.4);
-  --shadow-overlay:
-    rgba(13, 37, 61, 0.08) 0 8px 24px, rgba(13, 37, 61, 0.04) 0 2px 6px;
-  --shadow-raised:
-    0 1px 2px rgba(13, 37, 61, 0.05), 0 4px 16px rgba(13, 37, 61, 0.06);
-}
-
-.dark {
   color-scheme: dark;
 
   /* Surfaces */
@@ -151,7 +78,7 @@
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-/* Theme-dependent tokens resolve through the raw vars above. */
+/* Palette tokens resolve through the raw vars above. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -211,7 +138,7 @@
   --shadow-raised: var(--shadow-raised);
 }
 
-/* Theme-independent tokens. */
+/* Tokens with no palette dimension. */
 @theme {
   /* Fonts */
   --font-sans: "Geist Sans";
@@ -244,7 +171,7 @@
   /* Containers */
   --container-page: 920px;
   --container-chat: 760px;
-  --container-rail: 420px;
+  --container-rail: 440px;
 
   /* Motion */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -260,7 +187,7 @@
   }
 }
 
-/* Prose maps to semantic tokens, so it re-derives per theme automatically. */
+/* Prose maps to semantic tokens rather than raw colours. */
 @utility prose-nightwarden {
   --tw-prose-body: var(--color-foreground);
   --tw-prose-headings: var(--color-foreground);

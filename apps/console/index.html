@@ -4,14 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NightWarden</title>
-    <script>
-      // Apply the stored theme before first paint so the dark default never
-      // flashes light. Mirrors lib/theme.tsx (key "nw-theme", default dark).
-      (function () {
-        if (localStorage.getItem("nw-theme") !== "light")
-          document.documentElement.classList.add("dark");
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>
