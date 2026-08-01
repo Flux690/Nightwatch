@@ -15,7 +15,14 @@ import {
   getSession,
   getSessionMessages,
   deleteSession,
+  markAlertCleared,
 } from "../db/sessions.js";
+import { listSessionPage } from "../session/list.js";
+import {
+  proposeFix,
+  proposeHypothesis,
+  resolveHypothesis,
+} from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { seedCompleteReport } from "./report-helper.js";
@@ -24,6 +31,7 @@ import { buildTranscript } from "../session/transcript.js";
 import {
   insertExecutingRemediationAction,
   findRemediationAction,
+  settleRemediationAction,
 } from "../db/remediation-actions.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
@@ -305,5 +313,91 @@ describe("API-local session store", () => {
     expect(() => appendSessionMessages([msg("ghost-session", 0)])).toThrow(
       /FOREIGN KEY/i,
     );
+  });
+
+  // The five words and nothing else. Every one of them is derived from the
+  // action log, the alert or the hypothesis rows; none is ever declared.
+  describe("derived status", () => {
+    function statusOf(sessionId: string): string | null {
+      const row = listSessionPage(200, 0).rows.find(
+        (r) => r.sessionId === sessionId,
+      );
+      return row?.status ?? null;
+    }
+
+    // Its own alert id per session: clearing one must not settle another's.
+    function investigation(sourceAlertId = randomUUID()): string {
+      const m = meta();
+      createSession(m, { ...alert, sourceAlertId }, true);
+      return m.sessionId;
+    }
+
+    it("says nothing about a session that is not under investigation", () => {
+      const m = meta();
+      createSession(m, null);
+      expect(statusOf(m.sessionId)).toBeNull();
+    });
+
+    it("reads Resolved once a remediation executed", () => {
+      const sessionId = investigation();
+      seedCompleteReport(sessionId);
+      insertExecutingRemediationAction({
+        toolUseId: "tu-exec",
+        sessionId,
+        toolName: "RestartDockerService",
+        input: { target: "docker/app/web" },
+        resolvedBy: "operator",
+      });
+      expect(statusOf(sessionId)).toBe("inconclusive");
+      settleRemediationAction(sessionId, "tu-exec", "executed", "ok");
+      expect(statusOf(sessionId)).toBe("resolved");
+    });
+
+    it("reads Resolved when the originating alert cleared, with nothing run", () => {
+      const sourceAlertId = randomUUID();
+      const sessionId = investigation(sourceAlertId);
+      const untouched = investigation();
+      seedCompleteReport(sessionId);
+      seedCompleteReport(untouched);
+      expect(statusOf(sessionId)).toBe("inconclusive");
+
+      markAlertCleared(sourceAlertId, new Date().toISOString());
+      expect(statusOf(sessionId)).toBe("resolved");
+      expect(statusOf(untouched)).toBe("inconclusive");
+    });
+
+    it("reads Action required for a finished run whose fix nobody acted on", () => {
+      const sessionId = investigation();
+      seedCompleteReport(sessionId);
+      proposeFix(sessionId, "test", "restart the container", []);
+      expect(statusOf(sessionId)).toBe("action_required");
+    });
+
+    it("reads Failed when the run crashed rather than stood down", () => {
+      const sessionId = investigation();
+      appendSessionMessages([msg(sessionId, 0, { role: "error" })]);
+      expect(statusOf(sessionId)).toBe("failed");
+    });
+
+    it("reads Inconclusive when the record holds no cause it could stand behind", () => {
+      const settled = investigation();
+      seedCompleteReport(settled);
+      expect(statusOf(settled)).toBe("inconclusive");
+
+      // Recording nothing at all is the same answer, honestly stated.
+      expect(statusOf(investigation())).toBe("inconclusive");
+    });
+
+    it("says nothing when a cause was found but nothing was recommended or run", () => {
+      const sessionId = investigation();
+      proposeHypothesis(sessionId, "test", "the deploy set the cache size");
+      resolveHypothesis(sessionId, "test", {
+        id: "h1",
+        verdict: "trigger",
+        finding: "the climb starts at the merge",
+        evidenceIds: ["tu-never-ran"],
+      });
+      expect(statusOf(sessionId)).toBe(null);
+    });
   });
 });

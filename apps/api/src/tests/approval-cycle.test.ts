@@ -276,7 +276,7 @@ describe("durable approval interrupts", () => {
     expect(reportRes.status).toBe(200);
     const { report, actions } =
       (await reportRes.json()) as SessionReportResponse;
-    expect(report.recommendedFix.summary).toBe("");
+    expect(report.fixes).toEqual([]);
     expect(actions).toHaveLength(1);
     expect(actions[0]).toMatchObject({
       toolUseId: "tu-apr-1",

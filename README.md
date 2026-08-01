@@ -11,7 +11,7 @@ NightWarden is a self-hosted, open-source AI SRE agent for Docker and Kubernetes
 
 An alert fires at 3am. Normally that means waking up, SSHing into a box, reading logs, checking `docker ps` or `kubectl get pods`, correlating a recent deploy, and only then deciding what to do. The investigation is slow, manual, and always lands on a tired human.
 
-NightWarden does that first pass for you. The moment an alert arrives, it starts pulling logs, container or pod state, and host metrics, reasons about the root cause, and drafts a concrete remediation such as restarting a service - or, when the root cause is in your application code and a repository is connected, a code fix proposed as a draft pull request. It writes its findings into a live report as it works, so by the time you look at your screen the investigation is already written up - root cause, the hypotheses it ruled out, the evidence behind each - and a fix is sitting there waiting for one click.
+NightWarden does that first pass for you. The moment an alert arrives it starts pulling logs, container or pod state, and host metrics, works out what caused the failure, and drafts a concrete fix - restarting a service, or, when the cause is in your code and a repository is connected, a draft pull request. It writes down what it finds as it goes, so by the time you look at your screen the investigation is already written up: what it thinks broke, what it ruled out, the evidence behind each, and a fix waiting for one click.
 
 The important part is what it will not do. NightWarden never changes anything on a server without your explicit approval. It reads freely and acts only on permission, so you get the speed of an automated responder with the safety of a human gate.
 
@@ -50,7 +50,13 @@ class console ui;
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
 
-When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens an investigation session and runs an agentic loop: it calls read-only tools on the relevant runner (service logs, process lists, metrics), feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question. As it reasons it keeps an **investigation report** up to date through a tool call - raising hypotheses, marking them proven or disproven, and citing the exact tool result behind each - so the report fills in live on screen rather than appearing at the end. The loop will not finish an investigation with an incomplete report: if the agent tries to stop with hypotheses still open it is pushed back, and if it genuinely cannot conclude it must say so rather than invent a cause. Any action that writes to a server pauses the loop and surfaces an approval card in the console. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the root cause is in the application code itself, the same loop can check the code out into an isolated sandbox on the API host, build and test a fix there, and leave a draft pull request for human review.
+When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens a session and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
+
+As it works it builds an **investigation record**, one small step at a time. It writes down a hunch before testing it, then settles that hunch with a verdict and the ids of the tool calls that back it, and finally records what it recommends you do. Nothing it wrote earlier can be edited or deleted, so a claim it later abandons stays visible. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
+
+The run cannot end with a hunch left untested: the agent is pushed back until every one is settled, and if it genuinely cannot work out the cause it says so instead of inventing one.
+
+Any action that writes to a server pauses the loop and shows you an approval card. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the cause is in your code, the same loop checks the code out into an isolated sandbox on the API host, builds and tests a fix there, and leaves a draft pull request for you to review.
 
 ### The three pieces
 
@@ -58,13 +64,13 @@ When an alert fires, your Alertmanager (or any webhook source) posts it to the A
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the operator UI, built around the report rather than the chat. A left icon rail switches between Sessions, Integrations, and Audit; beside it a list rail carries that section's contents (the sessions queue, the integration catalog, audit scopes). Open an investigation and the report owns the main area - root cause, hypotheses, evidence with charts, proposed fix - while the live transcript docks into a chat rail on the right. A plain conversation keeps the chat centred instead, with no report. Approval and clarification cards, the runner fleet view, and settings all live here too.
+**Console** is the operator UI, built around the report rather than the chat. One sidebar holds everything: your destinations at the top, your sessions in the middle, and Settings and Log out at the bottom. It collapses to a narrow icon strip when you want the full width for reading. Open an investigation and the report takes the main area - what caused the failure, the hunches behind it, the evidence with charts, the proposed fix - with the live transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. Integrations and the audit log are full-width pages. Approval cards, the runner fleet view and settings all live here too.
 
 ## Features
 
-- **A report, not a wall of chat.** Every investigation produces a structured report the agent maintains _while it works_: the root cause, every hypothesis it raised and whether it was proven or disproven, and the evidence behind each - with metric charts and merged pull requests frozen into the report so it still renders long after your metrics retention has rolled over. Each claim carries a citation chip back to the exact tool call that supports it.
-- **It cannot finish without concluding.** An investigation is not allowed to end with hypotheses left open: the loop pushes the agent back until the report resolves, and if the evidence genuinely does not support a conclusion it must record an honest "inconclusive" with what it checked. No quietly abandoned investigations, and no invented root causes.
-- **Ask or Investigate.** Ask is a normal chat with your fleet - it can look things up and even act with approval, but writes no report. Investigate runs the full gated investigation. Alerts always investigate, and you can escalate a conversation into one at any time.
+- **A report, not a wall of chat.** Every investigation produces a written record the agent builds _while it works_: each hunch it raised, how it turned out, and the evidence behind it. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
+- **It cannot finish without concluding.** A run is not allowed to end with a hunch left untested: the agent is pushed back until every one is settled, and anything it calls the root cause has to cite a tool call. A session reads "Resolved" only once a fix actually ran or the alert itself cleared - never because the model said it found the cause.
+- **No mode to choose.** Ask a question and you get a plain conversation. An alert opens an investigation. If your question turns out to be an incident, the agent opens the investigation itself, so you never have to decide up front. Once a session is an investigation it stays one.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
@@ -296,8 +302,9 @@ NightWarden is a pnpm workspace. Apps consume shared code only through its packa
 apps/
   api/                  Fastify API: the brain
     src/
-      agent/            agentic loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
-                        report.ts is the report service: the only place a report is saved
+      agent/            agent loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
+                        report.ts is the only place the investigation record is written
+                        evidence-source.ts answers which source a cited call questioned
       alerts/           Alertmanager ingest, dedup, batching
       auth/             owner password, runner token minting, fleet ingest credential
       config/           operator settings: the config store, its routes, health and the run-readiness gate
@@ -311,7 +318,7 @@ apps/
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
       session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
                         transcript.ts projects stored messages into the render-ready items the console draws,
-                        list.ts derives the sessions queue (status, headline, severity)
+                        list.ts derives each session's row (its status word, severity)
       ws/               runner registry/routing, command transport
       dispatcher.ts     single entry point for every investigation
       logger.ts         the process logger
@@ -333,8 +340,8 @@ apps/
       auth/             login and owner-password setup
       components/
         ui/             shadcn-style primitives (Base UI under the hood)
-        layout/         four-zone shell, section rails (sessions/integrations/audit), settings modal, wizard chrome
-        report/         the investigation report artifact (hypotheses, evidence charts, citations)
+        layout/         the one sidebar and its collapse, the sessions list, settings modal, wizard chrome
+        report/         the rendered investigation record (hunches, verdicts, evidence charts, citations)
         transcript/     transcript dispatcher + per-card panels
       hooks/            shared console event-stream (SSE) provider, attention counter, per-session report
       lib/              shared client helpers (theme, utils, toast, time, icon/status variants)
@@ -353,10 +360,10 @@ packages/
       service-identity.ts the two unrelated identity shapes and their key builders
       tools/            tool input/output payload types, by platform: docker.ts, kubernetes.ts,
                         host.ts, common.ts (the LLM schemas live in apps/api/src/agent/tools/)
-      sessions.ts       session, message, run-mode and queue-row shapes
+      sessions.ts       session, message and queue-row shapes
       messages.ts       canonical message parts and the native envelope a provider replays verbatim
       transcript.ts     the render-ready transcript items and their explicit tool-call states
-      reports.ts        investigation report shape (hypotheses, evidence, snapshots)
+      reports.ts        investigation record shape (hypotheses, verdicts, fixes, conviction)
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
       integrations.ts   integration payloads (GitHub, Prometheus, Loki)

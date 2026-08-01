@@ -9,10 +9,9 @@ import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { findingFor, formatBytes } from "./toolFindings.js";
 
-/* One row shape for every tool: name, target, the finding, and a chevron.
-   The row carries the answer so the common case needs no click, and expansion
-   is a thread line rather than a card - at rail width a bordered box per tool
-   buries the conversation it is supposed to explain. */
+/* One row shape for every tool: name, target, the finding, and a chevron. The
+   row carries the answer so the common case needs no click, and expansion is a
+   thread line: at rail width a box per tool buries the conversation. */
 
 // Beyond this the body scrolls behind an explicit opt-in. The runner already
 // caps its output at 64KB for safety; this is the separate, much tighter cap
@@ -66,9 +65,8 @@ const OUTCOME_TONE: Record<ToolOutcome, string> = {
 };
 
 // The one-line reading of a settled call, shared with the report so a cited
-// result says there exactly what its row in the transcript says. The class
-// outranks the finding's own tone: the finding is read off the result, and a
-// result that never arrived has nothing to read.
+// result reads the same in both. The class outranks the finding's own tone: a
+// result that never arrived has nothing to read off.
 export function resultSummary(
   toolName: string,
   result: unknown,
@@ -366,6 +364,12 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   );
 }
 
+const RECORDING_TOOLS = new Set([
+  "ProposeHypothesis",
+  "ResolveHypothesis",
+  "ProposeFix",
+]);
+
 /* The presentation registry. Tools whose result IS a rendered artifact keep
    their bespoke component; everything else is a row. */
 export function ToolCard({
@@ -383,7 +387,7 @@ export function ToolCard({
 
   // The report has its own panel; showing its bookkeeping as a step in the
   // transcript is noise the reader has to skip past.
-  if (toolName === "UpdateReport") return null;
+  if (RECORDING_TOOLS.has(toolName)) return null;
 
   if (toolName === "Edit" || toolName === "Write") {
     const change = result === null ? null : parseFileChange(result);

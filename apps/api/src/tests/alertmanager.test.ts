@@ -19,7 +19,7 @@ function alert(
 
 describe("parseAlertmanager", () => {
   it("projects an alert's fields into the normalized shape", () => {
-    const [parsed] = parseAlertmanager({ alerts: [alert()] });
+    const [parsed] = parseAlertmanager({ alerts: [alert()] }).firing;
     expect(parsed).toMatchObject({
       sourceAlertId: "fp-1",
       alertType: "HighCPU",
@@ -35,7 +35,7 @@ describe("parseAlertmanager", () => {
     const sev = (s: string | undefined) =>
       parseAlertmanager({
         alerts: [alert({ labels: { alertname: "X", severity: s } })],
-      })[0]?.severity;
+      }).firing[0]?.severity;
     expect(sev("error")).toBe("critical");
     expect(sev("critical")).toBe("critical");
     expect(sev("warn")).toBe("warning");
@@ -52,7 +52,7 @@ describe("parseAlertmanager", () => {
 
   describe("batch independence", () => {
     it("a malformed alert is skipped without aborting routable siblings", () => {
-      const parsed = parseAlertmanager({
+      const { firing } = parseAlertmanager({
         alerts: [
           alert({ fingerprint: "good-1" }),
           // labels:null used to throw on labels["alertname"] and lose the batch
@@ -61,24 +61,25 @@ describe("parseAlertmanager", () => {
           alert({ fingerprint: "good-2" }),
         ],
       });
-      const ids = parsed.map((p) => p.sourceAlertId);
+      const ids = firing.map((p) => p.sourceAlertId);
       expect(ids).toContain("good-1");
       expect(ids).toContain("good-2");
       // the null-labels alert still parses (defensively) into an unknown identity
       // rather than throwing; the non-object element is dropped.
-      expect(parsed.length).toBe(3);
+      expect(firing.length).toBe(3);
     });
   });
 
   describe("resolved notifications", () => {
-    it("skips status:resolved alerts so a cleared condition opens no investigation", () => {
-      const parsed = parseAlertmanager({
+    it("separates a cleared condition from the alerts that open an investigation", () => {
+      const { firing, clearedIds } = parseAlertmanager({
         alerts: [
           alert({ status: "resolved", fingerprint: "cleared" }),
           alert({ status: "firing", fingerprint: "firing-1" }),
         ],
       });
-      expect(parsed.map((p) => p.sourceAlertId)).toEqual(["firing-1"]);
+      expect(firing.map((p) => p.sourceAlertId)).toEqual(["firing-1"]);
+      expect(clearedIds).toEqual(["cleared"]);
     });
   });
 
@@ -87,30 +88,30 @@ describe("parseAlertmanager", () => {
       const labels = { alertname: "HighCPU", container: "web-01" };
       const [a] = parseAlertmanager({
         alerts: [{ status: "firing", labels, fingerprint: undefined }],
-      });
+      }).firing;
       const [b] = parseAlertmanager({
         alerts: [{ status: "firing", labels, fingerprint: undefined }],
-      });
+      }).firing;
       // same labels -> same id (dedup holds), and never an undefined id.
       expect(a?.sourceAlertId).toBeTruthy();
       expect(a?.sourceAlertId).toBe(b?.sourceAlertId);
     });
 
     it("two distinct fingerprint-less alerts do not collide", () => {
-      const parsed = parseAlertmanager({
+      const { firing } = parseAlertmanager({
         alerts: [
           { status: "firing", labels: { alertname: "A", container: "x" } },
           { status: "firing", labels: { alertname: "B", container: "y" } },
         ],
       });
-      expect(parsed[0]?.sourceAlertId).not.toBe(parsed[1]?.sourceAlertId);
+      expect(firing[0]?.sourceAlertId).not.toBe(firing[1]?.sourceAlertId);
     });
   });
 
   it("defaults firedAt to now when startsAt is missing", () => {
     const [parsed] = parseAlertmanager({
       alerts: [alert({ startsAt: undefined })],
-    });
+    }).firing;
     expect(parsed?.firedAt).toBeTruthy();
     expect(() => new Date(parsed!.firedAt).toISOString()).not.toThrow();
   });

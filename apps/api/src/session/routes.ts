@@ -5,7 +5,7 @@ import type {
   SessionDetail,
   SessionReportResponse,
 } from "@nightwarden/shared";
-import { resolveEvidence } from "../agent/report.js";
+import { computeConviction, resolveEvidence } from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import {
@@ -115,17 +115,16 @@ export async function registerSessionRoutes(
       if (report === undefined) {
         return reply.code(404).send({ error: "no report for session" });
       }
-      // Actions come from the executor's own log, never from the report the
-      // model wrote, so "what ran" cannot disagree with what actually ran. The
-      // cited evidence is resolved here for the same reason: the transcript
-      // quotes itself, rather than the report carrying a copy the model could
-      // have edited.
+      // Everything beside `report` is joined here rather than stored, so what
+      // the model wrote cannot disagree with what ran, what was quoted, or how
+      // well a claim is backed.
       const response: SessionReportResponse = {
         report,
         actions: listRemediationActionsForSession(request.params.id).map(
           toActionRecord,
         ),
         evidence: resolveEvidence(request.params.id, report),
+        conviction: computeConviction(request.params.id, report),
       };
       return response;
     },

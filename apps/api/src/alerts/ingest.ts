@@ -1,10 +1,15 @@
 import type { FastifyInstance } from "fastify";
-import { parseAlertmanager, type ParsedAlert } from "./parsers/alertmanager.js";
+import {
+  parseAlertmanager,
+  type ParsedWebhook,
+} from "./parsers/alertmanager.js";
 import { routeAlert } from "./route-alert.js";
 import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
 } from "../db/alert-sources.js";
+import { markAlertCleared } from "../db/sessions.js";
+import { publishReportUpdated } from "../session/stream.js";
 import {
   getLokiIntegration,
   getPrometheusIntegration,
@@ -33,7 +38,7 @@ export async function registerAlertRoutes(
       return reply.code(401).send({ error: "unknown or revoked token" });
     }
 
-    let parsed: ParsedAlert[];
+    let parsed: ParsedWebhook;
     try {
       parsed = parseSource(request.body);
     } catch (err) {
@@ -68,14 +73,25 @@ export async function registerAlertRoutes(
       });
     }
 
+    // A clear is recorded before anything is routed, so a batch that clears one
+    // alert and fires another leaves both facts on the sessions they belong to.
+    const clearedAt = new Date().toISOString();
+    for (const sourceAlertId of parsed.clearedIds) {
+      for (const sessionId of markAlertCleared(sourceAlertId, clearedAt)) {
+        publishReportUpdated(sessionId);
+      }
+    }
+
     let enqueued = 0;
     let skipped = 0;
-    for (const alert of parsed) {
+    for (const alert of parsed.firing) {
       if (routeAlert(alert) === "enqueued") enqueued++;
       else skipped++;
     }
 
-    return reply.code(200).send({ received: parsed.length, enqueued, skipped });
+    return reply
+      .code(200)
+      .send({ received: parsed.firing.length, enqueued, skipped });
   });
 }
 
@@ -89,7 +105,7 @@ function extractToken(
 
 // Source is decided by the body's structure alone - a User-Agent is client-controlled
 // and spoofable, so it is not consulted.
-function parseSource(body: unknown): ParsedAlert[] {
+function parseSource(body: unknown): ParsedWebhook {
   if (isAlertmanagerShape(body)) {
     return parseAlertmanager(body);
   }

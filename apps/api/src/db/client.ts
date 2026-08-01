@@ -50,11 +50,9 @@ repo.yarnpkg.com',
   updated_at                TEXT      NOT NULL
 );
 
--- One row per provider, each owning its own credentials and endpoint, so
--- switching the active provider cannot carry the previous one's key or base
--- URL across. reasoning_level is the operator's pick in that provider's own
--- vocabulary; the two columns after it are facts captured from the catalog
--- when the model was saved, so starting a run never has to reach the network.
+-- One row per provider, so switching the active one cannot carry the previous
+-- one's key or base URL across. The catalog facts are captured when the model
+-- is saved, so starting a run never has to reach the network.
 CREATE TABLE IF NOT EXISTS provider_config (
   provider            TEXT      PRIMARY KEY,
   model               TEXT,
@@ -88,11 +86,9 @@ CREATE TABLE IF NOT EXISTS alert_sources (
   created_at          TEXT   NOT NULL
 );
 
--- One row per pull-integration ('github', 'prometheus', 'loki', ...): config is
--- per-kind JSON, secret_encrypted is the encrypted credential (NULL when the
--- kind has none, e.g. an auth-less Prometheus). Neither is ever returned by an
--- endpoint. A new integration is a row, never a table; config is validated
--- per-kind in app code since rows are only ever read whole by kind.
+-- One row per pull-integration, with per-kind JSON config and an encrypted
+-- credential that is NULL when the kind has none. Neither is ever returned by
+-- an endpoint. A new integration is a row, never a table.
 CREATE TABLE IF NOT EXISTS integrations (
   kind                TEXT   PRIMARY KEY,
   config              TEXT   NOT NULL,
@@ -106,21 +102,21 @@ CREATE TABLE IF NOT EXISTS integrations (
 -- session (foreign_keys is enabled below), because none of it is reachable or
 -- meaningful once the session is gone.
 
--- investigation is what the session IS, carried from the moment it exists.
--- Deriving it from the artifacts a run happens to produce reclassifies
--- anything stopped early. It is a one-way ratchet and never clears.
+-- investigation is what the session IS, carried from the moment it exists, and
+-- it is a one-way ratchet that never clears. alert_cleared_at is the other way
+-- one resolves: the condition recovered, whoever fixed it.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   originating_alert    TEXT,
   investigation        INTEGER   NOT NULL DEFAULT 0,
+  alert_cleared_at     TEXT,
   created_at           TEXT      NOT NULL
 );
 
--- The durable transcript, and the only record of what ran. canonical holds
--- { parts, native }: our own portable form of the turn plus the vendor's
--- verbatim message, so a same-dialect resume replays byte-exact and a switched
--- provider still reads the conversation.
+-- The durable transcript, and the only record of what ran. canonical holds our
+-- portable form of the turn plus the vendor's verbatim message, so a resume on
+-- the same dialect replays byte-exact and a switched provider still reads it.
 CREATE TABLE IF NOT EXISTS session_messages (
   id             INTEGER   PRIMARY KEY AUTOINCREMENT,
   session_id     TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
@@ -159,11 +155,9 @@ CREATE TABLE IF NOT EXISTS pending_human_input (
 CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
   ON pending_human_input (claimed_at);
 
--- The investigation report, maintained live by the agent. Unlike
--- remediation_actions it IS a child of sessions: a report nobody can reach is
--- not a record. One row per session, full-replace on every UpdateReport. It
--- holds only what the model wrote; cited evidence is resolved from the
--- transcript on read, so nothing here is a copy of what ran.
+-- The investigation record, appended to one act at a time, and a child of its
+-- session because a record nobody can reach is not a record. It holds only what
+-- the model wrote; evidence, conviction and status are resolved on read.
 CREATE TABLE IF NOT EXISTS reports (
   session_id     TEXT   PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
   report         TEXT   NOT NULL,

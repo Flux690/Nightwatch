@@ -1,9 +1,11 @@
 import type {
+  Conviction,
   NormalizedAlert,
   RemediationActionRecord,
   Report,
-  ReportStatus,
+  ReportConviction,
   ResolvedEvidence,
+  Verdict,
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 import { StatusText } from "@/components/ui/status";
@@ -11,20 +13,20 @@ import { ACTION_LABEL, ACTION_TONE } from "@/lib/remediationStatus";
 import { Evidence } from "./Evidence.js";
 
 // The investigation report rendered in the main area. The claims are the
-// model's; the evidence under each one is the transcript quoting itself, so
-// nothing here is a description of data the system already holds.
+// model's; everything around them - the evidence, the conviction, what ran - is
+// the system answering for itself.
 
-const STATUS_LABEL: Record<ReportStatus, string> = {
-  investigation_incomplete: "Investigating",
-  root_cause_identified: "Root cause identified",
-  inconclusive: "Inconclusive",
+const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
+  root_cause: { label: "Root cause", className: "text-ok" },
+  trigger: { label: "Trigger", className: "text-ok" },
+  contributing_factor: { label: "Contributing factor", className: "text-wait" },
+  symptom: { label: "Symptom", className: "text-muted-foreground" },
+  disproven: {
+    label: "Disproven",
+    className: "text-muted-foreground line-through",
+  },
+  open: { label: "Open", className: "text-run" },
 };
-
-const HYPOTHESIS_LABEL = {
-  root_cause: "Root cause",
-  disproven: "Disproven",
-  open: "Open",
-} as const;
 
 function SectionHeading({
   children,
@@ -38,6 +40,17 @@ function SectionHeading({
   );
 }
 
+// Absence is the signal: a claim the ledger cannot back carries no marker, and
+// no warning badge either, because a badge that appears often gets ignored.
+function ConvictionMark({
+  conviction,
+}: {
+  conviction: Conviction | undefined;
+}): React.JSX.Element | null {
+  if (conviction === undefined) return null;
+  return <span className="text-sm text-ink-subtle">{conviction}</span>;
+}
+
 function CitedEvidence({
   ids,
   evidence,
@@ -49,8 +62,7 @@ function CitedEvidence({
 }): React.JSX.Element | null {
   // A citation naming no call renders nothing at all. The claim above it stands
   // either way, so reaching past the evidence shows as a claim with none. Cited
-  // once however often it is named: a repeat is the model's slip, not a second
-  // piece of evidence.
+  // once however often it is named: a repeat is the model's slip.
   const cited = [...new Set(ids)].flatMap((id) => evidence.get(id) ?? []);
   if (cited.length === 0) return null;
   return (
@@ -66,6 +78,7 @@ export function ReportPanel({
   report,
   actions,
   evidence,
+  conviction,
   alert,
 }: {
   // Null until the agent records its first finding. The investigation view is
@@ -74,6 +87,7 @@ export function ReportPanel({
   actions: RemediationActionRecord[];
   // The cited calls, resolved by the API against the transcript.
   evidence: ResolvedEvidence[];
+  conviction: ReportConviction;
   alert: NormalizedAlert | null;
 }): React.JSX.Element {
   if (report === null) {
@@ -92,31 +106,22 @@ export function ReportPanel({
   }
 
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
+  // The verdict line is the root-cause hypothesis itself, not a second
+  // free-text field that could disagree with it.
+  const rootCause = report.hypotheses.find((h) => h.verdict === "root_cause");
 
   return (
     <div className="mx-auto w-full max-w-page px-8 py-6">
       <header className="mb-6">
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
-          {report.headline || "Investigation"}
+          Investigation
         </h1>
-        <div className="mt-2 text-sm text-muted-foreground">
-          {STATUS_LABEL[report.status]}
-        </div>
-      </header>
-
-      {report.rootCause.summary && (
-        <section className="mt-6 border-t border-border pt-6">
-          <SectionHeading>Root cause</SectionHeading>
-          <p className="m-0 text-base font-medium">
-            {report.rootCause.summary}
+        {rootCause !== undefined && (
+          <p className="m-0 mt-2 text-base font-medium">
+            {rootCause.statement}
           </p>
-          {report.rootCause.detail && (
-            <p className="m-0 mt-1 text-sm text-muted-foreground">
-              {report.rootCause.detail}
-            </p>
-          )}
-        </section>
-      )}
+        )}
+      </header>
 
       {report.hypotheses.length > 0 && (
         <section className="mt-6 border-t border-border pt-6">
@@ -128,23 +133,17 @@ export function ReportPanel({
                   <span
                     className={cn(
                       "text-sm font-semibold uppercase tracking-[0.05em]",
-                      h.state === "root_cause"
-                        ? "text-ok"
-                        : h.state === "disproven"
-                          ? "text-muted-foreground line-through"
-                          : "text-run",
+                      VERDICT_VIEW[h.verdict].className,
                     )}
                   >
-                    {HYPOTHESIS_LABEL[h.state]}
+                    {VERDICT_VIEW[h.verdict].label}
                   </span>
-                  <span className="text-sm text-ink-subtle">
-                    {h.confidence} confidence
-                  </span>
+                  <ConvictionMark conviction={conviction[h.id]} />
                 </div>
                 <p className="m-0 mt-1 text-sm">{h.statement}</p>
-                {h.reason && (
+                {h.finding && (
                   <p className="m-0 mt-1 text-sm text-muted-foreground">
-                    {h.reason}
+                    {h.finding}
                   </p>
                 )}
                 <CitedEvidence
@@ -158,17 +157,38 @@ export function ReportPanel({
         </section>
       )}
 
-      {report.recommendedFix.summary && (
+      {report.fixes.length > 0 && (
         <section className="mt-6 border-t border-border pt-6">
-          <SectionHeading>Recommended fix</SectionHeading>
-          <p className="m-0 text-sm font-medium">
-            {report.recommendedFix.summary}
-          </p>
-          <CitedEvidence
-            ids={report.recommendedFix.evidenceIds}
-            evidence={byId}
-            alert={alert}
-          />
+          <SectionHeading>Proposed fix</SectionHeading>
+          <ul className="m-0 flex list-none flex-col gap-4 p-0">
+            {report.fixes.map((fix, i) => (
+              <li key={fix.id}>
+                <div className="flex items-baseline gap-2">
+                  {/* Everything before the last one was turned down, and the
+                      record says so rather than dropping it. */}
+                  {i < report.fixes.length - 1 && (
+                    <span className="text-sm text-muted-foreground uppercase tracking-[0.05em]">
+                      Superseded
+                    </span>
+                  )}
+                  <p
+                    className={cn(
+                      "m-0 text-sm font-medium",
+                      i < report.fixes.length - 1 && "text-muted-foreground",
+                    )}
+                  >
+                    {fix.summary}
+                  </p>
+                  <ConvictionMark conviction={conviction[fix.id]} />
+                </div>
+                <CitedEvidence
+                  ids={fix.evidenceIds}
+                  evidence={byId}
+                  alert={alert}
+                />
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -209,12 +229,6 @@ export function ReportPanel({
             ))}
           </ul>
         </section>
-      )}
-
-      {report.status === "inconclusive" && !report.rootCause.summary && (
-        <p className="text-sm text-muted-foreground">
-          The investigation ended without identifying a root cause.
-        </p>
       )}
     </div>
   );

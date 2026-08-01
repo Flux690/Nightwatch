@@ -62,9 +62,8 @@ export function Shell({
 }
 
 /* Attaches a stable, externally-owned DOM node as this element's child. The
-   chat is portaled ONCE into that node; moving the node between slots is a
-   plain DOM re-parent, so the chat component never unmounts (a portal whose
-   container changes would remount it and drop live streams mid-run). */
+   chat is portaled ONCE into it, so moving it between slots is a plain DOM
+   re-parent and the chat never unmounts, which would drop a live stream. */
 function ChatSlot({
   node,
   className,
@@ -309,6 +308,7 @@ function ShellContent({
                     report={report?.report ?? null}
                     actions={report?.actions ?? []}
                     evidence={report?.evidence ?? []}
+                    conviction={report?.conviction ?? {}}
                     alert={session?.originatingAlert ?? null}
                   />
                 </div>

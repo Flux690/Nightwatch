@@ -68,14 +68,14 @@ const FAILED_1 = {
   awaitingHumanInput: false,
 };
 
-const STOPPED_1 = {
+const NO_WORD_1 = {
   sessionId: "s4",
   title: "Abandoned run on cache-01",
   createdAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
   investigation: true,
   severity: null,
-  status: "stopped",
+  status: null,
   awaitingHumanInput: false,
 };
 
@@ -378,18 +378,19 @@ describe("SessionsSidebar", () => {
     });
 
     it("says nothing for a session no word applies to", async () => {
-      setup([[CHAT_1, STOPPED_1]]);
+      setup([[CHAT_1, NO_WORD_1]]);
 
       await waitFor(() => {
         expect(
           screen.getByText("Abandoned run on cache-01"),
         ).toBeInTheDocument();
       });
-      // "Stopped" is not one of the five words, and a plain session has none.
+      // Nothing outside the five words is expressible, and a row that none of
+      // them fits says nothing.
       const rows = screen.getAllByRole("listitem");
       for (const row of rows) {
         expect(row).not.toHaveTextContent(
-          /action required|investigating|resolved|inconclusive|failed|stopped/i,
+          /action required|investigating|resolved|inconclusive|failed/i,
         );
       }
     });

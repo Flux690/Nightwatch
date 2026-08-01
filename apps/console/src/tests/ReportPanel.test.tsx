@@ -1,42 +1,50 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { Report, ResolvedEvidence } from "@nightwarden/shared";
+import type {
+  Report,
+  ReportConviction,
+  ResolvedEvidence,
+} from "@nightwarden/shared";
 import userEvent from "@testing-library/user-event";
 
 import { ReportPanel } from "@/components/report/ReportPanel";
 
+const RESOLVED = "2026-07-21T12:30:00.000Z";
+
 const REPORT: Report = {
-  status: "root_cause_identified",
-  headline: "payments-worker OOM after PR #482",
-  rootCause: {
-    summary: "Cache bump leaks memory",
-    detail: "RSS climbed steadily from the merge until the OOM kill.",
-  },
   hypotheses: [
     {
       id: "h1",
       statement: "PR #482's cache bump leaks",
-      state: "root_cause",
-      confidence: "high",
-      reason: "climb starts at the merge timestamp",
+      verdict: "root_cause",
+      finding: "climb starts at the merge timestamp",
       evidenceIds: ["tu-stats"],
+      proposedAt: RESOLVED,
+      resolvedAt: RESOLVED,
     },
     {
       id: "h2",
       statement: "Host memory pressure",
-      state: "disproven",
-      confidence: "medium",
-      reason: "host free memory stayed flat",
+      verdict: "disproven",
+      finding: "host free memory stayed flat",
       evidenceIds: [],
+      proposedAt: RESOLVED,
+      resolvedAt: RESOLVED,
     },
   ],
-  recommendedFix: {
-    summary: "Revert PR #482",
-    evidenceIds: ["tu-changes"],
-  },
-  updatedAt: "2026-07-21T12:30:00.000Z",
+  fixes: [
+    {
+      id: "f1",
+      summary: "Revert PR #482",
+      evidenceIds: ["tu-changes"],
+      recordedAt: RESOLVED,
+    },
+  ],
+  updatedAt: RESOLVED,
   model: "test",
 };
+
+const CONVICTION: ReportConviction = { h1: "corroborated", f1: "cited" };
 
 const EVIDENCE: ResolvedEvidence[] = [
   {
@@ -73,6 +81,7 @@ function panel(overrides: Partial<Parameters<typeof ReportPanel>[0]> = {}) {
       report={REPORT}
       actions={[]}
       evidence={EVIDENCE}
+      conviction={CONVICTION}
       alert={null}
       {...overrides}
     />
@@ -84,15 +93,93 @@ afterEach(() => {
 });
 
 describe("ReportPanel", () => {
-  it("renders the artifact: headline, verdict and the root cause", () => {
+  it("leads with the hypothesis that resolved as the root cause", () => {
     render(panel());
 
+    // The verdict line and the row beneath it are one claim, so there is no
+    // second place for the cause to disagree with itself.
+    expect(screen.getAllByText("PR #482's cache bump leaks")).toHaveLength(2);
+    expect(screen.getByText("Root cause")).toBeInTheDocument();
+    expect(screen.getByText("Disproven")).toBeInTheDocument();
+  });
+
+  it("renders each of the six verdicts distinctly", () => {
+    const verdicts = [
+      "root_cause",
+      "trigger",
+      "symptom",
+      "contributing_factor",
+      "disproven",
+      "open",
+    ] as const;
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          hypotheses: verdicts.map((verdict, i) => ({
+            id: `h${i + 1}`,
+            statement: `claim ${verdict}`,
+            verdict,
+            finding: "",
+            evidenceIds: [],
+            proposedAt: RESOLVED,
+            resolvedAt: RESOLVED,
+          })),
+        },
+      }),
+    );
+
+    for (const label of [
+      "Root cause",
+      "Trigger",
+      "Symptom",
+      "Contributing factor",
+      "Disproven",
+      "Open",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("marks how well each claim is backed, and marks nothing when it is not", () => {
+    render(panel());
+
+    expect(screen.getByText("corroborated")).toBeInTheDocument();
+    expect(screen.getByText("cited")).toBeInTheDocument();
+    // h2 earned nothing, and absence is the whole signal: no warning badge.
+    expect(screen.queryByText("verified")).not.toBeInTheDocument();
+  });
+
+  it("keeps a rejected fix on screen beside the one that replaced it", () => {
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          fixes: [
+            {
+              id: "f1",
+              summary: "Revert PR #482",
+              evidenceIds: [],
+              recordedAt: RESOLVED,
+            },
+            {
+              id: "f2",
+              summary: "Raise the memory limit instead",
+              evidenceIds: [],
+              recordedAt: RESOLVED,
+            },
+          ],
+        },
+      }),
+    );
+
+    // A recommendation the operator turned down is part of the record, and
+    // which one stands has to be legible without reading the transcript.
+    expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
     expect(
-      screen.getByText("payments-worker OOM after PR #482"),
+      screen.getByText("Raise the memory limit instead"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Root cause identified")).toBeInTheDocument();
-    expect(screen.getByText("Cache bump leaks memory")).toBeInTheDocument();
-    expect(screen.getByText("PR #482's cache bump leaks")).toBeInTheDocument();
+    expect(screen.getByText("Superseded")).toBeInTheDocument();
   });
 
   it("puts the tool output that backs a claim underneath the claim", () => {
@@ -118,10 +205,11 @@ describe("ReportPanel", () => {
             {
               id: "h3",
               statement: "The queue backed up first",
-              state: "open",
-              confidence: "low",
-              reason: "",
+              verdict: "open",
+              finding: "",
               evidenceIds: ["tu-never-ran"],
+              proposedAt: RESOLVED,
+              resolvedAt: null,
             },
           ],
         },
@@ -168,6 +256,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
+          fixes: [],
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-now"] }],
         },
         evidence: [
@@ -198,6 +287,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
+          fixes: [],
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-top"] }],
         },
         evidence: [
@@ -233,6 +323,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
+          fixes: [],
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-miss"] }],
         },
         evidence: [
@@ -258,6 +349,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
+          fixes: [],
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-range"] }],
         },
         evidence: [
@@ -293,25 +385,40 @@ describe("ReportPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("states an honest empty inconclusive outcome", () => {
+  it("states an investigation that has recorded nothing", () => {
+    render(panel({ evidence: [], report: null }));
+    expect(screen.getByText("Investigation")).toBeInTheDocument();
+    expect(
+      screen.getByText(/has not recorded a finding yet/),
+    ).toBeInTheDocument();
+  });
+
+  it("says the run could not conclude by showing what it settled and no cause", () => {
     render(
       panel({
         evidence: [],
+        conviction: {},
         report: {
           ...REPORT,
-          status: "inconclusive",
-          headline: "",
-          rootCause: { summary: "", detail: "" },
-          hypotheses: [],
-          recommendedFix: { summary: "", evidenceIds: [] },
+          hypotheses: [
+            {
+              id: "h1",
+              statement: "Host memory pressure",
+              verdict: "disproven",
+              finding: "host free memory stayed flat",
+              evidenceIds: [],
+              proposedAt: RESOLVED,
+              resolvedAt: RESOLVED,
+            },
+          ],
+          fixes: [],
         },
       }),
     );
-    expect(screen.getByText("Investigation")).toBeInTheDocument();
-    expect(screen.getByText("Inconclusive")).toBeInTheDocument();
-    expect(
-      screen.getByText(/ended without identifying a root cause/),
-    ).toBeInTheDocument();
+
+    expect(screen.getByText("Disproven")).toBeInTheDocument();
+    expect(screen.queryByText("Root cause")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proposed fix")).not.toBeInTheDocument();
   });
 
   it("reports actions from the executor's log, not from the report text", () => {

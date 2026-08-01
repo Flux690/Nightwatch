@@ -1,18 +1,24 @@
-import type { Report } from "@nightwarden/shared";
-import { upsertReport } from "../db/reports.js";
+import { appendToReport } from "../db/reports.js";
 
 // Satisfies the investigate finish gate for tests that exercise run mechanics
-// rather than the report contract: inconclusive is a legal terminal state, so a
-// seeded report lets a scripted run end on its free-form finish as before.
+// rather than the record contract: one settled hypothesis is a complete record.
 export function seedCompleteReport(sessionId: string): void {
-  const report: Report = {
-    status: "inconclusive",
-    headline: "seeded by test",
-    rootCause: { summary: "", detail: "" },
-    hypotheses: [],
-    recommendedFix: { summary: "", evidenceIds: [] },
-    updatedAt: new Date().toISOString(),
-    model: "test",
-  };
-  upsertReport(sessionId, report, "test");
+  const now = new Date().toISOString();
+  appendToReport(sessionId, "test", (report) => ({
+    next: {
+      ...report,
+      hypotheses: [
+        {
+          id: "h1",
+          statement: "seeded by test",
+          verdict: "disproven",
+          finding: "",
+          evidenceIds: [],
+          proposedAt: now,
+          resolvedAt: now,
+        },
+      ],
+    },
+    value: null,
+  }));
 }

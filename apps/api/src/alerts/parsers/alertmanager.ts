@@ -14,13 +14,21 @@ const alertmanagerWebhookSchema = z.object({
   alerts: z.array(z.unknown()),
 });
 
-export function parseAlertmanager(body: unknown): ParsedAlert[] {
+// A cleared notification opens nothing - the condition recovered - but it is
+// the answer to whether an investigation already under way is still needed.
+export interface ParsedWebhook {
+  firing: ParsedAlert[];
+  clearedIds: string[];
+}
+
+export function parseAlertmanager(body: unknown): ParsedWebhook {
   const result = alertmanagerWebhookSchema.safeParse(body);
   if (!result.success) {
     throw new Error("Invalid Alertmanager payload: missing alerts array");
   }
 
-  const parsed: ParsedAlert[] = [];
+  const firing: ParsedAlert[] = [];
+  const clearedIds: string[] = [];
   for (const raw of result.data.alerts) {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       logger.warn({ raw }, "skipping malformed alert: not an object");
@@ -28,22 +36,24 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
     }
     const alert = raw as Record<string, unknown>;
 
-    // A resolved (cleared) notification must not open an investigation - the
-    // condition already recovered. Skip it rather than route it as firing.
-    if (alert["status"] === "resolved") continue;
-
     const labels = toStringMap(alert["labels"]);
     const fingerprint =
       typeof alert["fingerprint"] === "string" &&
       alert["fingerprint"].length > 0
         ? alert["fingerprint"]
         : synthesizeFingerprint(labels);
+
+    if (alert["status"] === "resolved") {
+      clearedIds.push(fingerprint);
+      continue;
+    }
+
     const firedAt =
       typeof alert["startsAt"] === "string"
         ? alert["startsAt"]
         : new Date().toISOString();
 
-    parsed.push({
+    firing.push({
       sourceAlertId: fingerprint,
       labels,
       alertType: labels["alertname"] ?? "unknown",
@@ -53,7 +63,7 @@ export function parseAlertmanager(body: unknown): ParsedAlert[] {
     });
   }
 
-  return parsed;
+  return { firing, clearedIds };
 }
 
 // Alertmanager usually supplies a stable `fingerprint`; when a BYO sender omits it, derive one

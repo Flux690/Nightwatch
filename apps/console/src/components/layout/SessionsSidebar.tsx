@@ -29,17 +29,15 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-// The five words, and nothing else: a stopped run earns no sixth.
 const STATUS_VIEW: Record<
   SessionRunStatus,
-  { label: string; tone: StatusTone } | null
+  { label: string; tone: StatusTone }
 > = {
   action_required: { label: "Action required", tone: "warn" },
   investigating: { label: "Investigating", tone: "run" },
   resolved: { label: "Resolved", tone: "ok" },
   inconclusive: { label: "Inconclusive", tone: "muted" },
   failed: { label: "Failed", tone: "fail" },
-  stopped: null,
 };
 
 // A word earns its slot by being actionable, and this list reports work
@@ -154,8 +152,8 @@ export function SessionsSidebar(): React.JSX.Element {
       renameSession(queryClient, sessionId, title);
       return;
     }
-    // Status and headline are both server-derived, so any event that can
-    // change them refetches the authoritative list.
+    // Status is server-derived, so any event that can change it refetches the
+    // authoritative list.
     if (
       env.type === "REPORT_UPDATED" ||
       env.type === "RUN_FINISHED" ||

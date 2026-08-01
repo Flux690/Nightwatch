@@ -200,12 +200,12 @@ describe("toolset assembly by fleet capabilities", () => {
         (t) => t.schema.name,
       );
       expect(plain).toContain("OpenInvestigation");
-      expect(plain).not.toContain("UpdateReport");
+      expect(plain).not.toContain("ProposeHypothesis");
 
       const investigating = effectiveToolset(new Set([]), {}, true).map(
         (t) => t.schema.name,
       );
-      expect(investigating).toContain("UpdateReport");
+      expect(investigating).toContain("ProposeHypothesis");
       expect(investigating).not.toContain("OpenInvestigation");
     });
   });
@@ -368,9 +368,9 @@ describe("toolset assembly by fleet capabilities", () => {
         );
 
       expect(namesOnTurn(0)).toContain("OpenInvestigation");
-      expect(namesOnTurn(0)).not.toContain("UpdateReport");
+      expect(namesOnTurn(0)).not.toContain("ProposeHypothesis");
 
-      expect(namesOnTurn(1)).toContain("UpdateReport");
+      expect(namesOnTurn(1)).toContain("ProposeHypothesis");
       expect(namesOnTurn(1)).not.toContain("OpenInvestigation");
 
       // The ratchet, across runs: this session has no alert, so the row is the
@@ -398,7 +398,7 @@ describe("toolset assembly by fleet capabilities", () => {
       const resumedNames = (
         resumed.chat.mock.calls[0]?.[0] as ToolSchema[]
       ).map((s) => s.name);
-      expect(resumedNames).toContain("UpdateReport");
+      expect(resumedNames).toContain("ProposeHypothesis");
       expect(resumedNames).not.toContain("OpenInvestigation");
     });
   });

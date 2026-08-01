@@ -9,19 +9,14 @@ import type { TranscriptItem } from "./transcript.js";
 // never replayed to the model.
 export type SessionRole = "user" | "assistant" | "error";
 
-// Row state for the sessions queue, derived server-side in precedence order:
-// pending human input, running, report terminal, error row, else stopped.
+// Row state for the sessions queue, derived server-side and never declared by
+// the model. A row no word applies to says nothing, which is why the field is
+// nullable rather than carrying a sixth value.
 export type SessionRunStatus =
-  | "action_required"
-  | "investigating"
-  | "resolved"
-  | "inconclusive"
-  | "failed"
-  | "stopped";
+  "action_required" | "investigating" | "resolved" | "inconclusive" | "failed";
 
 // One row of the console's one session list. A session not under investigation
-// leaves the status fields null. title is display-resolved (report headline
-// supersedes the stored session title).
+// leaves the status fields null.
 export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;
   investigation: boolean;

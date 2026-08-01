@@ -159,12 +159,13 @@ export {
   isToolOutcome,
 } from "./transcript.js";
 export type {
-  ReportStatus,
-  HypothesisState,
-  Confidence,
+  Verdict,
+  Conviction,
   Hypothesis,
+  ProposedFix,
   Report,
   ResolvedEvidence,
+  ReportConviction,
   SessionReportResponse,
 } from "./reports.js";
 export type {

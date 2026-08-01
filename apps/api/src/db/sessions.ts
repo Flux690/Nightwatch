@@ -48,6 +48,23 @@ export function openInvestigation(sessionId: string): void {
     .run(sessionId);
 }
 
+// The first clear wins: a re-fire that clears again says nothing new about the
+// condition this session was opened for. Returns the sessions it marked.
+export function markAlertCleared(
+  sourceAlertId: string,
+  clearedAt: string,
+): string[] {
+  const rows = getDb()
+    .prepare(
+      `UPDATE sessions SET alert_cleared_at = @clearedAt
+       WHERE alert_cleared_at IS NULL
+         AND json_extract(originating_alert, '$.sourceAlertId') = @sourceAlertId
+       RETURNING session_id AS sessionId`,
+    )
+    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string }>;
+  return rows.map((r) => r.sessionId);
+}
+
 // Read per turn by the loop, so OpenInvestigation takes effect on the next turn
 // of the run that called it rather than the next run.
 export function isUnderInvestigation(sessionId: string): boolean {
@@ -205,8 +222,8 @@ export function deleteSession(sessionId: string): void {
 }
 
 // Raw material for the sessions queue: one row per session joined with its
-// report and the transcript's tail. Derivation into queue fields (status,
-// title precedence) lives in session/list.ts, which also knows the dispatcher.
+// record, its action log and the transcript's tail. Deriving a status from all
+// that lives in session/list.ts, which also knows the dispatcher.
 export interface SessionListSource {
   sessionId: string;
   title: string;
@@ -214,7 +231,9 @@ export interface SessionListSource {
   lastActivityAt: string;
   originatingAlert: NormalizedAlert | null;
   investigation: boolean;
+  alertCleared: boolean;
   report: Report | null;
+  remediationExecuted: boolean;
   lastRole: string | null;
   awaitingHumanInput: boolean;
 }
@@ -236,6 +255,10 @@ export function listSessionSources(
     .prepare(
       `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
               s.originating_alert AS originatingAlert, s.investigation, r.report,
+              (s.alert_cleared_at IS NOT NULL) AS alertCleared,
+              EXISTS (SELECT 1 FROM remediation_actions ra
+                WHERE ra.session_id = s.session_id
+                  AND ra.status = 'executed') AS remediationExecuted,
               (SELECT m.role FROM session_messages m
                 WHERE m.session_id = s.session_id
                 ORDER BY m.seq DESC LIMIT 1) AS lastRole,
@@ -256,7 +279,9 @@ export function listSessionSources(
     lastActivityAt: string;
     originatingAlert: string | null;
     investigation: number;
+    alertCleared: number;
     report: string | null;
+    remediationExecuted: number;
     lastRole: string | null;
     awaitingHumanInput: number;
   }>;
@@ -272,7 +297,9 @@ export function listSessionSources(
           ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
           : null,
       investigation: r.investigation === 1,
+      alertCleared: r.alertCleared === 1,
       report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
+      remediationExecuted: r.remediationExecuted === 1,
       lastRole: r.lastRole,
       awaitingHumanInput: r.awaitingHumanInput === 1,
     })),

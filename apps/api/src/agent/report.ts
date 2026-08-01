@@ -1,118 +1,82 @@
 import type {
+  Conviction,
   Hypothesis,
+  ProposedFix,
   Report,
-  ReportStatus,
+  ReportConviction,
   ResolvedEvidence,
+  Verdict,
 } from "@nightwarden/shared";
-import { getReport, upsertReport } from "../db/reports.js";
+import { amendReport, appendToReport, getReport } from "../db/reports.js";
+import { listRemediationActionsForSession } from "../db/remediation-actions.js";
 import { getSessionMessages } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
+import { evidenceSource } from "./evidence-source.js";
 
-// The report domain service: the ONLY place a report is saved, and the owner of
-// the rule that a citation is the id of the tool call that produced it.
+// The report domain service: the only place the record is written, and the owner
+// of the two rules that keep it honest - a citation is the id of the tool call
+// that produced it, and nothing recorded can be unrecorded.
 
-// What the model emits via UpdateReport: claims, each citing the tool calls that
-// back it. Everything else the report shows is resolved from the transcript.
-export interface ReportInput {
-  status: ReportStatus;
-  headline: string;
-  rootCause: { summary: string; detail: string };
-  hypotheses: Hypothesis[];
-  recommendedFix: { summary: string; evidenceIds: string[] };
+// What a recording tool tells the model. A refusal is a correction, not a fault:
+// the act was rejected and the message says what to do instead.
+export interface RecordOutcome {
+  recorded: boolean;
+  message: string;
 }
 
-const REPORT_STATUSES: ReportStatus[] = [
-  "root_cause_identified",
-  "inconclusive",
-  "investigation_incomplete",
-];
-const HYPOTHESIS_STATES = ["root_cause", "disproven", "open"];
-const CONFIDENCES = ["low", "medium", "high"];
-
-// Defensive seatbelt behind the provider's schema enforcement; a corrupt call
-// gets a corrective tool error instead of a corrupt stored report.
-export function validateReportInput(
-  input: Record<string, unknown>,
-): ReportInput | null {
-  const candidate = input as unknown as ReportInput;
-  const stringArray = (v: unknown): v is string[] =>
-    Array.isArray(v) && v.every((s) => typeof s === "string");
-  if (!REPORT_STATUSES.includes(candidate.status)) return null;
-  if (typeof candidate.headline !== "string") return null;
-  if (
-    typeof candidate.rootCause?.summary !== "string" ||
-    typeof candidate.rootCause?.detail !== "string"
-  ) {
-    return null;
-  }
-  if (
-    !Array.isArray(candidate.hypotheses) ||
-    !candidate.hypotheses.every(
-      (h) =>
-        typeof h?.id === "string" &&
-        typeof h.statement === "string" &&
-        HYPOTHESIS_STATES.includes(h.state) &&
-        CONFIDENCES.includes(h.confidence) &&
-        typeof h.reason === "string" &&
-        stringArray(h.evidenceIds),
-    )
-  ) {
-    return null;
-  }
-  if (
-    typeof candidate.recommendedFix?.summary !== "string" ||
-    !stringArray(candidate.recommendedFix?.evidenceIds)
-  ) {
-    return null;
-  }
-  return candidate;
-}
-
-interface ToolCall {
+interface LedgerEntry {
   toolUseId: string;
   toolName: string;
   input: Record<string, unknown>;
   result: string | null;
+  createdAt: string;
 }
 
-// One walk of the durable transcript, which is the only record of what ran. The
-// provider's own call id is the citation handle, so nothing here numbers,
-// renames or copies anything.
-function toolCallsIn(sessionId: string): ToolCall[] {
-  const calls: ToolCall[] = [];
-  const byToolUseId = new Map<string, ToolCall>();
+// One walk of the durable transcript, which is the ledger. The provider's own
+// call id is the citation handle, so nothing here numbers or renames anything.
+function ledgerIn(sessionId: string): LedgerEntry[] {
+  const entries: LedgerEntry[] = [];
+  const byToolUseId = new Map<string, LedgerEntry>();
   for (const message of getSessionMessages(sessionId)) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
-        const call: ToolCall = {
+        const entry: LedgerEntry = {
           toolUseId: part.id,
           toolName: part.name,
           input: part.input,
           result: null,
+          createdAt: message.createdAt,
         };
-        calls.push(call);
-        byToolUseId.set(part.id, call);
+        entries.push(entry);
+        byToolUseId.set(part.id, entry);
       } else if (part.type === "tool_result") {
-        const call = byToolUseId.get(part.toolCallId);
-        if (call) call.result = part.output;
+        const entry = byToolUseId.get(part.toolCallId);
+        if (entry) entry.result = part.output;
       }
     }
   }
-  return calls;
+  return entries;
+}
+
+// Citations kept only where they name a call this session made, so a fabricated
+// one stays unrenderable. Existence, not completion: the model may cite a call
+// from the same turn, whose result is persisted only once the turn ends.
+function knownCitations(sessionId: string, ids: string[]): string[] {
+  const known = new Set(ledgerIn(sessionId).map((e) => e.toolUseId));
+  return [...new Set(ids)].filter((id) => known.has(id));
 }
 
 function citedIds(report: Report): Set<string> {
   return new Set([
     ...report.hypotheses.flatMap((h) => h.evidenceIds),
-    ...report.recommendedFix.evidenceIds,
+    ...report.fixes.flatMap((f) => f.evidenceIds),
   ]);
 }
 
-// In the order the calls happened, which is the order they are worth reading.
-// A citation whose call has not answered yet resolves to nothing: there is
-// nothing to quote, and an invented id must stay unrenderable. The outcome
-// rides along because a cited miss and a cited crash are not the same evidence.
+// In the order the calls happened, which is the order they are worth reading. A
+// citation whose call has not answered resolves to nothing: there is nothing to
+// quote. The outcome rides along - a cited miss and a cited crash differ.
 export function resolveEvidence(
   sessionId: string,
   report: Report,
@@ -121,7 +85,7 @@ export function resolveEvidence(
   if (cited.size === 0) return [];
   const outcomes = getToolOutcomes(sessionId);
   const resolved: ResolvedEvidence[] = [];
-  for (const { toolUseId, toolName, input, result } of toolCallsIn(sessionId)) {
+  for (const { toolUseId, toolName, input, result } of ledgerIn(sessionId)) {
     if (!cited.has(toolUseId) || result === null) continue;
     const outcome = outcomes.get(toolUseId);
     resolved.push({
@@ -135,64 +99,156 @@ export function resolveEvidence(
   return resolved;
 }
 
-// Citations kept only where they name a call this session actually made, so a
-// fabricated one stays unrenderable. The claim itself always survives: an
-// overreach must read as a missing citation, never as a missing sentence.
-export function enrichReport(
-  input: ReportInput,
+// Arithmetic over the ledger and the action log, so no tool input can set it.
+function convictionOf(
+  ids: string[],
+  ledger: Map<string, LedgerEntry>,
+  executedAt: string | null,
+): Conviction | null {
+  const entries = [...new Set(ids)]
+    .flatMap((id) => ledger.get(id) ?? [])
+    .filter((entry) => entry.result !== null);
+  if (entries.length === 0) return null;
+  if (executedAt !== null && entries.some((e) => e.createdAt > executedAt)) {
+    return "verified";
+  }
+  const sources = new Set(entries.map((e) => evidenceSource(e.toolName)));
+  return sources.size >= 2 ? "corroborated" : "cited";
+}
+
+// The instant the last remediation for this session settled as executed, which
+// is what makes a later read a confirmation rather than another observation.
+function lastExecutedAt(sessionId: string): string | null {
+  let latest: string | null = null;
+  for (const action of listRemediationActionsForSession(sessionId)) {
+    if (action.status !== "executed" || action.resolvedAt === null) continue;
+    if (latest === null || action.resolvedAt > latest)
+      latest = action.resolvedAt;
+  }
+  return latest;
+}
+
+export function computeConviction(
+  sessionId: string,
+  report: Report,
+): ReportConviction {
+  const ledger = new Map(ledgerIn(sessionId).map((e) => [e.toolUseId, e]));
+  const executedAt = lastExecutedAt(sessionId);
+  const graded: ReportConviction = {};
+  for (const row of [...report.hypotheses, ...report.fixes]) {
+    const conviction = convictionOf(row.evidenceIds, ledger, executedAt);
+    if (conviction !== null) graded[row.id] = conviction;
+  }
+  return graded;
+}
+
+export function proposeHypothesis(
   sessionId: string,
   model: string,
-): Report {
-  // Existence, not completion: the model may cite a call from the same turn,
-  // whose result is persisted only once the turn ends.
-  const known = new Set(toolCallsIn(sessionId).map((c) => c.toolUseId));
-  const keep = (ids: string[]): string[] => ids.filter((id) => known.has(id));
+  statement: string,
+): RecordOutcome {
+  const id = appendToReport(sessionId, model, (report) => {
+    const hypothesis: Hypothesis = {
+      id: `h${report.hypotheses.length + 1}`,
+      statement,
+      verdict: "open",
+      finding: "",
+      evidenceIds: [],
+      proposedAt: new Date().toISOString(),
+      resolvedAt: null,
+    };
+    return {
+      next: { ...report, hypotheses: [...report.hypotheses, hypothesis] },
+      value: hypothesis.id,
+    };
+  });
+  publishReportUpdated(sessionId);
   return {
-    status: input.status,
-    headline: input.headline,
-    rootCause: input.rootCause,
-    hypotheses: input.hypotheses.map((h) => ({
-      ...h,
-      evidenceIds: keep(h.evidenceIds),
-    })),
-    recommendedFix: {
-      ...input.recommendedFix,
-      evidenceIds: keep(input.recommendedFix.evidenceIds),
-    },
-    updatedAt: new Date().toISOString(),
-    model,
+    recorded: true,
+    message: `Recorded as ${id}. Pass that id to ResolveHypothesis once you have tested it.`,
   };
 }
 
-// The single save path: persisting and announcing are one operation, so no
-// caller can store a report the console never hears about.
-export function saveReport(
-  sessionId: string,
-  report: Report,
-  model: string,
-): void {
-  upsertReport(sessionId, report, model);
-  publishReportUpdated(sessionId);
+export interface ResolveHypothesisInput {
+  id: string;
+  verdict: Verdict;
+  finding: string;
+  evidenceIds: string[];
 }
 
-// The finish gate's last resort after the nudge cap: the run must still end
-// with a complete report, so stamp the honest "couldn't conclude" terminal.
-export function finalizeInconclusive(sessionId: string, model: string): void {
-  const existing = getReport(sessionId);
-  const report: Report = existing
-    ? {
-        ...existing,
-        status: "inconclusive",
-        updatedAt: new Date().toISOString(),
-      }
-    : {
-        status: "inconclusive",
-        headline: "",
-        rootCause: { summary: "", detail: "" },
-        hypotheses: [],
-        recommendedFix: { summary: "", evidenceIds: [] },
-        updatedAt: new Date().toISOString(),
-        model,
-      };
-  saveReport(sessionId, report, model);
+export function resolveHypothesis(
+  sessionId: string,
+  model: string,
+  input: ResolveHypothesisInput,
+): RecordOutcome {
+  const evidenceIds = knownCitations(sessionId, input.evidenceIds);
+  const wrote = amendReport(sessionId, model, (report) => {
+    const target = report.hypotheses.find((h) => h.id === input.id);
+    if (target === undefined || target.verdict !== "open") return null;
+    return {
+      ...report,
+      hypotheses: report.hypotheses.map((h) =>
+        h.id === input.id
+          ? {
+              ...h,
+              verdict: input.verdict,
+              finding: input.finding,
+              evidenceIds,
+              resolvedAt: new Date().toISOString(),
+            }
+          : h,
+      ),
+    };
+  });
+  if (!wrote) {
+    const existing = getReport(sessionId)?.hypotheses.find(
+      (h) => h.id === input.id,
+    );
+    return {
+      recorded: false,
+      message:
+        existing === undefined
+          ? `There is no hypothesis ${input.id} in this investigation. Propose it first.`
+          : `Hypothesis ${input.id} is already resolved as "${existing.verdict}" and the record cannot be rewritten. Propose a new hypothesis if your understanding has changed.`,
+    };
+  }
+  const dropped = input.evidenceIds.length - evidenceIds.length;
+  publishReportUpdated(sessionId);
+  return {
+    recorded: true,
+    message:
+      dropped === 0
+        ? `Recorded ${input.id} as "${input.verdict}".`
+        : `Recorded ${input.id} as "${input.verdict}". ${dropped} of the ids you cited name no call you made and were dropped; cite the ids exactly as they appear on your own tool calls.`,
+  };
+}
+
+// Appended, never replaced: a fix the operator rejected stays on the record
+// beside the one that superseded it.
+export function proposeFix(
+  sessionId: string,
+  model: string,
+  summary: string,
+  citations: string[],
+): RecordOutcome {
+  const evidenceIds = knownCitations(sessionId, citations);
+  const superseded = appendToReport(sessionId, model, (report) => {
+    const fix: ProposedFix = {
+      id: `f${report.fixes.length + 1}`,
+      summary,
+      evidenceIds,
+      recordedAt: new Date().toISOString(),
+    };
+    return {
+      next: { ...report, fixes: [...report.fixes, fix] },
+      value: report.fixes.length > 0,
+    };
+  });
+  publishReportUpdated(sessionId);
+  return {
+    recorded: true,
+    message: superseded
+      ? "Proposed fix recorded. It supersedes the one before it, which stays on the record."
+      : "Proposed fix recorded.",
+  };
 }

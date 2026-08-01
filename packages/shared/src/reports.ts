@@ -1,36 +1,56 @@
-// The investigation report: a durable, structured artifact the agent maintains
-// live during an Investigate run via the UpdateReport tool. Stored one-per-session.
-// It holds only what the model authored; everything the operator reads about the
-// evidence is resolved from the transcript, which is the record of what ran.
+// The investigation record: append-only rows the agent writes one act at a time.
+// It holds only what the model authored; status, conviction, the evidence and
+// what ran are all answered by the system.
 
 import type { RemediationActionRecord } from "./remediation.js";
 import type { ToolOutcome } from "./transcript.js";
 
-export type ReportStatus =
-  "root_cause_identified" | "inconclusive" | "investigation_incomplete";
-export type HypothesisState = "root_cause" | "disproven" | "open";
-export type Confidence = "low" | "medium" | "high";
+// How a hypothesis resolved, plus "open" while it is still being tested. Six,
+// because without a home for "symptom of something upstream" the model must
+// overclaim a root cause or leave the question open.
+export type Verdict =
+  | "root_cause"
+  | "trigger"
+  | "symptom"
+  | "contributing_factor"
+  | "disproven"
+  | "open";
+
+// How well the system can back a claim, computed from the ledger at read time.
+// A claim with no resolvable citation earns none of these.
+export type Conviction = "cited" | "corroborated" | "verified";
 
 export interface Hypothesis {
+  // Assigned by the system in proposal order, so a later call cannot land on an
+  // earlier row and rewrite it.
   id: string;
   statement: string;
-  state: HypothesisState;
-  confidence: Confidence;
-  reason: string;
-  // The ids of the tool calls that back this claim, copied verbatim. Ids naming
-  // no call in this session are dropped; the claim itself always survives.
+  verdict: Verdict;
+  // Why it resolved that way. Deliberately not "reason": since the reason rides
+  // the write call, that word means one thing across the whole contract.
+  finding: string;
+  // Ledger entry ids, copied verbatim. Ids naming no call in this session are
+  // dropped; the claim itself always survives.
   evidenceIds: string[];
+  proposedAt: string;
+  resolvedAt: string | null;
 }
 
+// What the agent RECOMMENDS, never a claim that anything ran. What actually ran
+// is the executed action log, which the model cannot write to.
+export interface ProposedFix {
+  id: string;
+  summary: string;
+  evidenceIds: string[];
+  recordedAt: string;
+}
+
+// A rejection redirects the agent rather than stopping it, so it proposes again.
+// The list keeps both: the last one is what stands, and the ones before it are
+// what the operator turned down.
 export interface Report {
-  status: ReportStatus;
-  // Short investigation title; supersedes the session title in the UI.
-  headline: string;
-  rootCause: { summary: string; detail: string };
   hypotheses: Hypothesis[];
-  // What the agent RECOMMENDS, never a claim that anything ran. What actually
-  // ran is the executed action log, which the model cannot write to.
-  recommendedFix: { summary: string; evidenceIds: string[] };
+  fixes: ProposedFix[];
   updatedAt: string;
   model: string;
 }
@@ -48,11 +68,17 @@ export interface ResolvedEvidence {
   outcome?: ToolOutcome;
 }
 
-// The report route's response. The three halves have three different authors
-// and that is the point: the model writes `report`, the executor writes
-// `actions`, and `evidence` is the transcript quoting itself.
+// Computed from the ledger on every read and never stored, so no tool input can
+// set it. Keyed by row id across both hypotheses and fixes, whose ids share one
+// namespace; a row absent from it earned no conviction at all.
+export type ReportConviction = Record<string, Conviction>;
+
+// The report route's response. Four authors, deliberately: the model writes
+// `report`, the executor `actions`, the transcript `evidence`, the system
+// `conviction`.
 export interface SessionReportResponse {
   report: Report;
   actions: RemediationActionRecord[];
   evidence: ResolvedEvidence[];
+  conviction: ReportConviction;
 }

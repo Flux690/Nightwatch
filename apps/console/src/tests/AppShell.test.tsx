@@ -117,7 +117,13 @@ function setup(pendingCount = 0) {
           })
         : Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ report: sessionReport, actions: [] }),
+            json: () =>
+              Promise.resolve({
+                report: sessionReport,
+                actions: [],
+                evidence: [],
+                conviction: {},
+              }),
           });
     }
     if (/\/sessions\/[^?]+/.test(url)) {
@@ -406,12 +412,18 @@ describe("Shell", () => {
 
       setInvestigation(true);
       setSessionReport({
-        status: "investigation_incomplete",
-        headline: "web-01 memory leak",
-        rootCause: { summary: "", detail: "" },
-        hypotheses: [],
-        evidence: [],
-        recommendedFix: { summary: "", evidenceIds: [] },
+        hypotheses: [
+          {
+            id: "h1",
+            statement: "web-01 leaks memory",
+            verdict: "root_cause",
+            finding: "",
+            evidenceIds: [],
+            proposedAt: new Date().toISOString(),
+            resolvedAt: new Date().toISOString(),
+          },
+        ],
+        fixes: [],
         updatedAt: new Date().toISOString(),
         model: "test",
       });
@@ -432,7 +444,7 @@ describe("Shell", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("web-01 memory leak")).toBeInTheDocument();
+        expect(screen.getAllByText("web-01 leaks memory").length).toBe(2);
       });
     });
 

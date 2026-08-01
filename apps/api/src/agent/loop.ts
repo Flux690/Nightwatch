@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import { GATE_NUDGE } from "./prompts/report.js";
-import { finalizeInconclusive } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
@@ -114,8 +113,8 @@ function buildSessionMeta(
 // handled by the dispatcher's catch - never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
-// Finish-gate pushback cap: after this many nudges the run finalizes as
-// inconclusive rather than looping; the time budget bounds it as well.
+// Finish-gate pushback cap: after this many nudges the run ends rather than
+// looping; the time budget bounds it as well.
 const MAX_NUDGES = 3;
 
 export interface RunInvestigationInput {
@@ -232,12 +231,6 @@ export async function runInvestigation(
     if (signal?.aborted) {
       log.info("run stopped by user during end wrap-up");
       return "stopped";
-    }
-    // The operator is ending the run, so no nudge loop - just guarantee a
-    // complete report exists before the terminal event. The wrap-up turn runs
-    // no tools, so the flag read at run start cannot have changed under it.
-    if (opensInvestigation && !reportComplete(sessionId)) {
-      finalizeInconclusive(sessionId, llm.model);
     }
     log.info("investigation ended after operator declined to continue");
     return "completed";
@@ -415,21 +408,17 @@ export async function runInvestigation(
 
     if (response.toolUses.length === 0) {
       // Finish gate: a session under investigation may only end with a complete
-      // report. Push back up to MAX_NUDGES times, then finalize honestly as
-      // inconclusive.
+      // record. Push back up to MAX_NUDGES times, then let it end - the status
+      // an unfinished record derives to is already the honest one.
       if (investigation && !reportComplete(sessionId)) {
         if (nudges < MAX_NUDGES) {
           nudges++;
-          log.info({ turn, nudges }, "finish gate: report incomplete, nudging");
+          log.info({ turn, nudges }, "finish gate: record incomplete, nudging");
           provider.appendUserMessage(GATE_NUDGE);
           persist();
           continue;
         }
-        log.warn(
-          { turn },
-          "finish gate: nudge cap reached, finalizing inconclusive",
-        );
-        finalizeInconclusive(sessionId, llm.model);
+        log.warn({ turn }, "finish gate: nudge cap reached, ending incomplete");
       }
       log.info({ turn }, "investigation finished with free-form response");
       return "completed";
