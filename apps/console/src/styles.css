@@ -1,7 +1,6 @@
 /* NightWarden Console — Tailwind v4 + shadcn (base-nova). One dark palette on
-   :root, mapped into Tailwind via @theme inline. Single accent (cobalt),
-   surface ladder, ink hierarchy, explicit state tokens, no opacity divisors.
-   Every text/border pair is WCAG-validated; these are the validated values. */
+   :root, mapped into Tailwind via @theme inline: single accent, surface ladder,
+   ink hierarchy, explicit state tokens. Every text/border pair is WCAG-validated. */
 
 @import "tailwindcss";
 @import "tw-animate-css";

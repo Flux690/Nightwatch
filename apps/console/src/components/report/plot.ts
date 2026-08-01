@@ -1,11 +1,9 @@
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { asRecord } from "@/lib/toolResult";
 
-/* What a measurement result can be drawn as, decided by the shape of the data
-   and never by the model. A query that returns points over time is a line; one
-   that returns a reading per label is a comparison; one reading is a number.
-   The agent chooses the picture by choosing what to measure, which is the only
-   say over it that cannot draw something the evidence does not show. */
+/* What a measurement result is drawn as, decided by the shape of the data and
+   never by the model: points over time are a line, a reading per label is a
+   comparison, one reading is a number. */
 
 export interface Point {
   at: string;

@@ -1,14 +1,10 @@
-/* Lets the report reach a tool call in the transcript rail.
- *
- * Scroll and mark, never open. The reader has already seen the output inline
- * under the claim and came here for position - what ran before and after -
- * which expanding the row pushes off screen. The mark is what makes the scroll
- * visible, since ten collapsed rows look identical.
- *
- * An event rather than shared state because the report and the transcript are
- * siblings under the Shell with no common owner, and threading a "reveal this
- * id" prop through both subtrees would put a transient interaction into the
- * data model. */
+/* Lets the report reach a tool call in the transcript rail: scroll and mark,
+   never open. The reader has read the output inline and came for position, so
+   the mark is what makes the scroll visible among identical collapsed rows. */
+
+/* An event rather than shared state: the report and the transcript are siblings
+   under the Shell with no common owner, and threading a "reveal this id" prop
+   through both subtrees would put a transient interaction into the data model. */
 
 const EVENT = "nw:reveal-tool-call";
 

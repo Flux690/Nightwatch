@@ -11,11 +11,9 @@ import { ChangesList, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
 import { plotFrom } from "./plot.js";
 
-/* One cited tool call, quoted under the claim it backs. The reading leads,
-   because that is what the claim rests on; the result follows. Drawn or quoted,
-   every value shown came from the recorded call, so checking a claim is reading
-   rather than trusting. Subordinate by rule: a claim stays scannable with three
-   of these beneath it. */
+/* One cited tool call, quoted under the claim it backs. The reading leads
+   because that is what the claim rests on; the result follows. Every value came
+   from the recorded call, so checking a claim is reading rather than trusting. */
 export function Evidence({
   entry,
   alert,

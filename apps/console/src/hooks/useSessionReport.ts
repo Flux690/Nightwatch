@@ -4,10 +4,9 @@ import type { ConsoleEvent, SessionReportResponse } from "@nightwarden/shared";
 import { apiFetch, ApiError } from "@/api/client";
 import { useConsoleEvents } from "./ConsoleEventsProvider.js";
 
-// The session's stored report, kept live: REPORT_UPDATED invalidates, and the
-// provider's reconnect invalidation self-heals a missed event. A 404 means no
-// finding has been recorded yet, which useSession answers separately - this
-// hook never says what a session is.
+// The session's stored report, kept live: REPORT_UPDATED invalidates and the
+// provider's reconnect self-heals a missed event. A 404 means no finding has
+// been recorded yet; this hook never says what a session is.
 export function useSessionReport(
   sessionId: string | null,
 ): SessionReportResponse | null {

@@ -5,10 +5,8 @@ import type { ApprovalStatus } from "./approvals.js";
 // works out what state a tool call is in.
 
 // Why a call did not simply answer, absent when it did. The console renders on
-// this rather than on a boolean, so a file that turned out to have a different
-// name reads as a miss instead of in the same red as a crash.
-// The list is the single definition and the type is derived from it, so a
-// reader checking a stored value against the classes cannot drift from them.
+// this rather than on a boolean, so a file under a different name reads as a
+// miss instead of in the same red as a crash. The type is derived from the list.
 export const TOOL_OUTCOMES = [
   // Some runners in a fan-out answered and some did not; the envelope names which.
   "partial",

@@ -209,10 +209,9 @@ export async function respondToPendingHumanInput(
   }
 
   if (decision === "reject") {
-    // Only what is true: the operator said no. Why is either in their comment or
-    // unknown, and the alert's severity cannot answer it - inferring "too risky"
-    // from a critical alert hands the agent a motive nobody gave. A rejection
-    // redirects the work rather than stopping it, so this asks for a next move.
+    // Only what is true: the operator said no. Why is in their comment or it is
+    // unknown, and inferring a motive from the alert's severity hands the agent
+    // one nobody gave. A rejection redirects the work, so this asks what next.
     const comment = text?.trim() ?? "";
     const gatedResult: ToolResult = {
       tool_use_id: pending.toolUseId,

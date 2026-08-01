@@ -202,10 +202,9 @@ export function countExecutedRemediations(params: {
   return row.count;
 }
 
-// Row to wire shape. Shared by the audit log and the session report so the two
-// views of one action can never drift apart. A write is addressed by its target
-// key, and that is what the audit names: which runner happened to serve it is a
-// routing detail that can differ between two attempts on the same service.
+// Row to wire shape, shared by the audit log and the session report so the two
+// views of one action cannot drift. A write is addressed by its target key, so
+// that is what the audit names; which runner served it is a routing detail.
 export function toActionRecord(
   action: RemediationAction,
 ): RemediationActionRecord {

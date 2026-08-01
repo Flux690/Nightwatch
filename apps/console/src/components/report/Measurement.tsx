@@ -3,9 +3,8 @@ import { cn } from "@/lib/utils";
 import type { Plot, Point } from "./plot.js";
 
 /* Hand-drawn SVG, no charting dependency: three shapes is not a library's worth
-   of work, and the colours are the app's own tokens rather than a package's
-   defaults. Nothing re-queries - every value comes from the recorded result, so
-   a chart still draws after the metric's retention window has expired. */
+   of work, and the colours are the app's own tokens. Nothing re-queries, so a
+   chart still draws after the metric's retention window has expired. */
 
 const W = 640;
 const H = 140;
