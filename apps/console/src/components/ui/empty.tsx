@@ -3,12 +3,15 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+/* Centred in the stage on both axes, contents ranged left. It claims the space
+   left over below the header, so it re-centres itself when the sidebar opens or
+   closes. No fill and no edge: there is nothing here worth bounding. */
 function Empty({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty"
       className={cn(
-        "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed p-6 text-balance",
+        "mx-auto flex w-full max-w-md min-w-0 flex-1 flex-col items-start justify-center gap-4",
         className,
       )}
       {...props}
@@ -20,7 +23,7 @@ function EmptyHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="empty-header"
-      className={cn("flex max-w-sm flex-col items-start gap-2", className)}
+      className={cn("flex w-full flex-col items-start gap-2", className)}
       {...props}
     />
   );

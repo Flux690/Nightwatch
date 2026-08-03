@@ -156,18 +156,28 @@ export function RunnerListPage({
       <BackLink to="/integrations">Integrations</BackLink>
       <PageHeader>
         <PageTitle>{copy.plural}</PageTitle>
-        <Button
-          size="sm"
-          onClick={() => void navigate({ to: `/integrations/${platform}/add` })}
-        >
-          <Plus {...ICON_INLINE} />
-          Add a {copy.singular.toLowerCase()}
-        </Button>
+        {/* The empty state carries this action itself, so offering it twice on
+            the one screen where it is the only thing to do reads as a mistake. */}
+        {connected.length > 0 && (
+          <Button
+            size="sm"
+            onClick={() =>
+              void navigate({ to: `/integrations/${platform}/add` })
+            }
+          >
+            <Plus {...ICON_INLINE} />
+            Add a {copy.singular.toLowerCase()}
+          </Button>
+        )}
       </PageHeader>
 
-      <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
-        {copy.blurb}
-      </p>
+      {/* Withheld while the list is empty: the empty state already says what
+          this is and what to do, and saying it twice reads as a stutter. */}
+      {connected.length > 0 && (
+        <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
+          {copy.blurb}
+        </p>
+      )}
 
       {removeError !== null && (
         <Alert variant="destructive" className="mb-4">
