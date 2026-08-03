@@ -121,9 +121,10 @@ export type {
 } from "./runner.js";
 export { PLATFORMS, isPlatform } from "./runner.js";
 export type {
-  SessionRole,
+  TranscriptKind,
   SessionMeta,
-  SessionMessage,
+  TranscriptRow,
+  SessionAlert,
   SessionDetail,
   SessionRunStatus,
   SessionListRow,
@@ -151,6 +152,7 @@ export type {
   ApprovalCardItem,
   ClarificationCardItem,
   ContinueCardItem,
+  AlertArrivedItem,
   TranscriptItem,
 } from "./transcript.js";
 export {

@@ -37,27 +37,39 @@ function alertInput(
 ): RunInvestigationInput {
   return {
     sessionId: `s-${sourceAlertId}`,
-    alert: makeAlert(sourceAlertId, firedAt),
+    alerts: [makeAlert(sourceAlertId, firedAt)],
   };
 }
 
-// Fakes the durable session->alert lookup (really getSession(id)?.originatingAlert), so a
-// resumed dispatch (no input.alert) still resolves via the fallback.
-function fakeAlertLookup(): {
-  getAlertForSession: (sessionId: string) => NormalizedAlert | null;
-  register: (sessionId: string, alert: NormalizedAlert) => void;
-} {
-  const bySession = new Map<string, NormalizedAlert>();
+// A whole batch on one session, none of them elected: this is what a 90s window
+// produces, and every member has to dedup.
+function batchInput(
+  sessionId: string,
+  sourceAlertIds: string[],
+): RunInvestigationInput {
   return {
-    getAlertForSession: (sessionId) => bySession.get(sessionId) ?? null,
-    register: (sessionId, alert) => bySession.set(sessionId, alert),
+    sessionId,
+    alerts: sourceAlertIds.map((id) => makeAlert(id)),
   };
 }
 
-// No lookup match for any session — for tests that only exercise input.alert
+// Fakes the durable session->alerts lookup (really getSession(id)?.alerts), so a
+// resumed dispatch (no input.alerts) still resolves via the fallback.
+function fakeAlertLookup(): {
+  getAlertsForSession: (sessionId: string) => NormalizedAlert[];
+  register: (sessionId: string, alerts: NormalizedAlert[]) => void;
+} {
+  const bySession = new Map<string, NormalizedAlert[]>();
+  return {
+    getAlertsForSession: (sessionId) => bySession.get(sessionId) ?? [],
+    register: (sessionId, alerts) => bySession.set(sessionId, alerts),
+  };
+}
+
+// No lookup match for any session — for tests that only exercise input.alerts
 // (the lookup is purely a resume-time fallback) or chat/resume-without-alert.
-function noAlertLookup(): NormalizedAlert | null {
-  return null;
+function noAlertLookup(): NormalizedAlert[] {
+  return [];
 }
 
 describe("dispatcher", () => {
@@ -69,7 +81,7 @@ describe("dispatcher", () => {
         started.push(input.sessionId);
         return gate.promise;
       },
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("a"));
@@ -84,7 +96,7 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({
       run: () => gate.promise,
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("dup", FIRED_AT));
@@ -102,18 +114,45 @@ describe("dispatcher", () => {
     expect(d.isInvestigating("dup", FIRED_AT)).toBe(false);
   });
 
+  it("dedups every alert of a batch, not whichever arrived first", async () => {
+    // A window elects no primary, so a re-notification of the tenth member is
+    // as much a duplicate as one of the first. Keying on one would let the rest
+    // through, and each would then be injected into the run already handling it.
+    const gate = deferred();
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertsForSession: noAlertLookup,
+    });
+
+    d.dispatch(batchInput("s-batch", ["first", "second", "third"]));
+
+    for (const id of ["first", "second", "third"]) {
+      expect(d.isInvestigating(id, FIRED_AT)).toBe(true);
+    }
+
+    // An alert that arrives mid-run joins the set the run is covering, so its
+    // own re-notification dedups too.
+    d.injectAlert("s-batch", makeAlert("fourth"));
+    expect(d.isInvestigating("fourth", FIRED_AT)).toBe(true);
+
+    gate.resolve();
+    await flush();
+
+    expect(d.isInvestigating("second", FIRED_AT)).toBe(false);
+  });
+
   it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
     const gate = deferred();
     const lookup = fakeAlertLookup();
     const d = createDispatcher({
       run: () => gate.promise,
-      getAlertForSession: lookup.getAlertForSession,
+      getAlertsForSession: lookup.getAlertsForSession,
     });
 
     expect(d.getActiveAlertSession()).toBeNull();
 
     const input = alertInput("a");
-    lookup.register(input.sessionId, input.alert!);
+    lookup.register(input.sessionId, input.alerts!);
     d.dispatch(input);
     expect(d.getActiveAlertSession()).toBe("s-a");
 
@@ -127,7 +166,7 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({
       run: () => gate.promise,
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch({ sessionId: "chat-1" });
@@ -140,7 +179,7 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({
       run: () => gate.promise,
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch({ sessionId: "chat-1" });
@@ -153,7 +192,7 @@ describe("dispatcher", () => {
     const gate = deferred();
     const d = createDispatcher({
       run: () => gate.promise,
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("a"));
@@ -173,7 +212,7 @@ describe("dispatcher", () => {
         receivedSignal = input.signal;
         return gate.promise;
       },
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("a"));
@@ -189,7 +228,7 @@ describe("dispatcher", () => {
   it("stop returns false for a session that is not running", () => {
     const d = createDispatcher({
       run: () => Promise.resolve<RunOutcome>("completed"),
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     expect(d.stop("unknown")).toBe(false);
@@ -205,39 +244,39 @@ describe("dispatcher", () => {
         gates.set(input.sessionId, g);
         return g.promise;
       },
-      getAlertForSession: noAlertLookup,
+      getAlertsForSession: noAlertLookup,
     });
 
     d.dispatch(alertInput("primary"));
-    const primaryId = "s-primary";
+    const openedId = "s-primary";
 
     const leftover = makeAlert("leftover");
-    d.injectAlert(primaryId, leftover);
+    d.injectAlert(openedId, leftover);
 
-    gates.get(primaryId)!.resolve();
+    gates.get(openedId)!.resolve();
     // Two flushes: the finally block runs, then the newly dispatched run starts.
     await flush();
     await flush();
 
     expect(started.length).toBe(2);
-    expect(started[1]).not.toBe(primaryId);
+    expect(started[1]).not.toBe(openedId);
 
     // Clean up the leftover run
     gates.get(started[1]!)?.resolve();
   });
 
-  // resume dispatch never carries input.alert; all alert-derived behavior must fall back to the session lookup
-  describe("resumed alert runs (no input.alert, derived via lookup)", () => {
+  // resume dispatch never carries input.alerts; all alert-derived behavior must fall back to the session lookup
+  describe("resumed alert runs (no input.alerts, derived via lookup)", () => {
     it("getActiveAlertSession recovers the alert session on resume", async () => {
       const gate = deferred();
       const lookup = fakeAlertLookup();
       const d = createDispatcher({
         run: () => gate.promise,
-        getAlertForSession: lookup.getAlertForSession,
+        getAlertsForSession: lookup.getAlertsForSession,
       });
 
       const resumedAlert = makeAlert("resumed");
-      lookup.register("s-resumed", resumedAlert);
+      lookup.register("s-resumed", [resumedAlert]);
 
       // Resume dispatch: no `alert` field, just seed + resumeToolResults.
       d.dispatch({ sessionId: "s-resumed", seed: [], resumeToolResults: [] });
@@ -255,11 +294,11 @@ describe("dispatcher", () => {
       const lookup = fakeAlertLookup();
       const d = createDispatcher({
         run: () => gate.promise,
-        getAlertForSession: lookup.getAlertForSession,
+        getAlertsForSession: lookup.getAlertsForSession,
       });
 
       const resumedAlert = makeAlert("resumed-dup");
-      lookup.register("s-resumed-dup", resumedAlert);
+      lookup.register("s-resumed-dup", [resumedAlert]);
 
       d.dispatch({
         sessionId: "s-resumed-dup",
@@ -286,11 +325,11 @@ describe("dispatcher", () => {
           gates.set(input.sessionId, g);
           return g.promise;
         },
-        getAlertForSession: lookup.getAlertForSession,
+        getAlertsForSession: lookup.getAlertsForSession,
       });
 
       const resumedAlert = makeAlert("resumed-leftover");
-      lookup.register("s-resumed-leftover", resumedAlert);
+      lookup.register("s-resumed-leftover", [resumedAlert]);
       d.dispatch({
         sessionId: "s-resumed-leftover",
         seed: [],

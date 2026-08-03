@@ -1,3 +1,4 @@
+import type { ReportGap } from "../report.js";
 import type { ToolSchema } from "../../llm/types.js";
 
 // The one thing a citation can be. The id of the call is the only handle that
@@ -105,6 +106,47 @@ When you have settled on what should be done, call ProposeFix. If the operator r
 
 Before you finish, settle every hypothesis you proposed. A hypothesis you settle as the root cause must cite at least one tool call. If you could not work out the cause, settle what you tested and say so; that is an honest and useful ending, and inventing a cause to avoid it is not.`;
 
-// Sent by the finish gate when a run stops with an incomplete record.
-export const GATE_NUDGE =
-  "Your investigation record is not finished. Settle every hypothesis you proposed with ResolveHypothesis, and make sure any hypothesis you settled as the root cause cites at least one tool call. If you proposed nothing, propose what you tested with ProposeHypothesis and settle it, so the record says what you ruled out.";
+// A settled hypothesis can never be settled again, so a claim whose evidence
+// did not hold up is recorded afresh rather than corrected in place. Both gaps
+// below say so, because asking for a call the system refuses teaches nothing.
+const RECORD_AGAIN =
+  "A settled hypothesis cannot be settled again, so propose it afresh with ProposeHypothesis and settle the new one with ResolveHypothesis";
+
+// Grammar for a list of row ids, so a request naming one gap and a request
+// naming four both read as English.
+function subject(ids: string[]): { names: string; is: string; them: string } {
+  if (ids.length === 1) return { names: ids[0]!, is: "is", them: "it" };
+  const names = `${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]!}`;
+  return { names, is: "are", them: "each of them" };
+}
+
+function sentenceFor(gap: ReportGap): string {
+  switch (gap.kind) {
+    case "empty_record":
+      return "You have recorded no hypotheses. Call ProposeHypothesis for each explanation you considered and ResolveHypothesis to settle it, so the record says what you ruled out. If you could not work out the cause, say what you tested and settle it as disproven; that is an honest ending, and inventing a cause to avoid it is not.";
+    case "open_hypothesis": {
+      const s = subject(gap.ids);
+      return `${s.names} ${s.is} still open. Settle ${s.them} with ResolveHypothesis.`;
+    }
+    case "uncited_root_cause": {
+      const s = subject(gap.ids);
+      return `${s.names} ${s.is} settled as a root cause while citing no tool call. ${RECORD_AGAIN}, citing the ids exactly as they appear on your own calls.`;
+    }
+    case "unresolvable_citation": {
+      const s = subject(gap.ids);
+      return `${s.names} ${s.is} backed only by calls that returned nothing, so the claim stands unsupported. ${RECORD_AGAIN} against a call that answered; for a proposed fix, call ProposeFix again.`;
+    }
+    case "unrecorded_fix":
+      return "A change has already been applied on this session and you have recommended nothing. Call ProposeFix with the fix you are recommending.";
+  }
+}
+
+// Sent by the finish gate when a run tries to end with gaps in its record. It
+// names those gaps and nothing else: a model that is one hypothesis short is not
+// told about the four things it did do.
+export function completionRequest(gaps: ReportGap[]): string {
+  return [
+    "Your investigation record is not finished.",
+    ...gaps.map(sentenceFor),
+  ].join(" ");
+}

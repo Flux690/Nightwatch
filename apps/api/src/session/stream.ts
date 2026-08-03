@@ -14,7 +14,7 @@ import type {
   ConsoleSessionTitleUpdated,
   ConsoleTextMessageContent,
   ConsoleTranscriptItem,
-  SessionMessage,
+  TranscriptRow,
 } from "@nightwarden/shared";
 
 // Every envelope goes to the one console bus as a typed ConsoleEvent; the SSE route
@@ -35,7 +35,7 @@ export function publishTextMessageContent(
 // times per run - a content event, orthogonal to run lifecycle.
 export function publishMessage(
   sessionId: string,
-  message: SessionMessage,
+  message: TranscriptRow,
 ): void {
   const env: ConsoleMessage = {
     messageId: randomUUID(),
@@ -110,7 +110,7 @@ export function publishRunRetrying(
 
 export function publishRunFailed(
   sessionId: string,
-  message: SessionMessage,
+  message: TranscriptRow,
 ): void {
   const env: ConsoleRunFailed = {
     messageId: randomUUID(),

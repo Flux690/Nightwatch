@@ -100,7 +100,7 @@ export async function registerSessionRoutes(
         title: session.title,
         createdAt: session.createdAt,
         investigation: session.investigation,
-        originatingAlert: session.originatingAlert,
+        alerts: session.alerts,
         transcript: buildTranscript(request.params.id),
       };
       return response;

@@ -10,7 +10,7 @@ const CONSOLE_EVENT = "console-event";
 const consoleBus = new EventEmitter();
 consoleBus.setMaxListeners(0);
 
-// Best-effort and ephemeral - the durable record is the SessionMessage
+// Best-effort and ephemeral - the durable record is the TranscriptRow
 // persisted when the turn completes - so a publish must never throw.
 export function publishConsoleEvent(event: ConsoleEvent): void {
   consoleBus.emit(CONSOLE_EVENT, event);

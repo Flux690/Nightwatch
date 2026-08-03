@@ -26,7 +26,7 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { getTranscriptRows } from "../db/sessions.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -107,14 +107,14 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         (e) =>
           e.type === "MESSAGE" &&
           e.payload["sessionId"] === sessionId &&
-          (e.payload["message"] as { role?: string } | undefined)?.role ===
+          (e.payload["message"] as { kind?: string } | undefined)?.kind ===
             "assistant",
       ),
     );
     close();
 
-    const messages = getSessionMessages(sessionId);
-    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+    const messages = getTranscriptRows(sessionId);
+    const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
     expect(lastAssistant?.content).toBe("I cannot help with that.");
     expect(
       messages.some((m) => m.content.startsWith("Escalated to human:")),
@@ -156,8 +156,8 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
     close();
 
-    const messages = getSessionMessages(sessionId);
-    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+    const messages = getTranscriptRows(sessionId);
+    const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
     expect(lastAssistant?.content).toBe("Root cause found. I am done.");
     expect(
       messages.some((m) => m.content.startsWith("Escalated to human:")),
@@ -204,7 +204,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    dispatcher.dispatch({ alert, sessionId });
+    dispatcher.dispatch({ alerts: [alert], sessionId });
 
     await waitFor(() =>
       events.find(
@@ -245,13 +245,13 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     );
     close();
 
-    const messages = getSessionMessages(sessionId);
+    const messages = getTranscriptRows(sessionId);
     expect(
       messages.some((m) => m.content.startsWith("Escalated to human:")),
     ).toBe(false);
     expect(events.some((e) => e.type === "ESCALATED")).toBe(false);
 
-    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+    const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
     expect(lastAssistant?.content).toContain("rejected");
   });
 });

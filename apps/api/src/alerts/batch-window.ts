@@ -48,15 +48,15 @@ export function createBatchWindow(opts: {
 export const batchWindow = createBatchWindow({
   windowMs: 90_000,
   onBatch: (alerts) => {
-    const primary = alerts[0];
-    if (!primary) return;
-    dispatcher.dispatch({
-      sessionId: randomUUID(),
-      alert: primary,
-      additionalAlerts: alerts.slice(1),
-    });
+    if (alerts.length === 0) return;
+    // The window is an assembly buffer, not an entity: it elects no member and
+    // keeps no identity of its own. What it produces is a session holding them all.
+    dispatcher.dispatch({ sessionId: randomUUID(), alerts });
     logger.info(
-      { alertCount: alerts.length, primaryId: primary.sourceAlertId },
+      {
+        alertCount: alerts.length,
+        alertIds: alerts.map((a) => a.sourceAlertId),
+      },
       "batch window fired",
     );
   },

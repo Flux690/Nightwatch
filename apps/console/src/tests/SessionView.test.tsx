@@ -69,7 +69,7 @@ function setup(initialItems: object[] = [USER_TURN]) {
             title: "Service is down on web-01",
             createdAt: "2026-06-13T00:00:00.000Z",
             investigation: false,
-            originatingAlert: null,
+            alerts: [],
             transcript: items,
           }),
       });
@@ -230,7 +230,7 @@ describe("SessionView", () => {
             message: {
               sessionId: "s1",
               seq: 2,
-              role: "assistant",
+              kind: "assistant",
               content: "Investigation complete.",
               parts: [{ type: "text", text: "Investigation complete." }],
               createdAt: new Date().toISOString(),
@@ -481,7 +481,7 @@ describe("SessionView", () => {
             message: {
               sessionId: "s1",
               seq: 3,
-              role: "assistant",
+              kind: "assistant",
               content: "Done.",
               parts: [{ type: "text", text: "Done." }],
               createdAt: "2024-01-01T00:03:00Z",
@@ -534,7 +534,7 @@ describe("SessionView", () => {
             message: {
               sessionId: "s1",
               seq: 2,
-              role: "user",
+              kind: "user",
               content: "check the db",
               parts: [{ type: "text", text: "check the db" }],
               createdAt: new Date().toISOString(),
@@ -687,7 +687,7 @@ describe("SessionView", () => {
             message: {
               sessionId: "s1",
               seq: 2,
-              role: "user",
+              kind: "user",
               content: "check the db",
               parts: [{ type: "text", text: "check the db" }],
               createdAt: new Date().toISOString(),
@@ -1161,7 +1161,7 @@ describe("SessionView", () => {
             message: {
               sessionId: "s1",
               seq: 2,
-              role: "error",
+              kind: "error",
               content:
                 "The model provider had a server problem - this is upstream, not your setup.",
               createdAt: new Date().toISOString(),

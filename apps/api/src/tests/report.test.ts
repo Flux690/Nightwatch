@@ -14,18 +14,22 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { Hypothesis, NormalizedAlert, Report } from "@nightwarden/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
 import { runInvestigation } from "../agent/loop.js";
-import { GATE_NUDGE } from "../agent/prompts/report.js";
-import { computeConviction, resolveEvidence } from "../agent/report.js";
+import {
+  computeConviction,
+  reportGaps,
+  resolveEvidence,
+} from "../agent/report.js";
 import { REPORT_TOOLS } from "../agent/tools/report.js";
 import { executeTool } from "../agent/tools/toolset.js";
-import { getReport, isReportComplete } from "../db/reports.js";
+import { getReport } from "../db/reports.js";
 import {
   insertExecutingRemediationAction,
   settleRemediationAction,
 } from "../db/remediation-actions.js";
-import { createSession, appendSessionMessages } from "../db/sessions.js";
+import { createSession, appendTranscriptRows } from "../db/sessions.js";
+import { buildTranscript } from "../session/transcript.js";
 import { useTempDb } from "./temp-db.js";
 
 function alert(sourceAlertId: string): NormalizedAlert {
@@ -38,50 +42,6 @@ function alert(sourceAlertId: string): NormalizedAlert {
     rawPayload: {},
   };
 }
-
-function hypothesis(overrides: Partial<Hypothesis>): Hypothesis {
-  return {
-    id: "h1",
-    statement: "leak",
-    verdict: "root_cause",
-    finding: "rss climbed",
-    evidenceIds: ["tu-1"],
-    proposedAt: new Date().toISOString(),
-    resolvedAt: new Date().toISOString(),
-    ...overrides,
-  };
-}
-
-function report(hypotheses: Hypothesis[]): Report {
-  return {
-    hypotheses,
-    fixes: [],
-    updatedAt: new Date().toISOString(),
-    model: "test",
-  };
-}
-
-describe("isReportComplete", () => {
-  it("needs every hypothesis settled and every root cause cited", () => {
-    expect(isReportComplete(report([]))).toBe(false);
-    expect(isReportComplete(report([hypothesis({})]))).toBe(true);
-    expect(
-      isReportComplete(
-        report([hypothesis({}), hypothesis({ id: "h2", verdict: "open" })]),
-      ),
-    ).toBe(false);
-    expect(isReportComplete(report([hypothesis({ evidenceIds: [] })]))).toBe(
-      false,
-    );
-    // Nothing turned out to be the cause, and every question was settled: an
-    // honest ending, not an unfinished one.
-    expect(
-      isReportComplete(
-        report([hypothesis({ verdict: "disproven", evidenceIds: [] })]),
-      ),
-    ).toBe(true);
-  });
-});
 
 describe("the investigation record", () => {
   let cleanupDb: () => void;
@@ -139,11 +99,11 @@ describe("the investigation record", () => {
     output: string,
     at: string,
   ): void {
-    appendSessionMessages([
+    appendTranscriptRows([
       {
         sessionId,
         seq,
-        role: "assistant",
+        kind: "assistant",
         content: `[tool: ${entry.name}]`,
         parts: [
           {
@@ -158,7 +118,7 @@ describe("the investigation record", () => {
       {
         sessionId,
         seq: seq + 1,
-        role: "user",
+        kind: "user",
         content: "results",
         parts: [{ type: "tool_result", toolCallId: entry.id, output }],
         createdAt: at,
@@ -171,7 +131,7 @@ describe("the investigation record", () => {
   function seedTranscript(sessionId: string): void {
     createSession(
       { sessionId, title: "t", createdAt: new Date().toISOString() },
-      alert("seed"),
+      [alert("seed")],
     );
     appendCall(
       sessionId,
@@ -519,7 +479,18 @@ describe("the investigation record", () => {
   });
 
   describe("the finish gate", () => {
-    it("nudges a run that recorded nothing, then lets it end", async () => {
+    // Only the requests: the opening turn is an appendUserMessage too on the
+    // paths that resume, and the assertions below are about what the gate said.
+    function completionRequests(index = 0): string[] {
+      const provider = mockCreateProvider.mock.results[index]!.value as {
+        appendUserMessage: ReturnType<typeof vi.fn>;
+      };
+      return provider.appendUserMessage.mock.calls
+        .map(([msg]) => String(msg))
+        .filter((msg) => msg.startsWith("Your investigation record"));
+    }
+
+    it("asks a run that recorded nothing for the record, then lets it end", async () => {
       // Every turn is a free-form finish; the gate should push back MAX_NUDGES
       // times before letting the run go.
       mockCreateProvider.mockImplementationOnce(() =>
@@ -528,20 +499,106 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       const outcome = await runInvestigation({
         sessionId,
-        alert: alert("gate"),
+        alerts: [alert("gate")],
       });
       expect(outcome).toBe("completed");
 
+      const requests = completionRequests();
+      expect(requests).toHaveLength(3);
+      expect(requests[0]).toContain("recorded no hypotheses");
       const provider = mockCreateProvider.mock.results[0]!.value as {
-        appendUserMessage: ReturnType<typeof vi.fn>;
         chat: ReturnType<typeof vi.fn>;
       };
-      const nudges = provider.appendUserMessage.mock.calls.filter(
-        ([msg]) => msg === GATE_NUDGE,
-      );
-      expect(nudges).toHaveLength(3);
       expect(provider.chat).toHaveBeenCalledTimes(4);
       expect(getReport(sessionId)).toBeUndefined();
+
+      // Neither the requests nor the alert briefing NightWarden opened with is
+      // drawn: the operator sees one conversation, with the agent.
+      const drawn = JSON.stringify(buildTranscript(sessionId));
+      expect(drawn).not.toContain("Your investigation record");
+      expect(drawn).not.toContain("<alert>");
+    });
+
+    it("names only the gap that remains, not the whole contract", async () => {
+      // One hypothesis proposed and never settled: the record has exactly one
+      // hole, and the request must not mention the four it does not have.
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          {
+            toolUses: [
+              {
+                id: "tu-propose",
+                name: "ProposeHypothesis",
+                input: { statement: "the disk filled up" },
+              },
+            ],
+            text: "",
+          },
+          { toolUses: [], text: "That is my answer." },
+        ]),
+      );
+      const sessionId = randomUUID();
+      await runInvestigation({ sessionId, alerts: [alert("one-gap")] });
+
+      const request = completionRequests()[0]!;
+      expect(request).toContain("h1 is still open");
+      expect(request).toContain("ResolveHypothesis");
+      expect(request).not.toContain("recorded no hypotheses");
+      expect(request).not.toContain("ProposeFix");
+    });
+
+    it("asks for a recommendation when a change ran and none was recorded", () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      insertExecutingRemediationAction({
+        toolUseId: "tu-restart",
+        sessionId,
+        toolName: "RestartDockerService",
+        input: { target: "docker/app/web" },
+        resolvedBy: "operator",
+      });
+      settleRemediationAction(sessionId, "tu-restart", "executed", "restarted");
+
+      expect(reportGaps(sessionId).map((g) => g.kind)).toContain(
+        "unrecorded_fix",
+      );
+    });
+
+    it("counts a claim backed only by a call that never answered as a gap", async () => {
+      const sessionId = randomUUID();
+      createSession(
+        { sessionId, title: "t", createdAt: new Date().toISOString() },
+        [alert("unresolvable")],
+      );
+      // The call is in the transcript, so the citation is not fabricated - but
+      // it never answered, so there is nothing to quote under the claim.
+      appendTranscriptRows([
+        {
+          sessionId,
+          seq: 0,
+          kind: "assistant",
+          content: "[tool: QueryMetricsRange]",
+          parts: [
+            {
+              type: "tool_call",
+              id: "tu-silent",
+              name: "QueryMetricsRange",
+              input: { query: "rss" },
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      await call("ProposeHypothesis", sessionId, { statement: "leak" });
+      await call("ResolveHypothesis", sessionId, {
+        id: "h1",
+        verdict: "root_cause",
+        finding: "rss climbed",
+        evidenceIds: ["tu-silent"],
+      });
+
+      const gaps = reportGaps(sessionId);
+      expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
     it("passes silently once every hypothesis is settled", async () => {
@@ -578,19 +635,14 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       const outcome = await runInvestigation({
         sessionId,
-        alert: alert("gate-pass"),
+        alerts: [alert("gate-pass")],
       });
       expect(outcome).toBe("completed");
 
+      expect(completionRequests()).toHaveLength(0);
       const provider = mockCreateProvider.mock.results[0]!.value as {
-        appendUserMessage: ReturnType<typeof vi.fn>;
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(
-        provider.appendUserMessage.mock.calls.some(
-          ([msg]) => msg === GATE_NUDGE,
-        ),
-      ).toBe(false);
       expect(provider.chat).toHaveBeenCalledTimes(3);
       expect(getReport(sessionId)!.hypotheses[0]!.verdict).toBe("disproven");
     });

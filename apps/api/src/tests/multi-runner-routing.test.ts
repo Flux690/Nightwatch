@@ -45,7 +45,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { getTranscriptRows } from "../db/sessions.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
@@ -278,9 +278,9 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(0);
 
     // The error is persisted as a user-turn message in the transcript.
-    const messages = getSessionMessages(sessionId);
+    const messages = getTranscriptRows(sessionId);
     const errorMsg = messages.find(
-      (m) => m.role === "user" && m.content.includes("ghost-svc"),
+      (m) => m.kind === "user" && m.content.includes("ghost-svc"),
     );
     expect(errorMsg?.content).toMatch(/nginx/);
     expect(errorMsg?.content).toMatch(/api/);
@@ -325,9 +325,9 @@ describe("multi-runner routing", () => {
     expect(commandsB).toHaveLength(1);
 
     // Each answer is attributed, so the model can tell which host is the sick one.
-    const messages = getSessionMessages(sessionId);
+    const messages = getTranscriptRows(sessionId);
     const result = messages.find(
-      (m) => m.role === "user" && m.content.includes("byRunner"),
+      (m) => m.kind === "user" && m.content.includes("byRunner"),
     );
     expect(result?.content).toMatch(/web-01/);
     expect(result?.content).toMatch(/db-02/);

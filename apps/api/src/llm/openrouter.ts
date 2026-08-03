@@ -302,7 +302,7 @@ export class OpenRouterProvider implements LLMProvider {
     return level === null ? {} : { reasoning: { effort: level } };
   }
 
-  appendToolResults(results: ToolResult[], additionalText?: string): void {
+  appendToolResults(results: ToolResult[]): void {
     for (const r of results) {
       // This dialect has no is_error flag; fold it into the content the model reads.
       this.messages.push({
@@ -310,9 +310,6 @@ export class OpenRouterProvider implements LLMProvider {
         tool_call_id: r.tool_use_id,
         content: r.is_error ? `ERROR: ${r.content}` : r.content,
       });
-    }
-    if (additionalText) {
-      this.messages.push({ role: "user", content: additionalText });
     }
   }
 

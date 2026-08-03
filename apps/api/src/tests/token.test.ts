@@ -541,7 +541,7 @@ describe("Runner token lifecycle (issue 038)", () => {
           title: "history session",
           createdAt: new Date().toISOString(),
         },
-        null,
+        [],
       );
 
       await server.inject({

@@ -56,7 +56,7 @@ function slugify(text: string): string {
 // openPullRequest finds its existing PR instead of opening a second one. The alert type
 // is decoration, for a human scanning the branch list.
 export function branchNameFor(sessionId: string): string {
-  const alert = getSession(sessionId)?.originatingAlert ?? null;
+  const alert = getSession(sessionId)?.alerts[0]?.alert ?? null;
   const slug = alert === null ? "chat" : slugify(alert.alertType);
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
@@ -200,7 +200,7 @@ function composePrBody(
   filesChanged: string[],
 ): string {
   const session = getSession(sessionId);
-  const alert = session?.originatingAlert ?? null;
+  const alert = session?.alerts[0]?.alert ?? null;
   const sections: string[] = [];
   if (modelBody.trim().length > 0) sections.push(modelBody.trim());
 

@@ -1,6 +1,7 @@
 import type {
   Conviction,
   NormalizedAlert,
+  SessionAlert,
   RemediationActionRecord,
   Report,
   ReportConviction,
@@ -37,6 +38,47 @@ function SectionHeading({
     <h2 className="mb-2 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground">
       {children}
     </h2>
+  );
+}
+
+// What woke the operator, read from the alerts themselves rather than from the
+// opening message, which is written for the model. Rendered before the agent has
+// said anything, so the first thing on screen at 02:14 is true.
+function AlertBand({
+  alerts,
+}: {
+  alerts: SessionAlert[];
+}): React.JSX.Element | null {
+  if (alerts.length === 0) return null;
+  return (
+    <section className="mb-6 border-b border-border pb-6">
+      <SectionHeading>{alerts.length > 1 ? "Alerts" : "Alert"}</SectionHeading>
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        {alerts.map(({ alert, clearedAt }) => (
+          <li key={`${alert.sourceAlertId}-${alert.firedAt}`}>
+            <div className="flex items-baseline gap-2">
+              {alert.severity === "critical" && (
+                <span className="text-sm font-semibold text-fail">
+                  Critical
+                </span>
+              )}
+              <span className="text-base font-medium">{alert.alertType}</span>
+              {clearedAt !== null && (
+                <span className="text-sm text-ok">Recovered</span>
+              )}
+            </div>
+            <p className="m-0 mt-1 text-sm text-muted-foreground">
+              {Object.entries(alert.labels)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(", ") || "no labels"}
+            </p>
+            <p className="m-0 mt-1 text-sm text-ink-subtle">
+              Fired {new Date(alert.firedAt).toLocaleString()}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -79,7 +121,7 @@ export function ReportPanel({
   actions,
   evidence,
   conviction,
-  alert,
+  alerts,
 }: {
   // Null until the agent records its first finding. The investigation view is
   // drawn from the session, not from this, so the panel outlives its absence.
@@ -88,11 +130,15 @@ export function ReportPanel({
   // The cited calls, resolved by the API against the transcript.
   evidence: ResolvedEvidence[];
   conviction: ReportConviction;
-  alert: NormalizedAlert | null;
+  // In arrival order. The band shows them all; the evidence plots need just one
+  // to draw the alert marker against.
+  alerts: SessionAlert[];
 }): React.JSX.Element {
+  const alert = alerts[0]?.alert ?? null;
   if (report === null) {
     return (
       <div className="mx-auto w-full max-w-page px-8 py-6">
+        <AlertBand alerts={alerts} />
         <header>
           <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
             Investigation
@@ -112,6 +158,7 @@ export function ReportPanel({
 
   return (
     <div className="mx-auto w-full max-w-page px-8 py-6">
+      <AlertBand alerts={alerts} />
       <header className="mb-6">
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
           Investigation

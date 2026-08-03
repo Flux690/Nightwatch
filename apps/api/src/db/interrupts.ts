@@ -1,26 +1,23 @@
 import { getDb } from "./client.js";
 import type { ToolResult } from "../llm/types.js";
 
+// A pointer at the gated call, and the results of the turn's other calls, which
+// have nowhere valid to sit until that one is answered too. What the call was is
+// the transcript's to say: `findToolCall` reads it under the same id.
 export interface PendingHumanInput {
   sessionId: string;
   toolUseId: string;
   kind: "approval" | "clarification" | "continue";
-  toolName: string;
-  toolInput: Record<string, unknown>;
   completedResults: ToolResult[];
   claimedAt?: string | null;
-  createdAt: string;
 }
 
 interface RawRow {
   sessionId: string;
   toolUseId: string;
   kind: string;
-  toolName: string;
-  toolInput: string;
   completedResults: string;
   claimedAt: string | null;
-  createdAt: string;
 }
 
 function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
@@ -35,10 +32,8 @@ function parseRow(row: RawRow): PendingHumanInput {
       `pending_human_input(${row.sessionId}) has unknown kind "${row.kind}"`,
     );
   }
-  let toolInput: Record<string, unknown>;
   let completedResults: ToolResult[];
   try {
-    toolInput = JSON.parse(row.toolInput) as Record<string, unknown>;
     completedResults = JSON.parse(row.completedResults) as ToolResult[];
   } catch (err) {
     throw new Error(
@@ -51,11 +46,8 @@ function parseRow(row: RawRow): PendingHumanInput {
     sessionId: row.sessionId,
     toolUseId: row.toolUseId,
     kind: row.kind,
-    toolName: row.toolName,
-    toolInput,
     completedResults,
     claimedAt: row.claimedAt,
-    createdAt: row.createdAt,
   };
 }
 
@@ -65,19 +57,16 @@ export function insertPendingHumanInput(
   getDb()
     .prepare(
       `INSERT INTO pending_human_input
-         (session_id, tool_use_id, kind, tool_name, tool_input, completed_results, claimed_at, created_at)
+         (session_id, tool_use_id, kind, completed_results, claimed_at)
        VALUES
-         (@sessionId, @toolUseId, @kind, @toolName, @toolInput, @completedResults, @claimedAt, @createdAt)`,
+         (@sessionId, @toolUseId, @kind, @completedResults, @claimedAt)`,
     )
     .run({
       sessionId: pendingHumanInput.sessionId,
       toolUseId: pendingHumanInput.toolUseId,
       kind: pendingHumanInput.kind,
-      toolName: pendingHumanInput.toolName,
-      toolInput: JSON.stringify(pendingHumanInput.toolInput),
       completedResults: JSON.stringify(pendingHumanInput.completedResults),
       claimedAt: pendingHumanInput.claimedAt ?? null,
-      createdAt: pendingHumanInput.createdAt,
     });
 }
 
@@ -104,10 +93,8 @@ export function getPendingHumanInputBySessionId(
 ): PendingHumanInput | undefined {
   const row = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, tool_use_id AS toolUseId,
-              kind, tool_name AS toolName, tool_input AS toolInput,
-              completed_results AS completedResults, claimed_at AS claimedAt,
-              created_at AS createdAt
+      `SELECT session_id AS sessionId, tool_use_id AS toolUseId, kind,
+              completed_results AS completedResults, claimed_at AS claimedAt
        FROM pending_human_input
        WHERE session_id = ?`,
     )
@@ -124,8 +111,9 @@ export function hasPendingHumanInputForAlert(
     .prepare(
       `SELECT 1 FROM pending_human_input pi
        JOIN sessions s ON s.session_id = pi.session_id
-       WHERE json_extract(s.originating_alert, '$.sourceAlertId') = ?
-         AND json_extract(s.originating_alert, '$.firedAt') = ?
+       WHERE EXISTS (SELECT 1 FROM json_each(s.alerts)
+                     WHERE json_extract(value, '$.alert.sourceAlertId') = ?
+                       AND json_extract(value, '$.alert.firedAt') = ?)
        LIMIT 1`,
     )
     .get(sourceAlertId, firedAt);

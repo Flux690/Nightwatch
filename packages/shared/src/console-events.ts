@@ -1,4 +1,4 @@
-import type { SessionMessage } from "./sessions.js";
+import type { TranscriptRow } from "./sessions.js";
 import type { TranscriptItem } from "./transcript.js";
 
 // Common envelope for the API→console event stream (SSE). messageId is a per-event UUID
@@ -38,7 +38,7 @@ export interface ConsoleMessage extends ConsoleEnvelope {
   type: "MESSAGE";
   payload: {
     sessionId: string;
-    message: SessionMessage;
+    message: TranscriptRow;
   };
 }
 
@@ -117,7 +117,7 @@ export interface ConsoleRunFailed extends ConsoleEnvelope {
   type: "RUN_FAILED";
   payload: {
     sessionId: string;
-    message: SessionMessage;
+    message: TranscriptRow;
   };
 }
 

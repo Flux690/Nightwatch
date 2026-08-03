@@ -11,7 +11,11 @@ import {
 } from "@/components/ui/collapsible";
 import { Message } from "@/components/ui/message";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import type { TranscriptItem, ThinkingItem } from "./types.js";
+import type {
+  TranscriptItem,
+  ThinkingItem,
+  AlertArrivedItem,
+} from "./types.js";
 import { ToolCard } from "./toolPresentation.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
@@ -58,6 +62,25 @@ function ErrorNotice({ text }: { text: string }): React.JSX.Element {
     >
       <span className="text-sm font-medium text-fail">The run stopped</span>
       <p className="m-0 text-sm whitespace-pre-wrap">{text}</p>
+    </div>
+  );
+}
+
+// Why the agent changed course here. Deliberately a line, not a card: the
+// report's alert band holds the detail, and this only has to mark the moment.
+function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      className="animate-in fade-in flex items-baseline gap-2 border-y border-border py-2 text-sm duration-300"
+    >
+      <span className="font-medium text-muted-foreground">
+        Alert fired during this run
+      </span>
+      {item.severity === "critical" && (
+        <span className="font-semibold text-fail">Critical</span>
+      )}
+      <span>{item.alertType}</span>
     </div>
   );
 }
@@ -140,6 +163,8 @@ export function TranscriptItemRenderer({
       // 429 says rate-limited. Rendering it as prose would erase that and make
       // a provider outage read as the agent reasoning badly.
       return <ErrorNotice text={item.text} />;
+    case "alert_arrived":
+      return <AlertArrived item={item} />;
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":

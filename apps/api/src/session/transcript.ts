@@ -1,13 +1,13 @@
 import type {
   ApprovalRequest,
   ApprovalStatus,
-  SessionMessage,
+  TranscriptRow,
   ToolCallState,
   ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
 import { getPendingHumanInputBySessionId } from "../db/interrupts.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { getSession, getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import {
   countExecutedRemediations,
@@ -122,19 +122,10 @@ function toolCallState(
 // needs about a tool call - its result, whether it waits on a human - is decided
 // here, so the browser never reconciles sources against each other.
 export function buildTranscript(sessionId: string): TranscriptItem[] {
-  const messages: SessionMessage[] = getSessionMessages(sessionId);
-  const pendingRow = getPendingHumanInputBySessionId(sessionId);
-  const pending: ApprovalRequest | null = pendingRow
-    ? {
-        sessionId: pendingRow.sessionId,
-        toolName: pendingRow.toolName,
-        toolInput: pendingRow.toolInput,
-        toolUseId: pendingRow.toolUseId,
-        kind: pendingRow.kind,
-        status: "pending",
-        createdAt: pendingRow.createdAt,
-      }
-    : null;
+  const messages: TranscriptRow[] = getTranscriptRows(sessionId);
+  // Which call is waiting, and of what kind. What that call was comes from the
+  // transcript rows below, which hold it already.
+  const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
 
   // A decision the operator already made. Without this a reloaded transcript
   // shows the tool's output but forgets who released it.
@@ -160,9 +151,39 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     }
   }
 
+  // Alerts that arrived after the conversation started, in arrival order. The
+  // ones that opened the session are excluded: they predate every message, and
+  // the report's alert band sits directly above the first of them anyway.
+  const firstMessageAt = messages[0]?.createdAt ?? null;
+  const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
+    (entry) => firstMessageAt !== null && entry.arrivedAt > firstMessageAt,
+  );
+  let nextArrival = 0;
+
   const items: TranscriptItem[] = [];
   for (const msg of messages) {
-    if (msg.role === "error") {
+    // Placed where it interrupted: everything the agent did before this message
+    // happened before the alert landed, and everything after it, after.
+    while (
+      nextArrival < arrivals.length &&
+      arrivals[nextArrival]!.arrivedAt <= msg.createdAt
+    ) {
+      const entry = arrivals[nextArrival]!;
+      items.push({
+        kind: "alert_arrived",
+        id: `alert-${entry.alert.sourceAlertId}-${entry.arrivedAt}`,
+        alertType: entry.alert.alertType,
+        severity: entry.alert.severity,
+      });
+      nextArrival++;
+    }
+
+    // The harness talking to the model, not to the operator. Stored so a resume
+    // replays faithfully; never drawn, so the transcript reads as one
+    // conversation between two parties.
+    if (msg.kind === "nightwarden") continue;
+
+    if (msg.kind === "error") {
       if (msg.content) {
         items.push({
           kind: "error_text",
@@ -176,8 +197,8 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     if (msg.parts.length === 0) {
       if (msg.content) {
         items.push({
-          kind: msg.role === "user" ? "user_turn" : "agent_text",
-          id: `${msg.role}-${msg.seq}`,
+          kind: msg.kind === "user" ? "user_turn" : "agent_text",
+          id: `${msg.kind}-${msg.seq}`,
           text: msg.content,
         });
       }
@@ -186,11 +207,11 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
 
     let idx = 0;
     for (const part of msg.parts) {
-      const id = `${msg.role}-${msg.seq}-${idx++}`;
+      const id = `${msg.kind}-${msg.seq}-${idx++}`;
       if (part.type === "text") {
         if (!part.text) continue;
         items.push({
-          kind: msg.role === "user" ? "user_turn" : "agent_text",
+          kind: msg.kind === "user" ? "user_turn" : "agent_text",
           id,
           text: part.text,
         });
@@ -226,6 +247,17 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
         );
       }
     }
+  }
+
+  // An alert that landed after the last persisted turn still belongs on the end
+  // rather than nowhere.
+  for (const entry of arrivals.slice(nextArrival)) {
+    items.push({
+      kind: "alert_arrived",
+      id: `alert-${entry.alert.sourceAlertId}-${entry.arrivedAt}`,
+      alertType: entry.alert.alertType,
+      severity: entry.alert.severity,
+    });
   }
 
   return items;

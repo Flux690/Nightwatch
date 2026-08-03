@@ -309,7 +309,7 @@ function ShellContent({
                     actions={report?.actions ?? []}
                     evidence={report?.evidence ?? []}
                     conviction={report?.conviction ?? {}}
-                    alert={session?.originatingAlert ?? null}
+                    alerts={session?.alerts ?? []}
                   />
                 </div>
                 {/* Width, not presence, so it closes like the sidebar. Closed

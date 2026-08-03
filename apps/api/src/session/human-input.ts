@@ -4,6 +4,7 @@ import {
   getPendingHumanInputBySessionId,
 } from "../db/interrupts.js";
 import { insertRejectedRemediationAction } from "../db/remediation-actions.js";
+import { findToolCall } from "../db/sessions.js";
 import { dispatcher } from "../dispatcher.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
@@ -39,6 +40,23 @@ function requirePendingHumanInput(sessionId: string) {
     );
   }
   return pending;
+}
+
+// The interrupt names the gated call; the transcript says what it was, and the
+// two are written in one transaction. A miss here is a contradiction, not a
+// case to carry forward with an empty tool name.
+function requireGatedCall(
+  sessionId: string,
+  toolUseId: string,
+): { name: string; input: Record<string, unknown> } {
+  const call = findToolCall(sessionId, toolUseId);
+  if (!call) {
+    throw new HumanInputError(
+      409,
+      `No tool call ${toolUseId} in session ${sessionId}`,
+    );
+  }
+  return call;
 }
 
 function claimOrThrow(sessionId: string): void {
@@ -165,6 +183,9 @@ export async function respondToPendingHumanInput(
     };
   }
 
+  // Everything past the continue branch gates on a real tool call.
+  const call = requireGatedCall(sessionId, pending.toolUseId);
+
   if (pending.kind === "clarification") {
     if (decision !== undefined) {
       throw new HumanInputError(
@@ -185,7 +206,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       { tool_use_id: pending.toolUseId, content: answer },
-      { toolName: pending.toolName, input: pending.toolInput },
+      { toolName: call.name, input: call.input },
     );
   }
 
@@ -194,8 +215,12 @@ export async function respondToPendingHumanInput(
     // executeApprovedTool never throws - every fault becomes an is_error result -
     // so the approve path always reaches unpause() and the run always resumes.
     claimOrThrow(sessionId);
-    const { result, outcome } = await executeApprovedTool(pending, resolvedBy);
-    logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "approved");
+    const { result, outcome } = await executeApprovedTool(
+      pending,
+      call,
+      resolvedBy,
+    );
+    logger.info({ sessionId, tool: call.name, resolvedBy }, "approved");
     return unpause(
       sessionId,
       pending.toolUseId,
@@ -203,7 +228,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       result,
-      { toolName: pending.toolName, input: pending.toolInput },
+      { toolName: call.name, input: call.input },
       outcome,
     );
   }
@@ -226,17 +251,17 @@ export async function respondToPendingHumanInput(
     const wrote = insertRejectedRemediationAction({
       toolUseId: pending.toolUseId,
       sessionId,
-      toolName: pending.toolName,
-      input: pending.toolInput,
+      toolName: call.name,
+      input: call.input,
       resolvedBy,
     });
     if (!wrote) {
       logger.warn(
-        { sessionId, tool: pending.toolName, toolUseId: pending.toolUseId },
+        { sessionId, tool: call.name, toolUseId: pending.toolUseId },
         "reject record skipped: existing row holds the slot — action may have run before crash",
       );
     }
-    logger.info({ sessionId, tool: pending.toolName, resolvedBy }, "rejected");
+    logger.info({ sessionId, tool: call.name, resolvedBy }, "rejected");
     return unpause(
       sessionId,
       pending.toolUseId,
@@ -244,7 +269,7 @@ export async function respondToPendingHumanInput(
       resolvedBy,
       pending.completedResults,
       gatedResult,
-      { toolName: pending.toolName, input: pending.toolInput },
+      { toolName: call.name, input: call.input },
     );
   }
 

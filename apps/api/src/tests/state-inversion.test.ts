@@ -72,7 +72,7 @@ describe("state inversion: persistence and reads are API-local", () => {
       (e) =>
         e.type === "MESSAGE" &&
         e.payload["sessionId"] === sessionId &&
-        (e.payload["message"] as { role?: string } | undefined)?.role ===
+        (e.payload["message"] as { kind?: string } | undefined)?.kind ===
           "assistant",
     );
   }
@@ -146,7 +146,7 @@ describe("state inversion: persistence and reads are API-local", () => {
 
     const stored = getSession(String(sessionId));
     // No originating alert is the chat-vs-alert distinction now (trigger is gone).
-    expect(stored?.originatingAlert).toBeNull();
+    expect(stored?.alerts).toEqual([]);
 
     const txRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
@@ -155,7 +155,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     const session = (await txRes.json()) as SessionDetail;
     // The session reports the same absence the row holds, so nothing downstream
     // has to infer it.
-    expect(session.originatingAlert).toBeNull();
+    expect(session.alerts).toEqual([]);
     expect(session.investigation).toBe(false);
     // The opening message is the human's verbatim - not a fabricated alert block.
     expect(session.transcript[0]).toMatchObject({
@@ -175,14 +175,16 @@ describe("state inversion: persistence and reads are API-local", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: {
-        sourceAlertId: `si-${randomUUID()}`,
-        labels: {},
-        alertType: "ContainerDown",
-        severity: "critical",
-        firedAt: new Date().toISOString(),
-        rawPayload: {},
-      },
+      alerts: [
+        {
+          sourceAlertId: `si-${randomUUID()}`,
+          labels: {},
+          alertType: "ContainerDown",
+          severity: "critical",
+          firedAt: new Date().toISOString(),
+          rawPayload: {},
+        },
+      ],
     });
     // The row carries the flag from the moment it exists - checked here, before
     // the run has produced a report to infer anything from.
@@ -199,7 +201,7 @@ describe("state inversion: persistence and reads are API-local", () => {
     );
     const session = (await detailRes.json()) as SessionDetail;
     expect(session.investigation).toBe(true);
-    expect(session.originatingAlert?.alertType).toBe("ContainerDown");
+    expect(session.alerts[0]?.alert.alertType).toBe("ContainerDown");
 
     const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`, {
       headers: { Cookie: `nw_auth=${SESSION}` },
@@ -271,10 +273,10 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
       rawPayload: {},
     };
 
-    const { firstUserMessage } = buildInitialContext([alert]);
-    expect(firstUserMessage).toContain("<alert>");
-    expect(firstUserMessage).not.toContain("PAST INCIDENT HISTORY");
-    expect(firstUserMessage).not.toContain("memory leak in image v12");
-    expect(firstUserMessage).not.toContain("swap exhaustion under load");
+    const { openingTurn } = buildInitialContext([alert]);
+    expect(openingTurn).toContain("<alert>");
+    expect(openingTurn).not.toContain("PAST INCIDENT HISTORY");
+    expect(openingTurn).not.toContain("memory leak in image v12");
+    expect(openingTurn).not.toContain("swap exhaustion under load");
   });
 });

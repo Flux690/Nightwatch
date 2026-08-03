@@ -72,10 +72,9 @@ export interface LLMProvider {
     onDelta?: OnDelta,
     signal?: AbortSignal,
   ): Promise<ChatResponse>;
-  // additionalText, when provided, is appended to the same user message as the
-  // tool results. Used to inject mid-run alerts at each tool boundary.
-  appendToolResults(results: ToolResult[], additionalText?: string): void;
-  // Inject a human-authored user turn (chat / resume). Distinct from a
-  // tool_result: add_context mid-approval must stay a tool_result.
+  appendToolResults(results: ToolResult[]): void;
+  // A user turn that is not a tool result: the operator's own message, or
+  // anything NightWarden says to the model. Distinct from a tool_result because
+  // add_context mid-approval must stay one.
   appendUserMessage(message: string): void;
 }

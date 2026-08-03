@@ -9,7 +9,7 @@ import type {
 } from "@nightwarden/shared";
 import { amendReport, appendToReport, getReport } from "../db/reports.js";
 import { listRemediationActionsForSession } from "../db/remediation-actions.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { evidenceSource } from "./evidence-source.js";
@@ -38,7 +38,7 @@ interface LedgerEntry {
 function ledgerIn(sessionId: string): LedgerEntry[] {
   const entries: LedgerEntry[] = [];
   const byToolUseId = new Map<string, LedgerEntry>();
-  for (const message of getSessionMessages(sessionId)) {
+  for (const message of getTranscriptRows(sessionId)) {
     for (const part of message.parts) {
       if (part.type === "tool_call") {
         const entry: LedgerEntry = {
@@ -142,12 +142,64 @@ export function computeConviction(
   return graded;
 }
 
+// One named thing missing from the record. A list rather than a boolean so the
+// completion request can name only what is absent, and so a gap that survives a
+// request can be logged as itself.
+export type ReportGap =
+  | { kind: "empty_record" }
+  | { kind: "open_hypothesis"; ids: string[] }
+  | { kind: "uncited_root_cause"; ids: string[] }
+  | { kind: "unresolvable_citation"; ids: string[] }
+  | { kind: "unrecorded_fix" };
+
+// A run that settled every hypothesis it proposed has finished, whether or not
+// any of them turned out to be the cause: "I could not conclude, here is what I
+// checked" is a complete record, and the gate must never push a model past it.
+export function reportGaps(sessionId: string): ReportGap[] {
+  const report = getReport(sessionId);
+  const hypotheses = report?.hypotheses ?? [];
+  const fixes = report?.fixes ?? [];
+  const gaps: ReportGap[] = [];
+
+  if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
+
+  const open = hypotheses.filter((h) => h.verdict === "open").map((h) => h.id);
+  if (open.length > 0) gaps.push({ kind: "open_hypothesis", ids: open });
+
+  const uncited = hypotheses
+    .filter((h) => h.verdict === "root_cause" && h.evidenceIds.length === 0)
+    .map((h) => h.id);
+  if (uncited.length > 0)
+    gaps.push({ kind: "uncited_root_cause", ids: uncited });
+
+  if (report !== undefined) {
+    const resolved = new Set(
+      resolveEvidence(sessionId, report).map((e) => e.toolUseId),
+    );
+    const unbacked = [...hypotheses, ...fixes]
+      .filter(
+        (row) =>
+          row.evidenceIds.length > 0 &&
+          !row.evidenceIds.some((id) => resolved.has(id)),
+      )
+      .map((row) => row.id);
+    if (unbacked.length > 0)
+      gaps.push({ kind: "unresolvable_citation", ids: unbacked });
+  }
+
+  const executed = listRemediationActionsForSession(sessionId).some(
+    (a) => a.status === "executed",
+  );
+  if (executed && fixes.length === 0) gaps.push({ kind: "unrecorded_fix" });
+
+  return gaps;
+}
+
 export function proposeHypothesis(
   sessionId: string,
-  model: string,
   statement: string,
 ): RecordOutcome {
-  const id = appendToReport(sessionId, model, (report) => {
+  const id = appendToReport(sessionId, (report) => {
     const hypothesis: Hypothesis = {
       id: `h${report.hypotheses.length + 1}`,
       statement,
@@ -178,11 +230,10 @@ export interface ResolveHypothesisInput {
 
 export function resolveHypothesis(
   sessionId: string,
-  model: string,
   input: ResolveHypothesisInput,
 ): RecordOutcome {
   const evidenceIds = knownCitations(sessionId, input.evidenceIds);
-  const wrote = amendReport(sessionId, model, (report) => {
+  const wrote = amendReport(sessionId, (report) => {
     const target = report.hypotheses.find((h) => h.id === input.id);
     if (target === undefined || target.verdict !== "open") return null;
     return {
@@ -227,12 +278,11 @@ export function resolveHypothesis(
 // beside the one that superseded it.
 export function proposeFix(
   sessionId: string,
-  model: string,
   summary: string,
   citations: string[],
 ): RecordOutcome {
   const evidenceIds = knownCitations(sessionId, citations);
-  const superseded = appendToReport(sessionId, model, (report) => {
+  const superseded = appendToReport(sessionId, (report) => {
     const fix: ProposedFix = {
       id: `f${report.fixes.length + 1}`,
       summary,

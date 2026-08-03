@@ -19,7 +19,7 @@ import type {
 import { seedCompleteReport } from "./report-helper.js";
 
 // Stateful scripted provider: snapshot() accumulates messages so persist() in the loop
-// writes real session_messages rows.
+// writes real session_transcript rows.
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
@@ -881,7 +881,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    dispatcher.dispatch({ alert, sessionId });
+    dispatcher.dispatch({ alerts: [alert], sessionId });
 
     await waitFor(() =>
       events.find(

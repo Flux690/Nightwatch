@@ -31,7 +31,7 @@ import {
 } from "./console-events-helper.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { registerSessionRoutes } from "../session/routes.js";
-import { getSessionMessages } from "../db/sessions.js";
+import { getTranscriptRows } from "../db/sessions.js";
 import { mountApi } from "./api-server.js";
 
 function providerError(status: number, body?: Record<string, unknown>): Error {
@@ -121,7 +121,7 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     expect(first?.type === "RUN_RETRYING" && first.payload.summary).toBe(
       "Provider error (502). Retrying in 5s - attempt 2 of 4.",
     );
-    const roles = getSessionMessages(sessionId).map((m) => m.role);
+    const roles = getTranscriptRows(sessionId).map((m) => m.kind);
     expect(roles).toEqual(["user", "assistant"]);
   });
 
@@ -149,14 +149,14 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       ),
     );
     if (failed.type !== "RUN_FAILED") throw new Error("unreachable");
-    expect(failed.payload.message.role).toBe("error");
+    expect(failed.payload.message.kind).toBe("error");
     expect(failed.payload.message.content).toContain("server problem");
     expect(failed.payload.message.content).toContain(
       "(HTTP 502 from Poolside)",
     );
 
-    const messages = getSessionMessages(sessionId);
-    expect(messages.map((m) => [m.seq, m.role])).toEqual([
+    const messages = getTranscriptRows(sessionId);
+    expect(messages.map((m) => [m.seq, m.kind])).toEqual([
       [0, "user"],
       [1, "error"],
     ]);
@@ -184,8 +184,8 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
       ),
     );
 
-    const truncation = getSessionMessages(sessionId).find(
-      (m) => m.role === "error",
+    const truncation = getTranscriptRows(sessionId).find(
+      (m) => m.kind === "error",
     );
     expect(truncation?.content).toContain("cut off");
     expect(truncation?.content).toContain("output limit");
@@ -237,14 +237,14 @@ describe("run failure surfacing (dispatch -> retry -> transcript -> SSE)", () =>
     expect(res.status).toBe(202);
 
     await waitFor(() =>
-      getSessionMessages(sessionId).some((m) => m.role === "assistant"),
+      getTranscriptRows(sessionId).some((m) => m.kind === "assistant"),
     );
 
     // The failed exchange stays in the transcript but never reached the model:
     // the provider was started fresh, not seeded.
     expect(healthy.seed).not.toHaveBeenCalled();
     expect(healthy.start).toHaveBeenCalledWith("try again");
-    expect(getSessionMessages(sessionId).map((m) => [m.seq, m.role])).toEqual([
+    expect(getTranscriptRows(sessionId).map((m) => [m.seq, m.kind])).toEqual([
       [0, "user"],
       [1, "error"],
       [2, "user"],

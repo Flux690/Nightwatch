@@ -30,7 +30,14 @@ import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport } from "./report-helper.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
-import { hasPendingHumanInput } from "../db/interrupts.js";
+import {
+  getPendingHumanInputBySessionId,
+  hasPendingHumanInput,
+} from "../db/interrupts.js";
+import { isDuplicate } from "../alerts/dedup.js";
+import { findToolCall, getSession } from "../db/sessions.js";
+import { proposeFix } from "../agent/report.js";
+import { buildTranscript } from "../session/transcript.js";
 import { respondToPendingHumanInput } from "../session/human-input.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
 import {
@@ -137,7 +144,7 @@ describe("mid-run alert injection (loop seam)", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
 
-  it("alert injected mid-run appears in the next tool_results user message", async () => {
+  it("alert injected mid-run reaches the model as its own turn, unseen by the operator", async () => {
     const runnerId = generateRunnerToken("docker", "inject-midrun").id;
     const conn = registerRunner({
       runnerId: runnerId,
@@ -159,7 +166,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert("primary-mr"),
+      alerts: [alert("primary-mr")],
     });
     // Injection mechanics only: a seeded report satisfies the finish gate. It
     // is a child of the session, and dispatch() creates that row synchronously.
@@ -167,29 +174,40 @@ describe("mid-run alert injection (loop seam)", () => {
 
     // createProvider is called synchronously in start() before the first await.
     const provider = mockCreateProvider.mock.results[0]!.value as {
-      appendToolResults: ReturnType<typeof vi.fn>;
+      appendUserMessage: ReturnType<typeof vi.fn>;
     };
 
     // Inject while parked at turn 1's chat()
     dispatcher.injectAlert(sessionId, alert("injected-mr"));
 
-    // Release turn 1 → loop executes ListDockerServices, drains inbox,
-    // then calls appendToolResults(results, injectionText)
+    // Release turn 1 -> loop executes ListDockerServices, appends the results,
+    // drains the inbox and sends the alert as its own turn.
     gate.releaseNext();
 
-    await waitFor(() => provider.appendToolResults.mock.calls.length > 0);
+    await waitFor(() => provider.appendUserMessage.mock.calls.length > 0);
 
-    const call = provider.appendToolResults.mock.calls[0] as [
-      unknown,
-      string | undefined,
-    ];
-    const additionalText = call[1];
-    expect(additionalText).toBeDefined();
-    expect(additionalText).toContain("injected-mr");
+    const [injection] = provider.appendUserMessage.mock.calls[0] as [string];
+    expect(injection).toContain("injected-mr");
 
     // Release turn 2 and let the run finish cleanly.
     gate.releaseNext();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+
+    // The alert is on the session's own row, and the operator sees it as an
+    // alert marking where the ground moved - not as prose they appear to have
+    // written. The instruction sent to the model is drawn for nobody.
+    expect(
+      getSession(sessionId)?.alerts.map((a) => a.alert.sourceAlertId),
+    ).toEqual(["primary-mr", "injected-mr"]);
+
+    const transcript = buildTranscript(sessionId);
+    expect(JSON.stringify(transcript)).not.toContain("Another alert has fired");
+    // Between the tool call it interrupted and the turn that followed it.
+    expect(transcript.map((i) => i.kind)).toEqual([
+      "tool_card",
+      "alert_arrived",
+      "agent_text",
+    ]);
     unregisterRunner(conn);
   });
 
@@ -225,10 +243,11 @@ describe("mid-run alert injection (loop seam)", () => {
       [FINISH],
     );
 
+    const firedAtOfSuspended = new Date().toISOString();
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert("primary-sus"),
+      alerts: [alert("primary-sus", firedAtOfSuspended)],
     });
 
     // Release turn 1 → RestartDockerService is gated → run suspends
@@ -239,13 +258,27 @@ describe("mid-run alert injection (loop seam)", () => {
     // After suspension there is no active alert session operator-wide
     expect(dispatcher.getActiveAlertSession()).toBeNull();
 
+    // The interrupt points at the gated call; the transcript row written in the
+    // same transaction is what says which tool it was and with what arguments.
+    const pending = getPendingHumanInputBySessionId(sessionId)!;
+    const call = findToolCall(sessionId, pending.toolUseId)!;
+    expect(call.name).toBe("RestartDockerService");
+    expect(call.input).toMatchObject({
+      target: "docker/web-01/web-01",
+      reason: "test",
+    });
+
+    // A run nobody is watching still owns its alert, so the same alert firing
+    // again must not open a second session for it.
+    expect(isDuplicate(alert("primary-sus", firedAtOfSuspended))).toBe(true);
+
     // Dispatching a new alert creates a new session (not injected into the suspended one)
     const callsBefore = mockCreateProvider.mock.calls.length;
     const newSessionId = randomUUID();
 
     dispatcher.dispatch({
       sessionId: newSessionId,
-      alert: alert("new-after-sus"),
+      alerts: [alert("new-after-sus")],
     });
     seedCompleteReport(newSessionId);
 
@@ -271,7 +304,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert("primary-lo"),
+      alerts: [alert("primary-lo")],
     });
     seedCompleteReport(sessionId);
 
@@ -351,9 +384,12 @@ describe("mid-run alert injection (loop seam)", () => {
     const sessionId = randomUUID();
     dispatcher.dispatch({
       sessionId,
-      alert: alert("primary-resume", primaryFiredAt),
+      alerts: [alert("primary-resume", primaryFiredAt)],
     });
     seedCompleteReport(sessionId);
+    // This run restarts a service, and a run that changed something owes the
+    // operator a recommendation - otherwise the finish gate asks for one.
+    proposeFix(sessionId, "restart web-01", []);
 
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));

@@ -5,9 +5,10 @@ import type { TranscriptItem } from "./transcript.js";
 // A session is the agent's conversation thread (the durable parent); an incident is an optional
 // artifact referencing it. Sessions live in the API's SQLite, id minted at trigger time, appended per turn.
 
-// "error" rows are NightWarden's own failure notes: shown in the transcript,
-// never replayed to the model.
-export type SessionRole = "user" | "assistant" | "error";
+// Who wrote a row. Four kinds against a provider's two roles: "error" is our own
+// note, rendered but never replayed; "nightwarden" is the harness talking to the
+// model, replayed as a user turn but never rendered. buildSeed maps them.
+export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 
 // Row state for the sessions queue, derived server-side and never declared by
 // the model. A row no word applies to says nothing, which is why the field is
@@ -41,19 +42,30 @@ export interface SessionMeta {
   createdAt: string;
 }
 
+// One alert on a session, with the two facts the alert itself cannot carry:
+// when it joined, and whether the condition has since recovered.
+export interface SessionAlert {
+  alert: NormalizedAlert;
+  arrivedAt: string;
+  clearedAt: string | null;
+}
+
 // What GET /sessions/:id answers. The session states whether it is under
-// investigation itself, so no consumer has to infer it from the artifacts a run
-// happened to leave behind.
+// investigation itself, so no consumer infers it from a run's leftovers.
 export interface SessionDetail extends SessionMeta {
   investigation: boolean;
-  originatingAlert: NormalizedAlert | null;
+  // In arrival order: the batch that opened the session, then any that arrived
+  // while the run was working.
+  alerts: SessionAlert[];
   transcript: TranscriptItem[];
 }
 
-export interface SessionMessage {
+// One row of a session's transcript. Most are conversation turns; some are not,
+// which is what `kind` answers.
+export interface TranscriptRow {
   sessionId: string;
   seq: number;
-  role: SessionRole;
+  kind: TranscriptKind;
   // Human-readable rendering, derived from parts. Titles and list rows read it.
   content: string;
   // The turn's portable content. Empty on "error" rows, which are our own notes

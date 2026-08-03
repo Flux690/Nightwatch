@@ -10,7 +10,9 @@ import { resolveAlertTarget } from "../alerts/resolve-target.js";
 
 export interface InitialContext {
   systemPrompt: string;
-  firstUserMessage: string;
+  // The turn NightWarden writes when no human is there to write one. Null for a
+  // chat session, whose opening turn is the person's own message.
+  openingTurn: string | null;
 }
 
 const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
@@ -36,7 +38,7 @@ export function buildChatContext(
   return {
     systemPrompt:
       systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),
-    firstUserMessage: "",
+    openingTurn: null,
   };
 }
 
@@ -67,7 +69,7 @@ export function buildInitialContext(
       ? "An alert has fired. Investigate it."
       : `${alerts.length} correlated alerts have fired together. Investigate them as one incident.`;
 
-  const firstUserMessage = `${opening}
+  const openingTurn = `${opening}
 
 <alert>
 ${alertsSection}
@@ -77,7 +79,7 @@ Begin now. Start with whichever read tool most directly addresses this alert typ
 
   return {
     systemPrompt: systemPromptFor(opts, true),
-    firstUserMessage,
+    openingTurn,
   };
 }
 

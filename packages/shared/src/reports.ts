@@ -52,7 +52,6 @@ export interface Report {
   hypotheses: Hypothesis[];
   fixes: ProposedFix[];
   updatedAt: string;
-  model: string;
 }
 
 // One cited tool call, resolved from the transcript at read time so the report

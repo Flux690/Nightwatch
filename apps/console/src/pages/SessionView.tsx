@@ -293,7 +293,7 @@ export function SessionView({
         // Streamed text and reasoning carry ephemeral ids the refetch cannot
         // match, so an assistant or error row drops them; tool cards key on
         // toolUseId and are updated in place instead.
-        if (message.role === "assistant" || message.role === "error") {
+        if (message.kind === "assistant" || message.kind === "error") {
           setLiveItems([]);
         }
         void queryClient.invalidateQueries({ queryKey: ["session", sid] });

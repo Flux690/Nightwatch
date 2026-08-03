@@ -37,6 +37,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { insertPendingHumanInput } from "../db/interrupts.js";
+import { appendTranscriptRows } from "../db/sessions.js";
 import {
   findRemediationAction,
   insertRejectedRemediationAction,
@@ -274,20 +275,31 @@ describe("remediation action record", () => {
       )
       .run(sessionId, new Date().toISOString());
 
+    // The turn holding the gated call and the interrupt pointing at it are one
+    // transaction in the loop, so a crash leaves both or neither.
+    appendTranscriptRows([
+      {
+        sessionId,
+        seq: 0,
+        kind: "assistant",
+        content: "[tool: RestartDockerService]",
+        parts: [
+          {
+            type: "tool_call",
+            id: toolUseId,
+            name: "RestartDockerService",
+            input: { target: "docker/svc-01/api", reason: "wedged" },
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      },
+    ]);
     insertPendingHumanInput({
       sessionId,
       toolUseId,
       kind: "approval",
-      toolName: "RestartDockerService",
-      toolInput: {
-        target: "docker/svc-01/api",
-        reason: "wedged",
-        risk: "low",
-        estimatedDowntimeSeconds: 2,
-      },
       completedResults: [],
       claimedAt: null,
-      createdAt: new Date().toISOString(),
     });
 
     // Simulate the write-ahead row that was inserted before the API crashed

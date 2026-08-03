@@ -81,12 +81,12 @@ describe("Prometheus tools through the tool dispatch", () => {
   let mock: PromMock;
   let sessionSeq = 0;
 
-  function mintSession(alert: NormalizedAlert | null): ToolDispatchContext {
+  function mintSession(...alerts: NormalizedAlert[]): ToolDispatchContext {
     sessionSeq++;
     const sessionId = `prom-tools-${sessionSeq}`;
     createSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
-      alert,
+      alerts,
     );
     return {
       toolCallCeilingMs: 30_000,
@@ -168,9 +168,25 @@ describe("Prometheus tools through the tool dispatch", () => {
     expect(content.stepSeconds).toBe(63);
   });
 
+  it("anchors a batch on the earliest of them, since that is when it began", async () => {
+    connect();
+    // The window elects no primary, so anchoring on whichever arrived first
+    // would put the window wherever ingest ordering happened to land it.
+    const earlier: NormalizedAlert = {
+      ...ALERT,
+      sourceAlertId: "alert-0",
+      firedAt: "2026-07-16T11:30:00.000Z",
+    };
+    await executeTool(range, { query: "up" }, mintSession(ALERT, earlier));
+
+    const params = mock.requests[0]!.params;
+    expect(params.get("start")).toBe("2026-07-16T08:30:00.000Z");
+    expect(params.get("end")).toBe("2026-07-16T12:00:00.000Z");
+  });
+
   it("chat sessions anchor on now, and the window never extends into the future", async () => {
     connect();
-    await executeTool(range, { query: "up" }, mintSession(null));
+    await executeTool(range, { query: "up" }, mintSession());
 
     const params = mock.requests[0]!.params;
     const end = Date.parse(params.get("end")!);

@@ -1,3 +1,4 @@
+import type { AlertSeverity } from "./alerts.js";
 import type { ApprovalStatus } from "./approvals.js";
 
 // What the console renders, built server-side from the stored transcript joined
@@ -109,6 +110,16 @@ export interface ContinueCardItem {
   state: ToolCallState;
 }
 
+// An alert that fired while the run was already working, placed where it
+// interrupted. The report holds the detail; this says only that the ground
+// moved here, so the agent changing course has a visible cause.
+export interface AlertArrivedItem {
+  kind: "alert_arrived";
+  id: string;
+  alertType: string;
+  severity: AlertSeverity;
+}
+
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
@@ -117,7 +128,8 @@ export type TranscriptItem =
   | ToolCardItem
   | ApprovalCardItem
   | ClarificationCardItem
-  | ContinueCardItem;
+  | ContinueCardItem
+  | AlertArrivedItem;
 
 // Stable identity for a card, so a live update finds the item it belongs to.
 export function transcriptItemKey(item: TranscriptItem): string {

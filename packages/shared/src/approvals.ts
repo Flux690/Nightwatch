@@ -11,7 +11,6 @@ export interface ApprovalRequest {
   toolUseId: string; // Anthropic tool_use_id — correlation key
   kind?: "approval" | "clarification" | "continue";
   status: ApprovalStatus;
-  createdAt: string;
   resolvedAt?: string;
 }
 

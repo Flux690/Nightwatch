@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
-import { GATE_NUDGE } from "./prompts/report.js";
+import { completionRequest } from "./prompts/report.js";
+import { reportGaps, type ReportGap } from "./report.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
@@ -23,12 +24,12 @@ import {
   createSession,
   isUnderInvestigation,
   appendErrorMessage,
-  appendSessionMessages,
-  appendMessagesAndInterrupt,
+  appendSessionAlert,
+  appendTranscriptRows,
+  appendRowsAndInterrupt,
   getNextSeq,
   getSession,
 } from "../db/sessions.js";
-import { reportComplete } from "../db/reports.js";
 import {
   publishTextMessageContent,
   publishMessage,
@@ -46,7 +47,7 @@ import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
-  SessionMessage,
+  TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
 import type {
@@ -58,24 +59,26 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-// Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot
-// index so rows the seed skipped (error rows, dead exchanges) never collide.
+// Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot index
+// so rows the seed skipped never collide. `harnessTurns` names the indices
+// NightWarden authored, which the provider cannot tell from the operator's.
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
   fromCount: number,
   seqOffset: number,
+  harnessTurns: ReadonlySet<number>,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
-  const newMessages: SessionMessage[] = [];
+  const newMessages: TranscriptRow[] = [];
   for (let i = fromCount; i < snap.length; i++) {
     const m = snap[i];
     if (!m) continue;
     newMessages.push({
       sessionId,
       seq: seqOffset + i,
-      role: m.role,
+      kind: harnessTurns.has(i) ? "nightwarden" : m.role,
       content: m.content,
       parts: m.parts,
       ...(m.native && { native: m.native }),
@@ -83,11 +86,15 @@ function persistNewTurns(
     });
   }
   if (interrupt) {
-    appendMessagesAndInterrupt(newMessages, interrupt);
+    appendRowsAndInterrupt(newMessages, interrupt);
   } else {
-    appendSessionMessages(newMessages);
+    appendTranscriptRows(newMessages);
   }
-  for (const message of newMessages) publishMessage(sessionId, message);
+  // A harness row draws nothing, so publishing it would only cost the console a
+  // transcript refetch that changes no pixel.
+  for (const message of newMessages) {
+    if (message.kind !== "nightwarden") publishMessage(sessionId, message);
+  }
   return snap.length;
 }
 
@@ -119,10 +126,10 @@ const MAX_NUDGES = 3;
 
 export interface RunInvestigationInput {
   sessionId: string;
-  alert?: NormalizedAlert;
-  // Alerts that arrived within the 90s batch window alongside the primary one;
-  // included in the opening message for shared root-cause analysis (batch-triggered sessions only).
-  additionalAlerts?: NormalizedAlert[];
+  // Everything that fired inside the 90s batch window, all of it opening this
+  // session. No member is elected: they are investigated as one incident.
+  // Absent on a resume, which recovers them from the session row.
+  alerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
   // Present on resume: the full tool_results for the suspended turn
@@ -141,16 +148,21 @@ export async function runInvestigation(
   const { sessionId, signal } = input;
 
   const stored = getSession(sessionId);
-  const alert = input.alert ?? stored?.originatingAlert ?? null;
+  // A resume carries none, so the session's own record answers instead.
+  const allAlerts =
+    input.alerts ?? (stored?.alerts ?? []).map((entry) => entry.alert);
+  const alert = allAlerts[0] ?? null;
 
   // An alert opens an investigation; otherwise the session's own row answers,
   // never an artifact a previous run happened to leave behind. The row is the
   // one-way ratchet, so this can only ever turn on.
-  const opensInvestigation = alert !== null || (stored?.investigation ?? false);
+  const opensInvestigation =
+    allAlerts.length > 0 || (stored?.investigation ?? false);
 
   const log = logger.child({
     sessionId,
     alertType: alert?.alertType ?? "chat",
+    alertCount: allAlerts.length,
     investigation: opensInvestigation,
   });
 
@@ -200,6 +212,15 @@ export async function runInvestigation(
       },
     );
 
+  // Snapshot indices NightWarden wrote. Recorded as each message is sent, since
+  // by the time the diff is persisted a harness turn is indistinguishable from
+  // one the operator typed.
+  const harnessTurns = new Set<number>();
+  const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
+    provider.appendUserMessage(text);
+    harnessTurns.add(provider.snapshot().length - 1);
+  };
+
   // Operator declined a continue-request: replay the transcript and run one free-form
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
@@ -211,7 +232,7 @@ export async function runInvestigation(
     const provider = createProvider(systemPrompt, llm, apiKey);
     createSession(
       buildSessionMeta(sessionId, alert, input.userMessage),
-      alert,
+      allAlerts,
       opensInvestigation,
     );
 
@@ -227,7 +248,13 @@ export async function runInvestigation(
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
-    persistNewTurns(provider, sessionId, persistedCount, seqOffset);
+    persistNewTurns(
+      provider,
+      sessionId,
+      persistedCount,
+      seqOffset,
+      harnessTurns,
+    );
     if (signal?.aborted) {
       log.info("run stopped by user during end wrap-up");
       return "stopped";
@@ -245,10 +272,6 @@ export async function runInvestigation(
     "investigation started",
   );
 
-  const allAlerts = [
-    ...(input.alert ? [input.alert] : []),
-    ...(input.additionalAlerts ?? []),
-  ];
   const fleetView = getFleetView();
   const integration = getGitHubIntegration();
   const promptOptions: PromptOptions = {
@@ -258,7 +281,7 @@ export async function runInvestigation(
         ? null
         : `${integration.repoOwner}/${integration.repoName}`,
   };
-  const { systemPrompt, firstUserMessage } =
+  const { systemPrompt, openingTurn } =
     allAlerts.length > 0
       ? buildInitialContext(allAlerts, fleetView, promptOptions)
       : buildChatContext(fleetView, promptOptions, opensInvestigation);
@@ -266,7 +289,7 @@ export async function runInvestigation(
 
   createSession(
     buildSessionMeta(sessionId, alert, input.userMessage),
-    alert,
+    allAlerts,
     opensInvestigation,
   );
 
@@ -286,6 +309,7 @@ export async function runInvestigation(
       sessionId,
       persistedCount,
       seqOffset,
+      harnessTurns,
     );
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
@@ -299,15 +323,22 @@ export async function runInvestigation(
         sessionId,
         persistedCount,
         seqOffset,
+        harnessTurns,
       );
     }
   } else {
-    provider.start(input.userMessage ?? firstUserMessage);
+    // An alert has no human to type the first turn, so NightWarden writes it.
+    // A person's own first message is theirs, and is marked as neither.
+    provider.start(input.userMessage ?? openingTurn ?? "");
+    if (input.userMessage === undefined && openingTurn !== null) {
+      harnessTurns.add(0);
+    }
     persistedCount = persistNewTurns(
       provider,
       sessionId,
       persistedCount,
       seqOffset,
+      harnessTurns,
     );
     // Brand-new session only: refine the title in the background. Chat uses the
     // message; an alert, a compact summary.
@@ -321,11 +352,14 @@ export async function runInvestigation(
       sessionId,
       persistedCount,
       seqOffset,
+      harnessTurns,
     );
   };
 
   let turn = 0;
   let nudges = 0;
+  // How many completion requests each gap has survived, so a repeat is loud.
+  const gapsSeen = new Map<ReportGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
   // turn spends the same budget and the check-in below always arrives.
   const deadline = Date.now() + config.checkInAfterMs;
@@ -410,15 +444,34 @@ export async function runInvestigation(
       // Finish gate: a session under investigation may only end with a complete
       // record. Push back up to MAX_NUDGES times, then let it end - the status
       // an unfinished record derives to is already the honest one.
-      if (investigation && !reportComplete(sessionId)) {
+      const gaps = investigation ? reportGaps(sessionId) : [];
+      if (gaps.length > 0) {
         if (nudges < MAX_NUDGES) {
           nudges++;
-          log.info({ turn, nudges }, "finish gate: record incomplete, nudging");
-          provider.appendUserMessage(GATE_NUDGE);
+          for (const gap of gaps) {
+            const seen = (gapsSeen.get(gap.kind) ?? 0) + 1;
+            gapsSeen.set(gap.kind, seen);
+            // A gap that outlives its own request is a broken tool or a
+            // description the model cannot act on, not a distracted model.
+            if (seen > 1) {
+              log.warn(
+                { turn, gap: gap.kind, requests: seen },
+                "finish gate: gap survived a completion request",
+              );
+            }
+          }
+          log.info(
+            { turn, nudges, gaps: gaps.map((g) => g.kind) },
+            "finish gate: record incomplete, requesting completion",
+          );
+          sendHarnessMessage(provider, completionRequest(gaps));
           persist();
           continue;
         }
-        log.warn({ turn }, "finish gate: nudge cap reached, ending incomplete");
+        log.warn(
+          { turn, gaps: gaps.map((g) => g.kind) },
+          "finish gate: request cap reached, ending incomplete",
+        );
       }
       log.info({ turn }, "investigation finished with free-form response");
       return "completed";
@@ -450,17 +503,15 @@ export async function runInvestigation(
         sessionId,
         toolUseId: gated.tool.id,
         kind: isAskGate ? "clarification" : "approval",
-        toolName: gated.tool.name,
-        toolInput: gated.tool.input,
         completedResults: toolResults,
         claimedAt: null,
-        createdAt: new Date().toISOString(),
       };
       persistedCount = persistNewTurns(
         provider,
         sessionId,
         persistedCount,
         seqOffset,
+        harnessTurns,
         interrupt,
       );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
@@ -500,13 +551,15 @@ export async function runInvestigation(
       return "suspended";
     }
 
-    // Drain mid-run injected alerts at the tool boundary, riding the tool-results user turn so
-    // the provider never sees two consecutive user turns; the model judges each as downstream vs independent.
+    // Drain mid-run injected alerts at the tool boundary - the earliest point the
+    // model can act on one - as their own turn after the results. The model judges
+    // each as downstream of this incident or independent of it.
+    provider.appendToolResults(toolResults);
     const injected = dispatcher.drainInbox(sessionId);
-    const injectionText =
-      injected.length > 0 ? formatInjectedAlerts(injected) : undefined;
-
-    provider.appendToolResults(toolResults, injectionText);
+    if (injected.length > 0) {
+      for (const alert of injected) appendSessionAlert(sessionId, alert);
+      sendHarnessMessage(provider, formatInjectedAlerts(injected));
+    }
     persist();
   }
 
@@ -517,17 +570,15 @@ export async function runInvestigation(
     sessionId,
     toolUseId: continueId,
     kind: "continue",
-    toolName: "",
-    toolInput: {},
     completedResults: [],
     claimedAt: null,
-    createdAt: new Date().toISOString(),
   };
   persistedCount = persistNewTurns(
     provider,
     sessionId,
     persistedCount,
     seqOffset,
+    harnessTurns,
     continueInterrupt,
   );
   publishTranscriptItem({
@@ -558,11 +609,12 @@ function formatLabels(labels: Record<string, string>): string {
   return rendered || "no labels";
 }
 
+// Its own turn now, so it opens rather than continues: no leading blank lines.
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
   const header =
     alerts.length === 1
-      ? "\n\nINJECTED ALERT - decide: downstream effect of current incident or independent incident?"
-      : `\n\nINJECTED ALERTS (${alerts.length}) - for each, decide: downstream effect of current incident or independent incident?`;
+      ? "Another alert has fired while you were working. Decide whether it is a downstream effect of the incident you are investigating or an independent one, and say which."
+      : `${alerts.length} further alerts have fired while you were working. For each, decide whether it is a downstream effect of the incident you are investigating or an independent one, and say which.`;
   return (
     header +
     "\n" +

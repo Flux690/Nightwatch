@@ -124,7 +124,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const sessionId = `gh-changes-${sessionSeq}`;
     createSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
-      alert,
+      alert ? [alert] : [],
     );
     return {
       toolCallCeilingMs: 60_000,

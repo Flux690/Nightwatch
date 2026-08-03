@@ -2,41 +2,67 @@ import type {
   MessagePart,
   NativeEnvelope,
   NormalizedAlert,
+  SessionAlert,
   Report,
-  SessionMessage,
+  TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
 import { getDb } from "./client.js";
 import type { PendingHumanInput } from "./interrupts.js";
 
-// The alert is the durable source of severity-dependent behavior on resume, so
-// a run that no longer carries it in its job can recover it from here.
+// The alerts are the durable source of severity-dependent behavior on resume, so
+// a run that no longer carries them in its job can recover them from here.
 export type StoredSession = SessionMeta & {
-  originatingAlert: NormalizedAlert | null;
+  alerts: SessionAlert[];
   investigation: boolean;
 };
 
+function joining(alerts: NormalizedAlert[], at: string): SessionAlert[] {
+  return alerts.map((alert) => ({ alert, arrivedAt: at, clearedAt: null }));
+}
+
 // Create the session row once. Idempotent: a resume re-enters the loop with the
-// same id, and the first title/alert win - later runs never clobber them.
+// same id, and the first title/alerts win - later runs never clobber them.
 export function createSession(
   meta: SessionMeta,
-  originatingAlert: NormalizedAlert | null,
+  alerts: NormalizedAlert[],
   investigation = false,
 ): void {
   getDb()
     .prepare(
-      `INSERT INTO sessions (session_id, title, originating_alert, investigation, created_at)
-       VALUES (@sessionId, @title, @originatingAlert, @investigation, @createdAt)
+      `INSERT INTO sessions (session_id, title, alerts, investigation, created_at)
+       VALUES (@sessionId, @title, @alerts, @investigation, @createdAt)
        ON CONFLICT(session_id) DO NOTHING`,
     )
     .run({
       sessionId: meta.sessionId,
       title: meta.title,
-      originatingAlert:
-        originatingAlert != null ? JSON.stringify(originatingAlert) : null,
+      alerts: JSON.stringify(joining(alerts, meta.createdAt)),
       investigation: investigation ? 1 : 0,
       createdAt: meta.createdAt,
     });
+}
+
+function writeAlerts(sessionId: string, alerts: SessionAlert[]): void {
+  getDb()
+    .prepare(`UPDATE sessions SET alerts = @alerts WHERE session_id = @id`)
+    .run({ id: sessionId, alerts: JSON.stringify(alerts) });
+}
+
+// An alert that arrived while the run was already working. Read-modify-write in
+// a transaction so two arriving at once cannot lose each other. `arrivedAt` is
+// what later places it in the transcript, at the turn it interrupted.
+export function appendSessionAlert(
+  sessionId: string,
+  alert: NormalizedAlert,
+): void {
+  getDb().transaction((): void => {
+    const alerts = getSession(sessionId)?.alerts ?? [];
+    writeAlerts(sessionId, [
+      ...alerts,
+      { alert, arrivedAt: new Date().toISOString(), clearedAt: null },
+    ]);
+  })();
 }
 
 // One-way: a session put under investigation stays under one for good.
@@ -48,21 +74,35 @@ export function openInvestigation(sessionId: string): void {
     .run(sessionId);
 }
 
-// The first clear wins: a re-fire that clears again says nothing new about the
-// condition this session was opened for. Returns the sessions it marked.
+// Stamps this alert wherever it appears. The first clear wins per alert: a
+// re-fire that clears again says nothing new about that condition. Returns the
+// sessions it touched, which is not the same as the sessions now resolved.
 export function markAlertCleared(
   sourceAlertId: string,
   clearedAt: string,
 ): string[] {
-  const rows = getDb()
-    .prepare(
-      `UPDATE sessions SET alert_cleared_at = @clearedAt
-       WHERE alert_cleared_at IS NULL
-         AND json_extract(originating_alert, '$.sourceAlertId') = @sourceAlertId
-       RETURNING session_id AS sessionId`,
-    )
-    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string }>;
-  return rows.map((r) => r.sessionId);
+  return getDb().transaction((): string[] => {
+    const rows = getDb()
+      .prepare(
+        `SELECT session_id AS sessionId, alerts FROM sessions
+         WHERE EXISTS (SELECT 1 FROM json_each(alerts)
+                       WHERE json_extract(value, '$.alert.sourceAlertId') = @sourceAlertId
+                         AND json_extract(value, '$.clearedAt') IS NULL)`,
+      )
+      .all({ sourceAlertId }) as Array<{ sessionId: string; alerts: string }>;
+    for (const row of rows) {
+      writeAlerts(
+        row.sessionId,
+        parseAlerts(row.alerts).map((entry) =>
+          entry.alert.sourceAlertId === sourceAlertId &&
+          entry.clearedAt === null
+            ? { ...entry, clearedAt }
+            : entry,
+        ),
+      );
+    }
+    return rows.map((r) => r.sessionId);
+  })();
 }
 
 // Read per turn by the loop, so OpenInvestigation takes effect on the next turn
@@ -82,7 +122,18 @@ export function updateSessionTitle(sessionId: string, title: string): void {
     .run(title, sessionId);
 }
 
-function serializeCanonical(m: SessionMessage): string | null {
+// Untrusted on read for the same reason as the canonical column below: a session
+// with an unreadable alert list should still open, showing no alerts.
+function parseAlerts(raw: string): SessionAlert[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as SessionAlert[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function serializeCanonical(m: TranscriptRow): string | null {
   if (m.parts.length === 0 && m.native === undefined) return null;
   return JSON.stringify({ parts: m.parts, native: m.native });
 }
@@ -108,21 +159,22 @@ function parseCanonical(raw: string | null): {
   }
 }
 
-// Append a turn's messages atomically: UNIQUE(session_id, seq) forbids a duplicate seq, and
-// the transaction makes the turn all-or-nothing so the transcript checkpoint never holds a hole.
-export function appendSessionMessages(messages: SessionMessage[]): void {
+// Append a turn's rows atomically: the (session_id, seq) primary key forbids a
+// duplicate seq, and the transaction makes the turn all-or-nothing so the
+// transcript checkpoint never holds a hole.
+export function appendTranscriptRows(messages: TranscriptRow[]): void {
   if (messages.length === 0) return;
   const insert = getDb().prepare(
-    `INSERT INTO session_messages
-       (session_id, seq, role, content, canonical, created_at)
-     VALUES (@sessionId, @seq, @role, @content, @canonical, @createdAt)`,
+    `INSERT INTO session_transcript
+       (session_id, seq, kind, content, canonical, created_at)
+     VALUES (@sessionId, @seq, @kind, @content, @canonical, @createdAt)`,
   );
-  const insertAll = getDb().transaction((rows: SessionMessage[]) => {
+  const insertAll = getDb().transaction((rows: TranscriptRow[]) => {
     for (const m of rows) {
       insert.run({
         sessionId: m.sessionId,
         seq: m.seq,
-        role: m.role,
+        kind: m.kind,
         content: m.content,
         canonical: serializeCanonical(m),
         createdAt: m.createdAt,
@@ -136,7 +188,7 @@ export function getNextSeq(sessionId: string): number {
   const row = getDb()
     .prepare(
       `SELECT COALESCE(MAX(seq), -1) + 1 AS next
-       FROM session_messages WHERE session_id = ?`,
+       FROM session_transcript WHERE session_id = ?`,
     )
     .get(sessionId) as { next: number };
   return row.next;
@@ -147,17 +199,17 @@ export function getNextSeq(sessionId: string): number {
 export function appendErrorMessage(
   sessionId: string,
   text: string,
-): SessionMessage {
+): TranscriptRow {
   const db = getDb();
   const insert = db.prepare(
-    `INSERT INTO session_messages
-       (session_id, seq, role, content, canonical, created_at)
+    `INSERT INTO session_transcript
+       (session_id, seq, kind, content, canonical, created_at)
      VALUES (@sessionId, @seq, 'error', @content, NULL, @createdAt)`,
   );
-  const message: SessionMessage = {
+  const message: TranscriptRow = {
     sessionId,
     seq: 0,
-    role: "error",
+    kind: "error",
     content: text,
     parts: [],
     createdAt: new Date().toISOString(),
@@ -176,26 +228,26 @@ export function appendErrorMessage(
 
 // Called when suspending on a gated tool, so the DB is always consistent:
 // both the messages and interrupt row exist, or neither does.
-export function appendMessagesAndInterrupt(
-  messages: SessionMessage[],
+export function appendRowsAndInterrupt(
+  messages: TranscriptRow[],
   pendingHumanInput: PendingHumanInput,
 ): void {
   const insertMsg = getDb().prepare(
-    `INSERT INTO session_messages
-       (session_id, seq, role, content, canonical, created_at)
-     VALUES (@sessionId, @seq, @role, @content, @canonical, @createdAt)`,
+    `INSERT INTO session_transcript
+       (session_id, seq, kind, content, canonical, created_at)
+     VALUES (@sessionId, @seq, @kind, @content, @canonical, @createdAt)`,
   );
   const insertHumanInput = getDb().prepare(
     `INSERT INTO pending_human_input
-       (session_id, tool_use_id, kind, tool_name, tool_input, completed_results, claimed_at, created_at)
-     VALUES (@sessionId, @toolUseId, @kind, @toolName, @toolInput, @completedResults, @claimedAt, @createdAt)`,
+       (session_id, tool_use_id, kind, completed_results, claimed_at)
+     VALUES (@sessionId, @toolUseId, @kind, @completedResults, @claimedAt)`,
   );
   const txn = getDb().transaction(() => {
     for (const m of messages) {
       insertMsg.run({
         sessionId: m.sessionId,
         seq: m.seq,
-        role: m.role,
+        kind: m.kind,
         content: m.content,
         canonical: serializeCanonical(m),
         createdAt: m.createdAt,
@@ -205,36 +257,32 @@ export function appendMessagesAndInterrupt(
       sessionId: pendingHumanInput.sessionId,
       toolUseId: pendingHumanInput.toolUseId,
       kind: pendingHumanInput.kind,
-      toolName: pendingHumanInput.toolName,
-      toolInput: JSON.stringify(pendingHumanInput.toolInput),
       completedResults: JSON.stringify(pendingHumanInput.completedResults),
       claimedAt: pendingHumanInput.claimedAt ?? null,
-      createdAt: pendingHumanInput.createdAt,
     });
   });
   txn();
 }
 
-// Cascades to the transcript, the pending approval and the report; the
-// remediation audit log is not a child of sessions, so it survives.
+// Takes the report column with it and cascades to the transcript and the pending
+// approval. The remediation audit log is not a child of sessions, so it survives.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
 
-// Raw material for the sessions queue: one row per session joined with its
-// record, its action log and the transcript's tail. Deriving a status from all
-// that lives in session/list.ts, which also knows the dispatcher.
+// Raw material for the sessions queue: one row per session, with its action log
+// and the transcript's tail. Deriving a status from all that lives in
+// session/list.ts, which also knows the dispatcher.
 export interface SessionListSource {
   sessionId: string;
   title: string;
   createdAt: string;
   lastActivityAt: string;
-  originatingAlert: NormalizedAlert | null;
+  alerts: SessionAlert[];
   investigation: boolean;
-  alertCleared: boolean;
   report: Report | null;
   remediationExecuted: boolean;
-  lastRole: string | null;
+  lastKind: string | null;
   awaitingHumanInput: boolean;
 }
 
@@ -254,19 +302,17 @@ export function listSessionSources(
   const rows = getDb()
     .prepare(
       `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-              s.originating_alert AS originatingAlert, s.investigation, r.report,
-              (s.alert_cleared_at IS NOT NULL) AS alertCleared,
+              s.alerts, s.investigation, s.report,
               EXISTS (SELECT 1 FROM remediation_actions ra
                 WHERE ra.session_id = s.session_id
                   AND ra.status = 'executed') AS remediationExecuted,
-              (SELECT m.role FROM session_messages m
+              (SELECT m.kind FROM session_transcript m
                 WHERE m.session_id = s.session_id
-                ORDER BY m.seq DESC LIMIT 1) AS lastRole,
-              COALESCE((SELECT MAX(m.created_at) FROM session_messages m
+                ORDER BY m.seq DESC LIMIT 1) AS lastKind,
+              COALESCE((SELECT MAX(m.created_at) FROM session_transcript m
                 WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
               (p.session_id IS NOT NULL) AS awaitingHumanInput
        FROM sessions s
-       LEFT JOIN reports r ON r.session_id = s.session_id
        LEFT JOIN pending_human_input p ON p.session_id = s.session_id
        ORDER BY awaitingHumanInput DESC, lastActivityAt DESC, s.session_id ASC
        LIMIT ? OFFSET ?`,
@@ -277,12 +323,11 @@ export function listSessionSources(
     title: string;
     createdAt: string;
     lastActivityAt: string;
-    originatingAlert: string | null;
+    alerts: string;
     investigation: number;
-    alertCleared: number;
     report: string | null;
     remediationExecuted: number;
-    lastRole: string | null;
+    lastKind: string | null;
     awaitingHumanInput: number;
   }>;
   const page = rows.slice(0, limit);
@@ -292,15 +337,11 @@ export function listSessionSources(
       title: r.title,
       createdAt: r.createdAt,
       lastActivityAt: r.lastActivityAt,
-      originatingAlert:
-        r.originatingAlert !== null
-          ? (JSON.parse(r.originatingAlert) as NormalizedAlert)
-          : null,
+      alerts: parseAlerts(r.alerts),
       investigation: r.investigation === 1,
-      alertCleared: r.alertCleared === 1,
       report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
       remediationExecuted: r.remediationExecuted === 1,
-      lastRole: r.lastRole,
+      lastKind: r.lastKind,
       awaitingHumanInput: r.awaitingHumanInput === 1,
     })),
     nextOffset: rows.length > limit ? offset + page.length : null,
@@ -311,48 +352,59 @@ export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
       `SELECT session_id AS sessionId, title, investigation,
-              originating_alert AS originatingAlert, created_at AS createdAt
+              alerts, created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
     .get(sessionId) as
-    | (SessionMeta & { originatingAlert: string | null; investigation: number })
-    | undefined;
+    (SessionMeta & { alerts: string; investigation: number }) | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,
     title: row.title,
     createdAt: row.createdAt,
     investigation: row.investigation === 1,
-    // Stored as JSON text; only this layer deserializes it.
-    originatingAlert:
-      row.originatingAlert != null
-        ? (JSON.parse(row.originatingAlert) as NormalizedAlert)
-        : null,
+    alerts: parseAlerts(row.alerts),
   };
 }
 
-export function getSessionMessages(sessionId: string): SessionMessage[] {
+export function getTranscriptRows(sessionId: string): TranscriptRow[] {
   const rows = getDb()
     .prepare(
-      `SELECT session_id AS sessionId, seq, role, content,
+      `SELECT session_id AS sessionId, seq, kind, content,
               canonical, created_at AS createdAt
-       FROM session_messages WHERE session_id = ? ORDER BY seq ASC`,
+       FROM session_transcript WHERE session_id = ? ORDER BY seq ASC`,
     )
     .all(sessionId) as Array<{
     sessionId: string;
     seq: number;
-    role: string;
+    kind: string;
     content: string;
     canonical: string | null;
     createdAt: string;
   }>;
   return rows.map((r) => ({
     sessionId: r.sessionId,
-    // role is constrained to SessionRole on write; the column is plain TEXT.
-    role: r.role as SessionMessage["role"],
+    // kind is constrained to TranscriptKind on write; the column is plain TEXT.
+    kind: r.kind as TranscriptRow["kind"],
     seq: r.seq,
     content: r.content,
     ...parseCanonical(r.canonical),
     createdAt: r.createdAt,
   }));
+}
+
+// What a tool call was, read from the transcript that recorded it. Null for a
+// synthetic id, which is what a continue request carries: it gates on no tool.
+export function findToolCall(
+  sessionId: string,
+  toolUseId: string,
+): { name: string; input: Record<string, unknown> } | null {
+  for (const row of getTranscriptRows(sessionId)) {
+    for (const part of row.parts) {
+      if (part.type === "tool_call" && part.id === toolUseId) {
+        return { name: part.name, input: part.input };
+      }
+    }
+  }
+  return null;
 }

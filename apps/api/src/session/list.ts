@@ -22,16 +22,28 @@ function proposedSomething(report: Report): boolean {
   );
 }
 
-// Derived from the action log, the alert and the hypothesis rows, never from
+// Every alert, not any: a batch fired together elects no primary, so one symptom
+// recovering while the others still fire is not the incident being over. An
+// alert that arrived mid-run counts too - it may be a second incident entirely.
+function conditionRecovered(source: SessionListSource): boolean {
+  return (
+    source.alerts.length > 0 &&
+    source.alerts.every((entry) => entry.clearedAt !== null)
+  );
+}
+
+// Derived from the action log, the alerts and the hypothesis rows, never from
 // anything the model declared. A crash is checked before an unconcluded run, so
 // a run that broke reads as broken rather than as one that stood down.
 function deriveStatus(source: SessionListSource): SessionRunStatus | null {
   const report = source.report;
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
-  if (source.remediationExecuted || source.alertCleared) return "resolved";
+  if (source.remediationExecuted || conditionRecovered(source)) {
+    return "resolved";
+  }
   if (report !== null && proposedSomething(report)) return "action_required";
-  if (source.lastRole === "error") return "failed";
+  if (source.lastKind === "error") return "failed";
   // A record with no cause in it, up to and including an empty one: the run
   // ended with nothing it could stand behind.
   if (
@@ -57,7 +69,7 @@ export function listSessionPage(
         lastActivityAt: source.lastActivityAt,
         title: source.title,
         investigation,
-        severity: source.originatingAlert?.severity ?? null,
+        severity: source.alerts[0]?.alert.severity ?? null,
         status: investigation ? deriveStatus(source) : null,
         awaitingHumanInput: source.awaitingHumanInput,
       };

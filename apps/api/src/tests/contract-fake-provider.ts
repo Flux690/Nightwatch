@@ -59,9 +59,12 @@ function validateTranscript(messages: NativeMessage[]): void {
     const prev = messages[i - 1]!;
     const curr = messages[i]!;
 
-    if (prev.role === curr.role) {
+    // Consecutive user turns are legal - the Messages API combines them into
+    // one - which is what lets an injected alert follow the tool results as its
+    // own turn. Two assistant turns in a row is still a bug.
+    if (prev.role === "assistant" && curr.role === "assistant") {
       throw new Error(
-        `Contract violation: consecutive ${prev.role} messages at index ${i - 1} and ${i}`,
+        `Contract violation: consecutive assistant messages at index ${i - 1} and ${i}`,
       );
     }
 
@@ -234,20 +237,15 @@ function makeProvider(
       },
     ),
 
-    appendToolResults: vi.fn(
-      (results: ToolResult[], additionalText?: string) => {
-        const blocks: Array<ToolResultBlock | TextBlock> = results.map((r) => ({
-          type: "tool_result" as const,
-          tool_use_id: r.tool_use_id,
-          content: r.content,
-          ...(r.is_error && { is_error: true }),
-        }));
-        if (additionalText) {
-          blocks.push({ type: "text", text: additionalText });
-        }
-        messages.push({ role: "user", content: blocks });
-      },
-    ),
+    appendToolResults: vi.fn((results: ToolResult[]) => {
+      const blocks: Array<ToolResultBlock | TextBlock> = results.map((r) => ({
+        type: "tool_result" as const,
+        tool_use_id: r.tool_use_id,
+        content: r.content,
+        ...(r.is_error && { is_error: true }),
+      }));
+      messages.push({ role: "user", content: blocks });
+    }),
 
     appendUserMessage: vi.fn((msg: string) => {
       messages.push({ role: "user", content: msg });

@@ -148,12 +148,12 @@ describe("console SSE pipeline", () => {
       events.filter((e) => {
         const payload = e.payload as {
           sessionId?: string;
-          message?: { role?: string };
+          message?: { kind?: string };
         };
         return (
           e.type === "MESSAGE" &&
           payload.sessionId === sessionId &&
-          payload.message?.role === "assistant"
+          payload.message?.kind === "assistant"
         );
       }).length;
 

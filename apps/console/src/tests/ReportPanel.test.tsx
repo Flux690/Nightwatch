@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type {
+  NormalizedAlert,
+  SessionAlert,
   Report,
   ReportConviction,
   ResolvedEvidence,
@@ -10,6 +12,31 @@ import userEvent from "@testing-library/user-event";
 import { ReportPanel } from "@/components/report/ReportPanel";
 
 const RESOLVED = "2026-07-21T12:30:00.000Z";
+
+const ALERT: NormalizedAlert = {
+  sourceAlertId: "alert-1",
+  labels: { service: "payments-worker" },
+  alertType: "ContainerRestarting",
+  severity: "critical",
+  firedAt: "2026-07-21T12:00:00.000Z",
+  rawPayload: {},
+};
+
+const INJECTED_ALERT: NormalizedAlert = {
+  sourceAlertId: "alert-2",
+  labels: { service: "api" },
+  alertType: "HighLatency",
+  severity: "warning",
+  firedAt: "2026-07-21T12:20:00.000Z",
+  rawPayload: {},
+};
+
+function onSession(
+  alert: NormalizedAlert,
+  clearedAt: string | null = null,
+): SessionAlert {
+  return { alert, arrivedAt: alert.firedAt, clearedAt };
+}
 
 const REPORT: Report = {
   hypotheses: [
@@ -41,7 +68,6 @@ const REPORT: Report = {
     },
   ],
   updatedAt: RESOLVED,
-  model: "test",
 };
 
 const CONVICTION: ReportConviction = { h1: "corroborated", f1: "cited" };
@@ -82,7 +108,7 @@ function panel(overrides: Partial<Parameters<typeof ReportPanel>[0]> = {}) {
       actions={[]}
       evidence={EVIDENCE}
       conviction={CONVICTION}
-      alert={null}
+      alerts={[]}
       {...overrides}
     />
   );
@@ -391,6 +417,40 @@ describe("ReportPanel", () => {
     expect(
       screen.getByText(/has not recorded a finding yet/),
     ).toBeInTheDocument();
+  });
+
+  it("shows the alert before the agent has recorded anything", () => {
+    render(panel({ evidence: [], report: null, alerts: [onSession(ALERT)] }));
+    expect(screen.getByText("Critical")).toBeInTheDocument();
+    expect(screen.getByText("ContainerRestarting")).toBeInTheDocument();
+    expect(screen.getByText(/service=payments-worker/)).toBeInTheDocument();
+  });
+
+  it("shows an alert that arrived mid-run beside the one that opened it", () => {
+    render(panel({ alerts: [onSession(ALERT), onSession(INJECTED_ALERT)] }));
+    expect(screen.getByText("Alerts")).toBeInTheDocument();
+    expect(screen.getByText("ContainerRestarting")).toBeInTheDocument();
+    expect(screen.getByText("HighLatency")).toBeInTheDocument();
+  });
+
+  it("says which alerts have recovered and which are still firing", () => {
+    render(
+      panel({
+        alerts: [
+          onSession(ALERT, "2026-07-21T13:00:00.000Z"),
+          onSession(INJECTED_ALERT),
+        ],
+      }),
+    );
+    // One word, on the one that recovered: the session is not resolved while
+    // the other still fires, and the band has to show why.
+    expect(screen.getAllByText("Recovered")).toHaveLength(1);
+  });
+
+  it("renders no alert band on a session no alert opened", () => {
+    render(panel());
+    expect(screen.queryByText("Alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alerts")).not.toBeInTheDocument();
   });
 
   it("says the run could not conclude by showing what it settled and no cause", () => {

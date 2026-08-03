@@ -103,29 +103,38 @@ CREATE TABLE IF NOT EXISTS integrations (
 -- meaningful once the session is gone.
 
 -- investigation is what the session IS, carried from the moment it exists, and
--- it is a one-way ratchet that never clears. alert_cleared_at is the other way
--- one resolves: the condition recovered, whoever fixed it.
+-- it is a one-way ratchet that never clears.
+
+-- alerts is a JSON array in arrival order, each entry carrying when it joined and
+-- when it cleared. A batch elects no primary, so recovery is a fact about each
+-- alert and the session resolves only once they have all cleared.
+
+-- report is the investigation record, null until the agent's first finding, and
+-- one-to-one with the session it cannot outlive.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
-  originating_alert    TEXT,
+  alerts               TEXT      NOT NULL DEFAULT '[]',
   investigation        INTEGER   NOT NULL DEFAULT 0,
-  alert_cleared_at     TEXT,
+  report               TEXT,
   created_at           TEXT      NOT NULL
 );
 
--- The durable transcript, and the only record of what ran. canonical holds our
--- portable form of the turn plus the vendor's verbatim message, so a resume on
--- the same dialect replays byte-exact and a switched provider still reads it.
-CREATE TABLE IF NOT EXISTS session_messages (
-  id             INTEGER   PRIMARY KEY AUTOINCREMENT,
+-- The durable transcript, and the only record of what ran, keyed by the natural
+-- (session_id, seq). kind because not every row is a conversation turn: an error
+-- row is our own note, a nightwarden row is the harness talking to the model.
+
+-- canonical holds our portable form of the turn plus the vendor's verbatim
+-- message, so a resume on the same dialect replays byte-exact and a switched
+-- provider still reads it.
+CREATE TABLE IF NOT EXISTS session_transcript (
   session_id     TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
   seq            INTEGER   NOT NULL,
-  role           TEXT      NOT NULL,
+  kind           TEXT      NOT NULL,
   content        TEXT      NOT NULL,
   canonical      TEXT,
   created_at     TEXT      NOT NULL,
-  UNIQUE (session_id, seq)
+  PRIMARY KEY (session_id, seq)
 );
 
 -- How a tool call ended, as the API classified it. Our own reading, which the
@@ -139,30 +148,19 @@ CREATE TABLE IF NOT EXISTS tool_outcomes (
 );
 
 -- What a suspended run is waiting on. One per session: the loop gates on the
--- first write or question of a turn and stops there.
+-- first write or question of a turn and stops there. tool_use_id points at the
+-- gated call, which the transcript holds under that same id.
+
+-- completed_results are the turn's other calls, parked here because a transcript
+-- answering some of a turn's calls and not others is a conversation that cannot
+-- be replayed. They go back the moment the gated call is answered too.
 CREATE TABLE IF NOT EXISTS pending_human_input (
   session_id            TEXT   NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
   tool_use_id           TEXT   NOT NULL,
   kind                  TEXT   NOT NULL DEFAULT 'approval',
-  tool_name             TEXT   NOT NULL,
-  tool_input            TEXT   NOT NULL,
   completed_results     TEXT   NOT NULL DEFAULT '[]',
   claimed_at            TEXT,
-  created_at            TEXT   NOT NULL,
   PRIMARY KEY (session_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_pending_human_input_claimed
-  ON pending_human_input (claimed_at);
-
--- The investigation record, appended to one act at a time, and a child of its
--- session because a record nobody can reach is not a record. It holds only what
--- the model wrote; evidence, conviction and status are resolved on read.
-CREATE TABLE IF NOT EXISTS reports (
-  session_id     TEXT   PRIMARY KEY REFERENCES sessions(session_id) ON DELETE CASCADE,
-  report         TEXT   NOT NULL,
-  model          TEXT,
-  updated_at     TEXT   NOT NULL
 );
 
 

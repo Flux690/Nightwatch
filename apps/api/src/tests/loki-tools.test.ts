@@ -119,7 +119,7 @@ describe("Loki tools through the tool dispatch", () => {
     const sessionId = `loki-tools-${sessionSeq}`;
     createSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
-      alert,
+      alert ? [alert] : [],
     );
     return {
       toolCallCeilingMs: 30_000,

@@ -23,9 +23,11 @@ export interface ApprovedToolResult {
 // of the card wedging.
 export async function executeApprovedTool(
   pending: PendingHumanInput,
+  call: { name: string; input: Record<string, unknown> },
   resolvedBy: string,
 ): Promise<ApprovedToolResult> {
-  const { sessionId, toolUseId, toolName, toolInput } = pending;
+  const { sessionId, toolUseId } = pending;
+  const { name: toolName, input: toolInput } = call;
   try {
     // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict means
     // this tool_use_id already ran (crash-recovery path) - do not re-execute.

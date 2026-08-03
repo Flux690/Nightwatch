@@ -2,18 +2,19 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   NormalizedAlert,
-  SessionMessage,
+  TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 
 import {
   createSession,
-  appendSessionMessages,
-  appendMessagesAndInterrupt,
+  appendSessionAlert,
+  appendTranscriptRows,
+  appendRowsAndInterrupt,
   listSessionSources,
   getSession,
-  getSessionMessages,
+  getTranscriptRows,
   deleteSession,
   markAlertCleared,
 } from "../db/sessions.js";
@@ -27,6 +28,7 @@ import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { seedCompleteReport } from "./report-helper.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
+import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
 import {
   insertExecutingRemediationAction,
@@ -46,12 +48,12 @@ function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
 function msg(
   sessionId: string,
   seq: number,
-  overrides: Partial<SessionMessage> = {},
-): SessionMessage {
+  overrides: Partial<TranscriptRow> = {},
+): TranscriptRow {
   return {
     sessionId,
     seq,
-    role: seq % 2 === 0 ? "user" : "assistant",
+    kind: seq % 2 === 0 ? "user" : "assistant",
     content: `message ${seq}`,
     parts: [{ type: "text", text: `message ${seq}` }],
     createdAt: new Date().toISOString(),
@@ -80,55 +82,110 @@ describe("API-local session store", () => {
     vi.unstubAllEnvs();
   });
 
-  it("round-trips a session with its originating alert", () => {
+  it("round-trips a session with the alert that opened it", () => {
     const m = meta();
-    createSession(m, alert);
+    createSession(m, [alert]);
 
     const stored = getSession(m.sessionId);
     expect(stored).toBeDefined();
     expect(stored?.title).toBe("web-01 down");
-    expect(stored?.originatingAlert).toEqual(alert);
+    expect(stored?.alerts).toEqual([
+      { alert, arrivedAt: m.createdAt, clearedAt: null },
+    ]);
   });
 
-  it("stores a chat session with a null originating alert", () => {
+  it("stores a chat session with no alerts at all", () => {
     const m = meta({ title: "hello" });
-    createSession(m, null);
+    createSession(m, []);
 
-    expect(getSession(m.sessionId)?.originatingAlert).toBeNull();
+    expect(getSession(m.sessionId)?.alerts).toEqual([]);
+  });
+
+  it("keeps an alert that arrived after the session was already running", () => {
+    const m = meta();
+    const later = {
+      ...alert,
+      sourceAlertId: "later",
+      alertType: "HighLatency",
+    };
+    createSession(m, [alert]);
+    appendSessionAlert(m.sessionId, later);
+
+    const stored = getSession(m.sessionId)!.alerts;
+    expect(stored.map((entry) => entry.alert)).toEqual([alert, later]);
+    // The opening batch shares the session's instant; a later arrival carries
+    // its own, which is what places it at the turn it interrupted. Two clock
+    // reads can tie, so this asserts it is stamped, not that time moved.
+    expect(stored[0]!.arrivedAt).toBe(m.createdAt);
+    expect(stored[1]!.arrivedAt >= m.createdAt).toBe(true);
+    expect(stored[1]!.clearedAt).toBeNull();
   });
 
   it("createSession is idempotent and never clobbers the first title", () => {
     const m = meta({ title: "first" });
-    createSession(m, alert);
-    createSession({ ...m, title: "second" }, null);
+    createSession(m, [alert]);
+    createSession({ ...m, title: "second" }, []);
 
     const stored = getSession(m.sessionId);
     expect(stored?.title).toBe("first");
-    expect(stored?.originatingAlert).toEqual(alert);
+    expect(stored?.alerts.map((entry) => entry.alert)).toEqual([alert]);
   });
 
   it("persists and reads back a transcript ordered by seq", () => {
     const m = meta();
-    createSession(m, alert);
+    createSession(m, [alert]);
     // Insert out of order to prove ordering is by seq, not insertion.
-    appendSessionMessages([msg(m.sessionId, 1), msg(m.sessionId, 0)]);
-    appendSessionMessages([msg(m.sessionId, 2)]);
+    appendTranscriptRows([msg(m.sessionId, 1), msg(m.sessionId, 0)]);
+    appendTranscriptRows([msg(m.sessionId, 2)]);
 
-    const transcript = getSessionMessages(m.sessionId);
+    const transcript = getTranscriptRows(m.sessionId);
     expect(transcript.map((t) => t.seq)).toEqual([0, 1, 2]);
-    expect(transcript[0].role).toBe("user");
-    expect(transcript[1].role).toBe("assistant");
+    expect(transcript[0].kind).toBe("user");
+    expect(transcript[1].kind).toBe("assistant");
     expect(transcript[0].parts).toEqual([{ type: "text", text: "message 0" }]);
+  });
+
+  it("replays a harness message to the model and draws it for nobody", () => {
+    // The operator did not write it, so the transcript must not show it as
+    // theirs; the model answered it, so a resume that dropped it would leave
+    // that answer replying to nothing.
+    const m = meta();
+    createSession(m, [alert]);
+    appendTranscriptRows([
+      msg(m.sessionId, 0),
+      msg(m.sessionId, 1),
+      msg(m.sessionId, 2, {
+        kind: "nightwarden",
+        content: "Your investigation record is not finished.",
+        parts: [
+          { type: "text", text: "Your investigation record is not finished." },
+        ],
+      }),
+      msg(m.sessionId, 3),
+    ]);
+
+    const drawn = JSON.stringify(buildTranscript(m.sessionId));
+    expect(drawn).not.toContain("Your investigation record");
+    expect(buildTranscript(m.sessionId)).toHaveLength(3);
+
+    // The seed speaks the provider's vocabulary, where there are two roles and
+    // "nightwarden" is not one of them: it goes back as the user turn it was.
+    const seeded = buildSeed(m.sessionId);
+    expect(seeded).toHaveLength(4);
+    expect(seeded[2]).toMatchObject({
+      role: "user",
+      content: "Your investigation record is not finished.",
+    });
   });
 
   it("carries a tool call's outcome class into the rebuilt transcript", () => {
     // The provider message a reloaded transcript is rebuilt from has nowhere to
     // put our classification, so a reload would otherwise lose it.
     const m = meta();
-    createSession(m, alert);
-    appendSessionMessages([
+    createSession(m, [alert]);
+    appendTranscriptRows([
       {
-        ...msg(m.sessionId, 0, { role: "assistant" }),
+        ...msg(m.sessionId, 0, { kind: "assistant" }),
         parts: [
           { type: "tool_call", id: "tu-miss", name: "Read", input: {} },
           { type: "tool_result", toolCallId: "tu-miss", output: "not found" },
@@ -149,22 +206,22 @@ describe("API-local session store", () => {
 
   it("rejects a duplicate (session_id, seq) so a hole can never be re-filled", () => {
     const m = meta();
-    createSession(m, alert);
-    appendSessionMessages([msg(m.sessionId, 0)]);
+    createSession(m, [alert]);
+    appendTranscriptRows([msg(m.sessionId, 0)]);
 
-    expect(() => appendSessionMessages([msg(m.sessionId, 0)])).toThrow();
+    expect(() => appendTranscriptRows([msg(m.sessionId, 0)])).toThrow();
   });
 
   it("appends a batch atomically: a duplicate in the batch rolls back the whole turn", () => {
     const m = meta();
-    createSession(m, alert);
-    appendSessionMessages([msg(m.sessionId, 0)]);
+    createSession(m, [alert]);
+    appendTranscriptRows([msg(m.sessionId, 0)]);
 
     // seq 1 is new, seq 0 collides; the batch must be all-or-nothing.
     expect(() =>
-      appendSessionMessages([msg(m.sessionId, 1), msg(m.sessionId, 0)]),
+      appendTranscriptRows([msg(m.sessionId, 1), msg(m.sessionId, 0)]),
     ).toThrow();
-    expect(getSessionMessages(m.sessionId).map((t) => t.seq)).toEqual([0]);
+    expect(getTranscriptRows(m.sessionId).map((t) => t.seq)).toEqual([0]);
   });
 
   it("lists sessions newest first", () => {
@@ -177,9 +234,9 @@ describe("API-local session store", () => {
       createdAt: "2026-02-01T00:00:00.000Z",
     });
     const other = meta({ title: "other" });
-    createSession(older, alert);
-    createSession(newer, alert);
-    createSession(other, alert);
+    createSession(older, [alert]);
+    createSession(newer, [alert]);
+    createSession(other, [alert]);
 
     const list = listSessionSources(100, 0).sources.filter((session) =>
       [other.sessionId, newer.sessionId, older.sessionId].includes(
@@ -199,7 +256,7 @@ describe("API-local session store", () => {
             title: `${prefix}-${i}`,
             createdAt: `2026-03-01T00:00:${String(i).padStart(2, "0")}.000Z`,
           }),
-          alert,
+          [alert],
         );
       }
     }
@@ -228,18 +285,15 @@ describe("API-local session store", () => {
         title: "waiting",
         createdAt: "2026-01-01T00:00:00.000Z",
       });
-      createSession(waiting, alert);
-      appendMessagesAndInterrupt([msg(waiting.sessionId, 0)], {
+      createSession(waiting, [alert]);
+      appendRowsAndInterrupt([msg(waiting.sessionId, 0)], {
         sessionId: waiting.sessionId,
         toolUseId: "tu-float",
         kind: "approval",
-        toolName: "RestartDockerService",
-        toolInput: {},
         completedResults: [],
         claimedAt: null,
-        createdAt: "2026-01-01T00:00:00.000Z",
       });
-      createSession(meta({ title: "newer than waiting" }), alert);
+      createSession(meta({ title: "newer than waiting" }), [alert]);
 
       const first = listSessionSources(1, 0);
       expect(first.sources[0].sessionId).toBe(waiting.sessionId);
@@ -249,27 +303,24 @@ describe("API-local session store", () => {
 
   it("returns undefined for an unknown session", () => {
     expect(getSession("nope")).toBeUndefined();
-    expect(getSessionMessages("nope")).toEqual([]);
+    expect(getTranscriptRows("nope")).toEqual([]);
   });
 
   it("deleteSession removes the session, its messages, and any pending interrupt", () => {
     const m = meta();
-    createSession(m, alert);
-    appendMessagesAndInterrupt([msg(m.sessionId, 0)], {
+    createSession(m, [alert]);
+    appendRowsAndInterrupt([msg(m.sessionId, 0)], {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
       kind: "approval",
-      toolName: "RestartDockerService",
-      toolInput: {},
       completedResults: [],
       claimedAt: null,
-      createdAt: new Date().toISOString(),
     });
 
     deleteSession(m.sessionId);
 
     expect(getSession(m.sessionId)).toBeUndefined();
-    expect(getSessionMessages(m.sessionId)).toEqual([]);
+    expect(getTranscriptRows(m.sessionId)).toEqual([]);
     expect(hasPendingHumanInput(m.sessionId)).toBe(false);
   });
 
@@ -279,7 +330,7 @@ describe("API-local session store", () => {
 
   it("deleteSession removes the report (it has no reason to outlive the session)", () => {
     const m = meta();
-    createSession(m, alert);
+    createSession(m, [alert]);
     seedCompleteReport(m.sessionId);
     expect(getReport(m.sessionId)).toBeDefined();
 
@@ -290,7 +341,7 @@ describe("API-local session store", () => {
 
   it("deleteSession preserves the remediation audit log (the record outlives the session)", () => {
     const m = meta();
-    createSession(m, alert);
+    createSession(m, [alert]);
     insertExecutingRemediationAction({
       toolUseId: "tu-audit-survives",
       sessionId: m.sessionId,
@@ -310,7 +361,7 @@ describe("API-local session store", () => {
   });
 
   it("rejects a transcript message for a session that does not exist (foreign keys enforced)", () => {
-    expect(() => appendSessionMessages([msg("ghost-session", 0)])).toThrow(
+    expect(() => appendTranscriptRows([msg("ghost-session", 0)])).toThrow(
       /FOREIGN KEY/i,
     );
   });
@@ -328,13 +379,13 @@ describe("API-local session store", () => {
     // Its own alert id per session: clearing one must not settle another's.
     function investigation(sourceAlertId = randomUUID()): string {
       const m = meta();
-      createSession(m, { ...alert, sourceAlertId }, true);
+      createSession(m, [{ ...alert, sourceAlertId }], true);
       return m.sessionId;
     }
 
     it("says nothing about a session that is not under investigation", () => {
       const m = meta();
-      createSession(m, null);
+      createSession(m, []);
       expect(statusOf(m.sessionId)).toBeNull();
     });
 
@@ -353,7 +404,7 @@ describe("API-local session store", () => {
       expect(statusOf(sessionId)).toBe("resolved");
     });
 
-    it("reads Resolved when the originating alert cleared, with nothing run", () => {
+    it("reads Resolved when the alert cleared, with nothing run", () => {
       const sourceAlertId = randomUUID();
       const sessionId = investigation(sourceAlertId);
       const untouched = investigation();
@@ -366,16 +417,37 @@ describe("API-local session store", () => {
       expect(statusOf(untouched)).toBe("inconclusive");
     });
 
+    it("stays unresolved until every alert of a batch has cleared", () => {
+      // A batch elects no primary, so one symptom recovering while the others
+      // still fire is not the incident being over.
+      const m = meta();
+      const ids = [randomUUID(), randomUUID(), randomUUID()];
+      createSession(
+        m,
+        ids.map((sourceAlertId) => ({ ...alert, sourceAlertId })),
+        true,
+      );
+      seedCompleteReport(m.sessionId);
+
+      markAlertCleared(ids[0]!, new Date().toISOString());
+      expect(statusOf(m.sessionId)).toBe("inconclusive");
+      markAlertCleared(ids[1]!, new Date().toISOString());
+      expect(statusOf(m.sessionId)).toBe("inconclusive");
+
+      markAlertCleared(ids[2]!, new Date().toISOString());
+      expect(statusOf(m.sessionId)).toBe("resolved");
+    });
+
     it("reads Action required for a finished run whose fix nobody acted on", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
-      proposeFix(sessionId, "test", "restart the container", []);
+      proposeFix(sessionId, "restart the container", []);
       expect(statusOf(sessionId)).toBe("action_required");
     });
 
     it("reads Failed when the run crashed rather than stood down", () => {
       const sessionId = investigation();
-      appendSessionMessages([msg(sessionId, 0, { role: "error" })]);
+      appendTranscriptRows([msg(sessionId, 0, { kind: "error" })]);
       expect(statusOf(sessionId)).toBe("failed");
     });
 
@@ -390,8 +462,8 @@ describe("API-local session store", () => {
 
     it("says nothing when a cause was found but nothing was recommended or run", () => {
       const sessionId = investigation();
-      proposeHypothesis(sessionId, "test", "the deploy set the cache size");
-      resolveHypothesis(sessionId, "test", {
+      proposeHypothesis(sessionId, "the deploy set the cache size");
+      resolveHypothesis(sessionId, {
         id: "h1",
         verdict: "trigger",
         finding: "the climb starts at the merge",

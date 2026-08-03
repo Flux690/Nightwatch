@@ -135,7 +135,7 @@ function setup(pendingCount = 0) {
             title: "Check disk",
             createdAt: "2026-06-13T00:00:00.000Z",
             investigation,
-            originatingAlert: null,
+            alerts: [],
             transcript: [],
           }),
       });
@@ -377,7 +377,7 @@ describe("Shell", () => {
           payload: {
             sessionId: "new-s1",
             message: {
-              role: "assistant",
+              kind: "assistant",
               content: "Opening an investigation.",
             },
           },
@@ -433,7 +433,7 @@ describe("Shell", () => {
           type: "MESSAGE",
           payload: {
             sessionId: "new-s1",
-            message: { role: "assistant", content: "Found it." },
+            message: { kind: "assistant", content: "Found it." },
           },
         });
         MockEventSource.broadcast({
@@ -501,7 +501,7 @@ describe("Shell", () => {
           payload: {
             sessionId: "new-s1",
             message: {
-              role: "assistant",
+              kind: "assistant",
               content: "Opening an investigation.",
             },
           },

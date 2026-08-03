@@ -1,5 +1,4 @@
 import type { Verdict } from "@nightwarden/shared";
-import { checkLLMReadiness } from "../../config/readiness.js";
 import {
   PROPOSE_FIX_SCHEMA,
   PROPOSE_HYPOTHESIS_SCHEMA,
@@ -27,13 +26,6 @@ const VERDICTS: Exclude<Verdict, "open">[] = [
 ];
 function isVerdict(value: unknown): value is Exclude<Verdict, "open"> {
   return VERDICTS.some((v) => v === value);
-}
-
-// A run cannot start unconfigured, so the active provider's model is set by the
-// time any tool executes; the fallback only keeps attribution honest.
-function activeModel(): string {
-  const readiness = checkLLMReadiness();
-  return readiness.ready ? readiness.config.model : "unknown";
 }
 
 // Prose the record cannot do without. A blank one is the model skipping the
@@ -71,9 +63,7 @@ export const REPORT_TOOLS: Tool[] = [
       if (statement === null) {
         return malformed("A hypothesis needs a statement. Send one sentence.");
       }
-      return toResult(
-        proposeHypothesis(ctx.sessionId, activeModel(), statement),
-      );
+      return toResult(proposeHypothesis(ctx.sessionId, statement));
     },
   },
   {
@@ -96,7 +86,7 @@ export const REPORT_TOOLS: Tool[] = [
         );
       }
       return toResult(
-        resolveHypothesis(ctx.sessionId, activeModel(), {
+        resolveHypothesis(ctx.sessionId, {
           id,
           verdict,
           finding,
@@ -117,9 +107,7 @@ export const REPORT_TOOLS: Tool[] = [
           "A proposed fix needs a summary and an evidenceIds array, which may be empty.",
         );
       }
-      return toResult(
-        proposeFix(ctx.sessionId, activeModel(), summary, evidenceIds),
-      );
+      return toResult(proposeFix(ctx.sessionId, summary, evidenceIds));
     },
   },
 ];
