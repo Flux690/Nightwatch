@@ -6,9 +6,12 @@ import { Boxes, Plus, Server } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ServerCard, runnerDisplayName } from "@/components/layout/ServerCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -54,6 +57,13 @@ export const PLATFORM_COPY: Record<
 };
 
 type SortField = "name" | "status" | "lastSeen" | "services";
+
+const SORT_LABEL: Record<SortField, string> = {
+  name: "Name",
+  status: "Status",
+  services: "Services",
+  lastSeen: "Last seen",
+};
 type SortDir = "asc" | "desc";
 
 function compareRunners(
@@ -207,17 +217,23 @@ export function RunnerListPage({
 
       {!isLoading && !isError && connected.length > 1 && (
         <Field className="mb-3 max-w-60">
-          <FieldLabel htmlFor="runner-sort">Sort by</FieldLabel>
-          <NativeSelect
-            id="runner-sort"
+          <FieldLabel id="runner-sort-label">Sort by</FieldLabel>
+          <Select
+            items={SORT_LABEL}
             value={sortField}
-            onChange={(e) => handleSort(e.currentTarget.value as SortField)}
+            onValueChange={(value) => handleSort(value as SortField)}
           >
-            <NativeSelectOption value="name">Name</NativeSelectOption>
-            <NativeSelectOption value="status">Status</NativeSelectOption>
-            <NativeSelectOption value="services">Services</NativeSelectOption>
-            <NativeSelectOption value="lastSeen">Last seen</NativeSelectOption>
-          </NativeSelect>
+            <SelectTrigger id="runner-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(SORT_LABEL).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       )}
 

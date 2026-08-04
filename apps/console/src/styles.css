@@ -1,6 +1,5 @@
-/* NightWarden Console — Tailwind v4 + shadcn (base-nova). One dark palette on
-   :root, mapped into Tailwind via @theme inline: single accent, surface ladder,
-   ink hierarchy, explicit state tokens. Every text/border pair is WCAG-validated. */
+/* NightWarden Console. Every colour is a step on the scale below, and the
+   semantic tokens under it only ever point at a step. */
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -10,74 +9,115 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces */
-  --background: #0b0b0c;
-  --foreground: #f0f0f2;
-  --card: #121213;
-  --card-foreground: #f0f0f2;
-  --popover: #171719;
-  --popover-foreground: #f0f0f2;
-  --secondary: #1e1e20;
-  --secondary-foreground: #f0f0f2;
-  --secondary-hover: #26262a;
-  --muted: #1e1e20;
-  --muted-foreground: #b0b0b6;
-  --muted-hover: #26262a;
-  --surface: #171719;
-  --surface-hover: #1e1e20;
-  --surface-active: #2e2e33;
-  --ink-subtle: #8e8e95;
+  /* The scale. Each group is evenly spaced within itself, which is a promise
+     about neighbours rather than across the whole ladder. */
 
-  /* Primary (cobalt, lifted for dark; fills take DARK text — intentional) */
-  --primary: #6b9cf0;
-  --primary-hover: #82abf3;
-  --primary-press: #5a86e0;
-  --primary-foreground: #04121b;
-  --ring: #6b9cf0;
+  /* Surfaces, +0.035. Hue 262 at low chroma: chosen, not accidental. */
+  --n-1: oklch(0.178 0.005 262);
+  --n-2: oklch(0.213 0.006 262);
+  --n-3: oklch(0.248 0.007 262);
+  --n-4: oklch(0.283 0.007 262);
+  --n-5: oklch(0.318 0.008 262);
+  --n-6: oklch(0.353 0.008 262);
 
-  /* Accent tint */
-  --accent-tint: #1e2532;
-  --accent-wash: #2e3e5a;
+  /* Lines, +0.120. line-2 is 3.19:1 on the canvas against a 3.0 floor: it
+     carries every non-text edge and must not be darkened. */
+  --line-1: oklch(0.4 0.008 262);
+  --line-2: oklch(0.52 0.008 262);
 
-  /* Borders (input stays calm: 1.5-3:1 on card, the calm-border split) */
-  --border: #232326;
-  --border-strong: #6a6a70;
-  --input: #4a4a52;
+  /* Ink, +0.1225. ink-1 is set by where it still clears AA on --n-5. */
+  --ink-1: oklch(0.69 0.012 262);
+  --ink-2: oklch(0.8125 0.01 262);
+  --ink-3: oklch(0.935 0.004 262);
+
+  /* Status hues, then their tints at +0.090. */
+  --status-ok: oklch(0.78 0.14 165);
+  --status-warn: oklch(0.8 0.14 82);
+  --status-fail: oklch(0.77 0.15 18);
+  --status-ok-tint: oklch(0.29 0.05 165);
+  --status-warn-tint: oklch(0.29 0.05 82);
+  --status-fail-tint: oklch(0.29 0.05 18);
+  --status-fail-wash: oklch(0.38 0.05 18);
+
+  /* Fills, +0.040. Split from the ink of the same hue because one value cannot
+     clear both a fill's floor and a text colour's. */
+  --cobalt-fill: oklch(0.52 0.15 262);
+  --cobalt-fill-hover: oklch(0.56 0.15 262);
+  --cobalt-ink: oklch(0.7 0.13 262);
+  --cobalt-wash: oklch(0.318 0.06 262);
+  --red-fill: oklch(0.54 0.17 18);
+  --red-fill-hover: oklch(0.58 0.17 18);
+
+  --white: oklch(1 0 0);
+
+  /* The semantic layer. Each token names a job and points at a step above. */
+
+  /* Surfaces. The sidebar is the darkest thing on screen and the stage sits
+     above it, so content comes forward and the chrome recedes. */
+  --background: var(--n-2);
+  --foreground: var(--ink-3);
+  --card: var(--n-3);
+  --card-foreground: var(--ink-3);
+  --popover: var(--n-3);
+  --popover-foreground: var(--ink-3);
+  --secondary: var(--n-4);
+  --secondary-foreground: var(--ink-3);
+  --secondary-hover: var(--n-5);
+  --muted: var(--n-4);
+  --muted-foreground: var(--ink-2);
+  --muted-hover: var(--n-5);
+  --surface: var(--n-4);
+  --surface-hover: var(--n-5);
+  --surface-active: var(--n-6);
+  --ink-subtle: var(--ink-1);
+
+  /* Cobalt marks what you can act on. Hover is also the pressed appearance. */
+  --primary: var(--cobalt-fill);
+  --primary-hover: var(--cobalt-fill-hover);
+  --primary-foreground: var(--white);
+  --primary-ink: var(--cobalt-ink);
+  --ring: var(--cobalt-ink);
+
+  /* --input stays calm at 1.5-3:1 on a card, the calm-border split. */
+  --border: var(--n-4);
+  --border-strong: var(--line-2);
+  --input: var(--line-1);
 
   /* Semantic status */
-  --success: #3fc98a;
-  --warning: #f0b429;
-  --destructive: #f9828b;
-  --success-tint: #182c24;
-  --warning-tint: #312916;
-  --destructive-tint: #322224;
-  --destructive-wash: #4e2f32;
+  --success: var(--status-ok);
+  --warning: var(--status-warn);
+  --destructive: var(--status-fail);
+  --destructive-fill: var(--red-fill);
+  --destructive-fill-hover: var(--red-fill-hover);
+  --success-tint: var(--status-ok-tint);
+  --warning-tint: var(--status-warn-tint);
+  --destructive-tint: var(--status-fail-tint);
+  --destructive-wash: var(--status-fail-wash);
 
-  /* Run-state status (queue chips, indicators) */
-  --run: #6b9cf0;
-  --wait: #f0b429;
-  --ok: #3fc98a;
-  --fail: #f9828b;
-  --run-tint: #1e2532;
-  --wait-tint: #312916;
-  --ok-tint: #182c24;
-  --fail-tint: #322224;
+  /* The same steps under the vocabulary StatusTone reads in. */
+  --run: var(--cobalt-ink);
+  --wait: var(--status-warn);
+  --ok: var(--status-ok);
+  --fail: var(--status-fail);
+  --fail-tint: var(--status-fail-tint);
 
   /* Sidebar */
-  --sidebar: #121213;
-  --sidebar-foreground: #b0b0b6;
-  --sidebar-accent: #1e1e20;
-  --sidebar-accent-foreground: #f0f0f2;
-  --sidebar-border: #232326;
+  --sidebar: var(--n-1);
+  --sidebar-foreground: var(--ink-2);
+  --sidebar-hover: var(--n-3);
+  --sidebar-hover-foreground: var(--ink-3);
+  --sidebar-border: var(--n-3);
 
-  /* Scrim + shadows */
-  --scrim: rgba(0, 0, 0, 0.55);
+  --selection: var(--cobalt-wash);
+
+  /* Depth, not palette: black at alpha, carrying no hue of its own. */
+  --scrim: oklch(0 0 0 / 0.55);
   --shadow-overlay:
-    rgba(0, 0, 0, 0.5) 0 8px 24px, rgba(0, 0, 0, 0.35) 0 2px 6px;
-  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+    oklch(0 0 0 / 0.5) 0 8px 24px, oklch(0 0 0 / 0.35) 0 2px 6px;
+  --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.4), 0 4px 16px oklch(0 0 0 / 0.3);
 }
 
-/* Palette tokens resolve through the raw vars above. */
+/* Tailwind's colour utilities, resolving through the semantic layer above. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -98,12 +138,9 @@
 
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
-  --color-primary-press: var(--primary-press);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-ink: var(--primary-ink);
   --color-ring: var(--ring);
-
-  --color-accent-tint: var(--accent-tint);
-  --color-accent-wash: var(--accent-wash);
 
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
@@ -112,6 +149,8 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-destructive: var(--destructive);
+  --color-destructive-fill: var(--destructive-fill);
+  --color-destructive-fill-hover: var(--destructive-fill-hover);
   --color-success-tint: var(--success-tint);
   --color-warning-tint: var(--warning-tint);
   --color-destructive-tint: var(--destructive-tint);
@@ -121,15 +160,12 @@
   --color-wait: var(--wait);
   --color-ok: var(--ok);
   --color-fail: var(--fail);
-  --color-run-tint: var(--run-tint);
-  --color-wait-tint: var(--wait-tint);
-  --color-ok-tint: var(--ok-tint);
   --color-fail-tint: var(--fail-tint);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-hover-foreground: var(--sidebar-hover-foreground);
   --color-sidebar-border: var(--sidebar-border);
 
   --color-scrim: var(--scrim);
@@ -206,17 +242,15 @@
   --tw-prose-td-borders: var(--color-border);
 }
 
-/* Focus fallback for interactive elements without data-slot (e.g. Fleet's
-   sortable column headers, plain <Link>s). Primitives with data-slot handle
-   their own focus via focus-visible:border-ring on the element itself. */
-
+/* Focus for elements without data-slot (sortable headers, plain links).
+   Primitives with data-slot ring themselves via focus-visible:border-ring. */
 :focus-visible:not([data-slot]) {
   outline: 2px solid var(--color-ring);
   outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--color-accent-wash);
+  background: var(--selection);
   color: var(--color-foreground);
 }
 
@@ -241,8 +275,7 @@
   }
 }
 
-/* Working indicator: three dots hopping in sequence - the classic "typing"
-   affordance, shown while a run is active but nothing is streaming yet. */
+/* Shown while a run is active but nothing is streaming yet. */
 .nw-working {
   display: inline-flex;
   align-items: center;

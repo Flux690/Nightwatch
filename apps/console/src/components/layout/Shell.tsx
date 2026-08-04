@@ -356,15 +356,16 @@ function ShellContent({
             control that reopens it. Anchored to the inset so it keeps the
             sidebar toggle's centre line whatever sits above the content. */}
         {isSessionArea && investigationView && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
             aria-expanded={chatRailOpen}
-            className="absolute top-3 right-3 z-20 flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:top-14"
+            className="absolute top-3 right-3 z-20 text-muted-foreground max-md:top-14"
             onClick={() => setChatRailOpen((prev) => !prev)}
           >
             <PanelRight className="size-4.5" strokeWidth={1.5} aria-hidden />
-          </button>
+          </Button>
         )}
       </SidebarInset>
 

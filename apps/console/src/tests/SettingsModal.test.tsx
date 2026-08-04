@@ -197,6 +197,16 @@ async function openSection(
   await user.click(within(tablist).getByRole("tab", { name }));
 }
 
+// A Select is a button and a listbox that exists only while open, so a test
+// about its options opens it first and reads them from the listbox.
+const openSelect = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp,
+): Promise<HTMLElement> => {
+  await user.click(await screen.findByRole("combobox", { name }));
+  return screen.findByRole("listbox");
+};
+
 // Everything the catalog has to say is said in the suggestion list, so a test
 // about it opens the list first.
 const openModelList = async (
@@ -469,8 +479,8 @@ describe("SettingsModal", () => {
       setup();
       await openSection(user, /provider/i);
 
-      const select = await screen.findByLabelText(/^effort$/i);
-      const options = within(select).getAllByRole("option");
+      const list = await openSelect(user, /^effort$/i);
+      const options = within(list).getAllByRole("option");
 
       expect(options.map((o) => o.textContent)).toEqual([
         "Off",
@@ -506,10 +516,10 @@ describe("SettingsModal", () => {
       );
       await openSection(user, /provider/i);
 
-      const select = await screen.findByLabelText(/^reasoning$/i);
+      const list = await openSelect(user, /^reasoning$/i);
 
       expect(
-        within(select).queryByRole("option", { name: "Off" }),
+        within(list).queryByRole("option", { name: "Off" }),
       ).not.toBeInTheDocument();
     });
 
@@ -552,11 +562,11 @@ describe("SettingsModal", () => {
       await user.type(input, "openai/gpt-5");
       await user.click(await screen.findByRole("option", { name: /gpt-5/ }));
 
-      const select = await screen.findByLabelText(/^reasoning$/i);
+      const list = await openSelect(user, /^reasoning$/i);
       // The new model's own default, not whatever the previous one was set to.
       expect(
-        within(select).getByRole("option", { selected: true }),
-      ).toHaveValue("low");
+        within(list).getByRole("option", { selected: true }),
+      ).toHaveTextContent("Low");
     });
   });
 
@@ -566,12 +576,10 @@ describe("SettingsModal", () => {
       setup();
       await openSection(user, /provider/i);
 
-      const picker = await screen.findByLabelText(/^provider$/i, {
-        selector: "select",
-      });
+      const list = await openSelect(user, /^provider$/i);
 
       expect(
-        within(picker)
+        within(list)
           .getAllByRole("option")
           .map((o) => o.textContent),
       ).toEqual(["Select a provider", "Anthropic", "OpenRouter"]);
@@ -769,11 +777,15 @@ describe("SettingsModal", () => {
       const { fetchMock } = setup();
       await openSection(user, /sandbox/i);
 
-      const select = await screen.findByLabelText(/agent network/i);
-      expect(select).toHaveValue("none");
+      expect(await screen.findByLabelText(/agent network/i)).toHaveTextContent(
+        "None (no network)",
+      );
       expect(screen.getByText(/no network at all/i)).toBeInTheDocument();
 
-      await user.selectOptions(select, "open");
+      const list = await openSelect(user, /agent network/i);
+      await user.click(
+        within(list).getByRole("option", { name: /open \(unrestricted\)/i }),
+      );
       expect(
         screen.getByText(/could exfiltrate repository content/i),
       ).toBeInTheDocument();
@@ -798,8 +810,12 @@ describe("SettingsModal", () => {
       const { fetchMock } = setup();
       await openSection(user, /sandbox/i);
 
-      const select = await screen.findByLabelText(/agent network/i);
-      await user.selectOptions(select, "allowlist");
+      const list = await openSelect(user, /agent network/i);
+      await user.click(
+        within(list).getByRole("option", {
+          name: /allowlist \(recommended\)/i,
+        }),
+      );
       expect(
         screen.getByText(/enforcing proxy that reaches only the hosts below/i),
       ).toBeInTheDocument();

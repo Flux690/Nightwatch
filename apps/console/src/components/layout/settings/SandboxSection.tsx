@@ -4,12 +4,23 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DurationField } from "./DurationField";
 import { FIELD_HINT, FIELD_WIDTH, GROUP_HEADING, NO_SPINNERS } from "./layout";
+
+// Both the closed trigger and the open list read from here, so the word an
+// operator sees before opening is the same word they pick.
+const NETWORK_LABEL: Record<AgentConfig["sandboxNetwork"], string> = {
+  allowlist: "Allowlist (recommended)",
+  open: "Open (unrestricted)",
+  none: "None (no network)",
+};
 
 const NETWORK_HINT: Record<AgentConfig["sandboxNetwork"], string> = {
   allowlist:
@@ -99,34 +110,34 @@ export function SandboxSection({
       <section className="flex flex-col gap-3">
         <h4 className={GROUP_HEADING}>Network</h4>
         <Field className={FIELD_WIDTH.select}>
-          <FieldLabel htmlFor="settings-sandbox-network">
+          <FieldLabel id="settings-sandbox-network-label">
             Agent network
           </FieldLabel>
-          <NativeSelect
-            id="settings-sandbox-network"
-            className="w-full"
+          <Select
+            items={NETWORK_LABEL}
             value={form.sandboxNetwork}
-            onChange={(e) =>
+            onValueChange={(value) =>
               setField(
                 "sandboxNetwork",
-                e.currentTarget.value === "open"
+                value === "open"
                   ? "open"
-                  : e.currentTarget.value === "none"
+                  : value === "none"
                     ? "none"
                     : "allowlist",
               )
             }
           >
-            <NativeSelectOption value="allowlist">
-              Allowlist (recommended)
-            </NativeSelectOption>
-            <NativeSelectOption value="open">
-              Open (unrestricted)
-            </NativeSelectOption>
-            <NativeSelectOption value="none">
-              None (no network)
-            </NativeSelectOption>
-          </NativeSelect>
+            <SelectTrigger id="settings-sandbox-network">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(NETWORK_LABEL).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <p className={FIELD_HINT}>{NETWORK_HINT[form.sandboxNetwork]}</p>
         {form.sandboxNetwork === "allowlist" && (

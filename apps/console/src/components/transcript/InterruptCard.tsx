@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/* Swaps Card's ring for a border so the left accent can change weight with
+/* Swaps Card's ring for a border so the left edge can change weight with
    state. Weight, not hue: a pending decision is not a warning, and painting it
    amber trains the eye to skim past the colour rather than read the card. */
 export function InterruptCard({

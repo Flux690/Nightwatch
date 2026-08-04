@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RunnerRecord } from "@nightwarden/shared";
 import { StatusText } from "@/components/ui/status";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -69,13 +70,13 @@ export function ServerCard({
             </span>
           ))}
           {hidden > 0 && (
-            <button
-              type="button"
-              className="self-start text-sm text-muted-foreground hover:text-foreground"
+            <Button
+              variant="link"
+              className="self-start"
               onClick={() => setExpanded(true)}
             >
               {hidden} more
-            </button>
+            </Button>
           )}
         </div>
       )}

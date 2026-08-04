@@ -2,6 +2,7 @@ import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 import { asRecord } from "@/lib/toolResult";
 import { revealToolCall } from "@/components/transcript/revealToolCall";
+import { Button } from "@/components/ui/button";
 import {
   ToolBody,
   resultSummary,
@@ -44,13 +45,13 @@ export function Evidence({
             {target}
           </span>
         )}
-        <button
-          type="button"
-          className="ml-auto shrink-0 text-sm text-ink-subtle underline decoration-border underline-offset-2 hover:text-run hover:decoration-run"
+        <Button
+          variant="link"
+          className="ml-auto"
           onClick={() => revealToolCall(entry.toolUseId)}
         >
           Show in transcript
-        </button>
+        </Button>
       </div>
       {summary.text && (
         <p className={cn("m-0 mt-0.5 font-mono text-sm", summary.tone)}>

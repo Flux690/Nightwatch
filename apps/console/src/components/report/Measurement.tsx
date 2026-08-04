@@ -76,7 +76,7 @@ function Line({
               rate or a gauge is not, and it buries the axis it sits on. */}
           <polyline
             points={line}
-            className="stroke-run fill-none"
+            className="stroke-ink-subtle fill-none"
             strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -97,7 +97,7 @@ function Line({
                 cx={x(hover)}
                 cy={y(values[hover]!)}
                 r={4}
-                className="fill-run stroke-background"
+                className="fill-foreground stroke-background"
                 strokeWidth={2}
               />
             </g>

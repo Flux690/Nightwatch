@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { ICON_INLINE } from "@/lib/iconProps";
+import { Button } from "@/components/ui/button";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
 import { asRecord, stringAt as inputString } from "@/lib/toolResult";
@@ -108,13 +109,9 @@ function CappedText({ text }: { text: string }): React.JSX.Element {
       >
         {open ? text : lines.slice(0, BODY_MAX_LINES).join("\n")}
       </pre>
-      <button
-        type="button"
-        className="mt-1.5 text-sm text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground"
-        onClick={() => setOpen(!open)}
-      >
+      <Button variant="link" className="mt-1.5" onClick={() => setOpen(!open)}>
         {open ? "Show less" : `Show all ${lines.length} lines`}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -319,7 +316,7 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
       data-revealed={revealed || undefined}
       className={cn(
         "-mx-2 scroll-mt-6 rounded-md px-2 transition-colors duration-500",
-        revealed && "bg-accent-tint",
+        revealed && "bg-surface-hover",
       )}
     >
       <button

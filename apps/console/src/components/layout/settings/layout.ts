@@ -4,8 +4,9 @@
 export const FIELD_WIDTH = {
   // Endpoints, keys, model ids.
   text: "max-w-96",
-  // Short enumerated values: a provider name, a reasoning level.
-  select: "max-w-44",
+  // Sized to the longest option any of these hold, "Allowlist (recommended)":
+  // the popup inherits the trigger's width, so a narrow trigger truncates both.
+  select: "max-w-56",
   // A few digits, sized to the digits rather than to the row.
   number: "w-20",
 } as const;

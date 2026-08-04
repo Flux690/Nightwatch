@@ -19,9 +19,12 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ICON_UI } from "@/lib/iconProps";
 import { FIELD_WIDTH } from "./layout";
 
@@ -72,30 +75,45 @@ export function ProviderSection({
   // request, which is why nothing here appears a moment after everything else.
   const reasoning = block?.reasoning ?? null;
   const models = catalog.kind === "ready" ? catalog.models : [];
+  // The closed trigger and the open list read one map, so what is shown before
+  // opening is the same word that is offered inside.
+  const providerItems: Record<string, string> = {
+    // A fresh install has picked nothing; the empty value is what
+    // "not chosen yet" looks like.
+    "": "Select a provider",
+    ...Object.fromEntries(
+      providers.map((provider) => [provider.name, provider.label]),
+    ),
+  };
+  const levelItems: Record<string, string> = {
+    ...(reasoning?.canDisable === true ? { "": "Off" } : {}),
+    ...Object.fromEntries(
+      (reasoning?.levels ?? []).map((l) => [l.value, l.label]),
+    ),
+  };
 
   return (
     <div className="flex flex-col gap-5">
       <Field className={FIELD_WIDTH.select}>
-        <FieldLabel htmlFor="settings-provider">Provider</FieldLabel>
-        <NativeSelect
-          id="settings-provider"
-          className="w-full"
+        <FieldLabel id="settings-provider-label">Provider</FieldLabel>
+        <Select
+          items={providerItems}
           value={form.provider ?? ""}
-          onChange={(e) =>
-            onProviderChange(
-              (e.currentTarget.value || null) as AgentConfig["provider"],
-            )
+          onValueChange={(value) =>
+            onProviderChange((value || null) as AgentConfig["provider"])
           }
         >
-          {/* A fresh install has picked nothing; the empty option is what
-              "not chosen yet" looks like. */}
-          <NativeSelectOption value="">Select a provider</NativeSelectOption>
-          {providers.map((p) => (
-            <NativeSelectOption key={p.name} value={p.name}>
-              {p.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger id="settings-provider">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(providerItems).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
 
       <Field className={FIELD_WIDTH.text}>
@@ -197,26 +215,27 @@ export function ProviderSection({
         // Rendered from the chosen model's own descriptor: the provider's word
         // arrives in `label`, so nothing here knows which provider is selected.
         <Field className={FIELD_WIDTH.select}>
-          <FieldLabel htmlFor="settings-reasoning">
+          <FieldLabel id="settings-reasoning-label">
             {reasoning.label}
           </FieldLabel>
-          <NativeSelect
-            id="settings-reasoning"
-            className="w-full"
+          <Select
+            items={levelItems}
             value={block?.reasoningLevel ?? ""}
-            onChange={(e) =>
-              onProviderField("reasoningLevel", e.currentTarget.value || null)
+            onValueChange={(value) =>
+              onProviderField("reasoningLevel", value || null)
             }
           >
-            {reasoning.canDisable && (
-              <NativeSelectOption value="">Off</NativeSelectOption>
-            )}
-            {reasoning.levels.map((l) => (
-              <NativeSelectOption key={l.value} value={l.value}>
-                {l.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger id="settings-reasoning">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(levelItems).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       )}
     </div>
