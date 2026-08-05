@@ -11,6 +11,18 @@ import { PROVIDER_OPTIONS, fetchCatalog, fetchModels } from "../llm/catalog.js";
 import { maskKey } from "../secrets.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
+
+/* Zod's own message is the issues array as JSON, which the console would show
+   an operator verbatim. This names the field and says what is wrong with it. */
+function readable(error: z.ZodError): string {
+  return error.issues
+    .map((issue) =>
+      issue.path.length > 0
+        ? `${issue.path.join(".")}: ${issue.message}`
+        : issue.message,
+    )
+    .join("; ");
+}
 import type {
   LLMProviderName,
   ModelCatalog,
@@ -126,7 +138,7 @@ export async function registerConfigRoutes(
     async (request, reply) => {
       const parsed = ConfigPatchSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       // Provider blocks are written per provider so one cannot disturb the other;
       // everything else is global and goes through the single config row.
@@ -160,7 +172,7 @@ export async function registerConfigRoutes(
     async (request, reply) => {
       const parsed = CatalogBodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { provider, baseUrl, apiKey } = parsed.data;
 
@@ -195,7 +207,7 @@ export async function registerConfigRoutes(
     async (request, reply) => {
       const parsed = KeyBodySchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
+        return reply.code(400).send({ error: readable(parsed.error) });
       }
       const { provider, apiKey } = parsed.data;
       updateProvider(provider, { apiKey });
