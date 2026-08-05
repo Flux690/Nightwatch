@@ -325,7 +325,7 @@ export function SettingsModal({
     if (catalogData.models.length === 0) {
       return {
         kind: "empty",
-        message: "This endpoint listed no models. You can still type an id.",
+        message: "This endpoint listed no models.",
       };
     }
     return { kind: "ready", models: catalogData.models };
@@ -336,8 +336,17 @@ export function SettingsModal({
   // The ladder belongs to the model, so it is captured alongside it and the
   // control is drawn from the config rather than from a request. An id with no
   // catalog entry carries no ladder rather than the previous model's.
-  function setModel(id: string): void {
+  function setModel(id: string | null): void {
     if (!form?.provider) return;
+    // The ladder belongs to the model, so nothing chosen means no ladder.
+    if (id === null) {
+      patchProvider(form.provider, {
+        model: null,
+        reasoning: null,
+        reasoningLevel: null,
+      });
+      return;
+    }
     const reasoning =
       availableModels.find((m) => m.id === id)?.reasoning ?? null;
     const keeps = reasoning?.levels.some(
@@ -358,6 +367,9 @@ export function SettingsModal({
   const configDirty =
     form && config ? Object.keys(buildDelta(form, config)).length > 0 : false;
   const dirty = configDirty || keyDirty;
+  /* A provider with nothing chosen from its catalog is not configured, so there
+     is nothing to save - the box says so, and Save agrees. */
+  const unchosen = form?.provider != null && !block?.model;
 
   /* Closing with unsaved edits asks first; a discarded form re-syncs to the persisted config so a re-open never shows stale edits. */
   function handleClose(): void {
@@ -483,7 +495,10 @@ export function SettingsModal({
                 <Button
                   type="submit"
                   disabled={
-                    !dirty || saveConfig.isPending || saveApiKey.isPending
+                    !dirty ||
+                    unchosen ||
+                    saveConfig.isPending ||
+                    saveApiKey.isPending
                   }
                 >
                   {(saveConfig.isPending || saveApiKey.isPending) && (

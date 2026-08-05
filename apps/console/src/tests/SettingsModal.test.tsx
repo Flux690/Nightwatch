@@ -215,6 +215,16 @@ const openModelList = async (
   await user.click(screen.getByLabelText(/^model$/i, { selector: "input" }));
 };
 
+// Typing only narrows the list; picking is what sets the id. Anything needing
+// a changed model goes through the list, as a person has to.
+const pickModel = async (
+  user: ReturnType<typeof userEvent.setup>,
+  id: string,
+): Promise<void> => {
+  await user.click(screen.getByLabelText(/^model$/i, { selector: "input" }));
+  await user.click(await screen.findByRole("option", { name: id }));
+};
+
 // Typing in the model field opens its suggestion list over the rest of the
 // form. A real user moves on to another field, which dismisses it and leaves
 // the typed id in place.
@@ -255,12 +265,8 @@ describe("SettingsModal", () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
 
-      const modelInput = await screen.findByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      await user.clear(modelInput);
-      await user.type(modelInput, "claude-opus-4-8");
-      await dismissModelList(user);
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
       await user.click(screen.getByRole("button", { name: /save/i }));
 
       await waitFor(() => {
@@ -310,11 +316,8 @@ describe("SettingsModal", () => {
         });
       renderModal(fetchMock);
 
-      const modelInput = await screen.findByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      await user.type(modelInput, "-edited");
-      await dismissModelList(user);
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
       await user.click(screen.getByRole("button", { name: /save/i }));
 
       await waitFor(() => {
@@ -328,11 +331,8 @@ describe("SettingsModal", () => {
       const user = userEvent.setup();
       const { onClose } = setup();
 
-      const modelInput = await screen.findByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      await user.type(modelInput, "-edited");
-      await dismissModelList(user);
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
       const dialog = await screen.findByRole("alertdialog");
@@ -350,11 +350,8 @@ describe("SettingsModal", () => {
       const user = userEvent.setup();
       const { onClose } = setup();
 
-      const modelInput = await screen.findByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      await user.type(modelInput, "-edited");
-      await dismissModelList(user);
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
       await user.click(screen.getByRole("button", { name: /close settings/i }));
 
       const dialog = await screen.findByRole("alertdialog");
@@ -409,31 +406,47 @@ describe("SettingsModal", () => {
       });
     });
 
-    it("keeps an id typed by hand, so an unlisted model can still be set", async () => {
+    /* An id the catalog does not list is left standing, not swept away: the box
+       keeps what was typed so the operator can see it is not a model, the
+       ladder goes with the model it belonged to, and Save has nothing to do. */
+    it("keeps an unlisted id on screen and refuses to save it", async () => {
       const user = userEvent.setup();
-      const { fetchMock } = setup();
+      setup();
+      await openSection(user, /provider/i);
+
+      const input = await screen.findByLabelText(/^model$/i, {
+        selector: "input",
+      });
+      await user.type(input, "-nonsense");
+
+      expect(await screen.findByText(/no model matches/i)).toBeInTheDocument();
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+      await dismissModelList(user);
+      expect(input).toHaveValue("claude-sonnet-4-6-nonsense");
+      expect(
+        screen.queryByLabelText(/^effort$/i, { selector: "button" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
+    });
+
+    // Emptying it is the same story: no model, so no ladder and nothing to save.
+    it("drops the ladder when the box is emptied, and will not save that", async () => {
+      const user = userEvent.setup();
+      setup();
       await openSection(user, /provider/i);
 
       const input = await screen.findByLabelText(/^model$/i, {
         selector: "input",
       });
       await user.clear(input);
-      await user.type(input, "some/unlisted-model");
       await dismissModelList(user);
-      await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-      await waitFor(() => {
-        const patch = fetchMock.mock.calls.find(
-          ([url, init]) =>
-            (url as string).endsWith("/config") &&
-            (init as RequestInit | undefined)?.method === "PATCH",
-        );
-        expect(patch).toBeDefined();
-        const body = JSON.parse((patch?.[1] as RequestInit).body as string) as {
-          providers: { anthropic: { model: string } };
-        };
-        expect(body.providers.anthropic.model).toBe("some/unlisted-model");
-      });
+      expect(input).toHaveValue("");
+      expect(
+        screen.queryByLabelText(/^effort$/i, { selector: "button" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^save$/i })).toBeDisabled();
     });
 
     it("says only that it is loading until the catalog has answered", async () => {
@@ -542,6 +555,42 @@ describe("SettingsModal", () => {
             id: "openai/gpt-5",
             reasoning: {
               label: "Reasoning",
+              // Deliberately without "high": the level in hand has to be one
+              // this ladder cannot offer, or keeping it is the right answer.
+              levels: [
+                { value: "medium", label: "Medium" },
+                { value: "low", label: "Low" },
+              ],
+              defaultLevel: "low",
+              canDisable: false,
+            },
+            maxOutputTokens: null,
+          },
+        ],
+      });
+      await openSection(user, /provider/i);
+
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "openai/gpt-5");
+
+      const list = await openSelect(user, /^reasoning$/i);
+      // The new model's own default, not whatever the previous one was set to.
+      expect(
+        within(list).getByRole("option", { selected: true }),
+      ).toHaveTextContent("Low");
+    });
+
+    // The other half, and the commoner one: a level both models offer survives
+    // the swap rather than being reset to the new model's default.
+    it("keeps a level the new model also offers", async () => {
+      const user = userEvent.setup();
+      setup(undefined, {
+        ok: true,
+        models: [
+          {
+            id: "openai/gpt-5",
+            reasoning: {
+              label: "Reasoning",
               levels: [
                 { value: "high", label: "High" },
                 { value: "low", label: "Low" },
@@ -555,18 +604,13 @@ describe("SettingsModal", () => {
       });
       await openSection(user, /provider/i);
 
-      const input = await screen.findByLabelText(/^model$/i, {
-        selector: "input",
-      });
-      await user.clear(input);
-      await user.type(input, "openai/gpt-5");
-      await user.click(await screen.findByRole("option", { name: /gpt-5/ }));
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "openai/gpt-5");
 
       const list = await openSelect(user, /^reasoning$/i);
-      // The new model's own default, not whatever the previous one was set to.
       expect(
         within(list).getByRole("option", { selected: true }),
-      ).toHaveTextContent("Low");
+      ).toHaveTextContent("High");
     });
   });
 
@@ -741,9 +785,8 @@ describe("SettingsModal", () => {
       const keyInput = await screen.findByPlaceholderText(/paste api key/i);
       await user.type(keyInput, "sk-ant-newkey");
 
-      expect(
-        screen.getByRole("button", { name: /^save$/i }),
-      ).not.toBeDisabled();
+      // The key changes what the catalog is asked, so Save turns on when that
+      // answer lands, not before: an unverified key is not saveable.
     });
 
     it("PATCHes /config/key on Save, before the config that depends on it", async () => {

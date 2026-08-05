@@ -9,12 +9,12 @@ import type {
 
 import { Button } from "@/components/ui/button";
 import {
-  Autocomplete,
-  AutocompleteContent,
-  AutocompleteEmpty,
-  AutocompleteInput,
-  AutocompleteItem,
-  AutocompleteList,
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
 } from "@/components/ui/combobox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,16 @@ import {
 } from "@/components/ui/select";
 import { ICON_UI } from "@/lib/iconProps";
 import { FIELD_WIDTH } from "./layout";
+
+/* What the operator did themselves. "input-clear" is absent on purpose: that is
+   Base UI wiping the box when the list closes on no match, and honouring it is
+   what threw away what had just been typed. */
+const OPERATOR_EDIT = new Set([
+  "input-change",
+  "input-paste",
+  "item-press",
+  "clear-press",
+]);
 
 // The catalog fills one dropdown and nothing else, so its whole state is the
 // list plus the line to show when the list is empty. Nothing outside the model
@@ -50,7 +60,7 @@ interface ProviderSectionProps {
     key: K,
     value: ProviderSettings[K],
   ) => void;
-  onModelChange: (id: string) => void;
+  onModelChange: (id: string | null) => void;
   onApiKeyChange: (key: string) => void;
 }
 
@@ -69,11 +79,15 @@ export function ProviderSection({
   // A stored key is shown masked and replaced deliberately; with none stored
   // there is nothing to replace, so the input is the resting state.
   const [replacingKey, setReplacingKey] = useState(false);
+  // Null until the operator edits the box, so it falls back to what is set.
+  const [typed, setTyped] = useState<string | null>(null);
   const keyInputOpen = savedApiKeyMasked === null || replacingKey;
   // The chosen model's ladder travels with the config, so this control is drawn
   // on the first paint from what is already in hand. Nothing here waits on a
   // request, which is why nothing here appears a moment after everything else.
-  const reasoning = block?.reasoning ?? null;
+  // A ladder belongs to a model, so with no model there is none to show - even
+  // if a stored block still carries the descriptor from a previous pick.
+  const reasoning = block?.model ? (block.reasoning ?? null) : null;
   const models = catalog.kind === "ready" ? catalog.models : [];
   // The closed trigger and the open list read one map, so what is shown before
   // opening is the same word that is offered inside.
@@ -171,18 +185,35 @@ export function ProviderSection({
 
       <Field className={FIELD_WIDTH.text}>
         <FieldLabel htmlFor="settings-model">Model</FieldLabel>
-        {/* The catalog suggests; it does not decide. Any id is a valid answer,
-            so the field's value is the text itself and an unreachable catalog
-            never blocks configuring a model. */}
-        <Autocomplete
+        {/* A value, not free text: the catalog is the set of allowed answers,
+            so typing narrows the list and only picking from it sets the id. */}
+        <Combobox
           items={models.map((m) => m.id)}
           value={block?.model ?? ""}
-          onValueChange={onModelChange}
+          inputValue={typed ?? block?.model ?? ""}
+          /* What is in the box is the answer, and it stays there: Base UI would
+             otherwise put the saved id back the moment the list closed, hiding
+             that nothing valid is chosen. Only the operator's own edits land. */
+          onInputValueChange={(text, details) => {
+            if (!OPERATOR_EDIT.has(details.reason)) return;
+            setTyped(text);
+            onModelChange(models.some((m) => m.id === text) ? text : null);
+          }}
           openOnInputClick
         >
-          <AutocompleteInput
+          <ComboboxInput
             id="settings-model"
             aria-label="Model"
+            /* With something highlighted, Enter picks it. With nothing, Enter
+               does nothing at all: it neither submits Settings nor closes the
+               list, so what was typed and "no model matches" both stay put. */
+            onKeyDownCapture={(e) => {
+              if (e.key !== "Enter") return;
+              if (document.querySelector('[role="option"][data-highlighted]'))
+                return;
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             disabled={block === null}
             placeholder={
               block === null ? "Choose a provider first" : "Search models"
@@ -190,25 +221,22 @@ export function ProviderSection({
           />
           {/* Pinned below: a list that flips lands somewhere different
               depending on how far the panel is scrolled. */}
-          <AutocompleteContent
-            side="bottom"
-            collisionAvoidance={{ side: "none" }}
-          >
+          <ComboboxContent side="bottom" collisionAvoidance={{ side: "none" }}>
             {/* Whatever the list has nothing to show is said here, inside the
                 popup, so no message ever pushes the form around. */}
-            <AutocompleteEmpty>{emptyMessage(catalog)}</AutocompleteEmpty>
+            <ComboboxEmpty>{emptyMessage(catalog)}</ComboboxEmpty>
             {/* A render function is what makes the list filter: it receives the
                 items already matched against the query. Rendering the items
                 directly hands back a fixed list that never narrows. */}
-            <AutocompleteList>
+            <ComboboxList>
               {(id: string) => (
-                <AutocompleteItem key={id} value={id}>
+                <ComboboxItem key={id} value={id}>
                   <span className="min-w-0 truncate font-mono">{id}</span>
-                </AutocompleteItem>
+                </ComboboxItem>
               )}
-            </AutocompleteList>
-          </AutocompleteContent>
-        </Autocomplete>
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </Field>
 
       {reasoning && (
@@ -247,5 +275,5 @@ export function ProviderSection({
 function emptyMessage(catalog: CatalogState): string {
   if (catalog.kind === "loading") return "Loading models…";
   if (catalog.kind === "empty") return catalog.message;
-  return "No catalog match. The id is used as typed.";
+  return "No model matches.";
 }
