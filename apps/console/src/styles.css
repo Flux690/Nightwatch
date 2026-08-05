@@ -9,51 +9,44 @@
 :root {
   color-scheme: dark;
 
-  /* The scale. Each group is evenly spaced within itself, which is a promise
-     about neighbours rather than across the whole ladder. */
+  /* Surfaces. The ground doubles into the stage, then every rung steps +14%:
+     near black the eye reads a ratio, not a distance. */
+  --n-1: oklch(0.14 0.002 270);
+  --n-2: oklch(0.182 0.002 270);
+  --n-3: oklch(0.192 0.002 270);
+  --n-4: oklch(0.2 0.002 270);
 
-  /* Surfaces, +0.035. Hue 262 at low chroma: chosen, not accidental. */
-  --n-1: oklch(0.178 0.005 262);
-  --n-2: oklch(0.213 0.006 262);
-  --n-3: oklch(0.248 0.007 262);
-  --n-4: oklch(0.283 0.007 262);
-  --n-5: oklch(0.318 0.008 262);
-  --n-6: oklch(0.353 0.008 262);
+  /* Lines sit above every surface, so an edge can never be darker than what it
+     lands on. line-3 carries the chart axis at 3:1 on the stage. */
+  --line-1: oklch(0.258 0.003 270);
+  --line-2: oklch(0.373 0.004 270);
+  --line-3: oklch(0.494 0.004 270);
+  --line-lit: oklch(0.327 0.004 270);
 
-  /* Lines, +0.120. line-2 is 3.19:1 on the canvas against a 3.0 floor: it
-     carries every non-text edge and must not be darkened. */
-  --line-1: oklch(0.4 0.008 262);
-  --line-2: oklch(0.52 0.008 262);
-
-  /* Ink, +0.1225. ink-1 is set by where it still clears AA on --n-5. */
-  --ink-1: oklch(0.69 0.012 262);
-  --ink-2: oklch(0.8125 0.01 262);
-  --ink-3: oklch(0.935 0.004 262);
+  /* Ink, +0.1225. */
+  --ink-1: oklch(0.69 0.012 270);
+  --ink-2: oklch(0.8125 0.01 270);
+  --ink-3: oklch(0.935 0.004 270);
 
   /* Status hues, then their tints at +0.090. */
   --status-ok: oklch(0.78 0.14 165);
   --status-warn: oklch(0.8 0.14 82);
   --status-fail: oklch(0.77 0.15 18);
-  --status-ok-tint: oklch(0.29 0.05 165);
-  --status-warn-tint: oklch(0.29 0.05 82);
-  --status-fail-tint: oklch(0.29 0.05 18);
-  --status-fail-wash: oklch(0.38 0.05 18);
+  --status-ok-tint: oklch(0.25 0.05 165);
+  --status-warn-tint: oklch(0.25 0.05 82);
+  --status-fail-tint: oklch(0.25 0.05 18);
+  --status-fail-wash: oklch(0.34 0.05 18);
 
-  /* Fills, +0.040. Split from the ink of the same hue because one value cannot
-     clear both a fill's floor and a text colour's. */
-  --cobalt-fill: oklch(0.52 0.15 262);
-  --cobalt-fill-hover: oklch(0.56 0.15 262);
-  --cobalt-ink: oklch(0.7 0.13 262);
-  --cobalt-wash: oklch(0.318 0.06 262);
+  /* One accent, at the two lightnesses physics demands: a fill dark enough to
+     carry white and an ink light enough to be read on the dark. */
+  --cobalt-fill: oklch(0.52 0.15 270);
+  --cobalt-ink: oklch(0.7 0.13 270);
   --red-fill: oklch(0.54 0.17 18);
-  --red-fill-hover: oklch(0.58 0.17 18);
 
   --white: oklch(1 0 0);
 
   /* The semantic layer. Each token names a job and points at a step above. */
 
-  /* Surfaces. The sidebar is the darkest thing on screen and the stage sits
-     above it, so content comes forward and the chrome recedes. */
   --background: var(--n-2);
   --foreground: var(--ink-3);
   --card: var(--n-3);
@@ -62,33 +55,47 @@
   --popover-foreground: var(--ink-3);
   --secondary: var(--n-4);
   --secondary-foreground: var(--ink-3);
-  --secondary-hover: var(--n-5);
   --muted: var(--n-4);
   --muted-foreground: var(--ink-2);
-  --muted-hover: var(--n-5);
   --surface: var(--n-4);
-  --surface-hover: var(--n-5);
-  --surface-active: var(--n-6);
   --ink-subtle: var(--ink-1);
 
-  /* Cobalt marks what you can act on. Hover is also the pressed appearance. */
+  /* A state is a mix against the surface it lands on, never a rung of its own:
+     a fixed rung is right at one depth and wrong at the other three. */
+  --secondary-hover: color-mix(in oklab, var(--secondary), var(--ink-3) 4%);
+  --muted-hover: color-mix(in oklab, var(--muted), var(--ink-3) 4%);
+  --surface-hover: color-mix(in oklab, var(--surface), var(--ink-3) 4%);
+  --surface-active: color-mix(in oklab, var(--surface), var(--ink-3) 8%);
+
+  /* Cobalt marks what you can act on, and lifts the same way every surface
+     does. Hover is also the pressed appearance. */
   --primary: var(--cobalt-fill);
-  --primary-hover: var(--cobalt-fill-hover);
+  --primary-hover: color-mix(in oklab, var(--primary), var(--white) 8%);
   --primary-foreground: var(--white);
   --primary-ink: var(--cobalt-ink);
   --ring: var(--cobalt-ink);
 
   /* --input stays calm at 1.5-3:1 on a card, the calm-border split. */
-  --border: var(--n-4);
-  --border-strong: var(--line-2);
-  --input: var(--line-1);
+  --border: var(--line-1);
+  --border-strong: var(--line-3);
+  --input: var(--line-2);
+
+  /* The stage falls to the sidebar's own value at its foot, so the panel reads
+     as lit from above rather than as a flat sheet. */
+  --stage-fall: linear-gradient(var(--n-2) 0%, var(--n-1) 100%);
+  /* A hairline lit at the top and fading down it, the way an edge catches. */
+  --edge-lit: linear-gradient(var(--line-lit), var(--line-1));
 
   /* Semantic status */
   --success: var(--status-ok);
   --warning: var(--status-warn);
   --destructive: var(--status-fail);
   --destructive-fill: var(--red-fill);
-  --destructive-fill-hover: var(--red-fill-hover);
+  --destructive-fill-hover: color-mix(
+    in oklab,
+    var(--destructive-fill),
+    var(--white) 8%
+  );
   --success-tint: var(--status-ok-tint);
   --warning-tint: var(--status-warn-tint);
   --destructive-tint: var(--status-fail-tint);
@@ -101,17 +108,22 @@
   --fail: var(--status-fail);
   --fail-tint: var(--status-fail-tint);
 
-  /* Sidebar */
+  /* Rest is dim and unfilled, hover lifts the ink to full, selected holds that
+     ink on a fill you can see. */
   --sidebar: var(--n-1);
-  --sidebar-foreground: var(--ink-2);
-  --sidebar-hover: var(--n-3);
+  --sidebar-foreground: var(--ink-1);
+  --sidebar-hover: color-mix(in oklab, var(--sidebar), var(--ink-3) 8%);
   --sidebar-hover-foreground: var(--ink-3);
-  --sidebar-border: var(--n-3);
+  --sidebar-active: color-mix(in oklab, var(--sidebar), var(--ink-3) 15%);
+  --sidebar-border: var(--line-1);
 
-  --selection: var(--cobalt-wash);
+  --selection: color-mix(in oklab, var(--n-2), var(--cobalt-ink) 22%);
 
   /* Depth, not palette: black at alpha, carrying no hue of its own. */
   --scrim: oklch(0 0 0 / 0.55);
+  /* A ring rather than a drop: the spread darkens the surface right at the
+     edge, so a raised panel separates without being lightened further. */
+  --shadow-edge: 0 0.5px 1px 1px oklch(0 0 0 / 0.3);
   --shadow-overlay:
     oklch(0 0 0 / 0.5) 0 8px 24px, oklch(0 0 0 / 0.35) 0 2px 6px;
   --shadow-raised: 0 1px 2px oklch(0 0 0 / 0.4), 0 4px 16px oklch(0 0 0 / 0.3);
@@ -170,9 +182,11 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-hover-foreground: var(--sidebar-hover-foreground);
+  --color-sidebar-active: var(--sidebar-active);
   --color-sidebar-border: var(--sidebar-border);
 
   --color-scrim: var(--scrim);
+  --shadow-edge: var(--shadow-edge);
   --shadow-overlay: var(--shadow-overlay);
   --shadow-raised: var(--shadow-raised);
 }
@@ -183,12 +197,13 @@
   --font-sans: "Geist Sans";
   --font-mono: "Geist Mono";
 
-  /* Radius. One rung per kind of surface, and nothing rounds off-set. */
-  --radius-sm: 0.3rem; /* small controls and inline code */
-  --radius-md: 0.4rem; /* buttons, inputs and menu items */
-  --radius-lg: 0.5rem; /* cards and panels */
-  --radius-xl: 0.7rem; /* dialogs */
-  --radius-2xl: 0.9rem; /* the chat input */
+  /* Two radii, not five: 8px is everything on the stage, 12px is what floats
+     above it. The five names are Tailwind's namespace, not five rungs. */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 0.75rem;
 
   /* Type. Each rung has one job, so hierarchy rides size rather than colour. */
   --text-xs: 0.75rem; /* uppercase group labels */
@@ -203,29 +218,57 @@
   --text-xl--line-height: calc(28 / 20);
   --text-2xl: 1.5rem; /* page titles */
   --text-2xl--line-height: calc(30 / 24);
-  --text-3xl: 1.75rem; /* the greeting, alone */
-  --text-3xl--line-height: calc(34 / 28);
 
   /* Containers */
   --container-page: 920px;
   --container-chat: 760px;
   --container-rail: 440px;
+  --container-sidebar: 250px;
+  --container-sidebar-icon: 52px;
+  --container-sidebar-sheet: 288px;
 
   /* Motion. Every transition takes these unless it states otherwise, so a bare
      `transition-colors` is already on the system. Durations have no Tailwind
      namespace, so a utility spells them `duration-(--duration-base)`. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  /* A panel travels the width of itself, so it needs a curve that leaves and
+     arrives gently rather than the near-instant departure of ease-out. */
+  --ease-panel: cubic-bezier(0.32, 0.72, 0, 1);
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 240ms;
+  --duration-panel: 320ms;
   --default-transition-duration: var(--duration-base);
   --default-transition-timing-function: var(--ease-out);
 
-  /* Spacing. A 4px base restricted to 4 / 8 / 12 / 16 / 24 / 32 / 48, which
-     Tailwind spells 1 / 2 / 3 / 4 / 6 / 8 / 12. Items within a unit take the
-     small value, units take the large one. */
+  /* Spacing. A 4px base plus the half-steps 6 and 10, spelled 1.5 and 2.5.
+     Those two carry density: without them a compact row rounds to 4 or 8 and
+     the whole layout loosens. Items within a unit take the small value. */
   --spacing: 0.25rem;
+}
+
+/* The lit hairline rides -0.5px outside the box and is masked to that ring, so
+   it sits on the border rather than shrinking the content. */
+@utility edge-lit {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -0.5px;
+    border-radius: inherit;
+    padding: 0.5px;
+    background: var(--edge-lit);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+@utility stage-fall {
+  background-image: var(--stage-fall);
 }
 
 @utility no-scrollbar {
@@ -277,6 +320,7 @@
 
   html {
     @apply font-sans;
+    -webkit-font-smoothing: antialiased;
   }
 
   html,

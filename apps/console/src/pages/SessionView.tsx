@@ -13,7 +13,6 @@ import {
   useMessageScroller,
 } from "@/components/ui/message-scroller";
 import { toast } from "@/lib/toast";
-import { useAuth } from "@/auth/AuthContext";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import { useSession } from "@/hooks/useSession";
 import { prependSession } from "@/hooks/useSessions";
@@ -44,11 +43,6 @@ function awaitingCard(
     }
   }
   return undefined;
-}
-
-function displayNameFromEmail(email: string): string {
-  const local = email.split("@")[0];
-  return local.charAt(0).toUpperCase() + local.slice(1);
 }
 
 function ScrollToEndChatInput(
@@ -197,12 +191,8 @@ export function SessionView({
   // event clears it.
   const [activityNotice, setActivityNotice] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const { phase } = useAuth();
 
   const session = useSession(activeSessionId);
-
-  const displayName =
-    phase.kind === "authenticated" ? displayNameFromEmail(phase.email) : "";
 
   const prevRouteIdRef = useRef<string | null>(sessionIdFromRoute);
   useEffect(() => {
@@ -450,12 +440,6 @@ export function SessionView({
   if (!activeSessionId) {
     return (
       <div className="flex h-full flex-1 flex-col items-center justify-center">
-        <h1 className="m-0 mb-2 text-center text-3xl font-semibold tracking-[-0.4px] text-foreground">
-          Hello, {displayName}
-        </h1>
-        <p className="m-0 mb-6 text-center text-base text-muted-foreground">
-          Start an investigation or ask about your fleet.
-        </p>
         <div className="w-full">
           <ChatInput
             sessionId={null}

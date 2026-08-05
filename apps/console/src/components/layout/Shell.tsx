@@ -47,7 +47,7 @@ import { SessionView } from "@/pages/SessionView";
 // Nowrap inside an overflow-hidden rail, and the fade finishes before the
 // width does, so a label is never legible at an intermediate width.
 const NAV_LABEL =
-  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-fast) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
+  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-base) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
 
 export function Shell({
   children,
@@ -155,7 +155,7 @@ function ShellContent({
         Skip to content
       </a>
 
-      <Sidebar collapsible="icon">
+      <Sidebar collapsible="icon" variant="inset">
         {/* The gap goes with the label: 8px of nothing pushes the collapsed
             toggle off the icon column. */}
         <SidebarHeader className="h-14 flex-row items-center justify-between gap-2 overflow-hidden p-2 group-data-[collapsible=icon]:gap-0">
@@ -281,7 +281,7 @@ function ShellContent({
       <SidebarInset
         id="main-content"
         tabIndex={-1}
-        className="h-svh min-h-0 overflow-hidden"
+        className="h-svh min-h-0 overflow-hidden md:h-[calc(100svh-theme(spacing.6))]"
       >
         <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 md:hidden">
           <Button
@@ -303,7 +303,7 @@ function ShellContent({
           {isSessionArea ? (
             investigationView ? (
               <>
-                <div className="min-w-0 flex-1 overflow-y-auto">
+                <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
                   <ReportPanel
                     report={report?.report ?? null}
                     actions={report?.actions ?? []}
@@ -320,7 +320,7 @@ function ShellContent({
                   aria-hidden={!chatRailOpen}
                   inert={!chatRailOpen}
                   className={cn(
-                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-base)",
+                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-panel) ease-panel",
                     // The edge says where the report stops. It fades out
                     // rather than switching off, leaving no hairline.
                     chatRailOpen
@@ -335,7 +335,7 @@ function ShellContent({
                     className={cn(
                       "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col pt-12 transition-opacity duration-(--duration-fast)",
                       chatRailOpen
-                        ? "opacity-100 delay-(--duration-fast)"
+                        ? "opacity-100 delay-(--duration-base)"
                         : "opacity-0 delay-0",
                     )}
                   />

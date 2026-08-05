@@ -12,10 +12,10 @@ const buttonVariants = cva(
        inline text action is the one button that must carry no box. */
     variants: {
       size: {
-        default: "h-9 gap-2 px-4",
-        xs: "h-7 gap-1 px-2 text-sm [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1 px-3 text-sm [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-2 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        default: "h-8 gap-2 px-4",
+        xs: "h-6 gap-1 px-2 text-sm [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 px-3 text-sm [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-8 gap-2 px-3 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         icon: "size-8",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-7",

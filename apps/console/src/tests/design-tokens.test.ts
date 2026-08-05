@@ -21,18 +21,51 @@ for (const block of root) {
    depth rather than palette, so they are steps of nothing. */
 const scale = new Map<string, Step>();
 const aliases = new Map<string, string>();
+const mixes = new Map<string, { base: string; toward: string; part: number }>();
+const MIX =
+  /^color-mix\(\s*in oklab,\s*var\(--([a-z][-a-z0-9]*)\),\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%\s*\)$/;
 for (const [name, value] of declarations) {
   const triple = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);
   if (triple) {
     scale.set(name, { L: +triple[1], C: +triple[2], H: +triple[3] });
     continue;
   }
+  const blend = MIX.exec(value);
+  if (blend) {
+    mixes.set(name, {
+      base: blend[1] ?? "",
+      toward: blend[2] ?? "",
+      part: +(blend[3] ?? 0) / 100,
+    });
+    continue;
+  }
   const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(value);
   if (alias) aliases.set(name, alias[1]);
 }
 
+/* A mix is evaluated where the browser evaluates it, in OKLab, so the test
+   reads the colour that actually paints rather than an approximation. */
+function blend(x: Step, y: Step, part: number): Step {
+  const polar = ({ L, C, H }: Step) => {
+    const h = (H * Math.PI) / 180;
+    return [L, C * Math.cos(h), C * Math.sin(h)] as const;
+  };
+  const [l1, a1, b1] = polar(x);
+  const [l2, a2, b2] = polar(y);
+  const [L, a, b] = [
+    l1 + (l2 - l1) * part,
+    a1 + (a2 - a1) * part,
+    b1 + (b2 - b1) * part,
+  ];
+  let H = (Math.atan2(b, a) * 180) / Math.PI;
+  if (H < 0) H += 360;
+  return { L, C: Math.hypot(a, b), H };
+}
+
 function step(name: string): Step {
   const target = aliases.get(name) ?? name;
+  const mix = mixes.get(target);
+  if (mix) return blend(step(mix.base), step(mix.toward), mix.part);
   const value = scale.get(target);
   if (!value)
     throw new Error(`--${name} does not resolve to a step on the scale`);
@@ -73,22 +106,70 @@ function expectEvenSteps(group: string[], spacing: number): void {
   }
 }
 
-const SURFACES = ["sidebar", "background", "card", "secondary", "muted-hover"];
+const SURFACES = [
+  "sidebar",
+  "background",
+  "card",
+  "secondary",
+  "surface-hover",
+  "surface-active",
+];
+
+/* Rendered channel value, which is what the eye reads near black: contrast
+   ratio and OKLCH lightness both carry constants that flatten a doubling. */
+function channel(name: string): number {
+  const { L, C, H } = step(name);
+  const h = (H * Math.PI) / 180;
+  const [a, b] = [C * Math.cos(h), C * Math.sin(h)];
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const g = Math.min(
+    1,
+    Math.max(0, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+  );
+  return Math.round(
+    (g <= 0.0031308 ? 12.92 * g : 1.055 * g ** (1 / 2.4) - 0.055) * 255,
+  );
+}
 
 describe("the scale", () => {
-  it("spaces the neutral surfaces by 0.035", () => {
-    expectEvenSteps(["n-1", "n-2", "n-3", "n-4", "n-5", "n-6"], 0.035);
+  it("doubles the ground into the stage, then steps each rung about +14%", () => {
+    expect(channel("n-2") / channel("n-1")).toBeGreaterThanOrEqual(1.9);
+    for (const [below, above] of [
+      ["n-2", "n-3"],
+      ["n-3", "n-4"],
+    ] as const) {
+      const ratio = channel(above) / channel(below);
+      expect(ratio, `${below} to ${above}`).toBeGreaterThan(1.08);
+      expect(ratio, `${below} to ${above}`).toBeLessThan(1.22);
+    }
   });
 
-  it("spaces ink by 0.1225 and lines by 0.12", () => {
+  it("keeps every line above every surface, so an edge cannot invert", () => {
+    for (const line of ["line-1", "line-2", "line-3"])
+      for (const n of ["n-1", "n-2", "n-3", "n-4"])
+        expect(channel(line), `${line} over ${n}`).toBeGreaterThan(channel(n));
+  });
+
+  it("spaces ink by 0.1225", () => {
     expectEvenSteps(["ink-1", "ink-2", "ink-3"], 0.1225);
-    expectEvenSteps(["line-1", "line-2"], 0.12);
   });
 
-  it("spaces status tints by 0.09 and each fill pair by 0.04", () => {
+  it("spaces status tints by 0.09", () => {
     expectEvenSteps(["status-fail-tint", "status-fail-wash"], 0.09);
-    expectEvenSteps(["cobalt-fill", "cobalt-fill-hover"], 0.04);
-    expectEvenSteps(["red-fill", "red-fill-hover"], 0.04);
+  });
+
+  /* One value per accent: a fill lifts toward white the same way a surface
+     lifts toward ink, so a second hand-picked hex cannot drift from it. */
+  it("lifts each fill toward white for its hover", () => {
+    for (const [fill, hover] of [
+      ["primary", "primary-hover"],
+      ["destructive-fill", "destructive-fill-hover"],
+    ] as const) {
+      expect(mixes.get(hover)?.toward, `--${hover}`).toBe("white");
+      expect(step(hover).L).toBeGreaterThan(step(fill).L);
+    }
   });
 
   it("puts the sidebar below the stage, which sits below what is raised", () => {
@@ -96,10 +177,29 @@ describe("the scale", () => {
     expect(step("background").L).toBeLessThan(step("card").L);
   });
 
-  it("holds every semantic token to a step, and every step to a group", () => {
+  /* A gradient is a composition of steps, so each of its stops is held to the
+     same rule every other colour is: it names a step, never a value. */
+  it("builds every gradient out of steps", () => {
+    const gradients = [...declarations].filter(([, v]) =>
+      v.startsWith("linear-gradient("),
+    );
+    expect(gradients.length).toBeGreaterThan(0);
+    for (const [name, value] of gradients) {
+      const stops = [...value.matchAll(/var\(--([a-z][-a-z0-9]*)\)/g)];
+      expect(stops.length, `--${name} has no stops`).toBeGreaterThan(1);
+      for (const [, stop] of stops)
+        expect(
+          () => step(stop ?? ""),
+          `--${name} stop --${stop}`,
+        ).not.toThrow();
+    }
+  });
+
+  it("holds every semantic token to a step, a mix or an alias", () => {
     for (const [name, value] of declarations) {
-      if (scale.has(name) || aliases.has(name)) continue;
-      expect(value, `--${name} is neither a step nor an alias`).toMatch(
+      if (scale.has(name) || aliases.has(name) || mixes.has(name)) continue;
+      if (value.startsWith("linear-gradient(")) continue;
+      expect(value, `--${name} is neither a step, a mix nor an alias`).toMatch(
         /oklch\(0 0 0 \/ /,
       );
     }
@@ -109,7 +209,56 @@ describe("the scale", () => {
       );
     }
     for (const [name, target] of aliases) {
-      expect(scale.has(target), `--${name} points at --${target}`).toBe(true);
+      expect(
+        scale.has(target) || mixes.has(target),
+        `--${name} points at --${target}`,
+      ).toBe(true);
+    }
+  });
+
+  /* These shipped pointing at one token, so hovering a selected row said
+     nothing and the two states were indistinguishable. */
+  it("separates the sidebar's hover from its selected fill", () => {
+    const [rest, hover, active] = [
+      "sidebar",
+      "sidebar-hover",
+      "sidebar-active",
+    ];
+    expect(contrast(hover, rest)).toBeGreaterThan(1.05);
+    expect(contrast(active, hover)).toBeGreaterThan(1.1);
+    expect(step(active).L).toBeGreaterThan(step(hover).L);
+  });
+
+  /* Rest ink is dim so lifting it to full on hover is the signal; a bright
+     rest leaves nowhere to travel. */
+  it("keeps the sidebar's rest ink below its lit ink, both above AA", () => {
+    expect(contrast("sidebar-foreground", "sidebar")).toBeGreaterThanOrEqual(
+      4.5,
+    );
+    expect(step("sidebar-foreground").L).toBeLessThan(
+      step("sidebar-hover-foreground").L,
+    );
+    for (const fill of ["sidebar-hover", "sidebar-active"])
+      expect(
+        contrast("sidebar-hover-foreground", fill),
+        `lit ink on ${fill}`,
+      ).toBeGreaterThanOrEqual(7);
+  });
+
+  /* The rule the ladder depends on: a state is relative to the surface it
+     lands on, so it stays right at every depth instead of only one. */
+  it("derives every hover and active state rather than naming a rung", () => {
+    const states = [...declarations.keys()].filter((n) =>
+      /-(hover|active)$/.test(n),
+    );
+    expect(states.length).toBeGreaterThan(0);
+    for (const name of states) {
+      if (name === "primary-hover" || name.includes("fill")) continue;
+      const mix = mixes.get(name);
+      expect(mix, `--${name} is not a mix`).toBeDefined();
+      expect(mix?.toward, `--${name} mixes toward the wrong pole`).toBe(
+        "ink-3",
+      );
     }
   });
 });
@@ -231,12 +380,22 @@ function expectUtilityValues(
 }
 
 // Sizes are dimensions, not rhythm: only gaps, padding and margins are held.
-const SPACING = ["0", "1", "2", "3", "4", "6", "8", "12"];
+// 1.5 and 2.5 are the 6px and 10px half-steps; density needs them.
+const SPACING = ["0", "1", "1.5", "2", "2.5", "3", "4", "6", "8", "12"];
 
 describe("radius", () => {
   it("declares one set, and no rung outside it", () => {
     const rungs = [...css.matchAll(/--radius(-[a-z0-9]*)?:/g)].map((m) => m[1]);
     expect(rungs.sort()).toEqual(["-2xl", "-lg", "-md", "-sm", "-xl"]);
+  });
+
+  /* Five names, two values: the names are Tailwind's namespace and the system
+     has one radius for the stage and one for what floats above it. */
+  it("spends two values across those names", () => {
+    const values = [...css.matchAll(/--radius-[a-z0-9]*:\s*([^;]+);/g)].map(
+      (m) => m[1]?.trim(),
+    );
+    expect([...new Set(values)].sort()).toEqual(["0.5rem", "0.75rem"]);
   });
 
   it("rounds nothing to a value off that set", () => {
@@ -289,7 +448,7 @@ describe("shadow", () => {
   it("spends only the two project tokens", () => {
     expectUtilityValues(
       /(?<![-\w])shadow-([^\s"'`]+)/g,
-      ["raised", "overlay", "none"],
+      ["edge", "raised", "overlay", "none"],
       "shadow",
     );
   });
@@ -299,14 +458,24 @@ describe("motion", () => {
   it("resolves every duration and easing to a token", () => {
     expectUtilityValues(
       /(?<![-\w])duration-([^\s"'`]+)/g,
-      ["(--duration-fast)", "(--duration-base)", "(--duration-slow)"],
+      [
+        "(--duration-fast)",
+        "(--duration-base)",
+        "(--duration-slow)",
+        "(--duration-panel)",
+      ],
       "duration",
     );
-    expectUtilityValues(/(?<![-\w])ease-([^\s"'`]+)/g, ["in", "out"], "easing");
+    expectUtilityValues(
+      /(?<![-\w])ease-([^\s"'`]+)/g,
+      ["in", "out", "panel"],
+      "easing",
+    );
     for (const token of [
       "--duration-fast",
       "--duration-base",
       "--duration-slow",
+      "--duration-panel",
     ])
       expect(css).toContain(`${token}:`);
   });
