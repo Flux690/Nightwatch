@@ -28,3 +28,6 @@ issues
 
 # Demo droplet deployment sequence
 deploy/
+
+# The Playwright CLI's scratch output.
+.playwright-cli/
