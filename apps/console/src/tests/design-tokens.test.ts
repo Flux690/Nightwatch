@@ -1,11 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 
-/* The palette's contract: every semantic token points at a step on the
-   scale, each group of steps is evenly spaced, and every pair clears the WCAG floor its surface needs.
-   Conversion happens here because a browser reports oklch() back verbatim, and
-   a first prototype's rgb() regex read L, C and H as red, green and blue. */
+/* Every token points at a step, each band is evenly spaced, and every pair
+   clears its WCAG floor. Converted here because a browser reports oklch() back
+   verbatim, and a first prototype's rgb() regex read L, C and H as r, g and b. */
 
 type Step = { L: number; C: number; H: number };
 
@@ -195,5 +194,143 @@ describe("the contrast matrix", () => {
     const ratio = contrast("input", "card");
     expect(ratio, "input on card lower bound").toBeGreaterThanOrEqual(1.5);
     expect(ratio, "input on card upper bound").toBeLessThanOrEqual(3);
+  });
+});
+
+/* Every source file that can carry a utility class, named so a failure says
+   where. Tests are excluded: they assert on classes rather than declare them. */
+function sources(
+  dir: string,
+  into: [string, string][] = [],
+): [string, string][] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== "tests") sources(path, into);
+    } else if (/\.tsx?$/.test(entry.name)) {
+      into.push([path, readFileSync(path, "utf8")]);
+    }
+  }
+  return into;
+}
+
+const SOURCES = sources(join(process.cwd(), "src"));
+
+/* Values a utility of this kind may name. Anything else either fails silently
+   or invents a rung, which is the drift these bands exist to stop. */
+function expectUtilityValues(
+  pattern: RegExp,
+  allowed: readonly string[],
+  what: string,
+): void {
+  for (const [path, text] of SOURCES) {
+    for (const match of text.matchAll(pattern)) {
+      expect(allowed, `${what} \`${match[0]}\` in ${path}`).toContain(match[1]);
+    }
+  }
+}
+
+// Sizes are dimensions, not rhythm: only gaps, padding and margins are held.
+const SPACING = ["0", "1", "2", "3", "4", "6", "8", "12"];
+
+describe("radius", () => {
+  it("declares one set, and no rung outside it", () => {
+    const rungs = [...css.matchAll(/--radius(-[a-z0-9]*)?:/g)].map((m) => m[1]);
+    expect(rungs.sort()).toEqual(["-2xl", "-lg", "-md", "-sm", "-xl"]);
+  });
+
+  it("rounds nothing to a value off that set", () => {
+    expectUtilityValues(
+      /(?<![-\w])rounded(?:-(?:t|b|l|r|s|e|tl|tr|bl|br))?-([^\s"'`]+)/g,
+      ["sm", "md", "lg", "xl", "2xl", "full", "none", "[inherit]"],
+      "radius",
+    );
+  });
+});
+
+describe("focus", () => {
+  it("is one edge on the cobalt ink, laid over the control's own border", () => {
+    expect(css).toContain("outline: 1px solid var(--color-ring)");
+    expect(css).toContain("outline-offset: -1px");
+    expect(css).not.toContain(":focus-visible:not([data-slot])");
+  });
+
+  // It fades in, so it starts transparent rather than at the text colour.
+  it("gives the edge a colour to fade in from", () => {
+    expect(css).toContain("outline-color: transparent");
+  });
+
+  /* One group hoists the edge for the input inside it; nothing else recolours
+     a border, and nothing draws a second mark of its own. */
+  it("leaves the edge to the one rule, bar the group that owns its input", () => {
+    for (const [path, text] of SOURCES) {
+      if (path.endsWith("input-group.tsx")) continue;
+      expect(text, `border-ring in ${path}`).not.toContain("border-ring");
+    }
+    expectUtilityValues(
+      /(?<![-\w])outline-((?![0-9]|offset-|hidden\b)[^\s"'`]+)/g,
+      ["ring", "none"],
+      "outline",
+    );
+    // Suppressing the ring is legitimate only where another element draws it.
+    for (const [path, text] of SOURCES) {
+      expect(text, `unscoped outline-none in ${path}`).not.toMatch(
+        /(?<!focus-visible:)outline-none/,
+      );
+    }
+  });
+});
+
+describe("shadow", () => {
+  it("clears Tailwind's own scale so a stale size stops generating", () => {
+    expect(css).toContain("--shadow-*: initial;");
+  });
+
+  it("spends only the two project tokens", () => {
+    expectUtilityValues(
+      /(?<![-\w])shadow-([^\s"'`]+)/g,
+      ["raised", "overlay", "none"],
+      "shadow",
+    );
+  });
+});
+
+describe("motion", () => {
+  it("resolves every duration and easing to a token", () => {
+    expectUtilityValues(
+      /(?<![-\w])duration-([^\s"'`]+)/g,
+      ["(--duration-fast)", "(--duration-base)", "(--duration-slow)"],
+      "duration",
+    );
+    expectUtilityValues(/(?<![-\w])ease-([^\s"'`]+)/g, ["in", "out"], "easing");
+    for (const token of [
+      "--duration-fast",
+      "--duration-base",
+      "--duration-slow",
+    ])
+      expect(css).toContain(`${token}:`);
+  });
+
+  it("no-ops every animation under reduced motion, in one place", () => {
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\) \{\s*\*,\s*\*::before,\s*\*::after \{[^}]*animation-duration: 1ms !important;[^}]*transition-duration: 1ms !important;/,
+    );
+    for (const [path, text] of SOURCES) {
+      expect(text, `motion-reduce: in ${path}`).not.toContain("motion-reduce:");
+    }
+  });
+});
+
+describe("spacing", () => {
+  it("states the 4px base the set is built on", () => {
+    expect(css).toContain("--spacing: 0.25rem;");
+  });
+
+  it("holds every gap, padding and margin to the 4px set", () => {
+    expectUtilityValues(
+      /(?<![-\w])-?(?:gap|gap-x|gap-y|space-x|space-y|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml)-(\d+(?:\.\d+)?)(?![\w.-])/g,
+      SPACING,
+      "spacing",
+    );
   });
 });

@@ -110,7 +110,7 @@ export function ApprovalCardPanel({
         )}
 
         {command !== null && (
-          <pre className="m-0 overflow-x-auto rounded-md border border-border px-2.5 py-2 font-mono text-sm break-words whitespace-pre-wrap">
+          <pre className="m-0 overflow-x-auto rounded-md border border-border px-3 py-2 font-mono text-sm break-words whitespace-pre-wrap">
             <span className="text-ink-subtle select-none">$ </span>
             {command}
           </pre>
@@ -128,7 +128,7 @@ export function ApprovalCardPanel({
         {/* Facts about the call, plus the agent's own risk assessment. Its
             opinion, labelled as such, sitting beside the command that lets you
             judge it yourself. */}
-        <div className="flex flex-wrap gap-3.5 text-sm text-ink-subtle">
+        <div className="flex flex-wrap gap-4 text-sm text-ink-subtle">
           <span className="font-mono">{item.toolName}</span>
           {service !== null && <span className="font-mono">{service}</span>}
           <span>{item.risk ?? "unknown"} risk, per the agent</span>

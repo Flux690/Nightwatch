@@ -47,7 +47,7 @@ import { SessionView } from "@/pages/SessionView";
 // Nowrap inside an overflow-hidden rail, and the fade finishes before the
 // width does, so a label is never legible at an intermediate width.
 const NAV_LABEL =
-  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-fast) motion-reduce:transition-none group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
+  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-fast) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
 
 export function Shell({
   children,
@@ -231,7 +231,7 @@ function ShellContent({
                   params={{ id: attentionSessionId }}
                   aria-label={`${attentionCount} awaiting approval - open the first`}
                   onClick={dismissMobile}
-                  className="mb-1 flex h-8 items-center overflow-hidden rounded-sm bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
+                  className="mb-1 flex h-8 items-center overflow-hidden rounded-md bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
                 >
                   <span className="flex h-full w-10 shrink-0 items-center justify-center">
                     {attentionCount > 99 ? "99+" : attentionCount}
@@ -320,7 +320,7 @@ function ShellContent({
                   aria-hidden={!chatRailOpen}
                   inert={!chatRailOpen}
                   className={cn(
-                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-base) ease-linear motion-reduce:transition-none",
+                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-base)",
                     // The edge says where the report stops. It fades out
                     // rather than switching off, leaving no hairline.
                     chatRailOpen
@@ -333,7 +333,7 @@ function ShellContent({
                   <ChatSlot
                     node={chatNodeRef.current}
                     className={cn(
-                      "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col pt-14 transition-opacity duration-(--duration-fast) motion-reduce:transition-none",
+                      "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col pt-12 transition-opacity duration-(--duration-fast)",
                       chatRailOpen
                         ? "opacity-100 delay-(--duration-fast)"
                         : "opacity-0 delay-0",

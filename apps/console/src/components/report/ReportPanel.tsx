@@ -35,7 +35,7 @@ function SectionHeading({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <h2 className="mb-2 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground">
+    <h2 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
       {children}
     </h2>
   );
@@ -51,7 +51,7 @@ function AlertBand({
 }): React.JSX.Element | null {
   if (alerts.length === 0) return null;
   return (
-    <section className="mb-6 border-b border-border pb-6">
+    <section className="mb-12">
       <SectionHeading>{alerts.length > 1 ? "Alerts" : "Alert"}</SectionHeading>
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {alerts.map(({ alert, clearedAt }) => (
@@ -108,7 +108,7 @@ function CitedEvidence({
   const cited = [...new Set(ids)].flatMap((id) => evidence.get(id) ?? []);
   if (cited.length === 0) return null;
   return (
-    <div className="mt-1.5">
+    <div className="mt-2">
       {cited.map((entry) => (
         <Evidence key={entry.toolUseId} entry={entry} alert={alert} />
       ))}
@@ -164,16 +164,14 @@ export function ReportPanel({
           Investigation
         </h1>
         {rootCause !== undefined && (
-          <p className="m-0 mt-2 text-base font-medium">
-            {rootCause.statement}
-          </p>
+          <p className="m-0 mt-2 text-lg font-medium">{rootCause.statement}</p>
         )}
       </header>
 
       {report.hypotheses.length > 0 && (
-        <section className="mt-6 border-t border-border pt-6">
+        <section className="mt-12">
           <SectionHeading>Hypotheses</SectionHeading>
-          <ul className="m-0 flex list-none flex-col gap-5 p-0">
+          <ul className="m-0 flex list-none flex-col gap-6 p-0">
             {report.hypotheses.map((h) => (
               <li key={h.id}>
                 <div className="flex items-center gap-2">
@@ -205,7 +203,7 @@ export function ReportPanel({
       )}
 
       {report.fixes.length > 0 && (
-        <section className="mt-6 border-t border-border pt-6">
+        <section className="mt-12">
           <SectionHeading>Proposed fix</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {report.fixes.map((fix, i) => (
@@ -240,7 +238,7 @@ export function ReportPanel({
       )}
 
       {actions.length > 0 && (
-        <section className="mt-6 border-t border-border pt-6">
+        <section className="mt-12">
           <SectionHeading>Actions taken</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {actions.map((action) => (
@@ -268,7 +266,7 @@ export function ReportPanel({
                 {/* Only on a failure: on a success the detail is the PR or the
                     command's own output, which the transcript already shows. */}
                 {action.status === "failed" && action.result && (
-                  <p className="m-0 mt-0.5 text-sm text-muted-foreground">
+                  <p className="m-0 mt-1 text-sm text-muted-foreground">
                     {action.result}
                   </p>
                 )}

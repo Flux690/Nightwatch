@@ -28,7 +28,7 @@ function Caption({
   right?: string;
 }): React.JSX.Element {
   return (
-    <figcaption className="mt-1.5 flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
+    <figcaption className="mt-2 flex flex-wrap justify-between gap-2 text-sm text-muted-foreground">
       <span className="min-w-0">{left}</span>
       {right && <span className="shrink-0">{right}</span>}
     </figcaption>
@@ -132,7 +132,7 @@ function Bars({
 }): React.JSX.Element {
   const max = Math.max(...bars.map((b) => b.value), 0) || 1;
   return (
-    <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
+    <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
       {bars.map((bar) => (
         <li key={bar.label} className="flex items-center gap-2">
           <span className="w-48 shrink-0 truncate font-mono text-sm text-muted-foreground">

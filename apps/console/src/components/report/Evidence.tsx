@@ -54,12 +54,12 @@ export function Evidence({
         </Button>
       </div>
       {summary.text && (
-        <p className={cn("m-0 mt-0.5 font-mono text-sm", summary.tone)}>
+        <p className={cn("m-0 mt-1 font-mono text-sm", summary.tone)}>
           {summary.text}
         </p>
       )}
       {(plot !== null || pullRequests.length > 0 || worthQuoting) && (
-        <div className="mt-1.5 text-muted-foreground">
+        <div className="mt-2 text-muted-foreground">
           {plot !== null ? (
             <Measurement plot={plot} />
           ) : pullRequests.length > 0 ? (

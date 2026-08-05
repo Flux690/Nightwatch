@@ -48,7 +48,7 @@ export function ChangesList({
   pullRequests: PullRequest[];
 }): React.JSX.Element {
   return (
-    <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
+    <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
       {pullRequests.map((pr) => (
         <li key={pr.number} className="flex min-w-0 items-baseline gap-2">
           <a

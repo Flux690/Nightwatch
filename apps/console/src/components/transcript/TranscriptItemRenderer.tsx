@@ -31,7 +31,9 @@ function UserTurn({
   return (
     <Message
       align="end"
-      className={instant ? undefined : "animate-in fade-in duration-300"}
+      className={
+        instant ? undefined : "animate-in fade-in duration-(--duration-slow)"
+      }
       data-testid="user-turn"
     >
       <Bubble variant="secondary">
@@ -45,7 +47,7 @@ function UserTurn({
 
 function AgentMarkdown({ text }: { text: string }): React.JSX.Element {
   return (
-    <div className="animate-in fade-in duration-300 prose prose-nightwarden max-w-none">
+    <div className="animate-in fade-in duration-(--duration-slow) prose prose-nightwarden max-w-none">
       <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
     </div>
   );
@@ -58,7 +60,7 @@ function ErrorNotice({ text }: { text: string }): React.JSX.Element {
     <div
       role="status"
       data-testid="error-notice"
-      className="animate-in fade-in flex flex-col gap-1 rounded-md border border-fail bg-fail-tint px-3 py-2 duration-300"
+      className="animate-in fade-in flex flex-col gap-1 rounded-md border border-fail bg-fail-tint px-3 py-2 duration-(--duration-slow)"
     >
       <span className="text-sm font-medium text-fail">The run stopped</span>
       <p className="m-0 text-sm whitespace-pre-wrap">{text}</p>
@@ -72,7 +74,7 @@ function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
   return (
     <div
       role="status"
-      className="animate-in fade-in flex items-baseline gap-2 border-y border-border py-2 text-sm duration-300"
+      className="animate-in fade-in flex items-baseline gap-2 border-y border-border py-2 text-sm duration-(--duration-slow)"
     >
       <span className="font-medium text-muted-foreground">
         Alert fired during this run
@@ -114,22 +116,22 @@ function ThinkingBlock({
 
   return (
     <div
-      className="animate-in fade-in duration-300"
+      className="animate-in fade-in duration-(--duration-slow)"
       data-testid="thinking-block"
       data-streaming={item.streaming}
     >
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="group flex w-fit items-center gap-1.5 text-sm text-muted-foreground outline-none">
+        <CollapsibleTrigger className="group flex w-fit items-center gap-2 text-sm text-muted-foreground">
           <span className={item.streaming ? "animate-pulse" : undefined}>
             Thinking
           </span>
           <ChevronRight
             aria-hidden="true"
-            className="size-3.5 shrink-0 transition-transform duration-200 group-aria-expanded:rotate-90"
+            className="size-3.5 shrink-0 transition-transform duration-(--duration-base) group-aria-expanded:rotate-90"
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <p className="animate-in fade-in duration-500 whitespace-pre-wrap text-sm text-muted-foreground">
+          <p className="animate-in fade-in duration-(--duration-slow) whitespace-pre-wrap text-sm text-muted-foreground">
             {trimmed}
           </p>
         </CollapsibleContent>

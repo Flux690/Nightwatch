@@ -6,7 +6,7 @@ import React from "react";
 export function WorkingIndicator(): React.JSX.Element {
   return (
     <div
-      className="nw-working animate-in fade-in duration-300 text-muted-foreground"
+      className="nw-working animate-in fade-in duration-(--duration-slow) text-muted-foreground"
       role="status"
       aria-label="Working"
       data-testid="working-indicator"

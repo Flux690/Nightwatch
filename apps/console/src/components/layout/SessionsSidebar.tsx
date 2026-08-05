@@ -81,7 +81,7 @@ function SessionRow({
         isActive={active}
         onClick={onOpen}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="flex min-w-0 flex-1 items-center gap-2">
           {severity !== null && (
             <span className="shrink-0 text-fail">{severity}</span>
           )}
@@ -89,7 +89,7 @@ function SessionRow({
             // Remount on title change so the temp -> refined swap slides in.
             key={session.title}
             title={session.title}
-            className="min-w-0 flex-1 truncate animate-in slide-in-from-left-2 fade-in duration-300"
+            className="min-w-0 flex-1 truncate animate-in slide-in-from-left-2 fade-in duration-(--duration-slow)"
           >
             {session.title}
           </span>
@@ -168,7 +168,7 @@ export function SessionsSidebar(): React.JSX.Element {
 
   return (
     <>
-      <SidebarMenu className="gap-0.5">
+      <SidebarMenu className="gap-1">
         {!isLoading && sessions.length === 0 && (
           <p className="px-2 py-2 text-sm text-muted-foreground">
             No sessions yet

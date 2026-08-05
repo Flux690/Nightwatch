@@ -93,7 +93,7 @@ export function ProviderSection({
   };
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       <Field className={FIELD_WIDTH.select}>
         <FieldLabel id="settings-provider-label">Provider</FieldLabel>
         <Select
@@ -148,7 +148,7 @@ export function ProviderSection({
         ) : (
           <Field>
             <FieldLabel htmlFor="settings-api-key-stored">API key</FieldLabel>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <span
                 id="settings-api-key-stored"
                 className="font-mono text-sm text-muted-foreground"

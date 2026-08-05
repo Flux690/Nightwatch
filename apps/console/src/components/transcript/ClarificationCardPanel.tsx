@@ -82,7 +82,7 @@ export function ClarificationCardPanel({
           : null;
     return (
       <div data-testid="clarification-card" data-resolved="true">
-        <p className="mb-1.5 font-mono text-base font-medium">
+        <p className="mb-2 font-mono text-base font-medium">
           AskUserQuestion
           {answeredBy ? (
             <span
@@ -94,13 +94,13 @@ export function ClarificationCardPanel({
           ) : null}
         </p>
         <Card size="sm" className={TOOL_CARD_CLASS}>
-          <CardContent className="px-3.5 py-2.5">
+          <CardContent className="px-4">
             <p className={IO_LABEL_CLASS}>IN</p>
             <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
               {firstLines(item.question ?? "")}
             </p>
           </CardContent>
-          <CardContent className="border-t border-border px-3.5 py-2.5">
+          <CardContent className="px-4">
             <p className={IO_LABEL_CLASS}>OUT</p>
             <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
               {answerText === null ? "Answered" : firstLines(answerText)}

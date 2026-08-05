@@ -99,7 +99,7 @@ function SetupForm(): React.JSX.Element {
               onChange={(e) => setEmail(e.currentTarget.value)}
             />
           </Field>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <Field>
               <FieldLabel htmlFor="setup-password">Password</FieldLabel>
               <Input
@@ -114,7 +114,7 @@ function SetupForm(): React.JSX.Element {
             </Field>
             <ValidationError message={passwordError} />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <Field>
               <FieldLabel htmlFor="setup-confirm">Confirm password</FieldLabel>
               <Input

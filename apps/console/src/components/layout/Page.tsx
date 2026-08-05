@@ -92,7 +92,7 @@ export function BackLink({
   return (
     <Link
       to={to}
-      className="mb-2 inline-flex w-fit items-center gap-1.5 self-start rounded-sm text-sm text-muted-foreground no-underline hover:text-foreground"
+      className="mb-2 inline-flex w-fit items-center gap-2 self-start rounded-sm text-sm text-muted-foreground no-underline hover:text-foreground"
     >
       <ArrowLeft {...ICON_INLINE} />
       {children}

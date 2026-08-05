@@ -109,7 +109,7 @@ function CappedText({ text }: { text: string }): React.JSX.Element {
       >
         {open ? text : lines.slice(0, BODY_MAX_LINES).join("\n")}
       </pre>
-      <Button variant="link" className="mt-1.5" onClick={() => setOpen(!open)}>
+      <Button variant="link" className="mt-2" onClick={() => setOpen(!open)}>
         {open ? "Show less" : `Show all ${lines.length} lines`}
       </Button>
     </div>
@@ -146,14 +146,14 @@ function EventList({
   events: Record<string, unknown>[];
 }): React.JSX.Element {
   return (
-    <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+    <ul className="m-0 flex list-none flex-col gap-1 p-0">
       {events.slice(0, BODY_MAX_LINES).map((event, i) => {
         const at =
           typeof event["timestamp"] === "string" ? event["timestamp"] : "";
         const label =
           typeof event["eventType"] === "string" ? event["eventType"] : "";
         return (
-          <li key={`${at}-${i}`} className={cn(MONO, "flex gap-2.5")}>
+          <li key={`${at}-${i}`} className={cn(MONO, "flex gap-3")}>
             <time className="shrink-0 text-ink-subtle">
               {at ? new Date(at).toLocaleTimeString() : ""}
             </time>
@@ -315,7 +315,7 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
       id={`tool-${item.toolUseId}`}
       data-revealed={revealed || undefined}
       className={cn(
-        "-mx-2 scroll-mt-6 rounded-md px-2 transition-colors duration-500",
+        "-mx-2 scroll-mt-6 rounded-md px-2 transition-colors duration-(--duration-slow)",
         revealed && "bg-surface-hover",
       )}
     >
@@ -347,13 +347,13 @@ export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
           <ChevronRight
             {...ICON_INLINE}
             aria-hidden="true"
-            className="shrink-0 self-center text-ink-subtle transition-transform duration-200 group-aria-expanded:rotate-90"
+            className="shrink-0 self-center text-ink-subtle transition-transform duration-(--duration-base) group-aria-expanded:rotate-90"
           />
         )}
       </button>
 
       {open && !running && (
-        <div className="mt-0.5 mb-2 border-l border-border py-1 pl-3.5">
+        <div className="mt-1 mb-2 border-l border-border py-1 pl-4">
           <ToolBody toolName={toolName} input={input} result={result} />
         </div>
       )}

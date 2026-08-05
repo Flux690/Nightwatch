@@ -33,12 +33,12 @@ export function ServerCard({
     <Card
       data-testid="server-card"
       data-offline={!runner.online || undefined}
-      className={cn("gap-2 px-4 py-3.5", !runner.online && "opacity-60")}
+      className={cn("gap-2 px-4 py-4", !runner.online && "opacity-60")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium">{runnerDisplayName(runner)}</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {runner.hostname !== null && runner.hostname !== runner.serverName
               ? `host ${runner.hostname}`
               : null}
@@ -63,7 +63,7 @@ export function ServerCard({
           No services advertised yet.
         </p>
       ) : (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1">
           {shown.map((key) => (
             <span key={key} className="font-mono text-sm break-all">
               {key}

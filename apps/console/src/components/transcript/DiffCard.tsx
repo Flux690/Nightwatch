@@ -48,21 +48,21 @@ export function DiffCard({
 
   return (
     <div data-testid="diff-card">
-      <p className="mb-1.5 font-mono text-base font-medium">
+      <p className="mb-2 font-mono text-base font-medium">
         {toolName}
         <span className="ml-2 text-muted-foreground">{change.path}</span>
         <span className="ml-2 text-success">+{added}</span>
         <span className="ml-1 text-destructive">-{removed}</span>
       </p>
       <Card size="sm" className={TOOL_CARD_CLASS}>
-        <CardContent className="max-h-[360px] overflow-hidden px-0 py-2 font-mono text-base leading-relaxed">
+        <CardContent className="max-h-[360px] overflow-hidden px-0 font-mono text-base leading-relaxed">
           {change.hunks.map((hunk, hunkIndex) => (
             <div key={hunkIndex} className={hunkIndex > 0 ? "mt-3" : ""}>
               {hunk.lines.map((line, i) => (
                 <div
                   key={i}
                   className={cn(
-                    "flex gap-3 break-all whitespace-pre-wrap px-3.5",
+                    "flex gap-3 break-all whitespace-pre-wrap px-4",
                     lineClass(line.type),
                   )}
                 >

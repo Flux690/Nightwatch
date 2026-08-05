@@ -32,7 +32,7 @@ export function WizardStepper({
             key={i}
             data-done={i <= step || undefined}
             className={cn(
-              "h-[3px] flex-1 rounded-full transition-colors duration-base ease-out",
+              "h-[3px] flex-1 rounded-full transition-colors",
               i <= step ? "bg-primary" : "bg-border",
             )}
           />

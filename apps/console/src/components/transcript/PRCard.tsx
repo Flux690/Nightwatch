@@ -40,9 +40,9 @@ export function parsePullRequestResult(
 export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
   return (
     <div data-testid="pr-card">
-      <p className="mb-1.5 font-mono text-base font-medium">OpenPullRequest</p>
+      <p className="mb-2 font-mono text-base font-medium">OpenPullRequest</p>
       <Card size="sm" className={TOOL_CARD_CLASS}>
-        <CardContent className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
+        <CardContent className="flex flex-wrap items-center gap-2 px-4">
           <span className="text-base font-medium">
             Pull request #{pr.number}
           </span>
@@ -61,7 +61,7 @@ export function PRCard({ pr }: { pr: PullRequestResult }): React.JSX.Element {
           </a>
         </CardContent>
         {pr.message !== undefined && (
-          <CardContent className="border-t border-border px-3.5 py-2 text-base text-muted-foreground">
+          <CardContent className="px-4 text-base text-muted-foreground">
             <p className="m-0">{pr.message}</p>
           </CardContent>
         )}

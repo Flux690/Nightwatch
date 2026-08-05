@@ -17,6 +17,6 @@ export function firstLines(text: string, max = CARD_MAX_LINES): string {
 }
 
 export const TOOL_CARD_CLASS =
-  "gap-0 rounded-none border border-border py-0 ring-0";
+  "gap-3 rounded-none border border-border py-3 ring-0";
 export const IO_LABEL_CLASS =
-  "mb-1.5 font-mono text-sm font-medium tracking-[0.06em] text-muted-foreground";
+  "mb-1 font-mono text-sm font-medium tracking-[0.06em] text-muted-foreground";

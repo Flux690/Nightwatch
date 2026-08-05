@@ -119,6 +119,10 @@
 
 /* Tailwind's colour utilities, resolving through the semantic layer above. */
 @theme inline {
+  /* Cleared before the two project tokens are declared, so `shadow-md` stops
+     generating: a class whose token is missing emits no rule and fails silently. */
+  --shadow-*: initial;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -179,28 +183,27 @@
   --font-sans: "Geist Sans";
   --font-mono: "Geist Mono";
 
-  /* Radius */
-  --radius: 0.5rem;
-  --radius-sm: 0.3rem;
-  --radius-md: 0.4rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.7rem;
-  --radius-2xl: 0.9rem;
+  /* Radius. One rung per kind of surface, and nothing rounds off-set. */
+  --radius-sm: 0.3rem; /* small controls and inline code */
+  --radius-md: 0.4rem; /* buttons, inputs and menu items */
+  --radius-lg: 0.5rem; /* cards and panels */
+  --radius-xl: 0.7rem; /* dialogs */
+  --radius-2xl: 0.9rem; /* the chat input */
 
-  /* Type scale */
-  --text-xs: 0.75rem;
+  /* Type. Each rung has one job, so hierarchy rides size rather than colour. */
+  --text-xs: 0.75rem; /* uppercase group labels */
   --text-xs--line-height: calc(16 / 12);
-  --text-sm: 0.875rem;
+  --text-sm: 0.875rem; /* body */
   --text-sm--line-height: calc(20 / 14);
-  --text-base: 1rem;
+  --text-base: 1rem; /* chat prose, and emphasis within a section */
   --text-base--line-height: calc(24 / 16);
-  --text-lg: 1.125rem;
+  --text-lg: 1.125rem; /* section lead, and the report's verdict line */
   --text-lg--line-height: calc(26 / 18);
-  --text-xl: 1.25rem;
+  --text-xl: 1.25rem; /* dialog titles, and a measurement's headline figure */
   --text-xl--line-height: calc(28 / 20);
-  --text-2xl: 1.5rem;
+  --text-2xl: 1.5rem; /* page titles */
   --text-2xl--line-height: calc(30 / 24);
-  --text-3xl: 1.75rem;
+  --text-3xl: 1.75rem; /* the greeting, alone */
   --text-3xl--line-height: calc(34 / 28);
 
   /* Containers */
@@ -208,11 +211,21 @@
   --container-chat: 760px;
   --container-rail: 440px;
 
-  /* Motion */
+  /* Motion. Every transition takes these unless it states otherwise, so a bare
+     `transition-colors` is already on the system. Durations have no Tailwind
+     namespace, so a utility spells them `duration-(--duration-base)`. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 240ms;
+  --default-transition-duration: var(--duration-base);
+  --default-transition-timing-function: var(--ease-out);
+
+  /* Spacing. A 4px base restricted to 4 / 8 / 12 / 16 / 24 / 32 / 48, which
+     Tailwind spells 1 / 2 / 3 / 4 / 6 / 8 / 12. Items within a unit take the
+     small value, units take the large one. */
+  --spacing: 0.25rem;
 }
 
 @utility no-scrollbar {
@@ -242,11 +255,14 @@
   --tw-prose-td-borders: var(--color-border);
 }
 
-/* Focus for elements without data-slot (sortable headers, plain links).
-   Primitives with data-slot ring themselves via focus-visible:border-ring. */
-:focus-visible:not([data-slot]) {
-  outline: 2px solid var(--color-ring);
-  outline-offset: 2px;
+/* One lit edge, laid over the control's own border rather than beside it, so
+   it works the same on controls that have no border. Excluded: containers
+   focused to reach their contents, options, and a group's inner input. */
+:focus-visible:not([tabindex="-1"]):not([role="tabpanel"]):not(
+    [role="option"]
+  ):not([data-slot="input-group-control"]) {
+  outline: 1px solid var(--color-ring);
+  outline-offset: -1px;
 }
 
 ::selection {
@@ -272,6 +288,30 @@
   body {
     @apply bg-background text-foreground text-sm;
     margin: 0;
+  }
+
+  /* Fades in from transparent rather than from the text colour, which is what
+     made it flash white on the way in. */
+  * {
+    outline-color: transparent;
+    transition: outline-color var(--duration-fast) var(--ease-out);
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+}
+
+/* Reduced motion is answered once, for every animation and transition, rather
+   than per site: an animation added tomorrow is covered without being told. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -309,6 +349,8 @@
   }
 }
 
+/* Stopped outright rather than run for the 1ms above, so the resting opacity
+   these dots need as a still indicator applies from the first frame. */
 @media (prefers-reduced-motion: reduce) {
   .nw-working-dot {
     animation: none;

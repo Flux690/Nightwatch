@@ -387,7 +387,7 @@ export function SettingsModal({
     >
       <DialogContent
         showCloseButton={false}
-        className="gap-0 overflow-hidden rounded-2xl p-0 shadow-overlay sm:max-w-page"
+        className="gap-0 overflow-hidden p-0 shadow-overlay sm:max-w-page"
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
@@ -402,19 +402,19 @@ export function SettingsModal({
           className="grid h-[min(640px,85vh)] grid-cols-1 grid-rows-[auto_1fr] gap-0 sm:grid-cols-[210px_minmax(0,1fr)] sm:grid-rows-[minmax(0,1fr)]"
         >
           <div className="flex flex-col border-b border-border bg-surface p-2 max-sm:flex-row max-sm:overflow-x-auto sm:border-b-0 sm:border-r sm:px-2 sm:py-4">
-            <h2 className="mb-3 px-2.5 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground max-sm:hidden">
+            <h2 className="mb-3 px-3 text-sm font-medium uppercase tracking-[0.06em] text-muted-foreground max-sm:hidden">
               Settings
             </h2>
             <TabsList
               variant="line"
               aria-label="Settings sections"
-              className="flex w-full flex-col gap-0.5 rounded-none bg-transparent p-0 max-sm:flex-row max-sm:overflow-x-auto"
+              className="flex w-full flex-col gap-1 rounded-none bg-transparent p-0 max-sm:flex-row max-sm:overflow-x-auto"
             >
               {SECTIONS.map((s) => (
                 <TabsTrigger
                   key={s.id}
                   value={s.id}
-                  className="justify-start rounded-md bg-transparent px-2.5 py-2 text-muted-foreground hover:bg-surface-hover hover:text-foreground data-active:!bg-surface-hover data-active:text-foreground max-sm:w-auto max-sm:whitespace-nowrap after:hidden"
+                  className="justify-start rounded-md bg-transparent px-3 py-2 text-muted-foreground hover:bg-surface-hover hover:text-foreground data-active:!bg-surface-hover data-active:text-foreground max-sm:w-auto max-sm:whitespace-nowrap after:hidden"
                 >
                   {s.label}
                 </TabsTrigger>
@@ -442,7 +442,7 @@ export function SettingsModal({
                   <h3 className="mb-1 text-lg font-semibold tracking-[-0.2px] text-foreground">
                     {active.label}
                   </h3>
-                  <p className="mb-5 text-sm text-muted-foreground">
+                  <p className="mb-6 text-sm text-muted-foreground">
                     {active.description}
                   </p>
 
