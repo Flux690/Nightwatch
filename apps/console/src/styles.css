@@ -9,16 +9,18 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces. The ground doubles into the stage, then every rung steps +14%:
-     near black the eye reads a ratio, not a distance. */
+  /* Surfaces, each with a job. The ground doubles into the stage; the card sits
+     1.44x above it and a pick-from control 1.35x above the card. Near black the
+     eye reads a ratio, not a distance, and these two are measured off Linear. */
   --n-1: oklch(0.14 0.002 270);
   --n-2: oklch(0.182 0.002 270);
-  --n-3: oklch(0.192 0.002 270);
-  --n-4: oklch(0.2 0.002 270);
+  --n-3: oklch(0.2 0.002 270);
+  --n-4: oklch(0.216 0.002 270);
+  --n-5: oklch(0.255 0.002 270);
 
   /* Lines sit above every surface, so an edge can never be darker than what it
      lands on. line-3 carries the chart axis at 3:1 on the stage. */
-  --line-1: oklch(0.258 0.003 270);
+  --line-1: oklch(0.259 0.003 270);
   --line-2: oklch(0.373 0.004 270);
   --line-3: oklch(0.494 0.004 270);
   --line-lit: oklch(0.327 0.004 270);
@@ -49,19 +51,24 @@
 
   --background: var(--n-2);
   --foreground: var(--ink-3);
-  --card: var(--n-3);
+  --card: var(--n-4);
   --card-foreground: var(--ink-3);
-  --popover: var(--n-3);
+  --popover: var(--n-4);
   --popover-foreground: var(--ink-3);
-  --secondary: var(--n-4);
+  --secondary: var(--n-3);
   --secondary-foreground: var(--ink-3);
-  --muted: var(--n-4);
+  --muted: var(--n-3);
   --muted-foreground: var(--ink-2);
-  --surface: var(--n-4);
+  --surface: var(--n-3);
   --ink-subtle: var(--ink-1);
 
+  /* A control you pick from is a raised fill with no border; one you type into
+     takes the card's own fill and is bounded by a line instead. */
+  --control: var(--n-5);
+
   /* A state is a mix against the surface it lands on, never a rung of its own:
-     a fixed rung is right at one depth and wrong at the other three. */
+     a fixed rung is right at one depth and wrong at the other four. */
+  --control-hover: color-mix(in oklab, var(--control), var(--ink-3) 4%);
   --secondary-hover: color-mix(in oklab, var(--secondary), var(--ink-3) 4%);
   --muted-hover: color-mix(in oklab, var(--muted), var(--ink-3) 4%);
   --surface-hover: color-mix(in oklab, var(--surface), var(--ink-3) 4%);
@@ -150,6 +157,8 @@
   --color-surface: var(--surface);
   --color-surface-hover: var(--surface-hover);
   --color-surface-active: var(--surface-active);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
   --color-ink-subtle: var(--ink-subtle);
 
   --color-primary: var(--primary);
@@ -221,6 +230,9 @@
 
   /* Containers */
   --container-page: 920px;
+  /* 640px of content inside the page's own padding: a settings row reads as a
+     line of prose, and three cards across land at Linear's 203px. */
+  --container-form: 688px;
   --container-chat: 760px;
   --container-rail: 440px;
   --container-sidebar: 250px;

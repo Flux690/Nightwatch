@@ -11,8 +11,16 @@ import type {
   ReasoningDescriptor,
 } from "@nightwarden/shared";
 
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+
 import { AuthProvider } from "@/auth/AuthContext";
-import { SettingsModal } from "@/components/layout/SettingsModal";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { toast } from "@/lib/toast";
 
 const OWNER_EMAIL = "admin@example.com";
@@ -159,26 +167,42 @@ function makeFetchMock(
   });
 }
 
-function renderModal(fetchMock: ReturnType<typeof vi.fn>) {
+/* Settings is a route now, so it renders under a router with somewhere to
+   navigate away to - which is what the unsaved-provider guard reacts to. */
+function renderSettings(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal("fetch", fetchMock);
 
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const onClose = vi.fn();
+  const rootRoute = createRootRoute();
+  const settingsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings/$section",
+    component: SettingsPage,
+  });
+  const awayRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/audit",
+    component: () => <div>somewhere else</div>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([settingsRoute, awayRoute]),
+    history: createMemoryHistory({ initialEntries: ["/settings/provider"] }),
+  });
 
   render(
     <TestProviders>
       <QueryClientProvider client={qc}>
         <AuthProvider>
-          <SettingsModal opened onClose={onClose} />
+          <RouterProvider router={router} />
         </AuthProvider>
       </QueryClientProvider>
     </TestProviders>,
   );
 
-  return { fetchMock, onClose, qc };
+  return { fetchMock, qc, router };
 }
 
 function setup(
@@ -186,14 +210,17 @@ function setup(
   modelsOverride?: ModelCatalog | Promise<ModelCatalog>,
 ) {
   const config = { ...CONFIG, ...configOverride };
-  return renderModal(makeFetchMock(config, modelsOverride));
+  return renderSettings(makeFetchMock(config, modelsOverride));
 }
 
 async function openSection(
   user: ReturnType<typeof userEvent.setup>,
   name: RegExp,
 ): Promise<void> {
-  const tablist = screen.getByRole("tablist", { name: /settings sections/i });
+  // The page is a route now, so its tabs arrive a tick after render.
+  const tablist = await screen.findByRole("tablist", {
+    name: /settings sections/i,
+  });
   await user.click(within(tablist).getByRole("tab", { name }));
 }
 
@@ -238,7 +265,7 @@ afterEach(() => {
   toast.clean();
 });
 
-describe("SettingsModal", () => {
+describe("SettingsPage", () => {
   describe("form state", () => {
     it("keeps unsaved edits when the config refetches underneath", async () => {
       const user = userEvent.setup();
@@ -314,7 +341,7 @@ describe("SettingsModal", () => {
           }
           return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
         });
-      renderModal(fetchMock);
+      renderSettings(fetchMock);
 
       await screen.findByLabelText(/^model$/i, { selector: "input" });
       await pickModel(user, "claude-opus-4-8");
@@ -326,40 +353,87 @@ describe("SettingsModal", () => {
     });
   });
 
-  describe("dirty-close guard", () => {
-    it("asks before discarding unsaved changes and stays open on decline", async () => {
+  describe("unsaved provider guard", () => {
+    it("asks before leaving with the block half-edited, and stays put on decline", async () => {
       const user = userEvent.setup();
-      const { onClose } = setup();
+      const { router } = setup();
 
       await screen.findByLabelText(/^model$/i, { selector: "input" });
       await pickModel(user, "claude-opus-4-8");
-      await user.click(screen.getByRole("button", { name: /close settings/i }));
+      // Not awaited: a blocked navigation never settles, and awaiting it here
+      // is what wedged every test after this one.
+      act(() => {
+        void router.navigate({ to: "/audit" });
+      });
 
       const dialog = await screen.findByRole("alertdialog");
-      expect(
-        within(dialog).getByText(/discard unsaved changes/i),
-      ).toBeInTheDocument();
       await user.click(
         within(dialog).getByRole("button", { name: /^cancel$/i }),
       );
 
-      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.queryByText(/somewhere else/i)).not.toBeInTheDocument();
     });
 
-    it("discards edits and closes when the prompt is accepted", async () => {
+    it("leaves when the prompt is accepted", async () => {
       const user = userEvent.setup();
-      const { onClose } = setup();
+      const { router } = setup();
 
       await screen.findByLabelText(/^model$/i, { selector: "input" });
       await pickModel(user, "claude-opus-4-8");
-      await user.click(screen.getByRole("button", { name: /close settings/i }));
+      // Not awaited: a blocked navigation never settles, and awaiting it here
+      // is what wedged every test after this one.
+      act(() => {
+        void router.navigate({ to: "/audit" });
+      });
 
       const dialog = await screen.findByRole("alertdialog");
       await user.click(
-        within(dialog).getByRole("button", { name: /^discard$/i }),
+        within(dialog).getByRole("button", { name: /^leave$/i }),
       );
 
-      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText(/somewhere else/i)).toBeInTheDocument();
+    });
+
+    it("puts the confirmation on one surface, right-aligned, with the destructive fill", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
+      // Not awaited: a blocked navigation never settles, and awaiting it here
+      // is what wedged every test after this one.
+      act(() => {
+        void router.navigate({ to: "/audit" });
+      });
+
+      const dialog = await screen.findByRole("alertdialog");
+      const confirm = within(dialog).getByRole("button", { name: /^leave$/i });
+      expect(confirm).toHaveClass("bg-destructive-fill");
+      expect(confirm).toHaveClass("text-primary-foreground");
+
+      const footer = confirm.parentElement;
+      expect(footer).toHaveClass("sm:justify-end");
+      expect(footer?.className).not.toMatch(/bg-surface|border-t|grid-cols-2/);
+    });
+
+    it("does not ask for an autosaved value, which is already written", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await openSection(user, /limits/i);
+      const retries = await screen.findByLabelText(/^retries$/i);
+      await user.clear(retries);
+      await user.type(retries, "5");
+      await user.tab();
+
+      // Not awaited: a blocked navigation never settles, and awaiting it here
+      // is what wedged every test after this one.
+      act(() => {
+        void router.navigate({ to: "/audit" });
+      });
+
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(await screen.findByText(/somewhere else/i)).toBeInTheDocument();
     });
   });
 
@@ -705,7 +779,9 @@ describe("SettingsModal", () => {
       expect(screen.getByLabelText(/^timeout$/i)).toHaveValue(120);
     });
 
-    it("saves the value converted back to milliseconds", async () => {
+    /* A limit is valid on its own, so leaving the field writes it - but only
+       once it is left. A half-typed 4 must never be saved where 45 was meant. */
+    it("writes on blur, in milliseconds, and not while still being typed", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
       await openSection(user, /limits/i);
@@ -713,7 +789,14 @@ describe("SettingsModal", () => {
       const checkIn = await screen.findByLabelText(/check in after/i);
       await user.clear(checkIn);
       await user.type(checkIn, "45");
-      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      expect(
+        fetchMock.mock.calls.filter(
+          ([, init]) => (init as RequestInit | undefined)?.method === "PATCH",
+        ),
+      ).toHaveLength(0);
+
+      await user.tab();
 
       await waitFor(() => {
         const patch = fetchMock.mock.calls.find(
@@ -815,25 +898,22 @@ describe("SettingsModal", () => {
   });
 
   describe("sandbox network", () => {
-    it("saves the agent network knob and explains what each mode means", async () => {
+    it("saves the sandbox network knob and explains what each mode means", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
       await openSection(user, /sandbox/i);
 
-      expect(await screen.findByLabelText(/agent network/i)).toHaveTextContent(
-        "None (no network)",
-      );
+      expect(
+        await screen.findByLabelText(/sandbox network/i),
+      ).toHaveTextContent("None (no network)");
       expect(screen.getByText(/no network at all/i)).toBeInTheDocument();
 
-      const list = await openSelect(user, /agent network/i);
+      const list = await openSelect(user, /sandbox network/i);
       await user.click(
         within(list).getByRole("option", { name: /open \(unrestricted\)/i }),
       );
-      expect(
-        screen.getByText(/could exfiltrate repository content/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/could exfiltrate/i)).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: /^save$/i }));
       await waitFor(() => {
         const patch = fetchMock.mock.calls.find(
           (call) =>
@@ -853,38 +933,39 @@ describe("SettingsModal", () => {
       const { fetchMock } = setup();
       await openSection(user, /sandbox/i);
 
-      const list = await openSelect(user, /agent network/i);
+      const list = await openSelect(user, /sandbox network/i);
       await user.click(
         within(list).getByRole("option", {
           name: /allowlist \(recommended\)/i,
         }),
       );
       expect(
-        screen.getByText(/enforcing proxy that reaches only the hosts below/i),
+        screen.getByText(/only the hosts listed below/i),
       ).toBeInTheDocument();
 
       const textarea = screen.getByLabelText(/allowed hosts/i);
       await user.clear(textarea);
       await user.type(textarea, "registry.npmjs.org{enter}internal.dev{enter}");
+      await user.tab();
 
-      await user.click(screen.getByRole("button", { name: /^save$/i }));
       await waitFor(() => {
-        const patch = fetchMock.mock.calls.find(
-          (call) =>
-            call[0] === "/api/config" &&
-            (call[1] as RequestInit | undefined)?.method === "PATCH",
-        );
-        expect(patch).toBeDefined();
-        const body = JSON.parse(String((patch![1] as RequestInit).body)) as {
-          sandboxNetwork?: string;
-          sandboxAllowlistHosts?: string[];
-        };
-        expect(body.sandboxNetwork).toBe("allowlist");
+        const hosts = fetchMock.mock.calls
+          .filter(
+            (call) =>
+              call[0] === "/api/config" &&
+              (call[1] as RequestInit | undefined)?.method === "PATCH",
+          )
+          .map(
+            (call) =>
+              (
+                JSON.parse(String((call[1] as RequestInit).body)) as {
+                  sandboxAllowlistHosts?: string[];
+                }
+              ).sandboxAllowlistHosts,
+          )
+          .filter((h) => h !== undefined);
         // The trailing blank line from typing is dropped on save.
-        expect(body.sandboxAllowlistHosts).toEqual([
-          "registry.npmjs.org",
-          "internal.dev",
-        ]);
+        expect(hosts.at(-1)).toEqual(["registry.npmjs.org", "internal.dev"]);
       });
     });
   });

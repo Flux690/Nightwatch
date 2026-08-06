@@ -170,7 +170,9 @@ describe("Shell", () => {
       });
       const integrations = screen.getByRole("link", { name: "Integrations" });
       const audit = screen.getByRole("link", { name: "Audit log" });
-      const settings = screen.getByRole("button", { name: "Settings" });
+      // Settings is a place with an address of its own, so it links like the
+      // four above it; only Log out remains an action.
+      const settings = screen.getByRole("link", { name: "Settings" });
       const logOut = screen.getByRole("button", { name: "Log out" });
 
       expect(precedes(agent, investigations)).toBe(true);

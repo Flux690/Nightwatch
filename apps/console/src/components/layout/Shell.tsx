@@ -37,7 +37,6 @@ import { useSession } from "@/hooks/useSession";
 import { useSessionReport } from "@/hooks/useSessionReport";
 import { cn } from "@/lib/utils";
 import { ICON_NAV } from "@/lib/iconProps";
-import { SettingsModal } from "./SettingsModal.js";
 import { ReportPanel } from "@/components/report/ReportPanel";
 import { SessionView } from "@/pages/SessionView";
 
@@ -96,7 +95,6 @@ function ShellContent({
 }): React.JSX.Element {
   const { toggleSidebar, isOverlay, openOverlay, setOpenOverlay } =
     useSidebar();
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Present on /agent/$id and /investigations/$id; Shell owns the one persistent
@@ -200,10 +198,9 @@ function ShellContent({
               <SidebarMenuButton
                 aria-label="Settings"
                 tooltip="Settings"
-                onClick={() => {
-                  dismissOverlay();
-                  setSettingsOpen(true);
-                }}
+                isActive={isActive("/settings")}
+                onClick={dismissOverlay}
+                render={<Link to="/settings" />}
               >
                 <Settings {...ICON_NAV} />
                 <span className={NAV_LABEL}>Settings</span>
@@ -245,10 +242,13 @@ function ShellContent({
             <PanelLeft className="size-4.5" strokeWidth={1.5} aria-hidden />
           </Button>
         )}
+        {/* The fall belongs to the agent's own surface, where the conversation
+            runs the full stage. Every other page is flat ground. */}
         <div
           className={cn(
             "relative flex min-h-0 flex-1",
             isSessionArea ? "overflow-hidden" : "flex-col overflow-auto",
+            isSessionArea && !investigationView && "lg:stage-fall",
           )}
         >
           {isSessionArea ? (
@@ -329,13 +329,6 @@ function ShellContent({
           <SessionView sessionId={routeSessionId ?? null} />,
           chatNodeRef.current,
         )}
-
-      {/* No route of its own: the URL would have to name a page to return to,
-          and settings is opened from - and closes back to - wherever you are. */}
-      <SettingsModal
-        opened={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
     </>
   );
 }

@@ -180,8 +180,12 @@ function setup(
   return { fetchMock, qc, view };
 }
 
-function rowFor(title: string): HTMLElement {
+function cardFor(title: string): HTMLElement {
   return screen.getByRole("button", { name: title });
+}
+
+function categoryHeadings(): string[] {
+  return screen.getAllByRole("heading").map((h) => h.textContent ?? "");
 }
 
 afterEach(() => {
@@ -190,35 +194,66 @@ afterEach(() => {
 });
 
 describe("IntegrationsPage", () => {
+  describe("categories", () => {
+    it("groups by what the integration gives the agent, and renders no empty category", async () => {
+      setup();
+
+      await screen.findByText("GitHub");
+      expect(categoryHeadings()).toEqual([
+        "Fleet",
+        "Alerting",
+        "Observability",
+        "Code",
+      ]);
+    });
+
+    it("keeps a connected integration in its own category rather than moving it", async () => {
+      setup({ github: CONFIGURED });
+
+      await screen.findByText("GitHub");
+      await waitFor(() => {
+        expect(
+          within(cardFor("GitHub")).getByText("Connected"),
+        ).toBeInTheDocument();
+      });
+      expect(categoryHeadings()).toEqual([
+        "Fleet",
+        "Alerting",
+        "Observability",
+        "Code",
+      ]);
+    });
+  });
+
   describe("GitHub", () => {
-    it("shows Not connected and navigates to the GitHub connect route", async () => {
+    it("says nothing at all when unconnected, and navigates to the connect route", async () => {
       const user = userEvent.setup();
       setup();
 
       await screen.findByText("GitHub");
-      expect(
-        await within(rowFor("GitHub")).findByText("Not connected"),
-      ).toBeInTheDocument();
+      const card = within(cardFor("GitHub"));
+      expect(card.queryByText("Not connected")).not.toBeInTheDocument();
+      expect(card.queryByText("Connected")).not.toBeInTheDocument();
+      expect(card.getByText(/draft pull request/i)).toBeInTheDocument();
 
-      await user.click(rowFor("GitHub"));
+      await user.click(cardFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
     });
 
-    it("shows Connected under Installed once configured", async () => {
+    it("gains a status line once configured", async () => {
       const user = userEvent.setup();
       setup({ github: CONFIGURED });
 
       await screen.findByText("GitHub");
       await waitFor(() => {
         expect(
-          within(rowFor("GitHub")).getByText("Connected"),
+          within(cardFor("GitHub")).getByText("Connected"),
         ).toBeInTheDocument();
       });
-      expect(screen.getByText("Installed")).toBeInTheDocument();
 
-      await user.click(rowFor("GitHub"));
+      await user.click(cardFor("GitHub"));
       expect(
         await screen.findByText(/github connect destination/i),
       ).toBeInTheDocument();
@@ -238,10 +273,8 @@ describe("IntegrationsPage", () => {
       setup({ runners: [] });
 
       await screen.findByText("Kubernetes clusters");
-      await user.click(rowFor("Kubernetes clusters"));
+      await user.click(cardFor("Kubernetes clusters"));
 
-      // An empty fleet lands on the list, which offers the wizard. Landing in
-      // the wizard directly leaves a page with nowhere above it to return to.
       expect(
         await screen.findByText(/kubernetes clusters destination/i),
       ).toBeInTheDocument();
@@ -252,12 +285,11 @@ describe("IntegrationsPage", () => {
       setup({ runners: [CONNECTED_RUNNER] });
 
       expect(await screen.findByText("1 host")).toBeInTheDocument();
-      // The Docker host is not also counted as a cluster.
       expect(
-        await within(rowFor("Kubernetes clusters")).findByText("Not connected"),
-      ).toBeInTheDocument();
+        within(cardFor("Kubernetes clusters")).queryByText(/^\d+ cluster/),
+      ).not.toBeInTheDocument();
 
-      await user.click(rowFor("Docker hosts"));
+      await user.click(cardFor("Docker hosts"));
       expect(
         await screen.findByText(/docker hosts destination/i),
       ).toBeInTheDocument();
@@ -271,10 +303,10 @@ describe("IntegrationsPage", () => {
 
       await screen.findByText("Alertmanager");
       expect(
-        await within(rowFor("Alertmanager")).findByText("Not connected"),
-      ).toBeInTheDocument();
+        within(cardFor("Alertmanager")).queryByText(/receiving|waiting/i),
+      ).not.toBeInTheDocument();
 
-      await user.click(rowFor("Alertmanager"));
+      await user.click(cardFor("Alertmanager"));
       expect(
         await screen.findByText(/alertmanager destination/i),
       ).toBeInTheDocument();
@@ -304,10 +336,10 @@ describe("IntegrationsPage", () => {
       await screen.findByText("Prometheus");
       await waitFor(() => {
         expect(
-          within(rowFor("Prometheus")).getByText("Connected"),
+          within(cardFor("Prometheus")).getByText("Connected"),
         ).toBeInTheDocument();
       });
-      await user.click(rowFor("Prometheus"));
+      await user.click(cardFor("Prometheus"));
       expect(
         await screen.findByText(/prometheus destination/i),
       ).toBeInTheDocument();
@@ -318,7 +350,7 @@ describe("IntegrationsPage", () => {
       await screen.findByText("Loki");
       await waitFor(() => {
         expect(
-          within(rowFor("Loki")).getByText("Connected"),
+          within(cardFor("Loki")).getByText("Connected"),
         ).toBeInTheDocument();
       });
     });

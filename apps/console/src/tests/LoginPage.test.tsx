@@ -97,7 +97,7 @@ describe("LoginPage", () => {
   it("submits /api/login with email and password on valid login", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ ownerExists: true, authenticated: false });
-    await screen.findByText(/^log in$/i, { selector: "legend" });
+    await screen.findByRole("heading", { name: /^log in$/i });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "correcthorsebattery");
@@ -117,6 +117,26 @@ describe("LoginPage", () => {
     });
   });
 
+  /* The reserved-height slot is gone: with nothing wrong there is no live
+     region in the tree at all, and an error is bound to the field that caused
+     it rather than floating above the heading. */
+  it("mounts no error region until there is an error, then binds it to its field", async () => {
+    const user = userEvent.setup();
+    setup({ ownerExists: false });
+    await screen.findByText(/create your account/i);
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    const password = screen.getByLabelText(/^password/i);
+    await user.type(password, "short");
+    await user.tab();
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent(/at least 12 characters/i);
+    expect(password).toHaveAttribute("aria-invalid", "true");
+    expect(password).toHaveAttribute("aria-describedby", error.id);
+  });
+
   it("shows the server's error message inline when login fails", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockImplementation((url: string) => {
@@ -133,7 +153,7 @@ describe("LoginPage", () => {
       return Promise.resolve(jsonResponse(200, { ok: true }));
     });
     setupWithMock(fetchMock);
-    await screen.findByText(/^log in$/i, { selector: "legend" });
+    await screen.findByRole("heading", { name: /^log in$/i });
 
     await user.type(screen.getByLabelText(/^email/i), "admin@example.com");
     await user.type(screen.getByLabelText(/^password/i), "wrongpassword123");

@@ -8,79 +8,91 @@ import type {
 } from "@nightwarden/shared";
 import { Boxes, Server } from "lucide-react";
 
-import { Card } from "@/components/ui/card";
-import { Page } from "@/components/layout/Page";
-import { Spinner } from "@/components/ui/spinner";
+import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
 
-interface IntegrationRow {
+const CATEGORIES = [
+  "Fleet",
+  "Alerting",
+  "Observability",
+  "Code",
+  "Channels",
+  "Trackers",
+] as const;
+
+type Category = (typeof CATEGORIES)[number];
+
+interface IntegrationCard {
   title: string;
+  description: string;
+  category: Category;
   logo: React.ReactNode;
   to: string;
-  isLoading: boolean;
-  // null when the integration is not set up yet.
+  // null renders no status line at all: six repetitions of "Not connected"
+  // crowd out the ones that matter. "muted" is configured but not yet proven.
   status: string | null;
-  // "muted" for in-between states that are configured but not yet proven.
   statusVariant?: "success" | "muted";
 }
 
-function CatalogRow({
-  row,
+function CatalogCard({
+  card,
   onOpen,
 }: {
-  row: IntegrationRow;
+  card: IntegrationCard;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
     <button
       type="button"
-      aria-label={row.title}
+      aria-label={card.title}
       onClick={onOpen}
-      className="flex w-full items-center gap-3 px-4 py-3 text-left not-last:border-b not-last:border-border hover:bg-surface-hover"
+      className="flex h-39 flex-col gap-3 rounded-lg bg-card p-4 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
     >
-      <span className="flex size-8 shrink-0 items-center justify-center">
-        {row.logo}
+      <span className="flex items-center gap-2">
+        {/* The square is white because vendor logos are drawn for light
+            ground; anything monochrome inherits dark ink from it. */}
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-white text-background">
+          {card.logo}
+        </span>
+        <span className="min-w-0 text-sm leading-tight font-medium">
+          {card.title}
+        </span>
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{row.title}</span>
-      {row.isLoading ? (
-        <Spinner className="size-3" />
-      ) : (
+      <span className="line-clamp-3 text-sm text-muted-foreground">
+        {card.description}
+      </span>
+      {card.status !== null && (
         <span
           className={cn(
-            "shrink-0 text-sm",
-            row.status !== null && row.statusVariant !== "muted"
-              ? "text-success"
-              : "text-muted-foreground",
+            "mt-auto text-sm",
+            card.statusVariant === "muted"
+              ? "text-muted-foreground"
+              : "text-success",
           )}
         >
-          {row.status ?? "Not connected"}
+          {card.status}
         </span>
       )}
     </button>
   );
 }
 
-/* The integrations catalog: a full-width page, grouped Installed / All like an
-   extensions view. Rows open the existing config pages. */
 export function IntegrationsPage(): React.JSX.Element {
   const navigate = useNavigate();
 
-  const { data: github, isLoading: githubLoading } =
-    useQuery<GitHubIntegrationStatus>({
-      queryKey: ["github-integration"],
-      queryFn: () =>
-        apiFetch<GitHubIntegrationStatus>("/api/integrations/github"),
-    });
+  const { data: github } = useQuery<GitHubIntegrationStatus>({
+    queryKey: ["github-integration"],
+    queryFn: () =>
+      apiFetch<GitHubIntegrationStatus>("/api/integrations/github"),
+  });
 
-  const { data: runners, isLoading: runnersLoading } = useQuery<RunnerRecord[]>(
-    {
-      queryKey: ["runners"],
-      queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
-    },
-  );
+  const { data: runners } = useQuery<RunnerRecord[]>({
+    queryKey: ["runners"],
+    queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
+  });
 
-  const { data: ingest, isLoading: ingestLoading } = useQuery<{
+  const { data: ingest } = useQuery<{
     configured: boolean;
     lastReceivedAt: string | null;
   }>({
@@ -91,55 +103,66 @@ export function IntegrationsPage(): React.JSX.Element {
       ),
   });
 
-  const { data: prometheus, isLoading: prometheusLoading } =
-    useQuery<PrometheusIntegrationStatus>({
-      queryKey: ["prometheus-integration"],
-      queryFn: () =>
-        apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
-    });
+  const { data: prometheus } = useQuery<PrometheusIntegrationStatus>({
+    queryKey: ["prometheus-integration"],
+    queryFn: () =>
+      apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
+  });
 
-  const { data: loki, isLoading: lokiLoading } =
-    useQuery<LokiIntegrationStatus>({
-      queryKey: ["loki-integration"],
-      queryFn: () => apiFetch<LokiIntegrationStatus>("/api/integrations/loki"),
-    });
+  const { data: loki } = useQuery<LokiIntegrationStatus>({
+    queryKey: ["loki-integration"],
+    queryFn: () => apiFetch<LokiIntegrationStatus>("/api/integrations/loki"),
+  });
 
   const connectedRunners = (runners ?? []).filter((r) => r.hostname !== null);
 
   // Two entries, not one: a Docker host and a Kubernetes cluster install
-  // differently and are addressed differently, so each is its own integration.
-  function platformRow(
+  // differently and are addressed differently. Each routes to its own list
+  // rather than its wizard, which is a step you choose from there.
+  function platformCard(
     platform: "docker" | "kubernetes",
     title: string,
+    description: string,
     noun: string,
-  ): IntegrationRow {
+  ): IntegrationCard {
     const count = connectedRunners.filter(
       (r) => r.platform === platform,
     ).length;
     return {
       title,
+      description,
+      category: "Fleet",
       logo:
         platform === "docker" ? (
-          <Server className="size-5 text-muted-foreground" />
+          <Server className="size-5" />
         ) : (
-          <Boxes className="size-5 text-muted-foreground" />
+          <Boxes className="size-5" />
         ),
-      // Never past the platform's own page: the wizard is a step you choose
-      // from there, not somewhere you land.
       to: `/integrations/${platform}`,
-      isLoading: runnersLoading,
       status: count > 0 ? `${count} ${count === 1 ? noun : `${noun}s`}` : null,
     };
   }
 
-  const rows: IntegrationRow[] = [
-    platformRow("docker", "Docker hosts", "host"),
-    platformRow("kubernetes", "Kubernetes clusters", "cluster"),
+  const cards: IntegrationCard[] = [
+    platformCard(
+      "docker",
+      "Docker hosts",
+      "Read container state, logs and stats, and restart a service on approval.",
+      "host",
+    ),
+    platformCard(
+      "kubernetes",
+      "Kubernetes clusters",
+      "Read pod state, events and logs, and roll a deployment on approval.",
+      "cluster",
+    ),
     {
       title: "Alertmanager",
+      description:
+        "Forward the alerts that open an investigation the moment one fires.",
+      category: "Alerting",
       logo: <img src="/logos/alertmanager.svg" alt="" className="size-5" />,
       to: "/integrations/alertmanager",
-      isLoading: ingestLoading,
       status:
         ingest?.configured !== true
           ? null
@@ -150,53 +173,55 @@ export function IntegrationsPage(): React.JSX.Element {
     },
     {
       title: "Prometheus",
+      description:
+        "Query your metrics to confirm a symptom and chart what backs it.",
+      category: "Observability",
       logo: <img src="/logos/prometheus.svg" alt="" className="size-5" />,
       to: "/integrations/prometheus",
-      isLoading: prometheusLoading,
       status: prometheus?.configured === true ? "Connected" : null,
     },
     {
       title: "Loki",
+      description:
+        "Search your logs for the errors behind an alert and quote them as evidence.",
+      category: "Observability",
       logo: <img src="/logos/loki.svg" alt="" className="size-5" />,
       to: "/integrations/loki",
-      isLoading: lokiLoading,
       status: loki?.configured === true ? "Connected" : null,
     },
     {
       title: "GitHub",
+      description:
+        "Read the code behind a failure, verify a fix, and open a draft pull request.",
+      category: "Code",
       logo: <img src="/logos/github.svg" alt="" className="size-5" />,
       to: "/integrations/github",
-      isLoading: githubLoading,
       status: github?.configured === true ? "Connected" : null,
     },
   ];
 
-  const installed = rows.filter((r) => r.status !== null);
-  const available = rows.filter((r) => r.status === null);
-
-  function group(label: string, items: IntegrationRow[]): React.JSX.Element {
-    return (
-      <section className="mb-6">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">
-          {label}
-        </h2>
-        <Card className="gap-0 py-0">
-          {items.map((row) => (
-            <CatalogRow
-              key={row.title}
-              row={row}
-              onOpen={() => void navigate({ to: row.to })}
-            />
-          ))}
-        </Card>
-      </section>
-    );
-  }
-
   return (
-    <Page crumbs={[{ label: "Integrations" }]}>
-      {installed.length > 0 && group("Installed", installed)}
-      {available.length > 0 && group("All integrations", available)}
+    <Page crumbs={[{ label: "Integrations" }]} measure="form">
+      <div className="flex flex-col gap-8">
+        {CATEGORIES.map((category) => {
+          const inCategory = cards.filter((c) => c.category === category);
+          if (inCategory.length === 0) return null;
+          return (
+            <section key={category} className="flex flex-col gap-3">
+              <h2 className={SECTION_HEADING}>{category}</h2>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+                {inCategory.map((card) => (
+                  <CatalogCard
+                    key={card.title}
+                    card={card}
+                    onOpen={() => void navigate({ to: card.to })}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </Page>
   );
 }

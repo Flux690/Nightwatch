@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
 export const TABLE_HEAD =
   "[&_thead_th]:text-sm [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
 
+export const SECTION_HEADING =
+  "font-mono text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground";
+
 /* Generic loading placeholder for data tables. Renders `count` rows of `columns` skeleton cells. */
 export function SkeletonRows({
   count,
@@ -54,10 +57,14 @@ export interface Crumb {
 export function Page({
   crumbs,
   controls,
+  measure = "page",
   children,
 }: {
   crumbs: Crumb[];
   controls?: React.ReactNode;
+  /* Tables and lists take the page's full measure; forms and card grids read
+     better narrow, which is also what puts three cards across a row. */
+  measure?: "page" | "form";
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -106,7 +113,12 @@ export function Page({
           </div>
         )}
       </header>
-      <div className="mx-auto flex w-full max-w-page flex-1 flex-col p-6 max-lg:px-4">
+      <div
+        className={cn(
+          "mx-auto flex w-full flex-1 flex-col p-6 max-lg:px-4",
+          measure === "form" ? "max-w-form" : "max-w-page",
+        )}
+      >
         {children}
       </div>
     </div>

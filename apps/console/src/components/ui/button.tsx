@@ -29,7 +29,9 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary-hover aria-expanded:bg-secondary",
         ghost: "hover:bg-muted aria-expanded:bg-muted",
         destructive:
-          "bg-destructive-tint text-destructive hover:bg-destructive-wash",
+          "bg-destructive-fill text-primary-foreground hover:bg-destructive-fill-hover",
+        "destructive-ghost":
+          "text-destructive hover:bg-destructive-tint hover:text-destructive",
         /* Underlined at rest, not on hover: a link must read as one without
            relying on hue. Cobalt is reserved for hover, per the colour rule. */
         link: "h-auto gap-1 p-0 text-ink-subtle underline decoration-border underline-offset-2 hover:text-primary-ink hover:decoration-primary-ink",

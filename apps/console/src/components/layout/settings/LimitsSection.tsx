@@ -1,85 +1,60 @@
 import type { AgentConfig } from "@nightwarden/shared";
 
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { DurationField } from "./DurationField";
-import { FIELD_HINT, FIELD_WIDTH, GROUP_HEADING, NO_SPINNERS } from "./layout";
+import { SettingsGroup } from "./SettingsRow";
+import { DurationRow, NumberRow } from "./NumberRow";
 
 interface LimitsSectionProps {
-  form: AgentConfig;
-  setField: <K extends keyof AgentConfig>(
-    key: K,
-    value: AgentConfig[K],
-  ) => void;
+  config: AgentConfig;
+  save: (patch: Partial<AgentConfig>) => void;
 }
 
-// Grouped by what each number applies to, outermost first. The five values used
-// to sit in one grid at the same visual level while operating at three
-// different scopes, which is what made them unreadable.
+// Grouped by what each number applies to, outermost first: the five values
+// operate at three different scopes, which is what made one flat list unreadable.
 export function LimitsSection({
-  form,
-  setField,
+  config,
+  save,
 }: LimitsSectionProps): React.JSX.Element {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h4 className={GROUP_HEADING}>Investigation</h4>
-        <DurationField
+    <div className="flex flex-col gap-8">
+      <SettingsGroup title="Investigation">
+        <DurationRow
           id="settings-check-in"
-          label="Check in after"
+          title="Check in after"
+          description="The agent finishes its step, then asks whether to continue."
           unit="min"
-          hint="The agent finishes the step it is on, then asks whether to continue. Time spent waiting for an approval does not count."
-          valueMs={form.checkInAfterMs}
-          onChangeMs={(ms) => setField("checkInAfterMs", ms)}
+          valueMs={config.checkInAfterMs}
+          onCommitMs={(ms) => save({ checkInAfterMs: ms })}
         />
-      </section>
+      </SettingsGroup>
 
-      <section className="flex flex-col gap-3">
-        <h4 className={GROUP_HEADING}>Model request</h4>
-        <DurationField
+      <SettingsGroup title="Model request">
+        <DurationRow
           id="settings-request-timeout"
-          label="Timeout"
+          title="Timeout"
+          description="How long one request to the model may take."
           unit="sec"
-          valueMs={form.requestTimeoutMs}
-          onChangeMs={(ms) => setField("requestTimeoutMs", ms)}
+          valueMs={config.requestTimeoutMs}
+          onCommitMs={(ms) => save({ requestTimeoutMs: ms })}
         />
-        <div className="flex flex-col gap-1">
-          <Field>
-            <FieldLabel htmlFor="settings-max-retries">Retries</FieldLabel>
-            {/* Field stretches its own children to full width, so the box that
-                holds the digits is the child and the width lives inside it. */}
-            <div>
-              <Input
-                id="settings-max-retries"
-                type="number"
-                min={0}
-                className={`${FIELD_WIDTH.number} ${NO_SPINNERS}`}
-                value={form.maxRetries}
-                onChange={(e) => {
-                  const next = Number(e.currentTarget.value);
-                  setField("maxRetries", Number.isFinite(next) ? next : 0);
-                }}
-              />
-            </div>
-          </Field>
-          <p className={FIELD_HINT}>
-            How many times a failed request is retried, with a growing wait
-            between attempts, before the run fails.
-          </p>
-        </div>
-      </section>
+        <NumberRow
+          id="settings-max-retries"
+          title="Retries"
+          description="How many times a failed request is retried before the run fails."
+          value={config.maxRetries}
+          onCommit={(n) => save({ maxRetries: n })}
+        />
+      </SettingsGroup>
 
-      <section className="flex flex-col gap-3">
-        <h4 className={GROUP_HEADING}>Tool call</h4>
-        <DurationField
+      <SettingsGroup title="Tool call">
+        <DurationRow
           id="settings-tool-ceiling"
-          label="Maximum"
+          title="Maximum"
+          description="No single tool call may run longer than this."
           unit="min"
-          hint="No single tool call may run longer than this. Individual tools set their own lower limits, from 30 seconds for a metrics query up to 10 minutes for installing dependencies."
-          valueMs={form.toolCallCeilingMs}
-          onChangeMs={(ms) => setField("toolCallCeilingMs", ms)}
+          valueMs={config.toolCallCeilingMs}
+          onCommitMs={(ms) => save({ toolCallCeilingMs: ms })}
         />
-      </section>
+      </SettingsGroup>
     </div>
   );
 }

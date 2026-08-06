@@ -18,6 +18,7 @@ import { RunnerListPage } from "./pages/RunnerListPage.js";
 import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 import { PrometheusPage } from "./pages/PrometheusPage.js";
 import { LokiPage } from "./pages/LokiPage.js";
+import { SettingsPage } from "./pages/SettingsPage.js";
 
 // Above sign-in, not just above the console: finishing a sign-up on a phone
 // only to meet this message would be worse than meeting it first.
@@ -156,6 +157,23 @@ const prometheusRoute = createRoute({
   component: PrometheusPage,
 });
 
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings",
+  beforeLoad: () => {
+    throw redirect({
+      to: "/settings/$section",
+      params: { section: "provider" },
+    });
+  },
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/$section",
+  component: SettingsPage,
+});
+
 const lokiRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/loki",
@@ -180,6 +198,8 @@ export const routeTree = rootRoute.addChildren([
     alertmanagerRoute,
     prometheusRoute,
     lokiRoute,
+    settingsIndexRoute,
+    settingsRoute,
   ]),
 ]);
 

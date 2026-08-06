@@ -134,21 +134,30 @@ function channel(name: string): number {
 }
 
 describe("the scale", () => {
-  it("doubles the ground into the stage, then steps each rung about +14%", () => {
+  /* The ladder only ever rises. Even spacing is not the rule - Linear's own
+     ladder is not evenly spaced - so each relationship that carries meaning
+     states the ratio it was measured at instead. */
+  it("rises monotonically, doubling the ground into the stage", () => {
     expect(channel("n-2") / channel("n-1")).toBeGreaterThanOrEqual(1.9);
     for (const [below, above] of [
       ["n-2", "n-3"],
       ["n-3", "n-4"],
+      ["n-4", "n-5"],
     ] as const) {
-      const ratio = channel(above) / channel(below);
-      expect(ratio, `${below} to ${above}`).toBeGreaterThan(1.08);
-      expect(ratio, `${below} to ${above}`).toBeLessThan(1.22);
+      expect(channel(above), `${below} to ${above}`).toBeGreaterThan(
+        channel(below),
+      );
     }
+  });
+
+  it("holds the card and the control at the ratios they were measured at", () => {
+    expect(channel("card") / channel("background")).toBeCloseTo(1.44, 1);
+    expect(channel("control") / channel("card")).toBeCloseTo(1.35, 1);
   });
 
   it("keeps every line above every surface, so an edge cannot invert", () => {
     for (const line of ["line-1", "line-2", "line-3"])
-      for (const n of ["n-1", "n-2", "n-3", "n-4"])
+      for (const n of ["n-1", "n-2", "n-3", "n-4", "n-5"])
         expect(channel(line), `${line} over ${n}`).toBeGreaterThan(channel(n));
   });
 
