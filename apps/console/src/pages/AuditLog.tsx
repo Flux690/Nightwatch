@@ -5,8 +5,6 @@ import { ExternalLink, ScrollText } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Page,
-  PageHeader,
-  PageTitle,
   PageTableWrap,
   TABLE_HEAD,
   SkeletonRows,
@@ -73,11 +71,7 @@ export function AuditLogPage(): React.JSX.Element {
   const isEmpty = !isLoading && !isError && actions?.length === 0;
 
   return (
-    <Page>
-      <PageHeader>
-        <PageTitle>Audit log</PageTitle>
-      </PageHeader>
-
+    <Page crumbs={[{ label: "Audit log" }]}>
       {isLoading && (
         <PageTableWrap role="status" aria-label="Loading audit log">
           <Table className={TABLE_HEAD}>
@@ -184,7 +178,7 @@ export function AuditLogPage(): React.JSX.Element {
                       {/* Audit rows outlive session deletion; the link simply
                           degrades when the transcript is gone. */}
                       <Link
-                        to="/sessions/$id"
+                        to="/investigations/$id"
                         params={{ id: action.sessionId }}
                         aria-label="Open originating investigation"
                         className="inline-flex text-muted-foreground hover:text-foreground"

@@ -1,8 +1,15 @@
+import { Fragment } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
 
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Card } from "@/components/ui/card";
-import { ICON_INLINE } from "@/lib/iconProps";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -34,69 +41,75 @@ export function SkeletonRows({
   );
 }
 
-/* Page shell for data screens (Fleet, Audit log, Unresolved alerts, Add server). Single max-width (--container-page), centered, column flow. */
+/* One entry per level, root first. The last is where you are and never links;
+   a lone entry is the page title, so the chevron appears only on descent. */
+export interface Crumb {
+  label: string;
+  to?: string;
+}
+
+/* The one page shell: a bar carrying the breadcrumb, a divider, and a controls
+   row on the pages that have controls. The bar spans the stage; the body keeps
+   the reading measure. */
 export function Page({
-  className,
-  ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
-  return (
-    <div
-      className={cn(
-        "mx-auto flex min-h-full w-full max-w-page flex-col p-6 max-md:p-3 max-lg:px-4",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-/* Header row: title left, actions right. */
-export function PageHeader({
-  className,
-  ...props
-}: React.ComponentProps<"header">): React.JSX.Element {
-  return (
-    <header
-      className={cn(
-        "mb-4 flex shrink-0 items-center justify-between",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-export function PageTitle({
-  className,
-  ...props
-}: React.ComponentProps<"h1">): React.JSX.Element {
-  return (
-    <h1
-      className={cn(
-        "m-0 text-2xl font-semibold tracking-[-0.3px] text-foreground",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-/* The way back up. The catalog is a page, not a rail that stays on screen. */
-export function BackLink({
-  to,
+  crumbs,
+  controls,
   children,
 }: {
-  to: string;
-  children: React.ReactNode;
+  crumbs: Crumb[];
+  controls?: React.ReactNode;
+  children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Link
-      to={to}
-      className="mb-2 inline-flex w-fit items-center gap-2 self-start rounded-sm text-sm text-muted-foreground no-underline hover:text-foreground"
-    >
-      <ArrowLeft {...ICON_INLINE} />
-      {children}
-    </Link>
+    <div className="flex min-h-full w-full flex-col">
+      {/* Padding rides the rows, not the bar, so the divider runs the full
+          width of the stage. The pad below lg seats the sidebar toggle. */}
+      <header className="shrink-0">
+        <div className="flex h-12 items-center border-b border-border px-6 max-lg:px-4 max-lg:pl-12">
+          <Breadcrumb>
+            <BreadcrumbList className="text-base font-medium">
+              {crumbs.map((crumb, i) => (
+                <Fragment key={crumb.label}>
+                  {i > 0 && <BreadcrumbSeparator />}
+                  <BreadcrumbItem className="min-w-0">
+                    {/* font-medium beats the page part's own font-normal. */}
+                    {crumb.to === undefined ? (
+                      <BreadcrumbPage className="truncate font-medium">
+                        {crumb.label}
+                      </BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink
+                        className="truncate no-underline"
+                        /* Exact, or an ancestor crumb claims aria-current
+                           alongside the entry that really is the page. */
+                        render={
+                          <Link to={crumb.to} activeOptions={{ exact: true }} />
+                        }
+                      >
+                        {crumb.label}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </Fragment>
+              ))}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+        {/* Grouped, not a toolbar: the row also carries readouts. */}
+        {controls !== undefined && (
+          <div
+            role="group"
+            aria-label="Page controls"
+            className="flex min-h-12 items-center justify-between gap-3 px-6 max-lg:px-4"
+          >
+            {controls}
+          </div>
+        )}
+      </header>
+      <div className="mx-auto flex w-full max-w-page flex-1 flex-col p-6 max-lg:px-4">
+        {children}
+      </div>
+    </div>
   );
 }
 

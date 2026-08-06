@@ -47,7 +47,7 @@ function renderAuditRoute(qc: QueryClient, initialPath: string) {
   });
   const sessionRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/sessions/$id",
+    path: "/investigations/$id",
     component: () => <div>investigation destination</div>,
   });
   const router = createRouter({
@@ -107,7 +107,7 @@ describe("AuditLogPage", () => {
       const link = await screen.findByRole("link", {
         name: /open originating investigation/i,
       });
-      expect(link).toHaveAttribute("href", "/sessions/sess-42");
+      expect(link).toHaveAttribute("href", "/investigations/sess-42");
     });
   });
 

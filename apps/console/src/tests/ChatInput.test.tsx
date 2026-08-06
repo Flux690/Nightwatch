@@ -19,7 +19,7 @@ function setup(
     sessionId: string | null;
     isRunning: boolean;
   },
-  routePath = "/sessions/new",
+  routePath = "/agent",
 ) {
   vi.stubGlobal(
     "fetch",
@@ -36,14 +36,14 @@ function setup(
   const root = createRootRoute({ component: Outlet });
   const newRoute = createRoute({
     getParentRoute: () => root,
-    path: "/sessions/new",
+    path: "/agent",
     component: () => (
       <ChatInput sessionId={props.sessionId} isRunning={props.isRunning} />
     ),
   });
   const sessionRoute = createRoute({
     getParentRoute: () => root,
-    path: "/sessions/$id",
+    path: "/agent/$id",
     component: () => <div>session page</div>,
   });
 
@@ -137,7 +137,7 @@ describe("ChatInput", () => {
       const user = userEvent.setup();
       const { fetchMock } = setup(
         { sessionId: "s1", isRunning: false },
-        "/sessions/new",
+        "/agent",
       );
 
       const textarea = await screen.findByRole("textbox");
@@ -155,7 +155,7 @@ describe("ChatInput", () => {
 
     // There is no mode to choose: the agent opens an investigation itself.
     it("offers no mode picker at all", async () => {
-      setup({ sessionId: "s1", isRunning: false }, "/sessions/new");
+      setup({ sessionId: "s1", isRunning: false }, "/agent");
 
       await screen.findByRole("textbox");
       expect(

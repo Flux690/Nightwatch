@@ -24,12 +24,7 @@ import { FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
-import {
-  BackLink,
-  Page,
-  PageHeader,
-  PageTitle,
-} from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import { expiryDaysFrom } from "@/hooks/useGitHubExpiryDays";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
@@ -392,12 +387,12 @@ export function GitHubConnectPage(): React.JSX.Element {
   }
 
   return (
-    <Page>
-      <BackLink to="/integrations">Integrations</BackLink>
-      <PageHeader>
-        <PageTitle>Connect GitHub</PageTitle>
-      </PageHeader>
-
+    <Page
+      crumbs={[
+        { label: "Integrations", to: "/integrations" },
+        { label: "Connect GitHub" },
+      ]}
+    >
       <div className="flex flex-col gap-6">
         <p className="max-w-3xl text-sm text-muted-foreground">
           Let investigations read the bound repository, verify a fix, and

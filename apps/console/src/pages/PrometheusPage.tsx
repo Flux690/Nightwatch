@@ -9,12 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  BackLink,
-  Page,
-  PageHeader,
-  PageTitle,
-} from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
@@ -77,12 +72,12 @@ export function PrometheusPage(): React.JSX.Element {
   });
 
   return (
-    <Page>
-      <BackLink to="/integrations">Integrations</BackLink>
-      <PageHeader>
-        <PageTitle>Prometheus</PageTitle>
-      </PageHeader>
-
+    <Page
+      crumbs={[
+        { label: "Integrations", to: "/integrations" },
+        { label: "Prometheus" },
+      ]}
+    >
       <div className="flex flex-col gap-8">
         <p className="max-w-3xl text-sm text-muted-foreground">
           Connect the Prometheus you already run so investigations can query

@@ -1,30 +1,16 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestProviders } from "./renderWithProviders.js";
 import {
+  RouterProvider,
   createMemoryHistory,
-  createRootRoute,
-  createRoute,
   createRouter,
-  Outlet,
 } from "@tanstack/react-router";
-import { RouterProvider } from "@tanstack/react-router";
 
-import { AuthProvider } from "@/auth/AuthContext";
-import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
-import { Shell } from "@/components/layout/Shell";
-import { SessionView } from "@/pages/SessionView";
+import { TestProviders } from "./renderWithProviders.js";
+import { routeTree } from "@/router";
 import { MockEventSource } from "./mockEventSource.js";
-
-function ShellLayout(): React.JSX.Element {
-  return (
-    <Shell>
-      <Outlet />
-    </Shell>
-  );
-}
 
 const OWNER_EMAIL = "admin@example.com";
 
@@ -39,39 +25,15 @@ const SESSION_1 = {
   awaitingHumanInput: false,
 };
 
-function setup(pendingCount = 0) {
+// The real route tree, not a copy of it: the redirect, the two session route
+// families and the pages they land on are exactly what ships.
+function setup({
+  path = "/agent",
+  width = 1280,
+}: { path?: string; width?: number } = {}) {
   MockEventSource.reset();
-
   vi.stubGlobal("EventSource", MockEventSource);
-
-  // Waiting sessions are ordinary session rows carrying the flag - the badge counts
-  // the list, so there is no second endpoint that can disagree with it.
-  const makePending = (n: number) =>
-    Array.from({ length: n }, (_, i) => ({
-      sessionId: `s-${i}`,
-      title: `Waiting session ${i}`,
-      createdAt: new Date().toISOString(),
-      lastActivityAt: new Date().toISOString(),
-      investigation: true,
-      severity: null,
-      target: null,
-      status: "action_required",
-      awaitingHumanInput: true,
-    }));
-
-  // Mutable so a test can change the server-side count before broadcasting a WS
-  // event; the count derives from this list (refetched on the event), not a delta.
-  let pendingApprovals = makePending(pendingCount);
-  const setPendingCount = (n: number): void => {
-    pendingApprovals = makePending(n);
-  };
-
-  // The report is a finding the agent may not have recorded yet; null = 404.
-  // It no longer decides the layout, so a test can set either independently.
-  let sessionReport: Record<string, unknown> | null = null;
-  const setSessionReport = (r: Record<string, unknown> | null): void => {
-    sessionReport = r;
-  };
+  vi.stubGlobal("innerWidth", width);
 
   // What the session says it is. This is what the layout keys on.
   let investigation = false;
@@ -98,8 +60,19 @@ function setup(pendingCount = 0) {
         json: () => Promise.resolve({ sessionId: "new-s1" }),
       });
     }
-    if (url.includes("/runners")) {
+    if (url.includes("/runners") || url.includes("/remediation-actions")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+    }
+    // Configured, so the page has a status line to put in its controls row.
+    if (url.includes("/integrations/alertmanager")) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            configured: true,
+            lastReceivedAt: new Date().toISOString(),
+          }),
+      });
     }
     if (url.includes("/integrations/")) {
       return Promise.resolve({
@@ -109,22 +82,11 @@ function setup(pendingCount = 0) {
       });
     }
     if (url.includes("/report")) {
-      return sessionReport === null
-        ? Promise.resolve({
-            ok: false,
-            status: 404,
-            json: () => Promise.resolve({ error: "no report for session" }),
-          })
-        : Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                report: sessionReport,
-                actions: [],
-                evidence: [],
-                conviction: {},
-              }),
-          });
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: () => Promise.resolve({ error: "no report for session" }),
+      });
     }
     if (/\/sessions\/[^?]+/.test(url)) {
       return Promise.resolve({
@@ -143,11 +105,7 @@ function setup(pendingCount = 0) {
     if (url.includes("/sessions")) {
       return Promise.resolve({
         ok: true,
-        json: () =>
-          Promise.resolve({
-            rows: [SESSION_1, ...pendingApprovals],
-            nextOffset: null,
-          }),
+        json: () => Promise.resolve({ rows: [SESSION_1], nextOffset: null }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -158,61 +116,20 @@ function setup(pendingCount = 0) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
 
-  const rootRoute = createRootRoute({ component: ShellLayout });
-  const indexRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/",
-    component: () => <SessionView />,
-  });
-  const sessionIdRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/sessions/$id",
-    component: function SessionRoute() {
-      const { id } = sessionIdRoute.useParams();
-      return <SessionView sessionId={id} />;
-    },
-  });
-  const integrationsRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/integrations",
-    component: () => <div>Integrations Page</div>,
-  });
-  const settingsRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/settings",
-    component: () => <SessionView />,
-  });
-
   const router = createRouter({
-    routeTree: rootRoute.addChildren([
-      indexRoute,
-      sessionIdRoute,
-      integrationsRoute,
-      settingsRoute,
-    ]),
-    history: createMemoryHistory({ initialEntries: ["/"] }),
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [path] }),
   });
 
   render(
     <TestProviders>
       <QueryClientProvider client={qc}>
-        <AuthProvider>
-          <ConsoleEventsProvider>
-            <RouterProvider router={router} />
-          </ConsoleEventsProvider>
-        </AuthProvider>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </TestProviders>,
   );
 
-  return {
-    router,
-    qc,
-    fetchMock,
-    setPendingCount,
-    setSessionReport,
-    setInvestigation,
-  };
+  return { router, qc, fetchMock, setInvestigation };
 }
 
 afterEach(() => {
@@ -221,11 +138,19 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// jsdom applies no CSS, so the sessions zone leaves the DOM when the sidebar
-// collapses rather than being hidden by a class - which is also what makes
-// "collapsed shows destinations only" a fact a test can check.
-function sessionListPresent(): boolean {
-  return screen.queryByText("CPU spike on web-01") !== null;
+// jsdom applies no CSS, so the expanded/rail distinction is only legible as the
+// state the sidebar publishes for the CSS to key on. At the overlay tier the
+// element is absent entirely, which is the point of that tier.
+function sidebarState(): string | null {
+  const el = document.querySelector('[data-slot="sidebar"]');
+  return el === null ? null : el.getAttribute("data-state");
+}
+
+// The bar says where you are through the breadcrumb's current entry. Scoped to
+// the nav, because an active sidebar link carries aria-current too.
+async function currentCrumb(): Promise<HTMLElement> {
+  const nav = await screen.findByRole("navigation", { name: "breadcrumb" });
+  return within(nav).getByRole("link", { current: "page" });
 }
 
 function precedes(a: HTMLElement, b: HTMLElement): boolean {
@@ -235,126 +160,224 @@ function precedes(a: HTMLElement, b: HTMLElement): boolean {
 }
 
 describe("Shell", () => {
-  describe("the one sidebar", () => {
-    it("renders three zones in order: destinations, sessions, account", async () => {
+  describe("the sidebar holds only navigation", () => {
+    it("renders the four destinations, then Settings and Log out", async () => {
       setup();
 
-      const newSession = await screen.findByRole("button", {
-        name: /new session/i,
+      const agent = await screen.findByRole("link", { name: "Agent" });
+      const investigations = screen.getByRole("link", {
+        name: "Investigations",
       });
-      const sessionsHeading = screen.getByText("Sessions");
-      const settings = screen.getByRole("button", { name: /settings/i });
-      const logOut = screen.getByRole("button", { name: /log out/i });
-      const integrations = screen.getByRole("link", { name: /integrations/i });
-      const audit = screen.getByRole("link", { name: /audit log/i });
+      const integrations = screen.getByRole("link", { name: "Integrations" });
+      const audit = screen.getByRole("link", { name: "Audit log" });
+      const settings = screen.getByRole("button", { name: "Settings" });
+      const logOut = screen.getByRole("button", { name: "Log out" });
 
-      expect(precedes(newSession, integrations)).toBe(true);
-      expect(precedes(audit, sessionsHeading)).toBe(true);
-      expect(precedes(sessionsHeading, settings)).toBe(true);
+      expect(precedes(agent, investigations)).toBe(true);
+      expect(precedes(investigations, integrations)).toBe(true);
+      expect(precedes(integrations, audit)).toBe(true);
+      expect(precedes(audit, settings)).toBe(true);
       expect(precedes(settings, logOut)).toBe(true);
     });
 
-    it("shows every destination with a visible label", async () => {
+    it("carries no session list and no new-session action", async () => {
       setup();
 
-      for (const label of ["New session", "Integrations", "Audit log"]) {
-        expect(await screen.findByText(label)).toBeInTheDocument();
-      }
-    });
-
-    it("collapsing leaves the destinations reachable and drops the sessions", async () => {
-      const user = userEvent.setup();
-      setup();
-
-      await waitFor(() => expect(sessionListPresent()).toBe(true));
-
-      await user.click(screen.getByRole("button", { name: /toggle sidebar/i }));
-
-      await waitFor(() => expect(sessionListPresent()).toBe(false));
+      await screen.findByRole("link", { name: "Agent" });
+      expect(
+        screen.queryByRole("button", { name: /new session/i }),
+      ).not.toBeInTheDocument();
       expect(screen.queryByText("Sessions")).not.toBeInTheDocument();
-      // Every destination is still there, and still named for assistive tech.
-      expect(
-        screen.getByRole("link", { name: /integrations/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: /audit log/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /new session/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: /log out/i }),
-      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.queryByText("CPU spike on web-01"),
+        ).not.toBeInTheDocument();
+      });
     });
 
-    it("expanding again brings the sessions back", async () => {
+    it("Log out posts /api/logout", async () => {
       const user = userEvent.setup();
-      setup();
+      const { fetchMock } = setup();
 
-      await waitFor(() => expect(sessionListPresent()).toBe(true));
-      const toggle = screen.getByRole("button", { name: /toggle sidebar/i });
+      await user.click(await screen.findByRole("button", { name: "Log out" }));
 
-      await user.click(toggle);
-      await waitFor(() => expect(sessionListPresent()).toBe(false));
-      await user.click(toggle);
-
-      await waitFor(() => expect(sessionListPresent()).toBe(true));
-    });
-
-    it("New session button navigates to home", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await waitFor(() => screen.getByRole("link", { name: /integrations/i }));
-      await user.click(screen.getByRole("link", { name: /integrations/i }));
-      await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/integrations"),
-      );
-
-      await user.click(screen.getByRole("button", { name: /new session/i }));
-
-      await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/logout",
+          expect.objectContaining({ method: "POST" }),
+        );
+      });
     });
   });
 
-  describe("session creation flow", () => {
-    it("submitting from home navigates to /sessions/:id", async () => {
+  describe("routes", () => {
+    it("opens on Investigations rather than a chat greeting", async () => {
+      const { router } = setup({ path: "/" });
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/investigations");
+      });
+      expect(await currentCrumb()).toHaveTextContent("Investigations");
+    });
+  });
+
+  describe("the top bar", () => {
+    it("gives a page with no controls a lone crumb and no controls row", async () => {
+      setup({ path: "/audit" });
+
+      expect(await currentCrumb()).toHaveTextContent("Audit log");
+      // One entry and no ancestor above it, so no chevron is drawn.
+      expect(
+        within(
+          screen.getByRole("navigation", { name: "breadcrumb" }),
+        ).getAllByRole("link"),
+      ).toHaveLength(1);
+      expect(
+        screen.queryByRole("group", { name: /page controls/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("gives a record its breadcrumb, with the collection linked", async () => {
+      setup({ path: "/integrations/alertmanager" });
+
+      expect(await currentCrumb()).toHaveTextContent("Alertmanager");
+      // The breadcrumb absorbed the standalone back link: the way up is the
+      // first crumb, not a separate control above the title.
+      const crumb = within(
+        screen.getByRole("navigation", { name: "breadcrumb" }),
+      ).getByRole("link", { name: "Integrations" });
+      expect(crumb).toHaveAttribute("href", "/integrations");
+    });
+
+    it("renders the controls row on a page that has controls", async () => {
+      setup({ path: "/integrations/alertmanager" });
+
+      const controls = await screen.findByRole("group", {
+        name: /page controls/i,
+      });
+      expect(controls).toHaveTextContent(/receiving/i);
+    });
+  });
+
+  describe("the three width tiers", () => {
+    it("at 1024 and up toggles between expanded and the icon rail, keeping the toggle in the sidebar", async () => {
+      const user = userEvent.setup();
+      setup({ width: 1280 });
+
+      await waitFor(() => expect(sidebarState()).toBe("expanded"));
+      const toggle = screen.getByRole("button", { name: /toggle sidebar/i });
+
+      await user.click(toggle);
+      await waitFor(() => expect(sidebarState()).toBe("collapsed"));
+
+      // The rail keeps the control that expands it again, and every
+      // destination stays reachable by name.
+      expect(
+        screen.getByRole("button", { name: /toggle sidebar/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Investigations" }),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /toggle sidebar/i }));
+      await waitFor(() => expect(sidebarState()).toBe("expanded"));
+    });
+
+    it("between 768 and 1023 hides the sidebar entirely and moves its toggle into the stage", async () => {
+      const user = userEvent.setup();
+      setup({ width: 900 });
+
+      // Nothing of the sidebar is on screen - not even a rail - so the control
+      // that reopens it cannot be inside it.
+      await waitFor(() => expect(sidebarState()).toBeNull());
+      expect(
+        screen.queryByRole("link", { name: "Investigations" }),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /toggle sidebar/i }));
+
+      expect(
+        await screen.findByRole("link", { name: "Investigations" }),
+      ).toBeInTheDocument();
+    });
+
+    it("below 768 says the console is built for desktop", async () => {
+      setup({ width: 500 });
+
+      expect(
+        await screen.findByRole("heading", { name: /built for desktop/i }),
+      ).toBeInTheDocument();
+      expect(sidebarState()).toBeNull();
+    });
+  });
+
+  describe("the persistent chat", () => {
+    it("submitting from /agent navigates to /agent/:id without a remount", async () => {
       const user = userEvent.setup();
       const { router } = setup();
 
       const textarea = await screen.findByRole("textbox");
+      const streamBefore = MockEventSource.latest;
+      expect(streamBefore).not.toBeNull();
+
       await user.type(textarea, "Check disk usage on prod");
       await user.click(screen.getByRole("button", { name: /send/i }));
 
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
+        expect(router.state.location.pathname).toBe("/agent/new-s1");
       });
-    });
-
-    it("does not create a new event stream on navigation (no remount)", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await screen.findByRole("textbox");
-      const streamAtHome = MockEventSource.latest;
-      expect(streamAtHome).not.toBeNull();
-
-      await user.type(screen.getByRole("textbox"), "Check disk");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
-      });
-
-      // Same stream instance = no remount of the session view
-      expect(MockEventSource.latest).toBe(streamAtHome);
-      // Chat input still present
+      expect(MockEventSource.latest).toBe(streamBefore);
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    // The layout follows what the session says it is, so it appears with no
-    // report row present - which is the state an alert-opened session is in
-    // for the whole of the first minute.
+    // The one transition ticket 016 depends on: the agent promotes a session
+    // and the URL changes families underneath a chat that is mid-stream.
+    it("keeps a streaming run alive across the /agent to /investigations split", async () => {
+      const user = userEvent.setup();
+      const { router, setInvestigation } = setup();
+
+      await screen.findByRole("textbox");
+      await user.type(screen.getByRole("textbox"), "Check disk");
+      await user.click(screen.getByRole("button", { name: /send/i }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/agent/new-s1");
+      });
+
+      // This text exists only in the live view's own state - the server has no
+      // record of it, so nothing can re-fetch it after a remount.
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "m1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "new-s1",
+            kind: "text",
+            delta: "Analyzing disk usage...",
+          },
+        });
+      });
+      await screen.findByText("Analyzing disk usage...");
+      const streamBefore = MockEventSource.latest;
+
+      // What the promotion does to the address: replaced, not pushed, and
+      // across route families.
+      await act(async () => {
+        await router.navigate({
+          to: "/investigations/$id",
+          params: { id: "new-s1" },
+          replace: true,
+        });
+      });
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/investigations/new-s1");
+      });
+
+      // Only a surviving instance can still be holding this.
+      expect(screen.getByText("Analyzing disk usage...")).toBeInTheDocument();
+      expect(MockEventSource.latest).toBe(streamBefore);
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    });
+
     it("morphs to the investigation layout on the session's own flag, with no report", async () => {
       const user = userEvent.setup();
       const { router, setInvestigation } = setup();
@@ -363,12 +386,10 @@ describe("Shell", () => {
       await user.type(screen.getByRole("textbox"), "Check disk");
       await user.click(screen.getByRole("button", { name: /send/i }));
       await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
+        expect(router.state.location.pathname).toBe("/agent/new-s1");
       });
       const streamBefore = MockEventSource.latest;
 
-      // The agent called OpenInvestigation; its turn lands and the console
-      // refetches the session.
       setInvestigation(true);
       act(() => {
         MockEventSource.broadcast({
@@ -393,89 +414,7 @@ describe("Shell", () => {
       expect(
         screen.getByText(/has not recorded a finding yet/i),
       ).toBeInTheDocument();
-
-      // The morph is a DOM re-parent, never a remount: same stream, same input.
       expect(MockEventSource.latest).toBe(streamBefore);
-      expect(screen.getByRole("textbox")).toBeInTheDocument();
-    });
-
-    it("renders the report in the investigation layout once one exists", async () => {
-      const user = userEvent.setup();
-      const { router, setInvestigation, setSessionReport } = setup();
-
-      await screen.findByRole("textbox");
-      await user.type(screen.getByRole("textbox"), "Check disk");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
-      });
-
-      setInvestigation(true);
-      setSessionReport({
-        hypotheses: [
-          {
-            id: "h1",
-            statement: "web-01 leaks memory",
-            verdict: "root_cause",
-            finding: "",
-            evidenceIds: [],
-            proposedAt: new Date().toISOString(),
-            resolvedAt: new Date().toISOString(),
-          },
-        ],
-        fixes: [],
-        updatedAt: new Date().toISOString(),
-        model: "test",
-      });
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m-1",
-          type: "MESSAGE",
-          payload: {
-            sessionId: "new-s1",
-            message: { kind: "assistant", content: "Found it." },
-          },
-        });
-        MockEventSource.broadcast({
-          messageId: "m-rep",
-          type: "REPORT_UPDATED",
-          payload: { sessionId: "new-s1" },
-        });
-      });
-
-      await waitFor(() => {
-        expect(screen.getAllByText("web-01 leaks memory").length).toBe(2);
-      });
-    });
-
-    it("captures deltas arriving after session creation", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await screen.findByRole("textbox");
-
-      await user.type(screen.getByRole("textbox"), "Check disk");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
-      });
-
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m1",
-          type: "TEXT_MESSAGE_CONTENT",
-          payload: {
-            sessionId: "new-s1",
-            kind: "text",
-            delta: "Analyzing disk usage...",
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText("Analyzing disk usage...")).toBeInTheDocument();
-      });
     });
   });
 
@@ -484,29 +423,9 @@ describe("Shell", () => {
     // the control that reopens it with it.
     it("collapses and reopens without interrupting the live stream", async () => {
       const user = userEvent.setup();
-      const { router, setInvestigation } = setup();
-
-      await screen.findByRole("textbox");
-      await user.type(screen.getByRole("textbox"), "Check disk");
-      await user.click(screen.getByRole("button", { name: /send/i }));
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/sessions/new-s1");
-      });
+      const { setInvestigation } = setup({ path: "/investigations/new-s1" });
 
       setInvestigation(true);
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m-1",
-          type: "MESSAGE",
-          payload: {
-            sessionId: "new-s1",
-            message: {
-              kind: "assistant",
-              content: "Opening an investigation.",
-            },
-          },
-        });
-      });
       const railed = await screen.findByRole("complementary", {
         name: /investigation chat/i,
       });
@@ -520,151 +439,15 @@ describe("Shell", () => {
           screen.queryByRole("complementary", { name: /investigation chat/i }),
         ).not.toBeInTheDocument();
       });
-      const reopen = screen.getByRole("button", { name: /show the chat/i });
-      await user.click(reopen);
+      await user.click(screen.getByRole("button", { name: /show the chat/i }));
 
       await waitFor(() => {
         expect(
           screen.getByRole("complementary", { name: /investigation chat/i }),
         ).toBeInTheDocument();
       });
-      // A DOM re-parent throughout: the stream is the same instance.
       expect(MockEventSource.latest).toBe(streamBefore);
       expect(screen.getByRole("textbox")).toBeInTheDocument();
-    });
-  });
-
-  describe("attention queue", () => {
-    it("refetches and grows the count when INTERRUPT arrives", async () => {
-      const { setPendingCount } = setup(1);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^1 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-
-      // The interrupt is now durable server-side; the event triggers a refetch
-      // of the authoritative pending list rather than a local +1.
-      setPendingCount(2);
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m-int",
-          type: "HUMAN_INPUT_REQUIRED",
-          payload: {
-            sessionId: "s1",
-            toolUseId: "tool-99",
-            toolName: "RestartDockerService",
-            input: {},
-            incidentId: "inc-99",
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^2 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("refetches and clears the count when INTERRUPT_RESOLVED arrives", async () => {
-      const { setPendingCount } = setup(1);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^1 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-
-      setPendingCount(0);
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m-res",
-          type: "HUMAN_INPUT_RESOLVED",
-          payload: {
-            incidentId: "inc-0",
-            toolUseId: "tool-0",
-            status: "approved",
-          },
-        });
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.queryByRole("link", { name: /awaiting approval/i }),
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    it("does not double-count after an independent refetch (no stale delta)", async () => {
-      const { qc, setPendingCount } = setup(1);
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^1 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-
-      // Server count grows to 2; the event refreshes the list to 2.
-      setPendingCount(2);
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m-int",
-          type: "HUMAN_INPUT_REQUIRED",
-          payload: {
-            sessionId: "s1",
-            toolUseId: "tool-99",
-            toolName: "RestartDockerService",
-            input: {},
-            incidentId: "inc-99",
-          },
-        });
-      });
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^2 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-
-      // An unrelated refetch must not re-apply the event on top of the already
-      // up to date list; the count stays 2, not 3.
-      await act(async () => {
-        await qc.invalidateQueries({ queryKey: ["sessions"] });
-      });
-      await waitFor(() => {
-        expect(
-          screen.getByRole("link", {
-            name: /^2 awaiting approval/,
-          }),
-        ).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe("account", () => {
-    it("Log out posts /api/logout", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup();
-
-      const logoutButton = await screen.findByRole("button", {
-        name: /log out/i,
-      });
-      await user.click(logoutButton);
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/logout",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
     });
   });
 });

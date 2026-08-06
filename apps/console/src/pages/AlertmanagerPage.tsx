@@ -4,12 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  BackLink,
-  Page,
-  PageHeader,
-  PageTitle,
-} from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_UI } from "@/lib/iconProps";
@@ -132,11 +127,13 @@ export function AlertmanagerPage(): React.JSX.Element {
   );
 
   return (
-    <Page>
-      <BackLink to="/integrations">Integrations</BackLink>
-      <PageHeader>
-        <PageTitle>Alertmanager</PageTitle>
-        {showStatus && status && (
+    <Page
+      crumbs={[
+        { label: "Integrations", to: "/integrations" },
+        { label: "Alertmanager" },
+      ]}
+      controls={
+        showStatus && status ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span
               aria-hidden="true"
@@ -150,9 +147,9 @@ export function AlertmanagerPage(): React.JSX.Element {
               ? `Receiving - last alert ${relativeTime(status.lastReceivedAt)}`
               : "Waiting for first alert"}
           </div>
-        )}
-      </PageHeader>
-
+        ) : undefined
+      }
+    >
       <div className="flex flex-col gap-8">
         <p className="max-w-3xl text-sm text-muted-foreground">
           Forward alerts from the Alertmanager you already run. One credential

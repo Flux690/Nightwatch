@@ -7,13 +7,14 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import {
-  Plus,
+  Bot,
   Settings,
   LogOut,
   ScrollText,
-  Menu,
+  PanelLeft,
   PanelRight,
   Plug,
+  Telescope,
 } from "lucide-react";
 
 import {
@@ -21,8 +22,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -34,20 +33,27 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/auth/AuthContext";
-import { useAttentionCount } from "@/hooks/useAttentionCount";
 import { useSession } from "@/hooks/useSession";
 import { useSessionReport } from "@/hooks/useSessionReport";
 import { cn } from "@/lib/utils";
-import { ICON_NAV, ICON_UI } from "@/lib/iconProps";
-import { SessionsSidebar } from "./SessionsSidebar.js";
+import { ICON_NAV } from "@/lib/iconProps";
 import { SettingsModal } from "./SettingsModal.js";
 import { ReportPanel } from "@/components/report/ReportPanel";
 import { SessionView } from "@/pages/SessionView";
 
 // Nowrap inside an overflow-hidden rail, and the fade finishes before the
-// width does, so a label is never legible at an intermediate width.
+// width does, so a label is never legible at an intermediate width. Medium
+// because a 400 stroke on the dark panel reads dimmer than its own ink step.
 const NAV_LABEL =
-  "truncate whitespace-nowrap transition-opacity duration-(--duration-fast) delay-(--duration-base) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
+  "truncate whitespace-nowrap font-medium transition-opacity duration-(--duration-fast) delay-(--duration-base) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
+
+// The whole of the sidebar's navigation. Lists and actions belong to the pages.
+const NAV_ITEMS = [
+  { to: "/agent", label: "Agent", icon: Bot },
+  { to: "/investigations", label: "Investigations", icon: Telescope },
+  { to: "/integrations", label: "Integrations", icon: Plug },
+  { to: "/audit", label: "Audit log", icon: ScrollText },
+] as const;
 
 export function Shell({
   children,
@@ -88,19 +94,17 @@ function ShellContent({
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar();
+  const { toggleSidebar, isOverlay, openOverlay, setOpenOverlay } =
+    useSidebar();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // Present only on /sessions/$id; Shell owns the one persistent SessionView so
-  // the / -> /sessions/$id transition is a prop change, not a remount.
+  // Present on /agent/$id and /investigations/$id; Shell owns the one persistent
+  // SessionView so a move between them is a prop change, not a remount.
   const { id: routeSessionId } = useParams({ strict: false }) as {
     id?: string;
   };
-  const { count: attentionCount, firstSessionId: attentionSessionId } =
-    useAttentionCount();
   const { logout } = useAuth();
-  const navigate = useNavigate();
 
   // The morph keys on what the session says it is, so the layout appears the
   // instant the session exists rather than waiting on the model.
@@ -127,23 +131,18 @@ function ShellContent({
     chatNodeRef.current.className = "flex min-h-0 flex-1 flex-col";
   }
 
-  const isSettingsAlias = pathname === "/settings";
-  const settingsOpened = settingsOpen || isSettingsAlias;
-  const isSessionArea =
-    pathname === "/" || pathname.startsWith("/sessions/") || isSettingsAlias;
-
-  function closeSettings(): void {
-    setSettingsOpen(false);
-    if (isSettingsAlias) void navigate({ to: "/" });
-  }
-
   function isActive(to: string): boolean {
     return pathname === to || pathname.startsWith(`${to}/`);
   }
 
-  // In the mobile sheet any navigation or action should also dismiss it.
-  function dismissMobile(): void {
-    if (isMobile) setOpenMobile(false);
+  // A session is on screen for both route families; the list at
+  // /investigations is a page like any other.
+  const isSessionArea =
+    isActive("/agent") || pathname.startsWith("/investigations/");
+
+  // In the overlay any navigation or action should also dismiss it.
+  function dismissOverlay(): void {
+    if (isOverlay) setOpenOverlay(false);
   }
 
   return (
@@ -177,73 +176,22 @@ function ShellContent({
         <SidebarContent>
           <SidebarGroup>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  aria-label="New session"
-                  tooltip="New session"
-                  className="text-primary hover:text-primary-hover"
-                  onClick={() => {
-                    dismissMobile();
-                    void navigate({ to: "/" });
-                  }}
-                >
-                  <Plus {...ICON_NAV} />
-                  <span className={NAV_LABEL}>New session</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  aria-label="Integrations"
-                  tooltip="Integrations"
-                  isActive={isActive("/integrations")}
-                  onClick={dismissMobile}
-                  render={<Link to="/integrations" />}
-                >
-                  <Plug {...ICON_NAV} />
-                  <span className={NAV_LABEL}>Integrations</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  aria-label="Audit log"
-                  tooltip="Audit log"
-                  isActive={isActive("/audit")}
-                  onClick={dismissMobile}
-                  render={<Link to="/audit" />}
-                >
-                  <ScrollText {...ICON_NAV} />
-                  <span className={NAV_LABEL}>Audit log</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+                <SidebarMenuItem key={to}>
+                  <SidebarMenuButton
+                    aria-label={label}
+                    tooltip={label}
+                    isActive={isActive(to)}
+                    onClick={dismissOverlay}
+                    render={<Link to={to} />}
+                  >
+                    <Icon {...ICON_NAV} />
+                    <span className={NAV_LABEL}>{label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroup>
-
-          {/* Sessions are not meaningful as icons, so the zone leaves the
-              collapsed rail entirely. A sheet is never an icon rail. */}
-          {(isMobile || state === "expanded") && (
-            <SidebarGroup className="min-h-0 flex-1">
-              <SidebarGroupLabel>Sessions</SidebarGroupLabel>
-              {attentionCount > 0 && attentionSessionId !== null && (
-                /* A link, not a notice: knowing something waits is useless
-                   without a way to reach it. */
-                <Link
-                  to="/sessions/$id"
-                  params={{ id: attentionSessionId }}
-                  aria-label={`${attentionCount} awaiting approval - open the first`}
-                  onClick={dismissMobile}
-                  className="mb-1 flex h-8 items-center overflow-hidden rounded-md bg-warning-tint text-sm font-semibold text-warning hover:brightness-95"
-                >
-                  <span className="flex h-full w-10 shrink-0 items-center justify-center">
-                    {attentionCount > 99 ? "99+" : attentionCount}
-                  </span>
-                  <span className="min-w-0 truncate">awaiting approval</span>
-                </Link>
-              )}
-              <SidebarGroupContent className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
-                <SessionsSidebar />
-              </SidebarGroupContent>
-            </SidebarGroup>
-          )}
         </SidebarContent>
 
         <SidebarFooter>
@@ -253,7 +201,7 @@ function ShellContent({
                 aria-label="Settings"
                 tooltip="Settings"
                 onClick={() => {
-                  dismissMobile();
+                  dismissOverlay();
                   setSettingsOpen(true);
                 }}
               >
@@ -266,7 +214,7 @@ function ShellContent({
                 aria-label="Log out"
                 tooltip="Log out"
                 onClick={() => {
-                  dismissMobile();
+                  dismissOverlay();
                   void logout();
                 }}
               >
@@ -281,19 +229,22 @@ function ShellContent({
       <SidebarInset
         id="main-content"
         tabIndex={-1}
-        className="h-svh min-h-0 overflow-hidden md:h-[calc(100svh-theme(spacing.6))]"
+        className="h-svh min-h-0 overflow-hidden lg:h-[calc(100svh-theme(spacing.6))]"
       >
-        <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 md:hidden">
+        {/* Only while the sidebar is hidden: a panel that is not on screen
+            cannot host the control that reopens it. */}
+        {isOverlay && !openOverlay && (
           <Button
             variant="ghost"
-            size="icon-sm"
-            aria-label="Open menu"
+            size="icon"
+            aria-label="Toggle sidebar"
+            aria-expanded={false}
+            className="absolute top-3 left-3 z-20 text-muted-foreground"
             onClick={() => toggleSidebar()}
           >
-            <Menu {...ICON_UI} />
+            <PanelLeft className="size-4.5" strokeWidth={1.5} aria-hidden />
           </Button>
-          <span className="text-sm font-semibold">NightWarden</span>
-        </header>
+        )}
         <div
           className={cn(
             "relative flex min-h-0 flex-1",
@@ -303,7 +254,9 @@ function ShellContent({
           {isSessionArea ? (
             investigationView ? (
               <>
-                <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
+                {/* Below lg the report runs the full stage, so it clears the
+                    seat the sidebar toggle takes in the corner. */}
+                <div className="min-w-0 flex-1 overflow-y-auto max-lg:pt-12 [contain:layout]">
                   <ReportPanel
                     report={report?.report ?? null}
                     actions={report?.actions ?? []}
@@ -361,7 +314,7 @@ function ShellContent({
             size="icon"
             aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
             aria-expanded={chatRailOpen}
-            className="absolute top-3 right-3 z-20 text-muted-foreground max-md:top-14"
+            className="absolute top-3 right-3 z-20 text-muted-foreground"
             onClick={() => setChatRailOpen((prev) => !prev)}
           >
             <PanelRight className="size-4.5" strokeWidth={1.5} aria-hidden />
@@ -377,7 +330,12 @@ function ShellContent({
           chatNodeRef.current,
         )}
 
-      <SettingsModal opened={settingsOpened} onClose={closeSettings} />
+      {/* No route of its own: the URL would have to name a page to return to,
+          and settings is opened from - and closes back to - wherever you are. */}
+      <SettingsModal
+        opened={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </>
   );
 }

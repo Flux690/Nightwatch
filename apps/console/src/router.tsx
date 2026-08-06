@@ -3,12 +3,15 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  redirect,
 } from "@tanstack/react-router";
+import { useViewportTier } from "./hooks/useViewportTier.js";
 import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
+import { InvestigationsPage } from "./pages/InvestigationsPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddRunnerPage } from "./pages/AddRunnerPage.js";
 import { RunnerListPage } from "./pages/RunnerListPage.js";
@@ -16,7 +19,23 @@ import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
 import { PrometheusPage } from "./pages/PrometheusPage.js";
 import { LokiPage } from "./pages/LokiPage.js";
 
+// Above sign-in, not just above the console: finishing a sign-up on a phone
+// only to meet this message would be worse than meeting it first.
 function RootLayout(): React.JSX.Element {
+  const tier = useViewportTier();
+  if (tier === "phone") {
+    return (
+      <div className="flex h-svh flex-col items-center justify-center gap-2 p-6 text-center">
+        <h1 className="m-0 text-xl font-semibold">
+          NightWarden is built for desktop
+        </h1>
+        <p className="m-0 text-sm text-muted-foreground">
+          An investigation needs a screen at least 768px wide. Open the console
+          on a laptop.
+        </p>
+      </div>
+    );
+  }
   return (
     <AuthProvider>
       <Outlet />
@@ -40,26 +59,39 @@ const appRoute = createRoute({
   component: AuthGate,
 });
 
-// Inert: Shell owns the one persistent SessionView (id from the URL). These
-// routes exist only for URL matching, so / -> /sessions/$id is a prop change.
+// What the agent found while the operator slept is what they came for.
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/investigations" });
+  },
+});
+
+// Inert: Shell owns the one persistent SessionView, so crossing between the
+// two families is a prop change rather than a remount that drops a live run.
+const agentRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/agent",
   component: () => null,
 });
 
-const sessionIdRoute = createRoute({
+const agentSessionRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/sessions/$id",
+  path: "/agent/$id",
   component: () => null,
 });
 
-// Alias only: Shell detects /settings and opens the settings modal over the
-// session area, with the persistent SessionView still visible underneath.
-const settingsRoute = createRoute({
+const investigationRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/settings",
+  path: "/investigations/$id",
   component: () => null,
+});
+
+const investigationsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/investigations",
+  component: InvestigationsPage,
 });
 
 const auditRoute = createRoute({
@@ -130,12 +162,14 @@ const lokiRoute = createRoute({
   component: LokiPage,
 });
 
-const routeTree = rootRoute.addChildren([
+export const routeTree = rootRoute.addChildren([
   loginRoute,
   appRoute.addChildren([
     indexRoute,
-    sessionIdRoute,
-    settingsRoute,
+    agentRoute,
+    agentSessionRoute,
+    investigationsRoute,
+    investigationRoute,
     auditRoute,
     integrationsRoute,
     githubConnectRoute,

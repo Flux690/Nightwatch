@@ -54,7 +54,7 @@ export function ChatInput({
     onSuccess: async (createdSessionId) => {
       if (createdSessionId !== null) {
         await navigate({
-          to: "/sessions/$id",
+          to: "/agent/$id",
           params: { id: createdSessionId },
           replace: true,
         });

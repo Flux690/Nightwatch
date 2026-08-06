@@ -3,7 +3,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useViewportTier } from "@/hooks/useViewportTier";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 // Widths are theme tokens, so the sidebar cannot drift from the design system.
 const SIDEBAR_WIDTH = "var(--container-sidebar)";
-const SIDEBAR_WIDTH_MOBILE = "var(--container-sidebar-sheet)";
+const SIDEBAR_WIDTH_OVERLAY = "var(--container-sidebar-sheet)";
 const SIDEBAR_WIDTH_ICON = "var(--container-sidebar-icon)";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
@@ -35,9 +35,10 @@ type SidebarContextProps = {
   state: "expanded" | "collapsed";
   open: boolean;
   setOpen: (open: boolean) => void;
-  openMobile: boolean;
-  setOpenMobile: (open: boolean) => void;
-  isMobile: boolean;
+  openOverlay: boolean;
+  setOpenOverlay: (open: boolean) => void;
+  // 768-1023, where the sidebar is hidden entirely and opens over the stage.
+  isOverlay: boolean;
   toggleSidebar: () => void;
 };
 
@@ -65,8 +66,8 @@ function SidebarProvider({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const isMobile = useIsMobile();
-  const [openMobile, setOpenMobile] = React.useState(false);
+  const isOverlay = useViewportTier() === "tablet";
+  const [openOverlay, setOpenOverlay] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -89,8 +90,10 @@ function SidebarProvider({
 
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
-    return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
-  }, [isMobile, setOpen, setOpenMobile]);
+    return isOverlay
+      ? setOpenOverlay((open) => !open)
+      : setOpen((open) => !open);
+  }, [isOverlay, setOpen, setOpenOverlay]);
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -117,12 +120,20 @@ function SidebarProvider({
       state,
       open,
       setOpen,
-      isMobile,
-      openMobile,
-      setOpenMobile,
+      isOverlay,
+      openOverlay,
+      setOpenOverlay,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [
+      state,
+      open,
+      setOpen,
+      isOverlay,
+      openOverlay,
+      setOpenOverlay,
+      toggleSidebar,
+    ],
   );
 
   return (
@@ -161,7 +172,7 @@ function Sidebar({
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isOverlay, state, openOverlay, setOpenOverlay } = useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -178,9 +189,9 @@ function Sidebar({
     );
   }
 
-  if (isMobile) {
+  if (isOverlay) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={openOverlay} onOpenChange={setOpenOverlay} {...props}>
         <SheetContent
           dir={dir}
           data-sidebar="sidebar"
@@ -189,7 +200,7 @@ function Sidebar({
           className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
           style={
             {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              "--sidebar-width": SIDEBAR_WIDTH_OVERLAY,
             } as React.CSSProperties
           }
           side={side}
@@ -206,7 +217,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer hidden text-sidebar-foreground md:block"
+      className="group peer hidden text-sidebar-foreground lg:block"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}
@@ -227,7 +238,7 @@ function Sidebar({
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-(--duration-panel) ease-panel data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-(--duration-panel) ease-panel data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] lg:flex",
           // The sidebar is the ground and runs the full height; only the stage insets.
           variant === "floating" || variant === "inset"
             ? "group-data-[collapsible=icon]:w-(--sidebar-width-icon)"
@@ -305,7 +316,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:my-3 md:peer-data-[variant=inset]:mr-3 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:stage-fall md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:border md:peer-data-[variant=inset]:border-border",
+        "relative flex w-full flex-1 flex-col bg-background lg:peer-data-[variant=inset]:my-3 lg:peer-data-[variant=inset]:mr-3 lg:peer-data-[variant=inset]:ml-0 lg:peer-data-[variant=inset]:stage-fall lg:peer-data-[variant=inset]:rounded-xl lg:peer-data-[variant=inset]:border lg:peer-data-[variant=inset]:border-border",
         className,
       )}
       {...props}
@@ -509,7 +520,7 @@ function SidebarMenuButton({
     isActive?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const { isMobile, state } = useSidebar();
+  const { isOverlay, state } = useSidebar();
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -543,7 +554,7 @@ function SidebarMenuButton({
       <TooltipContent
         side="right"
         align="center"
-        hidden={state !== "collapsed" || isMobile}
+        hidden={state !== "collapsed" || isOverlay}
         {...tooltip}
       />
     </Tooltip>

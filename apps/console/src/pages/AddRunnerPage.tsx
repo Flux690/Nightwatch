@@ -16,12 +16,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  BackLink,
-  Page,
-  PageHeader,
-  PageTitle,
-} from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import {
   WizardStepper,
   WizardActions,
@@ -144,12 +139,13 @@ export function AddRunnerPage({
   }
 
   return (
-    <Page>
-      <BackLink to={listPath}>{copy.plural}</BackLink>
-      <PageHeader>
-        <PageTitle>Add a {copy.singular.toLowerCase()}</PageTitle>
-      </PageHeader>
-
+    <Page
+      crumbs={[
+        { label: "Integrations", to: "/integrations" },
+        { label: copy.plural, to: listPath },
+        { label: `Add a ${copy.singular.toLowerCase()}` },
+      ]}
+    >
       <WizardStepper step={step} total={3} title={STEP_TITLES[step]} />
 
       {step === 0 && (

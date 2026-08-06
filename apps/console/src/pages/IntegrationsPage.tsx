@@ -9,7 +9,7 @@ import type {
 import { Boxes, Server } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
-import { Page, PageHeader, PageTitle } from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
@@ -194,10 +194,7 @@ export function IntegrationsPage(): React.JSX.Element {
   }
 
   return (
-    <Page>
-      <PageHeader>
-        <PageTitle>Integrations</PageTitle>
-      </PageHeader>
+    <Page crumbs={[{ label: "Integrations" }]}>
       {installed.length > 0 && group("Installed", installed)}
       {available.length > 0 && group("All integrations", available)}
     </Page>

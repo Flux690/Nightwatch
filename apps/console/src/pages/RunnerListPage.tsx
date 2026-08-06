@@ -15,12 +15,7 @@ import {
 import { ServerCard, runnerDisplayName } from "@/components/layout/ServerCard";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  BackLink,
-  Page,
-  PageHeader,
-  PageTitle,
-} from "@/components/layout/Page";
+import { Page } from "@/components/layout/Page";
 import {
   Empty,
   EmptyDescription,
@@ -162,14 +157,17 @@ export function RunnerListPage({
   }
 
   return (
-    <Page>
-      <BackLink to="/integrations">Integrations</BackLink>
-      <PageHeader>
-        <PageTitle>{copy.plural}</PageTitle>
-        {/* The empty state carries this action itself, so offering it twice on
-            the one screen where it is the only thing to do reads as a mistake. */}
-        {connected.length > 0 && (
+    <Page
+      crumbs={[
+        { label: "Integrations", to: "/integrations" },
+        { label: copy.plural },
+      ]}
+      /* The empty state carries this action itself, so offering it twice on
+         the one screen where it is the only thing to do reads as a mistake. */
+      controls={
+        connected.length > 0 ? (
           <Button
+            className="ml-auto"
             size="sm"
             onClick={() =>
               void navigate({ to: `/integrations/${platform}/add` })
@@ -178,9 +176,9 @@ export function RunnerListPage({
             <Plus {...ICON_INLINE} />
             Add a {copy.singular.toLowerCase()}
           </Button>
-        )}
-      </PageHeader>
-
+        ) : undefined
+      }
+    >
       {/* Withheld while the list is empty: the empty state already says what
           this is and what to do, and saying it twice reads as a stutter. */}
       {connected.length > 0 && (

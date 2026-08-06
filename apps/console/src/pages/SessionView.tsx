@@ -170,7 +170,7 @@ function TranscriptColumn({
   );
 }
 
-/** Index route (/) renders with no id; /sessions/$id passes the param. */
+/** /agent renders with no id; the two $id routes pass the param. */
 export function SessionView({
   sessionId: sessionIdFromRoute = null,
 }: {

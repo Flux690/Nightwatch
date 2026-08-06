@@ -64,16 +64,11 @@ function textOk(body: string) {
 }
 
 /* The page is a routed screen with a navigation guard, so the seam under test is the route:
-   a memory router with a stub runner-servers destination. The layout link stands
-   in for the shell's rail navigation (the page has no back-link of its own). */
+   a memory router with a stub runner-servers destination. Leaving is driven
+   through the page's own breadcrumb. */
 function renderAddServerRoute() {
   const rootRoute = createRootRoute({
-    component: () => (
-      <>
-        <Link to="/integrations">Integrations</Link>
-        <Outlet />
-      </>
-    ),
+    component: () => <Outlet />,
   });
   const addRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -349,9 +344,9 @@ describe("AddRunnerPage", () => {
         within(dialog).getByRole("button", { name: /^cancel$/i }),
       );
 
-      expect(
-        screen.getByRole("heading", { name: /add a docker host/i }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("link", { current: "page" })).toHaveTextContent(
+        /add a docker host/i,
+      );
       expect(fetchMock).not.toHaveBeenCalledWith(
         expect.stringContaining("/api/tokens/"),
         expect.objectContaining({ method: "DELETE" }),
