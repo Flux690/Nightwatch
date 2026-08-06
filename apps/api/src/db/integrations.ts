@@ -63,8 +63,6 @@ function deleteIntegration(kind: string): void {
   getDb().prepare(`DELETE FROM integrations WHERE kind = ?`).run(kind);
 }
 
-/* -------------------------------- GitHub --------------------------------- */
-
 const GITHUB = "github";
 
 interface GitHubConfig {
@@ -135,8 +133,6 @@ export function deleteGitHubIntegration(): void {
   deleteIntegration(GITHUB);
 }
 
-/* ------------------------------ Prometheus ------------------------------- */
-
 const PROMETHEUS = "prometheus";
 
 interface PrometheusConfig {
@@ -175,8 +171,6 @@ export function savePrometheusIntegration(input: {
 export function deletePrometheusIntegration(): void {
   deleteIntegration(PROMETHEUS);
 }
-
-/* --------------------------------- Loki ---------------------------------- */
 
 const LOKI = "loki";
 

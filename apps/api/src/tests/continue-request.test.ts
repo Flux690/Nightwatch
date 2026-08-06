@@ -182,7 +182,6 @@ describe("continue-request interrupts", () => {
 
     close();
 
-    // cleanup: end the investigation
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {

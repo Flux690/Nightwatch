@@ -230,7 +230,6 @@ describe("durable approval interrupts", () => {
           e.payload["sessionId"] === sessionId,
       ),
     );
-    // Approve via /respond
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {
@@ -416,7 +415,6 @@ describe("durable approval interrupts", () => {
 
     close();
 
-    // cleanup
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -630,7 +628,6 @@ describe("durable approval interrupts", () => {
 
     close();
 
-    // cleanup
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -695,7 +692,6 @@ describe("durable approval interrupts", () => {
     );
     expect(validationRes.status).toBe(400);
 
-    // Cleanup
     close();
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",

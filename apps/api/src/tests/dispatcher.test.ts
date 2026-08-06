@@ -261,7 +261,6 @@ describe("dispatcher", () => {
     expect(started.length).toBe(2);
     expect(started[1]).not.toBe(openedId);
 
-    // Clean up the leftover run
     gates.get(started[1]!)?.resolve();
   });
 

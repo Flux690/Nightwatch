@@ -123,7 +123,6 @@ describe("provider/model config seam", () => {
     updateConfig({ provider: "openrouter" });
   }
 
-  // --- POST /config/models ---
   // Listing the catalog is also how a block is verified, so these cover both.
 
   it("POST /config/models: rejects a bad key, which is how a wrong key is reported", async () => {
@@ -272,8 +271,6 @@ describe("provider/model config seam", () => {
     expect(await storedMask()).not.toContain("persist");
   });
 
-  // --- GET /config/providers ---
-
   it("GET /config/providers: serves the picker so the console keeps no provider list of its own", async () => {
     const res = await server.inject({
       method: "GET",
@@ -330,8 +327,6 @@ describe("provider/model config seam", () => {
       "claude-haiku-4-5-20251001",
     ]);
   });
-
-  // --- what picking a model captures ---
 
   describe("saving a model", () => {
     afterEach(() => {
@@ -609,8 +604,6 @@ describe("provider/model config seam", () => {
     });
   });
 
-  // --- requireSession gate ---
-
   it("GET /config: returns 401 without a valid nw_auth cookie", async () => {
     const res = await server.inject({ method: "GET", url: "/api/config" });
     expect(res.statusCode).toBe(401);
@@ -632,8 +625,6 @@ describe("provider/model config seam", () => {
     // No plaintext key field
     expect(body).not.toHaveProperty("apiKey");
   });
-
-  // --- PATCH /config/key ---
 
   it("PATCH /config/key: saves the encrypted key and returns the masked representation", async () => {
     const res = await server.inject({
@@ -673,8 +664,6 @@ describe("provider/model config seam", () => {
     expect(body).not.toHaveProperty("apiKeyEncrypted");
     expect(JSON.stringify(body)).not.toContain(apiKey);
   });
-
-  // --- no invented defaults ---
 
   describe("an install nobody has configured", () => {
     beforeEach(() => {

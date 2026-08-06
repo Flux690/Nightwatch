@@ -216,7 +216,6 @@ describe("access-gate: gating is driven by tool access level", () => {
 
     close();
 
-    // cleanup
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -275,7 +274,6 @@ describe("access-gate: gating is driven by tool access level", () => {
 
     close();
 
-    // cleanup
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -389,7 +387,6 @@ describe("access-gate: gating is driven by tool access level", () => {
     expect(approvalInterrupt.payload["toolName"]).toBe("RestartDockerService");
     expect(executedCommands).not.toContain("RestartDockerService");
 
-    // Approve
     const approveRes = await fetch(
       `http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`,
       {

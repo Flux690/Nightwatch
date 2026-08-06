@@ -162,7 +162,6 @@ describe("clarification interrupts", () => {
 
     close();
 
-    // cleanup via /respond
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
@@ -364,7 +363,6 @@ describe("clarification interrupts", () => {
 
     close();
 
-    // cleanup
     await fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
       method: "POST",
       headers: {
