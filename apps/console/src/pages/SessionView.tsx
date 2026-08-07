@@ -239,7 +239,9 @@ export function SessionView({
         lastActivityAt: new Date().toISOString(),
         investigation: false,
         severity: null,
+        severityLabel: null,
         status: null,
+        finding: null,
         awaitingHumanInput: false,
       });
     },

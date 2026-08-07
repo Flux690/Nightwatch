@@ -1,18 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useRouterState,
-} from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Bot,
   Settings,
   LogOut,
   ScrollText,
   PanelLeft,
-  PanelRight,
   Plug,
   Telescope,
 } from "lucide-react";
@@ -32,13 +24,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { ChatHost } from "@/components/layout/ChatHost";
 import { useAuth } from "@/auth/AuthContext";
-import { useSession } from "@/hooks/useSession";
-import { useSessionReport } from "@/hooks/useSessionReport";
+import { useSessions } from "@/hooks/useSessions";
 import { cn } from "@/lib/utils";
 import { ICON_NAV } from "@/lib/iconProps";
-import { ReportPanel } from "@/components/report/ReportPanel";
-import { SessionView } from "@/pages/SessionView";
 
 // Nowrap inside an overflow-hidden rail, and the fade finishes before the
 // width does, so a label is never legible at an intermediate width. Medium
@@ -66,28 +56,9 @@ export function Shell({
   );
 }
 
-/* Attaches a stable, externally-owned DOM node as this element's child. The
-   chat is portaled ONCE into it, so moving it between slots is a plain DOM
-   re-parent and the chat never unmounts, which would drop a live stream. */
-function ChatSlot({
-  node,
-  className,
-}: {
-  node: HTMLElement;
-  className?: string;
-}): React.JSX.Element {
-  const hostRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    host.appendChild(node);
-    return () => {
-      if (node.parentElement === host) host.removeChild(node);
-    };
-  }, [node]);
-  return <div ref={hostRef} className={className} />;
-}
-
+/* Navigation, the stage it pushes, and the chat's permanent home. What a page
+   is made of is the route's business, so nothing here reads the pathname for
+   anything but which nav item is lit. */
 function ShellContent({
   children,
 }: {
@@ -95,48 +66,13 @@ function ShellContent({
 }): React.JSX.Element {
   const { toggleSidebar, isOverlay, openOverlay, setOpenOverlay } =
     useSidebar();
-
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // Present on /agent/$id and /investigations/$id; Shell owns the one persistent
-  // SessionView so a move between them is a prop change, not a remount.
-  const { id: routeSessionId } = useParams({ strict: false }) as {
-    id?: string;
-  };
   const { logout } = useAuth();
-
-  // The morph keys on what the session says it is, so the layout appears the
-  // instant the session exists rather than waiting on the model.
-  const session = useSession(routeSessionId ?? null);
-  const report = useSessionReport(routeSessionId ?? null);
-  const investigationView = session?.investigation === true;
-
-  const [chatRailOpen, setChatRailOpen] = useState(true);
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setChatRailOpen((prev) => !prev);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  // The chat's permanent DOM home, created once and re-parented between slots.
-  const chatNodeRef = useRef<HTMLDivElement | null>(null);
-  if (chatNodeRef.current === null) {
-    chatNodeRef.current = document.createElement("div");
-    chatNodeRef.current.className = "flex min-h-0 flex-1 flex-col";
-  }
+  const { actionRequiredCount } = useSessions("investigation");
 
   function isActive(to: string): boolean {
     return pathname === to || pathname.startsWith(`${to}/`);
   }
-
-  // A session is on screen for both route families; the list at
-  // /investigations is a page like any other.
-  const isSessionArea =
-    isActive("/agent") || pathname.startsWith("/investigations/");
 
   // In the overlay any navigation or action should also dismiss it.
   function dismissOverlay(): void {
@@ -185,6 +121,16 @@ function ShellContent({
                   >
                     <Icon {...ICON_NAV} />
                     <span className={NAV_LABEL}>{label}</span>
+                    {/* A plain number, not a badge: it says how much work there
+                        is, which is a readout rather than a notification. */}
+                    {to === "/investigations" && actionRequiredCount > 0 && (
+                      <span
+                        className={cn(NAV_LABEL, "ml-auto tabular-nums")}
+                        aria-label={`${actionRequiredCount} needing action`}
+                      >
+                        {actionRequiredCount}
+                      </span>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -242,93 +188,12 @@ function ShellContent({
             <PanelLeft className="size-4.5" strokeWidth={1.5} aria-hidden />
           </Button>
         )}
-        {/* The fall belongs to the agent's own surface, where the conversation
-            runs the full stage. Every other page is flat ground. */}
-        <div
-          className={cn(
-            "relative flex min-h-0 flex-1",
-            isSessionArea ? "overflow-hidden" : "flex-col overflow-auto",
-            isSessionArea && !investigationView && "lg:stage-fall",
-          )}
-        >
-          {isSessionArea ? (
-            investigationView ? (
-              <>
-                {/* Below lg the report runs the full stage, so it clears the
-                    seat the sidebar toggle takes in the corner. */}
-                <div className="min-w-0 flex-1 overflow-y-auto max-lg:pt-12 [contain:layout]">
-                  <ReportPanel
-                    report={report?.report ?? null}
-                    actions={report?.actions ?? []}
-                    evidence={report?.evidence ?? []}
-                    conviction={report?.conviction ?? {}}
-                    alerts={session?.alerts ?? []}
-                  />
-                </div>
-                {/* Width, not presence, so it closes like the sidebar. Closed
-                    it is zero-wide but present, so it leaves the accessibility
-                    tree and the tab order too. */}
-                <aside
-                  aria-label="Investigation chat"
-                  aria-hidden={!chatRailOpen}
-                  inert={!chatRailOpen}
-                  className={cn(
-                    "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-panel) ease-panel",
-                    // The edge says where the report stops. It fades out
-                    // rather than switching off, leaving no hairline.
-                    chatRailOpen
-                      ? "w-(--container-rail) border-border"
-                      : "w-0 border-transparent",
-                  )}
-                >
-                  {/* The chat holds its own width while the panel narrows past
-                      it, so nothing inside ever reflows. */}
-                  <ChatSlot
-                    node={chatNodeRef.current}
-                    className={cn(
-                      "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col pt-12 transition-opacity duration-(--duration-fast)",
-                      chatRailOpen
-                        ? "opacity-100 delay-(--duration-base)"
-                        : "opacity-0 delay-0",
-                    )}
-                  />
-                </aside>
-              </>
-            ) : (
-              <ChatSlot
-                node={chatNodeRef.current}
-                className="flex min-h-0 flex-1 flex-col"
-              />
-            )
-          ) : (
-            children
-          )}
+        {/* Scrolling is the page's to decide: a column of content scrolls here,
+            and a report beside a rail scrolls inside its own column. */}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-auto">
+          <ChatHost>{children}</ChatHost>
         </div>
-
-        {/* A sibling, never a child: a panel that collapses cannot host the
-            control that reopens it. Anchored to the inset so it keeps the
-            sidebar toggle's centre line whatever sits above the content. */}
-        {isSessionArea && investigationView && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
-            aria-expanded={chatRailOpen}
-            className="absolute top-3 right-3 z-20 text-muted-foreground"
-            onClick={() => setChatRailOpen((prev) => !prev)}
-          >
-            <PanelRight className="size-4.5" strokeWidth={1.5} aria-hidden />
-          </Button>
-        )}
       </SidebarInset>
-
-      {/* Portaled once into the stable node, so the route change and the move
-          between slots are prop/DOM moves rather than a remount. */}
-      {isSessionArea &&
-        createPortal(
-          <SessionView sessionId={routeSessionId ?? null} />,
-          chatNodeRef.current,
-        )}
     </>
   );
 }

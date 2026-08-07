@@ -8,6 +8,7 @@ import { Page } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { CopyableSnippet } from "@/components/layout/CopyableSnippet";
 import { ICON_UI } from "@/lib/iconProps";
+import { timeAgo } from "@/lib/time";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
@@ -30,16 +31,6 @@ function receiverSnippet(ingestUrl: string, token: string): string {
     "            type: Bearer",
     `            credentials: '${token}'`,
   ].join("\n");
-}
-
-function relativeTime(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 60_000) return "just now";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
 }
 
 export function AlertmanagerPage(): React.JSX.Element {
@@ -144,7 +135,7 @@ export function AlertmanagerPage(): React.JSX.Element {
               }
             />
             {status.lastReceivedAt !== null
-              ? `Receiving - last alert ${relativeTime(status.lastReceivedAt)}`
+              ? `Receiving - last alert ${timeAgo(status.lastReceivedAt)} ago`
               : "Waiting for first alert"}
           </div>
         ) : undefined

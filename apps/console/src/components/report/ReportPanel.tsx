@@ -137,7 +137,7 @@ export function ReportPanel({
   const alert = alerts[0]?.alert ?? null;
   if (report === null) {
     return (
-      <div className="mx-auto w-full max-w-page px-8 py-6">
+      <div className="mx-auto w-full max-w-report px-8 py-6">
         <AlertBand alerts={alerts} />
         <header>
           <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
@@ -157,7 +157,7 @@ export function ReportPanel({
   const rootCause = report.hypotheses.find((h) => h.verdict === "root_cause");
 
   return (
-    <div className="mx-auto w-full max-w-page px-8 py-6">
+    <div className="mx-auto w-full max-w-report px-8 py-6">
       <AlertBand alerts={alerts} />
       <header className="mb-6">
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">

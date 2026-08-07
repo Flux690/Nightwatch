@@ -51,9 +51,10 @@ export interface Crumb {
   to?: string;
 }
 
-/* The one page shell: a bar carrying the breadcrumb, a divider, and a controls
-   row on the pages that have controls. The bar spans the stage; the body keeps
-   the reading measure. */
+/* The one page shell, and the only one. `measure` names the page's own column
+   from the container block in styles.css. "full" keeps the stage's padding and
+   drops the column, which is what a list of one-line rows wants; "none" gives
+   up the padding too, which is what a report beside a rail needs. */
 export function Page({
   crumbs,
   controls,
@@ -62,19 +63,17 @@ export function Page({
 }: {
   crumbs: Crumb[];
   controls?: React.ReactNode;
-  /* Tables and lists take the page's full measure; forms and card grids read
-     better narrow, which is also what puts three cards across a row. */
-  measure?: "page" | "form";
+  measure?: "page" | "form" | "full" | "none";
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="flex min-h-full w-full flex-col">
+    <div className="flex min-h-full w-full min-w-0 flex-col">
       {/* Padding rides the rows, not the bar, so the divider runs the full
           width of the stage. The pad below lg seats the sidebar toggle. */}
       <header className="shrink-0">
         <div className="flex h-12 items-center border-b border-border px-6 max-lg:px-4 max-lg:pl-12">
           <Breadcrumb>
-            <BreadcrumbList className="text-base font-medium">
+            <BreadcrumbList className="text-sm font-medium">
               {crumbs.map((crumb, i) => (
                 <Fragment key={crumb.label}>
                   {i > 0 && <BreadcrumbSeparator />}
@@ -102,25 +101,31 @@ export function Page({
             </BreadcrumbList>
           </Breadcrumb>
         </div>
-        {/* Grouped, not a toolbar: the row also carries readouts. */}
+        {/* Grouped, not a toolbar: the row also carries readouts. The size is
+            set here so the whole bar reads at one step, whatever fills it. */}
         {controls !== undefined && (
           <div
             role="group"
             aria-label="Page controls"
-            className="flex min-h-12 items-center justify-between gap-3 px-6 max-lg:px-4"
+            className="flex min-h-12 items-center justify-between gap-3 px-6 text-sm max-lg:px-4"
           >
             {controls}
           </div>
         )}
       </header>
-      <div
-        className={cn(
-          "mx-auto flex w-full flex-1 flex-col p-6 max-lg:px-4",
-          measure === "form" ? "max-w-form" : "max-w-page",
-        )}
-      >
-        {children}
-      </div>
+      {measure === "none" ? (
+        children
+      ) : (
+        <div
+          className={cn(
+            "flex w-full flex-1 flex-col p-6 max-lg:px-4",
+            measure === "form" && "mx-auto max-w-form",
+            measure === "page" && "mx-auto max-w-page",
+          )}
+        >
+          {children}
+        </div>
+      )}
     </div>
   );
 }

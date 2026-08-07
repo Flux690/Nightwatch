@@ -2,6 +2,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import OpenAI from "openai";
 import type { ConsoleEvent, NormalizedAlert } from "@nightwarden/shared";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
@@ -98,6 +99,49 @@ describe("session title generation", () => {
       sessionId,
       title: "Checkout Latency Spike",
     });
+  });
+
+  // Without the run's retry policy one provider blip strands a session on its
+  // temporary title, which is the row's most prominent field.
+  it("rides out a transient provider error without touching the run's stream", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const provider = createContractFakeProvider([
+      { toolUses: [], text: '"Checkout Latency Spike"' },
+    ]);
+    let attempts = 0;
+    mockCreateTitleProvider.mockImplementationOnce(() => ({
+      ...provider,
+      chat: (...args: Parameters<typeof provider.chat>) => {
+        attempts++;
+        if (attempts === 1) {
+          return Promise.reject(
+            new OpenAI.APIConnectionError({ message: "down" }),
+          );
+        }
+        const [schemas, onDelta, signal] = args;
+        return provider.chat(schemas, onDelta, signal);
+      },
+    }));
+
+    const sessionId = "sess-title-retry";
+    seedSession(sessionId, "Why is checkout slow this morning?");
+    const events: ConsoleEvent[] = [];
+    const unsubscribe = subscribeConsole((e) => events.push(e));
+
+    const pending = generateSessionTitle(
+      sessionId,
+      "Why is checkout slow this morning?",
+      configuredConfig(),
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    await pending;
+    unsubscribe();
+    vi.useRealTimers();
+
+    expect(attempts).toBe(2);
+    expect(getSession(sessionId)?.title).toBe("Checkout Latency Spike");
+    // The stream is the investigation's; a title retry is logged, never sent.
+    expect(events.some((e) => e.type === "RUN_RETRYING")).toBe(false);
   });
 
   it("sends the message as quoted material with reasoning off, not as a live turn", async () => {

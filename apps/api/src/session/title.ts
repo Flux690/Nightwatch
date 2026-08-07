@@ -3,6 +3,9 @@ import { createTitleProvider } from "../llm/factory.js";
 import { updateSessionTitle } from "../db/sessions.js";
 import { publishSessionTitleUpdated } from "./stream.js";
 import { TITLE_SYSTEM_PROMPT } from "../agent/prompts/title.js";
+import { loadConfig } from "../config/store.js";
+import { retryDelaysMs } from "../llm/config.js";
+import { withLLMRetries } from "../llm/failures.js";
 import { logger } from "../logger.js";
 
 const MAX_TITLE_WORDS = 4;
@@ -74,7 +77,16 @@ export async function generateSessionTitle(
     provider.start(
       `Title this session. Its opening content:\n<content>\n${trimmed}\n</content>`,
     );
-    const response = await provider.chat([]);
+    // The run's retry policy, but logged only: a RUN_RETRYING event here would
+    // put title work on the investigation's stream, which this must never touch.
+    const response = await withLLMRetries(() => provider.chat([]), {
+      delays: retryDelaysMs(loadConfig().maxRetries),
+      onRetry: (notice) =>
+        logger.warn(
+          { sessionId, attempt: notice.attempt, delayMs: notice.delayMs },
+          "transient LLM error titling the session, retrying",
+        ),
+    });
     const title = refine(response.text);
     if (!title) {
       logger.warn(

@@ -12,6 +12,8 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { InvestigationsPage } from "./pages/InvestigationsPage.js";
+import { InvestigationRecordPage } from "./pages/InvestigationRecordPage.js";
+import { AgentPage } from "./pages/AgentPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddRunnerPage } from "./pages/AddRunnerPage.js";
 import { RunnerListPage } from "./pages/RunnerListPage.js";
@@ -69,24 +71,25 @@ const indexRoute = createRoute({
   },
 });
 
-// Inert: Shell owns the one persistent SessionView, so crossing between the
-// two families is a prop change rather than a remount that drops a live run.
+// The layout follows the route and nothing else. Crossing between the two
+// families remounts these components, but the conversation is portaled into a
+// node ChatHost owns above the router, so a live run is never dropped.
 const agentRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agent",
-  component: () => null,
+  component: AgentPage,
 });
 
 const agentSessionRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agent/$id",
-  component: () => null,
+  component: AgentPage,
 });
 
 const investigationRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/investigations/$id",
-  component: () => null,
+  component: InvestigationRecordPage,
 });
 
 const investigationsRoute = createRoute({

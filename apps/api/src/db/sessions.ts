@@ -4,11 +4,12 @@ import type {
   NormalizedAlert,
   SessionAlert,
   Report,
+  SessionKind,
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
 import { getDb } from "./client.js";
-import type { PendingHumanInput } from "./interrupts.js";
+import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 
 // The alerts are the durable source of severity-dependent behavior on resume, so
 // a run that no longer carries them in its job can recover them from here.
@@ -283,7 +284,11 @@ export interface SessionListSource {
   report: Report | null;
   remediationExecuted: boolean;
   lastKind: string | null;
+  // The tail's text, which is why a failed run failed when lastKind is "error".
+  lastContent: string | null;
   awaitingHumanInput: boolean;
+  // What the session is waiting on, null when it waits on nothing.
+  pendingKind: PendingHumanInput["kind"] | null;
 }
 
 // One page of it. nextOffset is the offset to ask for next, or null once the
@@ -293,59 +298,98 @@ export interface SessionListSourcePage {
   nextOffset: number | null;
 }
 
+interface SessionListRawRow {
+  sessionId: string;
+  title: string;
+  createdAt: string;
+  lastActivityAt: string;
+  alerts: string;
+  investigation: number;
+  report: string | null;
+  remediationExecuted: number;
+  lastKind: string | null;
+  lastContent: string | null;
+  awaitingHumanInput: number;
+  pendingKind: string | null;
+}
+
+const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
+        s.alerts, s.investigation, s.report,
+        EXISTS (SELECT 1 FROM remediation_actions ra
+          WHERE ra.session_id = s.session_id
+            AND ra.status = 'executed') AS remediationExecuted,
+        (SELECT m.kind FROM session_transcript m
+          WHERE m.session_id = s.session_id
+          ORDER BY m.seq DESC LIMIT 1) AS lastKind,
+        (SELECT m.content FROM session_transcript m
+          WHERE m.session_id = s.session_id
+          ORDER BY m.seq DESC LIMIT 1) AS lastContent,
+        COALESCE((SELECT MAX(m.created_at) FROM session_transcript m
+          WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
+        (p.session_id IS NOT NULL) AS awaitingHumanInput,
+        p.kind AS pendingKind`;
+
+function toSource(r: SessionListRawRow): SessionListSource {
+  return {
+    sessionId: r.sessionId,
+    title: r.title,
+    createdAt: r.createdAt,
+    lastActivityAt: r.lastActivityAt,
+    alerts: parseAlerts(r.alerts),
+    investigation: r.investigation === 1,
+    report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
+    remediationExecuted: r.remediationExecuted === 1,
+    lastKind: r.lastKind,
+    lastContent: r.lastContent,
+    awaitingHumanInput: r.awaitingHumanInput === 1,
+    pendingKind:
+      r.pendingKind !== null && isHumanInputKind(r.pendingKind)
+        ? r.pendingKind
+        : null,
+  };
+}
+
 // Ordering is the store's, not the console's: a waiting session leads the whole
 // list, and the id tiebreak stops a row swapping pages between fetches.
 export function listSessionSources(
   limit: number,
   offset: number,
+  kind?: SessionKind,
 ): SessionListSourcePage {
+  const filter =
+    kind === undefined
+      ? ""
+      : `WHERE s.investigation = ${kind === "investigation" ? 1 : 0}`;
   const rows = getDb()
     .prepare(
-      `SELECT s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-              s.alerts, s.investigation, s.report,
-              EXISTS (SELECT 1 FROM remediation_actions ra
-                WHERE ra.session_id = s.session_id
-                  AND ra.status = 'executed') AS remediationExecuted,
-              (SELECT m.kind FROM session_transcript m
-                WHERE m.session_id = s.session_id
-                ORDER BY m.seq DESC LIMIT 1) AS lastKind,
-              COALESCE((SELECT MAX(m.created_at) FROM session_transcript m
-                WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
-              (p.session_id IS NOT NULL) AS awaitingHumanInput
+      `SELECT ${LIST_COLUMNS}
        FROM sessions s
        LEFT JOIN pending_human_input p ON p.session_id = s.session_id
+       ${filter}
        ORDER BY awaitingHumanInput DESC, lastActivityAt DESC, s.session_id ASC
        LIMIT ? OFFSET ?`,
     )
     // One extra row answers "is there a next page?" without a second count query.
-    .all(limit + 1, offset) as Array<{
-    sessionId: string;
-    title: string;
-    createdAt: string;
-    lastActivityAt: string;
-    alerts: string;
-    investigation: number;
-    report: string | null;
-    remediationExecuted: number;
-    lastKind: string | null;
-    awaitingHumanInput: number;
-  }>;
+    .all(limit + 1, offset) as SessionListRawRow[];
   const page = rows.slice(0, limit);
   return {
-    sources: page.map((r) => ({
-      sessionId: r.sessionId,
-      title: r.title,
-      createdAt: r.createdAt,
-      lastActivityAt: r.lastActivityAt,
-      alerts: parseAlerts(r.alerts),
-      investigation: r.investigation === 1,
-      report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
-      remediationExecuted: r.remediationExecuted === 1,
-      lastKind: r.lastKind,
-      awaitingHumanInput: r.awaitingHumanInput === 1,
-    })),
+    sources: page.map(toSource),
     nextOffset: rows.length > limit ? offset + page.length : null,
   };
+}
+
+// Every investigation, unpaginated: the counts on the page are claims about the
+// whole set, which no page of rows can answer.
+export function listInvestigationSources(): SessionListSource[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ${LIST_COLUMNS}
+       FROM sessions s
+       LEFT JOIN pending_human_input p ON p.session_id = s.session_id
+       WHERE s.investigation = 1`,
+    )
+    .all() as SessionListRawRow[];
+  return rows.map(toSource);
 }
 
 export function getSession(sessionId: string): StoredSession | undefined {

@@ -53,7 +53,9 @@
   --foreground: var(--ink-3);
   --card: var(--n-4);
   --card-foreground: var(--ink-3);
-  --popover: var(--n-4);
+  /* The highest surface in the room, so it clears the card it may open over.
+     Measured against Linear's own popover at L 0.248. */
+  --popover: var(--n-5);
   --popover-foreground: var(--ink-3);
   --secondary: var(--n-3);
   --secondary-foreground: var(--ink-3);
@@ -228,12 +230,22 @@
   --text-2xl: 1.5rem; /* page titles */
   --text-2xl--line-height: calc(30 / 24);
 
-  /* Containers */
+  /* Containers. Every width in the console resolves here, under one of three
+     jobs, and each is tunable without moving the other two. */
+
+  /* Page measures - how wide a page's own column of content runs. A page names
+     one of these; nothing else does. */
   --container-page: 920px;
   /* 640px of content inside the page's own padding: a settings row reads as a
      line of prose, and three cards across land at Linear's 203px. */
   --container-form: 688px;
+  /* Content measures - how wide a kind of content reads, wherever it is
+     hosted. The conversation keeps its own on the Agent page and inside the
+     rail, so neither host states a width on its behalf. */
+  --container-report: 920px;
   --container-chat: 760px;
+
+  /* Structure - fixed widths of the frame itself, not measures of content. */
   --container-rail: 440px;
   --container-sidebar: 250px;
   --container-sidebar-icon: 52px;

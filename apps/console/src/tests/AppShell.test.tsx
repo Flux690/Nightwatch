@@ -8,22 +8,70 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
+import type { SessionListRow } from "@nightwarden/shared";
+
 import { TestProviders } from "./renderWithProviders.js";
 import { routeTree } from "@/router";
 import { MockEventSource } from "./mockEventSource.js";
 
 const OWNER_EMAIL = "admin@example.com";
 
-const SESSION_1 = {
+const SESSION_1: SessionListRow = {
   sessionId: "s1",
   title: "CPU spike on web-01",
   createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
   investigation: false,
   severity: null,
+  severityLabel: null,
   status: null,
+  finding: null,
   awaitingHumanInput: false,
 };
+
+function investigationRow(
+  sessionId: string,
+  title: string,
+  overrides: Partial<SessionListRow> = {},
+): SessionListRow {
+  return {
+    ...SESSION_1,
+    sessionId,
+    title,
+    createdAt: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+    lastActivityAt: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+    investigation: true,
+    ...overrides,
+  };
+}
+
+// Two in one group so severity has something to order, a status per group so
+// the triage order is visible, and one row carrying no severity at all.
+const INVESTIGATIONS = [
+  // Listed first, and ordered second: "P1" is a word we cannot rank.
+  investigationRow("inv-p1", "Checkout latency spike", {
+    severity: null,
+    severityLabel: "P1",
+    status: "action_required",
+    finding: "Raise the pod memory limit",
+  }),
+  investigationRow("inv-crit", "Container memory high", {
+    severity: "critical",
+    severityLabel: "critical",
+    status: "action_required",
+    finding: "Waiting on approval",
+  }),
+  investigationRow("inv-run", "Redis pool exhausted", {
+    severity: "warning",
+    severityLabel: "warning",
+    status: "investigating",
+    finding: "Connection pool starved by the checkout deploy",
+  }),
+  investigationRow("inv-done", "Disk filling on db-02", {
+    status: "resolved",
+    finding: "Alert condition recovered",
+  }),
+];
 
 // The real route tree, not a copy of it: the redirect, the two session route
 // families and the pages they land on are exactly what ships.
@@ -88,24 +136,36 @@ function setup({
         json: () => Promise.resolve({ error: "no report for session" }),
       });
     }
-    if (/\/sessions\/[^?]+/.test(url)) {
+    const record = /\/sessions\/([^?/]+)$/.exec(url);
+    if (record !== null) {
+      const id = record[1]!;
+      const known = INVESTIGATIONS.find((row) => row.sessionId === id);
       return Promise.resolve({
         ok: true,
         json: () =>
           Promise.resolve({
-            sessionId: "new-s1",
-            title: "Check disk",
+            sessionId: id,
+            title: known?.title ?? "Check disk",
             createdAt: "2026-06-13T00:00:00.000Z",
-            investigation,
+            investigation: known !== undefined || investigation,
             alerts: [],
             transcript: [],
           }),
       });
     }
     if (url.includes("/sessions")) {
+      const rows = url.includes("kind=investigation")
+        ? INVESTIGATIONS
+        : [SESSION_1];
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ rows: [SESSION_1], nextOffset: null }),
+        json: () =>
+          Promise.resolve({
+            rows,
+            nextOffset: null,
+            actionRequiredCount: 2,
+            investigationTotal: INVESTIGATIONS.length,
+          }),
       });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -380,9 +440,12 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    it("morphs to the investigation layout on the session's own flag, with no report", async () => {
+    // The layout is the route's and nothing else's. A session flipping to an
+    // investigation does not rearrange the page under an operator mid-read;
+    // the promotion replaces the address, and the address decides.
+    it("morphs on the address, not on the session's own flag", async () => {
       const user = userEvent.setup();
-      const { router, setInvestigation } = setup();
+      const { router, setInvestigation, fetchMock } = setup();
 
       await screen.findByRole("textbox");
       await user.type(screen.getByRole("textbox"), "Check disk");
@@ -391,6 +454,12 @@ describe("Shell", () => {
         expect(router.state.location.pathname).toBe("/agent/new-s1");
       });
       const streamBefore = MockEventSource.latest;
+
+      const sessionFetches = (): number =>
+        fetchMock.mock.calls.filter(
+          (call) => call[0] === "/api/sessions/new-s1",
+        ).length;
+      const before = sessionFetches();
 
       setInvestigation(true);
       act(() => {
@@ -404,6 +473,19 @@ describe("Shell", () => {
               content: "Opening an investigation.",
             },
           },
+        });
+      });
+      // The flag has demonstrably reached the client, and moved nothing.
+      await waitFor(() => expect(sessionFetches()).toBeGreaterThan(before));
+      expect(
+        screen.queryByRole("complementary", { name: /investigation chat/i }),
+      ).not.toBeInTheDocument();
+
+      await act(async () => {
+        await router.navigate({
+          to: "/investigations/$id",
+          params: { id: "new-s1" },
+          replace: true,
         });
       });
 
@@ -450,6 +532,183 @@ describe("Shell", () => {
       });
       expect(MockEventSource.latest).toBe(streamBefore);
       expect(screen.getByRole("textbox")).toBeInTheDocument();
+    });
+  });
+
+  describe("the investigations list", () => {
+    it("groups by status in triage order, and renders no empty group", async () => {
+      setup({ path: "/investigations" });
+
+      const action = await screen.findByRole("region", {
+        name: "Action required",
+      });
+      const investigating = screen.getByRole("region", {
+        name: "Investigating",
+      });
+      const resolved = screen.getByRole("region", { name: "Resolved" });
+
+      // The header states the status and nothing else; the rows under it are
+      // the count, and repeating it as a number adds no reading.
+      expect(action).toHaveTextContent("Action required");
+      expect(action).not.toHaveTextContent(/Action required\s*\d/);
+      expect(within(action).getAllByRole("link")).toHaveLength(2);
+      expect(within(investigating).getAllByRole("link")).toHaveLength(1);
+      expect(within(resolved).getAllByRole("link")).toHaveLength(1);
+      expect(precedes(action, investigating)).toBe(true);
+      expect(precedes(investigating, resolved)).toBe(true);
+
+      // Nothing is Failed, so no Failed header is drawn.
+      expect(
+        screen.queryByRole("region", { name: "Failed" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("region", { name: "Inconclusive" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("puts the title, the finding, the severity word and the age on one row", async () => {
+      setup({ path: "/investigations" });
+
+      const row = await screen.findByRole("link", {
+        name: /Container memory high/,
+      });
+      expect(row).toHaveTextContent("Container memory high");
+      expect(row).toHaveTextContent("Waiting on approval");
+      // The label's own word, not a vocabulary we imposed on it.
+      expect(row).toHaveTextContent("critical");
+      expect(row).toHaveTextContent("14m");
+    });
+
+    it("renders an absent severity as nothing rather than a substitute", async () => {
+      setup({ path: "/investigations" });
+
+      const row = await screen.findByRole("link", {
+        name: /Disk filling on db-02/,
+      });
+      expect(row).toHaveTextContent("Alert condition recovered");
+      expect(row).not.toHaveTextContent(/critical|warning|info|unknown|—/);
+    });
+
+    it("orders a group by severity, an unrankable word sorting last", async () => {
+      setup({ path: "/investigations" });
+
+      const critical = await screen.findByRole("link", {
+        name: /Container memory high/,
+      });
+      // The API sent "P1" first; severity is what decides the arrangement.
+      const unranked = screen.getByRole("link", {
+        name: /Checkout latency spike/,
+      });
+      expect(precedes(critical, unranked)).toBe(true);
+    });
+
+    it("opens a row at its own record", async () => {
+      const user = userEvent.setup();
+      const { router } = setup({ path: "/investigations" });
+
+      await user.click(
+        await screen.findByRole("link", { name: /Container memory high/ }),
+      );
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/investigations/inv-crit");
+      });
+    });
+
+    it("puts the count of work needing a person beside the nav item", async () => {
+      setup({ path: "/investigations" });
+
+      // Scoped to the sidebar: the breadcrumb names this page the same way.
+      await screen.findByRole("region", { name: "Action required" });
+      const sidebar = document.querySelector('[data-slot="sidebar"]');
+      const item = within(sidebar as HTMLElement).getByRole("link", {
+        name: "Investigations",
+      });
+      expect(
+        within(item).getByLabelText("2 needing action"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("the investigation record", () => {
+    it("heads the record with a breadcrumb back to the list", async () => {
+      setup({ path: "/investigations/inv-crit" });
+
+      await waitFor(async () => {
+        expect(await currentCrumb()).toHaveTextContent("Container memory high");
+      });
+      const back = within(
+        screen.getByRole("navigation", { name: "breadcrumb" }),
+      ).getByRole("link", { name: "Investigations" });
+      expect(back).toHaveAttribute("href", "/investigations");
+    });
+
+    it("carries its place in the queue and steps to the next record", async () => {
+      const user = userEvent.setup();
+      const { router } = setup({ path: "/investigations/inv-crit" });
+
+      // First of four: the critical leads the first group in triage order.
+      expect(await screen.findByText("1 / 4")).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: "Next investigation" }),
+      );
+
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/investigations/inv-p1");
+      });
+      expect(await screen.findByText("2 / 4")).toBeInTheDocument();
+      // Nothing navigated back to the list to get there.
+      expect(
+        screen.queryByRole("region", { name: "Action required" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers Copy report as Markdown and Delete, and never Mark as resolved", async () => {
+      const user = userEvent.setup();
+      setup({ path: "/investigations/inv-crit" });
+
+      await user.click(
+        await screen.findByRole("button", { name: "More actions" }),
+      );
+
+      expect(
+        await screen.findByRole("menuitem", {
+          name: "Copy report as Markdown",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: "Delete" }),
+      ).toBeInTheDocument();
+      // Status is derived and never declared; this is where an operator would
+      // most expect to declare it, so it must not be here.
+      expect(
+        screen.queryByRole("menuitem", { name: /mark as resolved/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("names the record in its delete confirmation and then deletes it", async () => {
+      const user = userEvent.setup();
+      const { router, fetchMock } = setup({ path: "/investigations/inv-crit" });
+
+      await user.click(
+        await screen.findByRole("button", { name: "More actions" }),
+      );
+      await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+      const dialog = await screen.findByRole("alertdialog");
+      expect(dialog).toHaveTextContent("Container memory high");
+      await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/sessions/inv-crit",
+          expect.objectContaining({ method: "DELETE" }),
+        );
+      });
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/investigations");
+      });
     });
   });
 });

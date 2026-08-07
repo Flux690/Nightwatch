@@ -21,20 +21,35 @@ export type SessionRunStatus =
 export interface SessionListRow extends SessionMeta {
   lastActivityAt: string;
   investigation: boolean;
+  // The rank, for ordering. Null when the label named a word we cannot rank.
   severity: AlertSeverity | null;
+  // The label's own word, for rendering. Null when the alert carries no label.
+  severityLabel: string | null;
   status: SessionRunStatus | null;
+  // One line answering the question the status raises, drawn from the system's
+  // record or the model's prose. Null when there is nothing to say.
+  finding: string | null;
   // Its own field rather than a reading of `status`, which is null unless the
   // session is under investigation - any session can be waiting on a human.
   awaitingHumanInput: boolean;
 }
 
-// What GET /sessions answers. The list is ordered by the API, so a client
-// renders the rows in the order it received them and never re-sorts a page.
+// What GET /sessions answers. The rows are one page; the counts are claims
+// about every session, which a page cannot answer.
 export interface SessionListPage {
   rows: SessionListRow[];
   // The offset to request next, or null once the list is exhausted.
   nextOffset: number | null;
+  // Investigations needing a human, by the same derivation the group headers
+  // use, so the nav count and the headers cannot disagree.
+  actionRequiredCount: number;
+  // Every investigation there is, so a record's place in the queue is true.
+  investigationTotal: number;
 }
+
+// Two pages over one table. Without it a page of results can be entirely the
+// other kind, and pagination stops meaning anything.
+export type SessionKind = "investigation" | "chat";
 
 export interface SessionMeta {
   sessionId: string;

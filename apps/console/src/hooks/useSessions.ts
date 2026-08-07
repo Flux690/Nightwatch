@@ -3,17 +3,27 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
-import type { SessionListPage, SessionListRow } from "@nightwarden/shared";
+import type {
+  SessionKind,
+  SessionListPage,
+  SessionListRow,
+} from "@nightwarden/shared";
 import { apiFetch } from "@/api/client";
 
-// One query for the whole console: sidebar, attention badge and the optimistic
-// row after a chat starts all read this cache, so none of them can disagree.
-export const SESSIONS_QUERY_KEY = ["sessions"] as const;
+// One cache per kind. Investigations and chats are two pages over one table, so
+// a shared cache would make either page's "load more" fetch the other's rows.
+export function sessionsQueryKey(kind: SessionKind): readonly [string, string] {
+  return ["sessions", kind] as const;
+}
 
 type Pages = InfiniteData<SessionListPage, number>;
 
 export interface UseSessionsResult {
   sessions: SessionListRow[];
+  // Answered by the server over every session, so it neither climbs as the
+  // operator scrolls nor reads zero on a page that never loaded the list.
+  actionRequiredCount: number;
+  investigationTotal: number;
   isLoading: boolean;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -31,25 +41,31 @@ function dedupe(rows: SessionListRow[]): SessionListRow[] {
   });
 }
 
-export function useSessions(): UseSessionsResult {
+export function useSessions(kind: SessionKind): UseSessionsResult {
   const query = useInfiniteQuery<
     SessionListPage,
     Error,
     Pages,
-    typeof SESSIONS_QUERY_KEY,
+    ReturnType<typeof sessionsQueryKey>,
     number
   >({
-    queryKey: SESSIONS_QUERY_KEY,
+    queryKey: sessionsQueryKey(kind),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      apiFetch<SessionListPage>(`/api/sessions?offset=${pageParam}`),
+      apiFetch<SessionListPage>(
+        `/api/sessions?kind=${kind}&offset=${pageParam}`,
+      ),
     getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
   });
 
+  const first = query.data?.pages[0];
   return {
-    // Rendered in the order received: the API owns the sort, including floating
-    // a session that is waiting on a human, so re-sorting here would fight it.
+    // In the order received: the API owns the sort of the set. Arranging what
+    // is on screen - the status groups and severity within them - is the
+    // page's, because status is derived from a dispatcher SQL cannot see.
     sessions: dedupe(query.data?.pages.flatMap((page) => page.rows) ?? []),
+    actionRequiredCount: first?.actionRequiredCount ?? 0,
+    investigationTotal: first?.investigationTotal ?? 0,
     isLoading: query.isLoading,
     hasMore: query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,
@@ -59,9 +75,10 @@ export function useSessions(): UseSessionsResult {
 
 function updatePages(
   queryClient: QueryClient,
+  kind: SessionKind,
   update: (pages: SessionListPage[]) => SessionListPage[],
 ): void {
-  queryClient.setQueryData<Pages>(SESSIONS_QUERY_KEY, (prev) =>
+  queryClient.setQueryData<Pages>(sessionsQueryKey(kind), (prev) =>
     prev === undefined ? prev : { ...prev, pages: update(prev.pages) },
   );
 }
@@ -72,18 +89,22 @@ export function prependSession(
   queryClient: QueryClient,
   row: SessionListRow,
 ): void {
-  updatePages(queryClient, (pages) =>
-    pages.map((page, index) =>
-      index === 0 ? { ...page, rows: [row, ...page.rows] } : page,
-    ),
+  updatePages(
+    queryClient,
+    row.investigation ? "investigation" : "chat",
+    (pages) =>
+      pages.map((page, index) =>
+        index === 0 ? { ...page, rows: [row, ...page.rows] } : page,
+      ),
   );
 }
 
 export function removeSession(
   queryClient: QueryClient,
+  kind: SessionKind,
   sessionId: string,
 ): void {
-  updatePages(queryClient, (pages) =>
+  updatePages(queryClient, kind, (pages) =>
     pages.map((page) => ({
       ...page,
       rows: page.rows.filter((row) => row.sessionId !== sessionId),
@@ -93,10 +114,11 @@ export function removeSession(
 
 export function renameSession(
   queryClient: QueryClient,
+  kind: SessionKind,
   sessionId: string,
   title: string,
 ): void {
-  updatePages(queryClient, (pages) =>
+  updatePages(queryClient, kind, (pages) =>
     pages.map((page) => ({
       ...page,
       rows: page.rows.map((row) =>

@@ -61,28 +61,30 @@ export async function registerSessionRoutes(
 ): Promise<void> {
   // Paginated rather than truncated: a hundredth session used to be the last one
   // the operator could reach, with nothing on screen saying so.
-  fastify.get<{ Querystring: { limit?: string; offset?: string } }>(
-    "/sessions",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const limit = parseBoundedInt(
-        request.query.limit,
-        DEFAULT_PAGE_LIMIT,
-        1,
-        MAX_PAGE_LIMIT,
-      );
-      const offset = parseBoundedInt(
-        request.query.offset,
-        0,
-        0,
-        Number.MAX_SAFE_INTEGER,
-      );
-      if (limit === null || offset === null) {
-        return reply.code(400).send({ error: "invalid limit or offset" });
-      }
-      return listSessionPage(limit, offset);
-    },
-  );
+  fastify.get<{
+    Querystring: { limit?: string; offset?: string; kind?: string };
+  }>("/sessions", { preHandler: requireSession }, async (request, reply) => {
+    const limit = parseBoundedInt(
+      request.query.limit,
+      DEFAULT_PAGE_LIMIT,
+      1,
+      MAX_PAGE_LIMIT,
+    );
+    const offset = parseBoundedInt(
+      request.query.offset,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (limit === null || offset === null) {
+      return reply.code(400).send({ error: "invalid limit or offset" });
+    }
+    const { kind } = request.query;
+    if (kind !== undefined && kind !== "investigation" && kind !== "chat") {
+      return reply.code(400).send({ error: "invalid kind" });
+    }
+    return listSessionPage(limit, offset, kind);
+  });
 
   // The session answers what it is. Returning a bare transcript meant an
   // unknown id came back as `200 []`, which the console drew as a real but

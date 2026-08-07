@@ -389,7 +389,9 @@ describe("API-local session store", () => {
       expect(statusOf(m.sessionId)).toBeNull();
     });
 
-    it("reads Resolved once a remediation executed", () => {
+    // Running a fix is evidence of effort, not of outcome. The alert that fired
+    // is the only thing that can say the incident is over.
+    it("does not resolve on a remediation while the alert it fired on still fires", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
       insertExecutingRemediationAction({
@@ -399,9 +401,26 @@ describe("API-local session store", () => {
         input: { target: "docker/app/web" },
         resolvedBy: "operator",
       });
-      expect(statusOf(sessionId)).toBe("inconclusive");
       settleRemediationAction(sessionId, "tu-exec", "executed", "ok");
-      expect(statusOf(sessionId)).toBe("resolved");
+      expect(statusOf(sessionId)).toBe("inconclusive");
+    });
+
+    // A promoted chat has no alert to recover, so the executed action is the
+    // only completion signal it will ever get.
+    it("resolves a session that fired on no alert once a remediation executed", () => {
+      const m = meta();
+      createSession(m, [], true);
+      seedCompleteReport(m.sessionId);
+      insertExecutingRemediationAction({
+        toolUseId: "tu-chat",
+        sessionId: m.sessionId,
+        toolName: "RestartDockerService",
+        input: { target: "docker/app/web" },
+        resolvedBy: "operator",
+      });
+      expect(statusOf(m.sessionId)).toBe("inconclusive");
+      settleRemediationAction(m.sessionId, "tu-chat", "executed", "ok");
+      expect(statusOf(m.sessionId)).toBe("resolved");
     });
 
     it("reads Resolved when the alert cleared, with nothing run", () => {
@@ -470,6 +489,189 @@ describe("API-local session store", () => {
         evidenceIds: ["tu-never-ran"],
       });
       expect(statusOf(sessionId)).toBe(null);
+    });
+  });
+
+  // The line answers the question its status raises, so the list can be triaged
+  // without opening every row. Every branch is a record or the model's prose.
+  describe("the finding line", () => {
+    function rowOf(sessionId: string) {
+      return listSessionPage(500, 0).rows.find(
+        (r) => r.sessionId === sessionId,
+      );
+    }
+    function findingOf(sessionId: string): string | null | undefined {
+      return rowOf(sessionId)?.finding;
+    }
+    function investigation(sourceAlertId = randomUUID()): string {
+      const m = meta();
+      createSession(m, [{ ...alert, sourceAlertId }], true);
+      return m.sessionId;
+    }
+
+    // A citation survives only if the call it names is in the transcript.
+    function cite(sessionId: string, toolUseId: string, seq: number): string {
+      appendTranscriptRows([
+        {
+          ...msg(sessionId, seq, { kind: "assistant" }),
+          parts: [
+            { type: "tool_call", id: toolUseId, name: "Read", input: {} },
+            { type: "tool_result", toolCallId: toolUseId, output: "ok" },
+          ],
+        },
+      ]);
+      return toolUseId;
+    }
+
+    it("says what a gated session waits on, by the kind of answer it needs", () => {
+      const sessionId = investigation();
+      appendRowsAndInterrupt([msg(sessionId, 0)], {
+        sessionId,
+        toolUseId: "tu-gate",
+        kind: "approval",
+        completedResults: [],
+        claimedAt: null,
+      });
+      expect(findingOf(sessionId)).toBe("Waiting on approval");
+    });
+
+    it("names the fix a finished run is waiting on somebody to take", () => {
+      const sessionId = investigation();
+      seedCompleteReport(sessionId);
+      proposeFix(sessionId, "raise the pod memory limit to 2Gi", []);
+      expect(findingOf(sessionId)).toBe("raise the pod memory limit to 2Gi");
+    });
+
+    // With no fix written the claim stands in for one, and the claim that leads
+    // is the most confident the run reached, not the last thing it typed.
+    it("leads with the most confident claim, the newer of two equals winning", () => {
+      const sessionId = investigation();
+      proposeHypothesis(sessionId, "the cache size grew at the merge");
+      proposeHypothesis(sessionId, "the sidecar leaks between deploys");
+      resolveHypothesis(sessionId, {
+        id: "h1",
+        verdict: "symptom",
+        finding: "it climbs with the cache",
+        evidenceIds: [cite(sessionId, "tu-1", 0)],
+      });
+      resolveHypothesis(sessionId, {
+        id: "h2",
+        verdict: "root_cause",
+        finding: "the leak survives the restart",
+        evidenceIds: [cite(sessionId, "tu-2", 1)],
+      });
+      // The cause outranks the symptom even though the symptom settled first.
+      expect(findingOf(sessionId)).toBe("the sidecar leaks between deploys");
+
+      proposeHypothesis(sessionId, "the pool never returns its connections");
+      resolveHypothesis(sessionId, {
+        id: "h3",
+        verdict: "root_cause",
+        finding: "the pool is full at the crash",
+        evidenceIds: [cite(sessionId, "tu-3", 2)],
+      });
+      expect(findingOf(sessionId)).toBe(
+        "the pool never returns its connections",
+      );
+    });
+
+    it("says the condition recovered, never which fix ran", () => {
+      const sourceAlertId = randomUUID();
+      const sessionId = investigation(sourceAlertId);
+      seedCompleteReport(sessionId);
+      markAlertCleared(sourceAlertId, new Date().toISOString());
+      expect(findingOf(sessionId)).toBe("Alert condition recovered");
+    });
+
+    it("names what an inconclusive run ruled out, and nothing when it recorded nothing", () => {
+      const ruled = investigation();
+      seedCompleteReport(ruled); // one disproven hypothesis
+      expect(findingOf(ruled)).toBe("Ruled out: seeded by test");
+      expect(findingOf(investigation())).toBeNull();
+    });
+
+    it("gives a failed run its own error text", () => {
+      const sessionId = investigation();
+      appendTranscriptRows([
+        msg(sessionId, 0, { kind: "error", content: "the provider timed out" }),
+      ]);
+      expect(findingOf(sessionId)).toBe("the provider timed out");
+    });
+
+    it("leaves a session that is not under investigation with no finding", () => {
+      const m = meta();
+      createSession(m, []);
+      expect(findingOf(m.sessionId)).toBeNull();
+    });
+
+    // The rank orders rows; the label is what the operator wrote and is the
+    // only thing rendered.
+    it("carries the severity rank and the label's own word apart", () => {
+      const m = meta();
+      createSession(
+        m,
+        [
+          {
+            ...alert,
+            sourceAlertId: randomUUID(),
+            severity: null,
+            labels: { severity: "P1" },
+          },
+        ],
+        true,
+      );
+      expect(rowOf(m.sessionId)).toMatchObject({
+        severity: null,
+        severityLabel: "P1",
+      });
+    });
+  });
+
+  // Claims about every session, which a page of rows cannot answer: a count of
+  // loaded pages climbs as the operator scrolls and reads zero before they do.
+  describe("the page's counts and its kind filter", () => {
+    function investigation(): string {
+      const m = meta();
+      createSession(m, [{ ...alert, sourceAlertId: randomUUID() }], true);
+      return m.sessionId;
+    }
+
+    it("counts every investigation needing action, not the ones on this page", () => {
+      const waiting = investigation();
+      appendRowsAndInterrupt([msg(waiting, 0)], {
+        sessionId: waiting,
+        toolUseId: "tu-count",
+        kind: "approval",
+        completedResults: [],
+        claimedAt: null,
+      });
+      const wholeSet = listSessionPage(500, 0).actionRequiredCount;
+
+      // One row on the page, and the count is unmoved by that.
+      const onePage = listSessionPage(1, 0);
+      expect(onePage.rows).toHaveLength(1);
+      expect(onePage.actionRequiredCount).toBe(wholeSet);
+      expect(wholeSet).toBeGreaterThan(0);
+    });
+
+    it("totals every investigation, so a record's place in the queue is true", () => {
+      const before = listSessionPage(1, 0).investigationTotal;
+      investigation();
+      createSession(meta(), []); // a chat adds nothing to the total
+      expect(listSessionPage(1, 0).investigationTotal).toBe(before + 1);
+    });
+
+    it("filters the rows by kind, leaving the counts alone", () => {
+      const chat = meta();
+      createSession(chat, []);
+      const only = listSessionPage(500, 0, "investigation");
+      expect(only.rows.every((r) => r.investigation)).toBe(true);
+      expect(only.rows.some((r) => r.sessionId === chat.sessionId)).toBe(false);
+
+      const chats = listSessionPage(500, 0, "chat");
+      expect(chats.rows.every((r) => !r.investigation)).toBe(true);
+      expect(chats.rows.some((r) => r.sessionId === chat.sessionId)).toBe(true);
+      expect(chats.investigationTotal).toBe(only.investigationTotal);
     });
   });
 });

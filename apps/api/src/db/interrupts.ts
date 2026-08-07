@@ -20,7 +20,9 @@ interface RawRow {
   claimedAt: string | null;
 }
 
-function isHumanInputKind(kind: string): kind is PendingHumanInput["kind"] {
+export function isHumanInputKind(
+  kind: string,
+): kind is PendingHumanInput["kind"] {
   return kind === "approval" || kind === "clarification" || kind === "continue";
 }
 
