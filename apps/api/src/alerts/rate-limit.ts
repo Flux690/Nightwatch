@@ -1,7 +1,5 @@
-import type { NormalizedAlert } from "@nightwarden/shared";
-
-// Fleet-wide alert budget, in memory (no Redis): one global counter is the storm cap since
-// every non-critical alert now reaches an LLM session. Critical severity always bypasses.
+// Fleet-wide investigation budget, in memory (no Redis). A run is what costs,
+// not an alert: a storm batches into one, and later arrivals join it.
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 30;
 
@@ -12,9 +10,9 @@ interface Counter {
 
 let counter: Counter | null = null;
 
-export function checkRateLimit(severity: NormalizedAlert["severity"]): boolean {
-  if (severity === "critical") return true;
-
+// No severity bypass: exempting the literal word "critical" exempts one guess
+// at the operator's vocabulary and budgets a "P1" emergency as routine.
+export function checkInvestigationBudget(): boolean {
   const now = Date.now();
   if (!counter || now >= counter.resetAt) {
     counter = { count: 1, resetAt: now + WINDOW_MS };

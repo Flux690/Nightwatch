@@ -23,6 +23,7 @@ import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport } from "./report-helper.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
+import { batchWindow } from "../alerts/batch-window.js";
 import { dispatcher } from "../dispatcher.js";
 import {
   markRunnerAlive,
@@ -157,6 +158,19 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       });
   }
 
+  // A released finish re-parks while the finish gate nudges, so keep releasing
+  // until the run has actually ended.
+  async function settleRun(): Promise<void> {
+    for (
+      let i = 0;
+      i < 40 && dispatcher.getActiveAlertSession() !== null;
+      i++
+    ) {
+      gate.releaseAll();
+      await vi.advanceTimersByTimeAsync(10);
+    }
+  }
+
   it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
     const token = generateAlertSourceToken("dedup");
     // A re-notification carries the SAME startsAt - that pairing is the dedup key.
@@ -209,51 +223,87 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     await vi.advanceTimersByTimeAsync(90_001);
   });
 
-  it("rate-limits past 30 non-critical alerts fleet-wide per hour; critical bypasses; resets after the window", async () => {
-    const token = generateAlertSourceToken("ratelimit");
-    useImmediateProvider(); // runs complete at once; rate-limit is independent of them
-    // Fake only Date - the rate-limit window is Date.now()-based. Faking
-    // setImmediate/setTimeout too would hang Fastify's async internals.
-    vi.useFakeTimers({ toFake: ["Date"] });
-
+  // Counting alerts throws away evidence that was free and leaves the hour
+  // spent for the next incident.
+  it("a storm costs one investigation: every later alert joins the run already going", async () => {
+    const token = generateAlertSourceToken("storm");
+    useGatedProvider(); // the run parks, so later alerts meet an active session
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     // The counter is global module state; jump past any window earlier tests
-    // opened so this test counts from zero.
+    // opened so this one counts from zero.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
     markRunnerAlive(connA);
     markRunnerAlive(connB);
 
-    // 30 distinct alerts all admitted.
+    expect(
+      await ingest(token, alertBody("storm-0", "warning", "web-02")),
+    ).toMatchObject({ enqueued: 1, skipped: 0 });
+    await vi.advanceTimersByTimeAsync(90_001);
+    const sessionId = dispatcher.getActiveAlertSession();
+    expect(sessionId).not.toBeNull();
+
+    // Well past the old 30-alert ceiling, and none of it is refused.
+    for (let i = 1; i <= 40; i++) {
+      markRunnerAlive(connB);
+      expect(
+        await ingest(token, alertBody(`storm-${i}`, "warning", "web-02")),
+      ).toMatchObject({ enqueued: 1, skipped: 0 });
+    }
+    expect(dispatcher.getActiveAlertSession()).toBe(sessionId);
+
+    // The storm spent one of the thirty, so an unrelated incident minutes later
+    // is still investigated - the case the old counter could not serve.
+    seedCompleteReport(sessionId!);
+    gate.releaseAll();
+    await vi.advanceTimersByTimeAsync(50);
+    markRunnerAlive(connB);
+    expect(
+      await ingest(token, alertBody("storm-other", "warning", "web-02")),
+    ).toMatchObject({ enqueued: 1, skipped: 0 });
+    await vi.advanceTimersByTimeAsync(90_001);
+  });
+
+  it("budgets thirty investigations an hour, whatever severity opened them, and resets after the window", async () => {
+    const token = generateAlertSourceToken("budget");
+    useGatedProvider(); // parked runs end on demand, so each incident is its own
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    // Installing fake timers rewinds to real time, which can land inside a
+    // window an earlier test opened; a day clears any of them.
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+    markRunnerAlive(connA);
+    markRunnerAlive(connB);
+
+    // An inherited run would swallow the first alert as an injection.
+    await settleRun();
+    expect(dispatcher.getActiveAlertSession()).toBeNull();
+    expect(batchWindow.isOpen()).toBe(false);
+
+    // Thirty separate incidents. Each run has to end before the next alert, or
+    // that alert joins it instead of opening an investigation of its own.
     for (let i = 0; i < 30; i++) {
-      const r = await ingest(token, alertBody(`rl-${i}`, "warning", "web-02"));
-      expect(r).toMatchObject({ enqueued: 1, skipped: 0 });
+      markRunnerAlive(connB);
+      expect(
+        await ingest(token, alertBody(`bg-${i}`, "warning", "web-02")),
+      ).toMatchObject({ enqueued: 1, skipped: 0 });
+      await vi.advanceTimersByTimeAsync(90_001);
+      seedCompleteReport(dispatcher.getActiveAlertSession()!);
+      gate.releaseAll();
+      await settleRun();
+      expect(dispatcher.getActiveAlertSession()).toBeNull();
     }
 
-    // The 31st non-critical alert is rate-limited.
+    // The 31st run of the hour is refused, and "critical" buys no exemption.
+    markRunnerAlive(connB);
     expect(
-      await ingest(token, alertBody("rl-over", "warning", "web-02")),
-    ).toMatchObject({
-      enqueued: 0,
-      skipped: 1,
-    });
+      await ingest(token, alertBody("bg-over", "critical", "web-02")),
+    ).toMatchObject({ enqueued: 0, skipped: 1 });
 
-    // A critical alert bypasses the limit even while it is exhausted.
-    expect(
-      await ingest(token, alertBody("rl-crit", "critical", "web-02")),
-    ).toMatchObject({
-      enqueued: 1,
-      skipped: 0,
-    });
-
-    // Jumping the fake clock also pushes the runner's liveness past its TTL, so refresh it -
-    // a real runner would still be answering pings.
     vi.advanceTimersByTime(60 * 60 * 1000 + 1);
     markRunnerAlive(connB);
     expect(
-      await ingest(token, alertBody("rl-after", "warning", "web-02")),
-    ).toMatchObject({
-      enqueued: 1,
-      skipped: 0,
-    });
+      await ingest(token, alertBody("bg-after", "warning", "web-02")),
+    ).toMatchObject({ enqueued: 1, skipped: 0 });
+    await vi.advanceTimersByTimeAsync(90_001);
   });
 
   it("dispatches matched and unmatched alerts alike - no identity gate at ingest", async () => {

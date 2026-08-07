@@ -10,6 +10,8 @@ export interface BatchWindow {
   // True if an alert with this (fingerprint, startsAt) is already pending.
   // Used for intra-window dedup: prevents the model seeing the same alert twice.
   has(sourceAlertId: string, firedAt: string): boolean;
+  // True while a window is holding alerts, which already has a run coming.
+  isOpen(): boolean;
 }
 
 export function createBatchWindow(opts: {
@@ -41,6 +43,10 @@ export function createBatchWindow(opts: {
           (a) => a.sourceAlertId === sourceAlertId && a.firedAt === firedAt,
         ) ?? false
       );
+    },
+
+    isOpen(): boolean {
+      return pending !== null;
     },
   };
 }
