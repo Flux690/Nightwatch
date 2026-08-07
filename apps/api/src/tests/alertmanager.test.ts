@@ -31,7 +31,8 @@ describe("parseAlertmanager", () => {
     expect(parsed?.labels).toMatchObject({ alertname: "HighCPU" });
   });
 
-  it("normalizes severity aliases and defaults unknown to info", () => {
+  // Calling an unrecognized word "info" would state a severity nobody wrote.
+  it("normalizes the conventional words and leaves anything else unknown", () => {
     const sev = (s: string | undefined) =>
       parseAlertmanager({
         alerts: [alert({ labels: { alertname: "X", severity: s } })],
@@ -39,8 +40,19 @@ describe("parseAlertmanager", () => {
     expect(sev("error")).toBe("critical");
     expect(sev("critical")).toBe("critical");
     expect(sev("warn")).toBe("warning");
-    expect(sev("page")).toBe("info");
-    expect(sev(undefined)).toBe("info");
+    expect(sev("info")).toBe("info");
+    expect(sev("page")).toBeNull();
+    expect(sev("P1")).toBeNull();
+    expect(sev(undefined)).toBeNull();
+  });
+
+  // The word survives verbatim even when the normalized rank cannot read it.
+  it("keeps the severity label verbatim whatever it normalizes to", () => {
+    const [parsed] = parseAlertmanager({
+      alerts: [alert({ labels: { alertname: "X", severity: "P1" } })],
+    }).firing;
+    expect(parsed?.labels["severity"]).toBe("P1");
+    expect(parsed?.severity).toBeNull();
   });
 
   it("throws only when the envelope itself is not an alerts array", () => {

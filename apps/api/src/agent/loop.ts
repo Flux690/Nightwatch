@@ -266,7 +266,7 @@ export async function runInvestigation(
   log.info(
     {
       alertLabels: alert?.labels ?? null,
-      severity: alert?.severity ?? "info",
+      severity: alert?.severity ?? null,
       isChat: alert == null,
     },
     "investigation started",

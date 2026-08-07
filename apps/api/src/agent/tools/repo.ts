@@ -207,7 +207,7 @@ function composePrBody(
   sections.push(
     alert === null
       ? "## Incident\n\nStarted from a NightWarden chat session."
-      : `## Incident\n\n- Alert: ${alert.alertType} (${alert.severity})\n- Fired at: ${alert.firedAt}`,
+      : `## Incident\n\n- Alert: ${alert.alertType}${alert.severity === null ? "" : ` (${alert.severity})`}\n- Fired at: ${alert.firedAt}`,
   );
 
   if (filesChanged.length > 0) {

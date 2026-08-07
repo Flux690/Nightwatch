@@ -7,7 +7,9 @@ export interface NormalizedAlert {
   sourceAlertId: string;
   labels: Record<string, string>;
   alertType: string;
-  severity: AlertSeverity;
+  // Null when the label is absent or names a word we cannot rank; `labels` keeps
+  // the operator's own word, which is the only verbatim record of it.
+  severity: AlertSeverity | null;
   firedAt: string;
   rawPayload: unknown;
 }

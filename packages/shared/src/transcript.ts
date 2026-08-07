@@ -117,7 +117,7 @@ export interface AlertArrivedItem {
   kind: "alert_arrived";
   id: string;
   alertType: string;
-  severity: AlertSeverity;
+  severity: AlertSeverity | null;
 }
 
 export type TranscriptItem =

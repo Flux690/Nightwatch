@@ -124,9 +124,12 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
   const labelLine = labels ? `\nlabels: ${labels}` : "";
+  // Dropped rather than stated as null: an unrankable word is still in the
+  // labels below, where the model reads it as the operator wrote it.
+  const severityLine =
+    alert.severity === null ? "" : `\nseverity: ${alert.severity}`;
   return `id: ${alert.sourceAlertId}
 target: ${targetLine}
-type: ${alert.alertType}
-severity: ${alert.severity}
+type: ${alert.alertType}${severityLine}
 fired at: ${alert.firedAt}${labelLine}`;
 }

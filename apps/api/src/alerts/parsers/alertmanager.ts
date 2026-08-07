@@ -90,8 +90,11 @@ function toStringMap(value: unknown): Record<string, string> {
   return out;
 }
 
+// Alertmanager reserves no values, so a word outside the conventional ones is
+// one we cannot rank rather than the lowest rank there is.
 function normalizeSeverity(s: string | undefined): NormalizedAlert["severity"] {
   if (s === "critical" || s === "error") return "critical";
   if (s === "warning" || s === "warn") return "warning";
-  return "info";
+  if (s === "info") return "info";
+  return null;
 }
