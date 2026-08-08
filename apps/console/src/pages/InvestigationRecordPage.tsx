@@ -4,8 +4,10 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardCopy,
   MoreHorizontal,
   PanelRight,
+  Trash2,
 } from "lucide-react";
 
 import { Page } from "@/components/layout/Page";
@@ -17,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/hooks/useSession";
@@ -128,29 +131,41 @@ export function InvestigationRecordPage(): React.JSX.Element {
         { label: title },
       ]}
       measure="none"
+      /* The menu acts on the investigation, so it sits after its name rather
+         than at the far edge: the crumb truncates at its own ceiling and the
+         menu follows wherever the name ends, sliding left for a short title. */
+      beside={
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="More actions"
+                className="ml-1 shrink-0 rounded-full text-muted-foreground"
+              >
+                <MoreHorizontal {...ICON_UI} />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={copyMarkdown}>
+              <ClipboardCopy {...ICON_UI} />
+              Copy report as Markdown
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
+              <Trash2 {...ICON_UI} />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      }
+      /* The stepper and the rail toggle stay: neither acts on the record's
+         identity - one moves between records, the other changes the layout. */
       controls={
         <div className="ml-auto flex items-center gap-1">
           <QueueStepper sessionId={sessionId} />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon" aria-label="More actions">
-                  <MoreHorizontal {...ICON_UI} />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={copyMarkdown}>
-                Copy report as Markdown
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setConfirmingDelete(true)}
-              >
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon"

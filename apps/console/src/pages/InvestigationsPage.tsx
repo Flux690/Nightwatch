@@ -4,6 +4,7 @@ import type { SessionListRow } from "@nightwarden/shared";
 
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useConsoleEvents } from "@/hooks/ConsoleEventsProvider";
 import {
   renameSession,
@@ -16,7 +17,13 @@ import { timeAgo } from "@/lib/time";
 /* One line: the symptom that fired, what the investigation has to say about it,
    then the two right-aligned facts. Nothing at rest, so the row the cursor is
    on is the only lit thing on the page, and it lights to the header's own fill. */
-function InvestigationRow({ row }: { row: SessionListRow }): React.JSX.Element {
+function InvestigationRow({
+  row,
+  running,
+}: {
+  row: SessionListRow;
+  running: boolean;
+}): React.JSX.Element {
   return (
     <li>
       <Link
@@ -33,6 +40,11 @@ function InvestigationRow({ row }: { row: SessionListRow }): React.JSX.Element {
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-3 text-muted-foreground">
+          {/* This group is derived from the live dispatcher, so the spinner is
+              not decoration: it says a run is moving at this moment. Hidden from
+              the accessibility tree because the group heading above already
+              says it, and repeating it on every row says nothing new. */}
+          {running && <Spinner aria-hidden className="size-3.5" role="none" />}
           {row.severityLabel !== null && <span>{row.severityLabel}</span>}
           <span className="tabular-nums">{timeAgo(row.createdAt)}</span>
         </span>
@@ -88,7 +100,11 @@ export function InvestigationsPage(): React.JSX.Element {
             </h2>
             <ul className="m-0 flex list-none flex-col p-0">
               {group.rows.map((row) => (
-                <InvestigationRow key={row.sessionId} row={row} />
+                <InvestigationRow
+                  key={row.sessionId}
+                  row={row}
+                  running={group.status === "investigating"}
+                />
               ))}
             </ul>
           </section>
