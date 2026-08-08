@@ -231,4 +231,157 @@ describe("Prometheus tools through the tool dispatch", () => {
     expect(result.outcome).toBe("system");
     expect(String(result.content)).toContain("parse error");
   });
+
+  /* Discovery, so an expression names a metric that exists. A PromQL query
+     against a metric nobody exports returns no series, which reads as "the
+     value is fine" rather than as a typo - the failure these tools remove. */
+  describe("reading what Prometheus holds", () => {
+    function installDiscoveryMock(payloads: Record<string, unknown>): void {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((input: unknown): Promise<Response> => {
+          const url = String(input);
+          const match = Object.keys(payloads).find((path) =>
+            url.includes(path),
+          );
+          if (match === undefined) {
+            throw new Error(`Unexpected Prometheus request in test: ${url}`);
+          }
+          return Promise.resolve(
+            json({ status: "success", data: payloads[match] }),
+          );
+        }),
+      );
+    }
+
+    it("narrows metric names by substring, case-insensitively", async () => {
+      connect();
+      installDiscoveryMock({
+        "/api/v1/label/__name__/values": [
+          "container_memory_working_set_bytes",
+          "container_cpu_usage_seconds_total",
+          "NODE_MEMORY_FREE_BYTES",
+        ],
+      });
+
+      const result = await executeTool(
+        findTool("ListMetricNames")!,
+        { contains: "MeMoRy" },
+        mintSession(ALERT),
+      );
+      const content = result.content as { names: string[] };
+      expect(content.names).toEqual([
+        "container_memory_working_set_bytes",
+        "NODE_MEMORY_FREE_BYTES",
+      ]);
+    });
+
+    // A miss is the useful answer here: it says the name is wrong now, rather
+    // than leaving an empty chart to say it later.
+    it("says nothing matched rather than answering with an empty list", async () => {
+      connect();
+      installDiscoveryMock({ "/api/v1/label/__name__/values": ["up"] });
+
+      const result = await executeTool(
+        findTool("ListMetricNames")!,
+        { contains: "nonesuch" },
+        mintSession(ALERT),
+      );
+      expect(result.outcome).toBe("expected_miss");
+      expect(String(result.content)).toContain("No metric names matched");
+    });
+
+    it("reads a metric's type and unit, which is how a counter is told from a gauge", async () => {
+      connect();
+      installDiscoveryMock({
+        "/api/v1/metadata": {
+          container_memory_working_set_bytes: [
+            { type: "gauge", unit: "bytes", help: "Current working set." },
+          ],
+        },
+      });
+
+      const result = await executeTool(
+        findTool("GetMetricMetadata")!,
+        { metric: "container_memory_working_set_bytes" },
+        mintSession(ALERT),
+      );
+      expect(result.content).toMatchObject({ type: "gauge", unit: "bytes" });
+    });
+
+    // Absence of metadata says nothing about whether the metric exists, so it
+    // must not read as "no such metric".
+    it("distinguishes an undeclared metric from a missing one", async () => {
+      connect();
+      installDiscoveryMock({ "/api/v1/metadata": {} });
+
+      const result = await executeTool(
+        findTool("GetMetricMetadata")!,
+        { metric: "custom_thing" },
+        mintSession(ALERT),
+      );
+      expect(result.outcome).toBe("expected_miss");
+      expect(String(result.content)).toContain("may still exist");
+    });
+
+    it("lists alerting rules with the expression each one tests", async () => {
+      connect();
+      installDiscoveryMock({
+        "/api/v1/rules": {
+          groups: [
+            {
+              rules: [
+                {
+                  name: "ContainerMemoryHigh",
+                  query: "container_memory_working_set_bytes > 4e9",
+                  state: "firing",
+                  alerts: [{ state: "firing", labels: {} }],
+                },
+                {
+                  name: "DiskFilling",
+                  query: "disk_free_bytes < 1e9",
+                  state: "inactive",
+                  alerts: [],
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      const result = await executeTool(
+        findTool("ListAlertRules")!,
+        {},
+        mintSession(ALERT),
+      );
+      const content = result.content as {
+        rules: Array<{ name: string; query: string; firingCount: number }>;
+      };
+      expect(content.rules).toHaveLength(2);
+      // The expression is the point: it names the metric, the threshold and the
+      // window that fired, none of which the alert's labels carry.
+      expect(content.rules[0]).toMatchObject({
+        name: "ContainerMemoryHigh",
+        query: "container_memory_working_set_bytes > 4e9",
+        firingCount: 1,
+      });
+      expect(content.rules[1]!.firingCount).toBe(0);
+    });
+
+    it("offers every discovery tool a corrective result when nothing is connected", async () => {
+      for (const name of [
+        "ListMetricNames",
+        "GetMetricMetadata",
+        "ListAlertRules",
+      ]) {
+        const result = await executeTool(
+          findTool(name)!,
+          { metric: "x" },
+          mintSession(ALERT),
+        );
+        expect(result.outcome).toBe("permission");
+        expect(String(result.content)).toContain("not configured");
+      }
+    });
+  });
 });

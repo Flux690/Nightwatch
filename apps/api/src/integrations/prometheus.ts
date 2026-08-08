@@ -106,6 +106,32 @@ async function parseEnvelope(res: Response): Promise<PrometheusQueryData> {
   return { resultType, series: raw.map(narrowSeries) };
 }
 
+// The success envelope every non-query endpoint answers with. `what` names the
+// call so a drifted payload says which read failed rather than only that one did.
+async function jsonBody(
+  res: Response,
+  what: string,
+): Promise<Record<string, unknown>> {
+  let body: Record<string, unknown>;
+  try {
+    body = (await res.json()) as Record<string, unknown>;
+  } catch {
+    throw new PrometheusApiError(
+      "bad_response",
+      res.status,
+      `Prometheus returned a non-JSON body (HTTP ${res.status}) ${what}`,
+    );
+  }
+  if (!res.ok || body["status"] !== "success") {
+    throw new PrometheusApiError(
+      "bad_response",
+      res.status,
+      `Prometheus returned ${res.status} ${what}`,
+    );
+  }
+  return body;
+}
+
 function narrowSeries(entry: unknown): PrometheusSeries {
   const e = (entry ?? {}) as Record<string, unknown>;
   const metric: Record<string, string> = {};
@@ -186,28 +212,14 @@ export async function firingInstancesOf(
   authHeader: string | null,
   ruleName: string,
 ): Promise<FiringInstance[] | null> {
-  const res = await prometheusFetch(
-    baseUrl,
-    authHeader,
-    `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
+  const body = await jsonBody(
+    await prometheusFetch(
+      baseUrl,
+      authHeader,
+      `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
+    ),
+    "listing rules",
   );
-  let body: Record<string, unknown>;
-  try {
-    body = (await res.json()) as Record<string, unknown>;
-  } catch {
-    throw new PrometheusApiError(
-      "bad_response",
-      res.status,
-      `Prometheus returned a non-JSON body (HTTP ${res.status}) listing rules`,
-    );
-  }
-  if (!res.ok || body["status"] !== "success") {
-    throw new PrometheusApiError(
-      "bad_response",
-      res.status,
-      `Prometheus returned ${res.status} listing rules`,
-    );
-  }
   const groups = (body["data"] as Record<string, unknown> | undefined)?.[
     "groups"
   ];
@@ -242,35 +254,101 @@ export async function firingInstancesOf(
   });
 }
 
-export async function labelValues(
+// One alerting rule as Prometheus holds it: the expression it evaluates and
+// whether it is currently firing.
+export interface AlertingRule {
+  name: string;
+  query: string;
+  state: string;
+  firingCount: number;
+}
+
+export async function alertingRules(
   baseUrl: string,
   authHeader: string | null,
-  label: string,
-): Promise<string[]> {
-  const res = await prometheusFetch(
-    baseUrl,
-    authHeader,
-    `/api/v1/label/${encodeURIComponent(label)}/values`,
+): Promise<AlertingRule[]> {
+  const body = await jsonBody(
+    await prometheusFetch(baseUrl, authHeader, "/api/v1/rules?type=alert"),
+    "listing rules",
   );
-  let body: Record<string, unknown>;
-  try {
-    body = (await res.json()) as Record<string, unknown>;
-  } catch {
-    throw new PrometheusApiError(
-      "bad_response",
-      res.status,
-      `Prometheus returned a non-JSON body (HTTP ${res.status})`,
-    );
-  }
-  if (!res.ok || body["status"] !== "success") {
-    throw new PrometheusApiError(
-      "bad_response",
-      res.status,
-      `Prometheus returned ${res.status} listing label values`,
-    );
-  }
+  const groups = (body["data"] as Record<string, unknown> | undefined)?.[
+    "groups"
+  ];
+  if (!Array.isArray(groups)) return [];
+  return groups
+    .flatMap((group) => {
+      const list = (group as Record<string, unknown>)["rules"];
+      return Array.isArray(list) ? list : [];
+    })
+    .flatMap((entry): AlertingRule[] => {
+      const rule = entry as Record<string, unknown>;
+      const name = rule["name"];
+      const query = rule["query"];
+      if (typeof name !== "string" || typeof query !== "string") return [];
+      const alerts = Array.isArray(rule["alerts"]) ? rule["alerts"] : [];
+      return [
+        {
+          name,
+          query,
+          state: typeof rule["state"] === "string" ? rule["state"] : "unknown",
+          firingCount: alerts.length,
+        },
+      ];
+    });
+}
+
+// The names Prometheus is currently storing, optionally narrowed by substring.
+// Matched here rather than server-side: /label/__name__/values takes no filter.
+export async function metricNames(
+  baseUrl: string,
+  authHeader: string | null,
+  contains: string | null,
+): Promise<string[]> {
+  const body = await jsonBody(
+    await prometheusFetch(baseUrl, authHeader, "/api/v1/label/__name__/values"),
+    "listing metric names",
+  );
   const data = body["data"];
-  return Array.isArray(data)
+  const all = Array.isArray(data)
     ? data.filter((v): v is string => typeof v === "string")
     : [];
+  if (contains === null) return all;
+  const needle = contains.toLowerCase();
+  return all.filter((name) => name.toLowerCase().includes(needle));
+}
+
+// What a metric is and what it is measured in. Prometheus only knows this for
+// metrics an exporter declared with HELP and TYPE, so an answer is often empty.
+export interface MetricMetadata {
+  metric: string;
+  type: string;
+  unit: string;
+  help: string;
+}
+
+export async function metricMetadata(
+  baseUrl: string,
+  authHeader: string | null,
+  metric: string,
+): Promise<MetricMetadata | null> {
+  const body = await jsonBody(
+    await prometheusFetch(
+      baseUrl,
+      authHeader,
+      `/api/v1/metadata?metric=${encodeURIComponent(metric)}`,
+    ),
+    "reading metric metadata",
+  );
+  const data = body["data"];
+  if (typeof data !== "object" || data === null) return null;
+  const entries = (data as Record<string, unknown>)[metric];
+  const first = Array.isArray(entries) ? entries[0] : undefined;
+  if (typeof first !== "object" || first === null) return null;
+  const row = first as Record<string, unknown>;
+  return {
+    metric,
+    type: typeof row["type"] === "string" ? row["type"] : "unknown",
+    unit: typeof row["unit"] === "string" ? row["unit"] : "",
+    help: typeof row["help"] === "string" ? row["help"] : "",
+  };
 }

@@ -2,8 +2,12 @@ import { decrypt } from "../../secrets.js";
 import { getPrometheusIntegration } from "../../db/integrations.js";
 import {
   PrometheusApiError,
+  alertingRules,
   instantQuery,
+  metricMetadata,
+  metricNames,
   rangeQuery,
+  type AlertingRule,
   type PrometheusQueryData,
   type PrometheusSeries,
 } from "../../integrations/prometheus.js";
@@ -23,6 +27,16 @@ export interface MetricsRangeResult extends MetricsQueryResult {
   stepSeconds: number;
 }
 
+export interface MetricNamesResult {
+  names: string[];
+  namesOmitted?: number;
+}
+
+export interface AlertRulesResult {
+  rules: AlertingRule[];
+  rulesOmitted?: number;
+}
+
 const DEFAULT_LOOKBACK_MINUTES = 180;
 const MAX_LOOKBACK_MINUTES = 10_080;
 const DEFAULT_LOOKFORWARD_MINUTES = 30;
@@ -30,6 +44,10 @@ const DEFAULT_LOOKFORWARD_MINUTES = 30;
 // fleet returns hundreds, which would drown the transcript.
 const MAX_SERIES = 20;
 const TARGET_POINTS_PER_SERIES = 200;
+// Enough to recognise a naming scheme and pick the right metric; a fleet's full
+// name list runs to thousands and would drown the turn that asked for it.
+const MAX_METRIC_NAMES = 100;
+const MAX_ALERT_RULES = 50;
 
 function clampedNumber(
   input: Record<string, unknown>,
@@ -97,7 +115,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             type: "string",
             enum: ["now", "alert"],
             description:
-              "Which moment to evaluate at. 'now' is the default and reads the current value; 'alert' reads the value as of the instant the alert fired.",
+              "Which moment to evaluate at. 'now', the default, reads the current value. 'alert' reads the value as of the instant the alert that opened this investigation fired; on a session no alert opened, it means the same as 'now'.",
           },
         },
         required: ["query"],
@@ -223,6 +241,169 @@ export const PROMETHEUS_TOOLS: Tool[] = [
           windowStart: start.toISOString(),
           windowEnd: end.toISOString(),
           stepSeconds: step,
+        };
+        return { content: result };
+      } catch (err) {
+        return corrective(err);
+      }
+    },
+  },
+
+  {
+    schema: {
+      name: "ListMetricNames",
+      description:
+        "List the metric names this Prometheus is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
+      input_schema: {
+        type: "object",
+        properties: {
+          contains: {
+            type: "string",
+            description:
+              "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
+          },
+        },
+        required: [],
+      },
+    },
+    access: "read",
+    timeoutMs: 30_000,
+    on: "api",
+    execute: async (input): Promise<ToolExecuteResult> => {
+      const integration = getPrometheusIntegration();
+      if (integration === null) return notConfigured();
+      const contains = input["contains"];
+      try {
+        const names = await metricNames(
+          integration.baseUrl,
+          integration.authHeaderEncrypted
+            ? decrypt(integration.authHeaderEncrypted)
+            : null,
+          typeof contains === "string" && contains.trim() !== ""
+            ? contains.trim()
+            : null,
+        );
+        if (names.length === 0) {
+          return {
+            content:
+              "No metric names matched. Widen the substring, or drop it to see what this Prometheus stores at all.",
+            outcome: "expected_miss",
+          };
+        }
+        const result: MetricNamesResult = {
+          names: names.slice(0, MAX_METRIC_NAMES),
+          ...(names.length > MAX_METRIC_NAMES && {
+            namesOmitted: names.length - MAX_METRIC_NAMES,
+          }),
+        };
+        return { content: result };
+      } catch (err) {
+        return corrective(err);
+      }
+    },
+  },
+
+  {
+    schema: {
+      name: "GetMetricMetadata",
+      description:
+        "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Prometheus only knows this for metrics an exporter declared, so an answer is often absent; absence says nothing about whether the metric exists.",
+      input_schema: {
+        type: "object",
+        properties: {
+          metric: {
+            type: "string",
+            description:
+              "The exact metric name, as it appears in ListMetricNames or in a series you have already queried.",
+          },
+        },
+        required: ["metric"],
+      },
+    },
+    access: "read",
+    timeoutMs: 30_000,
+    on: "api",
+    execute: async (input): Promise<ToolExecuteResult> => {
+      const integration = getPrometheusIntegration();
+      if (integration === null) return notConfigured();
+      const metric = input["metric"];
+      if (typeof metric !== "string" || metric.trim() === "") {
+        return { content: "metric must be a name", outcome: "system" };
+      }
+      try {
+        const meta = await metricMetadata(
+          integration.baseUrl,
+          integration.authHeaderEncrypted
+            ? decrypt(integration.authHeaderEncrypted)
+            : null,
+          metric.trim(),
+        );
+        if (meta === null) {
+          return {
+            content: `No exporter declared metadata for "${metric.trim()}". The metric may still exist and be queryable.`,
+            outcome: "expected_miss",
+          };
+        }
+        return { content: meta };
+      } catch (err) {
+        return corrective(err);
+      }
+    },
+  },
+
+  {
+    schema: {
+      name: "ListAlertRules",
+      description:
+        "List the alerting rules this Prometheus evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
+      input_schema: {
+        type: "object",
+        properties: {
+          contains: {
+            type: "string",
+            description:
+              "Case-insensitive substring the rule name must contain. Omit to list every rule.",
+          },
+        },
+        required: [],
+      },
+    },
+    access: "read",
+    timeoutMs: 30_000,
+    on: "api",
+    execute: async (input): Promise<ToolExecuteResult> => {
+      const integration = getPrometheusIntegration();
+      if (integration === null) return notConfigured();
+      const contains = input["contains"];
+      const needle =
+        typeof contains === "string" && contains.trim() !== ""
+          ? contains.trim().toLowerCase()
+          : null;
+      try {
+        const rules = await alertingRules(
+          integration.baseUrl,
+          integration.authHeaderEncrypted
+            ? decrypt(integration.authHeaderEncrypted)
+            : null,
+        );
+        const matched =
+          needle === null
+            ? rules
+            : rules.filter((r) => r.name.toLowerCase().includes(needle));
+        if (matched.length === 0) {
+          return {
+            content:
+              needle === null
+                ? "This Prometheus evaluates no alerting rules."
+                : `No alerting rule name contains "${contains as string}".`,
+            outcome: "expected_miss",
+          };
+        }
+        const result: AlertRulesResult = {
+          rules: matched.slice(0, MAX_ALERT_RULES),
+          ...(matched.length > MAX_ALERT_RULES && {
+            rulesOmitted: matched.length - MAX_ALERT_RULES,
+          }),
         };
         return { content: result };
       } catch (err) {
