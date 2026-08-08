@@ -546,6 +546,78 @@ describe("Shell", () => {
       expect(MockEventSource.latest).toBe(streamBefore);
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
+
+    it("takes the width the operator gives it, within its floor, and keeps it", async () => {
+      const user = userEvent.setup();
+      const { setInvestigation } = setup({ path: "/investigations/new-s1" });
+
+      setInvestigation(true);
+      const handle = await screen.findByRole("separator", {
+        name: /resize the chat/i,
+      });
+      const rail = screen.getByRole("complementary", {
+        name: /investigation chat/i,
+      });
+
+      // jsdom applies no CSS, so the width is only legible as the custom
+      // property the rail writes for the utility to read.
+      expect(rail.style.getPropertyValue("--container-rail")).toBe("420px");
+
+      handle.focus();
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      expect(rail.style.getPropertyValue("--container-rail")).toBe("460px");
+      expect(window.localStorage.getItem("nightwarden.rail.width")).toBe("460");
+
+      // Narrower than the floor is not a narrower rail, it is a transcript
+      // wrapped to shreds, so the floor holds however far the drag goes.
+      await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}");
+      expect(rail.style.getPropertyValue("--container-rail")).toBe("420px");
+    });
+
+    it("opens at the width it was left at, not at the default", async () => {
+      window.localStorage.setItem("nightwarden.rail.width", "600");
+      const { setInvestigation } = setup({ path: "/investigations/new-s1" });
+
+      setInvestigation(true);
+      const rail = await screen.findByRole("complementary", {
+        name: /investigation chat/i,
+      });
+
+      // A width set once and lost every night is worse than one you cannot set.
+      expect(rail.style.getPropertyValue("--container-rail")).toBe("600px");
+    });
+
+    it("expands over the report without unmounting the chat", async () => {
+      const user = userEvent.setup();
+      const { setInvestigation } = setup({ path: "/investigations/new-s1" });
+
+      setInvestigation(true);
+      await screen.findByRole("complementary", { name: /investigation chat/i });
+      const streamBefore = MockEventSource.latest;
+
+      await user.click(
+        screen.getByRole("button", { name: /expand the chat/i }),
+      );
+
+      // The report is still mounted underneath: expanding covers it, and coming
+      // back out must not cost a refetch or the scroll position.
+      expect(
+        screen.getByRole("heading", { name: "Investigation" }),
+      ).toBeInTheDocument();
+      // Nothing to drag while it owns the stage, so the handle steps aside.
+      expect(
+        screen.queryByRole("separator", { name: /resize the chat/i }),
+      ).not.toBeInTheDocument();
+      expect(MockEventSource.latest).toBe(streamBefore);
+
+      await user.click(
+        screen.getByRole("button", { name: /shrink the chat/i }),
+      );
+      expect(
+        await screen.findByRole("separator", { name: /resize the chat/i }),
+      ).toBeInTheDocument();
+      expect(MockEventSource.latest).toBe(streamBefore);
+    });
   });
 
   describe("the investigations list", () => {

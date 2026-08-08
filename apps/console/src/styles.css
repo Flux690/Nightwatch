@@ -264,7 +264,9 @@
   --container-chat: 760px;
 
   /* Structure - fixed widths of the frame itself, not measures of content. */
-  --container-rail: 440px;
+  /* Where the rail rests, and its floor. The operator drags it wider and the
+     rail writes this property back inline, so this is the value it starts at. */
+  --container-rail: 420px;
   --container-sidebar: 250px;
   --container-sidebar-icon: 52px;
   --container-sidebar-sheet: 288px;

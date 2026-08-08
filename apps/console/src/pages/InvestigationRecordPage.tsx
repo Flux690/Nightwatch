@@ -5,13 +5,15 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCopy,
+  Maximize2,
+  Minimize2,
   MoreHorizontal,
   PanelRight,
   Trash2,
 } from "lucide-react";
 
 import { Page } from "@/components/layout/Page";
-import { ChatSlot } from "@/components/layout/ChatHost";
+import { ChatRail } from "@/components/layout/ChatRail";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ReportPanel } from "@/components/report/ReportPanel";
 import { Button } from "@/components/ui/button";
@@ -96,6 +98,7 @@ export function InvestigationRecordPage(): React.JSX.Element {
   const session = useSession(sessionId === "" ? null : sessionId);
   const report = useSessionReport(sessionId === "" ? null : sessionId);
   const [chatRailOpen, setChatRailOpen] = useState(true);
+  const [chatExpanded, setChatExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = session?.title ?? "";
 
@@ -169,6 +172,27 @@ export function InvestigationRecordPage(): React.JSX.Element {
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
             <QueueStepper sessionId={sessionId} />
+            {/* The stepper moves between records and this pair changes the shape
+                of the one on screen, so a gap separates them rather than reading
+                as a third stepper button. It cannot sit in the rail: closed, the
+                rail is zero wide and has nothing to click. */}
+            {chatRailOpen && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-3"
+                aria-label={
+                  chatExpanded ? "Shrink the chat" : "Expand the chat"
+                }
+                onClick={() => setChatExpanded((prev) => !prev)}
+              >
+                {chatExpanded ? (
+                  <Minimize2 {...ICON_UI} />
+                ) : (
+                  <Maximize2 {...ICON_UI} />
+                )}
+              </Button>
+            )}
             {/* Ghost lights itself on aria-expanded so a menu trigger stays lit
                 while its menu is open. This one is not a trigger: expanded means
                 the rail is open, which is the resting state, so the light would
@@ -178,8 +202,16 @@ export function InvestigationRecordPage(): React.JSX.Element {
               size="icon"
               aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
               aria-expanded={chatRailOpen}
-              className="aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover"
-              onClick={() => setChatRailOpen((prev) => !prev)}
+              className={cn(
+                "aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover",
+                !chatRailOpen && "ml-3",
+              )}
+              onClick={() => {
+                // Closing leaves expanded behind with it: a rail that is not on
+                // screen cannot be in a mode.
+                setChatRailOpen((prev) => !prev);
+                setChatExpanded(false);
+              }}
             >
               <PanelRight {...ICON_UI} />
             </Button>
@@ -187,7 +219,9 @@ export function InvestigationRecordPage(): React.JSX.Element {
         </>
       }
     >
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* Positioned, so the expanded rail covers the report rather than pushing
+          it out. The report stays mounted underneath and comes back unscrolled. */}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
           <ReportPanel
             report={report?.report ?? null}
@@ -197,33 +231,7 @@ export function InvestigationRecordPage(): React.JSX.Element {
             alerts={session?.alerts ?? []}
           />
         </div>
-        {/* Width, not presence, so it closes like the sidebar. Closed it is
-            zero-wide but present, so it leaves the accessibility tree and the
-            tab order too. */}
-        <aside
-          aria-label="Investigation chat"
-          aria-hidden={!chatRailOpen}
-          inert={!chatRailOpen}
-          className={cn(
-            "flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color] duration-(--duration-panel) ease-panel",
-            // The edge says where the report stops. It fades out rather than
-            // switching off, leaving no hairline.
-            chatRailOpen
-              ? "w-(--container-rail) border-border"
-              : "w-0 border-transparent",
-          )}
-        >
-          {/* The chat holds its own width while the panel narrows past it, so
-              nothing inside ever reflows. */}
-          <ChatSlot
-            className={cn(
-              "flex min-h-0 w-(--container-rail) flex-1 shrink-0 flex-col transition-opacity duration-(--duration-fast)",
-              chatRailOpen
-                ? "opacity-100 delay-(--duration-base)"
-                : "opacity-0 delay-0",
-            )}
-          />
-        </aside>
+        <ChatRail open={chatRailOpen} expanded={chatExpanded} />
       </div>
       <ConfirmDialog
         open={confirmingDelete}
