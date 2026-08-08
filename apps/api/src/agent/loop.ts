@@ -460,17 +460,19 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       /* Only a run that acted is held to this. "I could not work out the cause,
          here is what I ruled out" is a complete ending and the gate must never
          push a model past it - but a run that had the operator release a write
-         and then went quiet with the condition still firing has left them
-         nothing. Unconfirmed counts as still firing: a condition nothing could
-         answer for is exactly when the operator needs telling. */
-      const released = opensInvestigation
-        ? gatedCalls(sessionId).some((c) => c.decision === "approved")
-        : false;
-      const recoveryUnconfirmed =
+         and then went quiet has left them nothing. Both an unrecovered condition
+         and an unanswerable one qualify; which of the two it was decides what
+         the request says, because they are not the same claim. */
+      const released =
+        opensInvestigation &&
+        gatedCalls(sessionId).some((c) => c.decision === "approved");
+      const unrecovered =
         released &&
         (recovery === "still_firing" || recovery === "unconfirmed") &&
-        !proposedSomething(getReport(sessionId) ?? null);
-      if (gaps.length > 0 || recoveryUnconfirmed) {
+        !proposedSomething(getReport(sessionId) ?? null)
+          ? recovery
+          : null;
+      if (gaps.length > 0 || unrecovered !== null) {
         if (nudges < MAX_NUDGES) {
           nudges++;
           for (const gap of gaps) {
@@ -489,10 +491,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             { turn, nudges, gaps: gaps.map((g) => g.kind), recovery },
             "finish gate: record incomplete, requesting completion",
           );
-          sendHarnessMessage(
-            provider,
-            completionRequest(gaps, recoveryUnconfirmed),
-          );
+          sendHarnessMessage(provider, completionRequest(gaps, unrecovered));
           persist();
           continue;
         }

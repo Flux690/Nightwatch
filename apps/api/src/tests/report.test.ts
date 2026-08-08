@@ -25,6 +25,10 @@ import { REPORT_TOOLS } from "../agent/tools/report.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
+import {
+  deletePrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/integrations.js";
 import { createSession, appendTranscriptRows } from "../db/sessions.js";
 import { buildTranscript } from "../session/transcript.js";
 import { useTempDb } from "./temp-db.js";
@@ -717,11 +721,71 @@ describe("the investigation record", () => {
         await runSession({ sessionId, alerts: [alert("acted-firing")] });
 
         const requests = completionRequests();
-        expect(requests[0]).toContain("still firing");
         expect(requests[0]).toContain("ProposeFix");
         // Never "try again": repeating a write that did not work is the failure
         // this gate exists to catch.
         expect(requests[0]).not.toContain("try again");
+
+        /* No source could answer here, so the request must not claim the
+           condition is still firing - that is a fact we do not have, in a system
+           whose premise is not asserting what it cannot verify. */
+        expect(requests[0]).toContain("Nothing can confirm");
+        expect(requests[0]).not.toContain("is still firing");
+      });
+
+      it("says the condition is still firing only when a source said so", async () => {
+        savePrometheusIntegration({
+          baseUrl: "http://prom.test",
+          authHeaderEncrypted: null,
+        });
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(() =>
+            Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  status: "success",
+                  data: {
+                    groups: [
+                      {
+                        rules: [
+                          {
+                            name: "HighMemory",
+                            type: "alerting",
+                            alerts: [{ state: "firing", labels: {} }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              ),
+            ),
+          ),
+        );
+        settledRun();
+        const sessionId = randomUUID();
+        createSession(
+          { sessionId, title: "t", createdAt: new Date().toISOString() },
+          [alert("acted-confirmed-firing")],
+        );
+        releasedWrite(sessionId, 0);
+
+        await runSession({
+          sessionId,
+          alerts: [alert("acted-confirmed-firing")],
+        });
+
+        const requests = completionRequests();
+        expect(requests[0]).toContain("is still firing");
+        expect(requests[0]).not.toContain("Nothing can confirm");
+
+        vi.unstubAllGlobals();
+        deletePrometheusIntegration();
       });
 
       it("is let go once it has recommended something", async () => {
