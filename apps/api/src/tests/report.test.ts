@@ -15,7 +15,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import type { NormalizedAlert } from "@nightwarden/shared";
-import { runInvestigation } from "../agent/loop.js";
+import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
   reportGaps,
@@ -519,7 +519,7 @@ describe("the investigation record", () => {
         createContractFakeProvider([{ toolUses: [], text: "All done." }]),
       );
       const sessionId = randomUUID();
-      const outcome = await runInvestigation({
+      const outcome = await runSession({
         sessionId,
         alerts: [alert("gate")],
       });
@@ -560,7 +560,7 @@ describe("the investigation record", () => {
         ]),
       );
       const sessionId = randomUUID();
-      await runInvestigation({ sessionId, alerts: [alert("one-gap")] });
+      await runSession({ sessionId, alerts: [alert("one-gap")] });
 
       const request = completionRequests()[0]!;
       expect(request).toContain("h1 is still open");
@@ -638,7 +638,7 @@ describe("the investigation record", () => {
         ]),
       );
       const sessionId = randomUUID();
-      const outcome = await runInvestigation({
+      const outcome = await runSession({
         sessionId,
         alerts: [alert("gate-pass")],
       });
@@ -714,7 +714,7 @@ describe("the investigation record", () => {
         );
         releasedWrite(sessionId, 0);
 
-        await runInvestigation({ sessionId, alerts: [alert("acted-firing")] });
+        await runSession({ sessionId, alerts: [alert("acted-firing")] });
 
         const requests = completionRequests();
         expect(requests[0]).toContain("still firing");
@@ -747,7 +747,7 @@ describe("the investigation record", () => {
         );
         releasedWrite(sessionId, 0);
 
-        await runInvestigation({
+        await runSession({
           sessionId,
           alerts: [alert("acted-recommended")],
         });
@@ -760,7 +760,7 @@ describe("the investigation record", () => {
       it("says nothing to a run that only looked", async () => {
         settledRun();
         const sessionId = randomUUID();
-        await runInvestigation({ sessionId, alerts: [alert("only-looked")] });
+        await runSession({ sessionId, alerts: [alert("only-looked")] });
 
         // No write was released, so an honest inconclusive ending stands even
         // though the alert never cleared.

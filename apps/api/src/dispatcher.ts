@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { runInvestigation } from "./agent/loop.js";
-import type { RunInvestigationInput, RunOutcome } from "./agent/loop.js";
+import { runSession } from "./agent/loop.js";
+import type { RunSessionInput, RunOutcome } from "./agent/loop.js";
 import { appendErrorMessage, getSession } from "./db/sessions.js";
 import { describeLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
@@ -14,7 +14,7 @@ import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
 // concurrency control: a new alert while one is running is injected rather than starting a second.
 export interface Dispatcher {
-  dispatch(input: RunInvestigationInput): void;
+  dispatch(input: RunSessionInput): void;
   // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
   isInvestigating(sourceAlertId: string, firedAt: string): boolean;
   // guards the 409 on POST /sessions/:id/messages
@@ -28,7 +28,7 @@ export interface Dispatcher {
 }
 
 export interface DispatcherOptions {
-  run: (input: RunInvestigationInput) => Promise<RunOutcome>;
+  run: (input: RunSessionInput) => Promise<RunOutcome>;
   // A resume dispatch carries no alerts, so a live run recovers the set it is
   // covering from the session's durable record.
   getAlertsForSession: (sessionId: string) => NormalizedAlert[];
@@ -52,11 +52,11 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
 
-  function resolveAlerts(input: RunInvestigationInput): NormalizedAlert[] {
+  function resolveAlerts(input: RunSessionInput): NormalizedAlert[] {
     return input.alerts ?? getAlertsForSession(input.sessionId);
   }
 
-  function start(input: RunInvestigationInput): void {
+  function start(input: RunSessionInput): void {
     const alerts = resolveAlerts(input);
 
     liveAlerts.set(
@@ -165,7 +165,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 }
 
 export const dispatcher = createDispatcher({
-  run: runInvestigation,
+  run: runSession,
   getAlertsForSession: (sessionId) =>
     (getSession(sessionId)?.alerts ?? []).map((entry) => entry.alert),
 });

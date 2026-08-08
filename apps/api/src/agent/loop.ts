@@ -130,7 +130,7 @@ export type RunOutcome = "completed" | "suspended" | "stopped";
 // looping; the time budget bounds it as well.
 const MAX_NUDGES = 3;
 
-export interface RunInvestigationInput {
+export interface RunSessionInput {
   sessionId: string;
   // Everything that fired inside the 90s batch window, all of it opening this
   // session. No member is elected: they are investigated as one incident.
@@ -148,9 +148,7 @@ export interface RunInvestigationInput {
   wrapUp?: boolean;
 }
 
-export async function runInvestigation(
-  input: RunInvestigationInput,
-): Promise<RunOutcome> {
+export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const { sessionId, signal } = input;
 
   const stored = getSession(sessionId);

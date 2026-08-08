@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
-import type { RunInvestigationInput, RunOutcome } from "../agent/loop.js";
+import type { RunSessionInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 
 // The gate resolves with a run outcome; these tests only exercise dedup/running
@@ -34,7 +34,7 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
 function alertInput(
   sourceAlertId: string,
   firedAt = FIRED_AT,
-): RunInvestigationInput {
+): RunSessionInput {
   return {
     sessionId: `s-${sourceAlertId}`,
     alerts: [makeAlert(sourceAlertId, firedAt)],
@@ -46,7 +46,7 @@ function alertInput(
 function batchInput(
   sessionId: string,
   sourceAlertIds: string[],
-): RunInvestigationInput {
+): RunSessionInput {
   return {
     sessionId,
     alerts: sourceAlertIds.map((id) => makeAlert(id)),

@@ -25,7 +25,7 @@ import {
   saveGitHubIntegration,
 } from "../db/integrations.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { runInvestigation } from "../agent/loop.js";
+import { runSession } from "../agent/loop.js";
 import {
   effectiveToolset,
   executeTool,
@@ -384,7 +384,7 @@ describe("repo work and the time budget", () => {
       { toolUses: [], text: "Done." },
     ]);
 
-    const run = runInvestigation({ sessionId, userMessage: "fix the repo" });
+    const run = runSession({ sessionId, userMessage: "fix the repo" });
     // Park turn 1 until the deadline has passed.
     await new Promise((r) => setTimeout(r, 400));
     gates.releaseNext();
