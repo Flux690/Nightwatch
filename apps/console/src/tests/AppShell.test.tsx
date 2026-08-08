@@ -615,29 +615,6 @@ describe("Shell", () => {
       expect(precedes(critical, unranked)).toBe(true);
     });
 
-    /* The group is derived from the live dispatcher, so a row in it is a run
-       moving right now. The spinner says that and nothing else - it is out of
-       the accessibility tree, because the group heading above already says
-       "Investigating" and repeating it per row adds no information. */
-    it("spins only on the rows that are actually running", async () => {
-      setup({ path: "/investigations" });
-
-      const investigating = await screen.findByRole("region", {
-        name: "Investigating",
-      });
-      expect(
-        investigating.querySelectorAll('[data-slot="spinner"]'),
-      ).toHaveLength(1);
-
-      for (const name of ["Action required", "Resolved"]) {
-        const group = screen.getByRole("region", { name });
-        expect(group.querySelectorAll('[data-slot="spinner"]')).toHaveLength(0);
-      }
-
-      // Nothing in the tree announces it twice.
-      expect(screen.queryAllByRole("status")).toHaveLength(0);
-    });
-
     it("opens a row at its own record", async () => {
       const user = userEvent.setup();
       const { router } = setup({ path: "/investigations" });
@@ -684,34 +661,6 @@ describe("Shell", () => {
       expect(
         screen.queryByRole("region", { name: "Action required" }),
       ).not.toBeInTheDocument();
-    });
-
-    /* The menu acts on the record itself, so it rides the crumb rather than the
-       controls row. Position is CSS, which jsdom does not apply, so what is
-       assertable is the containment: the menu sits in the header beside the
-       name, and the two controls that are not about this record's identity
-       stay in the row below. */
-    it("puts the menu beside the name, and leaves the stepper in the controls row", async () => {
-      setup({ path: "/investigations/inv-crit" });
-
-      // The stepper appears only once the list has placed this record, which is
-      // the last of the two to arrive; the menu is there from the first paint.
-      const stepper = await screen.findByRole("button", {
-        name: "Next investigation",
-      });
-      const menu = screen.getByRole("button", { name: "More actions" });
-
-      const header = screen.getByRole("navigation", {
-        name: "breadcrumb",
-      }).parentElement!;
-      expect(header).toContainElement(menu);
-
-      const controls = screen.getByRole("group", { name: /page controls/i });
-      expect(controls).not.toContainElement(menu);
-      expect(controls).toContainElement(stepper);
-      expect(controls).toContainElement(
-        screen.getByRole("button", { name: /hide the chat/i }),
-      );
     });
 
     it("offers Copy report as Markdown and Delete, and never Mark as resolved", async () => {

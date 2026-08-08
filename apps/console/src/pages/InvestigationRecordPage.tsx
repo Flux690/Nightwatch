@@ -166,11 +166,16 @@ export function InvestigationRecordPage(): React.JSX.Element {
       controls={
         <div className="ml-auto flex items-center gap-1">
           <QueueStepper sessionId={sessionId} />
+          {/* Ghost lights itself on aria-expanded so a menu trigger stays lit
+              while its menu is open. This one is not a trigger: expanded means
+              the rail is open, which is the resting state, so the light would
+              never go out. The attribute stays, the fill does not. */}
           <Button
             variant="ghost"
             size="icon"
             aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
             aria-expanded={chatRailOpen}
+            className="aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover"
             onClick={() => setChatRailOpen((prev) => !prev)}
           >
             <PanelRight {...ICON_UI} />
