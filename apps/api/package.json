@@ -6,7 +6,8 @@
     "build": "node ../../scripts/build-app.mjs .",
     "dev": "tsx watch --clear-screen=false --include ../../packages/shared/src src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:investigation": "tsx src/dev/seed-investigation.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.111.0",
