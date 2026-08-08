@@ -134,53 +134,57 @@ export function InvestigationRecordPage(): React.JSX.Element {
       /* The menu acts on the investigation, so it sits after its name rather
          than at the far edge: the crumb truncates at its own ceiling and the
          menu follows wherever the name ends, sliding left for a short title. */
+      /* Everything this page offers rides the one bar, so there is no controls
+         row beneath it and the rail's edge runs the full height of the stage.
+         The menu sits against the name because it acts on the record; the
+         stepper and the rail toggle are right-aligned because they act on the
+         queue and on the layout, not on this investigation. */
       beside={
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="More actions"
-                className="ml-1 shrink-0 rounded-full text-muted-foreground"
-              >
-                <MoreHorizontal {...ICON_UI} />
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={copyMarkdown}>
-              <ClipboardCopy {...ICON_UI} />
-              Copy report as Markdown
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
-              <Trash2 {...ICON_UI} />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      }
-      /* The stepper and the rail toggle stay: neither acts on the record's
-         identity - one moves between records, the other changes the layout. */
-      controls={
-        <div className="ml-auto flex items-center gap-1">
-          <QueueStepper sessionId={sessionId} />
-          {/* Ghost lights itself on aria-expanded so a menu trigger stays lit
-              while its menu is open. This one is not a trigger: expanded means
-              the rail is open, which is the resting state, so the light would
-              never go out. The attribute stays, the fill does not. */}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
-            aria-expanded={chatRailOpen}
-            className="aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover"
-            onClick={() => setChatRailOpen((prev) => !prev)}
-          >
-            <PanelRight {...ICON_UI} />
-          </Button>
-        </div>
+        <>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="More actions"
+                  className="ml-1 shrink-0 rounded-full text-muted-foreground"
+                >
+                  <MoreHorizontal {...ICON_UI} />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={copyMarkdown}>
+                <ClipboardCopy {...ICON_UI} />
+                Copy report as Markdown
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
+                <Trash2 {...ICON_UI} />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <QueueStepper sessionId={sessionId} />
+            {/* Ghost lights itself on aria-expanded so a menu trigger stays lit
+                while its menu is open. This one is not a trigger: expanded means
+                the rail is open, which is the resting state, so the light would
+                never go out. The attribute stays, the fill does not. */}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
+              aria-expanded={chatRailOpen}
+              className="aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover"
+              onClick={() => setChatRailOpen((prev) => !prev)}
+            >
+              <PanelRight {...ICON_UI} />
+            </Button>
+          </div>
+        </>
       }
     >
       <div className="flex min-h-0 flex-1 overflow-hidden">

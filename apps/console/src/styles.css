@@ -369,6 +369,16 @@
     @apply border-border;
   }
 
+  /* One scrollbar, stated once. The default paints a track, which reads as a
+     pale gutter beside dark content and lights up on hover; a scroller is a
+     hint about position, not a control worth a background. Thin and
+     track-less everywhere, so two columns side by side cannot disagree.
+     `no-scrollbar` is a utility and still wins where a panel wants none. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
