@@ -20,9 +20,9 @@ type Pages = InfiniteData<SessionListPage, number>;
 
 export interface UseSessionsResult {
   sessions: SessionListRow[];
-  // Answered by the server over every session, so it neither climbs as the
-  // operator scrolls nor reads zero on a page that never loaded the list.
-  actionRequiredCount: number;
+  // Answered by the server over every investigation, so a record's place in the
+  // queue neither climbs as the operator scrolls nor reads zero on a page that
+  // never loaded the list.
   investigationTotal: number;
   isLoading: boolean;
   hasMore: boolean;
@@ -64,7 +64,6 @@ export function useSessions(kind: SessionKind): UseSessionsResult {
     // is on screen - the status groups and severity within them - is the
     // page's, because status is derived from a dispatcher SQL cannot see.
     sessions: dedupe(query.data?.pages.flatMap((page) => page.rows) ?? []),
-    actionRequiredCount: first?.actionRequiredCount ?? 0,
     investigationTotal: first?.investigationTotal ?? 0,
     isLoading: query.isLoading,
     hasMore: query.hasNextPage,

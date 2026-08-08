@@ -4,7 +4,6 @@ import {
   Settings,
   LogOut,
   ScrollText,
-  PanelLeft,
   Plug,
   Telescope,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuLabel,
   SidebarProvider,
   SidebarTrigger,
   useSidebar,
@@ -26,15 +26,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChatHost } from "@/components/layout/ChatHost";
 import { useAuth } from "@/auth/AuthContext";
-import { useSessions } from "@/hooks/useSessions";
 import { cn } from "@/lib/utils";
 import { ICON_NAV } from "@/lib/iconProps";
 
-// Nowrap inside an overflow-hidden rail, and the fade finishes before the
-// width does, so a label is never legible at an intermediate width. Medium
-// because a 400 stroke on the dark panel reads dimmer than its own ink step.
-const NAV_LABEL =
-  "truncate whitespace-nowrap font-medium transition-opacity duration-(--duration-fast) delay-(--duration-base) group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0";
+// Medium because a 400 stroke on the dark panel reads dimmer than its own ink
+// step. The collapse behaviour belongs to the label slot, not to here.
+const NAV_LABEL = "font-medium";
 
 // The whole of the sidebar's navigation. Lists and actions belong to the pages.
 const NAV_ITEMS = [
@@ -64,11 +61,9 @@ function ShellContent({
 }: {
   children: React.ReactNode;
 }): React.JSX.Element {
-  const { toggleSidebar, isOverlay, openOverlay, setOpenOverlay } =
-    useSidebar();
+  const { isOverlay, setOpenOverlay } = useSidebar();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { logout } = useAuth();
-  const { actionRequiredCount } = useSessions("investigation");
 
   function isActive(to: string): boolean {
     return pathname === to || pathname.startsWith(`${to}/`);
@@ -89,13 +84,16 @@ function ShellContent({
       </a>
 
       <Sidebar collapsible="icon" variant="inset">
-        {/* The gap goes with the label: 8px of nothing pushes the collapsed
-            toggle off the icon column. */}
-        <SidebarHeader className="h-14 flex-row items-center justify-between gap-2 overflow-hidden p-2 group-data-[collapsible=icon]:gap-0">
+        {/* The same 48px bar the stage carries, begun at the same inset, so the
+            wordmark and the page's own title sit on one line. The gap goes with
+            the label: 8px of nothing pushes the collapsed toggle off centre. */}
+        <SidebarHeader className="h-12 flex-row items-center justify-between gap-2 overflow-hidden px-2 lg:mt-3 group-data-[collapsible=icon]:gap-0">
           <span
             className={cn(
-              NAV_LABEL,
-              "min-w-0 flex-1 text-lg font-semibold tracking-tight",
+              // Full ink: the wordmark is the one thing in the panel that names
+              // the product, and the panel's own ink step is its dimmest.
+              "nav-label-motion min-w-0 flex-1 truncate whitespace-nowrap text-lg font-semibold tracking-tight text-foreground",
+              "group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0",
             )}
           >
             NightWarden
@@ -120,17 +118,9 @@ function ShellContent({
                     render={<Link to={to} />}
                   >
                     <Icon {...ICON_NAV} />
-                    <span className={NAV_LABEL}>{label}</span>
-                    {/* A plain number, not a badge: it says how much work there
-                        is, which is a readout rather than a notification. */}
-                    {to === "/investigations" && actionRequiredCount > 0 && (
-                      <span
-                        className={cn(NAV_LABEL, "ml-auto tabular-nums")}
-                        aria-label={`${actionRequiredCount} needing action`}
-                      >
-                        {actionRequiredCount}
-                      </span>
-                    )}
+                    <SidebarMenuLabel className={NAV_LABEL}>
+                      {label}
+                    </SidebarMenuLabel>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -149,7 +139,9 @@ function ShellContent({
                 render={<Link to="/settings" />}
               >
                 <Settings {...ICON_NAV} />
-                <span className={NAV_LABEL}>Settings</span>
+                <SidebarMenuLabel className={NAV_LABEL}>
+                  Settings
+                </SidebarMenuLabel>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -162,7 +154,9 @@ function ShellContent({
                 }}
               >
                 <LogOut {...ICON_NAV} />
-                <span className={NAV_LABEL}>Log out</span>
+                <SidebarMenuLabel className={NAV_LABEL}>
+                  Log out
+                </SidebarMenuLabel>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -174,20 +168,6 @@ function ShellContent({
         tabIndex={-1}
         className="h-svh min-h-0 overflow-hidden lg:h-[calc(100svh-theme(spacing.6))]"
       >
-        {/* Only while the sidebar is hidden: a panel that is not on screen
-            cannot host the control that reopens it. */}
-        {isOverlay && !openOverlay && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Toggle sidebar"
-            aria-expanded={false}
-            className="absolute top-3 left-3 z-20 text-muted-foreground"
-            onClick={() => toggleSidebar()}
-          >
-            <PanelLeft className="size-4.5" strokeWidth={1.5} aria-hidden />
-          </Button>
-        )}
         {/* Scrolling is the page's to decide: a column of content scrolls here,
             and a report beside a rail scrolls inside its own column. */}
         <div className="relative flex min-h-0 flex-1 flex-col overflow-auto">

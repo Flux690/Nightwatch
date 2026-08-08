@@ -66,15 +66,6 @@ export function appendSessionAlert(
   })();
 }
 
-// One-way: a session put under investigation stays under one for good.
-export function openInvestigation(sessionId: string): void {
-  getDb()
-    .prepare(
-      `UPDATE sessions SET investigation = 1 WHERE session_id = ? AND investigation = 0`,
-    )
-    .run(sessionId);
-}
-
 // Stamps this alert wherever it appears. The first clear wins per alert: a
 // re-fire that clears again says nothing new about that condition. Returns the
 // sessions it touched, which is not the same as the sessions now resolved.
@@ -104,15 +95,6 @@ export function markAlertCleared(
     }
     return rows.map((r) => r.sessionId);
   })();
-}
-
-// Read per turn by the loop, so OpenInvestigation takes effect on the next turn
-// of the run that called it rather than the next run.
-export function isUnderInvestigation(sessionId: string): boolean {
-  const row = getDb()
-    .prepare(`SELECT investigation FROM sessions WHERE session_id = ?`)
-    .get(sessionId) as { investigation: number } | undefined;
-  return row?.investigation === 1;
 }
 
 // Overwrites unconditionally: the refined title deliberately replaces the

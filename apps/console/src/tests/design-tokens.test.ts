@@ -24,6 +24,12 @@ const aliases = new Map<string, string>();
 const mixes = new Map<string, { base: string; toward: string; part: number }>();
 const MIX =
   /^color-mix\(\s*in oklab,\s*var\(--([a-z][-a-z0-9]*)\),\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%\s*\)$/;
+
+/* An overlay names no base, because a control that can sit on four depths has
+   no one surface to be mixed against. It composites over whatever is beneath. */
+const overlays = new Map<string, { ink: string; alpha: number }>();
+const OVERLAY =
+  /^color-mix\(\s*in srgb,\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%,\s*transparent\s*\)$/;
 for (const [name, value] of declarations) {
   const triple = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);
   if (triple) {
@@ -37,6 +43,11 @@ for (const [name, value] of declarations) {
       toward: blend[2] ?? "",
       part: +(blend[3] ?? 0) / 100,
     });
+    continue;
+  }
+  const wash = OVERLAY.exec(value);
+  if (wash) {
+    overlays.set(name, { ink: wash[1] ?? "", alpha: +(wash[2] ?? 0) / 100 });
     continue;
   }
   const alias = /^var\(--([a-z][-a-z0-9]*)\)$/.exec(value);
@@ -207,6 +218,7 @@ describe("the scale", () => {
   it("holds every semantic token to a step, a mix or an alias", () => {
     for (const [name, value] of declarations) {
       if (scale.has(name) || aliases.has(name) || mixes.has(name)) continue;
+      if (overlays.has(name)) continue;
       if (value.startsWith("linear-gradient(")) continue;
       expect(value, `--${name} is neither a step, a mix nor an alias`).toMatch(
         /oklch\(0 0 0 \/ /,
@@ -255,7 +267,8 @@ describe("the scale", () => {
   });
 
   /* The rule the ladder depends on: a state is relative to the surface it
-     lands on, so it stays right at every depth instead of only one. */
+     lands on, so it stays right at every depth instead of only one. A state
+     bound to a surface it does not sit on is what makes a hover sink. */
   it("derives every hover and active state rather than naming a rung", () => {
     const states = [...declarations.keys()].filter((n) =>
       /-(hover|active)$/.test(n),
@@ -263,11 +276,35 @@ describe("the scale", () => {
     expect(states.length).toBeGreaterThan(0);
     for (const name of states) {
       if (name === "primary-hover" || name.includes("fill")) continue;
+      const overlay = overlays.get(name);
+      if (overlay) {
+        expect(overlay.ink, `--${name} washes with the wrong pole`).toBe(
+          "ink-3",
+        );
+        continue;
+      }
       const mix = mixes.get(name);
-      expect(mix, `--${name} is not a mix`).toBeDefined();
+      expect(mix, `--${name} is neither a mix nor a wash`).toBeDefined();
       expect(mix?.toward, `--${name} mixes toward the wrong pole`).toBe(
         "ink-3",
       );
+    }
+  });
+
+  /* Why a wash can be trusted at a depth nobody declared: its ink sits above
+     the whole surface ramp, so compositing it can only ever lighten. A rung
+     used this way lifts at one depth and sinks at the next, which is the bug
+     that put a menu row darker than the menu it opened on. */
+  it("keeps a depth-independent state above every surface it can land on", () => {
+    expect(overlays.size).toBeGreaterThan(0);
+    for (const [name, { ink, alpha }] of overlays) {
+      expect(alpha, `--${name} washes with no ink`).toBeGreaterThan(0);
+      for (const surface of [...SURFACES, "popover", "control", "input"]) {
+        expect(
+          step(ink).L,
+          `--${name} would sink on --${surface}`,
+        ).toBeGreaterThan(step(surface).L);
+      }
     }
   });
 });

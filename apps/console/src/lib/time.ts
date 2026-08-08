@@ -11,3 +11,18 @@ export function timeAgo(dateString: string | null): string {
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
 }
+
+export const DAY_GROUPS = ["Today", "Yesterday", "Older"] as const;
+
+export type DayGroup = (typeof DAY_GROUPS)[number];
+
+// Calendar days apart, not hours: 23:50 yesterday and 00:10 today are twenty
+// minutes and two days, and the operator remembers which day they spoke.
+export function dayGroup(dateString: string): DayGroup {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const at = new Date(dateString).getTime();
+  if (at >= midnight.getTime()) return "Today";
+  if (at >= midnight.getTime() - 86_400_000) return "Yesterday";
+  return "Older";
+}

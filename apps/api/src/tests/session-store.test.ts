@@ -636,24 +636,6 @@ describe("API-local session store", () => {
       return m.sessionId;
     }
 
-    it("counts every investigation needing action, not the ones on this page", () => {
-      const waiting = investigation();
-      appendRowsAndInterrupt([msg(waiting, 0)], {
-        sessionId: waiting,
-        toolUseId: "tu-count",
-        kind: "approval",
-        completedResults: [],
-        claimedAt: null,
-      });
-      const wholeSet = listSessionPage(500, 0).actionRequiredCount;
-
-      // One row on the page, and the count is unmoved by that.
-      const onePage = listSessionPage(1, 0);
-      expect(onePage.rows).toHaveLength(1);
-      expect(onePage.actionRequiredCount).toBe(wholeSet);
-      expect(wholeSet).toBeGreaterThan(0);
-    });
-
     it("totals every investigation, so a record's place in the queue is true", () => {
       const before = listSessionPage(1, 0).investigationTotal;
       investigation();

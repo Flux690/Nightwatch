@@ -1,7 +1,8 @@
 import type { FleetRunner, NormalizedAlert } from "@nightwarden/shared";
 import {
   budgetLine,
-  SYSTEM_PROMPT,
+  CHAT_PROMPT,
+  INVESTIGATION_PROMPT,
   type PromptOptions,
 } from "./prompts/system.js";
 import { REPORT_PROTOCOL } from "./prompts/report.js";
@@ -20,9 +21,13 @@ const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   repo: null,
 };
 
+// Two prompts, not one with a section bolted on: a question about the fleet is
+// not an incident, and telling a chat it has an investigation to shape is what
+// put a stopwatch on "how many containers are running?".
 function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
-  let prompt = SYSTEM_PROMPT + budgetLine(opts);
-  if (investigation) prompt += REPORT_PROTOCOL;
+  let prompt = investigation
+    ? INVESTIGATION_PROMPT + budgetLine(opts, true) + REPORT_PROTOCOL
+    : CHAT_PROMPT + budgetLine(opts, false);
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
 }

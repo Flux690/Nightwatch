@@ -37,7 +37,10 @@ function UserTurn({
       data-testid="user-turn"
     >
       <Bubble variant="secondary">
-        <BubbleContent className="text-base whitespace-pre-wrap">
+        {/* A bubble is raised content on the stage, so it takes the raised
+            rung. The secondary fill lifts four points off the ground, which
+            reads as flat rather than as a thing sitting on it. */}
+        <BubbleContent className="bg-card! text-base whitespace-pre-wrap">
           {text}
         </BubbleContent>
       </Bubble>
@@ -122,7 +125,7 @@ function ThinkingBlock({
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger className="group flex w-fit items-center gap-2 text-sm text-muted-foreground">
-          <span className={item.streaming ? "animate-pulse" : undefined}>
+          <span className={item.streaming ? "shimmer" : undefined}>
             Thinking
           </span>
           <ChevronRight

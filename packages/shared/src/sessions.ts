@@ -40,9 +40,6 @@ export interface SessionListPage {
   rows: SessionListRow[];
   // The offset to request next, or null once the list is exhausted.
   nextOffset: number | null;
-  // Investigations needing a human, by the same derivation the group headers
-  // use, so the nav count and the headers cannot disagree.
-  actionRequiredCount: number;
   // Every investigation there is, so a record's place in the queue is true.
   investigationTotal: number;
 }
@@ -69,6 +66,10 @@ export interface SessionAlert {
 // investigation itself, so no consumer infers it from a run's leftovers.
 export interface SessionDetail extends SessionMeta {
   investigation: boolean;
+  // Whether a run is in flight right now. The stream carries the deltas; without
+  // this the snapshot has three endings and no beginning, so a session rejoined
+  // mid-run reads as idle until the next event happens to land.
+  running: boolean;
   // In arrival order: the batch that opened the session, then any that arrived
   // while the run was working.
   alerts: SessionAlert[];

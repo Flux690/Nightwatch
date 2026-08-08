@@ -67,7 +67,10 @@ function AlertDialogHeader({
     <div
       data-slot="alert-dialog-header"
       className={cn(
-        "grid grid-rows-[auto_1fr] place-items-center gap-2 text-center has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 sm:group-data-[size=default]/alert-dialog-content:place-items-start sm:group-data-[size=default]/alert-dialog-content:text-left sm:group-data-[size=default]/alert-dialog-content:has-data-[slot=alert-dialog-media]:grid-rows-[auto_1fr]",
+        /* Left, at every size. The centred default is a phone pattern, and it
+           only un-centred for one of the two sizes, so a small dialog asked its
+           question down the middle while a large one asked it from the edge. */
+        "grid grid-rows-[auto_1fr] place-items-start gap-2 text-left has-data-[slot=alert-dialog-media]:grid-rows-[auto_auto_1fr] has-data-[slot=alert-dialog-media]:gap-x-4 has-data-[slot=alert-dialog-media]:group-data-[size=default]/alert-dialog-content:grid-rows-[auto_1fr]",
         className,
       )}
       {...props}
@@ -83,7 +86,10 @@ function AlertDialogFooter({
     <div
       data-slot="alert-dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        /* One row, ending at the right edge, under the question it answers.
+           The stacked reversal below sm is a phone layout this console has no
+           width for. */
+        "flex flex-row justify-end gap-2",
         className,
       )}
       {...props}
@@ -152,9 +158,12 @@ function AlertDialogAction({
   );
 }
 
+/* Filled and unbordered, a step above the dialog it stands on. Outlined, it
+   took the stage's own fill, which is darker than the dialog and read as a hole
+   in it; and its line rung is a step from the dialog it would be drawn on. */
 function AlertDialogCancel({
   className,
-  variant = "outline",
+  variant = "ghost",
   size = "default",
   ...props
 }: AlertDialogPrimitive.Close.Props &
@@ -162,7 +171,10 @@ function AlertDialogCancel({
   return (
     <AlertDialogPrimitive.Close
       data-slot="alert-dialog-cancel"
-      className={cn(className)}
+      className={cn(
+        "bg-state-raised hover:bg-state-raised-hover aria-expanded:bg-state-raised-hover",
+        className,
+      )}
       render={<Button variant={variant} size={size} />}
       {...props}
     />

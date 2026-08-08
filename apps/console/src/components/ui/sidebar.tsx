@@ -197,7 +197,10 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+          /* The sheet's own three-quarter width is a phone rule and it carries
+             a variant's specificity, so the declared width has to answer at the
+             same specificity or the panel opens half the window wide. */
+          className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground data-[side=left]:w-(--sidebar-width) sm:max-w-none [&>button]:hidden"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_OVERLAY,
@@ -484,9 +487,10 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  /* Collapsed, the squeezed label still holds a sliver of width, so the icon
-     centres only when the button fills the rail's content box. */
-  "peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-7! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:justify-center! group-data-[collapsible=icon]:gap-0! group-data-[collapsible=icon]:[&>span:last-child]:w-0 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground active:bg-sidebar-hover active:text-sidebar-hover-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-hover data-open:hover:text-sidebar-hover-foreground data-active:bg-sidebar-active data-active:text-sidebar-hover-foreground data-active:hover:bg-sidebar-active [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate",
+  /* The rail is 52px and its group insets 12 either side, so a full-width
+     button is already the 28px square the icon centres in. The width rides the
+     panel's own transition; forcing a size here is what used to make it snap. */
+  "peer/menu-button group/menu-button flex w-full items-center overflow-hidden rounded-md px-2 text-left text-sm transition-[padding] duration-(--duration-panel) ease-panel group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:px-1.5 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground active:bg-sidebar-hover active:text-sidebar-hover-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-hover data-open:hover:text-sidebar-hover-foreground data-active:bg-sidebar-active data-active:text-sidebar-hover-foreground data-active:hover:bg-sidebar-active [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -497,7 +501,7 @@ const sidebarMenuButtonVariants = cva(
       size: {
         default: "h-7 text-sm",
         sm: "h-6 text-sm",
-        lg: "h-10 text-sm group-data-[collapsible=icon]:p-0!",
+        lg: "h-10 text-sm",
       },
     },
     defaultVariants: {
@@ -558,6 +562,29 @@ function SidebarMenuButton({
         {...tooltip}
       />
     </Tooltip>
+  );
+}
+
+/* The one child the rail collapses, and it says so itself. Selecting the label
+   by its position instead was correct only while a button held exactly one
+   span, and silently wrong - not broken - the moment one held two. */
+function SidebarMenuLabel({
+  className,
+  ...props
+}: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="sidebar-menu-label"
+      data-sidebar="menu-label"
+      className={cn(
+        // Its own margin rather than the button's gap, so the label owns every
+        // pixel it occupies and there is nothing left to zero out separately.
+        "nav-label-motion ms-2 min-w-0 flex-1 truncate whitespace-nowrap",
+        "group-data-[collapsible=icon]:ms-0 group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:delay-0",
+        className,
+      )}
+      {...props}
+    />
   );
 }
 
@@ -722,6 +749,7 @@ export {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuLabel,
   SidebarMenuSkeleton,
   SidebarMenuSub,
   SidebarMenuSubButton,

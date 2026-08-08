@@ -5,7 +5,6 @@ import { GITHUB_TOOLS } from "./github.js";
 import { HOST_TOOLS } from "./host.js";
 import { K8S_TOOLS } from "./kubernetes.js";
 import { INTERRUPT_TOOLS } from "./interrupts.js";
-import { OPEN_INVESTIGATION_TOOLS } from "./investigation.js";
 import { LOKI_TOOLS } from "./loki.js";
 import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
@@ -26,7 +25,6 @@ export const TOOL_REGISTRY: Tool[] = [
   ...HOST_TOOLS,
   ...K8S_TOOLS,
   ...INTERRUPT_TOOLS,
-  ...OPEN_INVESTIGATION_TOOLS,
   ...REPO_TOOLS,
   ...GITHUB_TOOLS,
   ...PROMETHEUS_TOOLS,
@@ -89,10 +87,9 @@ export function effectiveToolset(
     ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
     ...(prometheus ? PROMETHEUS_TOOLS : []),
     ...(loki ? LOKI_TOOLS : []),
-    // Exactly one of these is offered. The ratchet is one-way, so a session
-    // already under investigation has no correct reason to be shown the tool
-    // that opens one.
-    ...(investigation ? REPORT_TOOLS : OPEN_INVESTIGATION_TOOLS),
+    // The record is the investigation's, so a chat is offered no way to write
+    // one. What a session is was decided before the run started.
+    ...(investigation ? REPORT_TOOLS : []),
   ];
 }
 

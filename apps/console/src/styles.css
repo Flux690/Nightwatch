@@ -75,6 +75,20 @@
   --muted-hover: color-mix(in oklab, var(--muted), var(--ink-3) 4%);
   --surface-hover: color-mix(in oklab, var(--surface), var(--ink-3) 4%);
   --surface-active: color-mix(in oklab, var(--surface), var(--ink-3) 8%);
+  /* The one state for a control that does not know its own depth. A ghost
+     button and a menu row sit on the stage, a card and a popover in turn, so a
+     rung that lifts on one sinks on the next. Ink at 8% lifts whatever is under
+     it, which is the only form of this that can be right everywhere. */
+  --state-hover: color-mix(in srgb, var(--ink-3) 8%, transparent);
+  /* A control that has to read as raised wherever it is put, filled rather than
+     outlined: there is no rung above the popover to give it, so it lifts off
+     whatever it lands on by the same means every state here does. */
+  --state-raised: color-mix(in srgb, var(--ink-3) 8%, transparent);
+  --state-raised-hover: color-mix(in srgb, var(--ink-3) 14%, transparent);
+  /* A rule has the same problem a state does. The line rungs are solved for the
+     stage and the card, so on the popover - the lightest surface there is - a
+     divider lands within one step of its own ground and disappears. */
+  --border-overlay: color-mix(in srgb, var(--ink-3) 12%, transparent);
 
   /* Cobalt marks what you can act on, and lifts the same way every surface
      does. Hover is also the pressed appearance. */
@@ -129,7 +143,7 @@
   --selection: color-mix(in oklab, var(--n-2), var(--cobalt-ink) 22%);
 
   /* Depth, not palette: black at alpha, carrying no hue of its own. */
-  --scrim: oklch(0 0 0 / 0.55);
+  --scrim: oklch(0 0 0 / 0.4);
   /* A ring rather than a drop: the spread darkens the surface right at the
      edge, so a raised panel separates without being lightened further. */
   --shadow-edge: 0 0.5px 1px 1px oklch(0 0 0 / 0.3);
@@ -150,6 +164,10 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-state-hover: var(--state-hover);
+  --color-state-raised: var(--state-raised);
+  --color-state-raised-hover: var(--state-raised-hover);
+  --color-border-overlay: var(--border-overlay);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary-hover: var(--secondary-hover);
@@ -300,6 +318,15 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Two speeds on one gesture: the gap closes with the panel, while the ink
+   leaves first so a label is never legible at an intermediate width. Collapsing
+   takes the delay off, so the fade leads going in and trails coming out. */
+@utility nav-label-motion {
+  transition:
+    margin-inline-start var(--duration-panel) var(--ease-panel),
+    opacity var(--duration-fast) var(--ease-out) var(--duration-base);
 }
 
 /* Prose maps to semantic tokens rather than raw colours. */

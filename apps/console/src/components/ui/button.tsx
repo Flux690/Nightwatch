@@ -23,11 +23,14 @@ const buttonVariants = cva(
       },
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary-hover",
+        /* Defined by its edge, so the surface shows through it and the edge
+           has to read at any depth. An opaque fill and a line rung are both
+           solved for the stage, and this button does not always stand on it. */
         outline:
-          "border-border bg-background hover:bg-muted aria-expanded:bg-muted",
+          "border-border-overlay bg-transparent hover:bg-state-hover aria-expanded:bg-state-hover",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary-hover aria-expanded:bg-secondary",
-        ghost: "hover:bg-muted aria-expanded:bg-muted",
+        ghost: "hover:bg-state-hover aria-expanded:bg-state-hover",
         destructive:
           "bg-destructive-fill text-primary-foreground hover:bg-destructive-fill-hover",
         "destructive-ghost":

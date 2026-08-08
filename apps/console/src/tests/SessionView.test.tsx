@@ -1,4 +1,11 @@
-import { render, screen, waitFor, act, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  act,
+  within,
+  cleanup,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -12,9 +19,13 @@ import { RouterProvider } from "@tanstack/react-router";
 
 import { SessionView } from "../pages/SessionView.js";
 import { ConsoleEventsProvider } from "@/hooks/ConsoleEventsProvider";
+import { routeTree } from "@/router";
 import { MockEventSource } from "./mockEventSource.js";
 
+// AuthProvider as well as the hook: the page tests drive the real route tree,
+// whose root mounts the provider before any page renders.
 vi.mock("@/auth/AuthContext", () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
     phase: { kind: "authenticated", email: "operator@nightwarden.io" },
     login: vi.fn(),
@@ -31,7 +42,7 @@ const USER_TURN = {
   text: "Service is down on web-01",
 };
 
-function setup(initialItems: object[] = [USER_TURN]) {
+function setup(initialItems: object[] = [USER_TURN], running = false) {
   MockEventSource.reset();
 
   // Mutable, because the projection lives server-side now: a test that fires a
@@ -69,6 +80,7 @@ function setup(initialItems: object[] = [USER_TURN]) {
             title: "Service is down on web-01",
             createdAt: "2026-06-13T00:00:00.000Z",
             investigation: false,
+            running,
             alerts: [],
             transcript: items,
           }),
@@ -108,6 +120,131 @@ function setup(initialItems: object[] = [USER_TURN]) {
   );
 
   return { qc, fetchMock, setItems, holdRespond };
+}
+
+const AGO_MINUTES = (n: number): string =>
+  new Date(Date.now() - n * 60_000).toISOString();
+
+// One per group, so the day headings have something to hold, plus an
+// investigation the chat list must never be asked for.
+const CHAT_ROWS = [
+  { sessionId: "c1", title: "Why is redis restarting?", minutes: 5 },
+  { sessionId: "c2", title: "Explain the checkout deploy", minutes: 60 * 30 },
+  {
+    sessionId: "c3",
+    title: "What does this label mean?",
+    minutes: 60 * 24 * 9,
+  },
+];
+
+/* The page rather than the conversation: the header, its disclosure and its
+   menu live in AgentPage, so this drives the real route tree the way AppShell
+   does. The conversation below it is the same portalled node either way. */
+function setupPage({
+  path = "/agent",
+  running = false,
+}: { path?: string; running?: boolean } = {}) {
+  MockEventSource.reset();
+  vi.stubGlobal("EventSource", MockEventSource);
+  vi.stubGlobal("innerWidth", 1280);
+
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+
+  const fetchMock = vi.fn().mockImplementation((url: string, init?: object) => {
+    if (url.includes("/auth/status")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            ownerExists: true,
+            authenticated: true,
+            email: "operator@nightwarden.io",
+          }),
+      });
+    }
+    const record = /\/sessions\/([^?/]+)$/.exec(url);
+    if (record !== null && !url.includes("?")) {
+      const id = record[1]!;
+      if ((init as { method?: string })?.method === "DELETE") {
+        return Promise.resolve({ ok: true, status: 204, json: () => null });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            sessionId: id,
+            title: CHAT_ROWS.find((r) => r.sessionId === id)?.title ?? "Chat",
+            createdAt: "2026-06-13T00:00:00.000Z",
+            investigation: false,
+            running,
+            alerts: [],
+            transcript: [
+              {
+                kind: "user_turn",
+                id: "u-1",
+                text: "Why is redis restarting?",
+              },
+              {
+                kind: "thinking",
+                id: "t-1",
+                text: "checking the logs",
+                streaming: false,
+              },
+              {
+                kind: "agent_text",
+                id: "a-1",
+                text: "It was OOM-killed at 02:14.",
+              },
+            ],
+          }),
+      });
+    }
+    if (url.includes("/sessions")) {
+      // Answering only what was asked for is the point: a page that requested
+      // every session would be handed the investigation below.
+      const rows = url.includes("kind=chat")
+        ? CHAT_ROWS.map((row) => ({
+            sessionId: row.sessionId,
+            title: row.title,
+            createdAt: AGO_MINUTES(row.minutes),
+            lastActivityAt: AGO_MINUTES(row.minutes),
+            investigation: false,
+            severity: null,
+            severityLabel: null,
+            status: null,
+            finding: null,
+            awaitingHumanInput: false,
+          }))
+        : [];
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({ rows, nextOffset: null, investigationTotal: 0 }),
+      });
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+
+  render(
+    <TestProviders>
+      <QueryClientProvider client={qc}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </TestProviders>,
+  );
+
+  return { router, fetchMock, writeText };
 }
 
 afterEach(() => {
@@ -1448,5 +1585,149 @@ describe("SessionView", () => {
         expect(transcriptFetches()).toBeGreaterThan(before);
       });
     });
+  });
+
+  // The stream is this component's own state, so leaving and coming back starts
+  // it empty. Without the snapshot saying so, a live run reads as finished.
+  describe("rejoining a session that is already running", () => {
+    it("shows the run as working and holds the composer closed", async () => {
+      setup([USER_TURN], true);
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox")).toBeDisabled();
+      });
+      expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
+    });
+
+    it("leaves the composer open when the snapshot says nothing is running", async () => {
+      setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByRole("textbox")).not.toBeDisabled();
+    });
+  });
+});
+
+describe("the Agent page", () => {
+  // The name and its chevron are one control, so the disclosure is named by
+  // where you are rather than by a label sitting next to it.
+  async function openHistory(name: string): Promise<void> {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name }));
+  }
+
+  it("heads a new conversation 'New chat' and an open one by its title", async () => {
+    setupPage();
+    expect(
+      await screen.findByRole("button", { name: "New chat" }),
+    ).toBeInTheDocument();
+
+    cleanup();
+    setupPage({ path: "/agent/c1" });
+    expect(
+      await screen.findByRole("button", { name: "Why is redis restarting?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("lists only conversations a person started, grouped by day", async () => {
+    const { fetchMock } = setupPage();
+    await openHistory("New chat");
+
+    const panel = await screen.findByRole("dialog");
+    expect(
+      within(panel).getByRole("link", { name: /Why is redis restarting\?/ }),
+    ).toBeInTheDocument();
+
+    // The filter is the whole of "only what a person started", so the request
+    // carrying it is the behaviour worth pinning. Which day heading a row lands
+    // under is the clock's business, not this test's.
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("kind=chat")),
+    ).toBe(true);
+  });
+
+  it("offers a New chat entry above the list only once a session is open", async () => {
+    setupPage();
+    await openHistory("New chat");
+    expect(
+      within(await screen.findByRole("dialog")).queryByRole("link", {
+        name: "New chat",
+      }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    setupPage({ path: "/agent/c1" });
+    await openHistory("Why is redis restarting?");
+    const panel = await screen.findByRole("dialog");
+    const fresh = within(panel).getByRole("link", { name: "New chat" });
+    const firstRow = within(panel).getByRole("link", {
+      name: /Why is redis restarting\?/,
+    });
+    expect(
+      (fresh.compareDocumentPosition(firstRow) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !==
+        0,
+    ).toBe(true);
+  });
+
+  it("copies the conversation as a title and alternating role headings", async () => {
+    const user = userEvent.setup();
+    const { writeText } = setupPage({ path: "/agent/c1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "More actions" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Copy as Markdown" }),
+    );
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    // Thinking is collapsed on screen for the same reason it is absent here.
+    expect(writeText.mock.calls[0]?.[0]).toBe(
+      "# Why is redis restarting?\n\n" +
+        "## User\n\nWhy is redis restarting?\n\n" +
+        "## Assistant\n\nIt was OOM-killed at 02:14.\n",
+    );
+  });
+
+  it("names the chat in its delete confirmation and then deletes it", async () => {
+    const user = userEvent.setup();
+    const { fetchMock, router } = setupPage({ path: "/agent/c1" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "More actions" }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Why is redis restarting?");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).includes("/sessions/c1") &&
+            (init as { method?: string })?.method === "DELETE",
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/agent"));
+  });
+
+  it("does not offer to delete a chat a run is still holding", async () => {
+    const user = userEvent.setup();
+    setupPage({ path: "/agent/c1", running: true });
+
+    await user.click(
+      await screen.findByRole("button", { name: "More actions" }),
+    );
+    expect(
+      await screen.findByRole("menuitem", { name: "Delete" }),
+    ).toHaveAttribute("data-disabled");
   });
 });

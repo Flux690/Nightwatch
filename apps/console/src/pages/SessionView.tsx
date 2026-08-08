@@ -194,6 +194,19 @@ export function SessionView({
 
   const session = useSession(activeSessionId);
 
+  /* Arriving at a session that is already working. The live state below is this
+     component's, so leaving and returning starts it empty; the snapshot is the
+     only thing that can say a run is in flight. Read once per session, because
+     after that the stream is the truth and a refetch mid-suspend would undo it. */
+  const seededFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeSessionId === null || session === null) return;
+    if (session.sessionId !== activeSessionId) return;
+    if (seededFor.current === activeSessionId) return;
+    seededFor.current = activeSessionId;
+    if (session.running) setIsRunning(true);
+  }, [session, activeSessionId]);
+
   const prevRouteIdRef = useRef<string | null>(sessionIdFromRoute);
   useEffect(() => {
     const prev = prevRouteIdRef.current;
@@ -208,6 +221,7 @@ export function SessionView({
       setPendingEcho(null);
       lastEchoRef.current = null;
       setActivityNotice(null);
+      seededFor.current = null;
       return;
     }
 
@@ -217,6 +231,7 @@ export function SessionView({
       setPendingEcho(null);
       lastEchoRef.current = null;
       setActivityNotice(null);
+      seededFor.current = null;
     }
 
     activeSessionIdRef.current = curr;
@@ -230,8 +245,8 @@ export function SessionView({
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      // A typed message opens a plain session. If the agent decides it is an
-      // incident it calls OpenInvestigation, and the row follows from the API.
+      // A typed message opens a chat and it stays one, so the row goes to the
+      // chat list and never moves.
       prependSession(queryClient, {
         sessionId: newId,
         title: firstMessage.slice(0, 60),

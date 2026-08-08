@@ -157,9 +157,6 @@ export function listSessionPage(
       };
     }),
     nextOffset,
-    actionRequiredCount: investigations.filter(
-      (s) => deriveStatus(s) === "action_required",
-    ).length,
     investigationTotal: investigations.length,
   };
 }

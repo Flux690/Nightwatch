@@ -411,9 +411,17 @@ describe("SettingsPage", () => {
       expect(confirm).toHaveClass("bg-destructive-fill");
       expect(confirm).toHaveClass("text-primary-foreground");
 
+      // At every width, not only above sm: the console has no width below it.
       const footer = confirm.parentElement;
-      expect(footer).toHaveClass("sm:justify-end");
-      expect(footer?.className).not.toMatch(/bg-surface|border-t|grid-cols-2/);
+      expect(footer).toHaveClass("justify-end");
+      expect(footer?.className).not.toMatch(
+        /bg-surface|border-t|grid-cols-2|flex-col/,
+      );
+
+      // The question is asked from the edge, not down the middle.
+      const heading = within(dialog).getByRole("heading");
+      expect(heading.parentElement?.className).toMatch(/text-left/);
+      expect(heading.parentElement?.className).not.toMatch(/text-center/);
     });
 
     it("does not ask for an autosaved value, which is already written", async () => {

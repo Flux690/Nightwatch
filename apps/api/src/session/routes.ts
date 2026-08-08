@@ -102,6 +102,7 @@ export async function registerSessionRoutes(
         title: session.title,
         createdAt: session.createdAt,
         investigation: session.investigation,
+        running: dispatcher.isSessionRunning(request.params.id),
         alerts: session.alerts,
         transcript: buildTranscript(request.params.id),
       };
@@ -192,8 +193,8 @@ export async function registerSessionRoutes(
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
       const sessionId = randomUUID();
-      // A question opens a plain session. If it turns out to be an incident,
-      // the agent calls OpenInvestigation on this same session.
+      // A question opens a chat and stays one. An investigation is opened by an
+      // alert, never by the agent deciding mid-conversation.
       dispatcher.dispatch({ sessionId, userMessage: message });
       logger.info({ sessionId }, "chat session started");
       return reply.code(202).send({ sessionId });

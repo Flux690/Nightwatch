@@ -148,6 +148,7 @@ function setup({
             title: known?.title ?? "Check disk",
             createdAt: "2026-06-13T00:00:00.000Z",
             investigation: known !== undefined || investigation,
+            running: false,
             alerts: [],
             transcript: [],
           }),
@@ -163,7 +164,6 @@ function setup({
           Promise.resolve({
             rows,
             nextOffset: null,
-            actionRequiredCount: 2,
             investigationTotal: INVESTIGATIONS.length,
           }),
       });
@@ -242,8 +242,8 @@ describe("Shell", () => {
       expect(precedes(settings, logOut)).toBe(true);
     });
 
-    it("carries no session list and no new-session action", async () => {
-      setup();
+    it("carries no session list, no new-session action and no readouts", async () => {
+      setup({ path: "/investigations" });
 
       await screen.findByRole("link", { name: "Agent" });
       expect(
@@ -255,6 +255,16 @@ describe("Shell", () => {
           screen.queryByText("CPU spike on web-01"),
         ).not.toBeInTheDocument();
       });
+
+      // A nav item is its name and nothing else. The count that used to sit
+      // here said what the page it links to already says, and could not survive
+      // the rail. The page is loaded, so the number it would have shown exists.
+      await screen.findByRole("region", { name: "Action required" });
+      const sidebar = document.querySelector('[data-slot="sidebar"]');
+      const item = within(sidebar as HTMLElement).getByRole("link", {
+        name: "Investigations",
+      });
+      expect(item).toHaveTextContent(/^Investigations$/);
     });
 
     it("Log out posts /api/logout", async () => {
@@ -613,20 +623,6 @@ describe("Shell", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/investigations/inv-crit");
       });
-    });
-
-    it("puts the count of work needing a person beside the nav item", async () => {
-      setup({ path: "/investigations" });
-
-      // Scoped to the sidebar: the breadcrumb names this page the same way.
-      await screen.findByRole("region", { name: "Action required" });
-      const sidebar = document.querySelector('[data-slot="sidebar"]');
-      const item = within(sidebar as HTMLElement).getByRole("link", {
-        name: "Investigations",
-      });
-      expect(
-        within(item).getByLabelText("2 needing action"),
-      ).toBeInTheDocument();
     });
   });
 

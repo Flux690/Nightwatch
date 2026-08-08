@@ -22,7 +22,6 @@ import {
 } from "../db/integrations.js";
 import {
   createSession,
-  isUnderInvestigation,
   appendErrorMessage,
   appendSessionAlert,
   appendTranscriptRows,
@@ -374,9 +373,8 @@ export async function runInvestigation(
 
     const platforms = connectedPlatforms();
     // Re-read per turn: disconnecting an integration strips its tools from the
-    // very next turn, and OpenInvestigation swaps in the report tools on the
-    // turn after it fires rather than waiting for the next run.
-    const investigation = isUnderInvestigation(sessionId);
+    // very next turn. What the session is cannot change mid-run, so it is not
+    // re-read alongside them.
     const toolset = effectiveToolset(
       platforms,
       {
@@ -384,7 +382,7 @@ export async function runInvestigation(
         prometheus: getPrometheusIntegration() !== null,
         loki: getLokiIntegration() !== null,
       },
-      investigation,
+      opensInvestigation,
     );
     const toolSchemas = toolset.map((t) => t.schema);
 
@@ -444,7 +442,7 @@ export async function runInvestigation(
       // Finish gate: a session under investigation may only end with a complete
       // record. Push back up to MAX_NUDGES times, then let it end - the status
       // an unfinished record derives to is already the honest one.
-      const gaps = investigation ? reportGaps(sessionId) : [];
+      const gaps = opensInvestigation ? reportGaps(sessionId) : [];
       if (gaps.length > 0) {
         if (nudges < MAX_NUDGES) {
           nudges++;
