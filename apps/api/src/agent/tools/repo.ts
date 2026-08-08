@@ -11,10 +11,6 @@ import {
   GitHubApiError,
 } from "../../integrations/github.js";
 import {
-  insertExecutingRemediationAction,
-  settleRemediationAction,
-} from "../../db/remediation-actions.js";
-import {
   FileNotFoundError,
   GitOperationError,
   PathEscapeError,
@@ -449,22 +445,6 @@ export const REPO_TOOLS: Tool[] = [
           ws,
           { title },
           {
-            beginAudit: () =>
-              insertExecutingRemediationAction({
-                toolUseId: ctx.toolUseId,
-                sessionId: ctx.sessionId,
-                toolName: "OpenPullRequest",
-                input: { title, body: modelBody },
-                resolvedBy: "agent",
-              }),
-            settleAudit: (ok, detail) => {
-              settleRemediationAction(
-                ctx.sessionId,
-                ctx.toolUseId,
-                ok ? "executed" : "failed",
-                detail,
-              );
-            },
             composeBody: (filesChanged) =>
               composePrBody(ctx.sessionId, ws.branch, modelBody, filesChanged),
           },

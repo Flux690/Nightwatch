@@ -92,12 +92,13 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByText(/writes are being rejected/)).toBeInTheDocument();
     });
 
-    it("says how often this write already landed, so a tired operator sees the pattern", () => {
-      wrap({ ...approvalItem, recent: { count: 3, windowMinutes: 12 } });
+    it("says how often this write already ran here, so a tired operator sees the pattern", () => {
+      wrap({ ...approvalItem, priorRuns: 3 });
 
-      // Counted from the audit log: it informs the decision, never overrides it.
+      // Counted from this investigation's transcript: it informs the decision,
+      // never overrides it.
       expect(
-        screen.getByText(/4th time in the last 12 minutes/),
+        screen.getByText(/4th time in this investigation/),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /restart/i })).toBeEnabled();
     });
@@ -105,7 +106,7 @@ describe("TranscriptItemRenderer", () => {
     it("says nothing when this is the first time", () => {
       wrap(approvalItem);
 
-      expect(screen.queryByText(/time in the last/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/time in this investigation/)).toBeNull();
     });
 
     it("sends a rejection reason so the agent learns why, as the answer to the agent's own", async () => {

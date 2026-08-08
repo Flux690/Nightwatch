@@ -55,6 +55,8 @@ const OUTCOME_LABEL: Record<ToolOutcome, string> = {
   retryable: "Unavailable",
   permission: "Permission denied",
   system: "Failed",
+  // A decision, not a fault: nothing broke and nothing ran.
+  rejected: "Declined",
 };
 
 const OUTCOME_TONE: Record<ToolOutcome, string> = {
@@ -63,6 +65,7 @@ const OUTCOME_TONE: Record<ToolOutcome, string> = {
   retryable: "text-wait",
   permission: "text-wait",
   system: "text-fail",
+  rejected: "text-muted-foreground",
 };
 
 // The one-line reading of a settled call, shared with the report so a cited

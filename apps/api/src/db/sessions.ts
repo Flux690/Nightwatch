@@ -264,7 +264,6 @@ export interface SessionListSource {
   alerts: SessionAlert[];
   investigation: boolean;
   report: Report | null;
-  remediationExecuted: boolean;
   lastKind: string | null;
   // The tail's text, which is why a failed run failed when lastKind is "error".
   lastContent: string | null;
@@ -288,7 +287,6 @@ interface SessionListRawRow {
   alerts: string;
   investigation: number;
   report: string | null;
-  remediationExecuted: number;
   lastKind: string | null;
   lastContent: string | null;
   awaitingHumanInput: number;
@@ -297,9 +295,6 @@ interface SessionListRawRow {
 
 const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
         s.alerts, s.investigation, s.report,
-        EXISTS (SELECT 1 FROM remediation_actions ra
-          WHERE ra.session_id = s.session_id
-            AND ra.status = 'executed') AS remediationExecuted,
         (SELECT m.kind FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastKind,
@@ -320,7 +315,6 @@ function toSource(r: SessionListRawRow): SessionListSource {
     alerts: parseAlerts(r.alerts),
     investigation: r.investigation === 1,
     report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
-    remediationExecuted: r.remediationExecuted === 1,
     lastKind: r.lastKind,
     lastContent: r.lastContent,
     awaitingHumanInput: r.awaitingHumanInput === 1,

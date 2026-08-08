@@ -1,12 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Bot,
-  Settings,
-  LogOut,
-  ScrollText,
-  Plug,
-  Telescope,
-} from "lucide-react";
+import { Bot, Settings, LogOut, Plug, Telescope } from "lucide-react";
 
 import {
   Sidebar,
@@ -38,7 +31,6 @@ const NAV_ITEMS = [
   { to: "/agent", label: "Agent", icon: Bot },
   { to: "/investigations", label: "Investigations", icon: Telescope },
   { to: "/integrations", label: "Integrations", icon: Plug },
-  { to: "/audit", label: "Audit log", icon: ScrollText },
 ] as const;
 
 export function Shell({

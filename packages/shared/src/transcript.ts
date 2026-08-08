@@ -19,6 +19,10 @@ export const TOOL_OUTCOMES = [
   "permission",
   // The tool itself broke.
   "system",
+  // The operator said no, so it never ran. The only member a human authors, and
+  // the only durable record that a gated call was declined: the transcript holds
+  // the refusal we sent the model, not the decision behind it.
+  "rejected",
 ] as const;
 
 export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
@@ -87,9 +91,10 @@ export interface ApprovalCardItem {
   toolName: string;
   input: Record<string, unknown>;
   risk?: string;
-  // How often this exact write already landed recently, computed from the audit log.
-  // Present only when it has happened before; the card informs, it never refuses.
-  recent?: { count: number; windowMinutes: number };
+  // How many times this same write already ran in this investigation, counted
+  // from its transcript. Present only when it has happened before; the card
+  // informs, it never refuses.
+  priorRuns?: number;
   state: ToolCallState;
 }
 

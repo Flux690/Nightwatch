@@ -30,11 +30,6 @@ import { seedCompleteReport } from "./report-helper.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
-import {
-  insertExecutingRemediationAction,
-  findRemediationAction,
-  settleRemediationAction,
-} from "../db/remediation-actions.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -339,27 +334,6 @@ describe("API-local session store", () => {
     expect(getReport(m.sessionId)).toBeUndefined();
   });
 
-  it("deleteSession preserves the remediation audit log (the record outlives the session)", () => {
-    const m = meta();
-    createSession(m, [alert]);
-    insertExecutingRemediationAction({
-      toolUseId: "tu-audit-survives",
-      sessionId: m.sessionId,
-      toolName: "RestartDockerService",
-      input: {
-        target: "docker/web/web",
-      },
-      resolvedBy: "console",
-    });
-
-    deleteSession(m.sessionId);
-
-    expect(getSession(m.sessionId)).toBeUndefined();
-    expect(
-      findRemediationAction(m.sessionId, "tu-audit-survives"),
-    ).toBeDefined();
-  });
-
   it("rejects a transcript message for a session that does not exist (foreign keys enforced)", () => {
     expect(() => appendTranscriptRows([msg("ghost-session", 0)])).toThrow(
       /FOREIGN KEY/i,
@@ -389,38 +363,41 @@ describe("API-local session store", () => {
       expect(statusOf(m.sessionId)).toBeNull();
     });
 
-    // Running a fix is evidence of effort, not of outcome. The alert that fired
-    // is the only thing that can say the incident is over.
-    it("does not resolve on a remediation while the alert it fired on still fires", () => {
+    // Running a write is evidence of effort, not of outcome, and whether an
+    // approved shell command even changed anything is unknowable. The alert that
+    // fired is the only thing that can say the incident is over.
+    it("does not resolve on a write while the alert it fired on still fires", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
-      insertExecutingRemediationAction({
-        toolUseId: "tu-exec",
-        sessionId,
-        toolName: "RestartDockerService",
-        input: { target: "docker/app/web" },
-        resolvedBy: "operator",
-      });
-      settleRemediationAction(sessionId, "tu-exec", "executed", "ok");
+      appendTranscriptRows([
+        {
+          sessionId,
+          seq: 0,
+          kind: "assistant",
+          content: "",
+          parts: [
+            {
+              type: "tool_call",
+              id: "tu-exec",
+              name: "RestartDockerService",
+              input: { target: "docker/app/web" },
+            },
+            { type: "tool_result", toolCallId: "tu-exec", output: "ok" },
+          ],
+          createdAt: new Date().toISOString(),
+        },
+      ]);
       expect(statusOf(sessionId)).toBe("inconclusive");
     });
 
-    // A promoted chat has no alert to recover, so the executed action is the
-    // only completion signal it will ever get.
-    it("resolves a session that fired on no alert once a remediation executed", () => {
+    // No alert means no condition, and no condition means nothing can ever say
+    // the incident is over - so it never reads Resolved rather than reading it
+    // on the strength of something having run.
+    it("never resolves a session that fired on no alert", () => {
       const m = meta();
       createSession(m, [], true);
       seedCompleteReport(m.sessionId);
-      insertExecutingRemediationAction({
-        toolUseId: "tu-chat",
-        sessionId: m.sessionId,
-        toolName: "RestartDockerService",
-        input: { target: "docker/app/web" },
-        resolvedBy: "operator",
-      });
       expect(statusOf(m.sessionId)).toBe("inconclusive");
-      settleRemediationAction(m.sessionId, "tu-chat", "executed", "ok");
-      expect(statusOf(m.sessionId)).toBe("resolved");
     });
 
     it("reads Resolved when the alert cleared, with nothing run", () => {

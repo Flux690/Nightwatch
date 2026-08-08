@@ -164,33 +164,6 @@ CREATE TABLE IF NOT EXISTS pending_human_input (
 );
 
 
--- The audit log, which outlives the sessions it refers to.
-
--- Intentionally NOT a child of sessions: it is the durable record of what was
--- changed on the fleet and must survive a deleted session, so session_id is a
--- plain historical reference rather than a cascading foreign key.
-CREATE TABLE IF NOT EXISTS remediation_actions (
-  id                      INTEGER   PRIMARY KEY AUTOINCREMENT,
-  tool_use_id             TEXT      NOT NULL,
-  session_id              TEXT      NOT NULL,
-  tool_name               TEXT      NOT NULL,
-  service_identity_key    TEXT,
-  status                  TEXT      NOT NULL,
-  resolved_by             TEXT,
-  input                   TEXT      NOT NULL,
-  result                  TEXT,
-  created_at              TEXT      NOT NULL,
-  resolved_at             TEXT,
-  -- Write-ahead idempotency: this is what refuses to re-execute an approved write
-  -- after a crash. It must never be widened - a service that moved runners between
-  -- the crash and the retry would then run twice, which is the exact case it exists for.
-  UNIQUE (session_id, tool_use_id)
-);
-
--- Covers the recent-action count the approval card shows, which filters on exactly
--- these columns; without it that read full-scans the audit history.
-CREATE INDEX IF NOT EXISTS idx_remediation_recent
-  ON remediation_actions (service_identity_key, tool_name, status, created_at);
 `;
 
 let _db: Database.Database | undefined;
@@ -210,11 +183,16 @@ export function getDb(): Database.Database {
   return _db;
 }
 
-// Open + bootstrap eagerly at boot so a misconfigured data path fails fast
-// rather than on the first request.
+// Open eagerly at boot so a misconfigured data path fails fast rather than on
+// the first request.
+//
+// A claim is deliberately NOT cleared here. A row still claimed after a restart
+// means the API died between approving a write and recording its result, so
+// whether it ran is unknown - and clearing the claim would offer the operator a
+// button that runs it a second time. It stays claimed and the respond route
+// refuses it, which is the honest answer to a question nobody can answer.
 export function initDb(): void {
-  const db = getDb();
-  db.prepare(`UPDATE pending_human_input SET claimed_at = NULL`).run();
+  getDb();
 }
 
 export function resetDb(): void {

@@ -59,16 +59,17 @@ export function reportToMarkdown(
     );
   }
 
-  // What ran is the executor's log, never a claim the model made about itself.
-  const actions = report?.actions ?? [];
-  if (actions.length > 0) {
+  // What the operator released, read from the ledger rather than from anything
+  // the model said about itself.
+  const decisions = report?.decisions ?? [];
+  if (decisions.length > 0) {
     sections.push(
       [
         "## What ran",
         "",
-        ...actions.map(
-          (a) =>
-            `- ${a.toolName} - ${a.status}${a.result === null ? "" : `: ${a.result}`}`,
+        ...decisions.map(
+          (d) =>
+            `- ${d.toolName}${d.target === null ? "" : ` ${d.target}`} - ${d.decision}${d.result === null ? "" : `: ${d.result}`}`,
         ),
       ].join("\n"),
     );

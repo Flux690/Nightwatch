@@ -184,7 +184,7 @@ function renderSettings(fetchMock: ReturnType<typeof vi.fn>) {
   });
   const awayRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/audit",
+    path: "/agent",
     component: () => <div>somewhere else</div>,
   });
   const router = createRouter({
@@ -363,7 +363,7 @@ describe("SettingsPage", () => {
       // Not awaited: a blocked navigation never settles, and awaiting it here
       // is what wedged every test after this one.
       act(() => {
-        void router.navigate({ to: "/audit" });
+        void router.navigate({ to: "/agent" });
       });
 
       const dialog = await screen.findByRole("alertdialog");
@@ -383,7 +383,7 @@ describe("SettingsPage", () => {
       // Not awaited: a blocked navigation never settles, and awaiting it here
       // is what wedged every test after this one.
       act(() => {
-        void router.navigate({ to: "/audit" });
+        void router.navigate({ to: "/agent" });
       });
 
       const dialog = await screen.findByRole("alertdialog");
@@ -403,7 +403,7 @@ describe("SettingsPage", () => {
       // Not awaited: a blocked navigation never settles, and awaiting it here
       // is what wedged every test after this one.
       act(() => {
-        void router.navigate({ to: "/audit" });
+        void router.navigate({ to: "/agent" });
       });
 
       const dialog = await screen.findByRole("alertdialog");
@@ -437,7 +437,7 @@ describe("SettingsPage", () => {
       // Not awaited: a blocked navigation never settles, and awaiting it here
       // is what wedged every test after this one.
       act(() => {
-        void router.navigate({ to: "/audit" });
+        void router.navigate({ to: "/agent" });
       });
 
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();

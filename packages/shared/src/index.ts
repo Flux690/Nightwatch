@@ -165,16 +165,13 @@ export type {
   Verdict,
   Conviction,
   Hypothesis,
+  GatedCall,
   ProposedFix,
   Report,
   ResolvedEvidence,
   ReportConviction,
   SessionReportResponse,
 } from "./reports.js";
-export type {
-  RemediationStatus,
-  RemediationActionRecord,
-} from "./remediation.js";
 export type {
   CatalogError,
   LLMProviderName,

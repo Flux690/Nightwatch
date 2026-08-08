@@ -28,13 +28,15 @@ function proposedSomething(report: Report): boolean {
   );
 }
 
-// The alert that fired is what says the incident is over, so a remediation
-// running while it still fires settles nothing. Where no alert fired there is
-// nothing to recover, and an executed remediation is the only signal there is.
+/* The alert that fired is what says the incident is over, so a write running
+   while it still fires settles nothing - and whether a write even happened is a
+   question nothing can answer, since an approved shell command may only have
+   read. The condition is the one signal that means what it says. */
 function isSettled(source: SessionListSource): boolean {
-  return source.alerts.length > 0
-    ? source.alerts.every((entry) => entry.clearedAt !== null)
-    : source.remediationExecuted;
+  return (
+    source.alerts.length > 0 &&
+    source.alerts.every((entry) => entry.clearedAt !== null)
+  );
 }
 
 // Derived from the action log, the alerts and the hypothesis rows, never from

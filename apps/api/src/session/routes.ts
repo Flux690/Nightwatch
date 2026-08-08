@@ -5,13 +5,13 @@ import type {
   SessionDetail,
   SessionReportResponse,
 } from "@nightwarden/shared";
-import { computeConviction, resolveEvidence } from "../agent/report.js";
+import {
+  computeConviction,
+  gatedCalls,
+  resolveEvidence,
+} from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
-import {
-  listRemediationActionsForSession,
-  toActionRecord,
-} from "../db/remediation-actions.js";
 import { getSession, deleteSession } from "../db/sessions.js";
 import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";
@@ -123,9 +123,7 @@ export async function registerSessionRoutes(
       // well a claim is backed.
       const response: SessionReportResponse = {
         report,
-        actions: listRemediationActionsForSession(request.params.id).map(
-          toActionRecord,
-        ),
+        decisions: gatedCalls(request.params.id),
         evidence: resolveEvidence(request.params.id, report),
         conviction: computeConviction(request.params.id, report),
       };

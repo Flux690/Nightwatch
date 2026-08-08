@@ -1,17 +1,19 @@
 import type {
   Conviction,
+  GatedCall,
   Hypothesis,
   ProposedFix,
   Report,
   ReportConviction,
   ResolvedEvidence,
+  ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
 import { amendReport, appendToReport, getReport } from "../db/reports.js";
-import { listRemediationActionsForSession } from "../db/remediation-actions.js";
 import { getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
+import { targetKeyFromInput, wasGated } from "../session/transcript.js";
 import { evidenceSource } from "./evidence-source.js";
 
 // The report domain service: the only place the record is written, and the owner
@@ -116,14 +118,42 @@ function convictionOf(
   return sources.size >= 2 ? "corroborated" : "cited";
 }
 
-// The instant the last remediation for this session settled as executed, which
-// is what makes a later read a confirmation rather than another observation.
-function lastExecutedAt(sessionId: string): string | null {
+/* Every call the operator had to release, and which way they went, read back
+   from the session's own ledger. The registry says a call was gated, the outcome
+   says it was declined, and who decided is not recorded: there is one operator. */
+export function gatedCalls(sessionId: string): GatedCall[] {
+  const outcomes = getToolOutcomes(sessionId);
+  return ledgerIn(sessionId).flatMap((entry) => {
+    if (!wasGated(entry.toolName) || entry.result === null) return [];
+    const outcome = outcomes.get(entry.toolUseId);
+    return [
+      {
+        toolUseId: entry.toolUseId,
+        toolName: entry.toolName,
+        target: targetKeyFromInput(entry.input),
+        decision:
+          outcome === "rejected"
+            ? ("rejected" as const)
+            : ("approved" as const),
+        ...(outcome !== undefined && { outcome }),
+        result: entry.result,
+      },
+    ];
+  });
+}
+
+// The instant the last released write answered, which is what makes a later read
+// a confirmation rather than another observation. A declined call changed
+// nothing, so it never starts that clock.
+function lastExecutedAt(
+  ledger: Map<string, LedgerEntry>,
+  outcomes: Map<string, ToolOutcome>,
+): string | null {
   let latest: string | null = null;
-  for (const action of listRemediationActionsForSession(sessionId)) {
-    if (action.status !== "executed" || action.resolvedAt === null) continue;
-    if (latest === null || action.resolvedAt > latest)
-      latest = action.resolvedAt;
+  for (const entry of ledger.values()) {
+    if (entry.result === null || !wasGated(entry.toolName)) continue;
+    if (outcomes.get(entry.toolUseId) === "rejected") continue;
+    if (latest === null || entry.createdAt > latest) latest = entry.createdAt;
   }
   return latest;
 }
@@ -133,7 +163,7 @@ export function computeConviction(
   report: Report,
 ): ReportConviction {
   const ledger = new Map(ledgerIn(sessionId).map((e) => [e.toolUseId, e]));
-  const executedAt = lastExecutedAt(sessionId);
+  const executedAt = lastExecutedAt(ledger, getToolOutcomes(sessionId));
   const graded: ReportConviction = {};
   for (const row of [...report.hypotheses, ...report.fixes]) {
     const conviction = convictionOf(row.evidenceIds, ledger, executedAt);
@@ -149,8 +179,7 @@ export type ReportGap =
   | { kind: "empty_record" }
   | { kind: "open_hypothesis"; ids: string[] }
   | { kind: "uncited_root_cause"; ids: string[] }
-  | { kind: "unresolvable_citation"; ids: string[] }
-  | { kind: "unrecorded_fix" };
+  | { kind: "unresolvable_citation"; ids: string[] };
 
 // A run that settled every hypothesis it proposed has finished, whether or not
 // any of them turned out to be the cause: "I could not conclude, here is what I
@@ -186,11 +215,6 @@ export function reportGaps(sessionId: string): ReportGap[] {
     if (unbacked.length > 0)
       gaps.push({ kind: "unresolvable_citation", ids: unbacked });
   }
-
-  const executed = listRemediationActionsForSession(sessionId).some(
-    (a) => a.status === "executed",
-  );
-  if (executed && fixes.length === 0) gaps.push({ kind: "unrecorded_fix" });
 
   return gaps;
 }

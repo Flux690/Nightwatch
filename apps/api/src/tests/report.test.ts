@@ -24,10 +24,7 @@ import {
 import { REPORT_TOOLS } from "../agent/tools/report.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
-import {
-  insertExecutingRemediationAction,
-  settleRemediationAction,
-} from "../db/remediation-actions.js";
+import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { createSession, appendTranscriptRows } from "../db/sessions.js";
 import { buildTranscript } from "../session/transcript.js";
 import { useTempDb } from "./temp-db.js";
@@ -427,24 +424,33 @@ describe("the investigation record", () => {
       );
     });
 
-    it("verifies a fix cited by a read taken after a remediation ran", async () => {
-      const sessionId = randomUUID();
-      seedTranscript(sessionId);
-      insertExecutingRemediationAction({
-        toolUseId: "tu-restart",
-        sessionId,
-        toolName: "RestartDockerService",
-        input: { target: "docker/app/web" },
-        resolvedBy: "operator",
-      });
-      settleRemediationAction(sessionId, "tu-restart", "executed", "restarted");
-      // Dated after the action settled, which is what makes it a confirmation.
+    // The clock a confirmation is measured against is the write itself, read
+    // from the ledger: a gated call that answered is one the operator released.
+    function appendRestart(sessionId: string, seq: number, at: string): void {
       appendCall(
         sessionId,
-        4,
+        seq,
+        {
+          id: "tu-restart",
+          name: "RestartDockerService",
+          input: { target: "docker/app/web" },
+        },
+        "restarted",
+        at,
+      );
+    }
+
+    it("verifies a fix cited by a read taken after the write it released", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
+      // Dated after the write answered, which is what makes it a confirmation.
+      appendCall(
+        sessionId,
+        6,
         { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
         METRICS,
-        new Date(Date.now() + 60_000).toISOString(),
+        "2026-07-03T02:06:00.000Z",
       );
 
       await call("ProposeFix", sessionId, {
@@ -456,17 +462,10 @@ describe("the investigation record", () => {
       );
     });
 
-    it("does not verify a fix cited only by reads taken before the remediation", async () => {
+    it("does not verify a fix cited only by reads taken before the write", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      insertExecutingRemediationAction({
-        toolUseId: "tu-restart",
-        sessionId,
-        toolName: "RestartDockerService",
-        input: { target: "docker/app/web" },
-        resolvedBy: "operator",
-      });
-      settleRemediationAction(sessionId, "tu-restart", "executed", "restarted");
+      appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
 
       await call("ProposeFix", sessionId, {
         summary: "restart the container",
@@ -474,6 +473,29 @@ describe("the investigation record", () => {
       });
       expect(computeConviction(sessionId, getReport(sessionId)!)["f1"]).toBe(
         "corroborated",
+      );
+    });
+
+    it("never counts a declined call as the write a later read confirms", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
+      recordToolOutcome(sessionId, "tu-restart", "rejected");
+      appendCall(
+        sessionId,
+        6,
+        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        METRICS,
+        "2026-07-03T02:06:00.000Z",
+      );
+
+      await call("ProposeFix", sessionId, {
+        summary: "restart the container",
+        evidenceIds: ["tu-after"],
+      });
+      // The operator said no, so nothing changed and the read confirms nothing.
+      expect(computeConviction(sessionId, getReport(sessionId)!)["f1"]).toBe(
+        "cited",
       );
     });
   });
@@ -545,23 +567,6 @@ describe("the investigation record", () => {
       expect(request).toContain("ResolveHypothesis");
       expect(request).not.toContain("recorded no hypotheses");
       expect(request).not.toContain("ProposeFix");
-    });
-
-    it("asks for a recommendation when a change ran and none was recorded", () => {
-      const sessionId = randomUUID();
-      seedTranscript(sessionId);
-      insertExecutingRemediationAction({
-        toolUseId: "tu-restart",
-        sessionId,
-        toolName: "RestartDockerService",
-        input: { target: "docker/app/web" },
-        resolvedBy: "operator",
-      });
-      settleRemediationAction(sessionId, "tu-restart", "executed", "restarted");
-
-      expect(reportGaps(sessionId).map((g) => g.kind)).toContain(
-        "unrecorded_fix",
-      );
     });
 
     it("counts a claim backed only by a call that never answered as a gap", async () => {

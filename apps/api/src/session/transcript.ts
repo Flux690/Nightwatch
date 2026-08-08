@@ -9,11 +9,25 @@ import type {
 import { getPendingHumanInputBySessionId } from "../db/interrupts.js";
 import { getSession, getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
-import {
-  countExecutedRemediations,
-  listRemediationActionsForSession,
-  targetKeyFromInput,
-} from "../db/remediation-actions.js";
+import { findTool } from "../agent/tools/toolset.js";
+
+// The tool input's target key. A write addresses a service by it, and a tool
+// that names none is not addressing one.
+export function targetKeyFromInput(
+  input: Record<string, unknown>,
+): string | null {
+  const target = input["target"];
+  return typeof target === "string" ? target : null;
+}
+
+// Whether a call had to be approved before it could run, read from the registry
+// rather than recorded: `access` is what gates it, so it is also what says a call
+// was gated. Nothing can drift, and an agent-run tool can never render as one a
+// human released.
+export function wasGated(toolName: string): boolean {
+  const tool = findTool(toolName);
+  return tool !== undefined && tool.access !== "read";
+}
 
 // The only place a tool call becomes a card. Both the transcript fetch and the
 // live stream call it, which is what keeps a streamed card and a reloaded one
@@ -27,6 +41,9 @@ export function toolCallCard(
         input: Record<string, unknown>;
         state: ToolCallState;
         awaitingKind?: "approval" | "clarification";
+        // How many times this same write already ran in this investigation. The
+        // caller counts it, because only a walk of the transcript can.
+        priorRuns?: number;
       },
 ): TranscriptItem {
   const { toolUseId, state } = call;
@@ -53,45 +70,33 @@ export function toolCallCard(
   }
   if (awaitingKind === "approval") {
     const risk = input["risk"];
-    const recent = recentActionCount(toolName, input);
+    const priorRuns = call.priorRuns ?? 0;
     return {
       kind: "approval_card",
       toolUseId,
       toolName,
       input,
       ...(typeof risk === "string" && { risk }),
-      ...(recent !== null && { recent }),
+      ...(priorRuns > 0 && { priorRuns }),
       state,
     };
   }
   return { kind: "tool_card", toolUseId, toolName, input, state };
 }
 
-// How long back the approval card looks when telling the operator how often this
-// exact write already landed. A constant, not config: it informs a decision rather
-// than gating one, so there is nothing here for an operator to tune.
-const RECENT_ACTION_WINDOW_MINUTES = 30;
-
-// Computed from the audit log, never authored: repeating a restart is a pattern the
-// human should see before approving another. It reports, it does not refuse - a
-// person who restarts a fifth time has made a decision, not a mistake.
-function recentActionCount(
+/* How many times this same write already ran in this investigation, counted from
+   the transcript itself. Repeating a fix is rarely fixing it, and 3am is exactly
+   when that pattern is easiest to miss. It reports, it never refuses - a person
+   who restarts a fifth time has made a decision, not a mistake. */
+function priorRunsOf(
   toolName: string,
   input: Record<string, unknown>,
-): { count: number; windowMinutes: number } | null {
-  const serviceIdentityKey = targetKeyFromInput(input);
-  if (serviceIdentityKey === null) return null;
-  const since = new Date(
-    Date.now() - RECENT_ACTION_WINDOW_MINUTES * 60_000,
-  ).toISOString();
-  const count = countExecutedRemediations({
-    serviceIdentityKey,
-    toolName,
-    since,
-  });
-  return count > 0
-    ? { count, windowMinutes: RECENT_ACTION_WINDOW_MINUTES }
-    : null;
+  approved: Array<{ toolName: string; target: string | null }>,
+): number {
+  const target = targetKeyFromInput(input);
+  if (target === null) return 0;
+  return approved.filter((a) => a.toolName === toolName && a.target === target)
+    .length;
 }
 
 // A tool call's state, in precedence order: what the session is suspended on
@@ -100,15 +105,15 @@ function toolCallState(
   toolName: string,
   result: string | undefined,
   awaiting: boolean,
-  decided: { decision: ApprovalStatus; by?: string } | null,
+  decided: ApprovalStatus | null,
   outcome: ToolOutcome | undefined,
 ): ToolCallState {
   if (awaiting) return { phase: "awaiting_human" };
   const classified = outcome === undefined ? {} : { outcome };
-  if (decided)
+  if (decided !== null)
     return {
       phase: "resolved",
-      ...decided,
+      decision: decided,
       ...(result !== undefined && { result }),
       ...classified,
     };
@@ -127,20 +132,18 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   // transcript rows below, which hold it already.
   const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
 
-  // A decision the operator already made. Without this a reloaded transcript
-  // shows the tool's output but forgets who released it.
-  const decisions = new Map<
-    string,
-    { decision: ApprovalStatus; by?: string }
-  >();
-  for (const action of listRemediationActionsForSession(sessionId)) {
-    decisions.set(action.toolUseId, {
-      decision: action.status === "rejected" ? "rejected" : "approved",
-      ...(action.resolvedBy && { by: action.resolvedBy }),
-    });
-  }
-
   const outcomes = getToolOutcomes(sessionId);
+
+  // A decision the operator already made, reconstructed rather than stored: the
+  // registry says the call needed one, and the outcome says which way it went.
+  const decisionFor = (
+    toolName: string,
+    toolUseId: string,
+    settled: boolean,
+  ): ApprovalStatus | null => {
+    if (!settled || !wasGated(toolName)) return null;
+    return outcomes.get(toolUseId) === "rejected" ? "rejected" : "approved";
+  };
 
   const results = new Map<string, string>();
   for (const msg of messages) {
@@ -159,6 +162,10 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     (entry) => firstMessageAt !== null && entry.arrivedAt > firstMessageAt,
   );
   let nextArrival = 0;
+
+  // Writes the operator already released, in the order they ran, so the approval
+  // card can say this is the third restart of the same service.
+  const approved: Array<{ toolName: string; target: string | null }> = [];
 
   const items: TranscriptItem[] = [];
   for (const msg of messages) {
@@ -226,7 +233,11 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
         }
       } else if (part.type === "tool_call") {
         const awaiting = pending?.toolUseId === part.id ? pending : null;
-        const decided = decisions.get(part.id) ?? null;
+        const decided = decisionFor(
+          part.name,
+          part.id,
+          results.has(part.id) && awaiting === null,
+        );
         items.push(
           toolCallCard({
             toolUseId: part.id,
@@ -239,12 +250,23 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
               decided,
               outcomes.get(part.id),
             ),
+            priorRuns: priorRunsOf(part.name, part.input, approved),
             // A decided call stays an approval card so its outcome has somewhere
             // to render, not just the tool output it produced.
             ...(awaiting ? { awaitingKind: awaiting.kind } : {}),
-            ...(!awaiting && decided ? { awaitingKind: "approval" } : {}),
+            ...(!awaiting && decided !== null
+              ? { awaitingKind: "approval" as const }
+              : {}),
           }),
         );
+        // Counted in transcript order, so a card reports what ran before it and
+        // never counts itself.
+        if (decided === "approved") {
+          approved.push({
+            toolName: part.name,
+            target: targetKeyFromInput(part.input),
+          });
+        }
       }
     }
   }

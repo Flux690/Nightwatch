@@ -116,12 +116,12 @@ export function ApprovalCardPanel({
           </pre>
         )}
 
-        {/* Counted from the audit log, never authored. Repeating a fix is rarely
-            fixing it, and 3am is exactly when that pattern is easiest to miss. */}
-        {item.recent !== undefined && !resolved && (
+        {/* Counted from this investigation's own transcript, never authored.
+            Repeating a fix is rarely fixing it, and 3am is exactly when that
+            pattern is easiest to miss. */}
+        {item.priorRuns !== undefined && !resolved && (
           <p className="text-sm text-warning">
-            {ordinal(item.recent.count + 1)} time in the last{" "}
-            {item.recent.windowMinutes} minutes.
+            {ordinal(item.priorRuns + 1)} time in this investigation.
           </p>
         )}
 

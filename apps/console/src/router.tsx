@@ -9,7 +9,6 @@ import { useViewportTier } from "./hooks/useViewportTier.js";
 import { AuthProvider } from "./auth/AuthContext.js";
 import { AuthGate } from "./auth/AuthGate.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { AuditLogPage } from "./pages/AuditLog.js";
 import { IntegrationsPage } from "./pages/IntegrationsPage.js";
 import { InvestigationsPage } from "./pages/InvestigationsPage.js";
 import { InvestigationRecordPage } from "./pages/InvestigationRecordPage.js";
@@ -98,17 +97,6 @@ const investigationsRoute = createRoute({
   component: InvestigationsPage,
 });
 
-const auditRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/audit",
-  component: AuditLogPage,
-  // Scope rides the URL so the rail and the table share one address.
-  validateSearch: (search: Record<string, unknown>) => ({
-    ...(typeof search["scope"] === "string" && { scope: search["scope"] }),
-    ...(typeof search["server"] === "string" && { server: search["server"] }),
-  }),
-});
-
 const integrationsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations",
@@ -191,7 +179,6 @@ export const routeTree = rootRoute.addChildren([
     agentSessionRoute,
     investigationsRoute,
     investigationRoute,
-    auditRoute,
     integrationsRoute,
     githubConnectRoute,
     dockerHostsRoute,

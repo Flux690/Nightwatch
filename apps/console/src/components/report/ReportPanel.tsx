@@ -1,17 +1,26 @@
 import type {
   Conviction,
+  GatedCall,
   NormalizedAlert,
   SessionAlert,
-  RemediationActionRecord,
   Report,
   ReportConviction,
   ResolvedEvidence,
   Verdict,
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
-import { StatusText } from "@/components/ui/status";
-import { ACTION_LABEL, ACTION_TONE } from "@/lib/remediationStatus";
+import { StatusText, type StatusTone } from "@/components/ui/status";
 import { Evidence } from "./Evidence.js";
+
+/* What the operator did, and what came of it. Three words because there are
+   three outcomes worth telling apart: it ran, they said no, or it broke. Who
+   decided is not shown - there is one operator, and the record is theirs. */
+function decisionView(call: GatedCall): { label: string; tone: StatusTone } {
+  if (call.decision === "rejected") return { label: "Declined", tone: "muted" };
+  return call.outcome === "system" || call.outcome === "retryable"
+    ? { label: "Failed", tone: "fail" }
+    : { label: "Ran", tone: "ok" };
+}
 
 // The investigation report rendered in the main area. The claims are the
 // model's; everything around them - the evidence, the conviction, what ran - is
@@ -118,7 +127,7 @@ function CitedEvidence({
 
 export function ReportPanel({
   report,
-  actions,
+  decisions,
   evidence,
   conviction,
   alerts,
@@ -126,7 +135,8 @@ export function ReportPanel({
   // Null until the agent records its first finding. The investigation view is
   // drawn from the session, not from this, so the panel outlives its absence.
   report: Report | null;
-  actions: RemediationActionRecord[];
+  // Every call the operator had to release, and which way they went.
+  decisions: GatedCall[];
   // The cited calls, resolved by the API against the transcript.
   evidence: ResolvedEvidence[];
   conviction: ReportConviction;
@@ -237,41 +247,36 @@ export function ReportPanel({
         </section>
       )}
 
-      {actions.length > 0 && (
+      {decisions.length > 0 && (
         <section className="mt-12">
           <SectionHeading>Actions taken</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {actions.map((action) => (
-              <li key={action.toolUseId}>
-                <div className="flex items-baseline gap-2">
-                  <StatusText tone={ACTION_TONE[action.status]}>
-                    {ACTION_LABEL[action.status]}
-                  </StatusText>
-                  <span className="min-w-0 flex-1 truncate font-mono text-sm">
-                    {action.toolName}
-                    {action.serviceIdentityKey ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        {action.serviceIdentityKey}
-                      </span>
-                    ) : null}
-                  </span>
-                  {action.resolvedBy && (
-                    <span className="shrink-0 text-sm text-ink-subtle">
-                      {action.status === "rejected" ? "declined" : "approved"}{" "}
-                      by {action.resolvedBy}
+            {decisions.map((decided) => {
+              const { label, tone } = decisionView(decided);
+              return (
+                <li key={decided.toolUseId}>
+                  <div className="flex items-baseline gap-2">
+                    <StatusText tone={tone}>{label}</StatusText>
+                    <span className="min-w-0 flex-1 truncate font-mono text-sm">
+                      {decided.toolName}
+                      {decided.target ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          {decided.target}
+                        </span>
+                      ) : null}
                     </span>
+                  </div>
+                  {/* Only on a failure: on a success the detail is the PR or the
+                      command's own output, which the transcript already shows. */}
+                  {label === "Failed" && decided.result && (
+                    <p className="m-0 mt-1 text-sm text-muted-foreground">
+                      {decided.result}
+                    </p>
                   )}
-                </div>
-                {/* Only on a failure: on a success the detail is the PR or the
-                    command's own output, which the transcript already shows. */}
-                {action.status === "failed" && action.result && (
-                  <p className="m-0 mt-1 text-sm text-muted-foreground">
-                    {action.result}
-                  </p>
-                )}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

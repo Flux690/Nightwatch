@@ -1,14 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import type {
@@ -47,7 +39,6 @@ import {
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { getDb } from "../db/client.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -109,12 +100,6 @@ describe("durable approval interrupts", () => {
     await mountApi(server, registerSessionRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
-  });
-
-  afterEach(() => {
-    // Breaker counts executed writes across the shared temp DB, so without this
-    // reset one case's restarts trip it for a later case.
-    getDb().prepare("DELETE FROM remediation_actions").run();
   });
 
   afterAll(async () => {
@@ -273,16 +258,17 @@ describe("durable approval interrupts", () => {
       { headers: { Cookie: `nw_auth=${SESSION}` } },
     );
     expect(reportRes.status).toBe(200);
-    const { report, actions } =
+    const { report, decisions } =
       (await reportRes.json()) as SessionReportResponse;
     expect(report.fixes).toEqual([]);
-    expect(actions).toHaveLength(1);
-    expect(actions[0]).toMatchObject({
+    // Read back from the session's own ledger: the registry says the call was
+    // gated, and no outcome on it says the operator released it.
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({
       toolUseId: "tu-apr-1",
       toolName: "RestartDockerService",
-      status: "executed",
-      resolvedBy: "operator",
-      serviceIdentityKey: "docker/web-01/web-01",
+      target: "docker/web-01/web-01",
+      decision: "approved",
     });
 
     close();

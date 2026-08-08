@@ -221,7 +221,7 @@ function precedes(a: HTMLElement, b: HTMLElement): boolean {
 
 describe("Shell", () => {
   describe("the sidebar holds only navigation", () => {
-    it("renders the four destinations, then Settings and Log out", async () => {
+    it("renders the three destinations, then Settings and Log out", async () => {
       setup();
 
       const agent = await screen.findByRole("link", { name: "Agent" });
@@ -229,17 +229,18 @@ describe("Shell", () => {
         name: "Investigations",
       });
       const integrations = screen.getByRole("link", { name: "Integrations" });
-      const audit = screen.getByRole("link", { name: "Audit log" });
       // Settings is a place with an address of its own, so it links like the
-      // four above it; only Log out remains an action.
+      // three above it; only Log out remains an action.
       const settings = screen.getByRole("link", { name: "Settings" });
       const logOut = screen.getByRole("button", { name: "Log out" });
 
       expect(precedes(agent, investigations)).toBe(true);
       expect(precedes(investigations, integrations)).toBe(true);
-      expect(precedes(integrations, audit)).toBe(true);
-      expect(precedes(audit, settings)).toBe(true);
+      expect(precedes(integrations, settings)).toBe(true);
       expect(precedes(settings, logOut)).toBe(true);
+      // The audit log went with the table behind it: a record of what ran in a
+      // session nobody can open any more answers no question.
+      expect(screen.queryByRole("link", { name: "Audit log" })).toBeNull();
     });
 
     it("carries no session list, no new-session action and no readouts", async () => {
@@ -295,9 +296,9 @@ describe("Shell", () => {
 
   describe("the top bar", () => {
     it("gives a page with no controls a lone crumb and no controls row", async () => {
-      setup({ path: "/audit" });
+      setup({ path: "/investigations" });
 
-      expect(await currentCrumb()).toHaveTextContent("Audit log");
+      expect(await currentCrumb()).toHaveTextContent("Investigations");
       // One entry and no ancestor above it, so no chevron is drawn.
       expect(
         within(
@@ -389,8 +390,10 @@ describe("Shell", () => {
       const { router } = setup();
 
       const textarea = await screen.findByRole("textbox");
+      // The composer renders before the stream opens, so waiting on the textarea
+      // and reading the stream is a gap that only closes on an idle machine.
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
       const streamBefore = MockEventSource.latest;
-      expect(streamBefore).not.toBeNull();
 
       await user.type(textarea, "Check disk usage on prod");
       await user.click(screen.getByRole("button", { name: /send/i }));

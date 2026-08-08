@@ -105,7 +105,7 @@ function panel(overrides: Partial<Parameters<typeof ReportPanel>[0]> = {}) {
   return (
     <ReportPanel
       report={REPORT}
-      actions={[]}
+      decisions={[]}
       evidence={EVIDENCE}
       conviction={CONVICTION}
       alerts={[]}
@@ -481,53 +481,45 @@ describe("ReportPanel", () => {
     expect(screen.queryByText("Proposed fix")).not.toBeInTheDocument();
   });
 
-  it("reports actions from the executor's log, not from the report text", () => {
+  it("reports what the operator released, read from the ledger not the report text", () => {
     render(
       panel({
-        actions: [
+        decisions: [
           {
-            sessionId: "s1",
             toolUseId: "tu-1",
-            serviceIdentityKey: "docker/encodr-prod/encodr/cache",
             toolName: "RestartDockerService",
-            status: "executed",
-            resolvedBy: "operator",
+            target: "docker/encodr-prod/encodr/cache",
+            decision: "approved",
             result: '{"restarted":true}',
-            createdAt: "2026-07-26T17:43:00.000Z",
-            resolvedAt: "2026-07-26T17:43:02.000Z",
           },
           {
-            sessionId: "s1",
             toolUseId: "tu-2",
-            serviceIdentityKey: null,
             toolName: "DockerBash",
-            status: "rejected",
-            resolvedBy: "operator",
+            target: null,
+            decision: "rejected",
+            outcome: "rejected",
             result: null,
-            createdAt: "2026-07-26T17:44:00.000Z",
-            resolvedAt: "2026-07-26T17:44:01.000Z",
           },
           {
-            sessionId: "s1",
             toolUseId: "tu-3",
-            serviceIdentityKey: null,
             toolName: "OpenPullRequest",
-            status: "failed",
-            resolvedBy: "agent",
+            target: null,
+            decision: "approved",
+            outcome: "system",
             result:
               "There is nothing to propose: this branch has no commits against the base branch.",
-            createdAt: "2026-07-26T17:45:00.000Z",
-            resolvedAt: "2026-07-26T17:45:01.000Z",
           },
         ],
       }),
     );
 
-    // Executed and declined read differently, and both name who decided.
+    // Ran, declined and broken read differently. Who decided is not shown:
+    // there is one operator, so naming them says nothing.
     expect(screen.getByText("Actions taken")).toBeInTheDocument();
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("Declined")).toBeInTheDocument();
-    expect(screen.getAllByText(/by operator/)).toHaveLength(2);
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText(/by operator/)).not.toBeInTheDocument();
 
     // A failure states its cause; a success does not repeat its own output here.
     expect(screen.getByText(/nothing to propose/)).toBeInTheDocument();

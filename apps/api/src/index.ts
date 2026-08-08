@@ -14,7 +14,6 @@ import { seedIntegrationsFromEnv } from "./integrations/seed.js";
 import { registerSessionRoutes } from "./session/routes.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerInstallRoutes } from "./runners/install.js";
-import { registerRemediationRoutes } from "./remediation/routes.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
 import { registerConsoleRoutes } from "./console/serve.js";
 import { buildAuthHeader } from "./integrations/github.js";
@@ -77,7 +76,6 @@ await fastify.register(
     await registerSessionRoutes(api);
     await registerRunnerRoutes(api);
     await registerInstallRoutes(api);
-    await registerRemediationRoutes(api);
     await registerIntegrationRoutes(api);
   },
   { prefix: "/api" },

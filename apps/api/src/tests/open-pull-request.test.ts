@@ -13,9 +13,7 @@ vi.mock("dockerode", () => ({ default: MockDocker }));
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
-import { getDb } from "../db/client.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
-import { insertExecutingRemediationAction } from "../db/remediation-actions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { teardownAll } from "../sandbox/workspace.js";
 import type { ToolExecuteResult } from "../agent/tools/types.js";
@@ -215,18 +213,6 @@ function runOpr(
   });
 }
 
-function auditRow(
-  sessionId: string,
-  toolUseId: string,
-): { status: string; result: string | null } | undefined {
-  return getDb()
-    .prepare(
-      "SELECT status, result FROM remediation_actions WHERE session_id = ? AND tool_use_id = ?",
-    )
-    .get(sessionId, toolUseId) as
-    { status: string; result: string | null } | undefined;
-}
-
 beforeAll(() => {
   cleanupDb = useTempDb();
   // Network detachment is covered in sandbox-workspace tests; keep this
@@ -284,10 +270,6 @@ describe("OpenPullRequest", () => {
     // The gate is gone by design: the body carries no verification section.
     expect(body).not.toContain("## Verification");
     expect(body).toContain(SESSION_ID);
-
-    const audit = auditRow(SESSION_ID, "opr-create");
-    expect(audit?.status).toBe("executed");
-    expect(audit?.result).toContain('"number":42');
   });
 
   it("updates the existing open PR on a later call instead of duplicating", async () => {
@@ -353,29 +335,30 @@ describe("OpenPullRequest", () => {
     expect(outcome.message).toContain("nothing to propose");
     expect(prState.createPayloads).toHaveLength(requestsBefore);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
-
-    // The audit row still says why, so the report can state the reason.
-    const audit = auditRow(SESSION_ID, "opr-nodiff");
-    expect(audit?.status).toBe("failed");
-    expect(audit?.result).toContain("nothing to propose");
   });
 
-  it("refuses to re-run a tool_use that was already attempted (crash recovery)", async () => {
-    insertExecutingRemediationAction({
-      toolUseId: "opr-crash",
-      sessionId: SESSION_ID,
-      toolName: "OpenPullRequest",
-      input: {},
-      resolvedBy: "agent",
-    });
+  // Crash recovery is branch identity, not a stored attempt: a retry finds the
+  // PR its own branch already opened and updates it, so a run that died after
+  // creating one cannot open a second.
+  it("updates rather than duplicating when a retry follows a PR it already opened", async () => {
+    prState.open = [
+      {
+        number: 42,
+        html_url: "https://github.com/acme/api/pull/42",
+        draft: true,
+      },
+    ];
+    gitState.dirty = true;
     const before = prState.createPayloads.length;
+
     const result = await runOpr(
       { title: "Fix it again" },
       SESSION_ID,
       "opr-crash",
     );
-    expect(result.outcome).toBe("system");
-    expect(String(result.content)).toContain("already attempted");
+    prState.open = [];
+
+    expect((result.content as { action: string }).action).toBe("updated");
     expect(prState.createPayloads).toHaveLength(before);
   });
 });

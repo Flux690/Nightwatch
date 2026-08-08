@@ -1,8 +1,4 @@
 import { loadConfig } from "../config/store.js";
-import {
-  insertExecutingRemediationAction,
-  settleRemediationAction,
-} from "../db/remediation-actions.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 import type { ToolResult } from "../llm/types.js";
 import { logger } from "../logger.js";
@@ -24,43 +20,24 @@ export interface ApprovedToolResult {
 export async function executeApprovedTool(
   pending: PendingHumanInput,
   call: { name: string; input: Record<string, unknown> },
-  resolvedBy: string,
 ): Promise<ApprovedToolResult> {
   const { sessionId, toolUseId } = pending;
   const { name: toolName, input: toolInput } = call;
   try {
-    // Write-ahead: insert as 'executing' before dispatch. A UNIQUE conflict means
-    // this tool_use_id already ran (crash-recovery path) - do not re-execute.
-    const inserted = insertExecutingRemediationAction({
-      toolUseId,
-      sessionId,
-      toolName,
-      input: toolInput,
-      resolvedBy,
-    });
-    if (!inserted) {
-      // Previously attempted - outcome unknown. Surface to the model so the
-      // operator can decide whether to retry with a fresh tool call.
-      logger.warn(
-        { sessionId, tool: toolName, toolUseId },
-        "duplicate approve: action previously attempted, skipping execution",
-      );
-      return failed(
-        sessionId,
-        toolUseId,
-        `Action previously attempted (outcome unknown - may have run). Do not re-execute automatically. Inform the operator and ask whether to retry.`,
-      );
-    }
-
+    // The interrupt row is the write-ahead record: it is claimed before this runs
+    // and deleted only once the result is in hand, so a claim that outlives the
+    // process is what says an attempt may already have happened.
     const toolEntry = findTool(toolName);
     if (!toolEntry) {
       logger.error(
         { sessionId, tool: toolName },
         "approved tool not found in registry",
       );
-      const detail = `Tool "${toolName}" not found in registry. Platform configuration error.`;
-      settleRemediationAction(sessionId, toolUseId, "failed", detail);
-      return failed(sessionId, toolUseId, detail);
+      return failed(
+        sessionId,
+        toolUseId,
+        `Tool "${toolName}" not found in registry. Platform configuration error.`,
+      );
     }
 
     const execResult = await executeTool(toolEntry, toolInput, {
@@ -69,12 +46,6 @@ export async function executeApprovedTool(
       toolUseId,
     });
     const isFailure = isToolFailure(execResult.outcome);
-    settleRemediationAction(
-      sessionId,
-      toolUseId,
-      isFailure ? "failed" : "executed",
-      execResult.content,
-    );
     if (execResult.outcome !== undefined) {
       recordToolOutcome(sessionId, toolUseId, execResult.outcome);
     }
@@ -95,12 +66,6 @@ export async function executeApprovedTool(
       { sessionId, tool: toolName, err },
       "approve path failed after claim; resolving interrupt as failed",
     );
-    try {
-      settleRemediationAction(sessionId, toolUseId, "failed", msg);
-    } catch {
-      // The write-ahead row may not exist (the insert itself failed). Nothing
-      // to settle; the run still resumes with the failure result below.
-    }
     return failed(
       sessionId,
       toolUseId,

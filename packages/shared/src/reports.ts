@@ -2,7 +2,6 @@
 // It holds only what the model authored; status, conviction, the evidence and
 // what ran are all answered by the system.
 
-import type { RemediationActionRecord } from "./remediation.js";
 import type { ToolOutcome } from "./transcript.js";
 
 // How a hypothesis resolved, plus "open" while it is still being tested. Six,
@@ -72,12 +71,29 @@ export interface ResolvedEvidence {
 // namespace; a row absent from it earned no conviction at all.
 export type ReportConviction = Record<string, Conviction>;
 
-// The report route's response. Four authors, deliberately: the model writes
-// `report`, the executor `actions`, the transcript `evidence`, the system
-// `conviction`.
+// A gated call and what the operator did with it, read back from the session's
+// own transcript. Who decided is not recorded: there is one operator, and a
+// multi-tenant build gets the name from the session that approved it.
+export interface GatedCall {
+  toolUseId: string;
+  toolName: string;
+  // The service the write addressed, absent on a tool that names no target.
+  target: string | null;
+  decision: "approved" | "rejected";
+  // Present only on a call that did not simply answer; `rejected` is the class a
+  // human authored, every other member the API's own reading.
+  outcome?: ToolOutcome;
+  // Only worth reading on a failure: a success is its own output, which the
+  // transcript already shows.
+  result: string | null;
+}
+
+// The report route's response. Three authors, deliberately: the model writes
+// `report`, the transcript answers `decisions` and `evidence`, the system
+// computes `conviction`.
 export interface SessionReportResponse {
   report: Report;
-  actions: RemediationActionRecord[];
+  decisions: GatedCall[];
   evidence: ResolvedEvidence[];
   conviction: ReportConviction;
 }

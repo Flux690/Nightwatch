@@ -169,7 +169,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     unregisterRunner(conn);
   });
 
-  it("still shows who decided, and what the tool returned, after the wait ends", async () => {
+  it("still shows the decision, and what the tool returned, after the wait ends", async () => {
     const { conn } = connectRunner("after-decision");
     await startGatedChat("decision survives");
 
@@ -177,13 +177,15 @@ describe("a suspended session serves its pending row with its transcript", () =>
     await resolvePending(sessionId);
 
     // Reloading is the only way an operator sees a finished investigation, so the
-    // decision has to come from the database, not from the browser that made it.
+    // decision has to be reconstructible from the database, not from the browser
+    // that made it. Nothing stores it: the registry says the call was gated and
+    // the outcome says it was declined.
     const items = await getTranscript(sessionId);
     const card = items.find((i) => i.kind === "approval_card");
     expect(card?.kind === "approval_card" && card.state).toMatchObject({
       phase: "resolved",
       decision: "rejected",
-      by: "cleanup",
+      outcome: "rejected",
     });
 
     unregisterRunner(conn);

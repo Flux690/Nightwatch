@@ -167,7 +167,7 @@ export function InvestigationRecordPage(): React.JSX.Element {
         <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
           <ReportPanel
             report={report?.report ?? null}
-            actions={report?.actions ?? []}
+            decisions={report?.decisions ?? []}
             evidence={report?.evidence ?? []}
             conviction={report?.conviction ?? {}}
             alerts={session?.alerts ?? []}

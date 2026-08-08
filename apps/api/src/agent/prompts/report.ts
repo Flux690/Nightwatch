@@ -136,8 +136,6 @@ function sentenceFor(gap: ReportGap): string {
       const s = subject(gap.ids);
       return `${s.names} ${s.is} backed only by calls that returned nothing, so the claim stands unsupported. ${RECORD_AGAIN} against a call that answered; for a proposed fix, call ProposeFix again.`;
     }
-    case "unrecorded_fix":
-      return "A change has already been applied on this session and you have recommended nothing. Call ProposeFix with the fix you are recommending.";
   }
 }
 
