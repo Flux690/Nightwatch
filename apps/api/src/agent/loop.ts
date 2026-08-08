@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import { completionRequest } from "./prompts/report.js";
-import { reportGaps, type ReportGap } from "./report.js";
+import {
+  gatedCalls,
+  proposedSomething,
+  reportGaps,
+  type ReportGap,
+} from "./report.js";
+import { getReport } from "../db/reports.js";
+import { verifyRecovery } from "../verification/recovery.js";
 import { effectiveToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
@@ -440,10 +447,32 @@ export async function runInvestigation(
 
     if (response.toolUses.length === 0) {
       // Finish gate: a session under investigation may only end with a complete
-      // record. Push back up to MAX_NUDGES times, then let it end - the status
-      // an unfinished record derives to is already the honest one.
+      // record and either a recovery or a recommendation. Push back up to
+      // MAX_NUDGES times, then let it end - the status an unfinished record
+      // derives to is already the honest one.
       const gaps = opensInvestigation ? reportGaps(sessionId) : [];
-      if (gaps.length > 0) {
+      // Asked here rather than on the read path: this is the one moment the
+      // answer changes what happens next, and the investigations list reads
+      // status once per row. Run whether or not the gate will use it - stamping
+      // a recovered condition keeps the record true even when the alert source
+      // never sent a resolved notification.
+      const recovery = opensInvestigation
+        ? await verifyRecovery(sessionId)
+        : "no_condition";
+      /* Only a run that acted is held to this. "I could not work out the cause,
+         here is what I ruled out" is a complete ending and the gate must never
+         push a model past it - but a run that had the operator release a write
+         and then went quiet with the condition still firing has left them
+         nothing. Unconfirmed counts as still firing: a condition nothing could
+         answer for is exactly when the operator needs telling. */
+      const released = opensInvestigation
+        ? gatedCalls(sessionId).some((c) => c.decision === "approved")
+        : false;
+      const recoveryUnconfirmed =
+        released &&
+        (recovery === "still_firing" || recovery === "unconfirmed") &&
+        !proposedSomething(getReport(sessionId) ?? null);
+      if (gaps.length > 0 || recoveryUnconfirmed) {
         if (nudges < MAX_NUDGES) {
           nudges++;
           for (const gap of gaps) {
@@ -459,15 +488,18 @@ export async function runInvestigation(
             }
           }
           log.info(
-            { turn, nudges, gaps: gaps.map((g) => g.kind) },
+            { turn, nudges, gaps: gaps.map((g) => g.kind), recovery },
             "finish gate: record incomplete, requesting completion",
           );
-          sendHarnessMessage(provider, completionRequest(gaps));
+          sendHarnessMessage(
+            provider,
+            completionRequest(gaps, recoveryUnconfirmed),
+          );
           persist();
           continue;
         }
         log.warn(
-          { turn, gaps: gaps.map((g) => g.kind) },
+          { turn, gaps: gaps.map((g) => g.kind), recovery },
           "finish gate: request cap reached, ending incomplete",
         );
       }

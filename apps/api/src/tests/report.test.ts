@@ -651,5 +651,121 @@ describe("the investigation record", () => {
       expect(provider.chat).toHaveBeenCalledTimes(3);
       expect(getReport(sessionId)!.hypotheses[0]!.verdict).toBe("disproven");
     });
+
+    /* The gate holds a run that acted to a different standard from one that only
+       looked. "I could not work out the cause" is a complete ending; releasing a
+       write and then going quiet with the condition still firing is not. */
+    describe("a run that acted", () => {
+      // A gated call carrying a result: the registry says it needed releasing,
+      // and no rejected outcome on it says the operator released it.
+      function releasedWrite(sessionId: string, seq: number): void {
+        appendCall(
+          sessionId,
+          seq,
+          {
+            id: "tu-released",
+            name: "RestartDockerService",
+            input: { target: "docker/app/web" },
+          },
+          "restarted",
+          "2026-07-03T02:05:00.000Z",
+        );
+      }
+
+      function settledRun(): void {
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            {
+              toolUses: [
+                {
+                  id: "tu-propose",
+                  name: "ProposeHypothesis",
+                  input: { statement: "the worker leaks" },
+                },
+              ],
+              text: "",
+            },
+            {
+              toolUses: [
+                {
+                  id: "tu-resolve",
+                  name: "ResolveHypothesis",
+                  input: {
+                    id: "h1",
+                    verdict: "disproven",
+                    finding: "it did not",
+                    evidenceIds: ["tu-propose"],
+                  },
+                },
+              ],
+              text: "",
+            },
+            { toolUses: [], text: "Restarted it." },
+          ]),
+        );
+      }
+
+      it("is asked for a recommendation when the condition still fires", async () => {
+        settledRun();
+        const sessionId = randomUUID();
+        createSession(
+          { sessionId, title: "t", createdAt: new Date().toISOString() },
+          [alert("acted-firing")],
+        );
+        releasedWrite(sessionId, 0);
+
+        await runInvestigation({ sessionId, alerts: [alert("acted-firing")] });
+
+        const requests = completionRequests();
+        expect(requests[0]).toContain("still firing");
+        expect(requests[0]).toContain("ProposeFix");
+        // Never "try again": repeating a write that did not work is the failure
+        // this gate exists to catch.
+        expect(requests[0]).not.toContain("try again");
+      });
+
+      it("is let go once it has recommended something", async () => {
+        mockCreateProvider.mockImplementationOnce(() =>
+          createContractFakeProvider([
+            {
+              toolUses: [
+                {
+                  id: "tu-fix",
+                  name: "ProposeFix",
+                  input: { summary: "cap concurrency", evidenceIds: [] },
+                },
+              ],
+              text: "",
+            },
+            { toolUses: [], text: "Recommended." },
+          ]),
+        );
+        const sessionId = randomUUID();
+        createSession(
+          { sessionId, title: "t", createdAt: new Date().toISOString() },
+          [alert("acted-recommended")],
+        );
+        releasedWrite(sessionId, 0);
+
+        await runInvestigation({
+          sessionId,
+          alerts: [alert("acted-recommended")],
+        });
+
+        // The record has an empty-record gap of its own; what must not appear is
+        // the recovery sentence, because the operator has been told what to do.
+        expect(completionRequests().join(" ")).not.toContain("still firing");
+      });
+
+      it("says nothing to a run that only looked", async () => {
+        settledRun();
+        const sessionId = randomUUID();
+        await runInvestigation({ sessionId, alerts: [alert("only-looked")] });
+
+        // No write was released, so an honest inconclusive ending stands even
+        // though the alert never cleared.
+        expect(completionRequests()).toHaveLength(0);
+      });
+    });
   });
 });

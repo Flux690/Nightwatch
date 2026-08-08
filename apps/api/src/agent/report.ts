@@ -172,6 +172,19 @@ export function computeConviction(
   return graded;
 }
 
+// Something for the operator to act on: a recommendation, or a cited root cause
+// that amounts to one. Read by the status derivation and by the finish gate, so
+// what the list calls actionable and what the gate accepts cannot disagree.
+export function proposedSomething(report: Report | null): boolean {
+  if (report === null) return false;
+  return (
+    report.fixes.length > 0 ||
+    report.hypotheses.some(
+      (h) => h.verdict === "root_cause" && h.evidenceIds.length > 0,
+    )
+  );
+}
+
 // One named thing missing from the record. A list rather than a boolean so the
 // completion request can name only what is absent, and so a gap that survives a
 // request can be logged as itself.

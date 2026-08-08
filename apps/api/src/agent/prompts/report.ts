@@ -139,12 +139,24 @@ function sentenceFor(gap: ReportGap): string {
   }
 }
 
+/* The alert is still firing and nothing has been recommended. It asks for a
+   recommendation rather than for another fix attempt: the operator may have to
+   act, and a record that ends with neither a recovery nor an instruction leaves
+   them nothing. It never says "try again" - repeating a write that did not work
+   is the failure mode this whole gate exists to catch. */
+const UNCONFIRMED_RECOVERY =
+  "The condition that opened this investigation is still firing, and you have recommended nothing. Verify the condition yourself, and if it has genuinely not recovered, call ProposeFix with what the operator should do. Do not repeat a write that has already run.";
+
 // Sent by the finish gate when a run tries to end with gaps in its record. It
 // names those gaps and nothing else: a model that is one hypothesis short is not
 // told about the four things it did do.
-export function completionRequest(gaps: ReportGap[]): string {
+export function completionRequest(
+  gaps: ReportGap[],
+  recoveryUnconfirmed = false,
+): string {
   return [
     "Your investigation record is not finished.",
     ...gaps.map(sentenceFor),
+    ...(recoveryUnconfirmed ? [UNCONFIRMED_RECOVERY] : []),
   ].join(" ");
 }

@@ -34,7 +34,7 @@ console["Console<br/>Live Report · Sessions Queue<br/>Chat · Approval Cards ·
 github["GitHub<br/>Draft Pull Requests"]
 
 monitoring -- POST /alerts/ingest --> api
-console -- Start investigation --> api
+console -- Ask a question --> api
 api -- WebSocket --> runner
 api -- REST + SSE --> console
 api -- sandboxed code fixes --> github
@@ -56,6 +56,17 @@ As it works it builds an **investigation record**, one small step at a time. It 
 
 The run cannot end with a hunch left untested: the agent is pushed back until every one is settled, and if it genuinely cannot work out the cause it says so instead of inventing one.
 
+**A fix is not believed until the alert says so.** NightWarden never asks the model whether its fix worked - it re-checks the condition that fired, and there are two independent ways it learns the answer:
+
+1. **Your alert source tells it.** When Alertmanager posts the resolved notification for an alert, that alert is marked cleared. This is the ordinary path and needs no configuration beyond a webhook receiver, where `send_resolved` is already the default.
+2. **NightWarden asks Prometheus itself.** When a run tries to end, it asks Prometheus whether the alerting rule that fired still holds an instance matching this alert, through the rules API. That is the same rule on the same evaluation interval that fired in the first place - not a query NightWarden composed, and not a threshold it guessed. A rule that is `pending` counts as still firing.
+
+Both write the same record, so they cross-check each other: if you have turned `send_resolved` off, the second path still notices the recovery.
+
+If nothing can answer - Prometheus unreachable, the rule renamed, no metrics integration connected - the investigation says the fix ran but recovery was never confirmed. It does not read "Resolved". An unanswerable question is never treated as a yes.
+
+A run that had you approve a write and then goes quiet while the condition is still firing is pushed back and asked what you should do about it. It is never asked to try again: repeating a write that did not work is the exact mistake this catches.
+
 Any action that writes to a server pauses the loop and shows you an approval card. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the cause is in your code, the same loop checks the code out into an isolated sandbox on the API host, builds and tests a fix there, and leaves a draft pull request for you to review.
 
 ### The three pieces
@@ -64,13 +75,14 @@ Any action that writes to a server pauses the loop and shows you an approval car
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the operator UI, built around the report rather than the chat. One sidebar holds everything: your destinations at the top, your sessions in the middle, and Settings and Log out at the bottom. It collapses to a narrow icon strip when you want the full width for reading. Open an investigation and the report takes the main area - what caused the failure, the hunches behind it, the evidence with charts, the proposed fix - with the live transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. Integrations and the audit log are full-width pages. Approval cards, the runner fleet view and settings all live here too.
+**Console** is the operator UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one and the report takes the main area - what caused the failure, the hunches behind it, the evidence with charts, the proposed fix - with the live transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
 
 ## Features
 
 - **A report, not a wall of chat.** Every investigation produces a written record the agent builds _while it works_: each hunch it raised, how it turned out, and the evidence behind it. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
-- **It cannot finish without concluding.** A run is not allowed to end with a hunch left untested: the agent is pushed back until every one is settled, and anything it calls the root cause has to cite a tool call. A session reads "Resolved" only once a fix actually ran or the alert itself cleared - never because the model said it found the cause.
-- **No mode to choose.** Ask a question and you get a plain conversation. An alert opens an investigation. If your question turns out to be an incident, the agent opens the investigation itself, so you never have to decide up front. Once a session is an investigation it stays one.
+- **It cannot finish without concluding.** A run is not allowed to end with a hunch left untested: the agent is pushed back until every one is settled, and anything it calls the root cause has to cite a tool call.
+- **"Resolved" means the alert stopped firing.** Not that a fix ran, and never because the model said it found the cause. NightWarden confirms recovery against the condition that fired - your alert source's own resolved notification, or by asking Prometheus whether its rule still holds. When nothing can answer, the record says recovery was not confirmed rather than claiming it.
+- **No mode to choose.** Ask a question and you get a plain conversation, with the full toolset behind the same approval gate. An alert opens an investigation. A session is what it was created as and never changes underneath you.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
@@ -241,10 +253,9 @@ merges. Requirements and properties:
   in the PR body what it ran; NightWarden appends the incident context, the
   changed files, and a session reference. One session maps to one branch and
   at most one open PR - calling the tool again pushes the newest commits and
-  updates it - and every PR action is recorded write-ahead in the audit log,
-  so after a crash an action with an unknown outcome refuses to blindly run
-  again. (Repos whose GitHub plan lacks draft PRs get a normal PR, and the
-  tool result says so.)
+  updates it, which is also what makes a retry after a crash update the
+  proposal rather than open a second one. (Repos whose GitHub plan lacks draft
+  PRs get a normal PR, and the tool result says so.)
 - **Work survives every death mode.** Files must be read before they can be
   edited, edits come back as real diffs in the transcript, and a sandbox that
   idles out (default one hour, a Settings knob, alongside the session time
@@ -313,7 +324,6 @@ apps/
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
       integrations/     GitHub / Prometheus / Loki clients and connect/status routes
       llm/              provider factory (Anthropic / OpenRouter)
-      remediation/      executed/rejected action log routes (the audit trail)
       runners/          runner registry and the one install-artifact endpoint
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
       session/          session routes, console event bus (SSE), interrupt coordinator + approval executor,
@@ -345,7 +355,7 @@ apps/
         transcript/     transcript dispatcher + per-card panels
       hooks/            shared console event-stream (SSE) provider, attention counter, per-session report
       lib/              shared client helpers (theme, utils, toast, time, icon/status variants)
-      pages/            login, fleet, add-server wizard, session view, audit log, integration config pages
+      pages/            login, fleet, add-server wizard, agent + investigation pages, integration config pages
 packages/
   runner-transport/     Everything about talking to NightWarden, shared by both runners
     src/
@@ -369,7 +379,6 @@ packages/
       integrations.ts   integration payloads (GitHub, Prometheus, Loki)
       alerts.ts         normalized alert shapes
       auth.ts           owner auth payloads
-      remediation.ts    remediation status + audit shapes
       runner.ts         Platform, the two manifest shapes, and the fleet view
 ```
 

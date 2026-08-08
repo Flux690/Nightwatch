@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type {
   NormalizedAlert,
   TranscriptRow,
@@ -30,6 +39,11 @@ import { seedCompleteReport } from "./report-helper.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
+import {
+  deletePrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/integrations.js";
+import { verifyRecovery } from "../verification/recovery.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -456,7 +470,10 @@ describe("API-local session store", () => {
       expect(statusOf(investigation())).toBe("inconclusive");
     });
 
-    it("says nothing when a cause was found but nothing was recommended or run", () => {
+    // It used to answer null here, which put the row in no group on the page
+    // while it still counted in the queue total - so the stepper read "3 / 12"
+    // over eleven rows. Every investigation lands in exactly one group.
+    it("reads Inconclusive when a cause was found but nothing was recommended", () => {
       const sessionId = investigation();
       proposeHypothesis(sessionId, "the deploy set the cache size");
       resolveHypothesis(sessionId, {
@@ -465,7 +482,135 @@ describe("API-local session store", () => {
         finding: "the climb starts at the merge",
         evidenceIds: ["tu-never-ran"],
       });
-      expect(statusOf(sessionId)).toBe(null);
+      expect(statusOf(sessionId)).toBe("inconclusive");
+    });
+
+    /* Verification asks whoever owns the condition, never the model, and writes
+       the same clearedAt the resolved webhook writes. Stubbing fetch is the
+       system boundary; everything below it is ours. */
+    describe("verifying the condition against its own source", () => {
+      function rulesAnswer(alerts: unknown[]): void {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(() =>
+            Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  status: "success",
+                  data: {
+                    groups: [
+                      {
+                        rules: [
+                          { name: alert.alertType, type: "alerting", alerts },
+                        ],
+                      },
+                    ],
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              ),
+            ),
+          ),
+        );
+      }
+
+      beforeEach(() => {
+        savePrometheusIntegration({
+          baseUrl: "http://prom.test",
+          authHeaderEncrypted: null,
+        });
+      });
+
+      afterEach(() => {
+        vi.unstubAllGlobals();
+        deletePrometheusIntegration();
+      });
+
+      it("resolves once Prometheus no longer holds the rule firing", async () => {
+        const sessionId = investigation();
+        seedCompleteReport(sessionId);
+        expect(statusOf(sessionId)).toBe("inconclusive");
+
+        rulesAnswer([]);
+        await expect(verifyRecovery(sessionId)).resolves.toBe("confirmed");
+        // Written to the same field the webhook writes, so the two ways of
+        // learning it converge on one record and status stays a plain read.
+        expect(statusOf(sessionId)).toBe("resolved");
+      });
+
+      it("leaves a still-firing rule alone", async () => {
+        const sessionId = investigation();
+        seedCompleteReport(sessionId);
+
+        rulesAnswer([{ state: "firing", labels: {} }]);
+        await expect(verifyRecovery(sessionId)).resolves.toBe("still_firing");
+        expect(statusOf(sessionId)).toBe("inconclusive");
+      });
+
+      // The rule is true but has not held long enough to fire. Reading that as
+      // recovery would resolve an incident on its way back.
+      it("does not call a pending rule recovered", async () => {
+        const sessionId = investigation();
+        rulesAnswer([{ state: "pending", labels: {} }]);
+        await expect(verifyRecovery(sessionId)).resolves.toBe("still_firing");
+      });
+
+      // The load-bearing case: an unanswerable question is not a yes. If this
+      // ever collapses into "confirmed", an unreachable Prometheus silently
+      // resolves every open incident.
+      it("never reads an unreachable source as recovery", async () => {
+        const sessionId = investigation();
+        seedCompleteReport(sessionId);
+
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))),
+        );
+        await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
+        expect(statusOf(sessionId)).toBe("inconclusive");
+      });
+
+      it("never reads a rule Prometheus does not know as recovery", async () => {
+        const sessionId = investigation();
+        rulesAnswer([]);
+        // Answering about some other rule is not answering about this one.
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(() =>
+            Promise.resolve(
+              new Response(
+                JSON.stringify({ status: "success", data: { groups: [] } }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              ),
+            ),
+          ),
+        );
+        await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
+        expect(statusOf(sessionId)).toBe("inconclusive");
+      });
+
+      it("has nothing to verify on a session no alert opened", async () => {
+        const m = meta();
+        createSession(m, [], true);
+        await expect(verifyRecovery(m.sessionId)).resolves.toBe("no_condition");
+      });
+    });
+
+    it("gives every investigation a group, whatever its record holds", () => {
+      const sessionId = investigation();
+      proposeHypothesis(sessionId, "nothing was ever settled");
+      const rows = listSessionPage(500, 0).rows.filter((r) => r.investigation);
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.every((r) => r.status !== null)).toBe(true);
+      expect(
+        rows.find((r) => r.sessionId === sessionId)?.status,
+      ).not.toBeNull();
     });
   });
 

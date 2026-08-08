@@ -11,22 +11,8 @@ import {
   listSessionSources,
   type SessionListSource,
 } from "../db/sessions.js";
+import { proposedSomething } from "../agent/report.js";
 import { dispatcher } from "../dispatcher.js";
-
-// A symptom explains nothing on its own, and a disproven claim less; neither
-// counts as the run standing behind an answer.
-const CAUSES: Verdict[] = ["root_cause", "trigger", "contributing_factor"];
-
-// Something for the operator to act on: a recommendation, or a cited root cause
-// that amounts to one.
-function proposedSomething(report: Report): boolean {
-  return (
-    report.fixes.length > 0 ||
-    report.hypotheses.some(
-      (h) => h.verdict === "root_cause" && h.evidenceIds.length > 0,
-    )
-  );
-}
 
 /* The alert that fired is what says the incident is over, so a write running
    while it still fires settles nothing - and whether a write even happened is a
@@ -39,25 +25,24 @@ function isSettled(source: SessionListSource): boolean {
   );
 }
 
-// Derived from the action log, the alerts and the hypothesis rows, never from
-// anything the model declared. A crash is checked before an unconcluded run, so
-// a run that broke reads as broken rather than as one that stood down.
-function deriveStatus(source: SessionListSource): SessionRunStatus | null {
+/* Derived from the alerts, the dispatcher and the hypothesis rows, never from
+   anything the model declared. A crash is checked before an unconcluded run, so
+   a run that broke reads as broken rather than as one that stood down.
+
+   Total by construction: every investigation lands in exactly one group. The
+   fall-through used to answer null, which put a record in no group on the page
+   while still counting in the queue total - so the stepper read "3 / 12" over
+   eleven rows. */
+function deriveStatus(source: SessionListSource): SessionRunStatus {
   const report = source.report;
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
   if (isSettled(source)) return "resolved";
   if (report !== null && proposedSomething(report)) return "action_required";
   if (source.lastKind === "error") return "failed";
-  // A record with no cause in it, up to and including an empty one: the run
-  // ended with nothing it could stand behind.
-  if (
-    report === null ||
-    !report.hypotheses.some((h) => CAUSES.includes(h.verdict))
-  ) {
-    return "inconclusive";
-  }
-  return null;
+  // Nothing for the operator to act on: the run ended without a recommendation,
+  // whether or not it named a cause along the way.
+  return "inconclusive";
 }
 
 const WAITING_ON: Record<

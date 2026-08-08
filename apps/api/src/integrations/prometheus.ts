@@ -166,6 +166,82 @@ export async function rangeQuery(
   return parseEnvelope(res);
 }
 
+// One currently-active instance of an alerting rule, as Prometheus itself sees
+// it. The labels identify which instance, since one rule fires per series.
+export interface FiringInstance {
+  labels: Record<string, string>;
+  state: string;
+}
+
+/* Whether Prometheus still holds this alerting rule firing. Asking the rules API
+   rather than re-evaluating the expression ourselves: this is the same rule, on
+   the same evaluation interval, that fired the alert in the first place, so
+   nothing here can disagree with what would fire it again.
+
+   `null` means Prometheus does not know a rule by that name - it was renamed,
+   removed, or the alert came from somewhere else - which is a different answer
+   from "it is not firing" and must not be read as recovery. */
+export async function firingInstancesOf(
+  baseUrl: string,
+  authHeader: string | null,
+  ruleName: string,
+): Promise<FiringInstance[] | null> {
+  const res = await prometheusFetch(
+    baseUrl,
+    authHeader,
+    `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
+  );
+  let body: Record<string, unknown>;
+  try {
+    body = (await res.json()) as Record<string, unknown>;
+  } catch {
+    throw new PrometheusApiError(
+      "bad_response",
+      res.status,
+      `Prometheus returned a non-JSON body (HTTP ${res.status}) listing rules`,
+    );
+  }
+  if (!res.ok || body["status"] !== "success") {
+    throw new PrometheusApiError(
+      "bad_response",
+      res.status,
+      `Prometheus returned ${res.status} listing rules`,
+    );
+  }
+  const groups = (body["data"] as Record<string, unknown> | undefined)?.[
+    "groups"
+  ];
+  if (!Array.isArray(groups)) return null;
+
+  const rules = groups.flatMap((group) => {
+    const list = (group as Record<string, unknown>)["rules"];
+    return Array.isArray(list) ? list : [];
+  });
+  // The filter is a server-side hint, not a guarantee: an older Prometheus
+  // ignores rule_name[] and answers with everything.
+  const named = rules.filter(
+    (rule) => (rule as Record<string, unknown>)["name"] === ruleName,
+  );
+  if (named.length === 0) return null;
+
+  return named.flatMap((rule) => {
+    const alerts = (rule as Record<string, unknown>)["alerts"];
+    if (!Array.isArray(alerts)) return [];
+    return alerts.flatMap((entry): FiringInstance[] => {
+      const alert = entry as Record<string, unknown>;
+      const state = alert["state"];
+      if (typeof state !== "string") return [];
+      const labels: Record<string, string> = {};
+      if (typeof alert["labels"] === "object" && alert["labels"] !== null) {
+        for (const [k, v] of Object.entries(alert["labels"])) {
+          if (typeof v === "string") labels[k] = v;
+        }
+      }
+      return [{ labels, state }];
+    });
+  });
+}
+
 export async function labelValues(
   baseUrl: string,
   authHeader: string | null,
