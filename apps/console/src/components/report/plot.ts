@@ -10,10 +10,16 @@ export interface Point {
   value: number;
 }
 
+export type PlotUnit = "bytes";
+
 export type Plot =
-  | { kind: "line"; label: string; points: Point[] }
-  | { kind: "bars"; bars: { label: string; value: number }[] }
-  | { kind: "value"; label: string; value: number };
+  | { kind: "line"; label: string; unit: PlotUnit | null; points: Point[] }
+  | {
+      kind: "bars";
+      unit: PlotUnit | null;
+      bars: { label: string; value: number }[];
+    }
+  | { kind: "value"; label: string; unit: PlotUnit | null; value: number };
 
 interface Series {
   metric: Record<string, string>;
@@ -38,6 +44,13 @@ function labelOf(metric: Record<string, string>): string {
   const qualifier =
     metric["container"] ?? metric["pod"] ?? metric["job"] ?? metric["instance"];
   return qualifier ? `${name} (${qualifier})` : name;
+}
+
+// Prometheus names a metric for the unit it counts in, so the name is where the
+// unit comes from. Without it a working set of 4272341811 draws as "4.3B", which
+// is not 4 GB and is not caught at 02:14.
+function unitOf(metric: Record<string, string>): PlotUnit | null {
+  return /_bytes(_total)?$/.test(metric["__name__"] ?? "") ? "bytes" : null;
 }
 
 function stringMap(value: unknown): Record<string, string> {
@@ -122,6 +135,7 @@ export function plotFrom(
     return {
       kind: "line",
       label: labelOf(chosen.metric),
+      unit: unitOf(chosen.metric),
       points: downsample(chosen.points),
     };
   }
@@ -131,6 +145,8 @@ export function plotFrom(
   if (series.length > 1) {
     return {
       kind: "bars",
+      // Bars only compare readings of the same metric, so one unit covers them.
+      unit: unitOf(series[0]!.metric),
       bars: series.map((s) => ({
         label: labelOf(s.metric),
         value: s.points[0]!.value,
@@ -140,6 +156,7 @@ export function plotFrom(
   return {
     kind: "value",
     label: labelOf(series[0]!.metric),
+    unit: unitOf(series[0]!.metric),
     value: series[0]!.points[0]!.value,
   };
 }

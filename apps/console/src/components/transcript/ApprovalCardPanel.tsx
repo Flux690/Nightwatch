@@ -38,6 +38,21 @@ function serviceOf(input: Record<string, unknown>): string | null {
   return inputString(input, "server");
 }
 
+/* The agent's own grading of the call. The three levels the schema asks for read
+   as a sentence; anything else it wrote is shown as the note it is rather than
+   glued into a template, and nothing at all reads as nothing. */
+const RISK_SENTENCE: Record<string, string> = {
+  low: "The agent calls this low risk",
+  medium: "The agent calls this medium risk",
+  high: "The agent calls this high risk",
+};
+
+function riskLineOf(risk: string | undefined): string | null {
+  const said = risk?.trim() ?? "";
+  if (said === "") return null;
+  return RISK_SENTENCE[said.toLowerCase()] ?? said;
+}
+
 function ordinal(n: number): string {
   const tens = n % 100;
   if (tens >= 11 && tens <= 13) return `${n}th`;
@@ -85,6 +100,7 @@ export function ApprovalCardPanel({
   // entitled to author. Required on every write tool, so it is absent only on a
   // row written before that was true.
   const why = inputString(input, "reason");
+  const riskLine = riskLineOf(item.risk);
 
   return (
     <>
@@ -131,7 +147,7 @@ export function ApprovalCardPanel({
         <div className="flex flex-wrap gap-4 text-sm text-ink-subtle">
           <span className="font-mono">{item.toolName}</span>
           {service !== null && <span className="font-mono">{service}</span>}
-          <span>{item.risk ?? "unknown"} risk, per the agent</span>
+          {riskLine !== null && <span>{riskLine}</span>}
         </div>
 
         {state.phase === "resolved" ? (

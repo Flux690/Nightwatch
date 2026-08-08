@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import type { Plot, Point } from "./plot.js";
+import { formatBytes } from "@/components/transcript/toolFindings";
+import type { Plot, PlotUnit, Point } from "./plot.js";
 
 /* Hand-drawn SVG, no charting dependency: three shapes is not a library's worth
    of work, and the colours are the app's own tokens. Nothing re-queries, so a
@@ -14,6 +15,12 @@ const compact = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
+
+// Compact notation is only right for a count. A byte value read that way says
+// "4.3B" for four gigabytes, so a metric that names its unit is read in it.
+function readingIn(unit: PlotUnit | null): (value: number) => string {
+  return unit === "bytes" ? formatBytes : (value) => compact.format(value);
+}
 
 function timeLabel(iso: string): string {
   const d = new Date(iso);
@@ -37,13 +44,16 @@ function Caption({
 
 function Line({
   label,
+  unit,
   points,
 }: {
   label: string;
+  unit: PlotUnit | null;
   points: Point[];
 }): React.JSX.Element {
   const [hover, setHover] = useState<number | null>(null);
 
+  const read = readingIn(unit);
   const values = points.map((p) => p.value);
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -111,13 +121,13 @@ function Line({
               top: `${(y(values[hover]!) / H) * 100}%`,
             }}
           >
-            {compact.format(values[hover]!)} · {timeLabel(points[hover]!.at)}
+            {read(values[hover]!)} · {timeLabel(points[hover]!.at)}
           </div>
         )}
       </div>
       <Caption
         left={label}
-        right={`${compact.format(min)}–${compact.format(max)} · ${timeLabel(points[0]!.at)}–${timeLabel(points[points.length - 1]!.at)}`}
+        right={`${read(min)}–${read(max)} · ${timeLabel(points[0]!.at)}–${timeLabel(points[points.length - 1]!.at)}`}
       />
     </figure>
   );
@@ -126,10 +136,13 @@ function Line({
 // One reading per label has no time axis, so the comparison is the point. Bars
 // are proportional to the largest, which is the only claim the data supports.
 function Bars({
+  unit,
   bars,
 }: {
+  unit: PlotUnit | null;
   bars: { label: string; value: number }[];
 }): React.JSX.Element {
+  const read = readingIn(unit);
   const max = Math.max(...bars.map((b) => b.value), 0) || 1;
   return (
     <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
@@ -144,7 +157,7 @@ function Bars({
             style={{ width: `${Math.max((bar.value / max) * 100, 1)}%` }}
           />
           <span className="shrink-0 font-mono text-sm tabular-nums">
-            {compact.format(bar.value)}
+            {read(bar.value)}
           </span>
         </li>
       ))}
@@ -154,13 +167,13 @@ function Bars({
 
 export function Measurement({ plot }: { plot: Plot }): React.JSX.Element {
   if (plot.kind === "line") {
-    return <Line label={plot.label} points={plot.points} />;
+    return <Line label={plot.label} unit={plot.unit} points={plot.points} />;
   }
-  if (plot.kind === "bars") return <Bars bars={plot.bars} />;
+  if (plot.kind === "bars") return <Bars unit={plot.unit} bars={plot.bars} />;
   return (
     <figure className="m-0 mt-2">
       <p className={cn("m-0 font-mono text-xl tabular-nums")}>
-        {compact.format(plot.value)}
+        {readingIn(plot.unit)(plot.value)}
       </p>
       <Caption left={plot.label} />
     </figure>

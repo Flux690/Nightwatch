@@ -1,8 +1,11 @@
 import type {
+  ResolvedEvidence,
   SessionAlert,
   SessionReportResponse,
   Verdict,
 } from "@nightwarden/shared";
+import { findingFor } from "@/components/transcript/toolFindings";
+import { targetOf } from "@/components/transcript/toolPresentation";
 
 // The verdict as a sentence rather than the enum, since the export is read
 // outside the console where the vocabulary is not on screen to compare against.
@@ -14,6 +17,25 @@ const VERDICT_WORD: Record<Verdict, string> = {
   disproven: "Disproven",
   open: "Open",
 };
+
+/* The calls a claim rests on, carried out with it. An exported postmortem that
+   names a finding but not what backed it is only the model's word for it, and
+   the export is read where the transcript is not. The reading is computed from
+   the recorded result, exactly as the console computes it. */
+function citedLines(
+  ids: string[],
+  evidence: Map<string, ResolvedEvidence>,
+): string[] {
+  return [...new Set(ids)].flatMap((id) => {
+    const entry = evidence.get(id);
+    if (entry === undefined) return [];
+    const target = targetOf(entry.input);
+    const reading = findingFor(entry.toolName, entry.result)?.text;
+    return [
+      `- \`${entry.toolName}\`${target === null ? "" : ` ${target}`}${reading === undefined ? "" : ` - ${reading}`}`,
+    ];
+  });
+}
 
 function alertLine(entry: SessionAlert): string {
   const severity = entry.alert.labels["severity"];
@@ -34,18 +56,31 @@ export function reportToMarkdown(
     sections.push(["## Alerts", "", ...alerts.map(alertLine)].join("\n"));
   }
 
+  const byId = new Map((report?.evidence ?? []).map((e) => [e.toolUseId, e]));
+
   const claims = report?.report.hypotheses ?? [];
   if (claims.length > 0) {
     sections.push(
       [
         "## Claims",
         "",
-        ...claims.map((h) => {
-          const conviction = report?.conviction[h.id];
-          const verdict = `${VERDICT_WORD[h.verdict]}${conviction === undefined ? "" : `, ${conviction}`}.`;
-          const body = h.finding.trim();
-          return `### ${h.statement}\n\n${verdict}${body === "" ? "" : `\n\n${body}`}`;
-        }),
+        claims
+          .map((h) => {
+            const conviction = report?.conviction[h.id];
+            const verdict = `${VERDICT_WORD[h.verdict]}${conviction === undefined ? "" : `, ${conviction}`}.`;
+            const body = h.finding.trim();
+            const cited = citedLines(h.evidenceIds, byId);
+            return [
+              `### ${h.statement}`,
+              "",
+              verdict,
+              ...(body === "" ? [] : ["", body]),
+              ...(cited.length === 0 ? [] : ["", "Evidence:", "", ...cited]),
+            ].join("\n");
+          })
+          // A blank line before each heading, or the next claim's `###` lands
+          // against the previous one's body and stops being a heading.
+          .join("\n\n"),
       ].join("\n"),
     );
   }
@@ -53,9 +88,16 @@ export function reportToMarkdown(
   const fixes = report?.report.fixes ?? [];
   if (fixes.length > 0) {
     sections.push(
-      ["## Proposed fixes", "", ...fixes.map((f) => `- ${f.summary}`)].join(
-        "\n",
-      ),
+      [
+        "## Proposed fixes",
+        "",
+        // Nested under the fix rather than in a block of its own: a fix is one
+        // line, and its evidence belongs to that line.
+        ...fixes.flatMap((f) => [
+          `- ${f.summary}`,
+          ...citedLines(f.evidenceIds, byId).map((line) => `  ${line}`),
+        ]),
+      ].join("\n"),
     );
   }
 

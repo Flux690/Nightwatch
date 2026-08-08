@@ -222,6 +222,62 @@ describe("ReportPanel", () => {
     expect(prLink).toHaveAttribute("href", "https://github.com/o/r/pull/482");
   });
 
+  it("draws a call cited by several claims once and names it under the rest", () => {
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          hypotheses: [
+            { ...REPORT.hypotheses[0]!, evidenceIds: ["tu-stats"] },
+            { ...REPORT.hypotheses[1]!, evidenceIds: ["tu-stats"] },
+          ],
+          fixes: [{ ...REPORT.fixes[0]!, evidenceIds: ["tu-stats"] }],
+        },
+      }),
+    );
+
+    // Every claim says what it rests on, so none of them reads as unbacked.
+    expect(screen.getAllByText("GetDockerStats")).toHaveLength(3);
+    // One call is one measurement: read three times down the page it reads as
+    // three, and a report that looks like more evidence than it has is worse
+    // than one that looks like less.
+    expect(screen.getAllByText(/mem 511 MB of 512 MB/)).toHaveLength(1);
+  });
+
+  it("does not repeat a log's worst line when the body opens with it", () => {
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          fixes: [],
+          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-log"] }],
+        },
+        evidence: [
+          {
+            toolUseId: "tu-log",
+            toolName: "GetDockerLogs",
+            input: { target: "docker/encodr/payments-worker" },
+            result: JSON.stringify({
+              lines: [
+                "fatal: cannot allocate 2.2GB buffer",
+                "job 4471 accepted",
+              ],
+              totalLines: 2,
+            }),
+          },
+        ],
+      }),
+    );
+
+    // The reading picks the worst line; here it is also the first line the body
+    // quotes, so the two would sit on adjacent rows and one event would read as
+    // two. The body keeps it, and the reading steps aside.
+    expect(screen.getAllByText(/cannot allocate 2\.2GB buffer/)).toHaveLength(
+      1,
+    );
+    expect(screen.getByText(/job 4471 accepted/)).toBeInTheDocument();
+  });
+
   it("keeps a claim whose citation resolves to nothing", () => {
     render(
       panel({
@@ -304,7 +360,9 @@ describe("ReportPanel", () => {
       }),
     );
 
-    expect(screen.getByText("8.6B")).toBeInTheDocument();
+    // Read in the unit the metric names itself in. Compact notation says "8.6B"
+    // for this, which is not eight gigabytes and is not caught at a glance.
+    expect(screen.getByText("8.0 GB")).toBeInTheDocument();
     expect(screen.getByText("redis_memory_used_bytes")).toBeInTheDocument();
   });
 

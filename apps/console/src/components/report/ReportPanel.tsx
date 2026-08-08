@@ -26,14 +26,21 @@ function decisionView(call: GatedCall): { label: string; tone: StatusTone } {
 // model's; everything around them - the evidence, the conviction, what ran - is
 // the system answering for itself.
 
+/* Weight of ink, not colour: a verdict classifies a claim, it does not ask for
+   anything, and a page of green and amber labels spends the operator's attention
+   before the report has said anything. Only "Open" keeps a colour, because it is
+   the one that means work is still outstanding. */
 const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
-  root_cause: { label: "Root cause", className: "text-ok" },
-  trigger: { label: "Trigger", className: "text-ok" },
-  contributing_factor: { label: "Contributing factor", className: "text-wait" },
+  root_cause: { label: "Root cause", className: "text-foreground" },
+  trigger: { label: "Trigger", className: "text-foreground" },
+  contributing_factor: {
+    label: "Contributing factor",
+    className: "text-muted-foreground",
+  },
   symptom: { label: "Symptom", className: "text-muted-foreground" },
   disproven: {
     label: "Disproven",
-    className: "text-muted-foreground line-through",
+    className: "text-ink-subtle line-through",
   },
   open: { label: "Open", className: "text-run" },
 };
@@ -102,13 +109,31 @@ function ConvictionMark({
   return <span className="text-sm text-ink-subtle">{conviction}</span>;
 }
 
+/* Which claim draws each cited call. A call two hypotheses and a fix all rest on
+   is one measurement, so it is drawn under the first claim to name it and only
+   named by the rest - otherwise the same chart fills the page three times and
+   reads as three separate readings. */
+function drawnBy(report: Report): Map<string, string> {
+  const owner = new Map<string, string>();
+  for (const claim of [...report.hypotheses, ...report.fixes]) {
+    for (const id of claim.evidenceIds) {
+      if (!owner.has(id)) owner.set(id, claim.id);
+    }
+  }
+  return owner;
+}
+
 function CitedEvidence({
+  claimId,
   ids,
   evidence,
+  drawn,
   alert,
 }: {
+  claimId: string;
   ids: string[];
   evidence: Map<string, ResolvedEvidence>;
+  drawn: Map<string, string>;
   alert: NormalizedAlert | null;
 }): React.JSX.Element | null {
   // A citation naming no call renders nothing at all. The claim above it stands
@@ -119,7 +144,12 @@ function CitedEvidence({
   return (
     <div className="mt-2">
       {cited.map((entry) => (
-        <Evidence key={entry.toolUseId} entry={entry} alert={alert} />
+        <Evidence
+          key={entry.toolUseId}
+          entry={entry}
+          alert={alert}
+          repeat={drawn.get(entry.toolUseId) !== claimId}
+        />
       ))}
     </div>
   );
@@ -162,6 +192,7 @@ export function ReportPanel({
   }
 
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
+  const drawn = drawnBy(report);
   // The verdict line is the root-cause hypothesis itself, not a second
   // free-text field that could disagree with it.
   const rootCause = report.hypotheses.find((h) => h.verdict === "root_cause");
@@ -202,8 +233,10 @@ export function ReportPanel({
                   </p>
                 )}
                 <CitedEvidence
+                  claimId={h.id}
                   ids={h.evidenceIds}
                   evidence={byId}
+                  drawn={drawn}
                   alert={alert}
                 />
               </li>
@@ -237,8 +270,10 @@ export function ReportPanel({
                   <ConvictionMark conviction={conviction[fix.id]} />
                 </div>
                 <CitedEvidence
+                  claimId={fix.id}
                   ids={fix.evidenceIds}
                   evidence={byId}
+                  drawn={drawn}
                   alert={alert}
                 />
               </li>
