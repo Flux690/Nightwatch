@@ -25,10 +25,7 @@ import type {
 
 const CONFIG_ID = "global";
 
-export const PROVIDER_NAMES: readonly LLMProviderName[] = [
-  "anthropic",
-  "openrouter",
-];
+const PROVIDER_NAMES: readonly LLMProviderName[] = ["anthropic", "openrouter"];
 
 type ConfigRow = {
   activeProvider: string | null;
@@ -226,7 +223,7 @@ const UPSERT_CONFIG = `
 
 // Global settings only; the per-provider blocks are written by updateProvider so
 // a change to one provider can never disturb the other.
-export type GlobalConfigPatch = Partial<Omit<AgentConfig, "providers">>;
+type GlobalConfigPatch = Partial<Omit<AgentConfig, "providers">>;
 
 export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
   const next: AgentConfig = { ...loadConfig(), ...patch };

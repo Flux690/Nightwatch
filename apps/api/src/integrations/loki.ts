@@ -15,12 +15,12 @@ export class LokiApiError extends Error {
 
 // One stream per labelset; values are [nanosecond-timestamp-string, line] as
 // Loki returns them, normalized no further here so the tool owns presentation.
-export interface LokiStream {
+interface LokiStream {
   labels: Record<string, string>;
   values: Array<[string, string]>;
 }
 
-export interface LokiLogData {
+interface LokiLogData {
   streams: LokiStream[];
 }
 
@@ -46,7 +46,7 @@ function joinUrl(baseUrl: string, path: string): string {
 
 // Loki windows are nanosecond epochs; ms*1e6 overflows a JS number, so go via
 // BigInt to keep the value exact.
-export function toLokiNs(date: Date): string {
+function toLokiNs(date: Date): string {
   return (BigInt(date.getTime()) * 1_000_000n).toString();
 }
 

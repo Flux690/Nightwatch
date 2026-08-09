@@ -30,10 +30,9 @@ export interface SandboxLog {
 // Provisioning progress for the console: creation is slow (clone, image pull,
 // container start, dependency install) and would otherwise look like a hang on
 // the first repo tool.
-export type SandboxStage =
-  "cloning" | "starting" | "installing" | "ready" | "failed";
+type SandboxStage = "cloning" | "starting" | "installing" | "ready" | "failed";
 
-export interface PullRequestRef {
+interface PullRequestRef {
   number: number;
   url: string;
   draft: boolean;

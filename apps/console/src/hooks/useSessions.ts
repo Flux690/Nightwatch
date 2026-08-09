@@ -18,7 +18,7 @@ export function sessionsQueryKey(kind: SessionKind): readonly [string, string] {
 
 type Pages = InfiniteData<SessionListPage, number>;
 
-export interface UseSessionsResult {
+interface UseSessionsResult {
   sessions: SessionListRow[];
   // Answered by the server over every investigation, so a record's place in the
   // queue neither climbs as the operator scrolls nor reads zero on a page that

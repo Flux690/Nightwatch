@@ -13,7 +13,7 @@ import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
 // concurrency control: a new alert while one is running is injected rather than starting a second.
-export interface Dispatcher {
+interface Dispatcher {
   dispatch(input: RunSessionInput): void;
   // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
   isInvestigating(sourceAlertId: string, firedAt: string): boolean;
@@ -27,7 +27,7 @@ export interface Dispatcher {
   stop(sessionId: string): boolean;
 }
 
-export interface DispatcherOptions {
+interface DispatcherOptions {
   run: (input: RunSessionInput) => Promise<RunOutcome>;
   // A resume dispatch carries no alerts, so a live run recovers the set it is
   // covering from the session's durable record.

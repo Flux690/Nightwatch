@@ -6,7 +6,7 @@ import { TOOL_CARD_CLASS } from "./cardChrome.js";
 import { ICON_UI } from "@/lib/iconProps";
 import { asRecord } from "@/lib/toolResult";
 
-export interface PullRequestResult {
+interface PullRequestResult {
   action: "created" | "updated";
   number: number;
   url: string;

@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ConsoleEvent, TranscriptItem } from "@nightwarden/shared";
+import type {
+  ConsoleEvent,
+  SessionKind,
+  TranscriptItem,
+} from "@nightwarden/shared";
 import { transcriptItemKey } from "@nightwarden/shared";
 
 import {
@@ -241,18 +245,18 @@ export function SessionView({
   const persistedItems = session?.transcript ?? EMPTY_ITEMS;
 
   const handleSessionCreated = useCallback(
-    (newId: string, firstMessage: string) => {
+    (newId: string, firstMessage: string, kind: SessionKind) => {
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      // A typed message opens a chat and it stays one, so the row goes to the
-      // chat list and never moves.
+      // The mode the operator picked is what the session is, from here on. The
+      // row goes to that list and never moves between them.
       prependSession(queryClient, {
         sessionId: newId,
         title: firstMessage.slice(0, 60),
         createdAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
-        investigation: false,
+        investigation: kind === "investigation",
         severity: null,
         severityLabel: null,
         status: null,

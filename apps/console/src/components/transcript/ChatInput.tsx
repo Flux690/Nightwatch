@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Square } from "lucide-react";
+import type { SessionKind } from "@nightwarden/shared";
 import {
   InputGroup,
   InputGroupAddon,
@@ -9,13 +10,39 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ICON_UI } from "@/lib/iconProps";
+import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-export interface ChatInputProps {
+/* What the operator is asking for, picked before they type. Investigate opens a
+   session that writes a report at the end; Chat answers and stops. Declared, not
+   inferred - the person asking knows which one they want, and no classifier
+   guesses on their behalf. */
+const MODE_LABEL: Record<SessionKind, string> = {
+  chat: "Chat",
+  investigation: "Investigate",
+};
+
+const MODE_HINT: Record<SessionKind, string> = {
+  chat: "Answer the question and stop",
+  investigation: "Work it out and write up a report",
+};
+
+interface ChatInputProps {
   sessionId: string | null;
   isRunning: boolean;
-  onSessionCreated?: (sessionId: string, firstMessage: string) => void;
+  onSessionCreated?: (
+    sessionId: string,
+    firstMessage: string,
+    kind: SessionKind,
+  ) => void;
   onSend?: (text: string) => void;
   // The POST never reached the API: the view rolls back its optimistic state.
   onSendFailed?: () => void;
@@ -29,6 +56,7 @@ export function ChatInput({
   onSendFailed,
 }: ChatInputProps): React.JSX.Element {
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<SessionKind>("chat");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composingRef = useRef(false);
   const navigate = useNavigate();
@@ -39,9 +67,9 @@ export function ChatInput({
         const data = await apiFetch<{ sessionId: string }>("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: trimmed }),
+          body: JSON.stringify({ message: trimmed, kind: mode }),
         });
-        onSessionCreated?.(data.sessionId, trimmed);
+        onSessionCreated?.(data.sessionId, trimmed, mode);
         return data.sessionId;
       }
       await apiFetch<void>(`/api/sessions/${sessionId}/messages`, {
@@ -52,9 +80,11 @@ export function ChatInput({
       return null;
     },
     onSuccess: async (createdSessionId) => {
+      // The route follows what the session is, decided before the first turn
+      // ran, so nothing ever has to cross between the two families later.
       if (createdSessionId !== null) {
         await navigate({
-          to: "/agent/$id",
+          to: mode === "investigation" ? "/investigations/$id" : "/agent/$id",
           params: { id: createdSessionId },
           replace: true,
         });
@@ -93,6 +123,22 @@ export function ChatInput({
     onSend?.(trimmed);
     submit.mutate(trimmed);
   }, [text, isRunning, submit, onSend]);
+
+  const modeItem = (value: SessionKind): React.JSX.Element => (
+    <DropdownMenuItem onClick={() => setMode(value)}>
+      <Check
+        {...ICON_UI}
+        className={cn(mode !== value && "invisible")}
+        aria-hidden
+      />
+      <span className="flex flex-col items-start">
+        <span>{MODE_LABEL[value]}</span>
+        <span className="text-sm text-muted-foreground">
+          {MODE_HINT[value]}
+        </span>
+      </span>
+    </DropdownMenuItem>
+  );
 
   const canSend = text.trim().length > 0 && !isRunning && !submit.isPending;
 
@@ -137,9 +183,37 @@ export function ChatInput({
           align="block-end"
           className="justify-between gap-2 px-2 pb-2"
         >
-          {/* Holds the send button against the trailing edge now that nothing
-              occupies the leading one. */}
-          <span />
+          {/* Cobalt, and the only lit thing on the bar besides send: it changes
+              what the run will be, so it reads as a decision rather than as a
+              setting. Gone once the session exists - by then it is answered.
+
+              px-2 against the addon's own px-2 puts its first letter on 16px,
+              which is where the textarea's px-4 starts the placeholder above it:
+              the two read as one left edge rather than as a near miss. */}
+          {sessionId === null ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <InputGroupButton
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full px-2 text-primary-ink"
+                    aria-label={`Mode: ${MODE_LABEL[mode]}`}
+                  >
+                    {MODE_LABEL[mode]}
+                    <ChevronDown {...ICON_UI} aria-hidden />
+                  </InputGroupButton>
+                }
+              />
+              <DropdownMenuContent align="start">
+                {modeItem("chat")}
+                {modeItem("investigation")}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <span />
+          )}
           {isRunning ? (
             <InputGroupButton
               type="button"

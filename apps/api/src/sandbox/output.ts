@@ -12,7 +12,7 @@ function utf8BoundaryAtOrAfter(buf: Buffer, index: number): number {
   return i;
 }
 
-export interface CappedOutput {
+interface CappedOutput {
   text: string;
   truncated: boolean;
 }

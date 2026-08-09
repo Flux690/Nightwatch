@@ -3,7 +3,7 @@ import { asRecord, numberAt, stringAt } from "@/lib/toolResult";
 // Merged pull requests from a cited change query, read out of the recorded
 // result rather than a copy stored on the report.
 
-export interface PullRequest {
+interface PullRequest {
   number: number;
   title: string;
   author: string;

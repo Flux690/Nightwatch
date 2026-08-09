@@ -28,14 +28,10 @@ import {
   markAlertCleared,
 } from "../db/sessions.js";
 import { listSessionPage } from "../session/list.js";
-import {
-  proposeFix,
-  proposeHypothesis,
-  resolveHypothesis,
-} from "../agent/report.js";
+import { recordHypothesis } from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
-import { seedCompleteReport } from "./report-helper.js";
+import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
@@ -451,7 +447,7 @@ describe("API-local session store", () => {
     it("reads Action required for a finished run whose fix nobody acted on", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
-      proposeFix(sessionId, "restart the container", []);
+      seedRecommendation(sessionId, "restart the container");
       expect(statusOf(sessionId)).toBe("action_required");
     });
 
@@ -475,9 +471,8 @@ describe("API-local session store", () => {
     // over eleven rows. Every investigation lands in exactly one group.
     it("reads Inconclusive when a cause was found but nothing was recommended", () => {
       const sessionId = investigation();
-      proposeHypothesis(sessionId, "the deploy set the cache size");
-      resolveHypothesis(sessionId, {
-        id: "h1",
+      recordHypothesis(sessionId, {
+        statement: "the deploy set the cache size",
         verdict: "trigger",
         finding: "the climb starts at the merge",
         evidenceIds: ["tu-never-ran"],
@@ -604,7 +599,12 @@ describe("API-local session store", () => {
 
     it("gives every investigation a group, whatever its record holds", () => {
       const sessionId = investigation();
-      proposeHypothesis(sessionId, "nothing was ever settled");
+      recordHypothesis(sessionId, {
+        statement: "something downstream broke",
+        verdict: "symptom",
+        finding: "it followed the upstream failure",
+        evidenceIds: ["tu-never-ran"],
+      });
       const rows = listSessionPage(500, 0).rows.filter((r) => r.investigation);
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((r) => r.status !== null)).toBe(true);
@@ -660,7 +660,7 @@ describe("API-local session store", () => {
     it("names the fix a finished run is waiting on somebody to take", () => {
       const sessionId = investigation();
       seedCompleteReport(sessionId);
-      proposeFix(sessionId, "raise the pod memory limit to 2Gi", []);
+      seedRecommendation(sessionId, "raise the pod memory limit to 2Gi");
       expect(findingOf(sessionId)).toBe("raise the pod memory limit to 2Gi");
     });
 
@@ -668,16 +668,14 @@ describe("API-local session store", () => {
     // is the most confident the run reached, not the last thing it typed.
     it("leads with the most confident claim, the newer of two equals winning", () => {
       const sessionId = investigation();
-      proposeHypothesis(sessionId, "the cache size grew at the merge");
-      proposeHypothesis(sessionId, "the sidecar leaks between deploys");
-      resolveHypothesis(sessionId, {
-        id: "h1",
+      recordHypothesis(sessionId, {
+        statement: "the cache size grew at the merge",
         verdict: "symptom",
         finding: "it climbs with the cache",
         evidenceIds: [cite(sessionId, "tu-1", 0)],
       });
-      resolveHypothesis(sessionId, {
-        id: "h2",
+      recordHypothesis(sessionId, {
+        statement: "the sidecar leaks between deploys",
         verdict: "root_cause",
         finding: "the leak survives the restart",
         evidenceIds: [cite(sessionId, "tu-2", 1)],
@@ -685,9 +683,8 @@ describe("API-local session store", () => {
       // The cause outranks the symptom even though the symptom settled first.
       expect(findingOf(sessionId)).toBe("the sidecar leaks between deploys");
 
-      proposeHypothesis(sessionId, "the pool never returns its connections");
-      resolveHypothesis(sessionId, {
-        id: "h3",
+      recordHypothesis(sessionId, {
+        statement: "the pool never returns its connections",
         verdict: "root_cause",
         finding: "the pool is full at the crash",
         evidenceIds: [cite(sessionId, "tu-3", 2)],

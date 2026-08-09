@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { Page } from "@/components/layout/Page";
-import { ChatSlot } from "@/components/layout/ChatHost";
+import { SessionView } from "@/pages/SessionView";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -221,7 +221,7 @@ export function AgentPage(): React.JSX.Element {
       {/* The fall belongs to this surface alone, where the conversation has the
           whole stage to fall through. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:stage-fall">
-        <ChatSlot className="flex min-h-0 flex-1 flex-col" />
+        <SessionView sessionId={sessionId} />
       </div>
       <ConfirmDialog
         open={confirmingDelete}

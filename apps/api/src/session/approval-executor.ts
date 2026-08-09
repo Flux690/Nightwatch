@@ -10,7 +10,7 @@ import type { ToolOutcome } from "@nightwarden/shared";
 // What the model is sent back, and how the console draws the settled card. The
 // two travel together so the transcript cannot say "failed" where the model was
 // told otherwise.
-export interface ApprovedToolResult {
+interface ApprovedToolResult {
   result: ToolResult;
   outcome?: ToolOutcome;
 }

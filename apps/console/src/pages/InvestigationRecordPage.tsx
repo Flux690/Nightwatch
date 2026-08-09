@@ -14,6 +14,7 @@ import {
 
 import { Page } from "@/components/layout/Page";
 import { ChatRail } from "@/components/layout/ChatRail";
+import { SessionView } from "@/pages/SessionView";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ReportPanel } from "@/components/report/ReportPanel";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,13 @@ export function InvestigationRecordPage(): React.JSX.Element {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = session?.title ?? "";
 
+  /* A run in flight has the whole stage: the transcript is the live view, and a
+     report drawn beside it would be a document being written in front of the
+     reader. The record takes over the moment the run stops - written up or not,
+     because a run that crashed before its write-up still has a ledger worth
+     reading. */
+  const working = session?.running ?? false;
+
   const remove = useMutation({
     mutationFn: () =>
       apiFetch<void>(`/api/sessions/${sessionId}`, { method: "DELETE" }),
@@ -176,7 +184,7 @@ export function InvestigationRecordPage(): React.JSX.Element {
                 of the one on screen, so a gap separates them rather than reading
                 as a third stepper button. It cannot sit in the rail: closed, the
                 rail is zero wide and has nothing to click. */}
-            {chatRailOpen && (
+            {!working && chatRailOpen && (
               <Button
                 variant="ghost"
                 size="icon"
@@ -197,42 +205,54 @@ export function InvestigationRecordPage(): React.JSX.Element {
                 while its menu is open. This one is not a trigger: expanded means
                 the rail is open, which is the resting state, so the light would
                 never go out. The attribute stays, the fill does not. */}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
-              aria-expanded={chatRailOpen}
-              className={cn(
-                "aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover",
-                !chatRailOpen && "ml-3",
-              )}
-              onClick={() => {
-                // Closing leaves expanded behind with it: a rail that is not on
-                // screen cannot be in a mode.
-                setChatRailOpen((prev) => !prev);
-                setChatExpanded(false);
-              }}
-            >
-              <PanelRight {...ICON_UI} />
-            </Button>
+            {!working && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={chatRailOpen ? "Hide the chat" : "Show the chat"}
+                aria-expanded={chatRailOpen}
+                className={cn(
+                  "aria-expanded:bg-transparent hover:aria-expanded:bg-state-hover",
+                  !chatRailOpen && "ml-3",
+                )}
+                onClick={() => {
+                  // Closing leaves expanded behind with it: a rail that is not on
+                  // screen cannot be in a mode.
+                  setChatRailOpen((prev) => !prev);
+                  setChatExpanded(false);
+                }}
+              >
+                <PanelRight {...ICON_UI} />
+              </Button>
+            )}
           </div>
         </>
       }
     >
-      {/* Positioned, so the expanded rail covers the report rather than pushing
-          it out. The report stays mounted underneath and comes back unscrolled. */}
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
-          <ReportPanel
-            report={report?.report ?? null}
-            decisions={report?.decisions ?? []}
-            evidence={report?.evidence ?? []}
-            conviction={report?.conviction ?? {}}
-            alerts={session?.alerts ?? []}
+      {working ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:stage-fall">
+          <SessionView sessionId={sessionId === "" ? null : sessionId} />
+        </div>
+      ) : (
+        /* Positioned, so the expanded rail covers the report rather than pushing
+           it out. The report stays mounted underneath and comes back unscrolled. */
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
+            <ReportPanel
+              report={report?.report ?? null}
+              decisions={report?.decisions ?? []}
+              evidence={report?.evidence ?? []}
+              conviction={report?.conviction ?? {}}
+              alerts={session?.alerts ?? []}
+            />
+          </div>
+          <ChatRail
+            sessionId={sessionId === "" ? null : sessionId}
+            open={chatRailOpen}
+            expanded={chatExpanded}
           />
         </div>
-        <ChatRail open={chatRailOpen} expanded={chatExpanded} />
-      </div>
+      )}
       <ConfirmDialog
         open={confirmingDelete}
         onOpenChange={(open) => {

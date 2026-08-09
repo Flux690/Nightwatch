@@ -53,25 +53,6 @@ function parseRow(row: RawRow): PendingHumanInput {
   };
 }
 
-export function insertPendingHumanInput(
-  pendingHumanInput: PendingHumanInput,
-): void {
-  getDb()
-    .prepare(
-      `INSERT INTO pending_human_input
-         (session_id, tool_use_id, kind, completed_results, claimed_at)
-       VALUES
-         (@sessionId, @toolUseId, @kind, @completedResults, @claimedAt)`,
-    )
-    .run({
-      sessionId: pendingHumanInput.sessionId,
-      toolUseId: pendingHumanInput.toolUseId,
-      kind: pendingHumanInput.kind,
-      completedResults: JSON.stringify(pendingHumanInput.completedResults),
-      claimedAt: pendingHumanInput.claimedAt ?? null,
-    });
-}
-
 export function claimPendingHumanInput(sessionId: string): boolean {
   const result = getDb()
     .prepare(

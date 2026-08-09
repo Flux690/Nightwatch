@@ -4,7 +4,7 @@ import { getDb } from "./client.js";
 
 // Runner record stored in DB: the SHA-256 hash (hex) of the plaintext nwr_... credential.
 // Plaintext is returned once at generation and never stored or logged.
-export type RunnerRow = {
+type RunnerRow = {
   id: string;
   tokenHash: string;
   platform: Platform;
@@ -15,7 +15,7 @@ export type RunnerRow = {
 };
 
 // Public view returned by the list endpoint: no hash, no plaintext.
-export type RunnerMeta = {
+type RunnerMeta = {
   id: string;
   platform: Platform;
   label: string | null;
@@ -123,14 +123,6 @@ export function findRunnerByToken(plaintext: string): RunnerRow | undefined {
   const raw = getDb()
     .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE token = ?`)
     .get(hashToken(plaintext)) as Record<string, unknown> | undefined;
-  return raw ? mapRow(raw) : undefined;
-}
-
-// Look up a runner record by its UUID (used by routes that receive the record id, not the plaintext).
-export function findRunnerById(id: string): RunnerRow | undefined {
-  const raw = getDb()
-    .prepare(`SELECT ${SELECT_ROW} FROM runner WHERE id = ?`)
-    .get(id) as Record<string, unknown> | undefined;
   return raw ? mapRow(raw) : undefined;
 }
 

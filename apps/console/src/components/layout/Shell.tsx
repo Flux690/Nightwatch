@@ -16,8 +16,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
-import { ChatHost } from "@/components/layout/ChatHost";
 import { useAuth } from "@/auth/AuthContext";
 import { cn } from "@/lib/utils";
 import { ICON_NAV } from "@/lib/iconProps";
@@ -45,9 +43,9 @@ export function Shell({
   );
 }
 
-/* Navigation, the stage it pushes, and the chat's permanent home. What a page
-   is made of is the route's business, so nothing here reads the pathname for
-   anything but which nav item is lit. */
+/* Navigation and the stage it pushes. What a page is made of is the route's
+   business, so nothing here reads the pathname for anything but which nav item
+   is lit. */
 function ShellContent({
   children,
 }: {
@@ -163,7 +161,7 @@ function ShellContent({
         {/* Scrolling is the page's to decide: a column of content scrolls here,
             and a report beside a rail scrolls inside its own column. */}
         <div className="relative flex min-h-0 flex-1 flex-col overflow-auto">
-          <ChatHost>{children}</ChatHost>
+          {children}
         </div>
       </SidebarInset>
     </>

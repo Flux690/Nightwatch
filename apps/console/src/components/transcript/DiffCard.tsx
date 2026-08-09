@@ -13,7 +13,7 @@ export interface DiffLine {
 export interface DiffHunk {
   lines: DiffLine[];
 }
-export interface FileChange {
+interface FileChange {
   path: string;
   hunks: DiffHunk[];
 }

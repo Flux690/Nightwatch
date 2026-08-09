@@ -5,11 +5,11 @@ import type { ResolvedLLMConfig } from "@nightwarden/shared";
 // The single answer to "can the agent reach an LLM?". Every entry point that
 // starts a run asks here, so a half-configured install is refused at the door
 // with a specific reason instead of failing mid-investigation as a provider error.
-export type LLMReadiness =
+type LLMReadiness =
   | { ready: true; config: ResolvedLLMConfig; apiKey: string }
   | { ready: false; missing: LLMRequirement[] };
 
-export type LLMRequirement = "provider" | "model" | "API key";
+type LLMRequirement = "provider" | "model" | "API key";
 
 export function checkLLMReadiness(): LLMReadiness {
   const config = loadConfig();

@@ -1,11 +1,8 @@
 import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
-import { asRecord } from "@/lib/toolResult";
 import { revealToolCall } from "@/components/transcript/revealToolCall";
-import { quoteLine } from "@/components/transcript/toolFindings";
 import { Button } from "@/components/ui/button";
 import {
-  ToolBody,
   resultSummary,
   targetOf,
 } from "@/components/transcript/toolPresentation";
@@ -13,20 +10,13 @@ import { ChangesList, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
 import { plotFrom } from "./plot.js";
 
-/* The reading lifts the worst line out of a log; the body below quotes the log
-   in order. When the worst line is also the first, the two land on adjacent rows
-   and one event reads as two, so the body carries it alone. */
-function bodyOpensWithTheReading(result: string, reading: string): boolean {
-  const record = asRecord(result);
-  const lines = record === null ? null : record["lines"];
-  const first = Array.isArray(lines) ? lines[0] : null;
-  if (typeof first !== "string" || first.trim() === "") return false;
-  return reading.includes(quoteLine(first));
-}
+/* One cited tool call, shown under the claim it backs.
 
-/* One cited tool call, quoted under the claim it backs. The reading leads
-   because that is what the claim rests on; the result follows. Every value came
-   from the recorded call, so checking a claim is reading rather than trusting. */
+   Readings only: a chart, a list of merged changes, or the one line the result
+   amounts to. The raw body is deliberately absent - a report that quotes two
+   hundred log lines is a transcript with extra steps, and the transcript is one
+   click away. That also settles the duplicate-line problem for good: with no
+   body beneath it, the reading cannot repeat itself. */
 export function Evidence({
   entry,
   alert,
@@ -70,40 +60,24 @@ export function Evidence({
 
   const summary = resultSummary(entry.toolName, entry.result, entry.outcome);
   // Drawn when the result holds a measurement, listed when it holds merged pull
-  // requests, quoted otherwise. Every branch ends in something on screen: a
-  // result we cannot draw is still a result the operator came here to read.
+  // requests, and otherwise left to the reading alone.
   const plot = plotFrom(entry.result, alert);
   const pullRequests = pullRequestsFrom(entry.result);
-  // A one-line plain result is already stated in full by the reading above it,
-  // so quoting it underneath would print the same sentence twice.
-  const worthQuoting =
-    asRecord(entry.result) !== null || entry.result.includes("\n");
-  const quotedBelow =
-    plot === null && pullRequests.length === 0 && worthQuoting;
-  const showSummary =
-    summary.text !== "" &&
-    !(quotedBelow && bodyOpensWithTheReading(entry.result, summary.text));
 
   return (
     <div className="mt-2 border-l border-border pl-3">
       {header}
-      {showSummary && (
+      {summary.text !== "" && (
         <p className={cn("m-0 mt-1 font-mono text-sm", summary.tone)}>
           {summary.text}
         </p>
       )}
-      {(plot !== null || pullRequests.length > 0 || worthQuoting) && (
+      {(plot !== null || pullRequests.length > 0) && (
         <div className="mt-2 text-muted-foreground">
           {plot !== null ? (
             <Measurement plot={plot} />
-          ) : pullRequests.length > 0 ? (
-            <ChangesList pullRequests={pullRequests} />
           ) : (
-            <ToolBody
-              toolName={entry.toolName}
-              input={entry.input}
-              result={entry.result}
-            />
+            <ChangesList pullRequests={pullRequests} />
           )}
         </div>
       )}

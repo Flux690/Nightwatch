@@ -3,7 +3,7 @@ import { getDb } from "./client.js";
 import { hashToken } from "./runner.js";
 import { encrypt, decrypt } from "../secrets.js";
 
-export interface AlertSourceRow {
+interface AlertSourceRow {
   kind: string;
   lastReceivedAt: string | null;
   createdAt: string;

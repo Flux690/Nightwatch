@@ -14,7 +14,7 @@ export function timeAgo(dateString: string | null): string {
 
 export const DAY_GROUPS = ["Today", "Yesterday", "Older"] as const;
 
-export type DayGroup = (typeof DAY_GROUPS)[number];
+type DayGroup = (typeof DAY_GROUPS)[number];
 
 // Calendar days apart, not hours: 23:50 yesterday and 00:10 today are twenty
 // minutes and two days, and the operator remembers which day they spoke.

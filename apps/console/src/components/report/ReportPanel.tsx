@@ -1,49 +1,46 @@
 import type {
   Conviction,
   GatedCall,
-  NormalizedAlert,
+  Hypothesis,
   SessionAlert,
   Report,
   ReportConviction,
   ResolvedEvidence,
+  TimelineEntry,
   Verdict,
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 import { StatusText, type StatusTone } from "@/components/ui/status";
 import { Evidence } from "./Evidence.js";
 
-/* What the operator did, and what came of it. Three words because there are
-   three outcomes worth telling apart: it ran, they said no, or it broke. Who
-   decided is not shown - there is one operator, and the record is theirs. */
-function decisionView(call: GatedCall): { label: string; tone: StatusTone } {
-  if (call.decision === "rejected") return { label: "Declined", tone: "muted" };
-  return call.outcome === "system" || call.outcome === "retryable"
-    ? { label: "Failed", tone: "fail" }
-    : { label: "Ran", tone: "ok" };
-}
+/* The investigation as a document. Two authors on one page: the prose at the
+   top is the model's, written in one call once the run was over; everything
+   beneath it - what backs a claim, how well, and what actually ran - is the
+   system answering for itself. The headings are nominal throughout, because
+   there is no "we" here: there is NightWarden, and there is the record. */
 
-// The investigation report rendered in the main area. The claims are the
-// model's; everything around them - the evidence, the conviction, what ran - is
-// the system answering for itself.
-
-/* Weight of ink, not colour: a verdict classifies a claim, it does not ask for
-   anything, and a page of green and amber labels spends the operator's attention
-   before the report has said anything. Only "Open" keeps a colour, because it is
-   the one that means work is still outstanding. */
+// Colour is kept for the two verdicts that change what an operator does next.
+// The rest are set in the ink hierarchy: a page where every label shouts says
+// nothing about which one matters.
 const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
-  root_cause: { label: "Root cause", className: "text-foreground" },
-  trigger: { label: "Trigger", className: "text-foreground" },
+  root_cause: { label: "Root cause", className: "text-ok" },
+  trigger: { label: "Trigger", className: "text-ok" },
   contributing_factor: {
     label: "Contributing factor",
     className: "text-muted-foreground",
   },
   symptom: { label: "Symptom", className: "text-muted-foreground" },
-  disproven: {
-    label: "Disproven",
-    className: "text-ink-subtle line-through",
-  },
-  open: { label: "Open", className: "text-run" },
+  disproven: { label: "Disproven", className: "text-muted-foreground" },
 };
+
+// Most confident first, so the claim that decides what happens next leads.
+const CONFIDENCE: Verdict[] = [
+  "root_cause",
+  "trigger",
+  "contributing_factor",
+  "symptom",
+  "disproven",
+];
 
 function SectionHeading({
   children,
@@ -51,10 +48,23 @@ function SectionHeading({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <h2 className="mb-2 text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
+    <h2 className="mb-2 font-mono text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground">
       {children}
     </h2>
   );
+}
+
+/* What the operator did, and what came of it. Three words because there are
+   three outcomes worth telling apart: it ran, they said no, or it broke. Who
+   decided is not shown - there is one operator, and the record is theirs. */
+function decisionView(call: {
+  decision: "approved" | "rejected";
+  outcome?: string;
+}): { label: string; tone: StatusTone } {
+  if (call.decision === "rejected") return { label: "Declined", tone: "muted" };
+  return call.outcome === "system" || call.outcome === "retryable"
+    ? { label: "Failed", tone: "fail" }
+    : { label: "Ran", tone: "ok" };
 }
 
 // What woke the operator, read from the alerts themselves rather than from the
@@ -109,49 +119,72 @@ function ConvictionMark({
   return <span className="text-sm text-ink-subtle">{conviction}</span>;
 }
 
-/* Which claim draws each cited call. A call two hypotheses and a fix all rest on
-   is one measurement, so it is drawn under the first claim to name it and only
-   named by the rest - otherwise the same chart fills the page three times and
-   reads as three separate readings. */
-function drawnBy(report: Report): Map<string, string> {
-  const owner = new Map<string, string>();
-  for (const claim of [...report.hypotheses, ...report.fixes]) {
-    for (const id of claim.evidenceIds) {
-      if (!owner.has(id)) owner.set(id, claim.id);
-    }
-  }
-  return owner;
+function clockOf(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? iso
+    : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function CitedEvidence({
-  claimId,
-  ids,
-  evidence,
-  drawn,
-  alert,
-}: {
-  claimId: string;
-  ids: string[];
-  evidence: Map<string, ResolvedEvidence>;
-  drawn: Map<string, string>;
-  alert: NormalizedAlert | null;
-}): React.JSX.Element | null {
-  // A citation naming no call renders nothing at all. The claim above it stands
-  // either way, so reaching past the evidence shows as a claim with none. Cited
-  // once however often it is named: a repeat is the model's slip.
-  const cited = [...new Set(ids)].flatMap((id) => evidence.get(id) ?? []);
-  if (cited.length === 0) return null;
+/* The model's entries and the system's, in one order. Every released write is
+   contributed here rather than left to the model to list, so an action cannot
+   be missing from a timeline the model did not author in full. */
+function mergedTimeline(
+  written: TimelineEntry[],
+  decisions: GatedCall[],
+): TimelineEntry[] {
+  const actions: TimelineEntry[] = decisions.map((call) => ({
+    at: call.at,
+    what: call.toolName,
+    action: {
+      toolName: call.toolName,
+      target: call.target,
+      decision: call.decision,
+      ...(call.outcome !== undefined && { outcome: call.outcome }),
+    },
+  }));
+  return [...written, ...actions].sort((a, b) => a.at.localeCompare(b.at));
+}
+
+function TimelineRow({ entry }: { entry: TimelineEntry }): React.JSX.Element {
+  const action = entry.action;
   return (
-    <div className="mt-2">
-      {cited.map((entry) => (
-        <Evidence
-          key={entry.toolUseId}
-          entry={entry}
-          alert={alert}
-          repeat={drawn.get(entry.toolUseId) !== claimId}
-        />
-      ))}
-    </div>
+    <li className="flex gap-3">
+      <span className="shrink-0 tabular-nums text-sm text-ink-subtle">
+        {clockOf(entry.at)}
+      </span>
+      {action === undefined ? (
+        <span className="min-w-0 text-sm">{entry.what}</span>
+      ) : (
+        <span className="flex min-w-0 items-baseline gap-2">
+          <StatusText tone={decisionView(action).tone}>
+            {decisionView(action).label}
+          </StatusText>
+          <span className="min-w-0 truncate font-mono text-sm">
+            {action.toolName}
+            {action.target !== null && (
+              <span className="text-muted-foreground"> {action.target}</span>
+            )}
+          </span>
+        </span>
+      )}
+    </li>
+  );
+}
+
+function Prose({
+  heading,
+  children,
+}: {
+  heading: string;
+  children: string;
+}): React.JSX.Element | null {
+  if (children.trim() === "") return null;
+  return (
+    <section className="mt-12">
+      <SectionHeading>{heading}</SectionHeading>
+      <p className="m-0 text-sm">{children}</p>
+    </section>
   );
 }
 
@@ -192,126 +225,115 @@ export function ReportPanel({
   }
 
   const byId = new Map(evidence.map((e) => [e.toolUseId, e]));
-  const drawn = drawnBy(report);
-  // The verdict line is the root-cause hypothesis itself, not a second
-  // free-text field that could disagree with it.
-  const rootCause = report.hypotheses.find((h) => h.verdict === "root_cause");
+  // Coalesced rather than read straight: a record stored before the write-up
+  // existed carries no key at all, and an absent one must read as "not written
+  // up yet", not as an object to reach into.
+  const submitted = report.submitted ?? null;
+  const ranked = [...report.hypotheses].sort(
+    (a, b) => CONFIDENCE.indexOf(a.verdict) - CONFIDENCE.indexOf(b.verdict),
+  );
+  const findings = ranked.filter((h) => h.verdict !== "disproven");
+  const ruledOut = ranked.filter((h) => h.verdict === "disproven");
+  const timeline = mergedTimeline(submitted?.timeline ?? [], decisions);
+
+  /* A piece of evidence is drawn in full once per report; every later citation
+     of it is named and linked instead. Filled while rendering on purpose - the
+     order claims appear in is the order the reader meets them in, so the first
+     drawing is the one they can scroll back to. */
+  const drawn = new Set<string>();
+  const citedUnder = (ids: string[]): React.JSX.Element | null => {
+    const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
+    if (cited.length === 0) return null;
+    return (
+      <div className="mt-2">
+        {cited.map((entry) => {
+          const repeat = drawn.has(entry.toolUseId);
+          drawn.add(entry.toolUseId);
+          return (
+            <Evidence
+              key={entry.toolUseId}
+              entry={entry}
+              alert={alert}
+              repeat={repeat}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* The verdict label is dropped under "Ruled out", where the heading already
+     says it. The conviction mark is not: how well a dismissal is backed is the
+     same question as how well a cause is, and the reader who doubts the verdict
+     is exactly the one who needs it. */
+  const claimRow = (h: Hypothesis, withVerdict: boolean): React.JSX.Element => (
+    <li key={h.id}>
+      <div className="flex items-baseline gap-2">
+        {withVerdict && (
+          <span className={cn("text-sm", VERDICT_VIEW[h.verdict].className)}>
+            {VERDICT_VIEW[h.verdict].label}
+          </span>
+        )}
+        <ConvictionMark conviction={conviction[h.id]} />
+      </div>
+      <p className="m-0 mt-1 text-sm font-medium">{h.statement}</p>
+      {h.finding && (
+        <p className="m-0 mt-1 text-sm text-muted-foreground">{h.finding}</p>
+      )}
+      {citedUnder(h.evidenceIds)}
+    </li>
+  );
 
   return (
     <div className="mx-auto w-full max-w-report px-8 py-6">
       <AlertBand alerts={alerts} />
-      <header className="mb-6">
+      <header>
+        {/* The lede is the answer. Until the run has been written up there is
+            no answer to lead with, so the leading claim stands in for it. */}
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
-          Investigation
+          {submitted === null ? "Investigation" : submitted.summary}
         </h1>
-        {rootCause !== undefined && (
-          <p className="m-0 mt-2 text-lg font-medium">{rootCause.statement}</p>
+        {submitted === null && findings[0] !== undefined && (
+          <p className="m-0 mt-2 text-lg font-medium">
+            {findings[0].statement}
+          </p>
         )}
       </header>
 
-      {report.hypotheses.length > 0 && (
+      {timeline.length > 0 && (
         <section className="mt-12">
-          <SectionHeading>Hypotheses</SectionHeading>
-          <ul className="m-0 flex list-none flex-col gap-6 p-0">
-            {report.hypotheses.map((h) => (
-              <li key={h.id}>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "text-sm font-semibold uppercase tracking-[0.05em]",
-                      VERDICT_VIEW[h.verdict].className,
-                    )}
-                  >
-                    {VERDICT_VIEW[h.verdict].label}
-                  </span>
-                  <ConvictionMark conviction={conviction[h.id]} />
-                </div>
-                <p className="m-0 mt-1 text-sm">{h.statement}</p>
-                {h.finding && (
-                  <p className="m-0 mt-1 text-sm text-muted-foreground">
-                    {h.finding}
-                  </p>
-                )}
-                <CitedEvidence
-                  claimId={h.id}
-                  ids={h.evidenceIds}
-                  evidence={byId}
-                  drawn={drawn}
-                  alert={alert}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {report.fixes.length > 0 && (
-        <section className="mt-12">
-          <SectionHeading>Proposed fix</SectionHeading>
-          <ul className="m-0 flex list-none flex-col gap-4 p-0">
-            {report.fixes.map((fix, i) => (
-              <li key={fix.id}>
-                <div className="flex items-baseline gap-2">
-                  {/* Everything before the last one was turned down, and the
-                      record says so rather than dropping it. */}
-                  {i < report.fixes.length - 1 && (
-                    <span className="text-sm text-muted-foreground uppercase tracking-[0.05em]">
-                      Superseded
-                    </span>
-                  )}
-                  <p
-                    className={cn(
-                      "m-0 text-sm font-medium",
-                      i < report.fixes.length - 1 && "text-muted-foreground",
-                    )}
-                  >
-                    {fix.summary}
-                  </p>
-                  <ConvictionMark conviction={conviction[fix.id]} />
-                </div>
-                <CitedEvidence
-                  claimId={fix.id}
-                  ids={fix.evidenceIds}
-                  evidence={byId}
-                  drawn={drawn}
-                  alert={alert}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {decisions.length > 0 && (
-        <section className="mt-12">
-          <SectionHeading>Actions taken</SectionHeading>
+          <SectionHeading>Timeline</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {decisions.map((decided) => {
-              const { label, tone } = decisionView(decided);
-              return (
-                <li key={decided.toolUseId}>
-                  <div className="flex items-baseline gap-2">
-                    <StatusText tone={tone}>{label}</StatusText>
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm">
-                      {decided.toolName}
-                      {decided.target ? (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          {decided.target}
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
-                  {/* Only on a failure: on a success the detail is the PR or the
-                      command's own output, which the transcript already shows. */}
-                  {label === "Failed" && decided.result && (
-                    <p className="m-0 mt-1 text-sm text-muted-foreground">
-                      {decided.result}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
+            {timeline.map((entry, i) => (
+              <TimelineRow key={`${entry.at}-${i}`} entry={entry} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {submitted !== null && (
+        <>
+          <Prose heading="Impact">{submitted.impact}</Prose>
+          <Prose heading="Recommendation">{submitted.recommendation}</Prose>
+        </>
+      )}
+
+      {findings.length > 0 && (
+        <section className="mt-12">
+          <SectionHeading>Findings</SectionHeading>
+          <ul className="m-0 flex list-none flex-col gap-6 p-0">
+            {findings.map((h) => claimRow(h, true))}
+          </ul>
+        </section>
+      )}
+
+      {ruledOut.length > 0 && (
+        <section className="mt-12">
+          {/* No verdict label on these rows: the heading already says it, and
+              repeating "Disproven" down the column says nothing new. */}
+          <SectionHeading>Ruled out</SectionHeading>
+          <ul className="m-0 flex list-none flex-col gap-6 p-0">
+            {ruledOut.map((h) => claimRow(h, false))}
           </ul>
         </section>
       )}

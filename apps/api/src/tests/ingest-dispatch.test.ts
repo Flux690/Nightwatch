@@ -208,8 +208,13 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     // End the active run; a seeded report satisfies the finish gate so the
     // released free-form finish completes it, and the dedup key clears.
     seedCompleteReport(dispatcher.getActiveAlertSession()!);
-    gate.releaseAll();
-    await vi.advanceTimersByTimeAsync(50);
+    // The free-form finish is followed by the composition turn, which parks on
+    // the same gate. The clock is faked here, so this drives the loop itself
+    // rather than reaching for releaseUntil.
+    while (dispatcher.getActiveAlertSession() !== null) {
+      gate.releaseAll();
+      await vi.advanceTimersByTimeAsync(50);
+    }
     expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(false);
 
     // The same alert now starts a fresh investigation - no 24h suppression.

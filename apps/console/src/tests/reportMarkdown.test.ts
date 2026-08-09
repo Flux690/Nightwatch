@@ -33,18 +33,24 @@ const RESPONSE: SessionReportResponse = {
         verdict: "root_cause",
         finding: "the working set climbs with accepted job size",
         evidenceIds: ["tu-stats", "tu-stats", "tu-gone"],
-        proposedAt: AT,
-        resolvedAt: AT,
+        recordedAt: AT,
       },
-    ],
-    fixes: [
       {
-        id: "f1",
-        summary: "Cap concurrency at one job per worker",
+        id: "h2",
+        statement: "The ffmpeg bump leaks",
+        verdict: "disproven",
+        finding: "the working set was flat across that window",
         evidenceIds: ["tu-stats"],
         recordedAt: AT,
       },
     ],
+    submitted: {
+      summary: "encodr-worker exhausted its limit buffering two large jobs",
+      timeline: [{ at: "2026-08-03T20:11:00.000Z", what: "PR #812 merged" }],
+      impact: "One transcode job dropped",
+      recommendation: "Cap concurrency at one job per worker",
+      submittedAt: AT,
+    },
     updatedAt: AT,
   },
   decisions: [],
@@ -83,12 +89,21 @@ describe("reportToMarkdown", () => {
     expect(md).not.toContain("tu-gone");
   });
 
-  it("hangs a fix's evidence off the fix rather than in a block of its own", () => {
+  it("leads with the write-up, then the record it was composed from", () => {
     const md = reportToMarkdown("encodr-worker memory", [], RESPONSE);
 
     expect(md).toContain(
-      "- Cap concurrency at one job per worker\n  - `GetDockerStats`",
+      "encodr-worker exhausted its limit buffering two large jobs",
     );
+    expect(md).toContain("## Timeline");
+    expect(md).toContain("- 2026-08-03T20:11:00.000Z - PR #812 merged");
+    expect(md).toContain("## Impact");
+    expect(md).toContain("## Recommendation");
+    expect(md).toContain("Cap concurrency at one job per worker");
+    // What was ruled out travels too: it is the half a reader needs when the
+    // agent turns out to be wrong.
+    expect(md.indexOf("## Findings")).toBeLessThan(md.indexOf("## Ruled out"));
+    expect(md).toContain("### The ffmpeg bump leaks");
   });
 
   it("still reads as markdown when the record holds nothing but its alerts", () => {
@@ -97,6 +112,6 @@ describe("reportToMarkdown", () => {
     expect(md).toContain("# encodr-worker memory");
     expect(md).toContain("- ContainerRestarting (critical)");
     expect(md).toContain("still firing");
-    expect(md).not.toContain("## Claims");
+    expect(md).not.toContain("## Findings");
   });
 });

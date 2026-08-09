@@ -108,7 +108,7 @@ function setup({
         json: () => Promise.resolve({ sessionId: "new-s1" }),
       });
     }
-    if (url.includes("/runners") || url.includes("/remediation-actions")) {
+    if (url.includes("/runners")) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     }
     // Configured, so the page has a status line to put in its controls row.
@@ -405,52 +405,28 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    // The one transition ticket 016 depends on: the agent promotes a session
-    // and the URL changes families underneath a chat that is mid-stream.
-    it("keeps a streaming run alive across the /agent to /investigations split", async () => {
+    /* No session crosses between the two families, so nothing has to survive
+       the crossing. The mode is picked before the first turn runs and the route
+       follows from it, which is what let the portal that used to carry the chat
+       between /agent and /investigations be deleted outright. */
+    it("sends an investigation straight to its record, never through /agent", async () => {
       const user = userEvent.setup();
-      const { router, setInvestigation } = setup();
+      const { router } = setup();
 
       await screen.findByRole("textbox");
-      await user.type(screen.getByRole("textbox"), "Check disk");
+      await user.click(screen.getByRole("button", { name: /^mode:/i }));
+      await user.click(
+        await screen.findByRole("menuitem", { name: /investigate/i }),
+      );
+
+      await user.type(screen.getByRole("textbox"), "Why is checkout slow?");
       await user.click(screen.getByRole("button", { name: /send/i }));
-      await waitFor(() => {
-        expect(router.state.location.pathname).toBe("/agent/new-s1");
-      });
 
-      // This text exists only in the live view's own state - the server has no
-      // record of it, so nothing can re-fetch it after a remount.
-      act(() => {
-        MockEventSource.broadcast({
-          messageId: "m1",
-          type: "TEXT_MESSAGE_CONTENT",
-          payload: {
-            sessionId: "new-s1",
-            kind: "text",
-            delta: "Analyzing disk usage...",
-          },
-        });
-      });
-      await screen.findByText("Analyzing disk usage...");
-      const streamBefore = MockEventSource.latest;
-
-      // What the promotion does to the address: replaced, not pushed, and
-      // across route families.
-      await act(async () => {
-        await router.navigate({
-          to: "/investigations/$id",
-          params: { id: "new-s1" },
-          replace: true,
-        });
-      });
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/investigations/new-s1");
       });
-
-      // Only a surviving instance can still be holding this.
-      expect(screen.getByText("Analyzing disk usage...")).toBeInTheDocument();
-      expect(MockEventSource.latest).toBe(streamBefore);
-      expect(screen.getByRole("textbox")).toBeInTheDocument();
+      // One stream for the run, opened where it was started and never reopened.
+      expect(MockEventSource.instances).toHaveLength(1);
     });
 
     // The layout is the route's and nothing else's. A session flipping to an

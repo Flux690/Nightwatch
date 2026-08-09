@@ -12,7 +12,7 @@ import { homeDirFor, type SandboxLog } from "./workspace.js";
 
 const HOME_SUFFIX = homeDirFor("");
 
-export interface SalvageOptions {
+interface SalvageOptions {
   workspacesDir: string;
   // Rejects when no GitHub integration is bound; the affected workspace is
   // then kept on disk rather than silently discarded.
@@ -21,7 +21,7 @@ export interface SalvageOptions {
   log?: SandboxLog;
 }
 
-export interface SalvageResult {
+interface SalvageResult {
   pushed: number;
   kept: number;
 }

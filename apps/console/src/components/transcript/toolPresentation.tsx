@@ -173,7 +173,7 @@ function EventList({
 // Per-tool bodies. A tool with no entry falls back to its raw result, which is
 // honest: better a JSON block than a shape we pretended to understand. The
 // report quotes a cited call through this too, so one result renders one way.
-export function ToolBody({
+function ToolBody({
   toolName,
   input,
   result,
@@ -278,7 +278,7 @@ export function ToolBody({
   return <CappedText text={text} />;
 }
 
-export function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
+function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const { toolName, input } = item;

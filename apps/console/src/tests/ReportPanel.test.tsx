@@ -7,7 +7,6 @@ import type {
   ReportConviction,
   ResolvedEvidence,
 } from "@nightwarden/shared";
-import userEvent from "@testing-library/user-event";
 
 import { ReportPanel } from "@/components/report/ReportPanel";
 
@@ -46,31 +45,31 @@ const REPORT: Report = {
       verdict: "root_cause",
       finding: "climb starts at the merge timestamp",
       evidenceIds: ["tu-stats"],
-      proposedAt: RESOLVED,
-      resolvedAt: RESOLVED,
+      recordedAt: RESOLVED,
     },
     {
       id: "h2",
       statement: "Host memory pressure",
       verdict: "disproven",
       finding: "host free memory stayed flat",
-      evidenceIds: [],
-      proposedAt: RESOLVED,
-      resolvedAt: RESOLVED,
-    },
-  ],
-  fixes: [
-    {
-      id: "f1",
-      summary: "Revert PR #482",
       evidenceIds: ["tu-changes"],
       recordedAt: RESOLVED,
     },
   ],
+  submitted: {
+    summary: "payments-worker was OOM-killed after PR #482 raised its floor",
+    timeline: [
+      { at: "2026-07-21T12:05:00.000Z", what: "PR #482 merged" },
+      { at: "2026-07-21T12:30:00.000Z", what: "the container was killed" },
+    ],
+    impact: "Nine minutes of failed payment writes",
+    recommendation: "Revert PR #482",
+    submittedAt: RESOLVED,
+  },
   updatedAt: RESOLVED,
 };
 
-const CONVICTION: ReportConviction = { h1: "corroborated", f1: "cited" };
+const CONVICTION: ReportConviction = { h1: "corroborated", h2: "cited" };
 
 const EVIDENCE: ResolvedEvidence[] = [
   {
@@ -119,24 +118,51 @@ afterEach(() => {
 });
 
 describe("ReportPanel", () => {
-  it("leads with the hypothesis that resolved as the root cause", () => {
+  it("leads with the summary the run was written up with", () => {
     render(panel());
 
-    // The verdict line and the row beneath it are one claim, so there is no
-    // second place for the cause to disagree with itself.
-    expect(screen.getAllByText("PR #482's cache bump leaks")).toHaveLength(2);
-    expect(screen.getByText("Root cause")).toBeInTheDocument();
-    expect(screen.getByText("Disproven")).toBeInTheDocument();
+    // The lede is the answer, in the model's own prose, not a row lifted out of
+    // the ledger and dressed up as one.
+    expect(
+      screen.getByRole("heading", {
+        name: "payments-worker was OOM-killed after PR #482 raised its floor",
+        level: 1,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Nine minutes of failed payment writes"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
   });
 
-  it("renders each of the six verdicts distinctly", () => {
+  it("falls back to the leading claim until the run has been written up", () => {
+    render(panel({ report: { ...REPORT, submitted: null } }));
+
+    expect(
+      screen.getByRole("heading", { name: "Investigation", level: 1 }),
+    ).toBeInTheDocument();
+    // The ledger still renders: a run that ended before its write-up is not a
+    // run with nothing to show.
+    expect(screen.getAllByText("PR #482's cache bump leaks")).toHaveLength(2);
+    expect(screen.getByText("Root cause")).toBeInTheDocument();
+  });
+
+  it("separates what held up from what was ruled out", () => {
+    render(panel());
+
+    expect(screen.getByText("Findings")).toBeInTheDocument();
+    expect(screen.getByText("Ruled out")).toBeInTheDocument();
+    // The heading says it, so the row beneath does not repeat "Disproven".
+    expect(screen.getByText("Root cause")).toBeInTheDocument();
+    expect(screen.queryByText("Disproven")).not.toBeInTheDocument();
+  });
+
+  it("renders each of the four standing verdicts distinctly", () => {
     const verdicts = [
       "root_cause",
       "trigger",
       "symptom",
       "contributing_factor",
-      "disproven",
-      "open",
     ] as const;
     render(
       panel({
@@ -148,8 +174,7 @@ describe("ReportPanel", () => {
             verdict,
             finding: "",
             evidenceIds: [],
-            proposedAt: RESOLVED,
-            resolvedAt: RESOLVED,
+            recordedAt: RESOLVED,
           })),
         },
       }),
@@ -160,8 +185,6 @@ describe("ReportPanel", () => {
       "Trigger",
       "Symptom",
       "Contributing factor",
-      "Disproven",
-      "Open",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
@@ -176,36 +199,30 @@ describe("ReportPanel", () => {
     expect(screen.queryByText("verified")).not.toBeInTheDocument();
   });
 
-  it("keeps a rejected fix on screen beside the one that replaced it", () => {
+  it("puts the released writes on the composed timeline, in one order", () => {
     render(
       panel({
-        report: {
-          ...REPORT,
-          fixes: [
-            {
-              id: "f1",
-              summary: "Revert PR #482",
-              evidenceIds: [],
-              recordedAt: RESOLVED,
-            },
-            {
-              id: "f2",
-              summary: "Raise the memory limit instead",
-              evidenceIds: [],
-              recordedAt: RESOLVED,
-            },
-          ],
-        },
+        decisions: [
+          {
+            toolUseId: "tu-1",
+            toolName: "RestartDockerService",
+            target: "docker/encodr/cache",
+            at: "2026-07-21T12:20:00.000Z",
+            decision: "approved",
+            result: '{"restarted":true}',
+          },
+        ],
       }),
     );
 
-    // A recommendation the operator turned down is part of the record, and
-    // which one stands has to be legible without reading the transcript.
-    expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
-    expect(
-      screen.getByText("Raise the memory limit instead"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Superseded")).toBeInTheDocument();
+    // The model wrote two entries and the system contributed the write between
+    // them: an action cannot be missing from a timeline the model did not
+    // author in full.
+    expect(screen.getByText("Timeline")).toBeInTheDocument();
+    expect(screen.getByText("PR #482 merged")).toBeInTheDocument();
+    expect(screen.getByText("RestartDockerService")).toBeInTheDocument();
+    expect(screen.getByText("Ran")).toBeInTheDocument();
+    expect(screen.getByText("the container was killed")).toBeInTheDocument();
   });
 
   it("puts the tool output that backs a claim underneath the claim", () => {
@@ -231,25 +248,23 @@ describe("ReportPanel", () => {
             { ...REPORT.hypotheses[0]!, evidenceIds: ["tu-stats"] },
             { ...REPORT.hypotheses[1]!, evidenceIds: ["tu-stats"] },
           ],
-          fixes: [{ ...REPORT.fixes[0]!, evidenceIds: ["tu-stats"] }],
         },
       }),
     );
 
     // Every claim says what it rests on, so none of them reads as unbacked.
-    expect(screen.getAllByText("GetDockerStats")).toHaveLength(3);
+    expect(screen.getAllByText("GetDockerStats")).toHaveLength(2);
     // One call is one measurement: read three times down the page it reads as
     // three, and a report that looks like more evidence than it has is worse
     // than one that looks like less.
     expect(screen.getAllByText(/mem 511 MB of 512 MB/)).toHaveLength(1);
   });
 
-  it("does not repeat a log's worst line when the body opens with it", () => {
+  it("reads a log rather than reprinting it, and links to the transcript", () => {
     render(
       panel({
         report: {
           ...REPORT,
-          fixes: [],
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-log"] }],
         },
         evidence: [
@@ -269,13 +284,17 @@ describe("ReportPanel", () => {
       }),
     );
 
-    // The reading picks the worst line; here it is also the first line the body
-    // quotes, so the two would sit on adjacent rows and one event would read as
-    // two. The body keeps it, and the reading steps aside.
+    /* The worst line, once, as the reading. The body is not quoted at all: a
+       report that reprints two hundred log lines is a transcript with extra
+       steps, and the transcript is one click away. That is also what settles
+       the duplicated line for good - there is no second copy to collide with. */
     expect(screen.getAllByText(/cannot allocate 2\.2GB buffer/)).toHaveLength(
       1,
     );
-    expect(screen.getByText(/job 4471 accepted/)).toBeInTheDocument();
+    expect(screen.queryByText(/job 4471 accepted/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /show in transcript/i }),
+    ).toBeInTheDocument();
   });
 
   it("keeps a claim whose citation resolves to nothing", () => {
@@ -287,11 +306,10 @@ describe("ReportPanel", () => {
             {
               id: "h3",
               statement: "The queue backed up first",
-              verdict: "open",
+              verdict: "symptom",
               finding: "",
               evidenceIds: ["tu-never-ran"],
-              proposedAt: RESOLVED,
-              resolvedAt: null,
+              recordedAt: RESOLVED,
             },
           ],
         },
@@ -304,33 +322,6 @@ describe("ReportPanel", () => {
     expect(screen.queryByText("GetDockerStats")).not.toBeInTheDocument();
   });
 
-  it("clips a long result to its first lines and reveals the rest on demand", async () => {
-    const output = Array.from({ length: 12 }, (_, i) => `line-${i + 1}`).join(
-      "\n",
-    );
-    render(
-      panel({
-        evidence: [
-          {
-            toolUseId: "tu-stats",
-            toolName: "GetDockerLogs",
-            input: { target: "docker/encodr/payments-worker" },
-            result: JSON.stringify({ lines: output.split("\n") }),
-          },
-        ],
-      }),
-    );
-
-    // Clipped to the body cap, and the count says how much is being held back.
-    expect(screen.getByText(/line-8/)).toBeInTheDocument();
-    expect(screen.queryByText(/line-9/)).not.toBeInTheDocument();
-
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: /show all 12 lines/i }));
-    expect(screen.getByText(/line-9/)).toBeInTheDocument();
-  });
-
   it("shows the number when a cited query returns one reading rather than a range", () => {
     // An instant query has no time axis to draw. The reading is the evidence,
     // so it is stated - never dropped for want of a chart.
@@ -338,7 +329,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
-          fixes: [],
+          submitted: null,
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-now"] }],
         },
         evidence: [
@@ -371,7 +362,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
-          fixes: [],
+          submitted: null,
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-top"] }],
         },
         evidence: [
@@ -407,7 +398,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
-          fixes: [],
+          submitted: null,
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-miss"] }],
         },
         evidence: [
@@ -433,7 +424,7 @@ describe("ReportPanel", () => {
       panel({
         report: {
           ...REPORT,
-          fixes: [],
+          submitted: null,
           hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-range"] }],
         },
         evidence: [
@@ -525,21 +516,21 @@ describe("ReportPanel", () => {
               verdict: "disproven",
               finding: "host free memory stayed flat",
               evidenceIds: [],
-              proposedAt: RESOLVED,
-              resolvedAt: RESOLVED,
+              recordedAt: RESOLVED,
             },
           ],
-          fixes: [],
+          submitted: null,
         },
       }),
     );
 
-    expect(screen.getByText("Disproven")).toBeInTheDocument();
+    expect(screen.getByText("Ruled out")).toBeInTheDocument();
+    expect(screen.queryByText("Findings")).not.toBeInTheDocument();
     expect(screen.queryByText("Root cause")).not.toBeInTheDocument();
-    expect(screen.queryByText("Proposed fix")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recommendation")).not.toBeInTheDocument();
   });
 
-  it("reports what the operator released, read from the ledger not the report text", () => {
+  it("tells a released write from a declined one and from a broken one", () => {
     render(
       panel({
         decisions: [
@@ -547,6 +538,7 @@ describe("ReportPanel", () => {
             toolUseId: "tu-1",
             toolName: "RestartDockerService",
             target: "docker/encodr-prod/encodr/cache",
+            at: "2026-07-21T12:10:00.000Z",
             decision: "approved",
             result: '{"restarted":true}',
           },
@@ -554,6 +546,7 @@ describe("ReportPanel", () => {
             toolUseId: "tu-2",
             toolName: "DockerBash",
             target: null,
+            at: "2026-07-21T12:12:00.000Z",
             decision: "rejected",
             outcome: "rejected",
             result: null,
@@ -562,6 +555,7 @@ describe("ReportPanel", () => {
             toolUseId: "tu-3",
             toolName: "OpenPullRequest",
             target: null,
+            at: "2026-07-21T12:14:00.000Z",
             decision: "approved",
             outcome: "system",
             result:
@@ -573,20 +567,15 @@ describe("ReportPanel", () => {
 
     // Ran, declined and broken read differently. Who decided is not shown:
     // there is one operator, so naming them says nothing.
-    expect(screen.getByText("Actions taken")).toBeInTheDocument();
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("Declined")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText(/by operator/)).not.toBeInTheDocument();
-
-    // A failure states its cause; a success does not repeat its own output here.
-    expect(screen.getByText(/nothing to propose/)).toBeInTheDocument();
-    expect(screen.queryByText(/restarted/)).not.toBeInTheDocument();
   });
 
-  it("omits the actions section entirely when nothing ran", () => {
-    render(panel());
-    expect(screen.queryByText("Actions taken")).not.toBeInTheDocument();
+  it("draws no timeline on a record with neither entries nor released writes", () => {
+    render(panel({ report: { ...REPORT, submitted: null }, decisions: [] }));
+    expect(screen.queryByText("Timeline")).not.toBeInTheDocument();
   });
 
   it("tells the transcript which call to reveal, not just where to scroll", () => {

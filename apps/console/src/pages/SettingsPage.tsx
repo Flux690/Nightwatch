@@ -34,14 +34,14 @@ const CATALOG_ERRORS: Record<CatalogError, string> = {
 
 const CATALOG_DEBOUNCE_MS = 500;
 
-export const SECTIONS = [
+const SECTIONS = [
   { id: "provider", label: "Provider" },
   { id: "limits", label: "Limits" },
   { id: "sandbox", label: "Sandbox" },
   { id: "account", label: "Account" },
 ] as const;
 
-export type SectionId = (typeof SECTIONS)[number]["id"];
+type SectionId = (typeof SECTIONS)[number]["id"];
 
 const EDITABLE_PROVIDER_FIELDS = [
   "model",

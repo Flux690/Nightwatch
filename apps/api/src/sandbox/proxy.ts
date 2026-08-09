@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { getDocker } from "./docker.js";
 import { SandboxUnavailableError } from "./errors.js";
 
-export const PROXY_IMAGE = "nightwarden-tinyproxy";
-export const PROXY_CONTAINER = "nightwarden-sandbox-proxy";
-export const SANDBOX_NETWORK_NAME = "nightwarden-sandbox-net";
-export const PROXY_LABEL = "nightwarden.proxy";
+const PROXY_IMAGE = "nightwarden-tinyproxy";
+const PROXY_CONTAINER = "nightwarden-sandbox-proxy";
+const SANDBOX_NETWORK_NAME = "nightwarden-sandbox-net";
+const PROXY_LABEL = "nightwarden.proxy";
 const CONFIG_HASH_LABEL = "nightwarden.proxy-config";
 const PROXY_PORT = 8888;
 
@@ -18,7 +18,7 @@ RUN apk add --no-cache tinyproxy
 CMD ["tinyproxy", "-d", "-c", "/etc/tinyproxy/tinyproxy.conf"]
 `;
 
-export interface ProxyHandle {
+interface ProxyHandle {
   networkName: string;
   // Resolvable from inside the sandbox via the network's embedded DNS.
   proxyUrl: string;

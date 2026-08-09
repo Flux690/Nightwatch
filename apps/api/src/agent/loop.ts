@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
-import { completionRequest } from "./prompts/report.js";
 import {
-  gatedCalls,
-  proposedSomething,
-  reportGaps,
-  type ReportGap,
-} from "./report.js";
+  completionRequest,
+  compositionRequest,
+  compositionRetry,
+} from "./prompts/report.js";
+import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
+import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
 import { verifyRecovery } from "../verification/recovery.js";
 import { effectiveToolset } from "./tools/toolset.js";
@@ -53,6 +53,7 @@ import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
   NormalizedAlert,
+  SubmittedReport,
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
@@ -126,9 +127,33 @@ function buildSessionMeta(
 // handled by the dispatcher's catch - never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
-// Finish-gate pushback cap: after this many nudges the run ends rather than
-// looping; the time budget bounds it as well.
+// Finish-gate pushback cap: after this many nudges the run composes anyway
+// rather than looping; the time budget bounds it as well.
 const MAX_NUDGES = 3;
+
+// The composition turn has one tool and one job, so a second failure is a model
+// that cannot do it rather than one that misread the request.
+const MAX_COMPOSE_ATTEMPTS = 2;
+
+/* What is wrong with the report that was just written, read back from the
+   record rather than from the call that wrote it. The composition turn is the
+   one moment the model authors prose, so what it may not leave out is checked
+   here rather than trusted. */
+function compositionProblem(
+  submitted: SubmittedReport | null,
+  unrecovered: "still_firing" | "unconfirmed" | null,
+): string | null {
+  if (submitted === null) {
+    return "You ended the turn without writing the report.";
+  }
+  if (submitted.summary.trim() === "") return "Your report has no summary.";
+  if (unrecovered !== null && submitted.recommendation.trim() === "") {
+    return unrecovered === "still_firing"
+      ? "A write you released has run, the condition that opened this investigation is still firing, and your report recommends nothing."
+      : "A write you released has run, nothing can confirm the condition recovered, and your report recommends nothing.";
+  }
+  return null;
+}
 
 export interface RunSessionInput {
   sessionId: string;
@@ -138,6 +163,9 @@ export interface RunSessionInput {
   alerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
+  // The operator picked Investigate before they typed. An alert says the same
+  // thing by existing; absent on a resume, which reads the session's own row.
+  investigation?: boolean;
   // Present on resume: the full tool_results for the suspended turn
   // (completedResults from interrupt row + the newly resolved gated result).
   resumeToolResults?: ToolResult[];
@@ -161,7 +189,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // never an artifact a previous run happened to leave behind. The row is the
   // one-way ratchet, so this can only ever turn on.
   const opensInvestigation =
-    allAlerts.length > 0 || (stored?.investigation ?? false);
+    allAlerts.length > 0 ||
+    (input.investigation ?? false) ||
+    (stored?.investigation ?? false);
 
   const log = logger.child({
     sessionId,
@@ -373,6 +403,88 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
+  /* The composition turn: every investigation tool is taken away and one is put
+     back, so the only thing the model can do from here is the thing being asked
+     of it. The ledger rides the request rather than being left to context - the
+     timeline copies call ids verbatim, and turn forty is the worst place to copy
+     a string from. An ending without a report is still an ending: the record
+     renders on its own. */
+  const compose = async (
+    unrecovered: "still_firing" | "unconfirmed" | null,
+    turn: number,
+  ): Promise<RunOutcome> => {
+    let problem: string | null = null;
+    for (let attempt = 1; attempt <= MAX_COMPOSE_ATTEMPTS; attempt++) {
+      sendHarnessMessage(
+        provider,
+        problem === null
+          ? compositionRequest(
+              getReport(sessionId)?.hypotheses ?? [],
+              gatedCalls(sessionId),
+              unrecovered,
+            )
+          : compositionRetry(problem),
+      );
+      persist();
+
+      let composed: ChatResponse;
+      try {
+        composed = await chatWithRetries(
+          provider,
+          [SUBMIT_REPORT_TOOL.schema],
+          runSignal,
+        );
+      } catch (err) {
+        if (signal?.aborted) {
+          log.info("run stopped by user while composing the report");
+          persist();
+          return "stopped";
+        }
+        // The budget ran out with the record already complete. Ending without
+        // the write-up is honest; pushing past the operator's ceiling is not.
+        if (outOfTime.aborted) {
+          log.warn("time budget reached while composing the report");
+          persist();
+          return "completed";
+        }
+        throw err;
+      }
+      persist();
+      if (signal?.aborted) {
+        log.info("run stopped by user while composing the report");
+        return "stopped";
+      }
+
+      const { toolResults } = await processToolUses({
+        toolUses: composed.toolUses,
+        toolset: [SUBMIT_REPORT_TOOL],
+        sessionId,
+        execCtx: {
+          sessionId,
+          toolCallCeilingMs: config.toolCallCeilingMs,
+        },
+        log,
+      });
+      if (toolResults.length > 0) provider.appendToolResults(toolResults);
+      persist();
+
+      problem = compositionProblem(
+        getReport(sessionId)?.submitted ?? null,
+        unrecovered,
+      );
+      if (problem === null) {
+        log.info({ turn, attempt }, "investigation report written");
+        return "completed";
+      }
+      log.warn({ turn, attempt, problem }, "composition turn refused");
+    }
+    log.warn(
+      { turn },
+      "composition failed; the record stands without a report",
+    );
+    return "completed";
+  };
+
   while (Date.now() < deadline) {
     turn++;
 
@@ -444,35 +556,21 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     }
 
     if (response.toolUses.length === 0) {
-      // Finish gate: a session under investigation may only end with a complete
-      // record and either a recovery or a recommendation. Push back up to
-      // MAX_NUDGES times, then let it end - the status an unfinished record
-      // derives to is already the honest one.
-      const gaps = opensInvestigation ? reportGaps(sessionId) : [];
+      if (!opensInvestigation) {
+        log.info({ turn }, "chat finished with free-form response");
+        return "completed";
+      }
+      // Ledger gate: the record must be complete before it can be written up.
+      // Push back up to MAX_NUDGES times, then compose from what there is - the
+      // status an unfinished record derives to is already the honest one.
+      const gaps = reportGaps(sessionId);
       // Asked here rather than on the read path: this is the one moment the
       // answer changes what happens next, and the investigations list reads
-      // status once per row. Run whether or not the gate will use it - stamping
-      // a recovered condition keeps the record true even when the alert source
-      // never sent a resolved notification.
-      const recovery = opensInvestigation
-        ? await verifyRecovery(sessionId)
-        : "no_condition";
-      /* Only a run that acted is held to this. "I could not work out the cause,
-         here is what I ruled out" is a complete ending and the gate must never
-         push a model past it - but a run that had the operator release a write
-         and then went quiet has left them nothing. Both an unrecovered condition
-         and an unanswerable one qualify; which of the two it was decides what
-         the request says, because they are not the same claim. */
-      const released =
-        opensInvestigation &&
-        gatedCalls(sessionId).some((c) => c.decision === "approved");
-      const unrecovered =
-        released &&
-        (recovery === "still_firing" || recovery === "unconfirmed") &&
-        !proposedSomething(getReport(sessionId) ?? null)
-          ? recovery
-          : null;
-      if (gaps.length > 0 || unrecovered !== null) {
+      // status once per row. Run on every attempt - stamping a recovered
+      // condition keeps the record true even when the alert source never sent a
+      // resolved notification.
+      const recovery = await verifyRecovery(sessionId);
+      if (gaps.length > 0) {
         if (nudges < MAX_NUDGES) {
           nudges++;
           for (const gap of gaps) {
@@ -491,17 +589,29 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
             { turn, nudges, gaps: gaps.map((g) => g.kind), recovery },
             "finish gate: record incomplete, requesting completion",
           );
-          sendHarnessMessage(provider, completionRequest(gaps, unrecovered));
+          sendHarnessMessage(provider, completionRequest(gaps));
           persist();
           continue;
         }
         log.warn(
           { turn, gaps: gaps.map((g) => g.kind), recovery },
-          "finish gate: request cap reached, ending incomplete",
+          "finish gate: request cap reached, composing incomplete",
         );
       }
-      log.info({ turn }, "investigation finished with free-form response");
-      return "completed";
+      /* Only a run that acted must recommend. "I could not work out the cause,
+         here is what I ruled out" is a complete ending - but a run that had the
+         operator release a write and then went quiet has left them nothing.
+         Both an unrecovered condition and an unanswerable one qualify; which of
+         the two it was decides what the request says, because they are not the
+         same claim. */
+      const released = gatedCalls(sessionId).some(
+        (c) => c.decision === "approved",
+      );
+      const unrecovered =
+        released && (recovery === "still_firing" || recovery === "unconfirmed")
+          ? recovery
+          : null;
+      return compose(unrecovered, turn);
     }
 
     const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {

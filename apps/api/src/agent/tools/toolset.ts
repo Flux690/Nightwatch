@@ -61,7 +61,7 @@ export function findTool(toolName: string): Tool | undefined {
 // Which pull-integrations are connected this turn. Each defaults to true so a
 // caller that only cares about platforms still gets every library; the loop passes
 // live state, so a disconnected integration strips its tools from the next turn.
-export interface IntegrationConnections {
+interface IntegrationConnections {
   github?: boolean;
   prometheus?: boolean;
   loki?: boolean;

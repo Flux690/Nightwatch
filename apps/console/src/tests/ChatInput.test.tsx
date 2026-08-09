@@ -46,9 +46,14 @@ function setup(
     path: "/agent/$id",
     component: () => <div>session page</div>,
   });
+  const recordRoute = createRoute({
+    getParentRoute: () => root,
+    path: "/investigations/$id",
+    component: () => <div>record page</div>,
+  });
 
   const router = createRouter({
-    routeTree: root.addChildren([newRoute, sessionRoute]),
+    routeTree: root.addChildren([newRoute, sessionRoute, recordRoute]),
     history: createMemoryHistory({ initialEntries: [routePath] }),
   });
 
@@ -112,7 +117,7 @@ describe("ChatInput", () => {
   });
 
   describe("submit from new session (sessionId=null)", () => {
-    it("calls POST /api/chat with the message alone and navigates", async () => {
+    it("calls POST /api/chat carrying the mode, and lands in the chat family", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ sessionId: null, isRunning: false });
 
@@ -124,11 +129,42 @@ describe("ChatInput", () => {
         "/api/chat",
         expect.objectContaining({
           method: "POST",
-          body: JSON.stringify({ message: "Is nginx down?" }),
+          body: JSON.stringify({ message: "Is nginx down?", kind: "chat" }),
         }),
       );
 
       await screen.findByText("session page");
+    });
+
+    /* The mode is the whole of the decision: it settles what the session is
+       before the first turn runs, and the route follows from that - so no
+       session ever has to cross between the two families later. */
+    it("opens an investigation, and its record, when the operator picks Investigate", async () => {
+      const user = userEvent.setup();
+      const { fetchMock } = setup({ sessionId: null, isRunning: false });
+
+      await screen.findByRole("textbox");
+      await user.click(screen.getByRole("button", { name: /^mode:/i }));
+      await user.click(
+        await screen.findByRole("menuitem", { name: /investigate/i }),
+      );
+
+      await user.type(
+        await screen.findByRole("textbox"),
+        "Why is checkout slow?",
+      );
+      await user.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/chat",
+        expect.objectContaining({
+          body: JSON.stringify({
+            message: "Why is checkout slow?",
+            kind: "investigation",
+          }),
+        }),
+      );
+      await screen.findByText("record page");
     });
   });
 
@@ -153,13 +189,14 @@ describe("ChatInput", () => {
       );
     });
 
-    // There is no mode to choose: the agent opens an investigation itself.
+    // What a session is was settled when it was created, so there is nothing
+    // left to pick and the control is gone rather than disabled.
     it("offers no mode picker at all", async () => {
       setup({ sessionId: "s1", isRunning: false }, "/agent");
 
       await screen.findByRole("textbox");
       expect(
-        screen.queryByRole("button", { name: /session mode/i }),
+        screen.queryByRole("button", { name: /^mode:/i }),
       ).not.toBeInTheDocument();
     });
   });

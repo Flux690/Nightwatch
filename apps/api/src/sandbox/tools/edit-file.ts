@@ -4,7 +4,7 @@ import { assertContained, resolveRepoPath } from "../paths.js";
 import type { Workspace } from "../workspace.js";
 import { computeDiffHunks, type DiffHunk } from "./diff.js";
 
-export interface EditFileInput {
+interface EditFileInput {
   path: string;
   old_string: string;
   new_string: string;

@@ -10,7 +10,7 @@ import { prometheusSource } from "./sources/prometheus.js";
    decided at build time, not discovered at runtime. */
 const SOURCES: readonly VerificationSource[] = [prometheusSource];
 
-export type RecoveryState =
+type RecoveryState =
   // Every alert that opened this investigation has cleared. The only state that
   // may be called resolved.
   | "confirmed"

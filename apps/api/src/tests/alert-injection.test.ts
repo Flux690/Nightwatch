@@ -27,7 +27,7 @@ import Fastify from "fastify";
 import { generateRunnerToken } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
-import { seedCompleteReport } from "./report-helper.js";
+import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
 import {
@@ -36,7 +36,6 @@ import {
 } from "../db/interrupts.js";
 import { isDuplicate } from "../alerts/dedup.js";
 import { findToolCall, getSession } from "../db/sessions.js";
-import { proposeFix } from "../agent/report.js";
 import { buildTranscript } from "../session/transcript.js";
 import { respondToPendingHumanInput } from "../session/human-input.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
@@ -189,9 +188,9 @@ describe("mid-run alert injection (loop seam)", () => {
     const [injection] = provider.appendUserMessage.mock.calls[0] as [string];
     expect(injection).toContain("injected-mr");
 
-    // Release turn 2 and let the run finish cleanly.
-    gate.releaseNext();
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    // Release turn 2 and every turn after it: the free-form finish is followed
+    // by the composition turn, which parks on this gate like any other.
+    await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
 
     // The alert is on the session's own row, and the operator sees it as an
     // alert marking where the ground moved - not as prose they appear to have
@@ -202,8 +201,10 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const transcript = buildTranscript(sessionId);
     expect(JSON.stringify(transcript)).not.toContain("Another alert has fired");
-    // Between the tool call it interrupted and the turn that followed it.
-    expect(transcript.map((i) => i.kind)).toEqual([
+    // Between the tool call it interrupted and the turn that followed it. Only
+    // the opening three: what the run does after this is the gate's business
+    // and the composition turn's, neither of which this test is about.
+    expect(transcript.slice(0, 3).map((i) => i.kind)).toEqual([
       "tool_card",
       "alert_arrived",
       "agent_text",
@@ -291,8 +292,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // The suspended session's inbox was not touched
     expect(dispatcher.drainInbox(sessionId)).toHaveLength(0);
 
-    gate.releaseNext(); // free-form finish for the new session
-    await waitFor(() => !dispatcher.isSessionRunning(newSessionId));
+    await gate.releaseUntil(() => !dispatcher.isSessionRunning(newSessionId));
     unregisterRunner(susConn);
   });
 
@@ -314,8 +314,7 @@ describe("mid-run alert injection (loop seam)", () => {
     const callsBefore = mockCreateProvider.mock.calls.length;
 
     // Release: chat() resolves with free-form finish → run exits without draining inbox
-    gate.releaseNext();
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
 
     // The dispatcher's finally block dispatches leftovers as new sessions.
     // createProvider is called synchronously in the new session's start().
@@ -333,8 +332,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // The leftover session's id is dispatcher-minted, so seed its report only
     // now that it is the active alert session.
     seedCompleteReport(dispatcher.getActiveAlertSession()!);
-    gate.releaseNext(); // free-form finish for the leftover session
-    await waitFor(() => dispatcher.getActiveAlertSession() === null);
+    await gate.releaseUntil(() => dispatcher.getActiveAlertSession() === null);
   });
 
   // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
@@ -389,7 +387,7 @@ describe("mid-run alert injection (loop seam)", () => {
     seedCompleteReport(sessionId);
     // This run restarts a service, and a run that changed something owes the
     // operator a recommendation - otherwise the finish gate asks for one.
-    proposeFix(sessionId, "restart web-01", []);
+    seedRecommendation(sessionId, "restart web-01");
 
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
@@ -435,8 +433,7 @@ describe("mid-run alert injection (loop seam)", () => {
     });
 
     await server.close();
-    gate.releaseNext(); // free-form finish for the resumed run
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
     unregisterRunner(conn);
   });
 });

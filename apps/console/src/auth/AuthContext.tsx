@@ -10,7 +10,7 @@ import type { AuthStatusResponse } from "@nightwarden/shared";
 
 import { installFetchInterceptor } from "./fetchInterceptor.js";
 
-export type AuthPhase =
+type AuthPhase =
   | { kind: "loading" }
   | { kind: "needs-setup" }
   | { kind: "needs-login" }

@@ -3,7 +3,7 @@ import { assertContained, resolveRepoPath } from "../paths.js";
 import { FileNotFoundError } from "../errors.js";
 import type { Workspace } from "../workspace.js";
 
-export interface ReadFileInput {
+interface ReadFileInput {
   path: string;
   offset?: number;
   limit?: number;

@@ -11,7 +11,7 @@ import {
 // The outcome of matching an alert's labels against the live fleet. Resolved names the key to
 // act on; ambiguous names the runners to disambiguate between; unresolved hands the agent the
 // raw labels, which formatAlert renders in full alongside the fleet summary.
-export type AlertResolution =
+type AlertResolution =
   | {
       kind: "resolved";
       identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
@@ -165,7 +165,7 @@ function allFrom(text: string, alphabet: string): boolean {
 // Kubernetes generates pod names from the owning object, so the owner is recoverable from the
 // name's shape - but only against a known kind. Matching bare names would resolve pod `web-0` to
 // a Deployment named `web`, and a Job's pod `backup-x9k2m` to a Deployment named `backup`.
-export function podBelongsToWorkload(
+function podBelongsToWorkload(
   podName: string,
   workload: string,
   kind: K8sWorkloadKind,

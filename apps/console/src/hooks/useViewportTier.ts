@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const TABLET_MIN = 768;
 const DESKTOP_MIN = 1024;
 
-export type ViewportTier = "phone" | "tablet" | "desktop";
+type ViewportTier = "phone" | "tablet" | "desktop";
 
 function tierFor(width: number): ViewportTier {
   if (width < TABLET_MIN) return "phone";

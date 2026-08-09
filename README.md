@@ -11,7 +11,7 @@ NightWarden is a self-hosted, open-source AI SRE agent for Docker and Kubernetes
 
 An alert fires at 3am. Normally that means waking up, SSHing into a box, reading logs, checking `docker ps` or `kubectl get pods`, correlating a recent deploy, and only then deciding what to do. The investigation is slow, manual, and always lands on a tired human.
 
-NightWarden does that first pass for you. The moment an alert arrives it starts pulling logs, container or pod state, and host metrics, works out what caused the failure, and drafts a concrete fix - restarting a service, or, when the cause is in your code and a repository is connected, a draft pull request. It writes down what it finds as it goes, so by the time you look at your screen the investigation is already written up: what it thinks broke, what it ruled out, the evidence behind each, and a fix waiting for one click.
+NightWarden does that first pass for you. The moment an alert arrives it starts pulling logs, container or pod state, and host metrics, works out what caused the failure, and drafts a concrete fix - restarting a service, or, when the cause is in your code and a repository is connected, a draft pull request. It records what it finds as it goes and writes the whole thing up when it is done, so by the time you look at your screen the investigation is already written up: what it thinks broke, what it ruled out, the evidence behind each, and a fix waiting for one click.
 
 The important part is what it will not do. NightWarden never changes anything on a server without your explicit approval. It reads freely and acts only on permission, so you get the speed of an automated responder with the safety of a human gate.
 
@@ -28,7 +28,7 @@ runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 api["NightWarden API<br/>Node.js · SQLite<br/>Agent Loop · Approvals · Event Bus"]
 
 %% UI
-console["Console<br/>Live Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
+console["Console<br/>Report · Sessions Queue<br/>Chat · Approval Cards · Settings"]
 
 %% Code
 github["GitHub<br/>Draft Pull Requests"]
@@ -52,9 +52,11 @@ linkStyle default stroke:#888,stroke-width:1.5;
 
 When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens a session and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
 
-As it works it builds an **investigation record**, one small step at a time. It writes down a hunch before testing it, then settles that hunch with a verdict and the ids of the tool calls that back it, and finally records what it recommends you do. Nothing it wrote earlier can be edited or deleted, so a claim it later abandons stays visible. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
+As it works it builds an **investigation record**, one claim at a time. Each time it settles a hunch it writes down what it tested, the verdict it earned and the ids of the tool calls that back it. Nothing it wrote earlier can be edited or deleted, so a claim it later abandoned stays on the record beside the one that replaced it. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
 
-The run cannot end with a hunch left untested: the agent is pushed back until every one is settled, and if it genuinely cannot work out the cause it says so instead of inventing one.
+When the run is over the agent is handed that record back with every investigation tool taken away and one left, and writes the report from it: a summary, a timeline, who was affected, and what you should do. Writing it last means it is written knowing how the investigation ended, and it can add only the prose the record has no room for, so what it says cannot outrun what the record holds.
+
+The run cannot end on an empty record, or on a claim whose only citations are calls that answered nothing: the agent is pushed back until both hold, and if it genuinely cannot work out the cause it says so instead of inventing one.
 
 **A fix is not believed until the alert says so.** NightWarden never asks the model whether its fix worked - it re-checks the condition that fired, and there are two independent ways it learns the answer:
 
@@ -75,14 +77,14 @@ Any action that writes to a server pauses the loop and shows you an approval car
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the operator UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one and the report takes the main area - what caused the failure, the hunches behind it, the evidence with charts, the proposed fix - with the live transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
+**Console** is the operator UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open a finished one and the report takes the main area - the summary, the timeline, what held up and what was ruled out, each with its evidence and charts - with the transcript in a rail on the right that also collapses. While the run is still working the chat has the whole stage instead, because a report being written in front of you is not worth reading. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
 
 ## Features
 
-- **A report, not a wall of chat.** Every investigation produces a written record the agent builds _while it works_: each hunch it raised, how it turned out, and the evidence behind it. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
-- **It cannot finish without concluding.** A run is not allowed to end with a hunch left untested: the agent is pushed back until every one is settled, and anything it calls the root cause has to cite a tool call.
+- **A report, not a wall of chat.** The agent records each claim as it settles it, then writes the report from that record once the run is over: a summary you can paste into a postmortem, a timeline that includes every write it was allowed to make, who was affected, and what to do next. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
+- **It cannot finish without concluding.** A run is not allowed to end on an empty record, or on a claim backed only by a call that returned nothing, and no claim can be recorded at all without citing one. If it cannot find the cause it records what it ruled out and says so.
 - **"Resolved" means the alert stopped firing.** Not that a fix ran, and never because the model said it found the cause. NightWarden confirms recovery against the condition that fired - your alert source's own resolved notification, or by asking Prometheus whether its rule still holds. When nothing can answer, the record says recovery was not confirmed rather than claiming it.
-- **No mode to choose.** Ask a question and you get a plain conversation, with the full toolset behind the same approval gate. An alert opens an investigation. A session is what it was created as and never changes underneath you.
+- **One choice, made before you type.** Chat answers the question and stops. Investigate works it out and writes a report. Both get the full toolset behind the same approval gate, and an alert always opens an investigation. Nothing infers which you meant afterwards, and a session is what it was created as and never changes underneath you.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
@@ -351,7 +353,7 @@ apps/
       components/
         ui/             shadcn-style primitives (Base UI under the hood)
         layout/         the one sidebar and its collapse, the sessions list, settings modal, wizard chrome
-        report/         the rendered investigation record (hunches, verdicts, evidence charts, citations)
+        report/         the rendered report (summary, timeline, findings, what was ruled out, evidence charts)
         transcript/     transcript dispatcher + per-card panels
       hooks/            shared console event-stream (SSE) provider, attention counter, per-session report
       lib/              shared client helpers (theme, utils, toast, time, icon/status variants)
@@ -373,7 +375,7 @@ packages/
       sessions.ts       session, message and queue-row shapes
       messages.ts       canonical message parts and the native envelope a provider replays verbatim
       transcript.ts     the render-ready transcript items and their explicit tool-call states
-      reports.ts        investigation record shape (hypotheses, verdicts, fixes, conviction)
+      reports.ts        investigation record shape (hypotheses, verdicts, the composed report, conviction)
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
       integrations.ts   integration payloads (GitHub, Prometheus, Loki)

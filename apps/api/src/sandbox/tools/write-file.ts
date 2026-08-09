@@ -6,7 +6,7 @@ import type { Workspace } from "../workspace.js";
 import { computeDiffHunks } from "./diff.js";
 import type { FileChangeResult } from "./edit-file.js";
 
-export interface WriteFileInput {
+interface WriteFileInput {
   path: string;
   content: string;
 }

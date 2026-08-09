@@ -1,10 +1,10 @@
 import { appendToReport } from "../db/reports.js";
+import { submitReport } from "../agent/report.js";
 
-// Satisfies the investigate finish gate for tests that exercise run mechanics
-// rather than the record contract: one settled hypothesis is a complete record.
-// A run that also changed something needs a recommendation to leave no gap.
+// Satisfies the ledger gate for tests that exercise run mechanics rather than
+// the record contract: one recorded hypothesis is a complete ledger, so the run
+// reaches its composition turn instead of being nudged.
 export function seedCompleteReport(sessionId: string): void {
-  const now = new Date().toISOString();
   appendToReport(sessionId, (report) => ({
     next: {
       ...report,
@@ -15,11 +15,24 @@ export function seedCompleteReport(sessionId: string): void {
           verdict: "disproven",
           finding: "",
           evidenceIds: [],
-          proposedAt: now,
-          resolvedAt: now,
+          recordedAt: new Date().toISOString(),
         },
       ],
     },
     value: null,
   }));
+}
+
+// A finished write-up carrying one recommendation, for tests about what an
+// investigation is waiting on rather than about how it was composed.
+export function seedRecommendation(
+  sessionId: string,
+  recommendation: string,
+): void {
+  submitReport(sessionId, {
+    summary: "seeded by test",
+    timeline: [],
+    impact: "",
+    recommendation,
+  });
 }

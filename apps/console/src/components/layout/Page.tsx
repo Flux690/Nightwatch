@@ -13,44 +13,14 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-
-/* Warm Steel column headers: small, muted, upper-case across every data table. Apply as the Table className. */
-export const TABLE_HEAD =
-  "[&_thead_th]:text-sm [&_thead_th]:font-medium [&_thead_th]:uppercase [&_thead_th]:tracking-wider [&_thead_th]:text-muted-foreground";
 
 export const SECTION_HEADING =
   "font-mono text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground";
 
-/* Generic loading placeholder for data tables. Renders `count` rows of `columns` skeleton cells. */
-export function SkeletonRows({
-  count,
-  columns,
-}: {
-  count: number;
-  columns: number;
-}): React.JSX.Element {
-  return (
-    <>
-      {Array.from({ length: count }, (_, i) => (
-        <TableRow key={i}>
-          {Array.from({ length: columns }, (_, j) => (
-            <TableCell key={j}>
-              <Skeleton className="h-3.5 w-30" />
-            </TableCell>
-          ))}
-        </TableRow>
-      ))}
-    </>
-  );
-}
-
 /* One entry per level, root first. The last is where you are and never links;
    a lone entry is the page title, so the chevron appears only on descent. */
-export interface Crumb {
+interface Crumb {
   label: string;
   to?: string;
 }
@@ -168,12 +138,4 @@ export function Page({
       )}
     </div>
   );
-}
-
-/* Bordered card wrapper for a data table. */
-export function PageTableWrap({
-  className,
-  ...props
-}: React.ComponentProps<typeof Card>): React.JSX.Element {
-  return <Card className={cn("overflow-x-auto py-0", className)} {...props} />;
 }

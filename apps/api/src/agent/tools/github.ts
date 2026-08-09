@@ -13,7 +13,7 @@ import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire, so they live
 // with the tool rather than in @nightwarden/shared.
-export interface RecentPullRequest {
+interface RecentPullRequest {
   number: number;
   title: string;
   author: string;
@@ -23,7 +23,7 @@ export interface RecentPullRequest {
   filesOmitted?: boolean;
 }
 
-export interface RecentCommit {
+interface RecentCommit {
   sha: string;
   message: string;
   author: string;

@@ -6,7 +6,7 @@ import type {
   NotFoundResult,
 } from "@nightwarden/shared";
 
-export interface ResolvedK8sPod {
+interface ResolvedK8sPod {
   podName: string;
   namespace: string;
   containerName: string | undefined;
@@ -35,7 +35,7 @@ export function isNotFoundError(err: unknown): boolean {
   return err instanceof ApiException && err.code === 404;
 }
 
-export interface ResolvedWorkloadKind {
+interface ResolvedWorkloadKind {
   kind: K8sWorkloadKind;
   // Desired replicas: a restart gates on this (a scaled-to-0 workload has nothing
   // to restart), while still allowing a running-but-unhealthy one to be rolled. A

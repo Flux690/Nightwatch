@@ -13,7 +13,7 @@ import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 
 // The alerts are the durable source of severity-dependent behavior on resume, so
 // a run that no longer carries them in its job can recover them from here.
-export type StoredSession = SessionMeta & {
+type StoredSession = SessionMeta & {
   alerts: SessionAlert[];
   investigation: boolean;
 };
@@ -248,7 +248,7 @@ export function appendRowsAndInterrupt(
 }
 
 // Takes the report column with it and cascades to the transcript and the pending
-// approval. The remediation audit log is not a child of sessions, so it survives.
+// approval. Nothing about a session outlives it.
 export function deleteSession(sessionId: string): void {
   getDb().prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }
@@ -274,7 +274,7 @@ export interface SessionListSource {
 
 // One page of it. nextOffset is the offset to ask for next, or null once the
 // list is exhausted.
-export interface SessionListSourcePage {
+interface SessionListSourcePage {
   sources: SessionListSource[];
   nextOffset: number | null;
 }

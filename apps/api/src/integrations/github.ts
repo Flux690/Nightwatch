@@ -74,7 +74,7 @@ async function githubFetch(
   return res;
 }
 
-export interface RepoListResult extends GitHubRepoPage {
+interface RepoListResult extends GitHubRepoPage {
   expiresAt: string | null;
 }
 
@@ -112,7 +112,7 @@ export async function listRepos(
   return { repos, hasMore, expiresAt: parseExpiryHeader(res) };
 }
 
-export interface ValidatedRepo {
+interface ValidatedRepo {
   owner: string;
   name: string;
   expiresAt: string | null;
@@ -168,7 +168,7 @@ export function buildAuthHeader(token: string): string {
   return `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
 }
 
-export interface PullRequestInfo {
+interface PullRequestInfo {
   number: number;
   url: string;
   draft: boolean;
@@ -298,7 +298,7 @@ export async function updatePullRequest(
   }
 }
 
-export interface CommitInfo {
+interface CommitInfo {
   sha: string;
   message: string;
   author: string;
@@ -349,7 +349,7 @@ export async function listCommits(
   });
 }
 
-export interface MergedPullRequestInfo {
+interface MergedPullRequestInfo {
   number: number;
   title: string;
   author: string;

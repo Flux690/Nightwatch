@@ -1,7 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export interface InstallPlan {
+interface InstallPlan {
   command: string;
 }
 

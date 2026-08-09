@@ -1,5 +1,4 @@
 import type {
-  ApprovalRequest,
   ApprovalStatus,
   TranscriptRow,
   ToolCallState,

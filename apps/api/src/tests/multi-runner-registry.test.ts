@@ -9,7 +9,7 @@ import type {
   FleetRunner,
   RunnerRecord,
 } from "@nightwarden/shared";
-import { generateRunnerToken, findRunnerById } from "../db/runner.js";
+import { generateRunnerToken } from "../db/runner.js";
 import { mintTestSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 import { waitFor } from "./wait.js";

@@ -2,12 +2,12 @@ import { posix } from "node:path";
 import { resolveRepoPath } from "../paths.js";
 import type { ExecOutcome, Workspace } from "../workspace.js";
 
-export interface ExecInput {
+interface ExecInput {
   command: string;
   cwd?: string;
 }
 
-export interface ExecToolResult extends ExecOutcome {
+interface ExecToolResult extends ExecOutcome {
   timedOut: boolean;
 }
 

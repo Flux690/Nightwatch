@@ -20,7 +20,7 @@ export function isTransientLLMError(err: unknown): boolean {
   );
 }
 
-export interface RetryNotice {
+interface RetryNotice {
   attempt: number;
   maxAttempts: number;
   delayMs: number;

@@ -9,7 +9,7 @@ import { REPORT_PROTOCOL } from "./prompts/report.js";
 import { sandboxInstructions } from "./prompts/sandbox.js";
 import { resolveAlertTarget } from "../alerts/resolve-target.js";
 
-export interface InitialContext {
+interface InitialContext {
   systemPrompt: string;
   // The turn NightWarden writes when no human is there to write one. Null for a
   // chat session, whose opening turn is the person's own message.

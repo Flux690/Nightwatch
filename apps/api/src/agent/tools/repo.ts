@@ -51,7 +51,7 @@ function slugify(text: string): string {
 // Pure function of the session row, so any resume recomputes the identical branch and
 // openPullRequest finds its existing PR instead of opening a second one. The alert type
 // is decoration, for a human scanning the branch list.
-export function branchNameFor(sessionId: string): string {
+function branchNameFor(sessionId: string): string {
   const alert = getSession(sessionId)?.alerts[0]?.alert ?? null;
   const slug = alert === null ? "chat" : slugify(alert.alertType);
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;

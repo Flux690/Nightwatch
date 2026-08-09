@@ -8,7 +8,7 @@ import {
 } from "../git.js";
 import type { Workspace } from "../workspace.js";
 
-export type OpenPullRequestOutcome =
+type OpenPullRequestOutcome =
   | {
       action: "created" | "updated";
       number: number;
@@ -20,7 +20,7 @@ export type OpenPullRequestOutcome =
   // 422 that reads as a broken token, so it is answered here instead.
   | { action: "nothing_to_propose"; message: string };
 
-export interface OpenPullRequestHooks {
+interface OpenPullRequestHooks {
   // Host composes the final PR body: model text + incident context +
   // plain-text session reference.
   composeBody(filesChanged: string[]): string;

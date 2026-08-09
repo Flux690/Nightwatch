@@ -70,9 +70,9 @@ const indexRoute = createRoute({
   },
 });
 
-// The layout follows the route and nothing else. Crossing between the two
-// families remounts these components, but the conversation is portaled into a
-// node ChatHost owns above the router, so a live run is never dropped.
+// The layout follows the route and nothing else. What a session is decides its
+// route when it is created, so nothing ever crosses between the two families and
+// no conversation has to survive the crossing.
 const agentRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agent",

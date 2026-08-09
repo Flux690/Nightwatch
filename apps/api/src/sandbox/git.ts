@@ -52,7 +52,7 @@ function runGit(args: string[], opts: GitOptions): Promise<string> {
   });
 }
 
-export interface CloneOptions {
+interface CloneOptions {
   url: string;
   branch: string;
   dir: string;

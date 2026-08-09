@@ -6,7 +6,7 @@ import {
   type Isolation,
 } from "./docker.js";
 
-export interface PreflightResult {
+interface PreflightResult {
   ok: boolean;
   reason?: string;
   // Which isolation the host will actually use for sandboxes, so the console

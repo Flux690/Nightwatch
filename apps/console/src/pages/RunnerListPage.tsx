@@ -94,10 +94,7 @@ function compareRunners(
 
 // A runner belongs to the platform its row names, decided at onboarding, so the
 // two lists can never disagree with what the runner actually is.
-export function runsPlatform(
-  runner: RunnerRecord,
-  platform: Platform,
-): boolean {
+function runsPlatform(runner: RunnerRecord, platform: Platform): boolean {
   return runner.platform === platform;
 }
 

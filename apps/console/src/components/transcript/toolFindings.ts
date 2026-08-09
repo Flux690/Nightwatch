@@ -4,9 +4,9 @@ import { asRecord, numberAt as num, stringAt as str } from "@/lib/toolResult";
 // structured result and never written by the model: a sentence it composes about
 // data we already hold is one nothing can check. Quoted log lines stay verbatim.
 
-export type FindingTone = "normal" | "bad";
+type FindingTone = "normal" | "bad";
 
-export interface ToolFinding {
+interface ToolFinding {
   text: string;
   tone: FindingTone;
 }
@@ -42,7 +42,7 @@ function formatPercent(value: number): string {
 // rather than an ellipsis where the interesting part was.
 const LINE_CLIP = 120;
 
-export function quoteLine(line: string): string {
+function quoteLine(line: string): string {
   const trimmed = line.trim();
   return trimmed.length > LINE_CLIP
     ? `${trimmed.slice(0, LINE_CLIP)}…`

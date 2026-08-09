@@ -5,9 +5,9 @@ import { join } from "node:path";
 import Dockerode from "dockerode";
 import { SandboxUnavailableError } from "./errors.js";
 
-export const SANDBOX_LABEL = "nightwarden.sandbox";
-export const SESSION_LABEL = "nightwarden.session";
-export const SANDBOX_IMAGE = "nightwarden-sandbox";
+const SANDBOX_LABEL = "nightwarden.sandbox";
+const SESSION_LABEL = "nightwarden.session";
+const SANDBOX_IMAGE = "nightwarden-sandbox";
 const IMAGE_HASH_LABEL = "nightwarden.sandbox-image";
 
 // Built locally on top of the official node image: the runtime user is non-root
@@ -204,7 +204,7 @@ export async function createSandboxContainer(opts: {
 
 // Docker multiplexes stdout/stderr into 8-byte-framed chunks with no TTY;
 // frames are concatenated in arrival order to read like a terminal would.
-export function demuxOutput(buf: Buffer): string {
+function demuxOutput(buf: Buffer): string {
   if (buf.length === 0) return "";
   const first = buf[0] ?? 0;
   if (first !== 0 && first !== 1 && first !== 2) return buf.toString("utf8");
@@ -218,7 +218,7 @@ export function demuxOutput(buf: Buffer): string {
   return out;
 }
 
-export interface ContainerExecResult {
+interface ContainerExecResult {
   exitCode: number;
   output: string;
 }

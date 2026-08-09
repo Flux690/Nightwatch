@@ -14,12 +14,12 @@ import { alertAnchorFor } from "./alert-anchor.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
-export interface LokiLogLine {
+interface LokiLogLine {
   ts: string;
   line: string;
 }
 
-export interface LokiLogStream {
+interface LokiLogStream {
   labels: Record<string, string>;
   lines: LokiLogLine[];
 }

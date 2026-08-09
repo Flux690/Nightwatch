@@ -5,7 +5,7 @@ import type {
   NotFoundResult,
 } from "@nightwarden/shared";
 
-export interface ResolvedContainer {
+interface ResolvedContainer {
   container: Dockerode.Container;
   id: string;
   name: string;

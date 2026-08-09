@@ -268,7 +268,7 @@ export function createContractFakeProvider(
 
 // Module-level script shared across instances: setScript resets the sequence, and successive
 // runs (suspend then resume) continue where the last left off.
-export interface ScriptRunner {
+interface ScriptRunner {
   setScript: (turns: ScriptedTurn[]) => void;
   create: (opts?: { gate?: () => Promise<void> }) => ContractFakeProvider;
 }
@@ -289,21 +289,37 @@ export function createScriptRunner(): ScriptRunner {
 
 // A FIFO gate shared across instances: pass `gate` so each chat() parks until
 // releaseNext()/releaseAll(), for timing tests (e.g. mid-run injection).
-export interface GateController {
+interface GateController {
   gate: () => Promise<void>;
   releaseNext: () => void;
   releaseAll: () => void;
+  // Releases every turn as it arrives until `done` holds. An investigation ends
+  // with a composition turn and possibly a retry, so it parks more times than
+  // its script has turns - a test about dispatch mechanics should not have to
+  // count them. Real timers only; a faked-clock test drives its own loop.
+  releaseUntil: (done: () => boolean, timeoutMs?: number) => Promise<void>;
 }
 
 export function createGateController(): GateController {
   const pending: Array<() => void> = [];
+  const releaseAll = (): void => {
+    const copy = [...pending];
+    pending.length = 0;
+    for (const resolve of copy) resolve();
+  };
   return {
     gate: () => new Promise<void>((resolve) => pending.push(resolve)),
     releaseNext: () => pending.shift()?.(),
-    releaseAll: () => {
-      const copy = [...pending];
-      pending.length = 0;
-      for (const resolve of copy) resolve();
+    releaseAll,
+    releaseUntil: async (done, timeoutMs = 10_000) => {
+      const start = Date.now();
+      while (!done()) {
+        if (Date.now() - start > timeoutMs) {
+          throw new Error("releaseUntil timed out");
+        }
+        releaseAll();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
     },
   };
 }

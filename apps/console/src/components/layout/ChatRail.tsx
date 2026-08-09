@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { ChatSlot } from "./ChatHost";
+import { SessionView } from "@/pages/SessionView";
 import { readStoredNumber, writeStoredNumber } from "@/lib/persisted";
 import { cn } from "@/lib/utils";
 
@@ -21,9 +21,11 @@ function clamp(width: number): number {
 }
 
 export function ChatRail({
+  sessionId,
   open,
   expanded,
 }: {
+  sessionId: string | null;
   open: boolean;
   // Covers the stage rather than widening past its ceiling. A distinct mode, so
   // leaving it restores the width the operator chose instead of a drag's
@@ -118,13 +120,15 @@ export function ChatRail({
       )}
       {/* The chat holds its own width while the panel narrows past it, so
           nothing inside ever reflows on the way closed. */}
-      <ChatSlot
+      <div
         className={cn(
           "flex min-h-0 flex-1 shrink-0 flex-col transition-opacity duration-(--duration-fast)",
           expanded ? "w-full" : "w-(--container-rail)",
           open ? "opacity-100 delay-(--duration-base)" : "opacity-0 delay-0",
         )}
-      />
+      >
+        <SessionView sessionId={sessionId} />
+      </div>
     </aside>
   );
 }

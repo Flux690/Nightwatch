@@ -31,18 +31,6 @@ const CONFIGURED: PrometheusIntegrationStatus = {
   validatedAt: "2026-07-17T00:00:00.000Z",
 };
 
-const CONNECTED_RUNNER: RunnerRecord = {
-  id: "runner-1",
-  token: "runner-1",
-  platform: "docker" as const,
-  serverName: "prod-web-01",
-  hostname: "web-01",
-  createdAt: "2024-01-01T00:00:00Z",
-  online: true,
-  lastSeen: new Date().toISOString(),
-  manifest: null,
-};
-
 function jsonOk(body: unknown, status = 200) {
   return Promise.resolve({
     ok: true,

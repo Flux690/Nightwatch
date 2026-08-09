@@ -1,5 +1,5 @@
 import { describeNetworkFailure } from "./reachability.js";
-export type PrometheusErrorCode =
+type PrometheusErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
 
 export class PrometheusApiError extends Error {
@@ -194,7 +194,7 @@ export async function rangeQuery(
 
 // One currently-active instance of an alerting rule, as Prometheus itself sees
 // it. The labels identify which instance, since one rule fires per series.
-export interface FiringInstance {
+interface FiringInstance {
   labels: Record<string, string>;
   state: string;
 }
@@ -319,7 +319,7 @@ export async function metricNames(
 
 // What a metric is and what it is measured in. Prometheus only knows this for
 // metrics an exporter declared with HELP and TYPE, so an answer is often empty.
-export interface MetricMetadata {
+interface MetricMetadata {
   metric: string;
   type: string;
   unit: string;

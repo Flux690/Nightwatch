@@ -28,7 +28,7 @@ export class HumanInputError extends Error {
   }
 }
 
-export interface HumanInputActionResult extends ApprovalResponse {
+interface HumanInputActionResult extends ApprovalResponse {
   sessionId: string;
 }
 

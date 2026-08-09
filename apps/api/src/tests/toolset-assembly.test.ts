@@ -193,17 +193,19 @@ describe("toolset assembly by fleet capabilities", () => {
 
     // The record belongs to the investigation, and nothing offered to a chat
     // can start one: what a session is was settled before the run began.
-    it("offers the report tools to an investigation and to nothing else", () => {
+    it("offers the record's tool to an investigation and to nothing else", () => {
       const plain = effectiveToolset(new Set([]), {}, false).map(
         (t) => t.schema.name,
       );
-      expect(plain).not.toContain("ProposeHypothesis");
-      expect(plain).not.toContain("OpenInvestigation");
+      expect(plain).not.toContain("RecordHypothesis");
 
       const investigating = effectiveToolset(new Set([]), {}, true).map(
         (t) => t.schema.name,
       );
-      expect(investigating).toContain("ProposeHypothesis");
+      expect(investigating).toContain("RecordHypothesis");
+      // The composition turn's tool is the loop's to attach, never the
+      // toolset's: offered here it would let a run write itself up mid-work.
+      expect(investigating).not.toContain("SubmitInvestigationReport");
     });
   });
 
@@ -364,9 +366,8 @@ describe("toolset assembly by fleet capabilities", () => {
           (s) => s.name,
         );
 
-      expect(namesOnTurn(0)).not.toContain("ProposeHypothesis");
-      expect(namesOnTurn(0)).not.toContain("OpenInvestigation");
-      expect(namesOnTurn(1)).not.toContain("ProposeHypothesis");
+      expect(namesOnTurn(0)).not.toContain("RecordHypothesis");
+      expect(namesOnTurn(1)).not.toContain("RecordHypothesis");
 
       // And across runs: a follow-up on the same chat is still a chat.
       mockCreateProvider.mockClear();
@@ -392,8 +393,7 @@ describe("toolset assembly by fleet capabilities", () => {
       const resumedNames = (
         resumed.chat.mock.calls[0]?.[0] as ToolSchema[]
       ).map((s) => s.name);
-      expect(resumedNames).not.toContain("ProposeHypothesis");
-      expect(resumedNames).not.toContain("OpenInvestigation");
+      expect(resumedNames).not.toContain("RecordHypothesis");
     });
   });
 });

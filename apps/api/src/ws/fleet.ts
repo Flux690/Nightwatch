@@ -25,7 +25,7 @@ export interface RunnerConnection {
   lastSeen: number;
 }
 
-export interface RunnerView {
+interface RunnerView {
   runnerId: string;
   platform: Platform;
   serverName: string | null;
@@ -50,7 +50,7 @@ export function addressName(conn: RunnerConnection): string | null {
   return conn.serverName ?? conn.hostname;
 }
 
-export interface RunnerRegistration {
+interface RunnerRegistration {
   runnerId: string;
   platform: Platform;
   send: (msg: string) => void;
@@ -181,7 +181,7 @@ const apiContainerId = ownContainerId();
 // Told on connect, so the runner can keep NightWarden out of everything it
 // enumerates. The runner already excludes itself; this covers the API beside it.
 // Docker only: a cluster runner lists workloads, and the API is not one of them.
-export function pushHiddenContainer(conn: RunnerConnection): void {
+function pushHiddenContainer(conn: RunnerConnection): void {
   if (!apiContainerId || conn.platform !== "docker") return;
   const msg: HideContainerMessage = {
     messageId: randomUUID(),

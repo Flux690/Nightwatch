@@ -15,7 +15,6 @@ const VERDICT_WORD: Record<Verdict, string> = {
   symptom: "Symptom",
   contributing_factor: "Contributing factor",
   disproven: "Disproven",
-  open: "Open",
 };
 
 /* The calls a claim rests on, carried out with it. An exported postmortem that
@@ -58,48 +57,61 @@ export function reportToMarkdown(
 
   const byId = new Map((report?.evidence ?? []).map((e) => [e.toolUseId, e]));
 
-  const claims = report?.report.hypotheses ?? [];
-  if (claims.length > 0) {
-    sections.push(
-      [
-        "## Claims",
-        "",
-        claims
-          .map((h) => {
-            const conviction = report?.conviction[h.id];
-            const verdict = `${VERDICT_WORD[h.verdict]}${conviction === undefined ? "" : `, ${conviction}`}.`;
-            const body = h.finding.trim();
-            const cited = citedLines(h.evidenceIds, byId);
-            return [
-              `### ${h.statement}`,
-              "",
-              verdict,
-              ...(body === "" ? [] : ["", body]),
-              ...(cited.length === 0 ? [] : ["", "Evidence:", "", ...cited]),
-            ].join("\n");
-          })
-          // A blank line before each heading, or the next claim's `###` lands
-          // against the previous one's body and stops being a heading.
-          .join("\n\n"),
-      ].join("\n"),
-    );
+  const submitted = report?.report.submitted ?? null;
+  if (submitted !== null) {
+    sections.push(submitted.summary);
+    if (submitted.timeline.length > 0) {
+      sections.push(
+        [
+          "## Timeline",
+          "",
+          ...submitted.timeline.map((e) => `- ${e.at} - ${e.what}`),
+        ].join("\n"),
+      );
+    }
+    if (submitted.impact.trim() !== "") {
+      sections.push(["## Impact", "", submitted.impact].join("\n"));
+    }
+    if (submitted.recommendation.trim() !== "") {
+      sections.push(
+        ["## Recommendation", "", submitted.recommendation].join("\n"),
+      );
+    }
   }
 
-  const fixes = report?.report.fixes ?? [];
-  if (fixes.length > 0) {
-    sections.push(
-      [
-        "## Proposed fixes",
-        "",
-        // Nested under the fix rather than in a block of its own: a fix is one
-        // line, and its evidence belongs to that line.
-        ...fixes.flatMap((f) => [
-          `- ${f.summary}`,
-          ...citedLines(f.evidenceIds, byId).map((line) => `  ${line}`),
-        ]),
-      ].join("\n"),
-    );
-  }
+  const claims = report?.report.hypotheses ?? [];
+  const settled = claims.filter((h) => h.verdict !== "disproven");
+  const ruledOut = claims.filter((h) => h.verdict === "disproven");
+
+  // One claim with its verdict, its reason and what backs it. The evidence is
+  // carried inline because the export is read where the transcript is not: a
+  // verdict without it is only the model's word, in a document that outlives
+  // the console session it came from.
+  const claimBlock = (heading: string, rows: typeof claims): string =>
+    [
+      `## ${heading}`,
+      "",
+      rows
+        .map((h) => {
+          const conviction = report?.conviction[h.id];
+          const verdict = `${VERDICT_WORD[h.verdict]}${conviction === undefined ? "" : `, ${conviction}`}.`;
+          const body = h.finding.trim();
+          const cited = citedLines(h.evidenceIds, byId);
+          return [
+            `### ${h.statement}`,
+            "",
+            verdict,
+            ...(body === "" ? [] : ["", body]),
+            ...(cited.length === 0 ? [] : ["", "Evidence:", "", ...cited]),
+          ].join("\n");
+        })
+        // A blank line before each heading, or the next claim's `###` lands
+        // against the previous one's body and stops being a heading.
+        .join("\n\n"),
+    ].join("\n");
+
+  if (settled.length > 0) sections.push(claimBlock("Findings", settled));
+  if (ruledOut.length > 0) sections.push(claimBlock("Ruled out", ruledOut));
 
   // What the operator released, read from the ledger rather than from anything
   // the model said about itself.

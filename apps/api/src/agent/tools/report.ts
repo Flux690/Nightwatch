@@ -1,30 +1,27 @@
-import type { Verdict } from "@nightwarden/shared";
+import type { TimelineEntry, Verdict } from "@nightwarden/shared";
 import {
-  PROPOSE_FIX_SCHEMA,
-  PROPOSE_HYPOTHESIS_SCHEMA,
-  RESOLVE_HYPOTHESIS_SCHEMA,
+  RECORD_HYPOTHESIS_SCHEMA,
+  SUBMIT_INVESTIGATION_REPORT_SCHEMA,
 } from "../prompts/report.js";
 import {
-  proposeFix,
-  proposeHypothesis,
-  resolveHypothesis,
+  recordHypothesis,
+  submitReport,
   type RecordOutcome,
 } from "../report.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
-// Thin adapters over the report domain service. Offered only to a session under
-// investigation; the toolset gates them out of every other run.
+// Thin adapters over the report domain service. RecordHypothesis is offered only
+// to a session under investigation; SubmitInvestigationReport only on the
+// composition turn, which is the loop's business rather than the toolset's.
 
-// "open" is the state a hypothesis is born in, not something it can be settled
-// on, so it is the one verdict this tool does not accept.
-const VERDICTS: Exclude<Verdict, "open">[] = [
+const VERDICTS: Verdict[] = [
   "root_cause",
   "trigger",
   "symptom",
   "contributing_factor",
   "disproven",
 ];
-function isVerdict(value: unknown): value is Exclude<Verdict, "open"> {
+function isVerdict(value: unknown): value is Verdict {
   return VERDICTS.some((v) => v === value);
 }
 
@@ -37,6 +34,23 @@ function text(value: unknown): string | null {
 function citations(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   return value.every((id) => typeof id === "string") ? value : null;
+}
+
+// An empty string is how a required field says "none", so a timeline entry
+// without a call carries no evidenceId rather than an empty one.
+function timelineEntries(value: unknown): TimelineEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const entries: TimelineEntry[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) return null;
+    const row = raw as Record<string, unknown>;
+    const at = text(row["at"]);
+    const what = text(row["what"]);
+    if (at === null || what === null) return null;
+    const evidenceId = text(row["evidenceId"]);
+    entries.push({ at, what, ...(evidenceId !== null && { evidenceId }) });
+  }
+  return entries;
 }
 
 // Defensive seatbelt behind the provider's schema enforcement; a corrupt call
@@ -55,29 +69,21 @@ function toResult(outcome: RecordOutcome): ToolExecuteResult {
 
 export const REPORT_TOOLS: Tool[] = [
   {
-    schema: PROPOSE_HYPOTHESIS_SCHEMA,
+    schema: RECORD_HYPOTHESIS_SCHEMA,
     access: "read",
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const statement = text(input["statement"]);
-      if (statement === null) {
-        return malformed("A hypothesis needs a statement. Send one sentence.");
-      }
-      return toResult(proposeHypothesis(ctx.sessionId, statement));
-    },
-  },
-  {
-    schema: RESOLVE_HYPOTHESIS_SCHEMA,
-    access: "read",
-    on: "api",
-    execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const id = text(input["id"]);
-      const verdict = input["verdict"];
       const finding = input["finding"];
+      const verdict = input["verdict"];
       const evidenceIds = citations(input["evidenceIds"]);
-      if (id === null || typeof finding !== "string" || !isVerdict(verdict)) {
+      if (
+        statement === null ||
+        typeof finding !== "string" ||
+        !isVerdict(verdict)
+      ) {
         return malformed(
-          `Resolving a hypothesis needs its id, a finding, and one of these verdicts: ${VERDICTS.join(", ")}.`,
+          `Recording a hypothesis needs a statement, a finding, and one of these verdicts: ${VERDICTS.join(", ")}.`,
         );
       }
       if (evidenceIds === null || evidenceIds.length === 0) {
@@ -86,8 +92,8 @@ export const REPORT_TOOLS: Tool[] = [
         );
       }
       return toResult(
-        resolveHypothesis(ctx.sessionId, {
-          id,
+        recordHypothesis(ctx.sessionId, {
+          statement,
           verdict,
           finding,
           evidenceIds,
@@ -95,19 +101,32 @@ export const REPORT_TOOLS: Tool[] = [
       );
     },
   },
-  {
-    schema: PROPOSE_FIX_SCHEMA,
-    access: "read",
-    on: "api",
-    execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const summary = text(input["summary"]);
-      const evidenceIds = citations(input["evidenceIds"]);
-      if (summary === null || evidenceIds === null) {
-        return malformed(
-          "A proposed fix needs a summary and an evidenceIds array, which may be empty.",
-        );
-      }
-      return toResult(proposeFix(ctx.sessionId, summary, evidenceIds));
-    },
-  },
 ];
+
+/* Never in the toolset: the loop attaches this one schema, alone, on the
+   composition turn. Offering it alongside the investigation tools would let a
+   run write itself up in the middle of working. */
+export const SUBMIT_REPORT_TOOL: Tool = {
+  schema: SUBMIT_INVESTIGATION_REPORT_SCHEMA,
+  access: "read",
+  on: "api",
+  execute: async (input, ctx): Promise<ToolExecuteResult> => {
+    const summary = text(input["summary"]);
+    const impact = text(input["impact"]);
+    const recommendation = text(input["recommendation"]);
+    const timeline = timelineEntries(input["timeline"]);
+    if (summary === null || timeline === null) {
+      return malformed(
+        "A report needs a summary and a timeline array, which may be empty.",
+      );
+    }
+    return toResult(
+      submitReport(ctx.sessionId, {
+        summary,
+        timeline,
+        impact: impact ?? "",
+        recommendation: recommendation ?? "",
+      }),
+    );
+  },
+};

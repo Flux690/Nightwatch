@@ -3,7 +3,7 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
 
-export interface BatchWindow {
+interface BatchWindow {
   // Add an alert to the operator-wide batch window. If the window is not yet
   // open, starts the 90s hold timer. Subsequent alerts from any runner join.
   add(alert: NormalizedAlert): void;
@@ -14,7 +14,7 @@ export interface BatchWindow {
   isOpen(): boolean;
 }
 
-export function createBatchWindow(opts: {
+function createBatchWindow(opts: {
   windowMs: number;
   onBatch: (alerts: NormalizedAlert[]) => void;
 }): BatchWindow {

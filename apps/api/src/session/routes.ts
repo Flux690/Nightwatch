@@ -176,13 +176,17 @@ export async function registerSessionRoutes(
     },
   );
 
-  fastify.post<{ Body: { message?: string } }>(
+  fastify.post<{ Body: { message?: string; kind?: string } }>(
     "/chat",
     { preHandler: requireSession },
     async (request, reply) => {
       const message = request.body?.message?.trim();
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
+      }
+      const kind = request.body?.kind ?? "chat";
+      if (kind !== "chat" && kind !== "investigation") {
+        return reply.code(400).send({ error: "invalid kind" });
       }
       const readiness = checkLLMReadiness();
       if (!readiness.ready) {
@@ -191,10 +195,16 @@ export async function registerSessionRoutes(
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
       const sessionId = randomUUID();
-      // A question opens a chat and stays one. An investigation is opened by an
-      // alert, never by the agent deciding mid-conversation.
-      dispatcher.dispatch({ sessionId, userMessage: message });
-      logger.info({ sessionId }, "chat session started");
+      /* What a session is, is declared here and never again: by an alert, or by
+         the operator picking a mode before they typed. Nothing infers it later -
+         not the agent mid-conversation, and not the harness from what the run
+         happened to record. */
+      dispatcher.dispatch({
+        sessionId,
+        userMessage: message,
+        investigation: kind === "investigation",
+      });
+      logger.info({ sessionId, kind }, "session started");
       return reply.code(202).send({ sessionId });
     },
   );

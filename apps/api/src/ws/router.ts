@@ -8,7 +8,7 @@ import type { RunnerConnection } from "./fleet.js";
 
 // How a runner command is addressed: by service target key, or by the runner itself.
 // Declared per tool in the registry, never inferred from input shape.
-export type RouteBy = "service" | "runner";
+type RouteBy = "service" | "runner";
 
 // A fan-out wider than this is noise, not evidence: the model cannot read ten
 // hosts' filesystems in one turn and the token cost is real.
@@ -17,7 +17,7 @@ const MAX_FANOUT = 8;
 // The owning runner plus the advertised identity behind a target key, so the
 // transport can expand the flat key back into the structured payload. Nothing here
 // narrows it: the identity only ever returns to the runner that advertised it.
-export interface ResolvedService {
+interface ResolvedService {
   conn: RunnerConnection;
   identity: DockerServiceIdentity | KubernetesWorkloadIdentity;
 }

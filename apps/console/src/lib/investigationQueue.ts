@@ -7,7 +7,7 @@ import type {
 // Triage order: what needs a person, then what is still moving, then the three
 // kinds of finished. The group headers and the record's stepper share it, so
 // stepping through the queue walks the list exactly as it was read.
-export const STATUS_ORDER: SessionRunStatus[] = [
+const STATUS_ORDER: SessionRunStatus[] = [
   "action_required",
   "investigating",
   "resolved",
@@ -34,7 +34,7 @@ function rankOf(severity: AlertSeverity | null): number {
   return severity === null ? SEVERITY_RANK.info + 1 : SEVERITY_RANK[severity];
 }
 
-export interface StatusGroup {
+interface StatusGroup {
   status: SessionRunStatus;
   rows: SessionListRow[];
 }

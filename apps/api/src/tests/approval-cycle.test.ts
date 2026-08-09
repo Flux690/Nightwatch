@@ -260,7 +260,7 @@ describe("durable approval interrupts", () => {
     expect(reportRes.status).toBe(200);
     const { report, decisions } =
       (await reportRes.json()) as SessionReportResponse;
-    expect(report.fixes).toEqual([]);
+    expect(report.submitted).toBeNull();
     // Read back from the session's own ledger: the registry says the call was
     // gated, and no outcome on it says the operator released it.
     expect(decisions).toHaveLength(1);

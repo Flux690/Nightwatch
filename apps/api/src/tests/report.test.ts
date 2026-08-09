@@ -21,7 +21,7 @@ import {
   reportGaps,
   resolveEvidence,
 } from "../agent/report.js";
-import { REPORT_TOOLS } from "../agent/tools/report.js";
+import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
@@ -163,152 +163,129 @@ describe("the investigation record", () => {
     });
   }
 
-  // Records the hypothesis and returns the id the system assigned to it.
-  async function propose(
+  // Records a tested hypothesis and returns the id the system assigned to it.
+  async function record(
     sessionId: string,
     statement: string,
+    verdict: string,
+    evidenceIds: string[],
+    finding = "",
   ): Promise<string> {
-    await call("ProposeHypothesis", sessionId, { statement });
+    await call("RecordHypothesis", sessionId, {
+      statement,
+      verdict,
+      finding,
+      evidenceIds,
+    });
     const hypotheses = getReport(sessionId)!.hypotheses;
     return hypotheses[hypotheses.length - 1]!.id;
   }
 
-  describe("hypothesis transitions", () => {
-    it("records proposing and resolving as two acts on one row", async () => {
+  // The composition turn's tool, which is never in the toolset: the loop
+  // attaches it alone once the ledger gate has passed.
+  async function submit(
+    sessionId: string,
+    input: Record<string, unknown>,
+  ): Promise<{ content: unknown; outcome?: string }> {
+    return executeTool(SUBMIT_REPORT_TOOL, input, {
+      sessionId,
+      toolUseId: "tu-submit",
+      toolCallCeilingMs: 15_000,
+    });
+  }
+
+  describe("recording a hypothesis", () => {
+    it("records what was tested and how it settled as one act", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
 
-      const id = await propose(sessionId, "the cache bump leaks");
-      expect(getReport(sessionId)!.hypotheses).toMatchObject([
-        {
-          id,
-          statement: "the cache bump leaks",
-          verdict: "open",
-          resolvedAt: null,
-        },
-      ]);
-
-      await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "the climb starts at the merge",
-        evidenceIds: ["tu-1"],
-      });
-      const resolved = getReport(sessionId)!.hypotheses[0]!;
-      expect(resolved).toMatchObject({
+      const id = await record(
+        sessionId,
+        "the cache bump leaks",
+        "root_cause",
+        ["tu-1"],
+        "the climb starts at the merge",
+      );
+      const stored = getReport(sessionId)!.hypotheses[0]!;
+      expect(stored).toMatchObject({
         id,
         statement: "the cache bump leaks",
         verdict: "root_cause",
         finding: "the climb starts at the merge",
         evidenceIds: ["tu-1"],
       });
-      expect(resolved.resolvedAt).not.toBeNull();
+      expect(stored.recordedAt).not.toBe("");
     });
 
-    it("expresses all six verdicts, five settled and one still being tested", async () => {
+    it("expresses all five verdicts, every one of them settled", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      const settled = [
+      const verdicts = [
         "root_cause",
         "trigger",
         "symptom",
         "contributing_factor",
         "disproven",
       ];
-      for (const verdict of settled) {
-        const id = await propose(sessionId, `about ${verdict}`);
-        await call("ResolveHypothesis", sessionId, {
-          id,
-          verdict,
-          finding: "",
-          evidenceIds: ["tu-1"],
-        });
+      for (const verdict of verdicts) {
+        await record(sessionId, `about ${verdict}`, verdict, ["tu-1"]);
       }
-      await propose(sessionId, "still being tested");
-      expect(getReport(sessionId)!.hypotheses.map((h) => h.verdict)).toEqual([
-        ...settled,
-        "open",
-      ]);
+      expect(getReport(sessionId)!.hypotheses.map((h) => h.verdict)).toEqual(
+        verdicts,
+      );
     });
 
-    it("refuses a verdict of open, which is where a hypothesis starts", async () => {
+    it("refuses a verdict that is not one of the five", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      const id = await propose(sessionId, "the cache bump leaks");
-      const result = await call("ResolveHypothesis", sessionId, {
-        id,
+      const result = await call("RecordHypothesis", sessionId, {
+        statement: "the cache bump leaks",
         verdict: "open",
-        finding: "",
+        finding: "still looking",
         evidenceIds: ["tu-1"],
       });
       expect(result.outcome).toBe("system");
-    });
-
-    it("refuses to alter a hypothesis a later call disagrees with", async () => {
-      const sessionId = randomUUID();
-      seedTranscript(sessionId);
-      const id = await propose(sessionId, "the cache bump leaks");
-      await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "first read",
-        evidenceIds: ["tu-1"],
-      });
-
-      const second = await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "disproven",
-        finding: "changed my mind",
-        evidenceIds: ["tu-2"],
-      });
-      expect(second.outcome).toBe("expected_miss");
-      expect(String(second.content)).toMatch(/already resolved/);
-
-      // The row the model tried to overwrite is untouched, and nothing is gone.
-      expect(getReport(sessionId)!.hypotheses).toHaveLength(1);
-      expect(getReport(sessionId)!.hypotheses[0]).toMatchObject({
-        verdict: "root_cause",
-        finding: "first read",
-      });
-    });
-
-    it("refuses a verdict on a hypothesis that was never proposed", async () => {
-      const sessionId = randomUUID();
-      seedTranscript(sessionId);
-      const result = await call("ResolveHypothesis", sessionId, {
-        id: "h9",
-        verdict: "root_cause",
-        finding: "",
-        evidenceIds: ["tu-1"],
-      });
-      expect(result.outcome).toBe("expected_miss");
       expect(getReport(sessionId)).toBeUndefined();
     });
 
-    it("refuses a verdict with nothing behind it", async () => {
+    it("refuses a claim with nothing behind it, on any verdict", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      const id = await propose(sessionId, "the cache bump leaks");
-      const result = await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "a hunch",
-        evidenceIds: [],
-      });
-      expect(result.outcome).toBe("system");
-      expect(getReport(sessionId)!.hypotheses[0]!.verdict).toBe("open");
+      for (const verdict of ["root_cause", "disproven"]) {
+        const result = await call("RecordHypothesis", sessionId, {
+          statement: "a hunch",
+          verdict,
+          finding: "no reason given",
+          evidenceIds: [],
+        });
+        expect(result.outcome).toBe("system");
+      }
+      expect(getReport(sessionId)).toBeUndefined();
+    });
+
+    /* Append-only: there is no call that rewrites a row, so a changed mind is a
+       second record beside the first rather than an edit of it. */
+    it("keeps a claim the run later disagreed with beside the one that replaced it", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      await record(sessionId, "the cache bump leaks", "disproven", ["tu-2"]);
+
+      expect(
+        getReport(sessionId)!.hypotheses.map((h) => [h.id, h.verdict]),
+      ).toEqual([
+        ["h1", "root_cause"],
+        ["h2", "disproven"],
+      ]);
     });
 
     it("keeps a claim whose citation resolves to nothing, and drops only the citation", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      const id = await propose(sessionId, "the cache bump leaks");
-      await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "the climb starts at the merge",
-        evidenceIds: ["tu-1", "tu-invented"],
-      });
+      await record(sessionId, "the cache bump leaks", "root_cause", [
+        "tu-1",
+        "tu-invented",
+      ]);
 
       // The overreach is visible as a missing citation, never as a missing claim.
       const stored = getReport(sessionId)!.hypotheses[0]!;
@@ -317,28 +294,66 @@ describe("the investigation record", () => {
     });
   });
 
-  describe("the proposed fix", () => {
-    it("keeps a superseded fix beside the one that replaced it", async () => {
+  describe("the composed report", () => {
+    it("writes the prose the ledger has no field for, over a ledger it leaves alone", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      await call("ProposeFix", sessionId, {
-        summary: "revert PR #482",
-        evidenceIds: ["tu-2", "tu-invented"],
-      });
-      expect(getReport(sessionId)!.fixes).toMatchObject([
-        { id: "f1", summary: "revert PR #482", evidenceIds: ["tu-2"] },
-      ]);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
 
-      // A rejected fix redirects the agent, so it proposes again; the first
-      // stays on the record and the last one is what stands.
-      await call("ProposeFix", sessionId, {
-        summary: "restart the container instead",
-        evidenceIds: [],
+      await submit(sessionId, {
+        summary:
+          "web-01 was OOM-killed because the cache bump raised its floor",
+        timeline: [
+          {
+            at: "2026-07-03T02:00:00.000Z",
+            what: "memory crossed the limit",
+            evidenceId: "tu-1",
+          },
+        ],
+        impact: "nine minutes of failed reads",
+        recommendation: "revert PR #482",
       });
-      expect(getReport(sessionId)!.fixes.map((f) => f.summary)).toEqual([
-        "revert PR #482",
-        "restart the container instead",
-      ]);
+
+      const report = getReport(sessionId)!;
+      expect(report.submitted).toMatchObject({
+        summary:
+          "web-01 was OOM-killed because the cache bump raised its floor",
+        impact: "nine minutes of failed reads",
+        recommendation: "revert PR #482",
+      });
+      // The ledger it was composed from is untouched by the composing.
+      expect(report.hypotheses).toHaveLength(1);
+      expect(report.hypotheses[0]!.verdict).toBe("root_cause");
+    });
+
+    it("drops a timeline citation naming no call, and keeps the entry", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+
+      await submit(sessionId, {
+        summary: "the limit was lowered",
+        timeline: [
+          {
+            at: "2026-07-03T01:40:00.000Z",
+            what: "PR #482 merged",
+            evidenceId: "tu-invented",
+          },
+          {
+            at: "2026-07-03T02:00:00.000Z",
+            what: "first kill",
+            evidenceId: "",
+          },
+        ],
+        impact: "",
+        recommendation: "revert it",
+      });
+
+      const timeline = getReport(sessionId)!.submitted!.timeline;
+      expect(timeline).toHaveLength(2);
+      expect(timeline[0]!.what).toBe("PR #482 merged");
+      expect(timeline[0]!.evidenceId).toBeUndefined();
+      expect(timeline[1]!.evidenceId).toBeUndefined();
     });
   });
 
@@ -346,16 +361,19 @@ describe("the investigation record", () => {
     it("resolves a citation to the call that produced it, quoting the result verbatim", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      const id = await propose(sessionId, "the cache bump leaks");
-      await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "",
-        evidenceIds: ["tu-1"],
-      });
-      await call("ProposeFix", sessionId, {
-        summary: "revert PR #482",
-        evidenceIds: ["tu-2"],
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+      // The timeline cites too, so a call named only there still resolves.
+      await submit(sessionId, {
+        summary: "the cache bump raised the floor",
+        timeline: [
+          {
+            at: "2026-07-03T02:01:00.000Z",
+            what: "PR #482 merged",
+            evidenceId: "tu-2",
+          },
+        ],
+        impact: "",
+        recommendation: "revert PR #482",
       });
 
       const evidence = resolveEvidence(sessionId, getReport(sessionId)!);
@@ -378,27 +396,14 @@ describe("the investigation record", () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
 
-      const one = await propose(sessionId, "one source");
-      await call("ResolveHypothesis", sessionId, {
-        id: one,
-        verdict: "trigger",
-        finding: "",
-        evidenceIds: ["tu-1"],
-      });
-      const two = await propose(sessionId, "two sources");
-      await call("ResolveHypothesis", sessionId, {
-        id: two,
-        verdict: "root_cause",
-        finding: "",
-        evidenceIds: ["tu-1", "tu-2"],
-      });
-      const none = await propose(sessionId, "nothing behind it");
-      await call("ResolveHypothesis", sessionId, {
-        id: none,
-        verdict: "symptom",
-        finding: "",
-        evidenceIds: ["tu-invented"],
-      });
+      const one = await record(sessionId, "one source", "trigger", ["tu-1"]);
+      const two = await record(sessionId, "two sources", "root_cause", [
+        "tu-1",
+        "tu-2",
+      ]);
+      const none = await record(sessionId, "nothing behind it", "symptom", [
+        "tu-invented",
+      ]);
 
       const conviction = computeConviction(sessionId, getReport(sessionId)!);
       expect(conviction[one]).toBe("cited");
@@ -416,13 +421,10 @@ describe("the investigation record", () => {
         "{}",
         "2026-07-03T02:02:00.000Z",
       );
-      const id = await propose(sessionId, "two metric queries");
-      await call("ResolveHypothesis", sessionId, {
-        id,
-        verdict: "root_cause",
-        finding: "",
-        evidenceIds: ["tu-1", "tu-3"],
-      });
+      const id = await record(sessionId, "two metric queries", "root_cause", [
+        "tu-1",
+        "tu-3",
+      ]);
       expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "cited",
       );
@@ -444,7 +446,7 @@ describe("the investigation record", () => {
       );
     }
 
-    it("verifies a fix cited by a read taken after the write it released", async () => {
+    it("verifies a claim cited by a read taken after the write it released", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
       appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
@@ -457,25 +459,29 @@ describe("the investigation record", () => {
         "2026-07-03T02:06:00.000Z",
       );
 
-      await call("ProposeFix", sessionId, {
-        summary: "restart the container",
-        evidenceIds: ["tu-after"],
-      });
-      expect(computeConviction(sessionId, getReport(sessionId)!)["f1"]).toBe(
+      const id = await record(
+        sessionId,
+        "the container needed a restart",
+        "trigger",
+        ["tu-after"],
+      );
+      expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "verified",
       );
     });
 
-    it("does not verify a fix cited only by reads taken before the write", async () => {
+    it("does not verify a claim cited only by reads taken before the write", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
       appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
 
-      await call("ProposeFix", sessionId, {
-        summary: "restart the container",
-        evidenceIds: ["tu-1", "tu-2"],
-      });
-      expect(computeConviction(sessionId, getReport(sessionId)!)["f1"]).toBe(
+      const id = await record(
+        sessionId,
+        "the container needed a restart",
+        "trigger",
+        ["tu-1", "tu-2"],
+      );
+      expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "corroborated",
       );
     });
@@ -493,32 +499,82 @@ describe("the investigation record", () => {
         "2026-07-03T02:06:00.000Z",
       );
 
-      await call("ProposeFix", sessionId, {
-        summary: "restart the container",
-        evidenceIds: ["tu-after"],
-      });
+      const id = await record(
+        sessionId,
+        "the container needed a restart",
+        "trigger",
+        ["tu-after"],
+      );
       // The operator said no, so nothing changed and the read confirms nothing.
-      expect(computeConviction(sessionId, getReport(sessionId)!)["f1"]).toBe(
+      expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "cited",
       );
     });
   });
 
   describe("the finish gate", () => {
-    // Only the requests: the opening turn is an appendUserMessage too on the
-    // paths that resume, and the assertions below are about what the gate said.
-    function completionRequests(index = 0): string[] {
+    // Only the harness's own turns: the opening turn is an appendUserMessage too
+    // on the paths that resume, and the assertions below are about what the
+    // harness said, split by which of its two jobs said it.
+    function harnessMessages(index = 0): string[] {
       const provider = mockCreateProvider.mock.results[index]!.value as {
         appendUserMessage: ReturnType<typeof vi.fn>;
       };
-      return provider.appendUserMessage.mock.calls
-        .map(([msg]) => String(msg))
-        .filter((msg) => msg.startsWith("Your investigation record"));
+      return provider.appendUserMessage.mock.calls.map(([msg]) => String(msg));
+    }
+    function completionRequests(index = 0): string[] {
+      return harnessMessages(index).filter((m) =>
+        m.startsWith("Your investigation record"),
+      );
+    }
+    function compositionRequests(index = 0): string[] {
+      return harnessMessages(index).filter((m) =>
+        m.startsWith("Your investigation is over"),
+      );
     }
 
-    it("asks a run that recorded nothing for the record, then lets it end", async () => {
+    // A scripted turn recording one hypothesis, citing the recording call's own
+    // id - which is in the ledger by then, because the assistant turn is
+    // persisted before its tools run.
+    function recordTurn(verdict: string, statement: string) {
+      return {
+        toolUses: [
+          {
+            id: "tu-record",
+            name: "RecordHypothesis",
+            input: {
+              statement,
+              verdict,
+              finding: "what the read showed",
+              evidenceIds: ["tu-record"],
+            },
+          },
+        ],
+        text: "",
+      };
+    }
+
+    function submitTurn(recommendation = "cap concurrency at one job") {
+      return {
+        toolUses: [
+          {
+            id: "tu-submit",
+            name: "SubmitInvestigationReport",
+            input: {
+              summary: "the worker ran out of memory",
+              timeline: [],
+              impact: "one job dropped",
+              recommendation,
+            },
+          },
+        ],
+        text: "",
+      };
+    }
+
+    it("asks a run that recorded nothing for the record, then composes anyway", async () => {
       // Every turn is a free-form finish; the gate should push back MAX_NUDGES
-      // times before letting the run go.
+      // times before giving up and composing from what there is.
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([{ toolUses: [], text: "All done." }]),
       );
@@ -531,56 +587,31 @@ describe("the investigation record", () => {
 
       const requests = completionRequests();
       expect(requests).toHaveLength(3);
-      expect(requests[0]).toContain("recorded no hypotheses");
+      expect(requests[0]).toContain("recorded nothing");
+      // Four investigating turns, then both composition attempts - the scripted
+      // model never calls the tool, so the run ends with no report at all.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
       };
-      expect(provider.chat).toHaveBeenCalledTimes(4);
+      expect(provider.chat).toHaveBeenCalledTimes(6);
       expect(getReport(sessionId)).toBeUndefined();
 
       // Neither the requests nor the alert briefing NightWarden opened with is
       // drawn: the operator sees one conversation, with the agent.
       const drawn = JSON.stringify(buildTranscript(sessionId));
       expect(drawn).not.toContain("Your investigation record");
+      expect(drawn).not.toContain("Your investigation is over");
       expect(drawn).not.toContain("<alert>");
     });
 
     it("names only the gap that remains, not the whole contract", async () => {
-      // One hypothesis proposed and never settled: the record has exactly one
-      // hole, and the request must not mention the four it does not have.
-      mockCreateProvider.mockImplementationOnce(() =>
-        createContractFakeProvider([
-          {
-            toolUses: [
-              {
-                id: "tu-propose",
-                name: "ProposeHypothesis",
-                input: { statement: "the disk filled up" },
-              },
-            ],
-            text: "",
-          },
-          { toolUses: [], text: "That is my answer." },
-        ]),
-      );
-      const sessionId = randomUUID();
-      await runSession({ sessionId, alerts: [alert("one-gap")] });
-
-      const request = completionRequests()[0]!;
-      expect(request).toContain("h1 is still open");
-      expect(request).toContain("ResolveHypothesis");
-      expect(request).not.toContain("recorded no hypotheses");
-      expect(request).not.toContain("ProposeFix");
-    });
-
-    it("counts a claim backed only by a call that never answered as a gap", async () => {
       const sessionId = randomUUID();
       createSession(
         { sessionId, title: "t", createdAt: new Date().toISOString() },
-        [alert("unresolvable")],
+        [alert("one-gap")],
       );
-      // The call is in the transcript, so the citation is not fabricated - but
-      // it never answered, so there is nothing to quote under the claim.
+      // In the transcript, so the citation is not fabricated - but it never
+      // answered, so there is nothing to quote under the claim.
       appendTranscriptRows([
         {
           sessionId,
@@ -598,9 +629,52 @@ describe("the investigation record", () => {
           createdAt: new Date().toISOString(),
         },
       ]);
-      await call("ProposeHypothesis", sessionId, { statement: "leak" });
-      await call("ResolveHypothesis", sessionId, {
-        id: "h1",
+      await call("RecordHypothesis", sessionId, {
+        statement: "leak",
+        verdict: "root_cause",
+        finding: "rss climbed",
+        evidenceIds: ["tu-silent"],
+      });
+
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          { toolUses: [], text: "That is my answer." },
+        ]),
+      );
+      await runSession({ sessionId, alerts: [alert("one-gap")] });
+
+      const request = completionRequests()[0]!;
+      expect(request).toContain(
+        "h1 is backed only by calls that returned nothing",
+      );
+      expect(request).not.toContain("recorded nothing");
+    });
+
+    it("counts a claim backed only by a call that never answered as a gap", async () => {
+      const sessionId = randomUUID();
+      createSession(
+        { sessionId, title: "t", createdAt: new Date().toISOString() },
+        [alert("unresolvable")],
+      );
+      appendTranscriptRows([
+        {
+          sessionId,
+          seq: 0,
+          kind: "assistant",
+          content: "[tool: QueryMetricsRange]",
+          parts: [
+            {
+              type: "tool_call",
+              id: "tu-silent",
+              name: "QueryMetricsRange",
+              input: { query: "rss" },
+            },
+          ],
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      await call("RecordHypothesis", sessionId, {
+        statement: "leak",
         verdict: "root_cause",
         finding: "rss climbed",
         evidenceIds: ["tu-silent"],
@@ -610,35 +684,12 @@ describe("the investigation record", () => {
       expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
-    it("passes silently once every hypothesis is settled", async () => {
+    it("passes silently once the ledger holds a settled claim, then composes", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
-          {
-            toolUses: [
-              {
-                id: "tu-propose",
-                name: "ProposeHypothesis",
-                input: { statement: "the disk filled up" },
-              },
-            ],
-            text: "",
-          },
-          {
-            toolUses: [
-              {
-                id: "tu-resolve",
-                name: "ResolveHypothesis",
-                input: {
-                  id: "h1",
-                  verdict: "disproven",
-                  finding: "the disk was at 12 per cent",
-                  evidenceIds: ["tu-propose"],
-                },
-              },
-            ],
-            text: "",
-          },
+          recordTurn("disproven", "the disk filled up"),
           { toolUses: [], text: "I could not determine a cause." },
+          submitTurn("watch the disk for another day"),
         ]),
       );
       const sessionId = randomUUID();
@@ -649,16 +700,40 @@ describe("the investigation record", () => {
       expect(outcome).toBe("completed");
 
       expect(completionRequests()).toHaveLength(0);
-      const provider = mockCreateProvider.mock.results[0]!.value as {
-        chat: ReturnType<typeof vi.fn>;
-      };
-      expect(provider.chat).toHaveBeenCalledTimes(3);
-      expect(getReport(sessionId)!.hypotheses[0]!.verdict).toBe("disproven");
+      expect(compositionRequests()).toHaveLength(1);
+      // The ledger rides the request, so the timeline can copy ids from nearby.
+      expect(compositionRequests()[0]).toContain("RECORDED FINDINGS");
+      expect(compositionRequests()[0]).toContain("the disk filled up");
+
+      const report = getReport(sessionId)!;
+      expect(report.hypotheses[0]!.verdict).toBe("disproven");
+      expect(report.submitted).toMatchObject({
+        summary: "the worker ran out of memory",
+        recommendation: "watch the disk for another day",
+      });
+    });
+
+    it("does not compose a chat, which keeps no record at all", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          { toolUses: [], text: "Nine containers." },
+        ]),
+      );
+      const sessionId = randomUUID();
+      const outcome = await runSession({
+        sessionId,
+        userMessage: "how many containers are running?",
+      });
+      expect(outcome).toBe("completed");
+      expect(harnessMessages()).toHaveLength(0);
+      expect(getReport(sessionId)).toBeUndefined();
     });
 
     /* The gate holds a run that acted to a different standard from one that only
        looked. "I could not work out the cause" is a complete ending; releasing a
-       write and then going quiet with the condition still firing is not. */
+       write and then going quiet with the condition still firing is not - and
+       that demand lands on the composition turn, where the recommendation is
+       written. */
     describe("a run that acted", () => {
       // A gated call carrying a result: the registry says it needed releasing,
       // and no rejected outcome on it says the operator released it.
@@ -676,40 +751,17 @@ describe("the investigation record", () => {
         );
       }
 
-      function settledRun(): void {
+      function settledRun(...extra: ReturnType<typeof submitTurn>[]) {
         mockCreateProvider.mockImplementationOnce(() =>
           createContractFakeProvider([
-            {
-              toolUses: [
-                {
-                  id: "tu-propose",
-                  name: "ProposeHypothesis",
-                  input: { statement: "the worker leaks" },
-                },
-              ],
-              text: "",
-            },
-            {
-              toolUses: [
-                {
-                  id: "tu-resolve",
-                  name: "ResolveHypothesis",
-                  input: {
-                    id: "h1",
-                    verdict: "disproven",
-                    finding: "it did not",
-                    evidenceIds: ["tu-propose"],
-                  },
-                },
-              ],
-              text: "",
-            },
+            recordTurn("disproven", "the worker leaks"),
             { toolUses: [], text: "Restarted it." },
+            ...extra,
           ]),
         );
       }
 
-      it("is asked for a recommendation when the condition still fires", async () => {
+      it("is asked for a recommendation when nothing can confirm recovery", async () => {
         settledRun();
         const sessionId = randomUUID();
         createSession(
@@ -720,17 +772,15 @@ describe("the investigation record", () => {
 
         await runSession({ sessionId, alerts: [alert("acted-firing")] });
 
-        const requests = completionRequests();
-        expect(requests[0]).toContain("ProposeFix");
+        const request = compositionRequests()[0]!;
         // Never "try again": repeating a write that did not work is the failure
         // this gate exists to catch.
-        expect(requests[0]).not.toContain("try again");
-
+        expect(request).not.toContain("try again");
         /* No source could answer here, so the request must not claim the
            condition is still firing - that is a fact we do not have, in a system
            whose premise is not asserting what it cannot verify. */
-        expect(requests[0]).toContain("Nothing can confirm");
-        expect(requests[0]).not.toContain("is still firing");
+        expect(request).toContain("Nothing can confirm");
+        expect(request).not.toContain("is still firing");
       });
 
       it("says the condition is still firing only when a source said so", async () => {
@@ -780,48 +830,38 @@ describe("the investigation record", () => {
           alerts: [alert("acted-confirmed-firing")],
         });
 
-        const requests = completionRequests();
-        expect(requests[0]).toContain("is still firing");
-        expect(requests[0]).not.toContain("Nothing can confirm");
+        const request = compositionRequests()[0]!;
+        expect(request).toContain("is still firing");
+        expect(request).not.toContain("Nothing can confirm");
 
         vi.unstubAllGlobals();
         deletePrometheusIntegration();
       });
 
-      it("is let go once it has recommended something", async () => {
-        mockCreateProvider.mockImplementationOnce(() =>
-          createContractFakeProvider([
-            {
-              toolUses: [
-                {
-                  id: "tu-fix",
-                  name: "ProposeFix",
-                  input: { summary: "cap concurrency", evidenceIds: [] },
-                },
-              ],
-              text: "",
-            },
-            { toolUses: [], text: "Recommended." },
-          ]),
-        );
+      it("refuses a write-up that recommends nothing, and asks again", async () => {
+        settledRun(submitTurn(""), submitTurn("cap concurrency at one job"));
         const sessionId = randomUUID();
         createSession(
           { sessionId, title: "t", createdAt: new Date().toISOString() },
-          [alert("acted-recommended")],
+          [alert("acted-no-recommendation")],
         );
         releasedWrite(sessionId, 0);
 
         await runSession({
           sessionId,
-          alerts: [alert("acted-recommended")],
+          alerts: [alert("acted-no-recommendation")],
         });
 
-        // The record has an empty-record gap of its own; what must not appear is
-        // the recovery sentence, because the operator has been told what to do.
-        expect(completionRequests().join(" ")).not.toContain("still firing");
+        const retries = harnessMessages().filter((m) =>
+          m.includes("recommends nothing"),
+        );
+        expect(retries).toHaveLength(1);
+        expect(getReport(sessionId)!.submitted!.recommendation).toBe(
+          "cap concurrency at one job",
+        );
       });
 
-      it("says nothing to a run that only looked", async () => {
+      it("says nothing about recovery to a run that only looked", async () => {
         settledRun();
         const sessionId = randomUUID();
         await runSession({ sessionId, alerts: [alert("only-looked")] });
@@ -829,6 +869,9 @@ describe("the investigation record", () => {
         // No write was released, so an honest inconclusive ending stands even
         // though the alert never cleared.
         expect(completionRequests()).toHaveLength(0);
+        const request = compositionRequests()[0]!;
+        expect(request).not.toContain("is still firing");
+        expect(request).not.toContain("Nothing can confirm");
       });
     });
   });

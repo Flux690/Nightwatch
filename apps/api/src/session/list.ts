@@ -61,7 +61,6 @@ const CONFIDENCE: Verdict[] = [
   "trigger",
   "contributing_factor",
   "symptom",
-  "open",
 ];
 
 // Rows are appended in proposal order, so `<=` lets the newer of two equally
@@ -79,12 +78,12 @@ function leadingClaim(report: Report | null): Hypothesis | null {
   return best;
 }
 
-// What it waits on when nobody is gating it: the fix it proposed, or the claim
-// that amounts to one. Mirrors proposedSomething, which put it here.
+// What it waits on when nobody is gating it: the recommendation it wrote, or the
+// claim that amounts to one. Mirrors proposedSomething, which put it here.
 function awaitedRecommendation(report: Report | null): string | null {
-  const fix = report?.fixes.at(-1);
-  return fix !== undefined
-    ? fix.summary
+  const recommendation = report?.submitted?.recommendation.trim();
+  return recommendation
+    ? recommendation
     : (leadingClaim(report)?.statement ?? null);
 }
 
@@ -103,9 +102,7 @@ function deriveFinding(
     case "investigating":
       return leadingClaim(source.report)?.statement ?? null;
     case "resolved":
-      return source.alerts.length > 0
-        ? "Alert condition recovered"
-        : "A remediation ran";
+      return "Alert condition recovered";
     case "inconclusive": {
       const ruledOut = source.report?.hypotheses
         .filter((h) => h.verdict === "disproven")

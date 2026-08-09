@@ -6,7 +6,7 @@ import { toast } from "@/lib/toast";
 
 const KEY = ["config"];
 
-export type ConfigPatch = Partial<Omit<AgentConfig, "providers">>;
+type ConfigPatch = Partial<Omit<AgentConfig, "providers">>;
 
 export function useConfig(): AgentConfig | undefined {
   const { data } = useQuery<AgentConfig>({

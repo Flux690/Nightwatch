@@ -15,7 +15,7 @@ import { alertAnchorFor } from "./alert-anchor.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
-export interface MetricsQueryResult {
+interface MetricsQueryResult {
   resultType: string;
   series: PrometheusSeries[];
   seriesOmitted?: number;
@@ -27,12 +27,12 @@ export interface MetricsRangeResult extends MetricsQueryResult {
   stepSeconds: number;
 }
 
-export interface MetricNamesResult {
+interface MetricNamesResult {
   names: string[];
   namesOmitted?: number;
 }
 
-export interface AlertRulesResult {
+interface AlertRulesResult {
   rules: AlertingRule[];
   rulesOmitted?: number;
 }

@@ -7,12 +7,12 @@ import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
-export interface GatedTool {
+interface GatedTool {
   tool: ToolUse;
   entry: Tool;
 }
 
-export interface TurnOutcome {
+interface TurnOutcome {
   // One tool_result per non-gated tool_use, so every block in the assistant
   // message is answered even when a later one suspends the run.
   toolResults: ToolResult[];

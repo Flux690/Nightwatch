@@ -21,7 +21,11 @@ export function hasReport(sessionId: string): boolean {
 }
 
 function emptyReport(): Report {
-  return { hypotheses: [], fixes: [], updatedAt: new Date().toISOString() };
+  return {
+    hypotheses: [],
+    submitted: null,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 function writeReport(sessionId: string, report: Report): void {

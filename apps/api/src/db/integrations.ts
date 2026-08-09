@@ -71,7 +71,7 @@ interface GitHubConfig {
   tokenExpiresAt: string | null;
 }
 
-export interface GitHubIntegrationRow {
+interface GitHubIntegrationRow {
   tokenEncrypted: string;
   repoOwner: string;
   repoName: string;
@@ -139,7 +139,7 @@ interface PrometheusConfig {
   baseUrl: string;
 }
 
-export interface PrometheusIntegrationRow {
+interface PrometheusIntegrationRow {
   baseUrl: string;
   authHeaderEncrypted: string | null;
   validatedAt: string;
@@ -180,7 +180,7 @@ interface LokiConfig {
   orgId: string | null;
 }
 
-export interface LokiIntegrationRow {
+interface LokiIntegrationRow {
   baseUrl: string;
   orgId: string | null;
   authHeaderEncrypted: string | null;

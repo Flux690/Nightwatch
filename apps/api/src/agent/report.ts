@@ -2,10 +2,11 @@ import type {
   Conviction,
   GatedCall,
   Hypothesis,
-  ProposedFix,
   Report,
   ReportConviction,
   ResolvedEvidence,
+  SubmittedReport,
+  TimelineEntry,
   ToolOutcome,
   Verdict,
 } from "@nightwarden/shared";
@@ -69,10 +70,15 @@ function knownCitations(sessionId: string, ids: string[]): string[] {
   return [...new Set(ids)].filter((id) => known.has(id));
 }
 
+// Everything the record points at, from either author: the ledger's claims and
+// the composed timeline's references.
 function citedIds(report: Report): Set<string> {
+  const timeline = report.submitted?.timeline ?? [];
   return new Set([
     ...report.hypotheses.flatMap((h) => h.evidenceIds),
-    ...report.fixes.flatMap((f) => f.evidenceIds),
+    ...timeline.flatMap((entry) =>
+      entry.evidenceId === undefined ? [] : [entry.evidenceId],
+    ),
   ]);
 }
 
@@ -131,6 +137,7 @@ export function gatedCalls(sessionId: string): GatedCall[] {
         toolUseId: entry.toolUseId,
         toolName: entry.toolName,
         target: targetKeyFromInput(entry.input),
+        at: entry.createdAt,
         decision:
           outcome === "rejected"
             ? ("rejected" as const)
@@ -165,60 +172,53 @@ export function computeConviction(
   const ledger = new Map(ledgerIn(sessionId).map((e) => [e.toolUseId, e]));
   const executedAt = lastExecutedAt(ledger, getToolOutcomes(sessionId));
   const graded: ReportConviction = {};
-  for (const row of [...report.hypotheses, ...report.fixes]) {
+  for (const row of report.hypotheses) {
     const conviction = convictionOf(row.evidenceIds, ledger, executedAt);
     if (conviction !== null) graded[row.id] = conviction;
   }
   return graded;
 }
 
-// Something for the operator to act on: a recommendation, or a cited root cause
-// that amounts to one. Read by the status derivation and by the finish gate, so
-// what the list calls actionable and what the gate accepts cannot disagree.
+// Something for the operator to act on: a written recommendation, or a cited
+// root cause that amounts to one. Read by the status derivation and by the
+// composition gate, so what the list calls actionable and what the gate accepts
+// cannot disagree.
 export function proposedSomething(report: Report | null): boolean {
   if (report === null) return false;
+  const recommended = (report.submitted?.recommendation ?? "").trim() !== "";
   return (
-    report.fixes.length > 0 ||
+    recommended ||
     report.hypotheses.some(
       (h) => h.verdict === "root_cause" && h.evidenceIds.length > 0,
     )
   );
 }
 
-// One named thing missing from the record. A list rather than a boolean so the
-// completion request can name only what is absent, and so a gap that survives a
-// request can be logged as itself.
+// One named thing missing from the ledger, checked before the run is allowed to
+// compose. A list rather than a boolean so the completion request can name only
+// what is absent, and so a gap that survives a request can be logged as itself.
 export type ReportGap =
-  | { kind: "empty_record" }
-  | { kind: "open_hypothesis"; ids: string[] }
-  | { kind: "uncited_root_cause"; ids: string[] }
-  | { kind: "unresolvable_citation"; ids: string[] };
+  { kind: "empty_record" } | { kind: "unresolvable_citation"; ids: string[] };
 
-// A run that settled every hypothesis it proposed has finished, whether or not
-// any of them turned out to be the cause: "I could not conclude, here is what I
-// checked" is a complete record, and the gate must never push a model past it.
+/* A run that recorded what it tested has finished, whether or not any of it
+   turned out to be the cause: "I could not conclude, here is what I checked" is
+   a complete record, and the gate must never push a model past it.
+
+   Two kinds, not four. A hypothesis is recorded settled, so none can be left
+   open; and RecordHypothesis refuses a claim citing nothing, so an uncited root
+   cause cannot reach the record to be caught here. */
 export function reportGaps(sessionId: string): ReportGap[] {
   const report = getReport(sessionId);
   const hypotheses = report?.hypotheses ?? [];
-  const fixes = report?.fixes ?? [];
   const gaps: ReportGap[] = [];
 
   if (hypotheses.length === 0) gaps.push({ kind: "empty_record" });
-
-  const open = hypotheses.filter((h) => h.verdict === "open").map((h) => h.id);
-  if (open.length > 0) gaps.push({ kind: "open_hypothesis", ids: open });
-
-  const uncited = hypotheses
-    .filter((h) => h.verdict === "root_cause" && h.evidenceIds.length === 0)
-    .map((h) => h.id);
-  if (uncited.length > 0)
-    gaps.push({ kind: "uncited_root_cause", ids: uncited });
 
   if (report !== undefined) {
     const resolved = new Set(
       resolveEvidence(sessionId, report).map((e) => e.toolUseId),
     );
-    const unbacked = [...hypotheses, ...fixes]
+    const unbacked = hypotheses
       .filter(
         (row) =>
           row.evidenceIds.length > 0 &&
@@ -232,19 +232,28 @@ export function reportGaps(sessionId: string): ReportGap[] {
   return gaps;
 }
 
-export function proposeHypothesis(
+interface RecordHypothesisInput {
+  statement: string;
+  verdict: Verdict;
+  finding: string;
+  evidenceIds: string[];
+}
+
+// One act, recorded once it has been tested. Append-only: a claim the model
+// later disagrees with stays on the record beside the one that replaced it.
+export function recordHypothesis(
   sessionId: string,
-  statement: string,
+  input: RecordHypothesisInput,
 ): RecordOutcome {
+  const evidenceIds = knownCitations(sessionId, input.evidenceIds);
   const id = appendToReport(sessionId, (report) => {
     const hypothesis: Hypothesis = {
       id: `h${report.hypotheses.length + 1}`,
-      statement,
-      verdict: "open",
-      finding: "",
-      evidenceIds: [],
-      proposedAt: new Date().toISOString(),
-      resolvedAt: null,
+      statement: input.statement,
+      verdict: input.verdict,
+      finding: input.finding,
+      evidenceIds,
+      recordedAt: new Date().toISOString(),
     };
     return {
       next: { ...report, hypotheses: [...report.hypotheses, hypothesis] },
@@ -252,90 +261,44 @@ export function proposeHypothesis(
     };
   });
   publishReportUpdated(sessionId);
-  return {
-    recorded: true,
-    message: `Recorded as ${id}. Pass that id to ResolveHypothesis once you have tested it.`,
-  };
-}
-
-export interface ResolveHypothesisInput {
-  id: string;
-  verdict: Verdict;
-  finding: string;
-  evidenceIds: string[];
-}
-
-export function resolveHypothesis(
-  sessionId: string,
-  input: ResolveHypothesisInput,
-): RecordOutcome {
-  const evidenceIds = knownCitations(sessionId, input.evidenceIds);
-  const wrote = amendReport(sessionId, (report) => {
-    const target = report.hypotheses.find((h) => h.id === input.id);
-    if (target === undefined || target.verdict !== "open") return null;
-    return {
-      ...report,
-      hypotheses: report.hypotheses.map((h) =>
-        h.id === input.id
-          ? {
-              ...h,
-              verdict: input.verdict,
-              finding: input.finding,
-              evidenceIds,
-              resolvedAt: new Date().toISOString(),
-            }
-          : h,
-      ),
-    };
-  });
-  if (!wrote) {
-    const existing = getReport(sessionId)?.hypotheses.find(
-      (h) => h.id === input.id,
-    );
-    return {
-      recorded: false,
-      message:
-        existing === undefined
-          ? `There is no hypothesis ${input.id} in this investigation. Propose it first.`
-          : `Hypothesis ${input.id} is already resolved as "${existing.verdict}" and the record cannot be rewritten. Propose a new hypothesis if your understanding has changed.`,
-    };
-  }
-  const dropped = input.evidenceIds.length - evidenceIds.length;
-  publishReportUpdated(sessionId);
+  const dropped = new Set(input.evidenceIds).size - evidenceIds.length;
   return {
     recorded: true,
     message:
       dropped === 0
-        ? `Recorded ${input.id} as "${input.verdict}".`
-        : `Recorded ${input.id} as "${input.verdict}". ${dropped} of the ids you cited name no call you made and were dropped; cite the ids exactly as they appear on your own tool calls.`,
+        ? `Recorded ${id} as "${input.verdict}".`
+        : `Recorded ${id} as "${input.verdict}". ${dropped} of the ids you cited name no call you made and were dropped; cite the ids exactly as they appear on your own tool calls.`,
   };
 }
 
-// Appended, never replaced: a fix the operator rejected stays on the record
-// beside the one that superseded it.
-export function proposeFix(
+interface SubmitReportInput {
+  summary: string;
+  timeline: TimelineEntry[];
+  impact: string;
+  recommendation: string;
+}
+
+// The composition turn's one write. Citations are filtered the same way a
+// hypothesis's are, so a timeline entry cannot point at a call that never
+// happened. Written whole rather than appended: it is authored once.
+export function submitReport(
   sessionId: string,
-  summary: string,
-  citations: string[],
+  input: SubmitReportInput,
 ): RecordOutcome {
-  const evidenceIds = knownCitations(sessionId, citations);
-  const superseded = appendToReport(sessionId, (report) => {
-    const fix: ProposedFix = {
-      id: `f${report.fixes.length + 1}`,
-      summary,
-      evidenceIds,
-      recordedAt: new Date().toISOString(),
-    };
-    return {
-      next: { ...report, fixes: [...report.fixes, fix] },
-      value: report.fixes.length > 0,
-    };
-  });
-  publishReportUpdated(sessionId);
-  return {
-    recorded: true,
-    message: superseded
-      ? "Proposed fix recorded. It supersedes the one before it, which stays on the record."
-      : "Proposed fix recorded.",
+  const known = new Set(ledgerIn(sessionId).map((e) => e.toolUseId));
+  const timeline = input.timeline.map((entry) =>
+    entry.evidenceId !== undefined && known.has(entry.evidenceId)
+      ? entry
+      : { at: entry.at, what: entry.what },
+  );
+  const submitted: SubmittedReport = {
+    summary: input.summary,
+    timeline,
+    impact: input.impact,
+    recommendation: input.recommendation,
+    submittedAt: new Date().toISOString(),
   };
+  amendReport(sessionId, (report) => ({ ...report, submitted }));
+  publishReportUpdated(sessionId);
+  return { recorded: true, message: "Report recorded." };
 }

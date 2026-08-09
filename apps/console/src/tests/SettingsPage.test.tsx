@@ -6,7 +6,6 @@ import { TestProviders } from "./renderWithProviders.js";
 import type {
   AgentConfig,
   ModelCatalog,
-  ModelOption,
   ProviderOption,
   ReasoningDescriptor,
 } from "@nightwarden/shared";
