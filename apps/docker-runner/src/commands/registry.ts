@@ -48,7 +48,8 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
         getContainerLogs({
           service: service(input),
           tailLines: optionalNumber(input, "tailLines"),
-          sinceTimestamp: optionalString(input, "sinceTimestamp"),
+          since: optionalString(input, "since"),
+          until: optionalString(input, "until"),
           stderrOnly: optionalBoolean(input, "stderrOnly"),
         }),
     ],

@@ -70,10 +70,10 @@ export const K8S_TOOLS: Tool[] = [
             description:
               "Max raw lines to fetch before filtering (default 200).",
           },
-          sinceTimestamp: {
+          since: {
             type: "string",
             description:
-              "ISO 8601 timestamp. Lines within ±30s are always included.",
+              "An ISO 8601 timestamp the window starts at. There is no matching end: the Kubernetes log API reads forward from a point and cannot stop at one, so these are always the newest lines after it.",
           },
         },
         required: ["target"],

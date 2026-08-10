@@ -108,6 +108,28 @@ function anchoredWindow(
   return { start, end };
 }
 
+// The window ends where the caller aims it rather than at the alert, which is
+// what lets a second call reach past the first one's budget.
+function aimedWindow(
+  until: Date,
+  lookbackMinutes: number,
+): { start: Date; end: Date } {
+  const end = new Date(Math.min(until.getTime(), Date.now()));
+  return {
+    start: new Date(end.getTime() - lookbackMinutes * 60_000),
+    end,
+  };
+}
+
+// Absent is the alert; unparseable is the model's mistake and is corrected
+// rather than silently read as absent.
+function parseUntil(raw: unknown): Date | null | "invalid" {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") return "invalid";
+  const at = new Date(raw);
+  return Number.isNaN(at.getTime()) ? "invalid" : at;
+}
+
 function nsToIso(ns: string): string {
   try {
     const d = new Date(Number(BigInt(ns) / 1_000_000n));
@@ -189,7 +211,12 @@ export const LOKI_TOOLS: Tool[] = [
           lookforwardMinutes: {
             type: "number",
             description:
-              "How many minutes after the alert to search. Defaults to 5, and never extends past now.",
+              "How many minutes after the alert to search. Defaults to 5, and never extends past now. Ignored when until is given.",
+          },
+          until: {
+            type: "string",
+            description:
+              "Where the window ends, as an ISO 8601 timestamp, so you can read a moment other than the alert. The window becomes the lookbackMinutes ending here. Use it to look at when something started, taking the time from a QueryLogMetrics series, or to continue past a result that hit its budget by passing the ts of the oldest line you received. Defaults to the alert.",
           },
         },
         required: ["query"],
@@ -206,24 +233,37 @@ export const LOKI_TOOLS: Tool[] = [
         return { content: "query must be a LogQL string", outcome: "system" };
       }
 
+      const until = parseUntil(input["until"]);
+      if (until === "invalid") {
+        return {
+          content:
+            "until must be an ISO 8601 timestamp, for example 2026-08-10T11:23:00Z. Copy it from a tool result rather than composing one.",
+          outcome: "system",
+        };
+      }
+
       const limit = Math.round(
         clampedNumber(input, "limit", DEFAULT_LOG_LIMIT, MAX_LOG_LIMIT),
       );
-      const { start, end } = anchoredWindow(
-        ctx.sessionId,
-        clampedNumber(
-          input,
-          "lookbackMinutes",
-          DEFAULT_LOG_LOOKBACK_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ),
-        clampedNumber(
-          input,
-          "lookforwardMinutes",
-          DEFAULT_LOG_LOOKFORWARD_MINUTES,
-          MAX_LOOKBACK_MINUTES,
-        ),
+      const lookbackMinutes = clampedNumber(
+        input,
+        "lookbackMinutes",
+        DEFAULT_LOG_LOOKBACK_MINUTES,
+        MAX_LOOKBACK_MINUTES,
       );
+      const { start, end } =
+        until === null
+          ? anchoredWindow(
+              ctx.sessionId,
+              lookbackMinutes,
+              clampedNumber(
+                input,
+                "lookforwardMinutes",
+                DEFAULT_LOG_LOOKFORWARD_MINUTES,
+                MAX_LOOKBACK_MINUTES,
+              ),
+            )
+          : aimedWindow(until, lookbackMinutes);
 
       try {
         const data = await queryLogRange(
@@ -280,8 +320,9 @@ export const LOKI_TOOLS: Tool[] = [
           );
         }
         if (linesDropped > 0) {
+          const oldest = streams.at(-1)?.lines.at(-1)?.ts;
           notes.push(
-            `${linesDropped} matching line(s) are NOT in this result: it reached its ${ITEM_BUDGET_CHARS}-character budget. Lines come back newest first, so the ones missing are the oldest, and no repeat of this call reaches them - there is no paging. Add a filter to the selector to cut what you do not need, or count them with QueryLogMetrics. Do not read the absence of a line as evidence it did not occur.`,
+            `${linesDropped} matching line(s) are NOT in this result: it reached its ${ITEM_BUDGET_CHARS}-character budget. Lines come back newest first, so the ones missing are older than what you see. Prefer narrowing the selector, or counting them with QueryLogMetrics, over reading them all${oldest === undefined ? "" : `; to read the next ones, call again with until="${oldest}"`}. Do not read the absence of a line as evidence it did not occur.`,
           );
         }
 

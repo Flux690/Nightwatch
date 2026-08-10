@@ -109,12 +109,10 @@ export async function getWorkloadLogs(
     container: resolved.containerName,
     tailLines: input.tailLines ?? 200,
     previous: fromPreviousContainer,
-    ...(input.sinceTimestamp !== undefined && {
+    ...(input.since !== undefined && {
       sinceSeconds: Math.max(
         1,
-        Math.floor(
-          (Date.now() - new Date(input.sinceTimestamp).getTime()) / 1000,
-        ),
+        Math.floor((Date.now() - new Date(input.since).getTime()) / 1000),
       ),
     }),
   });

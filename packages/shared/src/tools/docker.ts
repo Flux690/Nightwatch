@@ -23,10 +23,13 @@ export interface DockerServiceListResult {
   containers: DockerContainerInstance[];
 }
 
+// since/until name the window's two edges, as the Docker API and kubectl both
+// name them. ISO 8601 either way; absent means the engine's own default.
 export interface DockerLogsInput {
   service: DockerServiceIdentity;
   tailLines?: number;
-  sinceTimestamp?: string;
+  since?: string;
+  until?: string;
   stderrOnly?: boolean;
 }
 export interface DockerLogsResult {

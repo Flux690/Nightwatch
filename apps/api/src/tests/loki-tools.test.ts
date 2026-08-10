@@ -258,9 +258,51 @@ describe("Loki tools through the tool dispatch", () => {
       expect(line.line).not.toContain("…[truncated]");
     }
     expect(content.note).toContain("NOT in this result");
-    // The dropped lines are unreachable, so the note must not imply a next page.
-    expect(content.note).toMatch(/no paging/i);
     expect(content.note).toContain("QueryLogMetrics");
+    // The cursor it hands back is the oldest line it returned, so continuing
+    // from it reads the next ones down rather than skipping any.
+    const oldest = content.streams[0]!.lines.at(-1)!.ts;
+    expect(content.note).toContain(`until="${oldest}"`);
+  });
+
+  /* The window is anchored on the alert and lookforwardMinutes cannot go
+     negative, so without this the end never moves and every repeat of a
+     budget-capped call returns the same newest lines. */
+  it("QueryLogs aims the window at until instead of the alert", async () => {
+    connect();
+    await executeTool(
+      logs,
+      {
+        query: '{app="api"}',
+        until: "2026-07-16T11:23:00.000Z",
+        lookbackMinutes: 30,
+      },
+      mintSession(ALERT),
+    );
+
+    const params = mock.requests[0]!.params;
+    expect(nsToMs(params.get("end")!)).toBe(
+      Date.parse("2026-07-16T11:23:00.000Z"),
+    );
+    // The whole window moves rather than shrinking from the right, so a walk
+    // backward covers new ground on every call.
+    expect(nsToMs(params.get("start")!)).toBe(
+      Date.parse("2026-07-16T10:53:00.000Z"),
+    );
+  });
+
+  it("QueryLogs corrects an until that is not a timestamp", async () => {
+    connect();
+    const result = await executeTool(
+      logs,
+      { query: '{app="api"}', until: "last tuesday" },
+      mintSession(ALERT),
+    );
+
+    expect(result.outcome).toBe("system");
+    expect(result.content).toContain("ISO 8601");
+    // Corrected before any request: a bad window is not Loki's to answer.
+    expect(mock.requests).toHaveLength(0);
   });
 
   it("QueryLogMetrics sends a step (no direction) and caps at 20 series", async () => {

@@ -47,7 +47,7 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
         getWorkloadLogs({
           service: service(input),
           tailLines: optionalNumber(input, "tailLines"),
-          sinceTimestamp: optionalString(input, "sinceTimestamp"),
+          since: optionalString(input, "since"),
         }),
     ],
     [

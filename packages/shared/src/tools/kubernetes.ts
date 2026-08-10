@@ -35,10 +35,12 @@ export interface K8sWorkloadListResult {
 }
 
 // No stderrOnly: the Kubernetes log API merges the streams and cannot filter them.
+// No `until` to match Docker's: the Kubernetes log API has no end-time
+// parameter, so offering one would be a filter pretending to be a query.
 export interface K8sLogsInput {
   service: KubernetesWorkloadIdentity;
   tailLines?: number;
-  sinceTimestamp?: string;
+  since?: string;
 }
 export interface K8sLogsResult {
   lines: string[];

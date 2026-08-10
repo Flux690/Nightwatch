@@ -56,10 +56,15 @@ export const DOCKER_TOOLS: Tool[] = [
             description:
               "How many raw lines to read before the error and warning filter is applied. Defaults to 200. Raise it when a busy service drowns out the lines you need.",
           },
-          sinceTimestamp: {
+          since: {
             type: "string",
             description:
-              "An ISO 8601 timestamp to centre the read on. Every line within thirty seconds either side of it is kept regardless of the filter.",
+              "An ISO 8601 timestamp the window starts at. Defaults to the whole tail the engine holds.",
+          },
+          until: {
+            type: "string",
+            description:
+              "An ISO 8601 timestamp the window ends at, so you can read a past moment rather than only the newest lines. Use it to look at when something started, taking the time from a metric series. Every line within thirty seconds either side of the moment you asked about is kept regardless of the filter. Defaults to now.",
           },
           stderrOnly: {
             type: "boolean",

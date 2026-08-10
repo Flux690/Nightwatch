@@ -58,6 +58,17 @@ export async function getContainerList(): Promise<DockerServiceListResult> {
   return { containers };
 }
 
+function msOrNull(iso: string | undefined): number | null {
+  if (iso === undefined) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function unixSeconds(iso: string | undefined): number | undefined {
+  const ms = msOrNull(iso);
+  return ms === null ? undefined : Math.floor(ms / 1000);
+}
+
 export async function getContainerLogs(
   input: DockerLogsInput,
 ): Promise<DockerLogsResult | NotFoundResult> {
@@ -66,9 +77,10 @@ export async function getContainerLogs(
   if (!resolved) return noContainerResult(input.service);
   const container = resolved.container;
 
-  const since = input.sinceTimestamp
-    ? Math.floor(new Date(input.sinceTimestamp).getTime() / 1000)
-    : undefined;
+  // The engine takes both edges in UNIX seconds, so a window can be aimed at a
+  // past moment rather than only walked back from now.
+  const since = unixSeconds(input.since);
+  const until = unixSeconds(input.until);
 
   const buf = await container.logs({
     stdout: !input.stderrOnly,
@@ -76,6 +88,7 @@ export async function getContainerLogs(
     follow: false,
     tail: input.tailLines ?? 200,
     ...(since !== undefined && { since }),
+    ...(until !== undefined && { until }),
   });
 
   const { stdout, stderr } = parseDockerMux(buf);
@@ -85,15 +98,15 @@ export async function getContainerLogs(
 
   const ERROR_RE =
     /\b(error|err|warn|warning|fatal|exception|traceback|panic)\b/i;
-  const alertTs = input.sinceTimestamp
-    ? new Date(input.sinceTimestamp).getTime()
-    : null;
+  // Whatever the caller aimed at is the moment worth keeping quiet lines around:
+  // the end of the window when it named one, the start of it otherwise.
+  const focus = msOrNull(input.until) ?? msOrNull(input.since);
 
   const filtered = allLines.filter((line) => {
     if (ERROR_RE.test(line)) return true;
-    if (alertTs) {
+    if (focus !== null) {
       const ts = extractLineTimestamp(line);
-      if (ts !== null && Math.abs(ts - alertTs) <= 30_000) return true;
+      if (ts !== null && Math.abs(ts - focus) <= 30_000) return true;
     }
     return false;
   });
@@ -105,7 +118,7 @@ export async function getContainerLogs(
     compressionNote:
       filtered.length === allLines.length
         ? ""
-        : `Filtered to ${filtered.length} of ${allLines.length} lines (errors, warnings, lines near alert timestamp)`,
+        : `Filtered to ${filtered.length} of ${allLines.length} lines (errors, warnings, lines within 30s of the moment asked about)`,
   };
 }
 
@@ -367,8 +380,14 @@ function parseUptime(status: string): number {
   return n * (multipliers[m[2]!.toLowerCase()] ?? 1);
 }
 
+// The offset is part of the match on purpose: an ISO timestamp cut at the
+// seconds parses as local time, which silently misses every line by the host's
+// own offset from UTC.
 function extractLineTimestamp(line: string): number | null {
-  const iso = line.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-  if (iso) return new Date(iso[0]).getTime();
-  return null;
+  const iso = line.match(
+    /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/,
+  );
+  if (iso === null) return null;
+  const ms = new Date(iso[0]).getTime();
+  return Number.isNaN(ms) ? null : ms;
 }

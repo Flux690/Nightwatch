@@ -55,6 +55,96 @@ describe("getContainerLogs", () => {
     expect((result as { lines: string[] }).lines).toContain("error: boom");
   });
 
+  /* tail alone only ever walks back from now, so without an end the newest lines
+     are the only ones reachable. The engine takes both edges in UNIX seconds. */
+  it("passes both window edges to the engine as seconds", async () => {
+    const logs = vi.fn().mockResolvedValue(muxFrame(1, "error: boom\n"));
+    MockDocker.mockImplementation(function () {
+      return {
+        listContainers: vi
+          .fn()
+          .mockResolvedValue([containerInfo("live-1", "running", 200)]),
+        getContainer: vi.fn().mockReturnValue({ logs }),
+      };
+    });
+
+    await getContainerLogs({
+      service: SERVICE,
+      since: "2026-07-16T10:53:00.000Z",
+      until: "2026-07-16T11:23:00.000Z",
+    });
+
+    expect(logs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        since: Date.parse("2026-07-16T10:53:00.000Z") / 1000,
+        until: Date.parse("2026-07-16T11:23:00.000Z") / 1000,
+      }),
+    );
+  });
+
+  // The quiet lines worth keeping sit around whatever the caller aimed at, which
+  // is the end of the window once it names one.
+  it("keeps quiet lines around until rather than around since", async () => {
+    const at = (iso: string, text: string): string => `${iso} ${text}`;
+    const logs = vi
+      .fn()
+      .mockResolvedValue(
+        muxFrame(
+          1,
+          `${at("2026-07-16T10:53:05.000Z", "near since")}\n${at("2026-07-16T11:23:05.000Z", "near until")}\n`,
+        ),
+      );
+    MockDocker.mockImplementation(function () {
+      return {
+        listContainers: vi
+          .fn()
+          .mockResolvedValue([containerInfo("live-1", "running", 200)]),
+        getContainer: vi.fn().mockReturnValue({ logs }),
+      };
+    });
+
+    const result = await getContainerLogs({
+      service: SERVICE,
+      since: "2026-07-16T10:53:00.000Z",
+      until: "2026-07-16T11:23:00.000Z",
+    });
+
+    const lines = (result as { lines: string[] }).lines;
+    expect(lines.some((l) => l.includes("near until"))).toBe(true);
+    expect(lines.some((l) => l.includes("near since"))).toBe(false);
+  });
+
+  /* Both lines name the same instant, so no single host offset can make a
+     timezone-blind parse right about both: cutting the offset off an ISO
+     timestamp reads it as local time and misses by the host's own offset. */
+  it("reads a line's timestamp in the zone the line states", async () => {
+    const logs = vi
+      .fn()
+      .mockResolvedValue(
+        muxFrame(
+          1,
+          "2026-07-16T11:23:05.000Z utc form\n2026-07-16T16:53:05.000+05:30 offset form\n",
+        ),
+      );
+    MockDocker.mockImplementation(function () {
+      return {
+        listContainers: vi
+          .fn()
+          .mockResolvedValue([containerInfo("live-1", "running", 200)]),
+        getContainer: vi.fn().mockReturnValue({ logs }),
+      };
+    });
+
+    const result = await getContainerLogs({
+      service: SERVICE,
+      until: "2026-07-16T11:23:00.000Z",
+    });
+
+    const lines = (result as { lines: string[] }).lines;
+    expect(lines.some((l) => l.includes("utc form"))).toBe(true);
+    expect(lines.some((l) => l.includes("offset form"))).toBe(true);
+  });
+
   // Logs are the likeliest place a secret rides out, so they are redacted where the
   // raw bytes enter rather than trusting each caller to remember.
   it("redacts a secret in a log line before it can leave the host", async () => {
