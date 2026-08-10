@@ -58,6 +58,8 @@ function makeAlert(service: string): NormalizedAlert {
     alertType: "HighCPU",
     severity: "warning",
     firedAt: new Date().toISOString(),
+    annotations: {},
+    generatorURL: null,
     rawPayload: {},
   };
 }

@@ -206,6 +206,8 @@ describe("state inversion: persistence and reads are API-local", () => {
           alertType: "ContainerDown",
           severity: "critical",
           firedAt: new Date().toISOString(),
+          annotations: {},
+          generatorURL: null,
           rawPayload: {},
         },
       ],
@@ -294,6 +296,8 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
       alertType: "HighMemory",
       severity: "warning",
       firedAt: new Date().toISOString(),
+      annotations: {},
+      generatorURL: null,
       rawPayload: {},
     };
 

@@ -839,6 +839,8 @@ describe("durable approval interrupts", () => {
       alertType: "ContainerDown",
       severity: "critical",
       firedAt: new Date().toISOString(),
+      annotations: {},
+      generatorURL: null,
       rawPayload: {},
     };
 

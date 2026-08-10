@@ -18,6 +18,8 @@ const ALERT: NormalizedAlert = {
   alertType: "ContainerRestarting",
   severity: "critical",
   firedAt: "2026-07-21T12:00:00.000Z",
+  annotations: {},
+  generatorURL: null,
   rawPayload: {},
 };
 
@@ -27,6 +29,8 @@ const INJECTED_ALERT: NormalizedAlert = {
   alertType: "HighLatency",
   severity: "warning",
   firedAt: "2026-07-21T12:20:00.000Z",
+  annotations: {},
+  generatorURL: null,
   rawPayload: {},
 };
 

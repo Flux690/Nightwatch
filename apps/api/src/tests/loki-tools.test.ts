@@ -20,6 +20,8 @@ const ALERT: NormalizedAlert = {
   alertType: "OOMKill",
   severity: "critical",
   firedAt: FIRED_AT,
+  annotations: {},
+  generatorURL: null,
   rawPayload: {},
 };
 

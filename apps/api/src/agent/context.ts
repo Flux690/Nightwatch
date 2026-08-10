@@ -114,6 +114,26 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   return `\n<fleet-summary>\nEach line names one Docker host or Kubernetes cluster, followed by the target keys it advertises. A key marked "(shared)" is advertised by more than one, so a call naming that key must also say which one you mean.\n${lines.join("\n")}\n</fleet-summary>\n`;
 }
 
+// Prometheus puts the expression that fired in the generator link's query string,
+// so the threshold costs no call. Grafana links to a rule page and carries none.
+function conditionFrom(generatorURL: string | null): string | null {
+  if (generatorURL === null) return null;
+  try {
+    const expr = new URL(generatorURL).searchParams.get("g0.expr");
+    return expr !== null && expr.trim() !== "" ? expr : null;
+  } catch {
+    return null;
+  }
+}
+
+// Rendered verbatim and never dereferenced: a runbook_url is a fact the model is
+// given, not an address anything fetches.
+function formatAnnotations(annotations: Record<string, string>): string {
+  const entries = Object.entries(annotations);
+  if (entries.length === 0) return "";
+  return `\nannotations:\n${entries.map(([k, v]) => `  ${k}: ${v}`).join("\n")}`;
+}
+
 // Match the alert's labels against the fleet: a resolved target names the key to act on;
 // ambiguous names the runners to choose between; unresolved hands the agent the raw labels
 // to match itself, never a guess. Every label is rendered below either way.
@@ -133,8 +153,14 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
   // labels below, where the model reads it as the operator wrote it.
   const severityLine =
     alert.severity === null ? "" : `\nseverity: ${alert.severity}`;
+  // Absent renders an empty section, never a different alert.
+  const condition = conditionFrom(alert.generatorURL);
+  const conditionLine =
+    condition === null ? "" : `\ncondition that fired: ${condition}`;
+  const linkLine =
+    alert.generatorURL === null ? "" : `\nlink: ${alert.generatorURL}`;
   return `id: ${alert.sourceAlertId}
 target: ${targetLine}
 type: ${alert.alertType}${severityLine}
-fired at: ${alert.firedAt}${labelLine}`;
+fired at: ${alert.firedAt}${labelLine}${formatAnnotations(alert.annotations)}${conditionLine}${linkLine}`;
 }

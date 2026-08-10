@@ -214,6 +214,8 @@ describe("session title generation", () => {
       alertType: "cpu_high",
       severity: "critical",
       firedAt: "2024-01-01T00:00:00Z",
+      annotations: {},
+      generatorURL: null,
       rawPayload: {},
     }));
 

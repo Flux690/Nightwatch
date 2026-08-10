@@ -72,6 +72,8 @@ const alert: NormalizedAlert = {
   alertType: "ContainerDown",
   severity: "critical",
   firedAt: "2026-06-13T00:00:00.000Z",
+  annotations: {},
+  generatorURL: null,
   rawPayload: { foo: "bar" },
 };
 

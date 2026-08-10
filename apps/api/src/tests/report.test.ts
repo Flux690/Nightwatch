@@ -40,6 +40,8 @@ function alert(sourceAlertId: string): NormalizedAlert {
     alertType: "HighMemory",
     severity: "warning",
     firedAt: new Date().toISOString(),
+    annotations: {},
+    generatorURL: null,
     rawPayload: {},
   };
 }

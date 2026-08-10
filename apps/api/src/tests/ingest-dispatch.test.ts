@@ -314,6 +314,7 @@ describe("POST /alerts/ingest dispatch behavior", () => {
   it("dispatches matched and unmatched alerts alike - no identity gate at ingest", async () => {
     const token = generateAlertSourceToken("mixed-batch");
     useImmediateProvider();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     const res = await server.inject({
       method: "POST",
@@ -366,5 +367,10 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     expect(body.received).toBe(2);
     expect(body.enqueued).toBe(2);
     expect(body.skipped).toBe(0);
+
+    // Both joined one window: draining it closes that window, so no 90s timer
+    // outlives this file and fires into a torn-down suite.
+    await vi.advanceTimersByTimeAsync(90_001);
+    expect(batchWindow.isOpen()).toBe(false);
   });
 });

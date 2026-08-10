@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseAlertmanager } from "../alerts/parsers/alertmanager.js";
+import { buildInitialContext } from "../agent/context.js";
 
-// Covers the parser's own job: projecting fields, normalizing severity, isolating malformed
-// alerts. Identity derivation is exercised separately in service-identity.test.ts.
+// What a webhook body becomes, and what the model is then told about it.
+// Identity derivation lives in service-identity.test.ts.
 
 function alert(
   overrides: Record<string, unknown> = {},
@@ -15,6 +16,12 @@ function alert(
     fingerprint: "fp-1",
     ...overrides,
   };
+}
+
+// What the model reads, built from a webhook body the way a real ingest does.
+function openingTurnFor(overrides: Record<string, unknown> = {}): string {
+  const { firing } = parseAlertmanager({ alerts: [alert(overrides)] });
+  return buildInitialContext(firing).openingTurn ?? "";
 }
 
 describe("parseAlertmanager", () => {
@@ -126,5 +133,84 @@ describe("parseAlertmanager", () => {
     }).firing;
     expect(parsed?.firedAt).toBeTruthy();
     expect(() => new Date(parsed!.firedAt).toISOString()).not.toThrow();
+  });
+});
+
+// The operator's own explanation and the expression that fired are context only:
+// both enrich the prompt and neither decides anything.
+describe("operator context reaches the model", () => {
+  const ANNOTATIONS = {
+    summary: "API latency above threshold",
+    description: "p99 has exceeded 2s for 10 minutes on web-01.",
+    // Given to the model as a fact, never fetched: pulling an operator-supplied
+    // URL from the API host is an SSRF surface.
+    runbook_url: "https://runbooks.internal/api-latency",
+  };
+
+  it("carries every annotation the sender wrote into the opening turn", () => {
+    const [parsed] = parseAlertmanager({
+      alerts: [alert({ annotations: ANNOTATIONS })],
+    }).firing;
+    expect(parsed?.annotations).toEqual(ANNOTATIONS);
+
+    const turn = openingTurnFor({ annotations: ANNOTATIONS });
+    for (const value of Object.values(ANNOTATIONS)) {
+      expect(turn).toContain(value);
+    }
+  });
+
+  // The threshold, for free, with no network call: Prometheus puts the PromQL
+  // that fired in the generator link's query string.
+  it("decodes the fired expression out of a Prometheus generatorURL", () => {
+    const turn = openingTurnFor({
+      generatorURL:
+        "http://prom:9090/graph?g0.expr=rate%28http_errors_total%5B5m%5D%29+%3E+0.05&g0.tab=1",
+    });
+    expect(turn).toContain(
+      "condition that fired: rate(http_errors_total[5m]) > 0.05",
+    );
+  });
+
+  // Grafana Alerting posts the same envelope but links to a rule page carrying no
+  // expression, so one parser serves both and the condition line is simply absent.
+  it("renders no condition for a Grafana body, and still parses it whole", () => {
+    const grafana = {
+      generatorURL: "http://grafana:3000/alerting/grafana/abc123/view",
+      annotations: { summary: "Disk nearly full" },
+    };
+    const [parsed] = parseAlertmanager({ alerts: [alert(grafana)] }).firing;
+    expect(parsed?.generatorURL).toBe(grafana.generatorURL);
+
+    const turn = openingTurnFor(grafana);
+    expect(turn).not.toContain("condition that fired:");
+    expect(turn).toContain("Disk nearly full");
+    expect(turn).toContain(grafana.generatorURL);
+  });
+
+  it("renders an empty section when the sender wrote neither", () => {
+    const [parsed] = parseAlertmanager({
+      alerts: [alert({ annotations: undefined, generatorURL: undefined })],
+    }).firing;
+    expect(parsed?.annotations).toEqual({});
+    expect(parsed?.generatorURL).toBeNull();
+
+    const turn = openingTurnFor({
+      annotations: undefined,
+      generatorURL: undefined,
+    });
+    expect(turn).not.toContain("annotations:");
+    expect(turn).not.toContain("condition that fired:");
+    expect(turn).not.toContain("link:");
+    // The alert itself still renders in full, which is the whole point of the
+    // absent section being a section rather than a branch.
+    expect(turn).toContain("type: HighCPU");
+  });
+
+  // A malformed link is the sender's, not ours: it renders as a link with no
+  // condition rather than taking the batch down.
+  it("survives a generatorURL that is not a URL", () => {
+    const turn = openingTurnFor({ generatorURL: "not a url" });
+    expect(turn).not.toContain("condition that fired:");
+    expect(turn).toContain("link: not a url");
   });
 });

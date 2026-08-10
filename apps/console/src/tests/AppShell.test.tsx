@@ -442,6 +442,7 @@ describe("Shell", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/agent/new-s1");
       });
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
       const streamBefore = MockEventSource.latest;
 
       const sessionFetches = (): number =>
@@ -503,6 +504,9 @@ describe("Shell", () => {
         name: /investigation chat/i,
       });
       expect(railed).toBeInTheDocument();
+      // The rail mounts before the stream opens, so capturing it any earlier
+      // compares null against null and proves nothing.
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
       const streamBefore = MockEventSource.latest;
 
       await user.click(screen.getByRole("button", { name: /hide the chat/i }));
@@ -569,6 +573,7 @@ describe("Shell", () => {
 
       setInvestigation(true);
       await screen.findByRole("complementary", { name: /investigation chat/i });
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
       const streamBefore = MockEventSource.latest;
 
       await user.click(

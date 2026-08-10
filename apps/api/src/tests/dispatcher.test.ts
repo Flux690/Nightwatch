@@ -27,6 +27,8 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
     alertType: "HighCPU",
     severity: "warning",
     firedAt,
+    annotations: {},
+    generatorURL: null,
     rawPayload: {},
   };
 }
