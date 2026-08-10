@@ -17,9 +17,7 @@ describe("findingFor", () => {
           "1:C 26 Jul 2026 17:26:31.786 # WARNING Memory overcommit must be enabled!",
           "1:M 26 Jul 2026 17:39:41.020 # OOM command not allowed when used memory > 'maxmemory'",
         ],
-        totalLines: 66,
-        droppedLines: 64,
-        compressionNote: "Filtered to 2 of 66 lines",
+        scannedLines: 66,
       });
 
       // The severe line wins over the warning, and it is quoted, not summarised.
@@ -28,13 +26,17 @@ describe("findingFor", () => {
       expect(finding?.tone).toBe("bad");
     });
 
-    it("reports an empty match rather than inventing a summary", () => {
+    // Naming the size of the search is the difference between "this service was
+    // quiet" and "the words you asked for were not in the lines we read".
+    it("says how much was searched when nothing matched", () => {
       const finding = findingFor("GetDockerLogs", {
         lines: [],
-        totalLines: 40,
-        droppedLines: 40,
+        scannedLines: 40,
       });
-      expect(finding).toEqual({ text: "no matching lines", tone: "normal" });
+      expect(finding).toEqual({
+        text: "no matches in 40 lines",
+        tone: "normal",
+      });
     });
   });
 

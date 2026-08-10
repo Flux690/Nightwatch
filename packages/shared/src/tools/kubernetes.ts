@@ -37,14 +37,22 @@ export interface K8sWorkloadListResult {
 // No stderrOnly: the Kubernetes log API merges the streams and cannot filter them.
 // No `until` to match Docker's: the Kubernetes log API has no end-time
 // parameter, so offering one would be a filter pretending to be a query.
+// contains/excludes are the caller's own, matched as plain text on whole lines.
 export interface K8sLogsInput {
   service: KubernetesWorkloadIdentity;
   tailLines?: number;
   since?: string;
+  contains?: string[];
+  excludes?: string[];
 }
+// A matched count means nothing without the size of what was searched: three
+// hits in the newest hundred lines is not three hits in the log.
 export interface K8sLogsResult {
   lines: string[];
-  totalLines: number;
+  scannedLines: number;
+  // The scan filled its tail, so older lines exist that it never looked at.
+  scanHitTail: boolean;
+  note: string;
   podName: string;
   containerName: string | null;
   podPhase: string;

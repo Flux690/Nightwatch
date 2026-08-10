@@ -54,7 +54,19 @@ export const DOCKER_TOOLS: Tool[] = [
           tailLines: {
             type: "number",
             description:
-              "How many raw lines to read before the error and warning filter is applied. Defaults to 200. Raise it when a busy service drowns out the lines you need.",
+              "How many of the newest lines to search, applied by the engine before contains and excludes. Defaults to 200. This is the size of the search, not the size of the answer: filtering it for a word you expect twice can return two lines out of two hundred searched, and says nothing about the lines it never read. Raise it to look further back.",
+          },
+          contains: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Keep only lines holding any one of these words, matched as plain text and ignoring case. Omit it to read the lines as they are.",
+          },
+          excludes: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Drop lines holding any one of these words, matched as plain text and ignoring case. Applied before contains, so an excluded line never returns.",
           },
           since: {
             type: "string",

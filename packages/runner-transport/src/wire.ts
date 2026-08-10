@@ -61,6 +61,18 @@ export function requiredStringArray(input: unknown, key: string): string[] {
   return value;
 }
 
+export function optionalStringArray(
+  input: unknown,
+  key: string,
+): string[] | undefined {
+  const value = record(input)[key];
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
+    throw new Error(`"${key}" must be an array of strings`);
+  }
+  return value;
+}
+
 // The nested object every service-routed command carries, read through the same
 // checks so a malformed identity fails here rather than deep in a platform client.
 export function nested(input: unknown, key: string): unknown {

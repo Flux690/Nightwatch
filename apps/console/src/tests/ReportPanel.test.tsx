@@ -281,7 +281,7 @@ describe("ReportPanel", () => {
                 "fatal: cannot allocate 2.2GB buffer",
                 "job 4471 accepted",
               ],
-              totalLines: 2,
+              scannedLines: 2,
             }),
           },
         ],

@@ -12,4 +12,5 @@ export {
   optionalString,
   requiredString,
   requiredStringArray,
+  optionalStringArray,
 } from "./wire.js";

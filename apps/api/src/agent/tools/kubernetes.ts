@@ -68,7 +68,19 @@ export const K8S_TOOLS: Tool[] = [
           tailLines: {
             type: "number",
             description:
-              "Max raw lines to fetch before filtering (default 200).",
+              "How many of the newest lines to search, applied by the apiserver before contains and excludes. Defaults to 200. This is the size of the search, not the size of the answer, and says nothing about the lines it never read. Raise it to look further back.",
+          },
+          contains: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Keep only lines holding any one of these words, matched as plain text and ignoring case. Omit it to read the lines as they are.",
+          },
+          excludes: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Drop lines holding any one of these words, matched as plain text and ignoring case. Applied before contains, so an excluded line never returns.",
           },
           since: {
             type: "string",

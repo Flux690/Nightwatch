@@ -88,14 +88,19 @@ const FORMATTERS: Record<string, Formatter> = {
     const lines = arr(r, "lines")?.filter(
       (l): l is string => typeof l === "string",
     );
-    const total = num(r, "totalLines");
+    const scanned = num(r, "scannedLines");
     if (!lines) return null;
     const counted =
-      total !== null && total !== lines.length
-        ? `${lines.length} of ${total}`
+      scanned !== null && scanned !== lines.length
+        ? `${lines.length} of ${scanned}`
         : `${lines.length} lines`;
+    // Naming what was searched: "none of 200" is a finding, "no lines" reads as
+    // a service that said nothing.
     if (lines.length === 0)
-      return { text: "no matching lines", tone: "normal" };
+      return {
+        text: scanned === null ? "no lines" : `no matches in ${scanned} lines`,
+        tone: "normal",
+      };
     const worst = worstLine(lines);
     return worst === null
       ? { text: counted, tone: "normal" }

@@ -82,16 +82,15 @@ describe("getContainerLogs", () => {
     );
   });
 
-  // The quiet lines worth keeping sit around whatever the caller aimed at, which
-  // is the end of the window once it names one.
-  it("keeps quiet lines around until rather than around since", async () => {
-    const at = (iso: string, text: string): string => `${iso} ${text}`;
+  /* The engine applies the tail before any filtering, so a filtered count is a
+     fact about the lines searched and never about the log. */
+  it("filters on the caller's words and says what it searched", async () => {
     const logs = vi
       .fn()
       .mockResolvedValue(
         muxFrame(
           1,
-          `${at("2026-07-16T10:53:05.000Z", "near since")}\n${at("2026-07-16T11:23:05.000Z", "near until")}\n`,
+          "connection reset by peer\nOOM killed pid 1234\nGET /health 200\n",
         ),
       );
     MockDocker.mockImplementation(function () {
@@ -103,28 +102,25 @@ describe("getContainerLogs", () => {
       };
     });
 
-    const result = await getContainerLogs({
+    const result = (await getContainerLogs({
       service: SERVICE,
-      since: "2026-07-16T10:53:00.000Z",
-      until: "2026-07-16T11:23:00.000Z",
-    });
+      contains: ["oom"],
+    })) as { lines: string[]; scannedLines: number; note: string };
 
-    const lines = (result as { lines: string[] }).lines;
-    expect(lines.some((l) => l.includes("near until"))).toBe(true);
-    expect(lines.some((l) => l.includes("near since"))).toBe(false);
+    // Matched case-insensitively, and nothing else survived.
+    expect(result.lines).toEqual(["OOM killed pid 1234"]);
+    expect(result.scannedLines).toBe(3);
+    expect(result.note).toContain("1 of 3");
+    expect(result.note).toContain("not necessarily absent");
   });
 
-  /* Both lines name the same instant, so no single host offset can make a
-     timezone-blind parse right about both: cutting the offset off an ISO
-     timestamp reads it as local time and misses by the host's own offset. */
-  it("reads a line's timestamp in the zone the line states", async () => {
+  /* The keyword guess this replaced dropped "connection reset by peer" and kept
+     "no errors found", deciding for the agent what counted as evidence. */
+  it("returns every line it read when the caller names no filter", async () => {
     const logs = vi
       .fn()
       .mockResolvedValue(
-        muxFrame(
-          1,
-          "2026-07-16T11:23:05.000Z utc form\n2026-07-16T16:53:05.000+05:30 offset form\n",
-        ),
+        muxFrame(1, "connection reset by peer\nGET /health 200\n"),
       );
     MockDocker.mockImplementation(function () {
       return {
@@ -135,14 +131,40 @@ describe("getContainerLogs", () => {
       };
     });
 
-    const result = await getContainerLogs({
-      service: SERVICE,
-      until: "2026-07-16T11:23:00.000Z",
+    const result = (await getContainerLogs({ service: SERVICE })) as {
+      lines: string[];
+      note: string;
+    };
+
+    expect(result.lines).toEqual([
+      "connection reset by peer",
+      "GET /health 200",
+    ]);
+    expect(result.note).toBe("");
+  });
+
+  // A scan that filled its tail has older lines behind it, and saying so is what
+  // stops "no matches" being read as "it never happened".
+  it("flags a scan that filled its tail", async () => {
+    const logs = vi.fn().mockResolvedValue(muxFrame(1, "a\nb\nc\n"));
+    MockDocker.mockImplementation(function () {
+      return {
+        listContainers: vi
+          .fn()
+          .mockResolvedValue([containerInfo("live-1", "running", 200)]),
+        getContainer: vi.fn().mockReturnValue({ logs }),
+      };
     });
 
-    const lines = (result as { lines: string[] }).lines;
-    expect(lines.some((l) => l.includes("utc form"))).toBe(true);
-    expect(lines.some((l) => l.includes("offset form"))).toBe(true);
+    const result = (await getContainerLogs({
+      service: SERVICE,
+      tailLines: 3,
+      contains: ["nothing matches this"],
+    })) as { lines: string[]; scanHitTail: boolean; note: string };
+
+    expect(result.lines).toEqual([]);
+    expect(result.scanHitTail).toBe(true);
+    expect(result.note).toContain("older lines were not searched");
   });
 
   // Logs are the likeliest place a secret rides out, so they are redacted where the

@@ -25,18 +25,27 @@ export interface DockerServiceListResult {
 
 // since/until name the window's two edges, as the Docker API and kubectl both
 // name them. ISO 8601 either way; absent means the engine's own default.
+
+// contains/excludes are the caller's own filter, matched as plain text against
+// whole lines. Neither engine can filter server-side, so somebody has to; this
+// way it is the caller's intent rather than a guess made here.
 export interface DockerLogsInput {
   service: DockerServiceIdentity;
   tailLines?: number;
   since?: string;
   until?: string;
+  contains?: string[];
+  excludes?: string[];
   stderrOnly?: boolean;
 }
+// A matched count means nothing without the size of what was searched: three
+// hits in the newest hundred lines is not three hits in the log.
 export interface DockerLogsResult {
   lines: string[];
-  totalLines: number;
-  droppedLines: number;
-  compressionNote: string;
+  scannedLines: number;
+  // The scan filled its tail, so older lines exist that it never looked at.
+  scanHitTail: boolean;
+  note: string;
 }
 
 export interface DockerConfigInput {

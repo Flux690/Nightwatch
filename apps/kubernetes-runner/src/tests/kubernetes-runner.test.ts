@@ -201,10 +201,44 @@ describe("Kubernetes runner command handlers", () => {
         containerName: "api-server",
         podPhase: "Running",
         fromPreviousContainer: false,
-        totalLines: 2,
+        scannedLines: 2,
       });
       const lines = (result as { lines: string[] }).lines;
       expect(lines.some((l) => l.includes("ERROR"))).toBe(true);
+    });
+
+    /* The apiserver has no way to filter log content, so the caller's words are
+       matched here. What that count is a fact about rides with it. */
+    it("filters on the caller's words and says what it searched", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue(
+        "OOMKilled container api\nINFO: starting up\nGET /health 200\n",
+      );
+
+      const result = (await getWorkloadLogs({
+        service: K8S_SERVICE,
+        contains: ["oomkilled"],
+      })) as { lines: string[]; scannedLines: number; note: string };
+
+      expect(result.lines).toEqual(["OOMKilled container api"]);
+      expect(result.scannedLines).toBe(3);
+      expect(result.note).toContain("1 of 3");
+      expect(result.note).toContain("not necessarily absent");
+    });
+
+    it("drops what the caller excludes before anything else", async () => {
+      mockCoreApi.listNamespacedPod.mockResolvedValue({ items: [RUNNING_POD] });
+      mockCoreApi.readNamespacedPodLog.mockResolvedValue(
+        "ERROR probe failed for healthcheck\nERROR db unreachable\n",
+      );
+
+      const result = (await getWorkloadLogs({
+        service: K8S_SERVICE,
+        contains: ["error"],
+        excludes: ["healthcheck"],
+      })) as { lines: string[] };
+
+      expect(result.lines).toEqual(["ERROR db unreachable"]);
     });
 
     it("fails fast naming the containers when a multi-container pod is ambiguous", async () => {

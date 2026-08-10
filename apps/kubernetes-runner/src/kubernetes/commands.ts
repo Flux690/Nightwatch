@@ -53,6 +53,39 @@ const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
 // count of what was dropped keeps the omission visible.
 const MAX_PODS_REPORTED = 20;
 const MAX_EVENTS_REPORTED = 100;
+const DEFAULT_TAIL_LINES = 200;
+
+// Plain text on whole lines, deliberately not a pattern: an agent-written regex
+// over thousands of lines is a backtracking hazard this runner would wear.
+// Case-insensitive, because ERROR and error are the same word to whoever asked.
+function matchesFilter(
+  line: string,
+  contains: string[],
+  excludes: string[],
+): boolean {
+  const haystack = line.toLowerCase();
+  const hits = (term: string): boolean => haystack.includes(term.toLowerCase());
+  if (excludes.some(hits)) return false;
+  return contains.length === 0 || contains.some(hits);
+}
+
+/* What the count means, which is not what it looks like: the tail is applied by
+   the apiserver before any filtering, so a small number of matches is a fact
+   about the lines searched and never about the log. */
+function logScanNote(
+  scanned: number,
+  matched: number,
+  tailLines: number,
+  scanHitTail: boolean,
+): string {
+  if (scanned === matched && !scanHitTail) return "";
+  const reach = scanHitTail
+    ? `the newest ${scanned} lines, which filled the ${tailLines}-line scan, so older lines were not searched`
+    : `all ${scanned} lines available`;
+  return matched === scanned
+    ? `Searched ${reach}.`
+    : `${matched} of ${scanned} lines matched your filter. Searched ${reach}. A line absent here was not necessarily absent from the log.`;
+}
 
 // List workloads, not pods, so the identity matches the manifest byte-for-byte; a pod-label identity
 // diverged, so a listed service couldn't be resolved back and the audit record mis-keyed it.
@@ -103,11 +136,12 @@ export async function getWorkloadLogs(
   // container); its useful output lives in the previous container, so request that rather than the empty current one.
   const fromPreviousContainer = !resolved.live;
 
+  const tailLines = input.tailLines ?? DEFAULT_TAIL_LINES;
   const log = await coreApi.readNamespacedPodLog({
     name: resolved.podName,
     namespace: resolved.namespace,
     container: resolved.containerName,
-    tailLines: input.tailLines ?? 200,
+    tailLines,
     previous: fromPreviousContainer,
     ...(input.since !== undefined && {
       sinceSeconds: Math.max(
@@ -119,11 +153,17 @@ export async function getWorkloadLogs(
 
   // Redacted where the raw text enters, so every count below describes what is
   // actually returned rather than what the pod emitted.
-  const lines = sanitizeLines(log.split("\n").filter(Boolean));
-  // Kubernetes reads are already tail-scoped server-side, so nothing is filtered here.
+  const scanned = sanitizeLines(log.split("\n").filter(Boolean));
+  const lines = scanned.filter((line) =>
+    matchesFilter(line, input.contains ?? [], input.excludes ?? []),
+  );
+  const scanHitTail = scanned.length >= tailLines;
+
   return {
     lines,
-    totalLines: lines.length,
+    scannedLines: scanned.length,
+    scanHitTail,
+    note: logScanNote(scanned.length, lines.length, tailLines, scanHitTail),
     podName: resolved.podName,
     containerName: resolved.containerName ?? null,
     podPhase: resolved.podPhase,

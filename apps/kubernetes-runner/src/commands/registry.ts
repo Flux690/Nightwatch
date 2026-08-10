@@ -2,6 +2,7 @@ import {
   nested,
   optionalNumber,
   optionalString,
+  optionalStringArray,
   requiredString,
   requiredStringArray,
   type CommandHandler,
@@ -48,6 +49,8 @@ export function createDispatchRegistry(): Map<string, CommandHandler> {
           service: service(input),
           tailLines: optionalNumber(input, "tailLines"),
           since: optionalString(input, "since"),
+          contains: optionalStringArray(input, "contains"),
+          excludes: optionalStringArray(input, "excludes"),
         }),
     ],
     [

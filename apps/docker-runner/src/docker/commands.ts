@@ -58,6 +58,40 @@ export async function getContainerList(): Promise<DockerServiceListResult> {
   return { containers };
 }
 
+const DEFAULT_TAIL_LINES = 200;
+
+// Plain text on whole lines, deliberately not a pattern: an agent-written regex
+// over thousands of lines is a backtracking hazard this host would wear.
+// Case-insensitive, because ERROR and error are the same word to whoever asked.
+function matchesFilter(
+  line: string,
+  contains: string[],
+  excludes: string[],
+): boolean {
+  const haystack = line.toLowerCase();
+  const hits = (term: string): boolean => haystack.includes(term.toLowerCase());
+  if (excludes.some(hits)) return false;
+  return contains.length === 0 || contains.some(hits);
+}
+
+/* What the count means, which is not what it looks like: the tail is applied by
+   the engine before any filtering, so a small number of matches is a fact about
+   the lines searched and never about the log. */
+function logScanNote(
+  scanned: number,
+  matched: number,
+  tailLines: number,
+  scanHitTail: boolean,
+): string {
+  if (scanned === matched && !scanHitTail) return "";
+  const reach = scanHitTail
+    ? `the newest ${scanned} lines, which filled the ${tailLines}-line scan, so older lines were not searched`
+    : `all ${scanned} lines in the window`;
+  return matched === scanned
+    ? `Searched ${reach}.`
+    : `${matched} of ${scanned} lines matched your filter. Searched ${reach}. A line absent here was not necessarily absent from the log.`;
+}
+
 function msOrNull(iso: string | undefined): number | null {
   if (iso === undefined) return null;
   const ms = new Date(iso).getTime();
@@ -81,12 +115,13 @@ export async function getContainerLogs(
   // past moment rather than only walked back from now.
   const since = unixSeconds(input.since);
   const until = unixSeconds(input.until);
+  const tailLines = input.tailLines ?? DEFAULT_TAIL_LINES;
 
   const buf = await container.logs({
     stdout: !input.stderrOnly,
     stderr: true,
     follow: false,
-    tail: input.tailLines ?? 200,
+    tail: tailLines,
     ...(since !== undefined && { since }),
     ...(until !== undefined && { until }),
   });
@@ -96,29 +131,16 @@ export async function getContainerLogs(
   // describe what is actually returned rather than what the container emitted.
   const allLines = sanitizeLines((stdout + stderr).split("\n").filter(Boolean));
 
-  const ERROR_RE =
-    /\b(error|err|warn|warning|fatal|exception|traceback|panic)\b/i;
-  // Whatever the caller aimed at is the moment worth keeping quiet lines around:
-  // the end of the window when it named one, the start of it otherwise.
-  const focus = msOrNull(input.until) ?? msOrNull(input.since);
-
-  const filtered = allLines.filter((line) => {
-    if (ERROR_RE.test(line)) return true;
-    if (focus !== null) {
-      const ts = extractLineTimestamp(line);
-      if (ts !== null && Math.abs(ts - focus) <= 30_000) return true;
-    }
-    return false;
-  });
+  const filtered = allLines.filter((line) =>
+    matchesFilter(line, input.contains ?? [], input.excludes ?? []),
+  );
+  const scanHitTail = allLines.length >= tailLines;
 
   return {
     lines: filtered,
-    totalLines: allLines.length,
-    droppedLines: allLines.length - filtered.length,
-    compressionNote:
-      filtered.length === allLines.length
-        ? ""
-        : `Filtered to ${filtered.length} of ${allLines.length} lines (errors, warnings, lines within 30s of the moment asked about)`,
+    scannedLines: allLines.length,
+    scanHitTail,
+    note: logScanNote(allLines.length, filtered.length, tailLines, scanHitTail),
   };
 }
 
@@ -378,16 +400,4 @@ function parseUptime(status: string): number {
     month: 2592000,
   };
   return n * (multipliers[m[2]!.toLowerCase()] ?? 1);
-}
-
-// The offset is part of the match on purpose: an ISO timestamp cut at the
-// seconds parses as local time, which silently misses every line by the host's
-// own offset from UTC.
-function extractLineTimestamp(line: string): number | null {
-  const iso = line.match(
-    /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?/,
-  );
-  if (iso === null) return null;
-  const ms = new Date(iso[0]).getTime();
-  return Number.isNaN(ms) ? null : ms;
 }

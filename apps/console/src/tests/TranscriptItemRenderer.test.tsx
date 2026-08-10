@@ -450,7 +450,7 @@ describe("TranscriptItemRenderer", () => {
                 phase: "complete",
                 result: JSON.stringify({
                   lines: ["OOM command not allowed"],
-                  totalLines: 200,
+                  scannedLines: 200,
                 }),
               },
             }}
