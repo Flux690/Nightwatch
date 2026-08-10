@@ -11,7 +11,7 @@ import {
   listSessionSources,
   type SessionListSource,
 } from "../db/sessions.js";
-import { proposedSomething } from "../agent/report.js";
+import { isActionable } from "../agent/report.js";
 import { dispatcher } from "../dispatcher.js";
 
 /* The alert that fired is what says the incident is over, so a write running
@@ -38,7 +38,7 @@ function deriveStatus(source: SessionListSource): SessionRunStatus {
   if (source.awaitingHumanInput) return "action_required";
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
   if (isSettled(source)) return "resolved";
-  if (report !== null && proposedSomething(report)) return "action_required";
+  if (report !== null && isActionable(report)) return "action_required";
   if (source.lastKind === "error") return "failed";
   // Nothing for the operator to act on: the run ended without a recommendation,
   // whether or not it named a cause along the way.
@@ -79,7 +79,7 @@ function leadingClaim(report: Report | null): Hypothesis | null {
 }
 
 // What it waits on when nobody is gating it: the recommendation it wrote, or the
-// claim that amounts to one. Mirrors proposedSomething, which put it here.
+// claim that amounts to one. Mirrors isActionable, which put it here.
 function awaitedRecommendation(report: Report | null): string | null {
   const recommendation = report?.submitted?.recommendation.trim();
   return recommendation

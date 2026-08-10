@@ -114,7 +114,7 @@ describe("the investigation record", () => {
             input: entry.input,
           },
         ],
-        createdAt: at,
+        timestamp: at,
       },
       {
         sessionId,
@@ -122,7 +122,7 @@ describe("the investigation record", () => {
         kind: "user",
         content: "results",
         parts: [{ type: "tool_result", toolCallId: entry.id, output }],
-        createdAt: at,
+        timestamp: at,
       },
     ]);
   }
@@ -626,7 +626,7 @@ describe("the investigation record", () => {
               input: { query: "rss" },
             },
           ],
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         },
       ]);
       await call("RecordHypothesis", sessionId, {
@@ -670,7 +670,7 @@ describe("the investigation record", () => {
               input: { query: "rss" },
             },
           ],
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         },
       ]);
       await call("RecordHypothesis", sessionId, {

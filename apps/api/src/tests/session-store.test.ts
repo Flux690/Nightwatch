@@ -61,7 +61,7 @@ function msg(
     kind: seq % 2 === 0 ? "user" : "assistant",
     content: `message ${seq}`,
     parts: [{ type: "text", text: `message ${seq}` }],
-    createdAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -394,7 +394,7 @@ describe("API-local session store", () => {
             },
             { type: "tool_result", toolCallId: "tu-exec", output: "ok" },
           ],
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         },
       ]);
       expect(statusOf(sessionId)).toBe("inconclusive");

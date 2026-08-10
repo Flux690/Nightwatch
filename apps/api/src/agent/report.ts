@@ -33,7 +33,7 @@ interface LedgerEntry {
   toolName: string;
   input: Record<string, unknown>;
   result: string | null;
-  createdAt: string;
+  timestamp: string;
 }
 
 // One walk of the durable transcript, which is the ledger. The provider's own
@@ -49,7 +49,7 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
           toolName: part.name,
           input: part.input,
           result: null,
-          createdAt: message.createdAt,
+          timestamp: message.timestamp,
         };
         entries.push(entry);
         byToolUseId.set(part.id, entry);
@@ -117,7 +117,7 @@ function convictionOf(
     .flatMap((id) => ledger.get(id) ?? [])
     .filter((entry) => entry.result !== null);
   if (entries.length === 0) return null;
-  if (executedAt !== null && entries.some((e) => e.createdAt > executedAt)) {
+  if (executedAt !== null && entries.some((e) => e.timestamp > executedAt)) {
     return "verified";
   }
   const sources = new Set(entries.map((e) => evidenceSource(e.toolName)));
@@ -137,7 +137,7 @@ export function gatedCalls(sessionId: string): GatedCall[] {
         toolUseId: entry.toolUseId,
         toolName: entry.toolName,
         target: targetKeyFromInput(entry.input),
-        at: entry.createdAt,
+        at: entry.timestamp,
         decision:
           outcome === "rejected"
             ? ("rejected" as const)
@@ -160,7 +160,7 @@ function lastExecutedAt(
   for (const entry of ledger.values()) {
     if (entry.result === null || !wasGated(entry.toolName)) continue;
     if (outcomes.get(entry.toolUseId) === "rejected") continue;
-    if (latest === null || entry.createdAt > latest) latest = entry.createdAt;
+    if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
   }
   return latest;
 }
@@ -183,7 +183,7 @@ export function computeConviction(
 // root cause that amounts to one. Read by the status derivation and by the
 // composition gate, so what the list calls actionable and what the gate accepts
 // cannot disagree.
-export function proposedSomething(report: Report | null): boolean {
+export function isActionable(report: Report | null): boolean {
   if (report === null) return false;
   const recommended = (report.submitted?.recommendation ?? "").trim() !== "";
   return (

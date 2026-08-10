@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS session_transcript (
   kind           TEXT      NOT NULL,
   content        TEXT      NOT NULL,
   canonical      TEXT,
-  created_at     TEXT      NOT NULL,
+  timestamp      TEXT      NOT NULL,
   PRIMARY KEY (session_id, seq)
 );
 

@@ -90,5 +90,5 @@ export interface TranscriptRow {
   // The vendor's own message, replayed verbatim when the dialect still matches -
   // parts alone can't restore a signed thinking block.
   native?: NativeEnvelope;
-  createdAt: string;
+  timestamp: string;
 }

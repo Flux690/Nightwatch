@@ -97,7 +97,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
             kind: "error",
             content: text,
             parts: [],
-            createdAt: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
           };
         }
         publishRunFailed(input.sessionId, row);

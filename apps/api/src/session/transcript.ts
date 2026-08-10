@@ -156,7 +156,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   // Alerts that arrived after the conversation started, in arrival order. The
   // ones that opened the session are excluded: they predate every message, and
   // the report's alert band sits directly above the first of them anyway.
-  const firstMessageAt = messages[0]?.createdAt ?? null;
+  const firstMessageAt = messages[0]?.timestamp ?? null;
   const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
     (entry) => firstMessageAt !== null && entry.arrivedAt > firstMessageAt,
   );
@@ -172,7 +172,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     // happened before the alert landed, and everything after it, after.
     while (
       nextArrival < arrivals.length &&
-      arrivals[nextArrival]!.arrivedAt <= msg.createdAt
+      arrivals[nextArrival]!.arrivedAt <= msg.timestamp
     ) {
       const entry = arrivals[nextArrival]!;
       items.push({

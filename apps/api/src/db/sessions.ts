@@ -149,8 +149,8 @@ export function appendTranscriptRows(messages: TranscriptRow[]): void {
   if (messages.length === 0) return;
   const insert = getDb().prepare(
     `INSERT INTO session_transcript
-       (session_id, seq, kind, content, canonical, created_at)
-     VALUES (@sessionId, @seq, @kind, @content, @canonical, @createdAt)`,
+       (session_id, seq, kind, content, canonical, timestamp)
+     VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
   );
   const insertAll = getDb().transaction((rows: TranscriptRow[]) => {
     for (const m of rows) {
@@ -160,7 +160,7 @@ export function appendTranscriptRows(messages: TranscriptRow[]): void {
         kind: m.kind,
         content: m.content,
         canonical: serializeCanonical(m),
-        createdAt: m.createdAt,
+        timestamp: m.timestamp,
       });
     }
   });
@@ -186,8 +186,8 @@ export function appendErrorMessage(
   const db = getDb();
   const insert = db.prepare(
     `INSERT INTO session_transcript
-       (session_id, seq, kind, content, canonical, created_at)
-     VALUES (@sessionId, @seq, 'error', @content, NULL, @createdAt)`,
+       (session_id, seq, kind, content, canonical, timestamp)
+     VALUES (@sessionId, @seq, 'error', @content, NULL, @timestamp)`,
   );
   const message: TranscriptRow = {
     sessionId,
@@ -195,7 +195,7 @@ export function appendErrorMessage(
     kind: "error",
     content: text,
     parts: [],
-    createdAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
   };
   db.transaction(() => {
     message.seq = getNextSeq(sessionId);
@@ -203,7 +203,7 @@ export function appendErrorMessage(
       sessionId,
       seq: message.seq,
       content: text,
-      createdAt: message.createdAt,
+      timestamp: message.timestamp,
     });
   })();
   return message;
@@ -217,8 +217,8 @@ export function appendRowsAndInterrupt(
 ): void {
   const insertMsg = getDb().prepare(
     `INSERT INTO session_transcript
-       (session_id, seq, kind, content, canonical, created_at)
-     VALUES (@sessionId, @seq, @kind, @content, @canonical, @createdAt)`,
+       (session_id, seq, kind, content, canonical, timestamp)
+     VALUES (@sessionId, @seq, @kind, @content, @canonical, @timestamp)`,
   );
   const insertHumanInput = getDb().prepare(
     `INSERT INTO pending_human_input
@@ -233,7 +233,7 @@ export function appendRowsAndInterrupt(
         kind: m.kind,
         content: m.content,
         canonical: serializeCanonical(m),
-        createdAt: m.createdAt,
+        timestamp: m.timestamp,
       });
     }
     insertHumanInput.run({
@@ -301,7 +301,7 @@ const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS create
         (SELECT m.content FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastContent,
-        COALESCE((SELECT MAX(m.created_at) FROM session_transcript m
+        COALESCE((SELECT MAX(m.timestamp) FROM session_transcript m
           WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
         (p.session_id IS NOT NULL) AS awaitingHumanInput,
         p.kind AS pendingKind`;
@@ -391,7 +391,7 @@ export function getTranscriptRows(sessionId: string): TranscriptRow[] {
   const rows = getDb()
     .prepare(
       `SELECT session_id AS sessionId, seq, kind, content,
-              canonical, created_at AS createdAt
+              canonical, timestamp
        FROM session_transcript WHERE session_id = ? ORDER BY seq ASC`,
     )
     .all(sessionId) as Array<{
@@ -400,7 +400,7 @@ export function getTranscriptRows(sessionId: string): TranscriptRow[] {
     kind: string;
     content: string;
     canonical: string | null;
-    createdAt: string;
+    timestamp: string;
   }>;
   return rows.map((r) => ({
     sessionId: r.sessionId,
@@ -409,7 +409,7 @@ export function getTranscriptRows(sessionId: string): TranscriptRow[] {
     seq: r.seq,
     content: r.content,
     ...parseCanonical(r.canonical),
-    createdAt: r.createdAt,
+    timestamp: r.timestamp,
   }));
 }
 

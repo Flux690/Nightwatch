@@ -89,7 +89,7 @@ function persistNewTurns(
       content: m.content,
       parts: m.parts,
       ...(m.native && { native: m.native }),
-      createdAt: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
     });
   }
   if (interrupt) {
