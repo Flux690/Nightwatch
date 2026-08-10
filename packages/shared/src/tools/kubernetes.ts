@@ -167,6 +167,8 @@ export interface K8sEvent {
   reportingComponent: string | null;
 }
 
+// An empty list is two different facts, so the result carries what it searched:
+// the window it was given, and what that window cannot speak for.
 export interface K8sEventsResult {
   workload: string;
   namespace: string;
@@ -174,6 +176,8 @@ export interface K8sEventsResult {
   events: K8sEvent[];
   eventsOmitted?: number;
   warningsOnly: boolean;
+  sinceMinutes: number;
+  note: string;
 }
 
 export interface K8sProcess {

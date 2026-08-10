@@ -54,6 +54,49 @@ const STRATEGIC_MERGE_PATCH_OPTIONS = setHeaderOptions(
 const MAX_PODS_REPORTED = 20;
 const MAX_EVENTS_REPORTED = 100;
 const DEFAULT_TAIL_LINES = 200;
+const DEFAULT_EVENT_WINDOW_MINUTES = 60;
+// What --event-ttl defaults to. It is an apiserver flag no API reports and one
+// managed providers do not expose, so this is a caveat and never a claim.
+const COMMON_EVENT_TTL_MINUTES = 60;
+
+/* Kubernetes deletes events on a TTL it will not tell us, and an event survives
+   only while something keeps updating it. So an empty list is either nothing
+   happened or the evidence expired, and only the caller's window is knowable. */
+function eventScopeNote(scope: {
+  returned: number;
+  older: number;
+  undated: number;
+  sinceMinutes: number;
+  livePods: number;
+  warningsOnly: boolean;
+}): string {
+  const parts: string[] = [];
+  if (scope.returned === 0) {
+    parts.push(
+      scope.older > 0
+        ? `No events in the last ${scope.sinceMinutes} minutes, but ${scope.older} older one(s) exist for this workload. Raise sinceMinutes to read them.`
+        : `No events at all for this workload${scope.warningsOnly ? ", and Normal events were not requested" : ""}.`,
+    );
+  } else if (scope.older > 0) {
+    parts.push(
+      `${scope.older} further event(s) sit before this window; raise sinceMinutes to include them.`,
+    );
+  }
+  if (scope.sinceMinutes > COMMON_EVENT_TTL_MINUTES) {
+    parts.push(
+      `Kubernetes keeps events for a limited time, commonly ${COMMON_EVENT_TTL_MINUTES} minutes, and reports no way to read that limit, so the older part of a ${scope.sinceMinutes}-minute window may hold events it has already deleted. Absence there is not evidence.`,
+    );
+  }
+  parts.push(
+    `Pod events were matched against the ${scope.livePods} pod(s) running now; a pod deleted since, such as an evicted one, carries no link back to this workload and is not represented.`,
+  );
+  if (scope.undated > 0) {
+    parts.push(
+      `${scope.undated} event(s) carry no timestamp, so they are included but their position in the order means nothing.`,
+    );
+  }
+  return parts.join(" ");
+}
 
 // Plain text on whole lines, deliberately not a pattern: an agent-written regex
 // over thousands of lines is a backtracking hazard this runner would wear.
@@ -232,16 +275,16 @@ export async function getWorkloadStats(
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
 
-  const labelSelector = await getWorkloadSelector(
+  const found = await getWorkloadSelector(
     appsApi,
     service.namespace,
     service.workload,
   );
-  if (labelSelector === null) return noWorkloadResult(input.service);
+  if (found === null) return noWorkloadResult(input.service);
 
   const podList = await coreApi.listNamespacedPod({
     namespace: service.namespace,
-    labelSelector,
+    labelSelector: found.labelSelector,
   });
   if (podList.items.length === 0) return noWorkloadResult(input.service);
 
@@ -301,38 +344,55 @@ export async function getWorkloadEvents(
   const coreApi = getCoreV1Api();
   const appsApi = getAppsV1Api();
 
-  const labelSelector = await getWorkloadSelector(
+  const found = await getWorkloadSelector(
     appsApi,
     service.namespace,
     service.workload,
   );
-  if (labelSelector === null) return noWorkloadResult(input.service);
+  if (found === null) return noWorkloadResult(input.service);
 
   const podList = await coreApi.listNamespacedPod({
     namespace: service.namespace,
-    labelSelector,
+    labelSelector: found.labelSelector,
   });
-  const subjects = new Set<string>([service.workload]);
+  const podNames = new Set<string>();
   for (const pod of podList.items) {
     const name = pod.metadata?.name;
-    if (name) subjects.add(name);
+    if (name) podNames.add(name);
   }
 
-  // One listing filtered client-side: a fieldSelector matches a single object name,
-  // and this needs the union of the controller and every one of its pods.
+  const warningsOnly = input.warningsOnly ?? true;
+  const sinceMinutes = input.sinceMinutes ?? DEFAULT_EVENT_WINDOW_MINUTES;
+
+  // type is a selectable field, so the narrowing the caller asked for happens at
+  // the apiserver. Kind and name cannot be expressed as one selector across a
+  // controller and its pods, so that half is matched below.
   const events = await coreApi.listNamespacedEvent({
     namespace: service.namespace,
+    ...(warningsOnly && { fieldSelector: "type=Warning" }),
   });
 
-  const warningsOnly = input.warningsOnly ?? true;
-  const cutoff = Date.now() - (input.sinceMinutes ?? 60) * 60_000;
+  // Kind as well as name: a Service, ConfigMap and ServiceAccount sharing the
+  // workload's name is the ordinary layout, and their events are not its own.
+  // Type is re-checked because the selector above is a way to move less data,
+  // never the thing that makes warningsOnly true.
+  const mine = events.items.filter((e) => {
+    if (warningsOnly && e.type !== "Warning") return false;
+    const { kind, name } = e.involvedObject;
+    if (kind === found.kind && name === service.workload) return true;
+    return kind === "Pod" && name !== undefined && podNames.has(name);
+  });
 
-  const matched = events.items
-    .filter((e) => subjects.has(e.involvedObject.name ?? ""))
-    .filter((e) => !warningsOnly || e.type === "Warning")
-    .filter((e) => eventTime(e) >= cutoff)
-    .sort((a, b) => eventTime(a) - eventTime(b));
+  const cutoff = Date.now() - sinceMinutes * 60_000;
+  // An event we cannot place in time cannot be ruled outside the window either,
+  // so it is kept and counted rather than dropped for having no timestamp.
+  const undated = mine.filter((e) => eventTime(e) === null).length;
+  const inWindow = mine.filter((e) => (eventTime(e) ?? cutoff) >= cutoff);
+  const older = mine.length - inWindow.length;
 
+  const matched = inWindow.sort(
+    (a, b) => (eventTime(a) ?? 0) - (eventTime(b) ?? 0),
+  );
   const shown = matched.slice(-MAX_EVENTS_REPORTED);
   const omitted = matched.length - shown.length;
 
@@ -342,6 +402,15 @@ export async function getWorkloadEvents(
     events: shown.map(normalizeEvent),
     ...(omitted > 0 && { eventsOmitted: omitted }),
     warningsOnly,
+    sinceMinutes,
+    note: eventScopeNote({
+      returned: shown.length,
+      older,
+      undated,
+      sinceMinutes,
+      livePods: podNames.size,
+      warningsOnly,
+    }),
   };
 }
 
@@ -925,9 +994,13 @@ export function parseMemoryBytes(quantity: string | undefined): number | null {
   return parseQuantity(quantity, MEMORY_BYTE_SCALE);
 }
 
-function eventTime(event: k8s.CoreV1Event): number {
+// Null rather than 0 for an event carrying no usable timestamp: 0 reads as 1970
+// and silently falls outside every window the caller can ask for.
+function eventTime(event: k8s.CoreV1Event): number | null {
   const stamp = event.lastTimestamp ?? event.eventTime ?? event.firstTimestamp;
-  return stamp ? new Date(stamp).getTime() : 0;
+  if (!stamp) return null;
+  const ms = new Date(stamp).getTime();
+  return Number.isNaN(ms) ? null : ms;
 }
 
 function normalizeEvent(event: k8s.CoreV1Event): K8sEvent {

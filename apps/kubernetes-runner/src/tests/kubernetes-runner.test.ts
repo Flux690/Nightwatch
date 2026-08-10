@@ -883,6 +883,98 @@ describe("Kubernetes runner command handlers", () => {
         expect.objectContaining({ reason: "FailedCreate" }),
       ]);
     });
+
+    /* A Deployment, a Service and a ServiceAccount sharing one name is the
+       ordinary layout, so matching on name alone claims the neighbours' events. */
+    it("does not claim a same-named object of another kind", async () => {
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({
+        items: [
+          {
+            ...WORKLOAD_EVENT,
+            reason: "FailedToUpdateEndpoint",
+            involvedObject: {
+              kind: "Service",
+              name: "api-server",
+              namespace: "production",
+            },
+          },
+          WORKLOAD_EVENT,
+        ],
+      });
+
+      const result = await getWorkloadEvents({ service: K8S_SERVICE });
+
+      expect((result as { events: Array<{ reason: string }> }).events).toEqual([
+        expect.objectContaining({ reason: "FailedCreate" }),
+      ]);
+    });
+
+    /* Empty is two different facts. Saying which one, and how many events sit
+       just outside the window, is what stops it reading as "nothing happened". */
+    it("names the events sitting outside the window rather than answering empty", async () => {
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({
+        items: [
+          { ...POD_EVENT, lastTimestamp: minutesAgo(200) },
+          { ...WORKLOAD_EVENT, lastTimestamp: minutesAgo(300) },
+        ],
+      });
+
+      const result = (await getWorkloadEvents({
+        service: K8S_SERVICE,
+        sinceMinutes: 30,
+      })) as { events: unknown[]; sinceMinutes: number; note: string };
+
+      expect(result.events).toEqual([]);
+      expect(result.sinceMinutes).toBe(30);
+      expect(result.note).toContain("2 older one(s) exist");
+      expect(result.note).toMatch(/raise sinceMinutes/i);
+      // An evicted pod is gone and its event names no owner, so the link back to
+      // this workload is unrecoverable; the scope it did search rides along.
+      expect(result.note).toContain("1 pod(s) running now");
+      expect(result.note).toMatch(/evicted/i);
+    });
+
+    // Asking for four hours on a cluster that keeps one is asking for something
+    // that cannot exist, and the result has to say so rather than answer [].
+    it("warns that a window longer than the retention cannot be answered", async () => {
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({ items: [] });
+
+      const result = (await getWorkloadEvents({
+        service: K8S_SERVICE,
+        sinceMinutes: 240,
+      })) as { note: string };
+
+      expect(result.note).toContain("Absence there is not evidence");
+      expect(result.note).toContain("already deleted");
+    });
+
+    // Scoring an undated event as epoch put it outside every window a caller
+    // could ask for, which dropped it without ever saying so.
+    it("keeps an event carrying no timestamp instead of dating it to 1970", async () => {
+      const undated = { ...POD_EVENT, lastTimestamp: undefined };
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({ items: [undated] });
+
+      const result = (await getWorkloadEvents({
+        service: K8S_SERVICE,
+        sinceMinutes: 30,
+      })) as { events: unknown[]; note: string };
+
+      expect(result.events).toHaveLength(1);
+      expect(result.note).toContain("carry no timestamp");
+    });
+
+    /* Not only for speed: a busy namespace unfiltered is thousands of events,
+       which reaches the API over the wire and is refused whole at the result
+       ceiling, so the tool answers nothing at exactly the wrong moment. */
+    it("asks the apiserver to narrow by type before the wire", async () => {
+      mockCoreApi.listNamespacedEvent.mockResolvedValue({ items: [] });
+
+      await getWorkloadEvents({ service: K8S_SERVICE });
+
+      expect(mockCoreApi.listNamespacedEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ fieldSelector: "type=Warning" }),
+      );
+    });
   });
 
   describe("restartWorkload (rollout restart)", () => {

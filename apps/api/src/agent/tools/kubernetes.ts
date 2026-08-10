@@ -137,7 +137,7 @@ export const K8S_TOOLS: Tool[] = [
     schema: {
       name: "GetK8sEvents",
       description:
-        "Read the Kubernetes events for a workload and for its pods, merged into one list with the oldest first. These are events such as FailedCreate, BackOff and OOMKilling, and they are usually the fastest way to learn why a workload will not come up.",
+        "Read the Kubernetes events for a workload and for its pods, merged into one list with the oldest first. These are events such as FailedCreate, BackOff and OOMKilling, and they are usually the fastest way to learn why a workload will not come up. Kubernetes deletes events on a timer, commonly one hour, so an empty list can mean the evidence expired rather than that nothing happened. Read the note on the result before concluding anything from an empty one.",
       input_schema: {
         type: "object",
         properties: {
@@ -147,7 +147,7 @@ export const K8S_TOOLS: Tool[] = [
           sinceMinutes: {
             type: "number",
             description:
-              "How many minutes to look back from now. Defaults to 60.",
+              "How many minutes to look back from now. Defaults to 60. Asking for more than that is worth doing when the result says older events exist, but a longer window cannot recover events Kubernetes has already deleted.",
           },
           warningsOnly: {
             type: "boolean",

@@ -94,10 +94,13 @@ export async function resolveWorkload(
 ): Promise<ResolvedK8sPod | NotFoundResult> {
   const identity: KubernetesWorkloadIdentity = { namespace, workload };
 
-  const labelSelector = await getWorkloadSelector(appsApi, namespace, workload);
-  if (labelSelector === null) return noWorkloadResult(identity);
+  const found = await getWorkloadSelector(appsApi, namespace, workload);
+  if (found === null) return noWorkloadResult(identity);
 
-  const podList = await coreApi.listNamespacedPod({ namespace, labelSelector });
+  const podList = await coreApi.listNamespacedPod({
+    namespace,
+    labelSelector: found.labelSelector,
+  });
   if (podList.items.length === 0) return noWorkloadResult(identity);
 
   const livePods = podList.items.filter((p) => p.status?.phase === "Running");
@@ -153,18 +156,26 @@ function selectContainer(
   return { kind: "ambiguous", available: names };
 }
 
+// The kind rides back with the selector because the probe below establishes it
+// anyway, and an event lookup that matches on name alone claims every Service,
+// ConfigMap and ServiceAccount sharing that name.
+export interface WorkloadSelector {
+  labelSelector: string;
+  kind: K8sWorkloadKind;
+}
+
 export async function getWorkloadSelector(
   appsApi: k8s.AppsV1Api,
   namespace: string,
   workload: string,
-): Promise<string | null> {
+): Promise<WorkloadSelector | null> {
   try {
     const deployment = await appsApi.readNamespacedDeployment({
       name: workload,
       namespace,
     });
     const sel = labelSelectorString(deployment.spec?.selector ?? {});
-    if (sel) return sel;
+    if (sel) return { labelSelector: sel, kind: "Deployment" };
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
     // Not a Deployment; try StatefulSet.
@@ -176,7 +187,7 @@ export async function getWorkloadSelector(
       namespace,
     });
     const sel = labelSelectorString(sts.spec?.selector ?? {});
-    if (sel) return sel;
+    if (sel) return { labelSelector: sel, kind: "StatefulSet" };
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
     // Not a StatefulSet; try DaemonSet.
@@ -188,7 +199,7 @@ export async function getWorkloadSelector(
       namespace,
     });
     const sel = labelSelectorString(ds.spec?.selector ?? {});
-    if (sel) return sel;
+    if (sel) return { labelSelector: sel, kind: "DaemonSet" };
   } catch (err) {
     if (!isNotFoundError(err)) throw err;
     // None of the three kinds.
