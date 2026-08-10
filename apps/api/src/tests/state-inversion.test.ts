@@ -77,6 +77,30 @@ describe("state inversion: persistence and reads are API-local", () => {
     );
   }
 
+  // The id in a 202 has to name something the next request can fetch, whatever
+  // work later moves ahead of the write.
+  it("answers for the session id the moment it hands one out", async () => {
+    setScript([{ text: "Working.", toolUses: [] }]);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Anything running?" }),
+    });
+    expect(res.status).toBe(202);
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    // Deliberately no waitFor: needing one is the defect.
+    const detail = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}`,
+      { headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    expect(detail.status).toBe(200);
+  });
+
   it("lists sessions and reads the full transcript with no runner connected", async () => {
     setScript([{ text: "Looks healthy.", toolUses: [] }]);
 

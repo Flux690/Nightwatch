@@ -12,7 +12,8 @@ import {
 } from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
-import { getSession, deleteSession } from "../db/sessions.js";
+import { createSession, getSession, deleteSession } from "../db/sessions.js";
+import { buildSessionMeta } from "../agent/loop.js";
 import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";
 import { requireSession } from "../auth/session.js";
@@ -199,11 +200,15 @@ export async function registerSessionRoutes(
          the operator picking a mode before they typed. Nothing infers it later -
          not the agent mid-conversation, and not the harness from what the run
          happened to record. */
-      dispatcher.dispatch({
-        sessionId,
-        userMessage: message,
-        investigation: kind === "investigation",
-      });
+      const investigation = kind === "investigation";
+      // The row exists before its id is handed out, so a 202 never names a
+      // session the next request cannot fetch. The run's own call is idempotent.
+      createSession(
+        buildSessionMeta(sessionId, null, message),
+        [],
+        investigation,
+      );
+      dispatcher.dispatch({ sessionId, userMessage: message, investigation });
       logger.info({ sessionId, kind }, "session started");
       return reply.code(202).send({ sessionId });
     },

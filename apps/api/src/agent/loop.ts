@@ -105,9 +105,10 @@ function persistNewTurns(
   return snap.length;
 }
 
-// null alert = chat session; title from user message. A placeholder either way: the
-// title model replaces it seconds later, so the alert type alone is enough here.
-function buildSessionMeta(
+/* null alert = chat session; title from user message. A placeholder either way:
+   the title model replaces it seconds later. Shared with the chat route, which
+   writes the row before handing out its id. */
+export function buildSessionMeta(
   sessionId: string,
   alert: NormalizedAlert | null,
   userMessage: string | undefined,
