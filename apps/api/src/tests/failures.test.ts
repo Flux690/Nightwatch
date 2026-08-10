@@ -192,6 +192,52 @@ describe("describeLLMError", () => {
     expect(text).toContain("from Poolside");
   });
 
+  // A context-length overflow is a 400, and the generic 400 wording points at a
+  // model and reasoning level the operator never touched.
+  it("tells a context-length overflow apart from a malformed request", () => {
+    const err = OpenAI.APIError.generate(
+      400,
+      {
+        error: {
+          message: "This endpoint's maximum context length is 128000 tokens",
+          metadata: {
+            error_type: "context_length_exceeded",
+            provider_code: "string_above_max_length",
+          },
+        },
+      },
+      "400",
+      new Headers(),
+    );
+
+    const text = describeLLMError(err);
+
+    expect(text).toContain("context window");
+    expect(text).not.toContain("malformed");
+    expect(text).not.toContain("reasoning level");
+  });
+
+  // Anthropic publishes no typed code for it, so the message is the only signal.
+  it("recognises the same overflow when only the message says so", () => {
+    const err = Anthropic.APIError.generate(
+      400,
+      {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "prompt is too long: 235433 tokens > 200000 maximum",
+        },
+      },
+      "400",
+      new Headers(),
+    );
+
+    const text = describeLLMError(err);
+
+    expect(text).toContain("context window");
+    expect(text).not.toContain("malformed");
+  });
+
   it("explains connection failures without a status code", () => {
     const text = describeLLMError(
       new OpenAI.APIConnectionError({ message: "down" }),

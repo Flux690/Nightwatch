@@ -83,6 +83,16 @@ function reasoningDetails(chunk: unknown): ReasoningDetail[] {
   });
 }
 
+// The gateway's own addition to the usage object, which the OpenAI SDK does not
+// type. Absent rather than zero when it is not reported.
+function usageCost(response: unknown): number | undefined {
+  if (typeof response !== "object" || response === null) return undefined;
+  const usage = (response as Record<string, unknown>)["usage"];
+  if (typeof usage !== "object" || usage === null) return undefined;
+  const cost = (usage as Record<string, unknown>)["cost"];
+  return typeof cost === "number" ? cost : undefined;
+}
+
 // A model's reasoning block, as OpenRouter's catalog publishes it. Only
 // `mandatory` is present on every entry; the rest are absent on most models.
 interface OpenRouterReasoning {
@@ -254,17 +264,30 @@ export class OpenRouterProvider implements LLMProvider {
       response = await stream.finalChatCompletion();
     } catch (err) {
       // Surface the status (429 rate limit, 502 provider down, timeout) instead
-      // of a bare stack, then rethrow to fail the job.
+      // of a bare stack; a refused request carries no usage, so turns is the size.
+      const scale = { model: this.model, turns: this.messages.length };
       if (err instanceof OpenAI.APIError) {
         logger.error(
-          { model: this.model, status: err.status, code: err.code, err },
+          { ...scale, status: err.status, code: err.code, err },
           "OpenRouter request failed",
         );
       } else {
-        logger.error({ model: this.model, err }, "OpenRouter request failed");
+        logger.error({ ...scale, err }, "OpenRouter request failed");
       }
       throw err;
     }
+
+    // The gateway returns usage on every response, so nothing has to ask for it.
+    logger.info(
+      {
+        model: this.model,
+        turns: this.messages.length,
+        input: response.usage?.prompt_tokens,
+        output: response.usage?.completion_tokens,
+        cost: usageCost(response),
+      },
+      "OpenRouter usage",
+    );
 
     const choice = response.choices[0];
     if (!choice) return { stopReason: "end_turn", toolUses: [], text: "" };

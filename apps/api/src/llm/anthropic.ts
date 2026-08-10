@@ -201,23 +201,28 @@ export class AnthropicProvider implements LLMProvider {
       }
       response = await stream.finalMessage();
     } catch (err) {
+      // A refused request carries no usage, so turns is the only size to report.
+      const scale = { model: this.model, turns: this.messages.length };
       if (err instanceof Anthropic.APIError) {
         logger.error(
-          { model: this.model, status: err.status, err },
+          { ...scale, status: err.status, err },
           "Anthropic request failed",
         );
       } else {
-        logger.error({ model: this.model, err }, "Anthropic request failed");
+        logger.error({ ...scale, err }, "Anthropic request failed");
       }
       throw err;
     }
 
-    logger.debug(
+    // At info: a run that dies on context is diagnosable without reproducing it.
+    logger.info(
       {
         model: this.model,
+        turns: this.messages.length,
+        input: response.usage.input_tokens,
+        output: response.usage.output_tokens,
         cacheRead: response.usage.cache_read_input_tokens,
         cacheWrite: response.usage.cache_creation_input_tokens,
-        input: response.usage.input_tokens,
       },
       "Anthropic usage",
     );

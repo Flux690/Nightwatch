@@ -57,6 +57,25 @@ function metadataField(body: unknown, field: string): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function bodyMessage(body: unknown): string {
+  if (typeof body !== "object" || body === null) return "";
+  const message = (body as Record<string, unknown>)["message"];
+  return typeof message === "string" ? message : "";
+}
+
+// OpenRouter types this condition; Anthropic only words it, so both are read.
+const CONTEXT_OVERFLOW_WORDING = [
+  "prompt is too long",
+  "context window",
+  "context length",
+];
+
+function isContextOverflow(err: { message: string; error: unknown }): boolean {
+  if (errorType(err.error) === "context_length_exceeded") return true;
+  const said = `${err.message} ${bodyMessage(err.error)}`.toLowerCase();
+  return CONTEXT_OVERFLOW_WORDING.some((wording) => said.includes(wording));
+}
+
 // Plain-language failure text persisted into the transcript. One or two
 // sentences a non-expert can act on, with the raw status in parentheses.
 export function describeLLMError(err: unknown): string {
@@ -87,6 +106,11 @@ export function describeLLMError(err: unknown): string {
   }
   if (status === 404) {
     return `The provider has no such model. It may have been renamed, retired, or moved behind a paid plan. Pick a different model in Settings${detail}.`;
+  }
+  // Checked before the generic 400 it arrives as: the operator changed nothing,
+  // so naming their model and reasoning level points at the wrong screen.
+  if (isContextOverflow(err)) {
+    return `This conversation grew past the model's context window, so the provider refused it. Continuing this session would hit the same limit: start a new one, or pick a model with a larger context window under Settings, Provider${detail}.`;
   }
   if (status === 400) {
     return `The provider rejected the request as malformed. If you have just changed the model or its reasoning level, check them under Settings, Provider${detail}.`;
