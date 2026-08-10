@@ -621,6 +621,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       log,
     });
 
+    // A turn's tools outlive the stop that arrives during them, so the gate is
+    // reached already aborted; suspending here parks an interrupt on a dead run.
+    if (signal?.aborted) {
+      log.info({ turn }, "run stopped by user before the gate");
+      persist();
+      return "stopped";
+    }
+
     if (gated !== null) {
       // Durably suspend: persist assistant turn + interrupt row in one transaction, then exit and
       // free the slot. Suspended sessions take no injections, so the inbox isn't drained here.

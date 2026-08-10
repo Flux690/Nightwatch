@@ -19,9 +19,16 @@ mockCreateProvider.mockImplementation(() =>
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
 import { waitFor } from "./wait.js";
+import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
+import { registerConsoleEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
+import { hasPendingHumanInput } from "../db/interrupts.js";
+import {
+  deletePrometheusIntegration,
+  savePrometheusIntegration,
+} from "../db/integrations.js";
 import { mountApi } from "./api-server.js";
 
 describe("POST /sessions/:id/stop", () => {
@@ -35,7 +42,7 @@ describe("POST /sessions/:id/stop", () => {
     SESSION = await mintTestSession();
 
     server = Fastify({ logger: false });
-    await mountApi(server, registerSessionRoutes);
+    await mountApi(server, registerSessionRoutes, registerConsoleEventRoutes);
     await server.listen({ port: 0, host: "127.0.0.1" });
     port = (server.server.address() as AddressInfo).port;
   });
@@ -97,5 +104,99 @@ describe("POST /sessions/:id/stop", () => {
 
     gateController.releaseAll();
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+  });
+
+  // The stop lands while the turn's read is still running, so the run reaches
+  // the write already aborted - the only window this can happen in.
+  it("ends a run as stopped when the stop lands on a turn holding a write", async () => {
+    savePrometheusIntegration({
+      baseUrl: "http://prom.test",
+      authHeaderEncrypted: null,
+    });
+    mockCreateProvider.mockImplementationOnce(() =>
+      createContractFakeProvider([
+        {
+          text: "Checking, then I need you.",
+          toolUses: [
+            { id: "tu-read", name: "QueryMetrics", input: { query: "up" } },
+            {
+              id: "tu-ask",
+              name: "AskUserQuestion",
+              input: {
+                question: "Which cluster?",
+                options: [{ label: "prod", description: "the live one" }],
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    // Parks the read so the stop has somewhere to land: the loop is inside
+    // processToolUses, past every abort check it currently makes.
+    let releaseRead = (): void => {};
+    let readStarted = false;
+    const reading = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        if (!url.startsWith("http://prom.test")) return realFetch(input, init);
+        readStarted = true;
+        return reading.then(
+          () =>
+            new Response(
+              JSON.stringify({
+                status: "success",
+                data: { resultType: "vector", result: [] },
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+        );
+      }),
+    );
+
+    const console = await connectConsoleEvents(port, SESSION);
+    const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Look and then ask." }),
+    });
+    const { sessionId } = (await chatRes.json()) as { sessionId: string };
+    await waitFor(() => readStarted);
+
+    const stopRes = await fetch(
+      `http://127.0.0.1:${port}/api/sessions/${sessionId}/stop`,
+      { method: "POST", headers: { Cookie: `nw_auth=${SESSION}` } },
+    );
+    expect(stopRes.status).toBe(200);
+
+    releaseRead();
+    await waitFor(() =>
+      console.events.some(
+        (e) => e.type === "RUN_STOPPED" && e.payload["sessionId"] === sessionId,
+      ),
+    );
+
+    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    // Nothing to approve: the operator stopped the run before the write ran.
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
+    expect(
+      console.events.some(
+        (e) =>
+          e.type === "HUMAN_INPUT_REQUIRED" &&
+          e.payload["sessionId"] === sessionId,
+      ),
+    ).toBe(false);
+
+    console.close();
+    vi.unstubAllGlobals();
+    deletePrometheusIntegration();
   });
 });
