@@ -1,5 +1,8 @@
 import { executeRunnerTool } from "../executor.js";
-import { DEFAULT_TOOL_TIMEOUT_MS } from "../../llm/config.js";
+import {
+  DEFAULT_TOOL_TIMEOUT_MS,
+  MAX_TOOL_RESULT_CHARS,
+} from "../../llm/config.js";
 import { DOCKER_TOOLS } from "./docker.js";
 import { GITHUB_TOOLS } from "./github.js";
 import { HOST_TOOLS } from "./host.js";
@@ -10,10 +13,10 @@ import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
 import { REPORT_TOOLS } from "./report.js";
 import type {
+  DispatchedToolResult,
   Tool,
   ToolDispatchContext,
   ToolExecuteContext,
-  ToolExecuteResult,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
 import type { Platform } from "@nightwarden/shared";
@@ -32,14 +35,20 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
+// Refused whole rather than shortened: a sliced JSON result parses as a smaller
+// truth, which is how an agent reports no errors in logs it never saw.
+function tooLarge(name: string, chars: number): string {
+  return `${name} produced ${chars} characters, past the ${MAX_TOOL_RESULT_CHARS} a single result may occupy, so none of it was read. Narrow the call - a tighter filter, a shorter window, a smaller limit - and run it again.`;
+}
+
 // Single dispatch chokepoint that both the live loop and the approval resume
 // path pass through. The caller supplies a ceiling; a tool's own limit can only
 // narrow it, never raise it past what the operator allowed.
-export function executeTool(
+export async function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
   ctx: ToolDispatchContext,
-): Promise<ToolExecuteResult> {
+): Promise<DispatchedToolResult> {
   const { toolCallCeilingMs, ...identity } = ctx;
   const effectiveCtx: ToolExecuteContext = {
     ...identity,
@@ -48,8 +57,24 @@ export function executeTool(
       toolCallCeilingMs,
     ),
   };
-  if (tool.on === "api") return tool.execute(input, effectiveCtx);
-  return executeRunnerTool(tool, input, effectiveCtx);
+  const result =
+    tool.on === "api"
+      ? await tool.execute(input, effectiveCtx)
+      : await executeRunnerTool(tool, input, effectiveCtx);
+  const content =
+    typeof result.content === "string"
+      ? result.content
+      : JSON.stringify(result.content);
+  if (content.length > MAX_TOOL_RESULT_CHARS) {
+    return {
+      content: tooLarge(tool.schema.name, content.length),
+      outcome: "system",
+    };
+  }
+  return {
+    content,
+    ...(result.outcome !== undefined && { outcome: result.outcome }),
+  };
 }
 
 // The single resolver used by both the loop and human-input (resuming a stored

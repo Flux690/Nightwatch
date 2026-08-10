@@ -12,6 +12,7 @@ import {
   type PrometheusSeries,
 } from "../../integrations/prometheus.js";
 import { alertAnchorFor } from "./alert-anchor.js";
+import { fitWithinBudget } from "./result-budget.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
@@ -62,11 +63,14 @@ function clampedNumber(
   return Math.min(raw, max);
 }
 
+// Capped by count, then by size: a range query returns twenty series of two
+// hundred points each, which is several times what one result may occupy.
 function capSeries(data: PrometheusQueryData): MetricsQueryResult {
-  const omitted = data.series.length - MAX_SERIES;
+  const { kept, dropped } = fitWithinBudget(data.series.slice(0, MAX_SERIES));
+  const omitted = data.series.length - MAX_SERIES + dropped;
   return {
     resultType: data.resultType,
-    series: data.series.slice(0, MAX_SERIES),
+    series: kept,
     ...(omitted > 0 && { seriesOmitted: omitted }),
   };
 }
@@ -399,11 +403,11 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             outcome: "expected_miss",
           };
         }
+        const { kept } = fitWithinBudget(matched.slice(0, MAX_ALERT_RULES));
+        const rulesOmitted = matched.length - kept.length;
         const result: AlertRulesResult = {
-          rules: matched.slice(0, MAX_ALERT_RULES),
-          ...(matched.length > MAX_ALERT_RULES && {
-            rulesOmitted: matched.length - MAX_ALERT_RULES,
-          }),
+          rules: kept,
+          ...(rulesOmitted > 0 && { rulesOmitted }),
         };
         return { content: result };
       } catch (err) {

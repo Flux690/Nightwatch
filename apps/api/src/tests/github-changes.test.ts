@@ -5,6 +5,7 @@ import { encrypt } from "../secrets.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
+import { parsedContent } from "./tool-result.js";
 import type { GetRecentChangesResult } from "../agent/tools/github.js";
 import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 
@@ -173,7 +174,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
     expect(outcome.outcome).toBeUndefined();
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     expect(result.branch).toBe("main");
     expect(result.windowStart).toBe(WINDOW_START_24H);
     expect(result.windowEnd).toBe(FIRED_AT);
@@ -192,6 +193,30 @@ describe("GetRecentChanges through the tool dispatch", () => {
     });
   });
 
+  /* A week-long window on a busy repo returns hundreds of commits, and pull
+     requests carry file lists on top; the same budget bounds both. */
+  it("drops whole changes past the budget and counts what it left out", async () => {
+    connectGitHub();
+    const mock = makeMock();
+    mock.commits = Array.from({ length: 400 }, (_, i) =>
+      commit(
+        `sha-${i}`,
+        `fix: ${"a rather wordy commit subject ".repeat(10)}${i}`,
+        "2026-07-16T11:31:00Z",
+      ),
+    );
+    installFetchMock(mock);
+
+    const outcome = await executeTool(tool, {}, mintSession(ALERT));
+
+    const result = parsedContent<GetRecentChangesResult>(outcome);
+    expect(result.commits.length).toBeLessThan(400);
+    expect(result.changesOmitted).toBe(400 - result.commits.length);
+    // Bounded here rather than refused at the ceiling, so the agent still gets
+    // the changes nearest the alert instead of nothing at all.
+    expect(outcome.outcome).toBeUndefined();
+  });
+
   it("a chat session with no alert anchors the window to now", async () => {
     connectGitHub();
     const mock = makeMock();
@@ -201,7 +226,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const outcome = await executeTool(tool, {}, mintSession(null));
     const after = Date.now();
 
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     const end = Date.parse(result.windowEnd);
     expect(end).toBeGreaterThanOrEqual(before);
     expect(end).toBeLessThanOrEqual(after);
@@ -235,7 +260,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     expect(result.commits.map((c) => c.sha)).toEqual(["plain-1"]);
   });
 
@@ -250,7 +275,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     expect(result.pullRequests).toHaveLength(16);
     const fileRequests = mock.requests.filter((u) => u.includes("/files"));
     expect(fileRequests).toHaveLength(15);
@@ -269,7 +294,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
     expect(outcome.outcome).toBeUndefined();
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     expect(result.pullRequests).toEqual([]);
     expect(result.commits).toHaveLength(1);
     expect(result.note).toContain("Pull requests read access");
@@ -284,7 +309,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
     const outcome = await executeTool(tool, {}, mintSession(ALERT));
 
     expect(outcome.outcome).toBeUndefined();
-    const result = outcome.content as GetRecentChangesResult;
+    const result = parsedContent<GetRecentChangesResult>(outcome);
     expect(result.commits).toEqual([]);
   });
 

@@ -9,6 +9,13 @@ export interface ToolExecuteResult {
   outcome?: ToolOutcome;
 }
 
+// What the dispatcher hands back: the result already rendered to the string the
+// model reads, and already bounded, so no caller can enter context past the cap.
+export interface DispatchedToolResult {
+  content: string;
+  outcome?: ToolOutcome;
+}
+
 // A fan-out where some runners answered still carries an answer; everything
 // else the model must read as an error.
 export function isToolFailure(outcome: ToolOutcome | undefined): boolean {

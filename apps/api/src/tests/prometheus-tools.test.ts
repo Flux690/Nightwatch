@@ -5,6 +5,7 @@ import { encrypt } from "../secrets.js";
 import { savePrometheusIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
+import { parsedContent } from "./tool-result.js";
 import type { MetricsRangeResult } from "../agent/tools/prometheus.js";
 import type { Tool, ToolDispatchContext } from "../agent/tools/types.js";
 
@@ -124,7 +125,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
     expect(result.outcome).toBe("permission");
-    expect(String(result.content)).toContain("not configured");
+    expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
 
@@ -164,7 +165,7 @@ describe("Prometheus tools through the tool dispatch", () => {
     expect(params.get("start")).toBe("2026-07-16T09:00:00.000Z");
     expect(params.get("end")).toBe("2026-07-16T12:30:00.000Z");
     expect(params.get("step")).toBe("63");
-    const content = result.content as MetricsRangeResult;
+    const content = parsedContent<MetricsRangeResult>(result);
     expect(content.windowStart).toBe("2026-07-16T09:00:00.000Z");
     expect(content.windowEnd).toBe("2026-07-16T12:30:00.000Z");
     expect(content.stepSeconds).toBe(63);
@@ -216,9 +217,34 @@ describe("Prometheus tools through the tool dispatch", () => {
     const windowMs =
       Date.parse(params.get("end")!) - Date.parse(params.get("start")!);
     expect(windowMs).toBe((10_080 + 30) * 60_000);
-    const content = result.content as MetricsRangeResult;
+    const content = parsedContent<MetricsRangeResult>(result);
     expect(content.series).toHaveLength(20);
     expect(content.seriesOmitted).toBe(5);
+  });
+
+  /* Twenty series is a count, not a size: at the step this tool asks for, each
+     carries around two hundred points, which is several times the ceiling. */
+  it("drops whole series once twenty of them exceed the size budget", async () => {
+    connect();
+    mock.result = Array.from({ length: 20 }, (_, i) => ({
+      metric: { name: `svc-${i}` },
+      values: Array.from({ length: 200 }, (_, p): [number, string] => [
+        1752667200 + p * 15,
+        `${p}.5`,
+      ]),
+    }));
+    const result = await executeTool(
+      range,
+      { query: "up" },
+      mintSession(ALERT),
+    );
+
+    const content = parsedContent<MetricsRangeResult>(result);
+    expect(content.series.length).toBeLessThan(20);
+    expect(content.seriesOmitted).toBe(20 - content.series.length);
+    // Each series that survived kept every point, so the shape it draws is the
+    // one Prometheus returned rather than a truncated curve.
+    for (const s of content.series) expect(s.values).toHaveLength(200);
   });
 
   it("a rejected query becomes a corrective result naming the server's error, never a throw", async () => {
@@ -231,7 +257,7 @@ describe("Prometheus tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
     expect(result.outcome).toBe("system");
-    expect(String(result.content)).toContain("parse error");
+    expect(result.content).toContain("parse error");
   });
 
   /* Discovery, so an expression names a metric that exists. A PromQL query
@@ -271,7 +297,7 @@ describe("Prometheus tools through the tool dispatch", () => {
         { contains: "MeMoRy" },
         mintSession(ALERT),
       );
-      const content = result.content as { names: string[] };
+      const content = parsedContent<{ names: string[] }>(result);
       expect(content.names).toEqual([
         "container_memory_working_set_bytes",
         "NODE_MEMORY_FREE_BYTES",
@@ -290,7 +316,7 @@ describe("Prometheus tools through the tool dispatch", () => {
         mintSession(ALERT),
       );
       expect(result.outcome).toBe("expected_miss");
-      expect(String(result.content)).toContain("No metric names matched");
+      expect(result.content).toContain("No metric names matched");
     });
 
     it("reads a metric's type and unit, which is how a counter is told from a gauge", async () => {
@@ -308,7 +334,10 @@ describe("Prometheus tools through the tool dispatch", () => {
         { metric: "container_memory_working_set_bytes" },
         mintSession(ALERT),
       );
-      expect(result.content).toMatchObject({ type: "gauge", unit: "bytes" });
+      expect(parsedContent(result)).toMatchObject({
+        type: "gauge",
+        unit: "bytes",
+      });
     });
 
     // Absence of metadata says nothing about whether the metric exists, so it
@@ -323,7 +352,7 @@ describe("Prometheus tools through the tool dispatch", () => {
         mintSession(ALERT),
       );
       expect(result.outcome).toBe("expected_miss");
-      expect(String(result.content)).toContain("may still exist");
+      expect(result.content).toContain("may still exist");
     });
 
     it("lists alerting rules with the expression each one tests", async () => {
@@ -356,9 +385,9 @@ describe("Prometheus tools through the tool dispatch", () => {
         {},
         mintSession(ALERT),
       );
-      const content = result.content as {
+      const content = parsedContent<{
         rules: Array<{ name: string; query: string; firingCount: number }>;
-      };
+      }>(result);
       expect(content.rules).toHaveLength(2);
       // The expression is the point: it names the metric, the threshold and the
       // window that fired, none of which the alert's labels carry.
@@ -382,7 +411,7 @@ describe("Prometheus tools through the tool dispatch", () => {
           mintSession(ALERT),
         );
         expect(result.outcome).toBe("permission");
-        expect(String(result.content)).toContain("not configured");
+        expect(result.content).toContain("not configured");
       }
     });
   });

@@ -5,6 +5,7 @@ import { encrypt } from "../secrets.js";
 import { saveLokiIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
+import { parsedContent } from "./tool-result.js";
 import type {
   LokiLogsResult,
   LokiMetricsResult,
@@ -159,7 +160,7 @@ describe("Loki tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
     expect(result.outcome).toBe("permission");
-    expect(String(result.content)).toContain("not configured");
+    expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
 
@@ -200,7 +201,7 @@ describe("Loki tools through the tool dispatch", () => {
       Date.parse("2026-07-16T12:05:00.000Z"),
     );
 
-    const content = result.content as LokiLogsResult;
+    const content = parsedContent<LokiLogsResult>(result);
     expect(content.returnedLines).toBe(2);
     expect(content.streams[0]!.lines[0]).toEqual({
       ts: "2026-07-16T12:00:00.000Z",
@@ -220,12 +221,46 @@ describe("Loki tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
     expect(mock.requests[0]!.params.get("limit")).toBe("1");
-    const content = result.content as LokiLogsResult;
+    const content = parsedContent<LokiLogsResult>(result);
     expect(content.linesTruncated).toBe(1);
     expect(content.streams[0]!.lines[0]!.line).toContain("…[truncated]");
     expect(content.streams[0]!.lines[0]!.line.length).toBeLessThan(huge.length);
     expect(content.hitLimit).toBe(true);
     expect(content.note).toContain("truncated");
+  });
+
+  /* The per-line cap bounds no total, so a legal 100-line answer of capped lines
+     is 200KB riding in context for the rest of the run. Lines share a budget. */
+  it("QueryLogs stops at the budget and says what is missing from the result", async () => {
+    connect();
+    // Each line is legal on its own; together they are several times the budget.
+    mock.streams = [
+      {
+        stream: { app: "api" },
+        values: Array.from({ length: 100 }, (_, i): [string, string] => [
+          `${1752667200 + i}000000000`,
+          `${i} ${"e".repeat(1_500)}`,
+        ]),
+      },
+    ];
+    const result = await executeTool(
+      logs,
+      { query: '{app="api"}' },
+      mintSession(ALERT),
+    );
+
+    const content = parsedContent<LokiLogsResult>(result);
+    expect(content.linesDropped).toBeGreaterThan(0);
+    expect(content.returnedLines + content.linesDropped).toBe(100);
+    // The lines that did arrive are whole, and the model is told the rest exist
+    // rather than being left to read the shortfall as "there were no more".
+    for (const line of content.streams[0]!.lines) {
+      expect(line.line).not.toContain("…[truncated]");
+    }
+    expect(content.note).toContain("NOT in this result");
+    // The dropped lines are unreachable, so the note must not imply a next page.
+    expect(content.note).toMatch(/no paging/i);
+    expect(content.note).toContain("QueryLogMetrics");
   });
 
   it("QueryLogMetrics sends a step (no direction) and caps at 20 series", async () => {
@@ -242,7 +277,7 @@ describe("Loki tools through the tool dispatch", () => {
     const req = mock.requests[0]!;
     expect(req.params.get("step")).not.toBeNull();
     expect(req.params.get("direction")).toBeNull();
-    const content = result.content as LokiMetricsResult;
+    const content = parsedContent<LokiMetricsResult>(result);
     expect(content.resultType).toBe("matrix");
     expect(content.series).toHaveLength(20);
     expect(content.seriesOmitted).toBe(5);
@@ -252,7 +287,7 @@ describe("Loki tools through the tool dispatch", () => {
     connect();
     mock.labels = ["app", "namespace"];
     const names = await executeTool(discover, {}, mintSession(ALERT));
-    const namesContent = names.content as LogLabelsResult;
+    const namesContent = parsedContent<LogLabelsResult>(names);
     expect(namesContent.mode).toBe("labels");
     expect(namesContent.labels).toEqual(["app", "namespace"]);
     // Discovery is bounded to a window around the alert, not all of time.
@@ -267,7 +302,7 @@ describe("Loki tools through the tool dispatch", () => {
       { label: "app" },
       mintSession(ALERT),
     );
-    const valuesContent = values.content as LogLabelsResult;
+    const valuesContent = parsedContent<LogLabelsResult>(values);
     expect(valuesContent.mode).toBe("values");
     expect(valuesContent.label).toBe("app");
     expect(valuesContent.values).toEqual(["api", "worker"]);
@@ -278,7 +313,7 @@ describe("Loki tools through the tool dispatch", () => {
       { selector: '{namespace="shop"}' },
       mintSession(ALERT),
     );
-    const seriesContent = series.content as LogLabelsResult;
+    const seriesContent = parsedContent<LogLabelsResult>(series);
     expect(seriesContent.mode).toBe("series");
     expect(seriesContent.matches).toEqual([{ app: "api", namespace: "shop" }]);
   });
@@ -289,7 +324,7 @@ describe("Loki tools through the tool dispatch", () => {
     mock.errorText = "parse error at line 1: unexpected }";
     const result = await executeTool(logs, { query: "{" }, mintSession(ALERT));
     expect(result.outcome).toBe("system");
-    expect(String(result.content)).toContain("parse error");
+    expect(result.content).toContain("parse error");
   });
 
   it("chat sessions anchor on now, and the window never extends into the future", async () => {

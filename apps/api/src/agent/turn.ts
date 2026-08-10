@@ -82,21 +82,17 @@ export async function processToolUses(params: {
         state: { phase: "running" },
       }),
     });
-    const result = await executeTool(entry, tool.input, {
+    const { content, outcome } = await executeTool(entry, tool.input, {
       ...execCtx,
       toolUseId: tool.id,
     });
-    const content =
-      typeof result.content === "string"
-        ? result.content
-        : JSON.stringify(result.content);
     toolResults.push({
       tool_use_id: tool.id,
       content,
-      is_error: isToolFailure(result.outcome),
+      is_error: isToolFailure(outcome),
     });
-    if (result.outcome !== undefined) {
-      recordToolOutcome(sessionId, tool.id, result.outcome);
+    if (outcome !== undefined) {
+      recordToolOutcome(sessionId, tool.id, outcome);
     }
     publishTranscriptItem({
       sessionId,
@@ -109,7 +105,7 @@ export async function processToolUses(params: {
         state: {
           phase: "complete",
           result: content,
-          ...(result.outcome !== undefined && { outcome: result.outcome }),
+          ...(outcome !== undefined && { outcome }),
         },
       }),
     });

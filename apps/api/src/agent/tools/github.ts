@@ -2,6 +2,7 @@ import type { ToolOutcome } from "@nightwarden/shared";
 import { decrypt } from "../../secrets.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
 import { alertAnchorFor } from "./alert-anchor.js";
+import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
 import {
   defaultBranch,
   listCommits,
@@ -36,6 +37,9 @@ export interface GetRecentChangesResult {
   windowEnd: string;
   pullRequests: RecentPullRequest[];
   commits: RecentCommit[];
+  // Merged in the window but past the size budget, so this is not the whole
+  // history of it. Absent when everything found is here.
+  changesOmitted?: number;
   note?: string;
 }
 
@@ -227,12 +231,21 @@ export const GITHUB_TOOLS: Tool[] = [
             committedAt,
           }));
 
+        // Pull requests are named first because they carry the file lists a
+        // change search is looking for; loose commits fill what budget is left.
+        const fitPrs = fitWithinBudget(pullRequests);
+        const fitCommits = fitWithinBudget(
+          commits,
+          ITEM_BUDGET_CHARS - fitPrs.spent,
+        );
+        const changesOmitted = fitPrs.dropped + fitCommits.dropped;
         const result: GetRecentChangesResult = {
           branch,
           windowStart: since,
           windowEnd: until,
-          pullRequests,
-          commits,
+          pullRequests: fitPrs.kept,
+          commits: fitCommits.kept,
+          ...(changesOmitted > 0 && { changesOmitted }),
           ...(note !== undefined && { note }),
         };
         return { content: result };

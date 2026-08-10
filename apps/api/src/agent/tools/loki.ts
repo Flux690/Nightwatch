@@ -11,6 +11,7 @@ import {
   type LokiMetricSeries,
 } from "../../integrations/loki.js";
 import { alertAnchorFor } from "./alert-anchor.js";
+import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
 
 // API-local by design: these shapes never cross the runner wire.
@@ -30,6 +31,8 @@ export interface LokiLogsResult {
   limit: number;
   hitLimit: boolean;
   linesTruncated: number;
+  // Matched the query but did not fit the budget, so this result is partial.
+  linesDropped: number;
   windowStart: string;
   windowEnd: string;
   note: string;
@@ -65,7 +68,6 @@ const MAX_LOG_LIMIT = 1_000;
 // A single JSON-blob line can dwarf the rest of the transcript; cap each line so
 // one verbose log cannot blow the context budget.
 const MAX_LINE_CHARS = 2_000;
-
 const DEFAULT_METRIC_LOOKBACK_MINUTES = 180;
 const DEFAULT_METRIC_LOOKFORWARD_MINUTES = 30;
 const MAX_SERIES = 20;
@@ -146,13 +148,16 @@ function corrective(err: unknown): ToolExecuteResult {
   };
 }
 
+// Capped by count, then by size: twenty series of two hundred points each is
+// well past what one result may occupy.
 function capMetricSeries(data: LokiMetricData): {
   series: LokiMetricSeries[];
   seriesOmitted?: number;
 } {
-  const omitted = data.series.length - MAX_SERIES;
+  const { kept, dropped } = fitWithinBudget(data.series.slice(0, MAX_SERIES));
+  const omitted = data.series.length - MAX_SERIES + dropped;
   return {
-    series: data.series.slice(0, MAX_SERIES),
+    series: kept,
     ...(omitted > 0 && { seriesOmitted: omitted }),
   };
 }
@@ -233,20 +238,29 @@ export const LOKI_TOOLS: Tool[] = [
 
         let returnedLines = 0;
         let linesTruncated = 0;
-        const streams: LokiLogStream[] = data.streams.map((s) => ({
-          labels: s.labels,
-          lines: s.values.map(([ns, raw]) => {
-            returnedLines++;
+        let linesDropped = 0;
+        let spent = 0;
+        // Whole lines are dropped rather than the text cut mid-result, so what
+        // does arrive is every character of the lines it claims to carry.
+        const streams: LokiLogStream[] = [];
+        for (const s of data.streams) {
+          const lines: LokiLogLine[] = [];
+          for (const [ns, raw] of s.values) {
             const truncated = raw.length > MAX_LINE_CHARS;
+            const line = truncated
+              ? raw.slice(0, MAX_LINE_CHARS) + " …[truncated]"
+              : raw;
+            if (spent + line.length > ITEM_BUDGET_CHARS) {
+              linesDropped++;
+              continue;
+            }
+            spent += line.length;
+            returnedLines++;
             if (truncated) linesTruncated++;
-            return {
-              ts: nsToIso(ns),
-              line: truncated
-                ? raw.slice(0, MAX_LINE_CHARS) + " …[truncated]"
-                : raw,
-            };
-          }),
-        }));
+            lines.push({ ts: nsToIso(ns), line });
+          }
+          if (lines.length > 0) streams.push({ labels: s.labels, lines });
+        }
 
         const hitLimit = returnedLines >= limit;
         const notes: string[] = [];
@@ -265,6 +279,11 @@ export const LOKI_TOOLS: Tool[] = [
             `${linesTruncated} line(s) truncated to ${MAX_LINE_CHARS} chars.`,
           );
         }
+        if (linesDropped > 0) {
+          notes.push(
+            `${linesDropped} matching line(s) are NOT in this result: it reached its ${ITEM_BUDGET_CHARS}-character budget. Lines come back newest first, so the ones missing are the oldest, and no repeat of this call reaches them - there is no paging. Add a filter to the selector to cut what you do not need, or count them with QueryLogMetrics. Do not read the absence of a line as evidence it did not occur.`,
+          );
+        }
 
         const result: LokiLogsResult = {
           streams,
@@ -272,6 +291,7 @@ export const LOKI_TOOLS: Tool[] = [
           limit,
           hitLimit,
           linesTruncated,
+          linesDropped,
           windowStart: start.toISOString(),
           windowEnd: end.toISOString(),
           note: notes.join(" "),

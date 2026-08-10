@@ -40,25 +40,21 @@ export async function executeApprovedTool(
       );
     }
 
-    const execResult = await executeTool(toolEntry, toolInput, {
+    const { content, outcome } = await executeTool(toolEntry, toolInput, {
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
       sessionId,
       toolUseId,
     });
-    const isFailure = isToolFailure(execResult.outcome);
-    if (execResult.outcome !== undefined) {
-      recordToolOutcome(sessionId, toolUseId, execResult.outcome);
+    if (outcome !== undefined) {
+      recordToolOutcome(sessionId, toolUseId, outcome);
     }
     return {
       result: {
         tool_use_id: toolUseId,
-        content:
-          typeof execResult.content === "string"
-            ? execResult.content
-            : JSON.stringify(execResult.content),
-        is_error: isFailure,
+        content,
+        is_error: isToolFailure(outcome),
       },
-      ...(execResult.outcome !== undefined && { outcome: execResult.outcome }),
+      ...(outcome !== undefined && { outcome }),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

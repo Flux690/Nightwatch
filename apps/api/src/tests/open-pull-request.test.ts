@@ -16,7 +16,8 @@ import { updateConfig } from "../config/store.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { teardownAll } from "../sandbox/workspace.js";
-import type { ToolExecuteResult } from "../agent/tools/types.js";
+import type { DispatchedToolResult } from "../agent/tools/types.js";
+import { parsedContent } from "./tool-result.js";
 
 const SESSION_ID = "ccccdddd-0000-4000-8000-000000000001";
 
@@ -203,7 +204,7 @@ function runOpr(
   input: Record<string, unknown>,
   sessionId = SESSION_ID,
   toolUseId = `opr-${++toolUseCounter}`,
-): Promise<ToolExecuteResult> {
+): Promise<DispatchedToolResult> {
   const entry = findTool("OpenPullRequest");
   if (!entry) throw new Error("OpenPullRequest missing from registry");
   return executeTool(entry, input, {
@@ -246,13 +247,13 @@ describe("OpenPullRequest", () => {
     );
 
     expect(result.outcome).toBeUndefined();
-    const outcome = result.content as {
+    const outcome = parsedContent<{
       action: string;
       number: number;
       url: string;
       draft: boolean;
       message: string;
-    };
+    }>(result);
     expect(outcome.action).toBe("created");
     expect(outcome.number).toBe(42);
     expect(outcome.draft).toBe(true);
@@ -291,7 +292,7 @@ describe("OpenPullRequest", () => {
     prState.open = [];
 
     expect(result.outcome).toBeUndefined();
-    const outcome = result.content as { action: string; message: string };
+    const outcome = parsedContent<{ action: string; message: string }>(result);
     expect(outcome.action).toBe("updated");
     expect(outcome.message).toContain("Updated existing PR #42");
     expect(prState.createPayloads).toHaveLength(before);
@@ -311,7 +312,7 @@ describe("OpenPullRequest", () => {
     prState.rejectDraft = false;
 
     expect(result.outcome).toBeUndefined();
-    const outcome = result.content as { draft: boolean; message: string };
+    const outcome = parsedContent<{ draft: boolean; message: string }>(result);
     expect(outcome.draft).toBe(false);
     expect(outcome.message).toContain("draft mode is unavailable");
     const attempts = prState.createPayloads.slice(-2);
@@ -330,7 +331,7 @@ describe("OpenPullRequest", () => {
     const result = await runOpr({ title: "Fix it" }, SESSION_ID, "opr-nodiff");
 
     expect(result.outcome).toBe("expected_miss");
-    const outcome = result.content as { action: string; message: string };
+    const outcome = parsedContent<{ action: string; message: string }>(result);
     expect(outcome.action).toBe("nothing_to_propose");
     expect(outcome.message).toContain("nothing to propose");
     expect(prState.createPayloads).toHaveLength(requestsBefore);
@@ -358,7 +359,7 @@ describe("OpenPullRequest", () => {
     );
     prState.open = [];
 
-    expect((result.content as { action: string }).action).toBe("updated");
+    expect(parsedContent<{ action: string }>(result).action).toBe("updated");
     expect(prState.createPayloads).toHaveLength(before);
   });
 });
