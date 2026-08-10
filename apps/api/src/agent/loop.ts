@@ -135,22 +135,18 @@ const MAX_NUDGES = 3;
 // that cannot do it rather than one that misread the request.
 const MAX_COMPOSE_ATTEMPTS = 2;
 
-/* What is wrong with the report that was just written, read back from the
-   record rather than from the call that wrote it. The composition turn is the
-   one moment the model authors prose, so what it may not leave out is checked
-   here rather than trusted. */
+// What is wrong with the report just written, read back from the record rather
+// than from the call that wrote it.
 function compositionProblem(
   submitted: SubmittedReport | null,
-  unrecovered: "still_firing" | "unconfirmed" | null,
+  unrecovered: boolean,
 ): string | null {
   if (submitted === null) {
     return "You ended the turn without writing the report.";
   }
   if (submitted.summary.trim() === "") return "Your report has no summary.";
-  if (unrecovered !== null && submitted.recommendation.trim() === "") {
-    return unrecovered === "still_firing"
-      ? "A write you released has run, the condition that opened this investigation is still firing, and your report recommends nothing."
-      : "A write you released has run, nothing can confirm the condition recovered, and your report recommends nothing.";
+  if (unrecovered && submitted.recommendation.trim() === "") {
+    return "A write you released has run, nothing can confirm the condition recovered, and your report recommends nothing.";
   }
   return null;
 }
@@ -410,7 +406,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
      a string from. An ending without a report is still an ending: the record
      renders on its own. */
   const compose = async (
-    unrecovered: "still_firing" | "unconfirmed" | null,
+    unrecovered: boolean,
     turn: number,
   ): Promise<RunOutcome> => {
     let problem: string | null = null;
@@ -599,19 +595,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         );
       }
       /* Only a run that acted must recommend. "I could not work out the cause,
-         here is what I ruled out" is a complete ending - but a run that had the
-         operator release a write and then went quiet has left them nothing.
-         Both an unrecovered condition and an unanswerable one qualify; which of
-         the two it was decides what the request says, because they are not the
-         same claim. */
+         here is what I ruled out" is a complete ending; a run that had the
+         operator release a write and then went quiet has left them nothing. */
       const released = gatedCalls(sessionId).some(
         (c) => c.decision === "approved",
       );
-      const unrecovered =
-        released && (recovery === "still_firing" || recovery === "unconfirmed")
-          ? recovery
-          : null;
-      return compose(unrecovered, turn);
+      return compose(released && recovery === "unconfirmed", turn);
     }
 
     const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {

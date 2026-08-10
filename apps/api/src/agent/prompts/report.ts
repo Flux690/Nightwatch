@@ -138,22 +138,11 @@ function sentenceFor(gap: ReportGap): string {
   }
 }
 
-/* A write ran and nothing has been recommended. Both sentences ask for a
-   recommendation rather than another fix attempt: the operator may have to act,
-   and a record ending with neither a recovery nor an instruction leaves them
-   nothing. Neither says "try again" - repeating a write that did not work is the
-   failure this gate exists to catch.
-
-   They are two sentences because they are two different facts. Telling the model
-   the condition is still firing when nothing could answer is a claim we cannot
-   support, in a system whose whole premise is not asserting what it cannot
-   verify. */
-const RECOVERY_SENTENCE: Record<"still_firing" | "unconfirmed", string> = {
-  still_firing:
-    "The condition that opened this investigation is still firing. Say what the operator should do about it in your recommendation. Do not repeat a write that has already run.",
-  unconfirmed:
-    "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the operator should do in your recommendation. Do not repeat a write that has already run.",
-};
+/* A write ran and nothing has been recommended. Asks for a recommendation rather
+   than another attempt: repeating a write that did not work is the failure this
+   gate catches, and a record ending with neither leaves the operator nothing. */
+const RECOVERY_SENTENCE =
+  "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the operator should do in your recommendation. Do not repeat a write that has already run.";
 
 // Sent by the finish gate when a run tries to end with gaps in its record. It
 // names those gaps and nothing else: a model that is one finding short is not
@@ -185,7 +174,7 @@ function writeLine(call: GatedCall): string {
 export function compositionRequest(
   hypotheses: Hypothesis[],
   writes: GatedCall[],
-  recovery: keyof typeof RECOVERY_SENTENCE | null,
+  unrecovered: boolean,
 ): string {
   // A run that reached here with nothing recorded exhausted the gate's requests.
   // Saying so beats printing an empty heading it might write around.
@@ -200,7 +189,7 @@ export function compositionRequest(
   if (writes.length > 0) {
     sections.push(`RELEASED WRITES\n${writes.map(writeLine).join("\n")}`);
   }
-  if (recovery !== null) sections.push(RECOVERY_SENTENCE[recovery]);
+  if (unrecovered) sections.push(RECOVERY_SENTENCE);
   sections.push(
     "Call SubmitInvestigationReport once. The findings above are rendered beneath what you write, so write only the summary, the timeline, the impact and the recommendation.",
   );

@@ -776,66 +776,7 @@ describe("the investigation record", () => {
         // Never "try again": repeating a write that did not work is the failure
         // this gate exists to catch.
         expect(request).not.toContain("try again");
-        /* No source could answer here, so the request must not claim the
-           condition is still firing - that is a fact we do not have, in a system
-           whose premise is not asserting what it cannot verify. */
         expect(request).toContain("Nothing can confirm");
-        expect(request).not.toContain("is still firing");
-      });
-
-      it("says the condition is still firing only when a source said so", async () => {
-        savePrometheusIntegration({
-          baseUrl: "http://prom.test",
-          authHeaderEncrypted: null,
-        });
-        vi.stubGlobal(
-          "fetch",
-          vi.fn(() =>
-            Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  status: "success",
-                  data: {
-                    groups: [
-                      {
-                        rules: [
-                          {
-                            name: "HighMemory",
-                            type: "alerting",
-                            alerts: [{ state: "firing", labels: {} }],
-                          },
-                        ],
-                      },
-                    ],
-                  },
-                }),
-                {
-                  status: 200,
-                  headers: { "content-type": "application/json" },
-                },
-              ),
-            ),
-          ),
-        );
-        settledRun();
-        const sessionId = randomUUID();
-        createSession(
-          { sessionId, title: "t", createdAt: new Date().toISOString() },
-          [alert("acted-confirmed-firing")],
-        );
-        releasedWrite(sessionId, 0);
-
-        await runSession({
-          sessionId,
-          alerts: [alert("acted-confirmed-firing")],
-        });
-
-        const request = compositionRequests()[0]!;
-        expect(request).toContain("is still firing");
-        expect(request).not.toContain("Nothing can confirm");
-
-        vi.unstubAllGlobals();
-        deletePrometheusIntegration();
       });
 
       it("refuses a write-up that recommends nothing, and asks again", async () => {

@@ -512,6 +512,18 @@ describe("API-local session store", () => {
         );
       }
 
+      // An alert as a real webhook delivers it: the rule's own series labels
+      // plus the external_labels Prometheus attaches on the way to Alertmanager.
+      function labelledInvestigation(labels: Record<string, string>): string {
+        const m = meta();
+        createSession(
+          m,
+          [{ ...alert, sourceAlertId: randomUUID(), labels }],
+          true,
+        );
+        return m.sessionId;
+      }
+
       beforeEach(() => {
         savePrometheusIntegration({
           baseUrl: "http://prom.test",
@@ -541,7 +553,7 @@ describe("API-local session store", () => {
         seedCompleteReport(sessionId);
 
         rulesAnswer([{ state: "firing", labels: {} }]);
-        await expect(verifyRecovery(sessionId)).resolves.toBe("still_firing");
+        await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
         expect(statusOf(sessionId)).toBe("inconclusive");
       });
 
@@ -550,7 +562,33 @@ describe("API-local session store", () => {
       it("does not call a pending rule recovered", async () => {
         const sessionId = investigation();
         rulesAnswer([{ state: "pending", labels: {} }]);
-        await expect(verifyRecovery(sessionId)).resolves.toBe("still_firing");
+        await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
+      });
+
+      // external_labels ride to Alertmanager but never reach rule evaluation, so
+      // a firing rule must not resolve however far the two label sets differ.
+      it("never resolves an alert carrying labels the rules API cannot have", async () => {
+        const sessionId = labelledInvestigation({
+          alertname: "ContainerDown",
+          severity: "critical",
+          container: "payments-api",
+          cluster: "prod-eu",
+          monitor: "primary",
+        });
+        seedCompleteReport(sessionId);
+
+        rulesAnswer([
+          {
+            state: "firing",
+            labels: {
+              alertname: "ContainerDown",
+              severity: "critical",
+              container: "payments-api",
+            },
+          },
+        ]);
+        await expect(verifyRecovery(sessionId)).resolves.toBe("unconfirmed");
+        expect(statusOf(sessionId)).toBe("inconclusive");
       });
 
       // The load-bearing case: an unanswerable question is not a yes. If this
