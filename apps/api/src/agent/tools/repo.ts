@@ -223,6 +223,8 @@ function composePrBody(
   return sections.join("\n\n");
 }
 
+// Edit, Write and Bash write, and still run unapproved: the write lands in a
+// disposable container on a throwaway branch a human merges or does not.
 export const REPO_TOOLS: Tool[] = [
   {
     schema: {
@@ -251,7 +253,8 @@ export const REPO_TOOLS: Tool[] = [
         required: ["path"],
       },
     },
-    access: "read",
+    effect: "read",
+    policy: "auto",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -302,7 +305,8 @@ export const REPO_TOOLS: Tool[] = [
         required: ["path", "old_string", "new_string"],
       },
     },
-    access: "read",
+    effect: "write",
+    policy: "auto",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -345,7 +349,8 @@ export const REPO_TOOLS: Tool[] = [
         required: ["path", "content"],
       },
     },
-    access: "read",
+    effect: "write",
+    policy: "auto",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -385,7 +390,8 @@ export const REPO_TOOLS: Tool[] = [
         required: ["command"],
       },
     },
-    access: "read",
+    effect: "write",
+    policy: "auto",
     timeoutMs: 300_000,
     on: "api",
     execute: (input, ctx) => {
@@ -431,9 +437,10 @@ export const REPO_TOOLS: Tool[] = [
         required: ["title"],
       },
     },
-    // Deliberately read: the PR is a proposal, the merge is the GitHub-enforced human gate, and
-    // gating creation would stall the 3am AFK flow this product exists for.
-    access: "read",
+    // Unapproved on purpose: the PR is a proposal, GitHub's human merge is the
+    // gate, and gating creation would stall the 3am AFK flow this exists for.
+    effect: "write",
+    policy: "auto",
     timeoutMs: 600_000,
     on: "api",
     execute: async (input, ctx) => {

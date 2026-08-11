@@ -23,7 +23,8 @@ function toolReturning(content: unknown): Tool {
       description: "",
       input_schema: { type: "object", properties: {} },
     },
-    access: "read",
+    effect: "read",
+    policy: "auto",
     on: "api",
     execute: () => Promise.resolve({ content }),
   };

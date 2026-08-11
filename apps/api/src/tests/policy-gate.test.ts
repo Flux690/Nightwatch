@@ -37,6 +37,7 @@ import {
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
+import { ELICITATIONS } from "../agent/tools/elicitations.js";
 import { TOOL_REGISTRY } from "../agent/tools/toolset.js";
 import { mountApi } from "./api-server.js";
 import { dockerService } from "./manifest-helper.js";
@@ -50,26 +51,38 @@ const CLARIFICATION_OPTIONS = [
 ];
 
 // The reason cannot be forgotten because it is part of the call's shape, the
-// same way approval cannot be forgotten because it is part of the registry
-// entry. A fifth write tool added without one would break this, not production.
-describe("access-gate: the reason rides every write call", () => {
-  it("every write tool requires a reason, and the ask tool declares none", () => {
-    const writes = TOOL_REGISTRY.filter((t) => t.access === "write");
-    expect(writes.length).toBeGreaterThan(0);
-    for (const tool of writes) {
+// same way approval cannot because it is the entry's policy.
+describe("policy-gate: the reason rides every gated call", () => {
+  it("every gated write requires a reason, and an elicitation declares none", () => {
+    const gated = TOOL_REGISTRY.filter(
+      (t) => t.effect === "write" && t.policy === "approve",
+    );
+    expect(gated.length).toBeGreaterThan(0);
+    for (const tool of gated) {
       expect(tool.schema.input_schema.required).toContain("reason");
     }
 
-    const asks = TOOL_REGISTRY.filter((t) => t.access === "ask");
-    expect(asks.length).toBeGreaterThan(0);
-    for (const tool of asks) {
+    // A write nobody has to permit asks nobody for a reason: the sandbox tools
+    // write only where a human reviews the result as a pull request.
+    const unapproved = TOOL_REGISTRY.filter(
+      (t) => t.effect === "write" && t.policy === "auto",
+    );
+    expect(unapproved.length).toBeGreaterThan(0);
+    for (const tool of unapproved) {
+      expect(tool.schema.input_schema.required).not.toContain("reason");
+    }
+
+    expect(ELICITATIONS.length).toBeGreaterThan(0);
+    for (const elicitation of ELICITATIONS) {
       // AskUserQuestion's `question` already is the reason; a second would be noise.
-      expect(tool.schema.input_schema.properties).not.toHaveProperty("reason");
+      expect(elicitation.schema.input_schema.properties).not.toHaveProperty(
+        "reason",
+      );
     }
   });
 });
 
-describe("access-gate: gating is driven by tool access level", () => {
+describe("policy-gate: gating is driven by tool policy", () => {
   let server: FastifyInstance;
   let port: number;
   let cleanupDb: () => void;

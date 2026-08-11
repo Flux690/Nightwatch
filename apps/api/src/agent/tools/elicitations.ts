@@ -1,6 +1,13 @@
-import type { Tool } from "./types.js";
+import type { ToolSchema } from "../../llm/types.js";
 
-export const INTERRUPT_TOOLS: Tool[] = [
+// Offered to the model as a tool because tool-calling is its only channel, but
+// modelled as neither: the result comes from a person, so there is nothing to
+// execute and no policy an operator rule could switch off.
+export interface Elicitation {
+  schema: ToolSchema;
+}
+
+export const ELICITATIONS: Elicitation[] = [
   {
     schema: {
       name: "AskUserQuestion",
@@ -42,12 +49,5 @@ export const INTERRUPT_TOOLS: Tool[] = [
         required: ["question", "options"],
       },
     },
-    access: "ask",
-    on: "api",
-    execute: async () => ({
-      content:
-        "AskUserQuestion is an interrupt and cannot be executed directly.",
-      outcome: "system",
-    }),
   },
 ];

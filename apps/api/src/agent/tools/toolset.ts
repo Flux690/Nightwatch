@@ -4,10 +4,10 @@ import {
   MAX_TOOL_RESULT_CHARS,
 } from "../../llm/config.js";
 import { DOCKER_TOOLS } from "./docker.js";
+import { ELICITATIONS, type Elicitation } from "./elicitations.js";
 import { GITHUB_TOOLS } from "./github.js";
 import { HOST_TOOLS } from "./host.js";
 import { K8S_TOOLS } from "./kubernetes.js";
-import { INTERRUPT_TOOLS } from "./interrupts.js";
 import { LOKI_TOOLS } from "./loki.js";
 import { PROMETHEUS_TOOLS } from "./prometheus.js";
 import { REPO_TOOLS } from "./repo.js";
@@ -17,6 +17,7 @@ import type {
   Tool,
   ToolDispatchContext,
   ToolExecuteContext,
+  ToolPolicy,
 } from "./types.js";
 import type { ToolSchema } from "../../llm/types.js";
 import type { Platform } from "@nightwarden/shared";
@@ -27,7 +28,6 @@ export const TOOL_REGISTRY: Tool[] = [
   ...DOCKER_TOOLS,
   ...HOST_TOOLS,
   ...K8S_TOOLS,
-  ...INTERRUPT_TOOLS,
   ...REPO_TOOLS,
   ...GITHUB_TOOLS,
   ...PROMETHEUS_TOOLS,
@@ -83,6 +83,22 @@ export function findTool(toolName: string): Tool | undefined {
   return TOOL_REGISTRY.find((t) => t.schema.name === toolName);
 }
 
+// Asked of the whole catalogue rather than of one turn's offer, because the
+// transcript renders calls from runs whose offered set is long gone.
+export function isElicitation(name: string): boolean {
+  return ELICITATIONS.some((e) => e.schema.name === name);
+}
+
+/* Whether a human must permit this call. A function rather than a field read
+   because an operator rule will answer from the arguments as well as the tool,
+   and `input` is already here for it. */
+export function resolvePolicy(
+  tool: Tool,
+  _input: Record<string, unknown>,
+): ToolPolicy {
+  return tool.policy;
+}
+
 // Which pull-integrations are connected this turn. Each defaults to true so a
 // caller that only cares about platforms still gets every library; the loop passes
 // live state, so a disconnected integration strips its tools from the next turn.
@@ -92,6 +108,13 @@ interface IntegrationConnections {
   loki?: boolean;
 }
 
+// What one turn offers: the things that execute, and the one thing only a
+// person can answer. Assembled together so hiding and gating stay one op.
+export interface OfferedToolset {
+  tools: Tool[];
+  elicitations: Elicitation[];
+}
+
 // Single source of truth for both the offered schemas and the names the loop
 // resolves, so hiding a tool and gating it are one op. `platforms` undefined means
 // every library, which only a caller wanting the whole catalogue passes.
@@ -99,22 +122,34 @@ export function effectiveToolset(
   platforms: Set<Platform> | undefined,
   connections: IntegrationConnections = {},
   investigation = true,
-): Tool[] {
+): OfferedToolset {
   const { github = true, prometheus = true, loki = true } = connections;
   const has = (platform: Platform): boolean =>
     platforms === undefined || platforms.has(platform);
+  return {
+    tools: [
+      // Host tools ride with Docker: they gate on the platform, since host facts
+      // only mean something on a runner that is 1:1 with its machine.
+      ...(has("docker") ? [...DOCKER_TOOLS, ...HOST_TOOLS] : []),
+      ...(has("kubernetes") ? K8S_TOOLS : []),
+      ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
+      ...(prometheus ? PROMETHEUS_TOOLS : []),
+      ...(loki ? LOKI_TOOLS : []),
+      // The record is the investigation's, so a chat is offered no way to write
+      // one. What a session is was decided before the run started.
+      ...(investigation ? REPORT_TOOLS : []),
+    ],
+    // Never stripped: a question needs no integration and no runner to reach a
+    // human, so every session can ask one.
+    elicitations: ELICITATIONS,
+  };
+}
+
+// The wire shape of everything on offer, in the order the model is shown it.
+export function offeredSchemas(offered: OfferedToolset): ToolSchema[] {
   return [
-    // Host tools ride with Docker: they gate on the platform, since host facts
-    // only mean something on a runner that is 1:1 with its machine.
-    ...(has("docker") ? [...DOCKER_TOOLS, ...HOST_TOOLS] : []),
-    ...(has("kubernetes") ? K8S_TOOLS : []),
-    ...INTERRUPT_TOOLS,
-    ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
-    ...(prometheus ? PROMETHEUS_TOOLS : []),
-    ...(loki ? LOKI_TOOLS : []),
-    // The record is the investigation's, so a chat is offered no way to write
-    // one. What a session is was decided before the run started.
-    ...(investigation ? REPORT_TOOLS : []),
+    ...offered.tools.map((t) => t.schema),
+    ...offered.elicitations.map((e) => e.schema),
   ];
 }
 
@@ -124,5 +159,5 @@ export function getToolSchemas(
   platforms?: Set<Platform>,
   connections?: IntegrationConnections,
 ): ToolSchema[] {
-  return effectiveToolset(platforms, connections ?? {}).map((t) => t.schema);
+  return offeredSchemas(effectiveToolset(platforms, connections ?? {}));
 }

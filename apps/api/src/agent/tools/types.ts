@@ -43,9 +43,14 @@ export interface ToolExecuteContext extends ToolCallIdentity {
   toolTimeoutMs: number;
 }
 
+// Two facts, not one: a write can be safe for where it lands, so a tool that
+// overrides the write -> approve default says why on its entry.
+export type ToolPolicy = "auto" | "approve";
+
 interface ToolCommon {
   schema: ToolSchema;
-  access: "read" | "write" | "ask";
+  effect: "read" | "write";
+  policy: ToolPolicy;
   // Per-tool override of the global tool timeout: repo tools run clones,
   // installs and test suites, which dwarf the 15s default.
   timeoutMs?: number;

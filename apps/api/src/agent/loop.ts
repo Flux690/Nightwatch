@@ -10,7 +10,7 @@ import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
 import { verifyRecovery } from "../verification/recovery.js";
-import { effectiveToolset } from "./tools/toolset.js";
+import { effectiveToolset, offeredSchemas } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
 import { processToolUses } from "./turn.js";
@@ -454,7 +454,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
       const { toolResults } = await processToolUses({
         toolUses: composed.toolUses,
-        toolset: [SUBMIT_REPORT_TOOL],
+        // Composition offers one tool and no way to reach a human: the record is
+        // already closed, so there is nothing left to ask about.
+        offered: { tools: [SUBMIT_REPORT_TOOL], elicitations: [] },
         sessionId,
         execCtx: {
           sessionId,
@@ -489,7 +491,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // Re-read per turn: disconnecting an integration strips its tools from the
     // very next turn. What the session is cannot change mid-run, so it is not
     // re-read alongside them.
-    const toolset = effectiveToolset(
+    const offered = effectiveToolset(
       platforms,
       {
         github: getGitHubIntegration() !== null,
@@ -498,7 +500,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       },
       opensInvestigation,
     );
-    const toolSchemas = toolset.map((t) => t.schema);
+    const toolSchemas = offeredSchemas(offered);
 
     const startedAt = Date.now();
     let response: ChatResponse;
@@ -616,7 +618,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
     const { toolResults, gated } = await processToolUses({
       toolUses: response.toolUses,
-      toolset,
+      offered,
       sessionId,
       execCtx,
       log,
@@ -633,7 +635,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     if (gated !== null) {
       // Durably suspend: persist assistant turn + interrupt row in one transaction, then exit and
       // free the slot. Suspended sessions take no injections, so the inbox isn't drained here.
-      const isAskGate = gated.entry.access === "ask";
+      const isAskGate = gated.kind === "clarification";
       const interrupt: PendingHumanInput = {
         sessionId,
         toolUseId: gated.tool.id,

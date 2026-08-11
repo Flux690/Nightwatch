@@ -1,49 +1,69 @@
-import { executeTool } from "./tools/toolset.js";
+import { executeTool, resolvePolicy } from "./tools/toolset.js";
 import { isToolFailure } from "./tools/types.js";
-import type { Tool, ToolDispatchContext } from "./tools/types.js";
+import type { OfferedToolset } from "./tools/toolset.js";
+import type { ToolDispatchContext } from "./tools/types.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
-interface GatedTool {
-  tool: ToolUse;
-  entry: Tool;
-}
+// Which interrupt a gated call raises. An elicitation always raises one; a tool
+// raises one only when the operator's policy says a human must permit it.
+type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {
   // One tool_result per non-gated tool_use, so every block in the assistant
   // message is answered even when a later one suspends the run.
   toolResults: ToolResult[];
-  // The single gated (write/ask) tool to suspend on, or null if the turn had
-  // none. At most one per turn; subsequent gated tools are rejected inline.
-  gated: GatedTool | null;
+  // The single gated call to suspend on, or null if the turn had none. At most
+  // one per turn; subsequent gated calls are rejected inline.
+  gated: { tool: ToolUse; kind: GateKind } | null;
 }
 
-// Two passes: run every non-gated read now, and pick the first gated (write/ask) tool for
-// the loop to suspend on. Reads resolve against the effective set, so a stripped tool reports unavailable.
+// Two passes: run every unapproved tool now, and pick the first call needing a human for
+// the loop to suspend on. Both resolve against the offered set, so a stripped tool reports unavailable.
 export async function processToolUses(params: {
   toolUses: ToolUse[];
-  toolset: Tool[];
+  offered: OfferedToolset;
   sessionId: string;
   // toolUseId is per call, so the loop hands over a turn-scoped base context
   // and each execution below completes it with its own tool_use id.
   execCtx: Omit<ToolDispatchContext, "toolUseId">;
   log: typeof logger;
 }): Promise<TurnOutcome> {
-  const { toolUses, toolset, sessionId, execCtx, log } = params;
+  const { toolUses, offered, sessionId, execCtx, log } = params;
 
   const toolResults: ToolResult[] = [];
-  let gatedTool: ToolUse | null = null;
-  let gatedEntry: Tool | null = null;
+  let gated: { tool: ToolUse; kind: GateKind } | null = null;
+
+  // Only one gate per turn, so every tool_use in this assistant message still
+  // gets a tool_result rather than the conversation being left unanswerable.
+  const gateOrReject = (call: ToolUse, kind: GateKind): void => {
+    if (gated !== null) {
+      toolResults.push({
+        tool_use_id: call.id,
+        content: "Another gated action is pending. Retry after it resolves.",
+        is_error: true,
+      });
+      recordToolOutcome(sessionId, call.id, "system");
+      return;
+    }
+    gated = { tool: call, kind };
+  };
 
   for (const tool of toolUses) {
     // Resolve against the effective set, not the full registry, so a tool stripped
     // by fleet providers or integrations never reaches the gate.
-    const entry = toolset.find((t) => t.schema.name === tool.name);
+    const entry = offered.tools.find((t) => t.schema.name === tool.name);
 
     if (!entry) {
+      // Nothing to execute either way: an elicitation's answer comes from a
+      // person, so it suspends rather than running.
+      if (offered.elicitations.some((e) => e.schema.name === tool.name)) {
+        gateOrReject(tool, "clarification");
+        continue;
+      }
       log.warn({ tool: tool.name }, "LLM requested unavailable tool");
       toolResults.push({
         tool_use_id: tool.id,
@@ -54,25 +74,11 @@ export async function processToolUses(params: {
       continue;
     }
 
-    if (entry.access === "write" || entry.access === "ask") {
-      if (gatedTool !== null) {
-        // Only one gate per turn; reject subsequent gated tools so every
-        // tool_use in this assistant message still gets a tool_result.
-        toolResults.push({
-          tool_use_id: tool.id,
-          content: "Another gated action is pending. Retry after it resolves.",
-          is_error: true,
-        });
-        recordToolOutcome(sessionId, tool.id, "system");
-        continue;
-      }
-
-      gatedTool = tool;
-      gatedEntry = entry;
+    if (resolvePolicy(entry, tool.input) === "approve") {
+      gateOrReject(tool, "approval");
       continue;
     }
 
-    // access === "read": execute immediately
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({
@@ -111,11 +117,5 @@ export async function processToolUses(params: {
     });
   }
 
-  return {
-    toolResults,
-    gated:
-      gatedTool !== null && gatedEntry !== null
-        ? { tool: gatedTool, entry: gatedEntry }
-        : null,
-  };
+  return { toolResults, gated };
 }

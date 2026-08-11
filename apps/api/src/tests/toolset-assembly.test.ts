@@ -194,12 +194,12 @@ describe("toolset assembly by fleet capabilities", () => {
     // The record belongs to the investigation, and nothing offered to a chat
     // can start one: what a session is was settled before the run began.
     it("offers the record's tool to an investigation and to nothing else", () => {
-      const plain = effectiveToolset(new Set([]), {}, false).map(
+      const plain = effectiveToolset(new Set([]), {}, false).tools.map(
         (t) => t.schema.name,
       );
       expect(plain).not.toContain("RecordHypothesis");
 
-      const investigating = effectiveToolset(new Set([]), {}, true).map(
+      const investigating = effectiveToolset(new Set([]), {}, true).tools.map(
         (t) => t.schema.name,
       );
       expect(investigating).toContain("RecordHypothesis");

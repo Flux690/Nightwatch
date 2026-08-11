@@ -179,7 +179,8 @@ export const GITHUB_TOOLS: Tool[] = [
         required: [],
       },
     },
-    access: "read",
+    effect: "read",
+    policy: "auto",
     timeoutMs: 60_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {

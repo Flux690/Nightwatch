@@ -8,7 +8,7 @@ import type {
 import { getPendingHumanInputBySessionId } from "../db/interrupts.js";
 import { getSession, getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
-import { findTool } from "../agent/tools/toolset.js";
+import { findTool, isElicitation } from "../agent/tools/toolset.js";
 
 // The tool input's target key. A write addresses a service by it, and a tool
 // that names none is not addressing one.
@@ -19,13 +19,10 @@ export function targetKeyFromInput(
   return typeof target === "string" ? target : null;
 }
 
-// Whether a call had to be approved before it could run, read from the registry
-// rather than recorded: `access` is what gates it, so it is also what says a call
-// was gated. Nothing can drift, and an agent-run tool can never render as one a
-// human released.
+// Whether a human had to permit this call, read from the registry rather than
+// recorded: policy is what gates a call, so it is also what says one was gated.
 export function wasGated(toolName: string): boolean {
-  const tool = findTool(toolName);
-  return tool !== undefined && tool.access !== "read";
+  return findTool(toolName)?.policy === "approve";
 }
 
 // The only place a tool call becomes a card. Both the transcript fetch and the
@@ -50,7 +47,7 @@ export function toolCallCard(
     return { kind: "continue_card", toolUseId, state };
   }
   const { toolName, input, awaitingKind } = call;
-  if (toolName === "AskUserQuestion") {
+  if (isElicitation(toolName)) {
     const parsed = input as {
       question?: string;
       options?: Array<{ label: string; description: string }>;
@@ -117,7 +114,7 @@ function toolCallState(
       ...classified,
     };
   if (result === undefined) return { phase: "running" };
-  if (toolName === "AskUserQuestion")
+  if (isElicitation(toolName))
     return { phase: "resolved", decision: "answered", result };
   return { phase: "complete", result, ...classified };
 }

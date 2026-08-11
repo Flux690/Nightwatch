@@ -70,7 +70,8 @@ function toResult(outcome: RecordOutcome): ToolExecuteResult {
 export const REPORT_TOOLS: Tool[] = [
   {
     schema: RECORD_HYPOTHESIS_SCHEMA,
-    access: "read",
+    effect: "read",
+    policy: "auto",
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const statement = text(input["statement"]);
@@ -108,7 +109,8 @@ export const REPORT_TOOLS: Tool[] = [
    run write itself up in the middle of working. */
 export const SUBMIT_REPORT_TOOL: Tool = {
   schema: SUBMIT_INVESTIGATION_REPORT_SCHEMA,
-  access: "read",
+  effect: "read",
+  policy: "auto",
   on: "api",
   execute: async (input, ctx): Promise<ToolExecuteResult> => {
     const summary = text(input["summary"]);

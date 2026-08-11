@@ -18,6 +18,7 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
+  gatedCalls,
   reportGaps,
   resolveEvidence,
 } from "../agent/report.js";
@@ -511,6 +512,43 @@ describe("the investigation record", () => {
       expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "cited",
       );
+    });
+
+    it("never counts an answered question as the write a later read confirms", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      // A question suspends the run for a human exactly as a write does, and
+      // changes nothing, so it starts no clock a later reading can confirm.
+      appendCall(
+        sessionId,
+        4,
+        {
+          id: "tu-ask",
+          name: "AskUserQuestion",
+          input: { question: "Which deploy?", options: [] },
+        },
+        "the 14:02 one",
+        "2026-07-03T02:05:00.000Z",
+      );
+      appendCall(
+        sessionId,
+        6,
+        { id: "tu-after", name: "QueryMetricsRange", input: { query: "rss" } },
+        METRICS,
+        "2026-07-03T02:06:00.000Z",
+      );
+
+      const id = await record(
+        sessionId,
+        "the deploy regressed memory",
+        "trigger",
+        ["tu-after"],
+      );
+      expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
+        "cited",
+      );
+      // Nor is it a decision the operator made about a write.
+      expect(gatedCalls(sessionId)).toHaveLength(0);
     });
   });
 
