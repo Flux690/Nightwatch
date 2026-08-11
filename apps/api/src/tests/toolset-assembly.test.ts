@@ -316,7 +316,7 @@ describe("toolset assembly by fleet capabilities", () => {
             "Content-Type": "application/json",
             Cookie: `nw_auth=${SESSION}`,
           },
-          body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+          body: JSON.stringify({ decision: "reject" }),
         },
       );
       await waitFor(() => !hasPendingHumanInput(sessionId));

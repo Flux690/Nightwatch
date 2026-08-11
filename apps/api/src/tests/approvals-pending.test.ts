@@ -143,7 +143,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject" }),
     });
   }
 

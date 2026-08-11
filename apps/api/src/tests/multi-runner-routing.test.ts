@@ -388,7 +388,7 @@ describe("multi-runner routing", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(approveRes.status).toBe(200);

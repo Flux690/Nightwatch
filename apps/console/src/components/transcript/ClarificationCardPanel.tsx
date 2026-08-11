@@ -21,7 +21,6 @@ export function ClarificationCardPanel({
   const state = item.state;
   const resolved = state.phase === "resolved";
   const answer = state.phase === "resolved" ? state.result : undefined;
-  const answeredBy = state.phase === "resolved" ? state.by : undefined;
   const [selected, setSelected] = useState<string[]>([]);
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
@@ -82,17 +81,7 @@ export function ClarificationCardPanel({
           : null;
     return (
       <div data-testid="clarification-card" data-resolved="true">
-        <p className="mb-2 font-mono text-base font-medium">
-          AskUserQuestion
-          {answeredBy ? (
-            <span
-              className="ml-2 font-normal text-muted-foreground"
-              data-testid="clarification-resolution"
-            >
-              answered by {answeredBy}
-            </span>
-          ) : null}
-        </p>
+        <p className="mb-2 font-mono text-base font-medium">AskUserQuestion</p>
         <Card size="sm" className={TOOL_CARD_CLASS}>
           <CardContent className="px-4">
             <p className={IO_LABEL_CLASS}>IN</p>

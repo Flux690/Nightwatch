@@ -232,7 +232,7 @@ describe("continue-request interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator" }),
+        body: JSON.stringify({}),
       },
     );
     expect(continueRes.status).toBe(200);
@@ -292,7 +292,7 @@ describe("continue-request interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "reject" }),
       },
     );
     expect(endRes.status).toBe(200);
@@ -358,7 +358,7 @@ describe("continue-request interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ resolvedBy: "operator-after-restart" }),
+        body: JSON.stringify({}),
       },
     );
     expect(resumeRes.status).toBe(200);

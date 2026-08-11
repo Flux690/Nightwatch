@@ -94,7 +94,6 @@ function unpause(
   sessionId: string,
   toolUseId: string,
   status: "approved" | "rejected" | "answered",
-  resolvedBy: string,
   completedResults: ToolResult[],
   gatedResult: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
@@ -113,7 +112,6 @@ function unpause(
       state: {
         phase: "resolved",
         decision: status,
-        by: resolvedBy,
         ...(status === "approved" && { result: gatedResult.content }),
         ...(outcome !== undefined && { outcome }),
       },
@@ -124,7 +122,6 @@ function unpause(
     sessionId,
     toolUseId,
     status,
-    resolvedBy,
     resolvedAt,
   });
 
@@ -134,13 +131,12 @@ function unpause(
     resumeToolResults: [...completedResults, gatedResult],
   });
 
-  return { sessionId, toolUseId, status, resolvedBy, resolvedAt };
+  return { sessionId, toolUseId, status, resolvedAt };
 }
 
 export async function respondToPendingHumanInput(
   sessionId: string,
   request: RespondRequest,
-  resolvedBy = "console",
 ): Promise<HumanInputActionResult> {
   const pending = requirePendingHumanInput(sessionId);
   const { decision, text } = request;
@@ -155,13 +151,9 @@ export async function respondToPendingHumanInput(
         sessionId,
         toolUseId: pending.toolUseId,
         status: "rejected",
-        resolvedBy,
         resolvedAt,
       });
-      logger.info(
-        { sessionId, resolvedBy },
-        "continue request ended by operator",
-      );
+      logger.info({ sessionId }, "continue request ended by operator");
       dispatcher.dispatch({
         sessionId,
         seed: buildSeed(sessionId),
@@ -171,7 +163,6 @@ export async function respondToPendingHumanInput(
         sessionId,
         toolUseId: pending.toolUseId,
         status: "rejected",
-        resolvedBy,
         resolvedAt,
       };
     }
@@ -179,19 +170,14 @@ export async function respondToPendingHumanInput(
       sessionId,
       toolUseId: pending.toolUseId,
       status: "continued",
-      resolvedBy,
       resolvedAt,
     });
-    logger.info(
-      { sessionId, resolvedBy },
-      "continue request resumed by operator",
-    );
+    logger.info({ sessionId }, "continue request resumed by operator");
     dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
     return {
       sessionId,
       toolUseId: pending.toolUseId,
       status: "continued",
-      resolvedBy,
       resolvedAt,
     };
   }
@@ -229,7 +215,6 @@ export async function respondToPendingHumanInput(
       sessionId,
       pending.toolUseId,
       "approved",
-      resolvedBy,
       pending.completedResults,
       {
         tool_use_id: pending.toolUseId,
@@ -243,12 +228,11 @@ export async function respondToPendingHumanInput(
   }
 
   if (pending.kind === "clarification") {
-    logger.info({ sessionId, resolvedBy }, "clarification answered");
+    logger.info({ sessionId }, "clarification answered");
     return unpause(
       sessionId,
       pending.toolUseId,
       "answered",
-      resolvedBy,
       pending.completedResults,
       { tool_use_id: pending.toolUseId, content: answer },
       { toolName: call.name, input: call.input },
@@ -260,12 +244,11 @@ export async function respondToPendingHumanInput(
     // executeApprovedTool never throws - every fault becomes an is_error result -
     // so the approve path always reaches unpause() and the run always resumes.
     const { result, outcome } = await executeApprovedTool(pending, call);
-    logger.info({ sessionId, tool: call.name, resolvedBy }, "approved");
+    logger.info({ sessionId, tool: call.name }, "approved");
     return unpause(
       sessionId,
       pending.toolUseId,
       "approved",
-      resolvedBy,
       pending.completedResults,
       result,
       { toolName: call.name, input: call.input },
@@ -288,12 +271,11 @@ export async function respondToPendingHumanInput(
   // The one outcome a human authors. The transcript carries the refusal we sent
   // the model, which reads as a failure; only this says a person chose it.
   recordToolOutcome(sessionId, pending.toolUseId, "rejected");
-  logger.info({ sessionId, tool: call.name, resolvedBy }, "rejected");
+  logger.info({ sessionId, tool: call.name }, "rejected");
   return unpause(
     sessionId,
     pending.toolUseId,
     "rejected",
-    resolvedBy,
     pending.completedResults,
     gatedResult,
     { toolName: call.name, input: call.input },

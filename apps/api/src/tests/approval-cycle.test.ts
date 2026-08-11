@@ -170,7 +170,7 @@ describe("durable approval interrupts", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "approve", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "approve" }),
     });
     await waitFor(() => restartCommands.length > countBefore);
   });
@@ -223,7 +223,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -324,7 +324,6 @@ describe("durable approval interrupts", () => {
         body: JSON.stringify({
           decision: "reject",
           text: "too risky",
-          resolvedBy: "operator",
         }),
       },
     );
@@ -407,7 +406,7 @@ describe("durable approval interrupts", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject" }),
     });
     await waitFor(() => !hasPendingHumanInput(sessionId));
   });
@@ -459,7 +458,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "op1" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(first.status).toBe(200);
@@ -472,7 +471,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "op2" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(second.status).toBe(409);
@@ -530,7 +529,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "op-approve" }),
+        body: JSON.stringify({ decision: "approve" }),
       }),
       fetch(`http://127.0.0.1:${port}/api/sessions/${sessionId}/respond`, {
         method: "POST",
@@ -538,7 +537,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "op-reject" }),
+        body: JSON.stringify({ decision: "reject" }),
       }),
     ]);
 
@@ -620,7 +619,7 @@ describe("durable approval interrupts", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject" }),
     });
   });
 
@@ -685,7 +684,7 @@ describe("durable approval interrupts", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject" }),
     });
   });
 
@@ -746,7 +745,6 @@ describe("durable approval interrupts", () => {
         },
         body: JSON.stringify({
           decision: "approve",
-          resolvedBy: "operator-after-restart",
         }),
       },
     );
@@ -819,7 +817,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(approveRes.status).toBe(200);
@@ -882,7 +880,7 @@ describe("durable approval interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "reject", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "reject" }),
       },
     );
     expect(rejectRes.status).toBe(200);
@@ -970,7 +968,6 @@ describe("durable approval interrupts", () => {
         },
         body: JSON.stringify({
           decision: "approve",
-          resolvedBy: "late-operator",
         }),
       },
     );

@@ -235,7 +235,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ decision: "reject", resolvedBy: "cleanup" }),
+      body: JSON.stringify({ decision: "reject" }),
     });
     await waitFor(() => !hasPendingHumanInput(sessionId));
   });
@@ -381,7 +381,6 @@ describe("policy-gate: gating is driven by tool policy", () => {
         },
         body: JSON.stringify({
           text: "Yes, recurring daily",
-          resolvedBy: "operator",
         }),
       },
     );
@@ -408,7 +407,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(approveRes.status).toBe(200);

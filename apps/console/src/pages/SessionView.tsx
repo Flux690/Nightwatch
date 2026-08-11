@@ -406,7 +406,6 @@ export function SessionView({
         // to the agent so a rejection says why instead of only saying no.
         body: {
           decision: action,
-          resolvedBy: "console",
           ...(reason !== undefined && { text: reason }),
         },
       });
@@ -426,7 +425,7 @@ export function SessionView({
             : item,
         ),
       );
-      respond.mutate({ toolUseId, body: { text, resolvedBy: "console" } });
+      respond.mutate({ toolUseId, body: { text } });
     },
     [respond],
   );

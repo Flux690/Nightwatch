@@ -81,7 +81,7 @@ function interruptResolved(
   return itemEvent({
     kind: "continue_card",
     toolUseId,
-    state: { phase: "resolved", decision: status, by: "console" },
+    state: { phase: "resolved", decision: status },
   });
 }
 
@@ -96,13 +96,13 @@ describe("applyLiveEvent — continue interrupt", () => {
     });
   });
 
-  it("resolves the card with the decision and who made it", () => {
+  it("resolves the card with the decision", () => {
     let items = applyLiveEvent([], continueInterrupt("ci-1"), "s1");
     items = applyLiveEvent(items, interruptResolved("ci-1", "continued"), "s1");
 
     expect(items[0]).toMatchObject({
       kind: "continue_card",
-      state: { phase: "resolved", decision: "continued", by: "console" },
+      state: { phase: "resolved", decision: "continued" },
     });
   });
 

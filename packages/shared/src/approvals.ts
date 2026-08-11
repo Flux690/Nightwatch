@@ -18,12 +18,10 @@ export interface ApprovalResponse {
   sessionId: string;
   toolUseId: string;
   status: ApprovalStatus;
-  resolvedBy: string;
   resolvedAt: string;
 }
 
 export interface RespondRequest {
   decision?: "approve" | "reject";
   text?: string;
-  resolvedBy?: string;
 }

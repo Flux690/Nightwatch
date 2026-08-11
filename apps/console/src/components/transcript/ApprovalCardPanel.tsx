@@ -153,7 +153,6 @@ export function ApprovalCardPanel({
         {state.phase === "resolved" ? (
           <p className="text-sm" data-testid="approval-resolution">
             {state.decision === "approved" ? "Approved" : "Rejected"}
-            {state.by ? ` by ${state.by}` : ""}
           </p>
         ) : rejecting ? (
           // The comment is fed back to the agent as this call's result, so it

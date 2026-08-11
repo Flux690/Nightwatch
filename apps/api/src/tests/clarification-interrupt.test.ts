@@ -220,7 +220,6 @@ describe("clarification interrupts", () => {
         },
         body: JSON.stringify({
           text: "Database overloaded",
-          resolvedBy: "operator",
         }),
       },
     );
@@ -294,7 +293,6 @@ describe("clarification interrupts", () => {
         },
         body: JSON.stringify({
           text: "Database overloaded, Memory leak",
-          resolvedBy: "operator",
         }),
       },
     );
@@ -423,7 +421,6 @@ describe("clarification interrupts", () => {
         },
         body: JSON.stringify({
           text: "Yes, recurring daily",
-          resolvedBy: "operator-after-restart",
         }),
       },
     );
@@ -515,7 +512,7 @@ describe("clarification interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ text: "Yes", resolvedBy: "operator" }),
+        body: JSON.stringify({ text: "Yes" }),
       },
     );
     expect(answerRes.status).toBe(200);
@@ -540,7 +537,7 @@ describe("clarification interrupts", () => {
           "Content-Type": "application/json",
           Cookie: `nw_auth=${SESSION}`,
         },
-        body: JSON.stringify({ decision: "approve", resolvedBy: "operator" }),
+        body: JSON.stringify({ decision: "approve" }),
       },
     );
     expect(approveRes.status).toBe(200);

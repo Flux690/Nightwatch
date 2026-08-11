@@ -40,7 +40,6 @@ export type ToolCallState =
   | {
       phase: "resolved";
       decision: ApprovalStatus;
-      by?: string;
       result?: unknown;
       outcome?: ToolOutcome;
     }

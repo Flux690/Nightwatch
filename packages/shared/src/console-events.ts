@@ -15,7 +15,6 @@ export interface ConsoleHumanInputResolved extends ConsoleEnvelope {
     sessionId: string;
     toolUseId: string;
     status: "approved" | "rejected" | "answered" | "continued";
-    resolvedBy?: string;
     resolvedAt?: string;
   };
 }

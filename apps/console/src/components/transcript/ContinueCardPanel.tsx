@@ -23,7 +23,6 @@ export function ContinueCardPanel({
       {state.phase === "resolved" ? (
         <p className="text-sm" data-testid="continue-resolution">
           {state.decision === "continued" ? "Continued" : "Cancelled"}
-          {state.by ? ` by ${state.by}` : ""}
         </p>
       ) : (
         <div className="flex gap-2">

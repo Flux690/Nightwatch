@@ -227,7 +227,6 @@ describe("termination paths: every run ends in model text, no escalation", () =>
         body: JSON.stringify({
           decision: "reject",
           text: "too risky",
-          resolvedBy: "test",
         }),
       },
     );

@@ -164,12 +164,11 @@ export async function registerSessionRoutes(
     { preHandler: requireSession },
     async (request, reply) => {
       try {
-        const { decision, text, resolvedBy } = request.body ?? {};
-        const response = await respondToPendingHumanInput(
-          request.params.id,
-          { decision, text },
-          resolvedBy,
-        );
+        const { decision, text } = request.body ?? {};
+        const response = await respondToPendingHumanInput(request.params.id, {
+          decision,
+          text,
+        });
         return reply.code(200).send(response);
       } catch (error) {
         return sendHumanInputError(reply, error);

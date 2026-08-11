@@ -920,7 +920,6 @@ describe("SessionView", () => {
             method: "POST",
             body: JSON.stringify({
               decision: "approve",
-              resolvedBy: "console",
             }),
           }),
         );
@@ -976,9 +975,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("approval-card");
-        expect(
-          within(card).getByText(/approved by operator/i),
-        ).toBeInTheDocument();
+        expect(within(card).getByText(/^approved$/i)).toBeInTheDocument();
         expect(
           within(card).queryByRole("button", { name: /restart/i }),
         ).not.toBeInTheDocument();
@@ -1082,7 +1079,6 @@ describe("SessionView", () => {
             method: "POST",
             body: JSON.stringify({
               decision: "approve",
-              resolvedBy: "console",
             }),
           }),
         );
@@ -1401,7 +1397,6 @@ describe("SessionView", () => {
             method: "POST",
             body: JSON.stringify({
               text: "nginx",
-              resolvedBy: "console",
             }),
           }),
         );
@@ -1448,9 +1443,7 @@ describe("SessionView", () => {
 
       await waitFor(() => {
         const card = screen.getByTestId("clarification-card");
-        expect(
-          within(card).getByText(/answered by operator/i),
-        ).toBeInTheDocument();
+        expect(within(card).getByText("AskUserQuestion")).toBeInTheDocument();
         expect(
           within(card).queryByRole("radio", { name: /^nginx$/i }),
         ).not.toBeInTheDocument();
@@ -1489,7 +1482,6 @@ describe("SessionView", () => {
             method: "POST",
             body: JSON.stringify({
               text: "nginx, postgres",
-              resolvedBy: "console",
             }),
           }),
         );
