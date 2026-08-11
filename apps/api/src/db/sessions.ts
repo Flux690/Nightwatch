@@ -46,8 +46,9 @@ export function createSession(
 ): void {
   const db = getDb();
   const insertSession = db.prepare(
-    `INSERT INTO sessions (session_id, title, investigation, created_at)
-     VALUES (@sessionId, @title, @investigation, @createdAt)
+    `INSERT INTO sessions
+       (session_id, title, investigation, created_at, last_activity_at)
+     VALUES (@sessionId, @title, @investigation, @createdAt, @createdAt)
      ON CONFLICT(session_id) DO NOTHING`,
   );
   const insertAlert = db.prepare(INSERT_ALERT);
@@ -213,6 +214,17 @@ function parseCanonical(raw: string | null): {
   }
 }
 
+// The newest row's timestamp, kept on the session because the queue sorts on it.
+// Written inside each appender's transaction, so it cannot fall behind the
+// transcript it summarises.
+function touchSession(sessionId: string, at: string): void {
+  getDb()
+    .prepare(
+      `UPDATE sessions SET last_activity_at = @at WHERE session_id = @sessionId`,
+    )
+    .run({ sessionId, at });
+}
+
 // Append a turn's rows atomically: the (session_id, seq) primary key forbids a
 // duplicate seq, and the transaction makes the turn all-or-nothing so the
 // transcript checkpoint never holds a hole.
@@ -234,6 +246,8 @@ export function appendTranscriptRows(messages: TranscriptRow[]): void {
         timestamp: m.timestamp,
       });
     }
+    const last = rows[rows.length - 1];
+    if (last) touchSession(last.sessionId, last.timestamp);
   });
   insertAll(messages);
 }
@@ -276,6 +290,7 @@ export function appendErrorMessage(
       content: text,
       timestamp: message.timestamp,
     });
+    touchSession(sessionId, message.timestamp);
   })();
   return message;
 }
@@ -314,6 +329,8 @@ export function appendRowsAndInterrupt(
       completedResults: JSON.stringify(pendingHumanInput.completedResults),
       claimedAt: pendingHumanInput.claimedAt ?? null,
     });
+    const last = messages[messages.length - 1];
+    if (last) touchSession(last.sessionId, last.timestamp);
   });
   txn();
 }
@@ -371,8 +388,7 @@ const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS create
         (SELECT m.content FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastContent,
-        COALESCE((SELECT MAX(m.timestamp) FROM session_transcript m
-          WHERE m.session_id = s.session_id), s.created_at) AS lastActivityAt,
+        s.last_activity_at AS lastActivityAt,
         (p.session_id IS NOT NULL) AS awaitingHumanInput,
         p.kind AS pendingKind`;
 
@@ -428,19 +444,14 @@ export function listSessionSources(
   };
 }
 
-// Every investigation, unpaginated: the counts on the page are claims about the
-// whole set, which no page of rows can answer.
-export function listInvestigationSources(): SessionListSource[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT ${LIST_COLUMNS}
-       FROM sessions s
-       LEFT JOIN pending_human_input p ON p.session_id = s.session_id
-       WHERE s.investigation = 1`,
-    )
-    .all() as SessionListRawRow[];
-  const alerts = alertsForMany(rows.map((r) => r.sessionId));
-  return rows.map((r) => toSource(r, alerts.get(r.sessionId) ?? []));
+// The queue's total is a claim about the whole set, which no page of rows can
+// answer. It is a count, so it is counted: loading every investigation and its
+// report to take the length of the array is the same answer at any size.
+export function countInvestigations(): number {
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) AS total FROM sessions WHERE investigation = 1`)
+    .get() as { total: number };
+  return row.total;
 }
 
 // Whether the row is there, for callers that only need it to exist. Kept apart

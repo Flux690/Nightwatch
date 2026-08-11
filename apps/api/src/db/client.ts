@@ -107,13 +107,21 @@ CREATE TABLE IF NOT EXISTS integrations (
 
 -- report is the investigation record, null until the agent's first finding, and
 -- one-to-one with the session it cannot outlive.
+-- last_activity_at is denormalised from the transcript's newest row, because the
+-- list sorts on it: derived, it is a correlated subquery the sort has to run for
+-- every session in the table before it can apply a LIMIT.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   investigation        INTEGER   NOT NULL DEFAULT 0,
   report               TEXT,
-  created_at           TEXT      NOT NULL
+  created_at           TEXT      NOT NULL,
+  last_activity_at     TEXT      NOT NULL
 );
+-- Serves both the queue's filtered sort and its total, which are the two
+-- queries a page load actually runs.
+CREATE INDEX IF NOT EXISTS idx_sessions_kind_activity
+  ON sessions(investigation, last_activity_at DESC);
 
 -- One row per alert this session covers, in arrival order, each carrying when it
 -- joined and when it cleared. A batch elects no primary, so recovery is a fact

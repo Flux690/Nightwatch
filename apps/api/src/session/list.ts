@@ -7,7 +7,7 @@ import type {
   Verdict,
 } from "@nightwarden/shared";
 import {
-  listInvestigationSources,
+  countInvestigations,
   listSessionSources,
   type SessionListSource,
 } from "../db/sessions.js";
@@ -122,7 +122,6 @@ export function listSessionPage(
   kind?: SessionKind,
 ): SessionListPage {
   const { sources, nextOffset } = listSessionSources(limit, offset, kind);
-  const investigations = listInvestigationSources();
   return {
     rows: sources.map((source) => {
       const { investigation } = source;
@@ -141,6 +140,6 @@ export function listSessionPage(
       };
     }),
     nextOffset,
-    investigationTotal: investigations.length,
+    investigationTotal: countInvestigations(),
   };
 }
