@@ -105,20 +105,36 @@ CREATE TABLE IF NOT EXISTS integrations (
 -- investigation is what the session IS, carried from the moment it exists, and
 -- it is a one-way ratchet that never clears.
 
--- alerts is a JSON array in arrival order, each entry carrying when it joined and
--- when it cleared. A batch elects no primary, so recovery is a fact about each
--- alert and the session resolves only once they have all cleared.
-
 -- report is the investigation record, null until the agent's first finding, and
 -- one-to-one with the session it cannot outlive.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
-  alerts               TEXT      NOT NULL DEFAULT '[]',
   investigation        INTEGER   NOT NULL DEFAULT 0,
   report               TEXT,
   created_at           TEXT      NOT NULL
 );
+
+-- One row per alert this session covers, in arrival order, each carrying when it
+-- joined and when it cleared. A batch elects no primary, so recovery is a fact
+-- about each alert and the session resolves only once they have all cleared.
+
+-- The scalars are what anything looks an alert up BY: source_alert_id and
+-- fired_at identify it, cleared_at says whether it is still open. Everything
+-- else is read whole and never queried, so it stays JSON in the alert column.
+CREATE TABLE IF NOT EXISTS session_alerts (
+  id                 INTEGER   PRIMARY KEY,
+  session_id         TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+  source_alert_id    TEXT      NOT NULL,
+  fired_at           TEXT      NOT NULL,
+  arrived_at         TEXT      NOT NULL,
+  cleared_at         TEXT,
+  alert              TEXT      NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_alerts_session
+  ON session_alerts(session_id, id);
+CREATE INDEX IF NOT EXISTS idx_session_alerts_source
+  ON session_alerts(source_alert_id, fired_at);
 
 -- The durable transcript, and the only record of what ran, keyed by the natural
 -- (session_id, seq). kind because not every row is a conversation turn: an error

@@ -420,7 +420,11 @@ describe("API-local session store", () => {
       seedCompleteReport(untouched);
       expect(statusOf(sessionId)).toBe("inconclusive");
 
-      markAlertCleared(sourceAlertId, new Date().toISOString());
+      // The ids it answers with are what ingest publishes REPORT_UPDATED for, so
+      // it names the sessions actually holding the alert, and each of them once.
+      expect(markAlertCleared(sourceAlertId, new Date().toISOString())).toEqual(
+        [sessionId],
+      );
       expect(statusOf(sessionId)).toBe("resolved");
       expect(statusOf(untouched)).toBe("inconclusive");
     });

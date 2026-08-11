@@ -18,83 +18,107 @@ type StoredSession = SessionMeta & {
   investigation: boolean;
 };
 
-function joining(alerts: NormalizedAlert[], at: string): SessionAlert[] {
-  return alerts.map((alert) => ({ alert, arrivedAt: at, clearedAt: null }));
+const INSERT_ALERT = `INSERT INTO session_alerts
+     (session_id, source_alert_id, fired_at, arrived_at, cleared_at, alert)
+   VALUES (@sessionId, @sourceAlertId, @firedAt, @arrivedAt, NULL, @alert)`;
+
+function alertParams(
+  sessionId: string,
+  alert: NormalizedAlert,
+  arrivedAt: string,
+): Record<string, string> {
+  return {
+    sessionId,
+    sourceAlertId: alert.sourceAlertId,
+    firedAt: alert.firedAt,
+    arrivedAt,
+    alert: JSON.stringify(alert),
+  };
 }
 
-// Create the session row once. Idempotent: a resume re-enters the loop with the
-// same id, and the first title/alerts win - later runs never clobber them.
+// Create the session row once, with the alerts that opened it. Idempotent: a
+// resume re-enters the loop with the same id, and the first title/alerts win -
+// later runs never clobber them.
 export function createSession(
   meta: SessionMeta,
   alerts: NormalizedAlert[],
   investigation = false,
 ): void {
-  getDb()
-    .prepare(
-      `INSERT INTO sessions (session_id, title, alerts, investigation, created_at)
-       VALUES (@sessionId, @title, @alerts, @investigation, @createdAt)
-       ON CONFLICT(session_id) DO NOTHING`,
-    )
-    .run({
+  const db = getDb();
+  const insertSession = db.prepare(
+    `INSERT INTO sessions (session_id, title, investigation, created_at)
+     VALUES (@sessionId, @title, @investigation, @createdAt)
+     ON CONFLICT(session_id) DO NOTHING`,
+  );
+  const insertAlert = db.prepare(INSERT_ALERT);
+  db.transaction((): void => {
+    const created = insertSession.run({
       sessionId: meta.sessionId,
       title: meta.title,
-      alerts: JSON.stringify(joining(alerts, meta.createdAt)),
       investigation: investigation ? 1 : 0,
       createdAt: meta.createdAt,
     });
+    // Only the call that created the row writes the batch, so a resume cannot
+    // append a second copy of the alerts the session already covers.
+    if (created.changes === 0) return;
+    for (const alert of alerts) {
+      insertAlert.run(alertParams(meta.sessionId, alert, meta.createdAt));
+    }
+  })();
 }
 
-function writeAlerts(sessionId: string, alerts: SessionAlert[]): void {
-  getDb()
-    .prepare(`UPDATE sessions SET alerts = @alerts WHERE session_id = @id`)
-    .run({ id: sessionId, alerts: JSON.stringify(alerts) });
-}
-
-// An alert that arrived while the run was already working. Read-modify-write in
-// a transaction so two arriving at once cannot lose each other. `arrivedAt` is
-// what later places it in the transcript, at the turn it interrupted.
+// An alert that arrived while the run was already working. `arrivedAt` is what
+// later places it in the transcript, at the turn it interrupted.
 export function appendSessionAlert(
   sessionId: string,
   alert: NormalizedAlert,
 ): void {
-  getDb().transaction((): void => {
-    const alerts = getSession(sessionId)?.alerts ?? [];
-    writeAlerts(sessionId, [
-      ...alerts,
-      { alert, arrivedAt: new Date().toISOString(), clearedAt: null },
-    ]);
+  getDb()
+    .prepare(INSERT_ALERT)
+    .run(alertParams(sessionId, alert, new Date().toISOString()));
+}
+
+// Releases alerts a run never got to, so the session that picks them up is the
+// only one covering them. Left here they would name alerts this run never saw,
+// and hold the session open until every one of them cleared.
+export function dropSessionAlerts(
+  sessionId: string,
+  alerts: NormalizedAlert[],
+): void {
+  if (alerts.length === 0) return;
+  const db = getDb();
+  const remove = db.prepare(
+    `DELETE FROM session_alerts
+     WHERE session_id = @sessionId
+       AND source_alert_id = @sourceAlertId AND fired_at = @firedAt`,
+  );
+  db.transaction((): void => {
+    for (const alert of alerts) {
+      remove.run({
+        sessionId,
+        sourceAlertId: alert.sourceAlertId,
+        firedAt: alert.firedAt,
+      });
+    }
   })();
 }
 
-// Stamps this alert wherever it appears. The first clear wins per alert: a
+// Stamps this alert wherever it is still open. The first clear wins per alert: a
 // re-fire that clears again says nothing new about that condition. Returns the
 // sessions it touched, which is not the same as the sessions now resolved.
 export function markAlertCleared(
   sourceAlertId: string,
   clearedAt: string,
 ): string[] {
-  return getDb().transaction((): string[] => {
-    const rows = getDb()
-      .prepare(
-        `SELECT session_id AS sessionId, alerts FROM sessions
-         WHERE EXISTS (SELECT 1 FROM json_each(alerts)
-                       WHERE json_extract(value, '$.alert.sourceAlertId') = @sourceAlertId
-                         AND json_extract(value, '$.clearedAt') IS NULL)`,
-      )
-      .all({ sourceAlertId }) as Array<{ sessionId: string; alerts: string }>;
-    for (const row of rows) {
-      writeAlerts(
-        row.sessionId,
-        parseAlerts(row.alerts).map((entry) =>
-          entry.alert.sourceAlertId === sourceAlertId &&
-          entry.clearedAt === null
-            ? { ...entry, clearedAt }
-            : entry,
-        ),
-      );
-    }
-    return rows.map((r) => r.sessionId);
-  })();
+  const rows = getDb()
+    .prepare(
+      `UPDATE session_alerts SET cleared_at = @clearedAt
+       WHERE source_alert_id = @sourceAlertId AND cleared_at IS NULL
+       RETURNING session_id AS sessionId`,
+    )
+    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string }>;
+  // One session can cover the same alert twice; the caller wants sessions.
+  return [...new Set(rows.map((r) => r.sessionId))];
 }
 
 // Overwrites unconditionally: the refined title deliberately replaces the
@@ -105,15 +129,62 @@ export function updateSessionTitle(sessionId: string, title: string): void {
     .run(title, sessionId);
 }
 
+interface AlertRow {
+  sessionId: string;
+  arrivedAt: string;
+  clearedAt: string | null;
+  alert: string;
+}
+
 // Untrusted on read for the same reason as the canonical column below: a session
-// with an unreadable alert list should still open, showing no alerts.
-function parseAlerts(raw: string): SessionAlert[] {
+// holding one unreadable alert should still open, showing the rest.
+function toSessionAlert(row: AlertRow): SessionAlert[] {
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SessionAlert[]) : [];
+    return [
+      {
+        alert: JSON.parse(row.alert) as NormalizedAlert,
+        arrivedAt: row.arrivedAt,
+        clearedAt: row.clearedAt,
+      },
+    ];
   } catch {
     return [];
   }
+}
+
+const ALERT_COLUMNS = `session_id AS sessionId, arrived_at AS arrivedAt,
+        cleared_at AS clearedAt, alert`;
+
+// id ascending is arrival order, which is what the first alert of a batch means
+// to everything that reads one.
+function alertsFor(sessionId: string): SessionAlert[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT ${ALERT_COLUMNS} FROM session_alerts
+       WHERE session_id = ? ORDER BY id ASC`,
+    )
+    .all(sessionId) as AlertRow[];
+  return rows.flatMap(toSessionAlert);
+}
+
+// One query for a whole page of sessions, rather than a correlated subquery per
+// row: the page is bounded, so this is two statements however long the list is.
+function alertsForMany(sessionIds: string[]): Map<string, SessionAlert[]> {
+  const byId = new Map<string, SessionAlert[]>();
+  if (sessionIds.length === 0) return byId;
+  const holes = sessionIds.map(() => "?").join(", ");
+  const rows = getDb()
+    .prepare(
+      `SELECT ${ALERT_COLUMNS} FROM session_alerts
+       WHERE session_id IN (${holes}) ORDER BY id ASC`,
+    )
+    .all(...sessionIds) as AlertRow[];
+  for (const row of rows) {
+    const entries = byId.get(row.sessionId) ?? [];
+    entries.push(...toSessionAlert(row));
+    byId.set(row.sessionId, entries);
+  }
+  return byId;
 }
 
 function serializeCanonical(m: TranscriptRow): string | null {
@@ -284,7 +355,6 @@ interface SessionListRawRow {
   title: string;
   createdAt: string;
   lastActivityAt: string;
-  alerts: string;
   investigation: number;
   report: string | null;
   lastKind: string | null;
@@ -294,7 +364,7 @@ interface SessionListRawRow {
 }
 
 const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
-        s.alerts, s.investigation, s.report,
+        s.investigation, s.report,
         (SELECT m.kind FROM session_transcript m
           WHERE m.session_id = s.session_id
           ORDER BY m.seq DESC LIMIT 1) AS lastKind,
@@ -306,13 +376,16 @@ const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS create
         (p.session_id IS NOT NULL) AS awaitingHumanInput,
         p.kind AS pendingKind`;
 
-function toSource(r: SessionListRawRow): SessionListSource {
+function toSource(
+  r: SessionListRawRow,
+  alerts: SessionAlert[],
+): SessionListSource {
   return {
     sessionId: r.sessionId,
     title: r.title,
     createdAt: r.createdAt,
     lastActivityAt: r.lastActivityAt,
-    alerts: parseAlerts(r.alerts),
+    alerts,
     investigation: r.investigation === 1,
     report: r.report !== null ? (JSON.parse(r.report) as Report) : null,
     lastKind: r.lastKind,
@@ -348,8 +421,9 @@ export function listSessionSources(
     // One extra row answers "is there a next page?" without a second count query.
     .all(limit + 1, offset) as SessionListRawRow[];
   const page = rows.slice(0, limit);
+  const alerts = alertsForMany(page.map((r) => r.sessionId));
   return {
-    sources: page.map(toSource),
+    sources: page.map((r) => toSource(r, alerts.get(r.sessionId) ?? [])),
     nextOffset: rows.length > limit ? offset + page.length : null,
   };
 }
@@ -365,25 +439,34 @@ export function listInvestigationSources(): SessionListSource[] {
        WHERE s.investigation = 1`,
     )
     .all() as SessionListRawRow[];
-  return rows.map(toSource);
+  const alerts = alertsForMany(rows.map((r) => r.sessionId));
+  return rows.map((r) => toSource(r, alerts.get(r.sessionId) ?? []));
+}
+
+// Whether the row is there, for callers that only need it to exist. Kept apart
+// from getSession so an existence check never pays for the alerts.
+export function sessionExists(sessionId: string): boolean {
+  const row = getDb()
+    .prepare(`SELECT 1 FROM sessions WHERE session_id = ? LIMIT 1`)
+    .get(sessionId);
+  return row !== undefined;
 }
 
 export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
       `SELECT session_id AS sessionId, title, investigation,
-              alerts, created_at AS createdAt
+              created_at AS createdAt
        FROM sessions WHERE session_id = ?`,
     )
-    .get(sessionId) as
-    (SessionMeta & { alerts: string; investigation: number }) | undefined;
+    .get(sessionId) as (SessionMeta & { investigation: number }) | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,
     title: row.title,
     createdAt: row.createdAt,
     investigation: row.investigation === 1,
-    alerts: parseAlerts(row.alerts),
+    alerts: alertsFor(sessionId),
   };
 }
 

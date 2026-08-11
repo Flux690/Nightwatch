@@ -92,11 +92,9 @@ export function hasPendingHumanInputForAlert(
 ): boolean {
   const row = getDb()
     .prepare(
-      `SELECT 1 FROM pending_human_input pi
-       JOIN sessions s ON s.session_id = pi.session_id
-       WHERE EXISTS (SELECT 1 FROM json_each(s.alerts)
-                     WHERE json_extract(value, '$.alert.sourceAlertId') = ?
-                       AND json_extract(value, '$.alert.firedAt') = ?)
+      `SELECT 1 FROM session_alerts sa
+       JOIN pending_human_input pi ON pi.session_id = sa.session_id
+       WHERE sa.source_alert_id = ? AND sa.fired_at = ?
        LIMIT 1`,
     )
     .get(sourceAlertId, firedAt);

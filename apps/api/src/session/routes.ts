@@ -12,7 +12,12 @@ import {
 } from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
-import { createSession, getSession, deleteSession } from "../db/sessions.js";
+import {
+  createSession,
+  deleteSession,
+  getSession,
+  sessionExists,
+} from "../db/sessions.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";
@@ -225,8 +230,7 @@ export async function registerSessionRoutes(
       if (!message) {
         return reply.code(400).send({ error: "message is required" });
       }
-      const session = getSession(sessionId);
-      if (!session) {
+      if (!sessionExists(sessionId)) {
         return reply.code(404).send({ error: "unknown session" });
       }
       if (

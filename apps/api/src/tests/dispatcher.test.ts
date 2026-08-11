@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
 import type { RunSessionInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
+import { createSession, getSession } from "../db/sessions.js";
+import { useTempDb } from "./temp-db.js";
 
 // The gate resolves with a run outcome; these tests only exercise dedup/running
 // bookkeeping, so a plain "completed" stands in for every run.
@@ -75,6 +77,17 @@ function noAlertLookup(): NormalizedAlert[] {
 }
 
 describe("dispatcher", () => {
+  // Dispatching an alert run writes its session and alert rows before the run is
+  // reachable, so this seam needs a database even with the run itself faked.
+  let cleanupDb: () => void;
+  beforeAll(() => {
+    cleanupDb = useTempDb();
+  });
+  afterAll(() => {
+    cleanupDb();
+    vi.unstubAllEnvs();
+  });
+
   it("starts work immediately — no cap, no queue", async () => {
     const started: string[] = [];
     const gate = deferred();
@@ -263,6 +276,16 @@ describe("dispatcher", () => {
     expect(started.length).toBe(2);
     expect(started[1]).not.toBe(openedId);
 
+    /* Exactly one session covers it. The alert is durable from the moment it is
+       injected, so leaving it here too would put an alert its run never saw on
+       this session's record, and hold it open until that alert cleared. */
+    expect(
+      getSession(openedId)?.alerts.map((a) => a.alert.sourceAlertId),
+    ).toEqual(["primary"]);
+    expect(
+      getSession(started[1]!)?.alerts.map((a) => a.alert.sourceAlertId),
+    ).toEqual(["leftover"]);
+
     gates.get(started[1]!)?.resolve();
   });
 
@@ -331,6 +354,17 @@ describe("dispatcher", () => {
 
       const resumedAlert = makeAlert("resumed-leftover");
       lookup.register("s-resumed-leftover", [resumedAlert]);
+      // A resume always has a row: the messages route 404s without one, and the
+      // interrupt that drives the approve path is a child of the session.
+      createSession(
+        {
+          sessionId: "s-resumed-leftover",
+          title: "t",
+          createdAt: new Date().toISOString(),
+        },
+        [resumedAlert],
+        true,
+      );
       d.dispatch({
         sessionId: "s-resumed-leftover",
         seed: [],

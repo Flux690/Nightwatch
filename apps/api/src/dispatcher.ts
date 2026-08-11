@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { runSession } from "./agent/loop.js";
+import { buildSessionMeta, runSession } from "./agent/loop.js";
 import type { RunSessionInput, RunOutcome } from "./agent/loop.js";
-import { appendErrorMessage, getSession } from "./db/sessions.js";
+import {
+  appendErrorMessage,
+  appendSessionAlert,
+  createSession,
+  dropSessionAlerts,
+  getSession,
+} from "./db/sessions.js";
 import { describeLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
 import {
@@ -59,6 +65,22 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   function start(input: RunSessionInput): void {
     const alerts = resolveAlerts(input);
 
+    /* The row exists before the session is reachable, the same way the chat
+       route writes it before handing out its id. An alert arriving in the gap
+       is injected into this session and needs somewhere to land; the run's own
+       call is idempotent, so it writes nothing a second time. */
+    if (input.alerts !== undefined && input.alerts.length > 0) {
+      createSession(
+        buildSessionMeta(
+          input.sessionId,
+          input.alerts[0] ?? null,
+          input.userMessage,
+        ),
+        input.alerts,
+        true,
+      );
+    }
+
     liveAlerts.set(
       input.sessionId,
       new Set(alerts.map((a) => dedupKey(a.sourceAlertId, a.firedAt))),
@@ -111,6 +133,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
           const leftovers = inbox.get(input.sessionId) ?? [];
           inbox.delete(input.sessionId);
           if (leftovers.length > 0) {
+            // Released here and written by the new session, so exactly one
+            // session covers each of them.
+            dropSessionAlerts(input.sessionId, leftovers);
             start({ sessionId: randomUUID(), alerts: leftovers });
           }
         }
@@ -139,8 +164,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     },
 
     // The run now covers this alert too, so a re-fire of it dedups against this
-    // session rather than being injected a second time.
+    // session rather than being injected a second time. Durable first: the
+    // sender was already answered 200, so a crash here must not lose it.
     injectAlert(sessionId: string, alert: NormalizedAlert): void {
+      appendSessionAlert(sessionId, alert);
       const arr = inbox.get(sessionId) ?? [];
       arr.push(alert);
       inbox.set(sessionId, arr);

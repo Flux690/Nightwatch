@@ -692,9 +692,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // model can act on one - as their own turn after the results. The model judges
     // each as downstream of this incident or independent of it.
     provider.appendToolResults(toolResults);
+    // Already durable: the dispatcher wrote each one when it arrived. The inbox
+    // exists to tell the model, which is a separate concern from keeping it.
     const injected = dispatcher.drainInbox(sessionId);
     if (injected.length > 0) {
-      for (const alert of injected) appendSessionAlert(sessionId, alert);
       sendHarnessMessage(provider, formatInjectedAlerts(injected));
     }
     persist();
