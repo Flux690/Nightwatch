@@ -32,7 +32,7 @@ import {
   findTool,
 } from "../agent/tools/toolset.js";
 import { REPO_TOOL_NAMES } from "../agent/tools/repo.js";
-import { teardownAll } from "../sandbox/workspace.js";
+import { releaseContainers } from "../sandbox/workspace.js";
 import { parsedContent } from "./tool-result.js";
 import type {
   Tool,
@@ -180,7 +180,7 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
-  await teardownAll("test cleanup");
+  await releaseContainers();
   cleanupDb();
   vi.unstubAllEnvs();
 });

@@ -292,7 +292,7 @@ export async function registerIntegrationRoutes(
     "/integrations/github",
     { preHandler: requireSession },
     async (_request, reply) => {
-      await teardownAll("github integration disconnected");
+      await teardownAll("disconnected");
       deleteGitHubIntegration();
       logger.info("github integration disconnected");
       return reply.code(204).send();

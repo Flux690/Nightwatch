@@ -11,6 +11,7 @@ import {
 import {
   cloneAndCheckout,
   commitAll,
+  currentBranch,
   hasUnpushedWork,
   isDirty,
   push,
@@ -185,6 +186,30 @@ async function installDependencies(
   }
 }
 
+/* The same rule the teardown obeys, on the one other path that removes a
+   checkout. Best-effort by nature: no repo here at all is the ordinary case,
+   and every failure means the folder was already beyond saving. */
+async function pushLeftovers(
+  dir: string,
+  options: WorkspaceOptions,
+): Promise<void> {
+  try {
+    if (await isDirty(dir)) {
+      await commitAll(
+        dir,
+        "nightwarden: checkpoint before reprovisioning",
+        options.commitAuthor,
+      );
+    }
+    if (await hasUnpushedWork(dir)) {
+      await push(dir, await currentBranch(dir), await options.authHeader());
+    }
+  } catch {
+    // Nothing to say: a fresh session has no folder, and a folder that cannot
+    // be pushed is one boot salvage already declined to rescue.
+  }
+}
+
 async function createEntry(
   sessionId: string,
   options: WorkspaceOptions,
@@ -204,7 +229,9 @@ async function provisionEntry(
   const dir = join(options.workspacesDir, sessionId);
   const homeDir = homeDirFor(dir);
   // A leftover dir (crash, reaped container) would break the clone; the branch
-  // is the durable state, so a fresh clone is always correct.
+  // is the durable state, so a fresh clone is always correct - but only once
+  // what is here has reached it, since a push that failed left the only copy.
+  await pushLeftovers(dir, options);
   await rm(dir, { recursive: true, force: true });
   await rm(homeDir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
@@ -332,22 +359,31 @@ export async function withWorkspace<T>(
   }
 }
 
-// Dirty work is checkpoint-committed and pushed before the container and dir go;
-// an idle-path push failure aborts, but a forced teardown proceeds and logs it.
+// Why the sandbox is going. Only the idle sweep defers to work in flight; the
+// others mean the session is going whether that work finishes or not.
+export type TeardownReason = "idle" | "deleted" | "disconnected";
+
+/* One rule, no modes: never drop a checkout without first trying to push it, and
+   if the push fails keep the checkout and destroy the container anyway. The
+   container is disposable and cheap to recreate; the work is neither, and boot
+   salvage is the one retry for every reason. */
 export async function teardown(
   sessionId: string,
-  reason: string,
-  force = false,
+  reason: TeardownReason,
 ): Promise<void> {
   const entry = sessions.get(sessionId);
   if (!entry) return;
-  if (entry.busy > 0 && !force) return;
+  if (entry.busy > 0 && reason === "idle") {
+    armIdleTimer(sessionId, entry);
+    return;
+  }
   const { workspace, options } = entry;
+  let saved = true;
   try {
     if (await isDirty(workspace.dir)) {
       await commitAll(
         workspace.dir,
-        "nightwarden: checkpoint at sandbox teardown",
+        `nightwarden: checkpoint at sandbox teardown (${reason})`,
         options.commitAuthor,
       );
     }
@@ -355,31 +391,41 @@ export async function teardown(
       await push(workspace.dir, workspace.branch, await options.authHeader());
     }
   } catch (err) {
+    saved = false;
     options.log?.warn(
       {
         sessionId,
         reason,
         err: err instanceof Error ? err.message : String(err),
       },
-      force
-        ? "sandbox teardown: push failed, discarding work"
-        : "sandbox teardown aborted: push failed, keeping workspace",
+      "sandbox teardown: work could not be pushed, keeping the checkout for boot salvage",
     );
-    if (!force) {
-      armIdleTimer(sessionId, entry);
-      return;
-    }
   }
   if (entry.idleTimer !== null) clearTimeout(entry.idleTimer);
   sessions.delete(sessionId);
   await destroyContainer(entry.containerId).catch(() => undefined);
-  await rm(workspace.dir, { recursive: true, force: true });
-  await rm(homeDirFor(workspace.dir), { recursive: true, force: true });
-  options.log?.info({ sessionId, reason }, "sandbox torn down");
+  if (saved) {
+    await rm(workspace.dir, { recursive: true, force: true });
+    await rm(homeDirFor(workspace.dir), { recursive: true, force: true });
+  }
+  options.log?.info({ sessionId, reason, saved }, "sandbox torn down");
 }
 
-export async function teardownAll(reason: string): Promise<void> {
+export async function teardownAll(reason: TeardownReason): Promise<void> {
+  await Promise.all([...sessions.keys()].map((id) => teardown(id, reason)));
+}
+
+/* Shutdown keeps every checkout and only stops the containers, which is the same
+   rule reached from the other side: nothing is being dropped, so nothing needs
+   pushing. Containers cannot outlive the process that started them, and the git
+   work belongs to the next boot's salvage, which has time for it. */
+export async function releaseContainers(): Promise<void> {
+  const entries = [...sessions.values()];
+  sessions.clear();
   await Promise.all(
-    [...sessions.keys()].map((id) => teardown(id, reason, true)),
+    entries.map((entry) => {
+      if (entry.idleTimer !== null) clearTimeout(entry.idleTimer);
+      return destroyContainer(entry.containerId).catch(() => undefined);
+    }),
   );
 }

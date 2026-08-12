@@ -27,7 +27,7 @@ vi.mock("node:child_process", () => ({ execFile: execFileMock }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import {
-  teardownAll,
+  releaseContainers,
   withWorkspace,
   type Workspace,
   type WorkspaceOptions,
@@ -317,7 +317,7 @@ afterAll(() => {
 afterEach(async () => {
   vi.useRealTimers();
   gitState.failPush = false;
-  await teardownAll("test cleanup");
+  await releaseContainers();
   gitState.remoteBranchExists = false;
   gitState.dirty = false;
   gitState.unpushed = "0";
@@ -486,7 +486,7 @@ describe("workspace lifecycle", () => {
     expect(push?.[1]).toBe(`http.extraHeader=Authorization: ${AUTH_HEADER}`);
   });
 
-  it("aborts idle teardown when the push fails, keeping container and workspace", async () => {
+  it("keeps the checkout when the push fails, and stops the container anyway", async () => {
     const warn = vi.fn();
     vi.useFakeTimers();
     const sessionId = nextSessionId();
@@ -505,11 +505,11 @@ describe("workspace lifecycle", () => {
     vi.useRealTimers();
 
     await waitFor(() => warn.mock.calls.length > 0);
-    expect(dockerState.removed).toHaveLength(0);
+    /* The container is disposable and a running one with no session is waste,
+       so it always goes. The checkout holds commits that exist nowhere else, so
+       it always stays, and boot salvage is what retries the push. */
+    expect(dockerState.removed).toHaveLength(1);
     expect(existsSync(join(workspacesDir, sessionId))).toBe(true);
-    // The live entry is retained: the next call needs no fresh clone.
-    await withWorkspace(sessionId, options(), () => Promise.resolve());
-    expect(cloneCalls()).toHaveLength(1);
   });
 
   it("never lets the auth header reach a git error message", async () => {

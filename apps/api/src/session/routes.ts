@@ -24,6 +24,7 @@ import { buildTranscript } from "./transcript.js";
 import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
+import { teardown } from "../sandbox/workspace.js";
 import { HumanInputError, respondToPendingHumanInput } from "./human-input.js";
 import { dispatcher } from "../dispatcher.js";
 import {
@@ -147,6 +148,11 @@ export async function registerSessionRoutes(
           .code(409)
           .send({ error: "session is running: stop it before deleting" });
       }
+      /* The sandbox goes with the row. Left behind, its container keeps running
+         and an hour later the idle sweep pushes to the operator's repository for
+         a session they deleted. Awaited, not fired and forgotten: a delete is
+         rare and manual, and a truthful 204 beats a fast one. */
+      await teardown(sessionId, "deleted");
       deleteSession(sessionId);
       return reply.code(204).send();
     },

@@ -15,7 +15,7 @@ import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
-import { teardownAll } from "../sandbox/workspace.js";
+import { releaseContainers } from "../sandbox/workspace.js";
 import type { DispatchedToolResult } from "../agent/tools/types.js";
 import { parsedContent } from "./tool-result.js";
 
@@ -231,7 +231,7 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
-  await teardownAll("test cleanup");
+  await releaseContainers();
   cleanupDb();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();

@@ -20,6 +20,7 @@ import { registerConsoleRoutes } from "./console/serve.js";
 import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
+import { releaseContainers } from "./sandbox/workspace.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
 import { decrypt } from "./secrets.js";
 import { getGitHubIntegration } from "./db/integrations.js";
@@ -154,13 +155,20 @@ function shutdown(signal: NodeJS.Signals): void {
   fastify.log.info({ signal }, "shutting down");
   const failsafe = setTimeout(() => process.exit(1), 5000);
   failsafe.unref();
-  fastify.close().then(
-    () => process.exit(0),
-    (err: unknown) => {
-      fastify.log.error(err);
-      process.exit(1);
-    },
-  );
+  // Sandbox containers cannot outlive the process that started them: without
+  // this they run until the next boot reaps them, holding their reservations.
+  // Their checkouts stay, and boot salvage does the git work with time for it.
+  releaseContainers()
+    .catch((err: unknown) => fastify.log.error(err))
+    .finally(() => {
+      fastify.close().then(
+        () => process.exit(0),
+        (err: unknown) => {
+          fastify.log.error(err);
+          process.exit(1);
+        },
+      );
+    });
 }
 
 process.once("SIGINT", shutdown);
