@@ -71,6 +71,12 @@ export interface WorkspaceOptions {
       patch: { title: string; body: string },
     ): Promise<void>;
   };
+  /* Paths this session has already read. A workspace is re-provisioned whenever
+     one is not live - a restart, or the idle sweep between two turns - and
+     without this the model's next edit is refused for a file its own context
+     says it read. The host supplies them: it has the transcript, and the sandbox
+     keeps no history of its own. */
+  readPaths?(): string[];
   onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
 }
@@ -85,8 +91,8 @@ export interface Workspace {
   readonly sessionId: string;
   readonly dir: string;
   readonly branch: string;
-  // Backs the read-before-edit guard; per session by construction because the
-  // workspace is per session.
+  // Backs the read-before-edit guard, holding canonical repo-relative names.
+  // Per session by construction, because the workspace is.
   readonly readPaths: Set<string>;
   readonly options: WorkspaceOptions;
   exec(
@@ -277,7 +283,7 @@ async function provisionEntry(
     sessionId,
     dir,
     branch: options.branch,
-    readPaths: new Set<string>(),
+    readPaths: new Set<string>(options.readPaths?.() ?? []),
     options,
     async exec(command, opts) {
       const result = await execInContainer(containerId, command, opts);

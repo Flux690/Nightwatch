@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { assertContained, resolveRepoPath } from "../paths.js";
+import { assertContained, repoKey, resolveRepoPath } from "../paths.js";
 import { FileNotFoundError } from "../errors.js";
 import type { Workspace } from "../workspace.js";
 
@@ -42,7 +42,7 @@ export async function readRepoFile(
     })
     .join("\n");
 
-  ws.readPaths.add(abs);
+  ws.readPaths.add(repoKey(input.path));
   const lastShown = offset - 1 + slice.length;
   return lastShown < lines.length
     ? `${numbered}\n(truncated: file continues beyond line ${lastShown} of ${lines.length})`

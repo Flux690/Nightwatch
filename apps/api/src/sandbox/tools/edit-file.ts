@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { ReadRequiredError } from "../errors.js";
-import { assertContained, resolveRepoPath } from "../paths.js";
+import { assertContained, repoKey, resolveRepoPath } from "../paths.js";
 import type { Workspace } from "../workspace.js";
 import { computeDiffHunks, type DiffHunk } from "./diff.js";
 
@@ -32,7 +32,9 @@ export async function editRepoFile(
 ): Promise<FileChangeResult> {
   const abs = resolveRepoPath(ws.dir, input.path);
   await assertContained(ws.dir, abs);
-  if (!ws.readPaths.has(abs)) throw new ReadRequiredError(input.path);
+  if (!ws.readPaths.has(repoKey(input.path))) {
+    throw new ReadRequiredError(input.path);
+  }
   if (input.old_string.length === 0) {
     throw new Error("old_string must not be empty.");
   }

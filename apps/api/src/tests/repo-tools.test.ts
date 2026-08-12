@@ -25,6 +25,11 @@ import {
   saveGitHubIntegration,
 } from "../db/integrations.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import {
+  appendTranscriptRows,
+  createSession,
+  getNextSeq,
+} from "../db/sessions.js";
 import { runSession } from "../agent/loop.js";
 import {
   effectiveToolset,
@@ -256,6 +261,43 @@ describe("repo tools through registry dispatch", () => {
     });
     expect(result.outcome).toBe("system");
     expect(result.content).toContain("Read");
+  });
+
+  it("keeps the reads it made when the workspace is provisioned again", async () => {
+    /* A workspace is rebuilt whenever one is not live: a restart, or the idle
+       sweep firing between two turns. This session's workspace has never
+       existed, so its readPaths can only have come from the transcript - which
+       is the point, since the model's context says it read the file. */
+    const resumed = "aaaabbbb-0000-4000-8000-0000000000ff";
+    createSession(
+      { sessionId: resumed, title: "t", createdAt: new Date().toISOString() },
+      [],
+    );
+    appendTranscriptRows([
+      {
+        sessionId: resumed,
+        seq: getNextSeq(resumed),
+        kind: "assistant",
+        content: "[tool: Read]",
+        parts: [
+          {
+            type: "tool_call",
+            id: "tu-earlier-read",
+            name: "Read",
+            input: { path: "package.json" },
+          },
+        ],
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+
+    const result = await executeTool(
+      tool("Edit"),
+      { path: "package.json", old_string: "fixture", new_string: "renamed" },
+      { ...CTX, sessionId: resumed },
+    );
+
+    expect(result.outcome).toBeUndefined();
   });
 
   it("fails loudly on a non-unique old_string and honours replace_all", async () => {

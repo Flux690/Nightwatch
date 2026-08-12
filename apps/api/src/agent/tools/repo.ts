@@ -2,7 +2,7 @@ import { decrypt } from "../../secrets.js";
 import { proxyDir, workspacesDir } from "../../env/paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
-import { getSession } from "../../db/sessions.js";
+import { getSession, getTranscriptRows } from "../../db/sessions.js";
 import {
   buildAuthHeader,
   createPullRequest,
@@ -18,6 +18,7 @@ import {
   SandboxUnavailableError,
 } from "../../sandbox/errors.js";
 import { classifyGitHubError, gitHubErrorDetail } from "./github.js";
+import { getToolOutcomes } from "../../db/tool-outcomes.js";
 import { logger } from "../../logger.js";
 import { publishSandboxStatus } from "../../session/stream.js";
 import {
@@ -25,6 +26,7 @@ import {
   type Workspace,
   type WorkspaceOptions,
 } from "../../sandbox/workspace.js";
+import { repoKey } from "../../sandbox/paths.js";
 import { readRepoFile } from "../../sandbox/tools/read-file.js";
 import { editRepoFile } from "../../sandbox/tools/edit-file.js";
 import { writeRepoFile } from "../../sandbox/tools/write-file.js";
@@ -57,6 +59,34 @@ function branchNameFor(sessionId: string): string {
   return `nightwarden/fix-${slug}-${sessionId.slice(0, 8)}`;
 }
 
+// Calling one of these on a path is what lets a later Edit touch it. Named
+// beside the tools themselves, because a transcript records a call and not the
+// side effect it had on a workspace that no longer exists.
+const PATH_UNLOCKING_TOOLS: ReadonlySet<string> = new Set(["Read", "Write"]);
+
+/* Rebuilt from the session's own transcript, so a re-provisioned workspace does
+   not make the model read files it already read. A call that recorded an outcome
+   did not answer cleanly, and only a clean answer showed the model anything. */
+function readPathsFor(sessionId: string): string[] {
+  const outcomes = getToolOutcomes(sessionId);
+  const paths: string[] = [];
+  for (const row of getTranscriptRows(sessionId)) {
+    for (const part of row.parts) {
+      if (part.type !== "tool_call") continue;
+      if (!PATH_UNLOCKING_TOOLS.has(part.name)) continue;
+      if (outcomes.has(part.id)) continue;
+      const path = part.input["path"];
+      if (typeof path !== "string") continue;
+      try {
+        paths.push(repoKey(path));
+      } catch {
+        // An unusable path never unlocked anything in the first place.
+      }
+    }
+  }
+  return paths;
+}
+
 function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
   const integration = getGitHubIntegration();
   if (integration === null) return null;
@@ -81,6 +111,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     network: config.sandboxNetwork,
     allowlistHosts: config.sandboxAllowlistHosts,
     proxyConfigDir: proxyDir(),
+    readPaths: () => readPathsFor(sessionId),
     onStatus: (stage) => publishSandboxStatus({ sessionId, stage }),
     commitAuthor: COMMIT_AUTHOR,
     pullRequests: {

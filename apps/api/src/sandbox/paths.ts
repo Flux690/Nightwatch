@@ -2,12 +2,13 @@ import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { PathEscapeError } from "./errors.js";
 
-// Security-critical: file handlers run on the API host against the bind-mounted
-// workspace, so an escaping path would reach the host filesystem.
-export function resolveRepoPath(
-  workspaceDir: string,
-  repoRelative: string,
-): string {
+/* The canonical name for a file in the repository: validated and normalized, and
+   still relative. That is the vocabulary the tool schema takes, the transcript
+   records and the errors print, so it is what anything remembering a path holds.
+   Where the checkout happens to sit is the caller's business, one syscall at a
+   time. Security-critical: file handlers run on the API host against the
+   bind-mounted workspace, so an escaping path would reach the host filesystem. */
+export function repoKey(repoRelative: string): string {
   if (repoRelative.length === 0 || repoRelative.includes("\0")) {
     throw new PathEscapeError(repoRelative);
   }
@@ -16,7 +17,14 @@ export function resolveRepoPath(
   if (normalized === ".." || normalized.startsWith(`..${sep}`)) {
     throw new PathEscapeError(repoRelative);
   }
-  return join(workspaceDir, normalized);
+  return normalized;
+}
+
+export function resolveRepoPath(
+  workspaceDir: string,
+  repoRelative: string,
+): string {
+  return join(workspaceDir, repoKey(repoRelative));
 }
 
 // A sandboxed process can plant a symlink anywhere on the host, so lexical
