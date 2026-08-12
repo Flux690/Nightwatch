@@ -8,6 +8,7 @@ import { registerTokenRoutes } from "./auth/token.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
+import { batchWindow } from "./alerts/batch-window.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { seedConfigFromEnv } from "./config/store.js";
 import { seedIntegrationsFromEnv } from "./integrations/seed.js";
@@ -155,6 +156,10 @@ function shutdown(signal: NodeJS.Signals): void {
   fastify.log.info({ signal }, "shutting down");
   const failsafe = setTimeout(() => process.exit(1), 5000);
   failsafe.unref();
+  // Everything the batch window holds was already answered 200, and up to 90
+  // seconds of it used to vanish on a graceful deploy. Dispatching writes the
+  // session and its alerts before the run is reachable, so they survive.
+  batchWindow.flush();
   // Sandbox containers cannot outlive the process that started them: without
   // this they run until the next boot reaps them, holding their reservations.
   // Their checkouts stay, and boot salvage does the git work with time for it.

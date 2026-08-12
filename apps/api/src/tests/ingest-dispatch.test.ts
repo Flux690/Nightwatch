@@ -268,6 +268,28 @@ describe("POST /alerts/ingest dispatch behavior", () => {
     await vi.advanceTimersByTimeAsync(90_001);
   });
 
+  it("fires what the window is holding on shutdown, instead of dropping alerts already answered 200", async () => {
+    const token = generateAlertSourceToken("flush");
+    useGatedProvider();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await settleRun();
+    markRunnerAlive(connA);
+
+    const firedAt = "2026-07-09T04:00:00.000Z";
+    expect(
+      await ingest(token, alertBody("flush-1", "warning", "web-01", firedAt)),
+    ).toMatchObject({ enqueued: 1, skipped: 0 });
+    // Held, with up to ninety seconds still to run: this is the state a deploy
+    // used to discard.
+    expect(batchWindow.isOpen()).toBe(true);
+
+    batchWindow.flush();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(batchWindow.isOpen()).toBe(false);
+    expect(dispatcher.isInvestigating("flush-1", firedAt)).toBe(true);
+  });
+
   it("budgets thirty investigations an hour, whatever severity opened them, and resets after the window", async () => {
     const token = generateAlertSourceToken("budget");
     useGatedProvider(); // parked runs end on demand, so each incident is its own

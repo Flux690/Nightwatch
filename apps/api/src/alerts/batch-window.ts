@@ -12,6 +12,11 @@ interface BatchWindow {
   has(sourceAlertId: string, firedAt: string): boolean;
   // True while a window is holding alerts, which already has a run coming.
   isOpen(): boolean;
+  /* Fires whatever is held, now. Called on shutdown: everything in here was
+     answered 200, and dispatching writes the session and its alert rows before
+     the run is reachable, so they are durable even though the run that starts
+     dies moments later with the process. Boot recovery picks that session up. */
+  flush(): void;
 }
 
 function createBatchWindow(opts: {
@@ -22,20 +27,32 @@ function createBatchWindow(opts: {
   // Single operator-wide pending list: alerts from any runner batch together so
   // the agent can judge shared root cause across servers.
   let pending: NormalizedAlert[] | null = null;
+  let timer: NodeJS.Timeout | null = null;
+
+  function fire(): void {
+    const batch = pending ?? [];
+    pending = null;
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (batch.length > 0) onBatch(batch);
+  }
 
   return {
     add(alert: NormalizedAlert): void {
       if (pending === null) {
         pending = [alert];
-        setTimeout(() => {
-          const batch = pending!;
-          pending = null;
-          onBatch(batch);
-        }, windowMs);
+        timer = setTimeout(fire, windowMs);
+        // A batch waiting to fire is not a reason to keep the process alive:
+        // the server holds the loop open, and shutdown flushes this explicitly.
+        timer.unref();
       } else {
         pending.push(alert);
       }
     },
+
+    flush: fire,
 
     has(sourceAlertId: string, firedAt: string): boolean {
       return (
