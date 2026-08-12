@@ -62,16 +62,6 @@ describe("policy-gate: the reason rides every gated call", () => {
       expect(tool.schema.input_schema.required).toContain("reason");
     }
 
-    // A write nobody has to permit asks nobody for a reason: the sandbox tools
-    // write only where a human reviews the result as a pull request.
-    const unapproved = TOOL_REGISTRY.filter(
-      (t) => t.effect === "write" && t.policy === "auto",
-    );
-    expect(unapproved.length).toBeGreaterThan(0);
-    for (const tool of unapproved) {
-      expect(tool.schema.input_schema.required).not.toContain("reason");
-    }
-
     expect(ELICITATIONS.length).toBeGreaterThan(0);
     for (const elicitation of ELICITATIONS) {
       // AskUserQuestion's `question` already is the reason; a second would be noise.

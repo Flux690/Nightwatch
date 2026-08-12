@@ -81,9 +81,3 @@ export async function reconcileRecovery(
   }
   return result;
 }
-
-// The schedule is process state, so a test driving several passes starts each
-// from a clean one rather than inheriting the previous test's timings.
-export function resetReconcilerSchedule(): void {
-  lastAsked.clear();
-}

@@ -40,10 +40,7 @@ import {
   savePrometheusIntegration,
 } from "../db/integrations.js";
 import { verifyRecovery } from "../verification/recovery.js";
-import {
-  reconcileRecovery,
-  resetReconcilerSchedule,
-} from "../verification/reconciler.js";
+import { reconcileRecovery } from "../verification/reconciler.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -568,7 +565,6 @@ describe("API-local session store", () => {
         expect(statusOf(sessionId)).toBe("inconclusive");
 
         rulesAnswer([]);
-        resetReconcilerSchedule();
         await reconcileRecovery();
 
         expect(statusOf(sessionId)).toBe("resolved");

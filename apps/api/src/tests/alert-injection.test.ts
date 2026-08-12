@@ -203,10 +203,8 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const transcript = buildTranscript(sessionId);
     expect(JSON.stringify(transcript)).not.toContain("Another alert has fired");
-    // Where the alert actually landed, which is while the model was still
-    // composing turn 1: the tool call ran after it, so it reads after it. Only
-    // the opening three: what the run does after this is the gate's business
-    // and the composition turn's, neither of which this test is about.
+    // Where the alert actually landed: it arrived while the model was still
+    // composing turn 1, so the tool call that ran afterwards reads afterwards.
     expect(transcript.slice(0, 3).map((i) => i.kind)).toEqual([
       "alert_arrived",
       "tool_card",

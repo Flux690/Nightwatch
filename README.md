@@ -89,7 +89,7 @@ Any action that writes to a server pauses the loop and shows you an approval car
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - NightWarden never merges.
-- **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits.
+- **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits. A run that was working when the process died survives too: on the next boot the session says it was interrupted rather than quietly reading as an investigation that concluded nothing, and if the alert is still firing and the run was recent, it carries on from its last complete exchange.
 - **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
 - **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one. A fleet-level read with no runner named answers for every runner at once, each answer attributed.
@@ -259,14 +259,17 @@ merges. Requirements and properties:
   proposal rather than open a second one. (Repos whose GitHub plan lacks draft
   PRs get a normal PR, and the tool result says so.)
 - **Work survives every death mode.** Files must be read before they can be
-  edited, edits come back as real diffs in the transcript, and a sandbox that
-  idles out (default one hour, a Settings knob, alongside the session time
-  budget every repo tool call extends) checkpoint-commits and pushes its
-  branch before the container and checkout are removed. At boot the API reaps
-  orphaned sandbox containers and salvages orphaned workspaces the same way -
-  commit, push, then remove, with a failed push keeping the folder for manual
-  recovery - before accepting sessions, so even an API crash mid-edit leaves
-  the work on its branch rather than gone.
+  edited, and edits come back as real diffs in the transcript. One rule governs
+  every way a sandbox ends: its work is committed and pushed to the session
+  branch first, and if that push cannot be made the checkout is kept for the
+  next boot to retry while the container is stopped regardless. A container
+  outliving its session is waste; the work is not replaceable. That covers the
+  sandbox idling out (default one hour, a Settings knob, alongside the session
+  time budget every repo tool call extends), the API shutting down, the
+  repository being disconnected, and you deleting the session. At boot the API
+  reaps orphaned containers and salvages orphaned workspaces the same way,
+  before accepting sessions, so even a crash mid-edit leaves the work on its
+  branch rather than gone.
 - We recommend enabling branch protection on the repository's default branch
   (GitHub → Settings → Branches); NightWarden's token deliberately has no
   Administration permission and cannot do this for you.
