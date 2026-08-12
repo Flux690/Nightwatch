@@ -51,6 +51,9 @@ interface ToolCommon {
   schema: ToolSchema;
   effect: "read" | "write";
   policy: ToolPolicy;
+  // A write safe to run twice, which is what lets a call caught by a crash be
+  // replayed instead of unwound. Only ever true where the tool says why.
+  idempotent?: true;
   // Per-tool override of the global tool timeout: repo tools run clones,
   // installs and test suites, which dwarf the 15s default.
   timeoutMs?: number;

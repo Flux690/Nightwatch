@@ -441,6 +441,9 @@ export const REPO_TOOLS: Tool[] = [
     // gate, and gating creation would stall the 3am AFK flow this exists for.
     effect: "write",
     policy: "auto",
+    // One PR per session branch, created or updated by branch identity, so a
+    // second call after a crash refreshes the proposal rather than opening one.
+    idempotent: true,
     timeoutMs: 600_000,
     on: "api",
     execute: async (input, ctx) => {

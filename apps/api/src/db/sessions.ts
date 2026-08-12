@@ -454,6 +454,46 @@ export function countInvestigations(): number {
   return row.total;
 }
 
+/* Claims the run slot, answering whether this caller got it. The conditional
+   UPDATE is the whole mutex: two racing dispatches both attempt it, one changes
+   a row and one does not, so a second run cannot start behind a stale check. */
+export function markRunning(sessionId: string): boolean {
+  const result = getDb()
+    .prepare(
+      `UPDATE sessions SET is_running = 1
+       WHERE session_id = ? AND is_running = 0`,
+    )
+    .run(sessionId);
+  return result.changes > 0;
+}
+
+// Released on every exit path a run has, including the ones that failed.
+export function markIdle(sessionId: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET is_running = 0 WHERE session_id = ?`)
+    .run(sessionId);
+}
+
+export function isRunning(sessionId: string): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM sessions WHERE session_id = ? AND is_running = 1 LIMIT 1`,
+    )
+    .get(sessionId);
+  return row !== undefined;
+}
+
+// Read once at boot, where every one of them is a run this process cannot be
+// running: it has only just started.
+export function runningSessionIds(): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT session_id AS sessionId FROM sessions WHERE is_running = 1`,
+    )
+    .all() as Array<{ sessionId: string }>;
+  return rows.map((r) => r.sessionId);
+}
+
 // Whether the row is there, for callers that only need it to exist. Kept apart
 // from getSession so an existence check never pays for the alerts.
 export function sessionExists(sessionId: string): boolean {

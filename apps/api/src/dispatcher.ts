@@ -7,6 +7,10 @@ import {
   createSession,
   dropSessionAlerts,
   getSession,
+  isRunning,
+  markIdle,
+  markRunning,
+  sessionExists,
 } from "./db/sessions.js";
 import { describeLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
@@ -54,7 +58,6 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   // session investigating ten alerts must dedup a re-fire of any of the ten.
   // Keyed by session, so a run's set leaves with it and nothing is counted.
   const liveAlerts = new Map<string, Set<string>>();
-  const activeSessionIds = new Set<string>();
   const inbox = new Map<string, NormalizedAlert[]>();
   const controllers = new Map<string, AbortController>();
 
@@ -81,11 +84,29 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       );
     }
 
+    /* Claimed durably before anything else, so a restart can tell a run that was
+       alive from one that concluded, and so a second dispatch cannot start. The
+       two ways to lose the claim are told apart: one is a race, the other is a
+       caller that dispatched into a session nothing had written. */
+    if (!sessionExists(input.sessionId)) {
+      logger.error(
+        { sessionId: input.sessionId },
+        "dispatch refused: no such session, its row must be written first",
+      );
+      return;
+    }
+    if (!markRunning(input.sessionId)) {
+      logger.warn(
+        { sessionId: input.sessionId },
+        "dispatch refused: a run already holds this session",
+      );
+      return;
+    }
+
     liveAlerts.set(
       input.sessionId,
       new Set(alerts.map((a) => dedupKey(a.sourceAlertId, a.firedAt))),
     );
-    activeSessionIds.add(input.sessionId);
     const controller = new AbortController();
     controllers.set(input.sessionId, controller);
 
@@ -125,7 +146,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         publishRunFailed(input.sessionId, row);
       })
       .finally(() => {
-        activeSessionIds.delete(input.sessionId);
+        markIdle(input.sessionId);
         controllers.delete(input.sessionId);
         if (alerts.length > 0) {
           // Leftovers at run end become one new session, the whole batch of them,
@@ -152,13 +173,17 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       return false;
     },
 
+    // Read from the row, not from memory: a run that died with the process is
+    // not running, and only the row survives to say so.
     isSessionRunning(sessionId: string): boolean {
-      return activeSessionIds.has(sessionId);
+      return isRunning(sessionId);
     },
 
+    // liveAlerts holds an entry for exactly as long as a run is in flight, so
+    // it is the in-process set of live runs as well as their alert keys.
     getActiveAlertSession(): string | null {
-      for (const sessionId of activeSessionIds) {
-        if ((liveAlerts.get(sessionId)?.size ?? 0) > 0) return sessionId;
+      for (const [sessionId, keys] of liveAlerts) {
+        if (keys.size > 0) return sessionId;
       }
       return null;
     },

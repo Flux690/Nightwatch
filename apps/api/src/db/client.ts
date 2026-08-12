@@ -110,10 +110,15 @@ CREATE TABLE IF NOT EXISTS integrations (
 -- last_activity_at is denormalised from the transcript's newest row, because the
 -- list sorts on it: derived, it is a correlated subquery the sort has to run for
 -- every session in the table before it can apply a LIMIT.
+
+-- is_running is claimed by a conditional UPDATE, so it is the mutex as well as
+-- the flag. There is one process, which is why it needs no TTL and no heartbeat:
+-- anything still set at boot was killed, because this process just started.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   investigation        INTEGER   NOT NULL DEFAULT 0,
+  is_running           INTEGER   NOT NULL DEFAULT 0,
   report               TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL

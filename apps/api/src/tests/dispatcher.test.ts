@@ -76,6 +76,17 @@ function noAlertLookup(): NormalizedAlert[] {
   return [];
 }
 
+// A resume always has a row: the messages route 404s without one, and the
+// interrupt that drives the approve path is a child of the session. Only a
+// dispatch carrying alerts writes its own row.
+function seedSession(sessionId: string, alerts: NormalizedAlert[]): void {
+  createSession(
+    { sessionId, title: "t", createdAt: new Date().toISOString() },
+    alerts,
+    true,
+  );
+}
+
 describe("dispatcher", () => {
   // Dispatching an alert run writes its session and alert rows before the run is
   // reachable, so this seam needs a database even with the run itself faked.
@@ -301,6 +312,7 @@ describe("dispatcher", () => {
 
       const resumedAlert = makeAlert("resumed");
       lookup.register("s-resumed", [resumedAlert]);
+      seedSession("s-resumed", [resumedAlert]);
 
       // Resume dispatch: no `alert` field, just seed + resumeToolResults.
       d.dispatch({ sessionId: "s-resumed", seed: [], resumeToolResults: [] });
@@ -323,6 +335,7 @@ describe("dispatcher", () => {
 
       const resumedAlert = makeAlert("resumed-dup");
       lookup.register("s-resumed-dup", [resumedAlert]);
+      seedSession("s-resumed-dup", [resumedAlert]);
 
       d.dispatch({
         sessionId: "s-resumed-dup",
@@ -354,17 +367,7 @@ describe("dispatcher", () => {
 
       const resumedAlert = makeAlert("resumed-leftover");
       lookup.register("s-resumed-leftover", [resumedAlert]);
-      // A resume always has a row: the messages route 404s without one, and the
-      // interrupt that drives the approve path is a child of the session.
-      createSession(
-        {
-          sessionId: "s-resumed-leftover",
-          title: "t",
-          createdAt: new Date().toISOString(),
-        },
-        [resumedAlert],
-        true,
-      );
+      seedSession("s-resumed-leftover", [resumedAlert]);
       d.dispatch({
         sessionId: "s-resumed-leftover",
         seed: [],

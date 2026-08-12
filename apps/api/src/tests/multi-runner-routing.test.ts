@@ -45,7 +45,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { dispatcher } from "../dispatcher.js";
-import { getTranscriptRows } from "../db/sessions.js";
+import { createSession, getTranscriptRows } from "../db/sessions.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
@@ -204,6 +204,12 @@ describe("multi-runner routing", () => {
 
   async function runSession(): Promise<string> {
     const sessionId = randomUUID();
+    // The chat route writes the row before dispatching, so that a run always has
+    // a session to claim; this drives the dispatcher directly and must do the same.
+    createSession(
+      { sessionId, title: "t", createdAt: new Date().toISOString() },
+      [],
+    );
     dispatcher.dispatch({
       sessionId,
       userMessage: "investigate",
