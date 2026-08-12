@@ -9,7 +9,7 @@ import {
 import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
-import { verifyRecovery } from "../verification/recovery.js";
+import { recoveryState } from "../verification/recovery.js";
 import { effectiveToolset, offeredSchemas } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
@@ -563,12 +563,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       // Push back up to MAX_NUDGES times, then compose from what there is - the
       // status an unfinished record derives to is already the honest one.
       const gaps = reportGaps(sessionId);
-      // Asked here rather than on the read path: this is the one moment the
-      // answer changes what happens next, and the investigations list reads
-      // status once per row. Run on every attempt - stamping a recovered
-      // condition keeps the record true even when the alert source never sent a
-      // resolved notification.
-      const recovery = await verifyRecovery(sessionId);
+      // Read, not asked: the reconciler and the resolved webhook both stamp the
+      // record, so the gate never makes a network call at the one instant a run
+      // happens to end. That instant is almost never when a condition clears.
+      const recovery = recoveryState(sessionId);
       if (gaps.length > 0) {
         if (nudges < MAX_NUDGES) {
           nudges++;

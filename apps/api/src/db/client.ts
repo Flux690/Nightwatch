@@ -148,6 +148,10 @@ CREATE INDEX IF NOT EXISTS idx_session_alerts_session
   ON session_alerts(session_id, id);
 CREATE INDEX IF NOT EXISTS idx_session_alerts_source
   ON session_alerts(source_alert_id, fired_at);
+-- Partial on purpose: the reconciler asks "what is still open" on a timer for
+-- the life of the install, and cleared alerts only ever accumulate.
+CREATE INDEX IF NOT EXISTS idx_session_alerts_open
+  ON session_alerts(session_id) WHERE cleared_at IS NULL;
 
 -- The durable transcript, and the only record of what ran, keyed by the natural
 -- (session_id, seq). kind because not every row is a conversation turn: an error

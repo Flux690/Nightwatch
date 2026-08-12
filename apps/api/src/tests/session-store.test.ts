@@ -40,6 +40,10 @@ import {
   savePrometheusIntegration,
 } from "../db/integrations.js";
 import { verifyRecovery } from "../verification/recovery.js";
+import {
+  reconcileRecovery,
+  resetReconcilerSchedule,
+} from "../verification/reconciler.js";
 
 function meta(overrides: Partial<SessionMeta> = {}): SessionMeta {
   return {
@@ -551,6 +555,22 @@ describe("API-local session store", () => {
         await expect(verifyRecovery(sessionId)).resolves.toBe("confirmed");
         // Written to the same field the webhook writes, so the two ways of
         // learning it converge on one record and status stays a plain read.
+        expect(statusOf(sessionId)).toBe("resolved");
+      });
+
+      /* The whole point of the reconciler: a fix lands, the rule's `for:`
+         elapses, and the alert goes quiet minutes after the run that fixed it
+         has ended. Nothing was listening for that before, and the finish gate
+         cannot be, because it only ever runs at the instant a run ends. */
+      it("resolves after the run ended, with no webhook, when the sweep next asks", async () => {
+        const sessionId = investigation();
+        seedCompleteReport(sessionId);
+        expect(statusOf(sessionId)).toBe("inconclusive");
+
+        rulesAnswer([]);
+        resetReconcilerSchedule();
+        await reconcileRecovery();
+
         expect(statusOf(sessionId)).toBe("resolved");
       });
 

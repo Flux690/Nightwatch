@@ -10,7 +10,7 @@ import { prometheusSource } from "./sources/prometheus.js";
    decided at build time, not discovered at runtime. */
 const SOURCES: readonly VerificationSource[] = [prometheusSource];
 
-type RecoveryState =
+export type RecoveryState =
   // Every alert that opened this investigation has cleared. The only state that
   // may be called resolved.
   | "confirmed"
@@ -22,6 +22,15 @@ type RecoveryState =
 
 function uncleared(alerts: SessionAlert[]): SessionAlert[] {
   return alerts.filter((entry) => entry.clearedAt === null);
+}
+
+/* What the record already says, with nothing asked of anyone. The webhook and
+   the reconciler both stamp clearedAt, so the finish gate reads the answer
+   instead of making an HTTP call at the one instant a run happens to end. */
+export function recoveryState(sessionId: string): RecoveryState {
+  const alerts = getSession(sessionId)?.alerts ?? [];
+  if (alerts.length === 0) return "no_condition";
+  return uncleared(alerts).length === 0 ? "confirmed" : "unconfirmed";
 }
 
 /* Stamps `clearedAt`, the field Alertmanager's resolved webhook also writes, so

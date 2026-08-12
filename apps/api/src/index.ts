@@ -9,6 +9,10 @@ import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
 import { batchWindow } from "./alerts/batch-window.js";
+import {
+  RECONCILE_TICK_MS,
+  reconcileRecovery,
+} from "./verification/reconciler.js";
 import { registerConfigRoutes } from "./config/routes.js";
 import { seedConfigFromEnv } from "./config/store.js";
 import { seedIntegrationsFromEnv } from "./integrations/seed.js";
@@ -138,6 +142,15 @@ const start = async (): Promise<void> => {
         `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed`,
       );
     }
+    /* An alert usually clears minutes after the run that fixed it has ended, so
+       something has to keep asking. Unref'd: a pending sweep is no reason to
+       hold the process open, and the server keeps the loop alive anyway. */
+    setInterval(() => {
+      void reconcileRecovery().catch((err: unknown) => {
+        fastify.log.warn({ err }, "recovery reconciler pass failed");
+      });
+    }, RECONCILE_TICK_MS).unref();
+
     const port = parseInt(process.env["PORT"] ?? "3000", 10);
     const host = process.env["HOST"] ?? "127.0.0.1";
     await fastify.listen({ port, host });

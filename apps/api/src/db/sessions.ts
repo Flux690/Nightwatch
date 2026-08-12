@@ -483,6 +483,18 @@ export function isRunning(sessionId: string): boolean {
   return row !== undefined;
 }
 
+// Sessions still holding a condition nobody has seen recover, oldest alert
+// first. What the reconciler works through, and the only reason it wakes up.
+export function sessionIdsWithOpenAlerts(): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT session_id AS sessionId FROM session_alerts
+       WHERE cleared_at IS NULL ORDER BY session_id`,
+    )
+    .all() as Array<{ sessionId: string }>;
+  return rows.map((r) => r.sessionId);
+}
+
 // Read once at boot, where every one of them is a run this process cannot be
 // running: it has only just started.
 export function runningSessionIds(): string[] {
