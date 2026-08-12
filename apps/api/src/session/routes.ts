@@ -233,16 +233,23 @@ export async function registerSessionRoutes(
       if (!sessionExists(sessionId)) {
         return reply.code(404).send({ error: "unknown session" });
       }
-      if (
-        dispatcher.isSessionRunning(sessionId) ||
-        hasPendingHumanInput(sessionId)
-      ) {
+      // Parked on a human rather than racing: the answer comes from the respond
+      // route, so this is refused before anything tries to claim the session.
+      if (hasPendingHumanInput(sessionId)) {
         return reply
           .code(409)
-          .send({ error: "session is busy: running or awaiting approval" });
+          .send({ error: "session is busy: awaiting approval" });
       }
       const seed = buildSeed(sessionId);
-      dispatcher.dispatch({ sessionId, seed, userMessage: message });
+      /* The claim inside dispatch decides it, not a check up here: two requests
+         arriving together both reach it and only one changes the row, so the
+         loser is told rather than starting a second run that would collide on
+         the transcript's primary key. */
+      if (!dispatcher.dispatch({ sessionId, seed, userMessage: message })) {
+        return reply
+          .code(409)
+          .send({ error: "session is busy: a run is already in flight" });
+      }
       logger.info({ sessionId, seeded: seed.length }, "session resumed");
       return reply.code(202).send({ sessionId });
     },

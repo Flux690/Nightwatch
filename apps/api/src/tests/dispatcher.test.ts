@@ -260,6 +260,31 @@ describe("dispatcher", () => {
     expect(d.stop("unknown")).toBe(false);
   });
 
+  it("refuses a second dispatch for a session a run already holds", async () => {
+    const gate = deferred();
+    const d = createDispatcher({
+      run: () => gate.promise,
+      getAlertsForSession: noAlertLookup,
+    });
+    seedSession("s-race", []);
+
+    expect(d.dispatch({ sessionId: "s-race", userMessage: "one" })).toBe(true);
+    /* The claim is a conditional UPDATE rather than a check followed by a start,
+       so the loser of a race learns it lost instead of beginning a second run
+       that collides on the transcript's primary key. */
+    expect(d.dispatch({ sessionId: "s-race", userMessage: "two" })).toBe(false);
+
+    gate.resolve();
+    await flush();
+
+    // Released on the way out, so the session takes a run again.
+    expect(d.dispatch({ sessionId: "s-race", userMessage: "three" })).toBe(
+      true,
+    );
+    gate.resolve();
+    await flush();
+  });
+
   it("inbox leftovers re-dispatch as new sessions when the run ends", async () => {
     const started: string[] = [];
     const gates = new Map<string, ReturnType<typeof deferred>>();

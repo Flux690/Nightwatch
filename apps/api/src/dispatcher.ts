@@ -24,7 +24,9 @@ import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 // Alert, chat, and resume all funnel through dispatch(). Alert injection is the
 // concurrency control: a new alert while one is running is injected rather than starting a second.
 interface Dispatcher {
-  dispatch(input: RunSessionInput): void;
+  // Answers whether the run started. False means the session already holds a
+  // run, which is a race the caller reports rather than a fault.
+  dispatch(input: RunSessionInput): boolean;
   // Derived, not cached. No TTLs — crashed run leaves no marker, so a re-fired alert re-investigates.
   isInvestigating(sourceAlertId: string, firedAt: string): boolean;
   // guards the 409 on POST /sessions/:id/messages
@@ -65,7 +67,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     return input.alerts ?? getAlertsForSession(input.sessionId);
   }
 
-  function start(input: RunSessionInput): void {
+  function start(input: RunSessionInput): boolean {
     const alerts = resolveAlerts(input);
 
     /* The row exists before the session is reachable, the same way the chat
@@ -93,14 +95,14 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         { sessionId: input.sessionId },
         "dispatch refused: no such session, its row must be written first",
       );
-      return;
+      return false;
     }
     if (!markRunning(input.sessionId)) {
       logger.warn(
         { sessionId: input.sessionId },
         "dispatch refused: a run already holds this session",
       );
-      return;
+      return false;
     }
 
     liveAlerts.set(
@@ -162,6 +164,7 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         }
         liveAlerts.delete(input.sessionId);
       });
+    return true;
   }
 
   return {
