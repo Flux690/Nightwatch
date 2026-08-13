@@ -1,4 +1,4 @@
-// One definition for all four write tools, so the sentence the operator reads on
+// One definition for all four write tools, so the sentence the user reads on
 // the approval card cannot drift between them. `ask` tools never carry this:
 // AskUserQuestion's `question` already is the reason.
 export const REASON_PROPERTY = {

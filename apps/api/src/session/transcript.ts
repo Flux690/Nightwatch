@@ -130,7 +130,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
 
   const outcomes = getToolOutcomes(sessionId);
 
-  // A decision the operator already made, reconstructed rather than stored: the
+  // A decision the user already made, reconstructed rather than stored: the
   // registry says the call needed one, and the outcome says which way it went.
   const decisionFor = (
     toolName: string,
@@ -165,7 +165,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   );
   let nextArrival = 0;
 
-  // Writes the operator already released, in the order they ran, so the approval
+  // Writes the user already released, in the order they ran, so the approval
   // card can say this is the third restart of the same service.
   const approved: Array<{ toolName: string; target: string | null }> = [];
 
@@ -187,7 +187,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       nextArrival++;
     }
 
-    // The harness talking to the model, not to the operator. Stored so a resume
+    // The harness talking to the model, not to the user. Stored so a resume
     // replays faithfully; never drawn, so the transcript reads as one
     // conversation between two parties.
     if (msg.kind === "nightwarden") continue;

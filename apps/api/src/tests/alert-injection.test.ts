@@ -170,7 +170,7 @@ describe("mid-run alert injection (loop seam)", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
 
-  it("alert injected mid-run reaches the model as its own turn, unseen by the operator", async () => {
+  it("alert injected mid-run reaches the model as its own turn, unseen by the user", async () => {
     const runnerId = generateRunnerToken("docker", "inject-midrun").id;
     const conn = registerRunner({
       runnerId: runnerId,
@@ -216,7 +216,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // by the composition turn, which parks on this gate like any other.
     await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
 
-    // The alert is on the session's own row, and the operator sees it as an
+    // The alert is on the session's own row, and the user sees it as an
     // alert marking where the ground moved - not as prose they appear to have
     // written. The instruction sent to the model is drawn for nobody.
     expect(
@@ -369,7 +369,7 @@ describe("mid-run alert injection (loop seam)", () => {
     );
     seedCompleteReport(sessionId);
     // This run restarts a service, and a run that changed something owes the
-    // operator a recommendation - otherwise the finish gate asks for one.
+    // user a recommendation - otherwise the finish gate asks for one.
     seedRecommendation(sessionId, "restart web-01");
 
     gate.releaseNext();

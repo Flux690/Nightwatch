@@ -193,7 +193,7 @@ describe("describeLLMError", () => {
   });
 
   // A context-length overflow is a 400, and the generic 400 wording points at a
-  // model and reasoning level the operator never touched.
+  // model and reasoning level the user never touched.
   it("tells a context-length overflow apart from a malformed request", () => {
     const err = OpenAI.APIError.generate(
       400,

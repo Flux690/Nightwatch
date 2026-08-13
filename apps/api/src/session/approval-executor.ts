@@ -65,13 +65,13 @@ export async function executeApprovedTool(
     return failed(
       sessionId,
       toolUseId,
-      `Action failed to execute: ${msg}. No confirmed change was made. Reassess and decide whether to retry or escalate to the operator.`,
+      `Action failed to execute: ${msg}. No confirmed change was made. Reassess and decide whether to retry or escalate to the user.`,
     );
   }
 }
 
 // The approve path's own faults: the write never reached its tool, so the class
-// is the harness breaking rather than anything the operator can widen or wait out.
+// is the harness breaking rather than anything the user can widen or wait out.
 function failed(
   sessionId: string,
   toolUseId: string,

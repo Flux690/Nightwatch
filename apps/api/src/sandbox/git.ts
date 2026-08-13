@@ -121,7 +121,7 @@ export async function commitAll(
 
 // Commits this branch has that its base does not. Deliberately not best-effort
 // like changedFiles below: "there is nothing to propose" is an answer given to
-// the operator, so an unresolvable base has to throw rather than read as zero.
+// the user, so an unresolvable base has to throw rather than read as zero.
 export async function commitsAgainstBase(dir: string): Promise<number> {
   const out = await runGit(["rev-list", "--count", "origin/HEAD..HEAD"], {
     cwd: dir,

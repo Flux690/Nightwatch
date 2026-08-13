@@ -3,9 +3,9 @@ import type { ReportGap } from "../report.js";
 import type { ToolSchema } from "../../llm/types.js";
 
 // The one thing a citation can be. The id of the call is the only handle that
-// exists, so the operator's view and the model's context name the same string.
+// exists, so the user's view and the model's context name the same string.
 const CITATION_DESCRIPTION =
-  "The ids of the tool calls whose results support this claim, copied exactly as they appear on your own calls. Cite only calls you actually made. The operator sees each cited result shown underneath the claim it backs, so cite the call whose output actually shows what you are asserting.";
+  "The ids of the tool calls whose results support this claim, copied exactly as they appear on your own calls. Cite only calls you actually made. The user sees each cited result shown underneath the claim it backs, so cite the call whose output actually shows what you are asserting.";
 
 // Draft-07-safe under Anthropic tool-schema constraints: additionalProperties
 // false everywhere, every field required, primitive enums, no length/pattern.
@@ -13,7 +13,7 @@ const CITATION_DESCRIPTION =
 export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
   name: "RecordHypothesis",
   description:
-    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the operator repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis rather than trying to correct this one.",
+    "Record a candidate explanation you have tested, and what testing it showed. Call this each time you settle one, including the ones that turned out to be wrong: what you ruled out is what stops the user repeating your work at three in the morning. The record is append-only, so if your understanding changes later, record the new hypothesis rather than trying to correct this one.",
   input_schema: {
     type: "object",
     additionalProperties: false,
@@ -53,7 +53,7 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
 export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
   name: "SubmitInvestigationReport",
   description:
-    "Write up the investigation you have just finished, for the operator who will read it in the morning. Your findings are already on the record and are rendered beneath what you write here, so do not restate them: no verdicts, no hypotheses, no re-copied citations. Write the things the record has no room for.",
+    "Write up the investigation you have just finished, for the user who will read it in the morning. Your findings are already on the record and are rendered beneath what you write here, so do not restate them: no verdicts, no hypotheses, no re-copied citations. Write the things the record has no room for.",
   input_schema: {
     type: "object",
     additionalProperties: false,
@@ -62,7 +62,7 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
       summary: {
         type: "string",
         description:
-          "Two or three sentences: what broke, why, and where it stands now. This is the first thing the operator reads and may be the only thing they read. Name the service, the value and the change.",
+          "Two or three sentences: what broke, why, and where it stands now. This is the first thing the user reads and may be the only thing they read. Name the service, the value and the change.",
       },
       timeline: {
         type: "array",
@@ -98,7 +98,7 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
       recommendation: {
         type: "string",
         description:
-          "What the operator should do, in the present or future tense, never as a claim that something has already been done: what you ran is recorded separately and shown to them. If a write you released already fixed it, say what would stop it recurring.",
+          "What the user should do, in the present or future tense, never as a claim that something has already been done: what you ran is recorded separately and shown to them. If a write you released already fixed it, say what would stop it recurring.",
       },
     },
   },
@@ -111,7 +111,7 @@ export const REPORT_PROTOCOL = `
 
 You are also keeping a record of this investigation.
 
-Each time you settle a candidate explanation - whether it held up or not - call RecordHypothesis with what you tested, the verdict, what the evidence showed, and the ids of the calls that showed it. A hypothesis you ruled out is worth as much to the operator as the one that held.
+Each time you settle a candidate explanation - whether it held up or not - call RecordHypothesis with what you tested, the verdict, what the evidence showed, and the ids of the calls that showed it. A hypothesis you ruled out is worth as much to the user as the one that held.
 
 Be specific. A finding should name a value, a file, a container, a commit or a log line. "Check database connectivity" is worthless to the person reading this at three in the morning.
 
@@ -140,9 +140,9 @@ function sentenceFor(gap: ReportGap): string {
 
 /* A write ran and nothing has been recommended. Asks for a recommendation rather
    than another attempt: repeating a write that did not work is the failure this
-   gate catches, and a record ending with neither leaves the operator nothing. */
+   gate catches, and a record ending with neither leaves the user nothing. */
 const RECOVERY_SENTENCE =
-  "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the operator should do in your recommendation. Do not repeat a write that has already run.";
+  "Nothing can confirm whether the condition that opened this investigation has recovered. Check it yourself if you have a way to, and say what the user should do in your recommendation. Do not repeat a write that has already run.";
 
 // Sent by the finish gate when a run tries to end with gaps in its record. It
 // names those gaps and nothing else: a model that is one finding short is not
@@ -183,7 +183,7 @@ export function compositionRequest(
       ? "RECORDED FINDINGS\nnone. Say plainly that no cause was established."
       : `RECORDED FINDINGS\n${hypotheses.map(findingLine).join("\n")}`;
   const sections = [
-    "Your investigation is over. Write it up for the operator who will read it in the morning.",
+    "Your investigation is over. Write it up for the user who will read it in the morning.",
     findings,
   ];
   if (writes.length > 0) {

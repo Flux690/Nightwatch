@@ -70,7 +70,7 @@ interface AlertSpec {
 }
 
 /* One webhook delivery, which is one alert group. groupKey is what Alertmanager
-   computed from the operator's group_by, and it is the only thing that decides
+   computed from the user's group_by, and it is the only thing that decides
    which alerts share an investigation - so every test names it explicitly. */
 function delivery(groupKey: string, alerts: AlertSpec[], truncated = 0) {
   return {

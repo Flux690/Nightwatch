@@ -52,7 +52,7 @@ export async function registerAlertRoutes(
 
     // Nothing to investigate with, in the other direction: evidence exists but no
     // model can reason over it. 503 rather than a drop, so Alertmanager retries
-    // once the operator finishes setup instead of losing the alert.
+    // once the user finishes setup instead of losing the alert.
     const readiness = checkLLMReadiness();
     if (!readiness.ready) {
       return reply

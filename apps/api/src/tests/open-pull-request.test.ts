@@ -322,7 +322,7 @@ describe("OpenPullRequest", () => {
 
   it("says there is nothing to propose, without asking GitHub, when the branch has no commits", async () => {
     // GitHub answers an empty diff with a bare 422, which reads as a broken
-    // token; the operator then reconnects a credential that was working.
+    // token; the user then reconnects a credential that was working.
     gitState.dirty = false;
     gitState.unpushed = "0";
     gitState.calls.length = 0;

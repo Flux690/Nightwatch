@@ -107,7 +107,7 @@ describe("first-boot config seed from the environment", () => {
 
     const config = loadConfig();
     expect(config.provider).toBeNull();
-    // The block is still filled: the operator only has to pick, not re-enter a key.
+    // The block is still filled: the user only has to pick, not re-enter a key.
     expect(config.providers.anthropic.model).toBe("claude-sonnet-4-6");
   });
 
@@ -117,7 +117,7 @@ describe("first-boot config seed from the environment", () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-first");
     seedConfigFromEnv();
 
-    // The operator then changes their mind in the console, and the box restarts
+    // The user then changes their mind in the console, and the box restarts
     // with the old environment still in its compose file.
     vi.stubEnv("ANTHROPIC_MODEL", "claude-opus-4-8");
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-second");
@@ -186,9 +186,9 @@ describe("first-boot integration seed from the environment", () => {
     expect(getPrometheusIntegration()).toBeNull();
   });
 
-  it("never overwrites an integration the operator already connected", async () => {
+  it("never overwrites an integration the user already connected", async () => {
     savePrometheusIntegration({
-      baseUrl: "http://chosen-by-operator:9090",
+      baseUrl: "http://chosen-by-user:9090",
       authHeaderEncrypted: null,
     });
     vi.stubEnv("PROMETHEUS_URL", "http://from-stale-compose-file:9090");
@@ -198,7 +198,7 @@ describe("first-boot integration seed from the environment", () => {
     await seedIntegrationsFromEnv();
 
     expect(getPrometheusIntegration()?.baseUrl).toBe(
-      "http://chosen-by-operator:9090",
+      "http://chosen-by-user:9090",
     );
     // Not even probed: the database already owns this one.
     expect(fetchMock).not.toHaveBeenCalled();

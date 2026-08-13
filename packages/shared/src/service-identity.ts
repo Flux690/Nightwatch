@@ -53,7 +53,7 @@ function composeLabel(
 }
 
 // Canonical address of one service, platform-prefixed so the two can never collide.
-// Always three segments: nothing an operator typed ever enters a key. Each platform
+// Always three segments: nothing a user typed ever enters a key. Each platform
 // builds its own, so neither function has a conditional in it.
 export function dockerServiceKey(id: DockerServiceIdentity): string {
   return `docker/${id.project}/${id.service}`;

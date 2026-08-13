@@ -121,7 +121,7 @@ describe("RunnerListPage", () => {
     it("shows every advertised identity key in full", async () => {
       setup([WEB_RUNNER]);
 
-      // A row clipped this to its first key; the operator needs the whole list,
+      // A row clipped this to its first key; the user needs the whole list,
       // since these are exactly what an alert's labels have to match.
       expect(await screen.findByText("docker/nginx/nginx")).toBeInTheDocument();
       expect(screen.getByText("docker/api/api")).toBeInTheDocument();

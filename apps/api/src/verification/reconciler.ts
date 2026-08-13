@@ -60,7 +60,7 @@ function forgetSettled(open: Set<string>): void {
 
 /* One pass. Sequential rather than parallel: these are the same few rules on
    one Prometheus, and a burst of concurrent requests to it mid-incident is the
-   last thing an operator needs from us. */
+   last thing a user needs from us. */
 export async function reconcileRecovery(
   now = Date.now(),
 ): Promise<{ asked: number; cleared: number }> {

@@ -90,7 +90,7 @@ function QueueStepper({
 
 /* The report with its chat rail, headed by a breadcrumb back to the list. No
    "Mark as resolved" in the menu: status is derived and never declared, and
-   this is the one place an operator would most expect to declare it. */
+   this is the one place a user would most expect to declare it. */
 export function InvestigationRecordPage(): React.JSX.Element {
   const { id } = useParams({ strict: false });
   const sessionId = id ?? "";

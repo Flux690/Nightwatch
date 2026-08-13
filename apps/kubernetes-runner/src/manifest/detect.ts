@@ -15,7 +15,7 @@ export async function buildKubernetesManifest(): Promise<KubernetesManifest> {
   return {
     platform: "kubernetes",
     // One pod on one arbitrary node, so this names the pod rather than a machine an
-    // operator would recognise. The display name from onboarding is what addresses it.
+    // user would recognise. The display name from onboarding is what addresses it.
     hostname: hostname(),
     runnerVersion: RUNNER_VERSION,
     services: await listWorkloads(),

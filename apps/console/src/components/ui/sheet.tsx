@@ -27,7 +27,7 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
       data-slot="sheet-overlay"
       className={cn(
         // Dim, not obscure: what the panel covers should stay readable, so the
-        // operator can see what they are navigating away from.
+        // user can see what they are navigating away from.
         "fixed inset-0 z-50 bg-scrim transition-opacity duration-(--duration-fast) data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}

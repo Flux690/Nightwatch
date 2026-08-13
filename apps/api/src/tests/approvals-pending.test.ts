@@ -176,7 +176,7 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     await resolvePending(sessionId);
 
-    // Reloading is the only way an operator sees a finished investigation, so the
+    // Reloading is the only way a user sees a finished investigation, so the
     // decision has to be reconstructible from the database, not from the browser
     // that made it. Nothing stores it: the registry says the call was gated and
     // the outcome says it was declined.
@@ -196,11 +196,11 @@ describe("a suspended session serves its pending row with its transcript", () =>
     expect(res.status).toBe(401);
   });
 
-  it("flags the waiting session operator-wide, whichever runner produced it", async () => {
+  it("flags the waiting session user-wide, whichever runner produced it", async () => {
     const { conn } = connectRunner("scope-c");
     await startGatedChat("scope test");
 
-    // No token parameter anywhere: the operator sees every waiting session.
+    // No token parameter anywhere: the user sees every waiting session.
     const sessionId = await waitForAwaitingSession();
     expect(sessionId).toBeTruthy();
 

@@ -155,7 +155,7 @@ async function installDependencies(
   options: WorkspaceOptions,
 ): Promise<string> {
   if (options.network === "none") {
-    return 'Dependency install was skipped: the sandbox is networkless (operator setting "none").';
+    return 'Dependency install was skipped: the sandbox is networkless (user setting "none").';
   }
   const plan = await resolveInstallPlan(dir);
   if (plan === null) {
@@ -175,7 +175,7 @@ async function installDependencies(
     }
     const tail = capOutput(result.output).text.slice(-2000);
     // Log the output tail too, not just the exit code: it names the blocked host
-    // (allowlist) or the failing binary (platform mismatch) so the operator can
+    // (allowlist) or the failing binary (platform mismatch) so the user can
     // tell the two apart. The tail carries merged stdout+stderr.
     options.log?.warn(
       { sessionId, command: plan.command, exitCode: result.exitCode, tail },

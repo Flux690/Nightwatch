@@ -17,7 +17,7 @@ export const DAY_GROUPS = ["Today", "Yesterday", "Older"] as const;
 type DayGroup = (typeof DAY_GROUPS)[number];
 
 // Calendar days apart, not hours: 23:50 yesterday and 00:10 today are twenty
-// minutes and two days, and the operator remembers which day they spoke.
+// minutes and two days, and the user remembers which day they spoke.
 export function dayGroup(dateString: string): DayGroup {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);

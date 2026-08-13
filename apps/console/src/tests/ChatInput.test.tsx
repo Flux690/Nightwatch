@@ -139,7 +139,7 @@ describe("ChatInput", () => {
     /* The mode is the whole of the decision: it settles what the session is
        before the first turn runs, and the route follows from that - so no
        session ever has to cross between the two families later. */
-    it("opens an investigation, and its record, when the operator picks Investigate", async () => {
+    it("opens an investigation, and its record, when the user picks Investigate", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({ sessionId: null, isRunning: false });
 

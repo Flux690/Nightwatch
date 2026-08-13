@@ -155,7 +155,7 @@ describe("API-local session store", () => {
   });
 
   it("replays a harness message to the model and draws it for nobody", () => {
-    // The operator did not write it, so the transcript must not show it as
+    // The user did not write it, so the transcript must not show it as
     // theirs; the model answered it, so a resume that dropped it would leave
     // that answer replying to nothing.
     const m = meta();
@@ -781,7 +781,7 @@ describe("API-local session store", () => {
       expect(findingOf(m.sessionId)).toBeNull();
     });
 
-    // The rank orders rows; the label is what the operator wrote and is the
+    // The rank orders rows; the label is what the user wrote and is the
     // only thing rendered.
     it("carries the severity rank and the label's own word apart", () => {
       const m = meta();
@@ -801,7 +801,7 @@ describe("API-local session store", () => {
   });
 
   // Claims about every session, which a page of rows cannot answer: a count of
-  // loaded pages climbs as the operator scrolls and reads zero before they do.
+  // loaded pages climbs as the user scrolls and reads zero before they do.
   describe("the page's counts and its kind filter", () => {
     function investigation(): string {
       const m = meta();

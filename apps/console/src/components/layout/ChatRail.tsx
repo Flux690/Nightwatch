@@ -5,7 +5,7 @@ import { readStoredNumber, writeStoredNumber } from "@/lib/persisted";
 import { cn } from "@/lib/utils";
 
 /* The conversation beside the record. How wide it should be is a question about
-   the operator's screen and the shape of their work, not one this layout can
+   the user's screen and the shape of their work, not one this layout can
    answer, so they set it and it outlives the session: a width you have to set
    again every night is worse than one you cannot set at all. */
 
@@ -28,7 +28,7 @@ export function ChatRail({
   sessionId: string | null;
   open: boolean;
   // Covers the stage rather than widening past its ceiling. A distinct mode, so
-  // leaving it restores the width the operator chose instead of a drag's
+  // leaving it restores the width the user chose instead of a drag's
   // leftover.
   expanded: boolean;
 }): React.JSX.Element {

@@ -185,7 +185,7 @@ describe("POST /sessions/:id/stop", () => {
     );
 
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
-    // Nothing to approve: the operator stopped the run before the write ran.
+    // Nothing to approve: the user stopped the run before the write ran.
     expect(hasPendingHumanInput(sessionId)).toBe(false);
     expect(
       console.events.some(

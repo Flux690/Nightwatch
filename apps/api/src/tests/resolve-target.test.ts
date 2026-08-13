@@ -54,7 +54,7 @@ describe("resolveAlertTarget", () => {
       runner("prod-2", [docker("encodr", "cache")]),
     ];
 
-    it("resolves an alert carrying only Compose labels, with nothing an operator configured", () => {
+    it("resolves an alert carrying only Compose labels, with nothing a user configured", () => {
       const res = resolveAlertTarget(
         {
           alertname: "ContainerHighMemory",

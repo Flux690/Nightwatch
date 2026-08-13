@@ -77,7 +77,7 @@ export function Page({
                     {i > 0 && <BreadcrumbSeparator />}
                     {/* Only the last crumb gives way. The ones before it name
                         the collection, and a collection cut to "Investi…" tells
-                        the operator less than the title it was protecting. */}
+                        the user less than the title it was protecting. */}
                     <BreadcrumbItem
                       className={
                         i === crumbs.length - 1 ? "min-w-0" : "shrink-0"

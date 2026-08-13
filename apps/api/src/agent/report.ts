@@ -124,9 +124,9 @@ function convictionOf(
   return sources.size >= 2 ? "corroborated" : "cited";
 }
 
-/* Every call the operator had to release, and which way they went, read back
+/* Every call the user had to release, and which way they went, read back
    from the session's own ledger. The registry says a call was gated, the outcome
-   says it was declined, and who decided is not recorded: there is one operator. */
+   says it was declined, and who decided is not recorded: there is one user. */
 export function gatedCalls(sessionId: string): GatedCall[] {
   const outcomes = getToolOutcomes(sessionId);
   return ledgerIn(sessionId).flatMap((entry) => {
@@ -179,7 +179,7 @@ export function computeConviction(
   return graded;
 }
 
-// Something for the operator to act on: a written recommendation, or a cited
+// Something for the user to act on: a written recommendation, or a cited
 // root cause that amounts to one. Read by the status derivation and by the
 // composition gate, so what the list calls actionable and what the gate accepts
 // cannot disagree.

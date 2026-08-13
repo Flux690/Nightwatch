@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-/* What the operator is asking for, picked before they type. Investigate opens a
+/* What the user is asking for, picked before they type. Investigate opens a
    session that writes a report at the end; Chat answers and stops. Declared, not
    inferred - the person asking knows which one they want, and no classifier
    guesses on their behalf. */

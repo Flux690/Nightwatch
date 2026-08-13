@@ -28,7 +28,7 @@ function ownContainerId(): string | null {
   return null;
 }
 
-// Identity by container id: image and Compose names are operator-configurable,
+// Identity by container id: image and Compose names are user-configurable,
 // so neither can identify us reliably.
 const self = ownContainerId();
 if (self) hidden.add(self);

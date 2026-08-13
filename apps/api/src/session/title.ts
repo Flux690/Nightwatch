@@ -23,7 +23,7 @@ export function buildAlertTitleSource(alerts: NormalizedAlert[]): string {
         .map(([key, value]) => `${key}=${value}`)
         .join(" ");
       // The label's own word, not the normalized rank: a severity we cannot
-      // rank is still what the operator called it, and the title reads it.
+      // rank is still what the user called it, and the title reads it.
       const severity = a.labels["severity"];
       const severityPart = severity === undefined ? "" : ` (${severity})`;
       return `[${a.alertType}] ${labels}${severityPart}`.replace(/\s+/g, " ");

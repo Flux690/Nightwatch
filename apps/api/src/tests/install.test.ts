@@ -75,7 +75,7 @@ describe("GET /runners/install", () => {
   });
 
   // The point of one endpoint: the artifact is chosen by the row the token names,
-  // so an operator cannot fetch the Docker script for a Kubernetes runner.
+  // so a user cannot fetch the Docker script for a Kubernetes runner.
   describe("the row's platform picks the artifact", () => {
     it("serves a shell script for a Docker runner", async () => {
       const res = await get(DOCKER_TOKEN);
@@ -130,7 +130,7 @@ describe("GET /runners/install", () => {
     it("bakes in PUBLIC_URL over the request Host, so a runner dials the address that is reachable from its own machine", async () => {
       vi.stubEnv("PUBLIC_URL", "https://nightwarden.example.com");
       try {
-        // What an operator's browser reached the console on: useless to a runner.
+        // What a user's browser reached the console on: useless to a runner.
         const res = await get(DOCKER_TOKEN, { host: "localhost:3000" });
         expect(res.body).toContain(
           "wss://nightwarden.example.com/api/clients/connect",

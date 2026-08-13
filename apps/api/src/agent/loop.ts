@@ -68,7 +68,7 @@ import type { PendingHumanInput } from "../db/interrupts.js";
 
 // Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot index
 // so rows the seed skipped never collide. `harnessTurns` names the indices
-// NightWarden authored, which the provider cannot tell from the operator's.
+// NightWarden authored, which the provider cannot tell from the user's.
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
@@ -160,7 +160,7 @@ export interface RunSessionInput {
   alerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
-  // The operator picked Investigate before they typed. An alert says the same
+  // The user picked Investigate before they typed. An alert says the same
   // thing by existing; absent on a resume, which reads the session's own row.
   investigation?: boolean;
   // Present on resume: the full tool_results for the suspended turn
@@ -169,7 +169,7 @@ export interface RunSessionInput {
   // Aborts the LLM request in flight when the dispatcher stops this run.
   signal?: AbortSignal;
   // When true: seed prior transcript and run exactly one wrap-up turn (no tools),
-  // then finish. Used when the operator declines a continue-request interrupt.
+  // then finish. Used when the user declines a continue-request interrupt.
   wrapUp?: boolean;
 }
 
@@ -213,7 +213,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const chatWithRetries = (
     provider: LLMProvider,
     toolSchemas: ToolSchema[],
-    // The run's effective signal: the operator's stop, or that combined with
+    // The run's effective signal: the user's stop, or that combined with
     // the investigation deadline once the loop has one.
     chatSignal: AbortSignal | undefined = signal,
   ): Promise<ChatResponse> =>
@@ -245,14 +245,14 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   // Snapshot indices NightWarden wrote. Recorded as each message is sent, since
   // by the time the diff is persisted a harness turn is indistinguishable from
-  // one the operator typed.
+  // one the user typed.
   const harnessTurns = new Set<number>();
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
     provider.appendUserMessage(text);
     harnessTurns.add(provider.snapshot().length - 1);
   };
 
-  // Operator declined a continue-request: replay the transcript and run one free-form
+  // User declined a continue-request: replay the transcript and run one free-form
   // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
   if (input.wrapUp) {
     const { systemPrompt } = buildChatContext(
@@ -268,7 +268,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
     }
-    log.info("time budget ended: operator chose to end, running wrap-up turn");
+    log.info("time budget ended: user chose to end, running wrap-up turn");
     try {
       await chatWithRetries(provider, []);
     } catch (err) {
@@ -285,7 +285,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       log.info("run stopped by user during end wrap-up");
       return "stopped";
     }
-    log.info("investigation ended after operator declined to continue");
+    log.info("investigation ended after user declined to continue");
     return "completed";
   }
 
@@ -385,7 +385,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const deadline = Date.now() + config.checkInAfterMs;
   // Propagated into the model request and every tool call so the budget is one
   // shared instant, not a duration each layer counts separately. Distinct from
-  // `signal`, which means the operator stopped the run.
+  // `signal`, which means the user stopped the run.
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
@@ -427,7 +427,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           return "stopped";
         }
         // The budget ran out with the record already complete. Ending without
-        // the write-up is honest; pushing past the operator's ceiling is not.
+        // the write-up is honest; pushing past the user's ceiling is not.
         if (outOfTime.aborted) {
           log.warn("time budget reached while composing the report");
           persist();
@@ -586,7 +586,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       }
       /* Only a run that acted must recommend. "I could not work out the cause,
          here is what I ruled out" is a complete ending; a run that had the
-         operator release a write and then went quiet has left them nothing. */
+         user release a write and then went quiet has left them nothing. */
       const released = gatedCalls(sessionId).some(
         (c) => c.decision === "approved",
       );
@@ -737,7 +737,7 @@ function formatLabels(labels: Record<string, string>): string {
 /* Its own turn, so it opens rather than continues: no leading blank lines.
 
    Stated, never asked. An injected alert reached this session because the alert
-   source grouped it with the ones already here, under the group_by its operator
+   source grouped it with the ones already here, under the group_by its user
    configured - so whether it belongs is already answered, and asking the model
    to re-decide would hand a routing call to the thing being routed. */
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {

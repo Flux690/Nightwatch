@@ -570,11 +570,11 @@ describe("ReportPanel", () => {
     );
 
     // Ran, declined and broken read differently. Who decided is not shown:
-    // there is one operator, so naming them says nothing.
+    // there is one user, so naming them says nothing.
     expect(screen.getByText("Ran")).toBeInTheDocument();
     expect(screen.getByText("Declined")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.queryByText(/by operator/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/by user/)).not.toBeInTheDocument();
   });
 
   it("draws no timeline on a record with neither entries nor released writes", () => {

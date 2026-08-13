@@ -25,7 +25,7 @@ export const DEFAULT_MAX_CONCURRENT_INVESTIGATIONS = 10;
 export const DEFAULT_CHECK_IN_AFTER_MS = 30 * 60_000;
 
 // Upper bound on any single tool call. Individual tools declare their own, often
-// far lower; this is the operator's brake on the slowest of them.
+// far lower; this is the user's brake on the slowest of them.
 export const DEFAULT_TOOL_CALL_CEILING_MS = 10 * 60_000;
 
 // For a tool that declares no limit of its own. A property of the tool, not a

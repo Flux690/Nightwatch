@@ -61,7 +61,7 @@ const appRoute = createRoute({
   component: AuthGate,
 });
 
-// What the agent found while the operator slept is what they came for.
+// What the agent found while the user slept is what they came for.
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",

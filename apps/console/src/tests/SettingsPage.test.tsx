@@ -489,7 +489,7 @@ describe("SettingsPage", () => {
     });
 
     /* An id the catalog does not list is left standing, not swept away: the box
-       keeps what was typed so the operator can see it is not a model, the
+       keeps what was typed so the user can see it is not a model, the
        ladder goes with the model it belonged to, and Save has nothing to do. */
     it("keeps an unlisted id on screen and refuses to save it", async () => {
       const user = userEvent.setup();
@@ -587,7 +587,7 @@ describe("SettingsPage", () => {
     });
 
     // The control describes a model that is already chosen, so making it wait
-    // on the catalog would move the form under the operator for no reason.
+    // on the catalog would move the form under the user for no reason.
     it("is on screen before the catalog has answered", async () => {
       const user = userEvent.setup();
       // A catalog that never resolves: the control must not depend on it.

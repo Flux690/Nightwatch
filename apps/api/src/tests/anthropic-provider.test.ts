@@ -152,7 +152,7 @@ describe("AnthropicProvider", () => {
       expect(params.output_config).toEqual({ effort: "xhigh" });
     });
 
-    it("sends no effort at all when the operator has picked no level", async () => {
+    it("sends no effort at all when the user has picked no level", async () => {
       const params = await sentParams(BASE_CONFIG);
 
       expect(params.output_config).toBeUndefined();

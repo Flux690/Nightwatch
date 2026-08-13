@@ -150,7 +150,7 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
     .join(", ");
   const labelLine = labels ? `\nlabels: ${labels}` : "";
   // Dropped rather than stated as null: an unrankable word is still in the
-  // labels below, where the model reads it as the operator wrote it.
+  // labels below, where the model reads it as the user wrote it.
   const severityLine =
     alert.severity === null ? "" : `\nseverity: ${alert.severity}`;
   // Absent renders an empty section, never a different alert.

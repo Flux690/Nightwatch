@@ -289,7 +289,7 @@ describe("router", () => {
       ).rejects.toThrow(/No docker runner named 'ghost-99'/);
     });
 
-    it("the operator-assigned name is the address, beating the OS hostname", async () => {
+    it("the user-assigned name is the address, beating the OS hostname", async () => {
       // Two boxes could both self-report "ubuntu"; only assigned names are unique.
       const a = connect("ubuntu", ["nginx"], { serverName: "prod-1" });
 

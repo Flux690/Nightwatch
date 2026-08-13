@@ -19,7 +19,7 @@ import { Evidence } from "./Evidence.js";
    system answering for itself. The headings are nominal throughout, because
    there is no "we" here: there is NightWarden, and there is the record. */
 
-// Colour is kept for the two verdicts that change what an operator does next.
+// Colour is kept for the two verdicts that change what a user does next.
 // The rest are set in the ink hierarchy: a page where every label shouts says
 // nothing about which one matters.
 const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
@@ -54,9 +54,9 @@ function SectionHeading({
   );
 }
 
-/* What the operator did, and what came of it. Three words because there are
+/* What the user did, and what came of it. Three words because there are
    three outcomes worth telling apart: it ran, they said no, or it broke. Who
-   decided is not shown - there is one operator, and the record is theirs. */
+   decided is not shown - there is one user, and the record is theirs. */
 function decisionView(call: {
   decision: "approved" | "rejected";
   outcome?: string;
@@ -67,7 +67,7 @@ function decisionView(call: {
     : { label: "Ran", tone: "ok" };
 }
 
-// What woke the operator, read from the alerts themselves rather than from the
+// What woke the user, read from the alerts themselves rather than from the
 // opening message, which is written for the model. Rendered before the agent has
 // said anything, so the first thing on screen at 02:14 is true.
 function AlertBand({
@@ -198,7 +198,7 @@ export function ReportPanel({
   // Null until the agent records its first finding. The investigation view is
   // drawn from the session, not from this, so the panel outlives its absence.
   report: Report | null;
-  // Every call the operator had to release, and which way they went.
+  // Every call the user had to release, and which way they went.
   decisions: GatedCall[];
   // The cited calls, resolved by the API against the transcript.
   evidence: ResolvedEvidence[];

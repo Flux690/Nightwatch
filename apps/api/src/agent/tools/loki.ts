@@ -146,7 +146,7 @@ function decryptedAuth(authHeaderEncrypted: string | null): string | null {
 function notConfigured(): ToolExecuteResult {
   return {
     content:
-      "Loki integration is not configured. The operator can connect it from the Integrations page. Continue without log evidence.",
+      "Loki integration is not configured. The user can connect it from the Integrations page. Continue without log evidence.",
     outcome: "permission",
   };
 }
@@ -160,7 +160,7 @@ function corrective(err: unknown): ToolExecuteResult {
       };
     }
     return {
-      content: `Loki request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`,
+      content: `Loki request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
       outcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }

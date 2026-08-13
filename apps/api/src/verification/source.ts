@@ -8,7 +8,7 @@ export type ConditionState = "cleared" | "unknown";
    fix that improves the metric the agent happened to pick can leave the
    condition firing, so the oracle is the condition, re-evaluated by its owner. */
 export interface VerificationSource {
-  // Named for the log, so an operator can see which source answered.
+  // Named for the log, so a user can see which source answered.
   readonly name: string;
   // Whether this source owns the alert. False is no opinion about the condition.
   claims(alert: NormalizedAlert): boolean;

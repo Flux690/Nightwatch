@@ -57,7 +57,7 @@ export interface SubmittedReport {
   summary: string;
   timeline: TimelineEntry[];
   impact: string;
-  // What the operator should do. Never a claim that anything has been done -
+  // What the user should do. Never a claim that anything has been done -
   // what ran is the released-write log, which the model cannot write to.
   recommendation: string;
   submittedAt: string;
@@ -88,8 +88,8 @@ export interface ResolvedEvidence {
 // set it. Keyed by hypothesis id; a row absent from it earned no conviction.
 export type ReportConviction = Record<string, Conviction>;
 
-// A gated call and what the operator did with it, read back from the session's
-// own transcript. Who decided is not recorded: there is one operator, and a
+// A gated call and what the user did with it, read back from the session's
+// own transcript. Who decided is not recorded: there is one user, and a
 // multi-tenant build gets the name from the session that approved it.
 export interface GatedCall {
   toolUseId: string;

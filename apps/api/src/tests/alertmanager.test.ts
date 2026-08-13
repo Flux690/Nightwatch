@@ -136,13 +136,13 @@ describe("parseAlertmanager", () => {
   });
 });
 
-// The operator's own explanation and the expression that fired are context only:
+// The user's own explanation and the expression that fired are context only:
 // both enrich the prompt and neither decides anything.
-describe("operator context reaches the model", () => {
+describe("user context reaches the model", () => {
   const ANNOTATIONS = {
     summary: "API latency above threshold",
     description: "p99 has exceeded 2s for 10 minutes on web-01.",
-    // Given to the model as a fact, never fetched: pulling an operator-supplied
+    // Given to the model as a fact, never fetched: pulling a user-supplied
     // URL from the API host is an SSRF surface.
     runbook_url: "https://runbooks.internal/api-latency",
   };

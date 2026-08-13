@@ -323,7 +323,7 @@ describe("policy-gate: gating is driven by tool policy", () => {
             name: "RestartDockerService",
             input: {
               target: "docker/svc-01/svc-01",
-              reason: "confirmed by operator",
+              reason: "confirmed by user",
               risk: "low",
               estimatedDowntimeSeconds: 2,
             },

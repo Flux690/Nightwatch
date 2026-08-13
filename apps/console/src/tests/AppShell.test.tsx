@@ -484,7 +484,7 @@ describe("Shell", () => {
     });
 
     // The layout is the route's and nothing else's. A session flipping to an
-    // investigation does not rearrange the page under an operator mid-read;
+    // investigation does not rearrange the page under a user mid-read;
     // the promotion replaces the address, and the address decides.
     it("morphs on the address, not on the session's own flag", async () => {
       const user = userEvent.setup();
@@ -581,7 +581,7 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    it("takes the width the operator gives it, within its floor, and keeps it", async () => {
+    it("takes the width the user gives it, within its floor, and keeps it", async () => {
       const user = userEvent.setup();
       const { setInvestigation } = setup({ path: "/investigations/new-s1" });
 
@@ -786,7 +786,7 @@ describe("Shell", () => {
       expect(
         screen.getByRole("menuitem", { name: "Delete" }),
       ).toBeInTheDocument();
-      // Status is derived and never declared; this is where an operator would
+      // Status is derived and never declared; this is where a user would
       // most expect to declare it, so it must not be here.
       expect(
         screen.queryByRole("menuitem", { name: /mark as resolved/i }),

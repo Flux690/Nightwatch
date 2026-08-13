@@ -15,7 +15,7 @@ export interface RunnerConnection {
   // Read from the runner's row at authentication, so it is known before any
   // manifest arrives and cannot be contradicted by what the runner reports.
   platform: Platform;
-  // Operator-assigned server name (unique by DB constraint) — the model-visible
+  // User-assigned server name (unique by DB constraint) — the model-visible
   // address for host routing. Null for legacy tokens minted without one.
   serverName: string | null;
   send: (msg: string) => void;
@@ -44,7 +44,7 @@ export class RunnerOfflineError extends Error {
   }
 }
 
-// The name the model addresses this server by: the operator-assigned name,
+// The name the model addresses this server by: the user-assigned name,
 // falling back to the self-reported OS hostname only for legacy unnamed tokens.
 export function addressName(conn: RunnerConnection): string | null {
   return conn.serverName ?? conn.hostname;

@@ -249,7 +249,7 @@ export function SessionView({
       activeSessionIdRef.current = newId;
       setActiveSessionId(newId);
 
-      // The mode the operator picked is what the session is, from here on. The
+      // The mode the user picked is what the session is, from here on. The
       // row goes to that list and never moves between them.
       prependSession(queryClient, {
         sessionId: newId,

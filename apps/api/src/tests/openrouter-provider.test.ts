@@ -123,7 +123,7 @@ describe("OpenRouterProvider", () => {
       expect(params.reasoning).toEqual({ effort: "high" });
     });
 
-    it("sends nothing when the operator has picked no level", async () => {
+    it("sends nothing when the user has picked no level", async () => {
       const params = await sentParams(BASE_CONFIG);
 
       expect(params.reasoning).toBeUndefined();

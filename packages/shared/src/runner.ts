@@ -68,7 +68,7 @@ export interface RunnerRecord {
 // discriminant is what lets a caller partition the fleet before matching.
 interface FleetRunnerBase {
   runnerId: string;
-  // The model-visible address: operator-assigned server name, or the
+  // The model-visible address: user-assigned server name, or the
   // self-reported hostname for tokens minted without one.
   serverName: string | null;
   hostname: string;

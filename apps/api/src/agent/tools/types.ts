@@ -32,7 +32,7 @@ interface ToolCallIdentity {
 }
 
 // What a caller hands the dispatcher: the upper bound this call may not exceed,
-// being the operator's ceiling already clamped by what remains of the run.
+// being the user's ceiling already clamped by what remains of the run.
 export interface ToolDispatchContext extends ToolCallIdentity {
   toolCallCeilingMs: number;
 }

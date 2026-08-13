@@ -9,7 +9,7 @@ function failureCode(err: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
-// Phrased for the operator configuring it: what went wrong, and where the attempt
+// Phrased for the user configuring it: what went wrong, and where the attempt
 // was made from, which is the part a browser cannot tell them.
 export function describeNetworkFailure(err: unknown, service: string): string {
   const from = `Attempted from the NightWarden API`;

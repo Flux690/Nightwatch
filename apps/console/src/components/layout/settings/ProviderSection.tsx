@@ -29,7 +29,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SettingsGroup, SettingsRow } from "./SettingsRow";
 import { CONTROL } from "./layout";
 
-/* What the operator did themselves. "input-clear" is absent on purpose: that is
+/* What the user did themselves. "input-clear" is absent on purpose: that is
    Base UI wiping the box when the list closes on no match, and honouring it is
    what threw away what had just been typed. */
 const OPERATOR_EDIT = new Set([

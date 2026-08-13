@@ -77,7 +77,7 @@ Any action that writes to a server pauses the loop and shows you an approval car
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the operator UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open a finished one and the report takes the main area - the summary, the timeline, what held up and what was ruled out, each with its evidence and charts - with the transcript in a rail on the right that also collapses. While the run is still working the chat has the whole stage instead, because a report being written in front of you is not worth reading. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
+**Console** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open a finished one and the report takes the main area - the summary, the timeline, what held up and what was ruled out, each with its evidence and charts - with the transcript in a rail on the right that also collapses. While the run is still working the chat has the whole stage instead, because a report being written in front of you is not worth reading. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
 
 ## Features
 
@@ -88,7 +88,7 @@ Any action that writes to a server pauses the loop and shows you an approval car
 - **A bounded number at once.** Ten investigations run concurrently by default, a Settings knob. One waiting on your approval keeps its place, because starting another only puts a second write in front of the same person. Beyond that, alerts wait their turn and the Investigations page says how many - nothing is ever dropped, because your alert source was already told the webhook was accepted.
 - **One choice, made before you type.** Chat answers the question and stops. Investigate works it out and writes a report. Both get the full toolset behind the same approval gate, and an alert always opens an investigation. Nothing infers which you meant afterwards, and a session is what it was created as and never changes underneath you.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
-- **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
+- **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which a user cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - NightWarden never merges.
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits. A run that was working when the process died survives too: on the next boot the session says it was interrupted rather than quietly reading as an investigation that concluded nothing, and if the alert is still firing and the run was recent, it carries on from its last complete exchange.
@@ -162,7 +162,7 @@ Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider*
 
 **HTTPS.** Put Caddy (or any reverse proxy) in front, point a domain at the host, set `PUBLIC_URL=https://your-domain`, and drop the `ports` mapping so only the proxy is exposed. Without a domain, run plain HTTP and restrict the port with your firewall.
 
-**Backup.** Everything durable is in the state directory. Stop the stack, `tar czf backup.tar.gz -C /opt nightwarden`, start it again. `secret.key` is in there: restoring the database without it leaves the stored API keys unreadable and signs every operator out.
+**Backup.** Everything durable is in the state directory. Stop the stack, `tar czf backup.tar.gz -C /opt nightwarden`, start it again. `secret.key` is in there: restoring the database without it leaves the stored API keys unreadable and signs every user out.
 
 **Upgrade.** `docker compose pull && docker compose up -d`. Pre-1.0 there are no schema migrations - a release that changes the schema is applied by deleting `nightwarden.db` and setting up again, and the release notes say when that applies.
 
@@ -325,7 +325,7 @@ apps/
                         evidence-source.ts answers which source a cited call questioned
       alerts/           Alertmanager ingest, dedup, and routing a delivery to its group
       auth/             owner password, runner token minting, fleet ingest credential
-      config/           operator settings: the config store, its routes, health and the run-readiness gate
+      config/           user settings: the config store, its routes, health and the run-readiness gate
       console/          serves the built console beside the API bundle, with an SPA fallback
       db/               SQLite schema and table modules (FKs on, no migrations)
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
@@ -352,7 +352,7 @@ apps/
       commands/         command dispatch (registry.ts, which decodes the wire)
       kubernetes/       @kubernetes/client-node client, workload commands, workload resolution
       manifest/         what this cluster advertises to the API
-  console/              React operator UI
+  console/              React user UI
     src/
       api/              one typed fetch boundary (apiFetch)
       auth/             login and owner-password setup

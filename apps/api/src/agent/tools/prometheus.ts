@@ -78,7 +78,7 @@ function capSeries(data: PrometheusQueryData): MetricsQueryResult {
 function notConfigured(): ToolExecuteResult {
   return {
     content:
-      "Prometheus integration is not configured. The operator can connect it from the Integrations page. Continue without metric evidence.",
+      "Prometheus integration is not configured. The user can connect it from the Integrations page. Continue without metric evidence.",
     outcome: "permission",
   };
 }
@@ -92,7 +92,7 @@ function corrective(err: unknown): ToolExecuteResult {
       };
     }
     return {
-      content: `Prometheus request failed: ${err.message}. If this persists the operator must fix the connection on the Integrations page.`,
+      content: `Prometheus request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
       outcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }

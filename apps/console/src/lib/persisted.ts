@@ -1,4 +1,4 @@
-/* Preferences the operator sets by hand and expects to find again. Neither read
+/* Preferences the user sets by hand and expects to find again. Neither read
    nor write may throw: localStorage is absent in a private window and its
    contents are user-editable, so a missing store and a garbage value are both
    ordinary inputs. A lost preference is a small cost; a blank console is not. */

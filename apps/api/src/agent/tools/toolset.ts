@@ -43,7 +43,7 @@ function tooLarge(name: string, chars: number): string {
 
 // Single dispatch chokepoint that both the live loop and the approval resume
 // path pass through. The caller supplies a ceiling; a tool's own limit can only
-// narrow it, never raise it past what the operator allowed.
+// narrow it, never raise it past what the user allowed.
 export async function executeTool(
   tool: Tool,
   input: Record<string, unknown>,
@@ -90,7 +90,7 @@ export function isElicitation(name: string): boolean {
 }
 
 /* Whether a human must permit this call. A function rather than a field read
-   because an operator rule will answer from the arguments as well as the tool,
+   because a user rule will answer from the arguments as well as the tool,
    and `input` is already here for it. */
 export function resolvePolicy(
   tool: Tool,

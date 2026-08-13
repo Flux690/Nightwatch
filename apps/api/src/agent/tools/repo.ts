@@ -164,7 +164,7 @@ function corrective(err: unknown): { content: string; outcome: ToolOutcome } {
     err instanceof GitOperationError
   ) {
     return {
-      content: `${err.message}. Repo tools are unavailable until the operator fixes this (Integrations page). Continue the investigation without them.`,
+      content: `${err.message}. Repo tools are unavailable until the user fixes this (Integrations page). Continue the investigation without them.`,
       outcome: "system",
     };
   }
@@ -185,7 +185,7 @@ async function runRepoTool<T>(
   if (options === null) {
     return {
       content:
-        "GitHub integration is not configured. The operator can connect a repository from the Integrations page. Continue without repo tools.",
+        "GitHub integration is not configured. The user can connect a repository from the Integrations page. Continue without repo tools.",
       outcome: "permission",
     };
   }
@@ -415,7 +415,7 @@ export const REPO_TOOLS: Tool[] = [
           description: {
             type: "string",
             description:
-              'One short sentence saying what this command does, which the operator sees, for example "Install dependencies".',
+              'One short sentence saying what this command does, which the user sees, for example "Install dependencies".',
           },
         },
         required: ["command"],

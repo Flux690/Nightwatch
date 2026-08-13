@@ -20,7 +20,7 @@ function inputString(
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-// The exact argv, never a paraphrase: what the operator reads has to be what
+// The exact argv, never a paraphrase: what the user reads has to be what
 // runs, or the approval is theatre.
 function commandOf(input: Record<string, unknown>): string | null {
   const command = input["command"];

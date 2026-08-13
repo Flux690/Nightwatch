@@ -9,7 +9,7 @@ import { logger } from "../logger.js";
 import { instantQuery } from "./prometheus.js";
 import { probeLoki } from "./loki.js";
 
-// A first-boot seed, never a live source: an integration the operator has already
+// A first-boot seed, never a live source: an integration the user has already
 // connected is never overwritten. Each is probed with the exact call the console's
 // Connect button makes, so a URL that cannot work fails at boot, not at 3am.
 export async function seedIntegrationsFromEnv(): Promise<void> {

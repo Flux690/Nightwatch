@@ -22,7 +22,7 @@ describe("target keys", () => {
     ).toBe("kubernetes/production/api-server");
   });
 
-  it("every key has exactly three segments, so nothing an operator typed can widen one", () => {
+  it("every key has exactly three segments, so nothing a user typed can widen one", () => {
     const keys = [
       dockerServiceKey({ project: "myapp", service: "postgres" }),
       kubernetesWorkloadKey({

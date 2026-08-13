@@ -19,7 +19,7 @@ export const TOOL_OUTCOMES = [
   "permission",
   // The tool itself broke.
   "system",
-  // The operator said no, so it never ran. The only member a human authors, and
+  // The user said no, so it never ran. The only member a human authors, and
   // the only durable record that a gated call was declined: the transcript holds
   // the refusal we sent the model, not the decision behind it.
   "rejected",

@@ -20,7 +20,7 @@ import { logger } from "../logger.js";
 import { buildSeed } from "./seed.js";
 
 /* How recent a dead run has to be to be worth continuing. Deliberately a
-   constant: an operator has no basis to reason about it, and it is not
+   constant: a user has no basis to reason about it, and it is not
    `checkInAfterMs`, which answers how long a run works before checking in. */
 const RESUME_WINDOW_MS = 15 * 60_000;
 

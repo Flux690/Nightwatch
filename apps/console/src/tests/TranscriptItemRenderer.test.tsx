@@ -85,14 +85,14 @@ describe("TranscriptItemRenderer", () => {
         },
       });
 
-      // Verbatim argv: what the operator reads has to be what runs.
+      // Verbatim argv: what the user reads has to be what runs.
       expect(
         screen.getByText(/redis-cli CONFIG SET maxmemory 8gb/),
       ).toBeInTheDocument();
       expect(screen.getByText(/writes are being rejected/)).toBeInTheDocument();
     });
 
-    it("says how often this write already ran here, so a tired operator sees the pattern", () => {
+    it("says how often this write already ran here, so a tired user sees the pattern", () => {
       wrap({ ...approvalItem, priorRuns: 3 });
 
       // Counted from this investigation's transcript: it informs the decision,
@@ -117,7 +117,7 @@ describe("TranscriptItemRenderer", () => {
       await user.click(screen.getByRole("button", { name: /^reject$/i }));
 
       // Two halves of one exchange: the agent states why it is asking, the
-      // operator answers in the same shape, and the answer is optional.
+      // user answers in the same shape, and the answer is optional.
       expect(screen.getByText(/agent.s reason/i)).toBeInTheDocument();
       expect(
         screen.getByText(/the health check has failed six times/i),

@@ -9,7 +9,7 @@ import type { logger } from "../logger.js";
 import type { ToolResult, ToolUse } from "../llm/types.js";
 
 // Which interrupt a gated call raises. An elicitation always raises one; a tool
-// raises one only when the operator's policy says a human must permit it.
+// raises one only when the user's policy says a human must permit it.
 type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {

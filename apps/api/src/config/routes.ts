@@ -13,7 +13,7 @@ import { requireSession } from "../auth/session.js";
 import { logger } from "../logger.js";
 
 /* Zod's own message is the issues array as JSON, which the console would show
-   an operator verbatim. This names the field and says what is wrong with it. */
+   a user verbatim. This names the field and says what is wrong with it. */
 function readable(error: z.ZodError): string {
   return error.issues
     .map((issue) =>

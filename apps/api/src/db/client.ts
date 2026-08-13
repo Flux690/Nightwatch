@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS runner (
 -- describes how to reach one model lives in provider_config below.
 CREATE TABLE IF NOT EXISTS config (
   id                        TEXT      PRIMARY KEY,
-  -- Which provider_config row is live. NULL means the operator has not picked
+  -- Which provider_config row is live. NULL means the user has not picked
   -- yet, which the run gate refuses on; a default would make a fresh install
   -- look configured while holding no API key.
   active_provider           TEXT,
@@ -250,7 +250,7 @@ export function getDb(): Database.Database {
 //
 // A claim is deliberately NOT cleared here. A row still claimed after a restart
 // means the API died between approving a write and recording its result, so
-// whether it ran is unknown - and clearing the claim would offer the operator a
+// whether it ran is unknown - and clearing the claim would offer the user a
 // button that runs it a second time. It stays claimed and the respond route
 // refuses it, which is the honest answer to a question nobody can answer.
 export function initDb(): void {

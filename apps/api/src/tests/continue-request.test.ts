@@ -346,7 +346,7 @@ describe("continue-request interrupts", () => {
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
     expect(hasPendingHumanInput(sessionId)).toBe(true);
 
-    // Grant a fresh deadline before responding (mimics operator action after restart)
+    // Grant a fresh deadline before responding (mimics user action after restart)
     updateConfig({ checkInAfterMs: 300_000 });
 
     // Resolve purely from DB state

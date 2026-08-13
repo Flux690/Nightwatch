@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
-// The operator-assigned server name is the primary label everywhere; the
+// The user-assigned server name is the primary label everywhere; the
 // self-reported OS hostname is the fallback when no name was given.
 export function runnerDisplayName(runner: RunnerRecord): string {
   return runner.serverName ?? runner.hostname ?? runner.id;

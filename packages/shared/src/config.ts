@@ -65,7 +65,7 @@ export interface ProviderSettings {
   baseUrl?: string;
   // Computed server-side on read and never stored; the plaintext never leaves.
   apiKeyMasked?: string | null;
-  // The operator's pick from this model's ladder. A plain string, validated
+  // The user's pick from this model's ladder. A plain string, validated
   // against the model's descriptor rather than a fixed union: the levels differ
   // per provider and per model, so an enum here could only ever be a guess.
   reasoningLevel: string | null;
@@ -78,12 +78,12 @@ export interface ProviderSettings {
   reasoning: ReasoningDescriptor | null;
 }
 
-// Both providers hold the same shape: the operator's choice plus the facts
+// Both providers hold the same shape: the user's choice plus the facts
 // captured about the model they chose.
 export type ProviderSettingsMap = Record<LLMProviderName, ProviderSettings>;
 
 export interface AgentConfig {
-  // Which provider block is live; null until an operator picks one. There is no
+  // Which provider block is live; null until a user picks one. There is no
   // default: a fresh install must not look configured when it can reach no LLM.
   provider: LLMProviderName | null;
   providers: ProviderSettingsMap;
@@ -120,7 +120,7 @@ export interface ResolvedLLMConfig {
   maxOutputTokens: number;
   maxRetries: number;
   requestTimeoutMs: number;
-  // The operator's pick, in the provider's vocabulary; each adapter translates
+  // The user's pick, in the provider's vocabulary; each adapter translates
   // it into its own wire param. Null means send nothing and take the default.
   reasoningLevel: string | null;
   // The ladder the pick came from. Null means the model publishes none, and an

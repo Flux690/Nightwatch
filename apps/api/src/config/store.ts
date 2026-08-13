@@ -149,7 +149,7 @@ function loadProviders(): ProviderSettingsMap {
 }
 
 // Operational defaults are engineering choices and stay; which provider is active
-// is the operator's to pick, so it starts null and the run gate refuses until set.
+// is the user's to pick, so it starts null and the run gate refuses until set.
 export function loadConfig(): AgentConfig {
   const row = readConfigRow();
   const providers = loadProviders();
@@ -359,7 +359,7 @@ export function seedConfigFromEnv(): void {
 }
 
 function seedProviderFromEnv(provider: LLMProviderName): void {
-  // Only an untouched block is seeded: once an operator has saved anything for a
+  // Only an untouched block is seeded: once a user has saved anything for a
   // provider, the database owns it and a stale compose file cannot overwrite it.
   const existing = readProviderRow(provider);
   if (existing?.model || existing?.apiKeyEncrypted) return;

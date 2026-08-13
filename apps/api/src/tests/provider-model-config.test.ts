@@ -687,7 +687,7 @@ describe("provider/model config seam", () => {
       expect(body.providers.anthropic.model).toBeNull();
       expect(body.providers.openrouter.model).toBeNull();
       expect(body.providers.anthropic.apiKeyMasked).toBeNull();
-      // Timeouts and sandbox limits are engineering choices, not the operator's;
+      // Timeouts and sandbox limits are engineering choices, not the user's;
       // a provider's own tuning defaults the same way inside its block.
       expect(body.sandboxNetwork).toBe("allowlist");
       expect(body.checkInAfterMs).toEqual(expect.any(Number));

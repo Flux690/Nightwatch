@@ -113,7 +113,7 @@ export function reportToMarkdown(
   if (settled.length > 0) sections.push(claimBlock("Findings", settled));
   if (ruledOut.length > 0) sections.push(claimBlock("Ruled out", ruledOut));
 
-  // What the operator released, read from the ledger rather than from anything
+  // What the user released, read from the ledger rather than from anything
   // the model said about itself.
   const decisions = report?.decisions ?? [];
   if (decisions.length > 0) {

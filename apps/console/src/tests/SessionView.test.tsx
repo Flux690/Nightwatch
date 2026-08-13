@@ -27,7 +27,7 @@ import { MockEventSource } from "./mockEventSource.js";
 vi.mock("@/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
   useAuth: () => ({
-    phase: { kind: "authenticated", email: "operator@nightwarden.io" },
+    phase: { kind: "authenticated", email: "user@nightwarden.io" },
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(),
@@ -160,7 +160,7 @@ function setupPage({
           Promise.resolve({
             ownerExists: true,
             authenticated: true,
-            email: "operator@nightwarden.io",
+            email: "user@nightwarden.io",
           }),
       });
     }
@@ -965,7 +965,7 @@ describe("SessionView", () => {
               state: {
                 phase: "resolved",
                 decision: "approved",
-                by: "operator",
+                by: "user",
                 result: "web-01 restarted",
               },
             },
@@ -1433,7 +1433,7 @@ describe("SessionView", () => {
               state: {
                 phase: "resolved",
                 decision: "answered",
-                by: "operator",
+                by: "user",
                 result: "nginx",
               },
             },

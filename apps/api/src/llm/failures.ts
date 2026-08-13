@@ -107,7 +107,7 @@ export function describeLLMError(err: unknown): string {
   if (status === 404) {
     return `The provider has no such model. It may have been renamed, retired, or moved behind a paid plan. Pick a different model in Settings${detail}.`;
   }
-  // Checked before the generic 400 it arrives as: the operator changed nothing,
+  // Checked before the generic 400 it arrives as: the user changed nothing,
   // so naming their model and reasoning level points at the wrong screen.
   if (isContextOverflow(err)) {
     return `This conversation grew past the model's context window, so the provider refused it. Continuing this session would hit the same limit: start a new one, or pick a model with a larger context window under Settings, Provider${detail}.`;

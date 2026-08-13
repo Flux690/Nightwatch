@@ -148,7 +148,7 @@ function installDockerMock(): void {
 }
 
 const SESSION_ID = "aaaabbbb-0000-4000-8000-000000000001";
-// The ceiling the operator allows, which a tool's own lower limit narrows.
+// The ceiling the user allows, which a tool's own lower limit narrows.
 const CTX: ToolDispatchContext = {
   toolCallCeilingMs: 600_000,
   sessionId: SESSION_ID,
@@ -385,8 +385,8 @@ describe("repo tools through registry dispatch", () => {
     expect(cmd).toContain("pnpm test");
   });
 
-  it("is cut down to the ceiling when the operator allows less than the tool wants", async () => {
-    // The ceiling is the operator's brake: a tool can narrow it, never raise it.
+  it("is cut down to the ceiling when the user allows less than the tool wants", async () => {
+    // The ceiling is the user's brake: a tool can narrow it, never raise it.
     await executeTool(
       tool("Bash"),
       { command: "pnpm test" },

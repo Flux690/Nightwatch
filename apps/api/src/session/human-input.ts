@@ -153,7 +153,7 @@ export async function respondToPendingHumanInput(
         status: "rejected",
         resolvedAt,
       });
-      logger.info({ sessionId }, "continue request ended by operator");
+      logger.info({ sessionId }, "continue request ended by user");
       dispatcher.dispatch({
         sessionId,
         seed: buildSeed(sessionId),
@@ -172,7 +172,7 @@ export async function respondToPendingHumanInput(
       status: "continued",
       resolvedAt,
     });
-    logger.info({ sessionId }, "continue request resumed by operator");
+    logger.info({ sessionId }, "continue request resumed by user");
     dispatcher.dispatch({ sessionId, seed: buildSeed(sessionId) });
     return {
       sessionId,
@@ -219,7 +219,7 @@ export async function respondToPendingHumanInput(
       {
         tool_use_id: pending.toolUseId,
         content:
-          "This call was already attempted and the outcome is unknown - it may have run. Do not re-execute it automatically. Tell the operator what was attempted and ask whether to retry.",
+          "This call was already attempted and the outcome is unknown - it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
         is_error: true,
       },
       { toolName: call.name, input: call.input },
@@ -256,12 +256,12 @@ export async function respondToPendingHumanInput(
     );
   }
 
-  // Only what is true: the operator said no. Why is in their comment or it is
+  // Only what is true: the user said no. Why is in their comment or it is
   // unknown, and inferring a motive from the alert's severity hands the agent
   // one nobody gave. A rejection redirects the work, so this asks what next.
   const gatedResult: ToolResult = {
     tool_use_id: pending.toolUseId,
-    content: `The operator rejected this call, so it did not run and nothing on the system changed. ${
+    content: `The user rejected this call, so it did not run and nothing on the system changed. ${
       answer
         ? `They said: "${answer}". Take that into account`
         : "They gave no reason. Take the rejection itself as the signal"

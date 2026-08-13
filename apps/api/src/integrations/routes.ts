@@ -169,7 +169,7 @@ export async function registerIntegrationRoutes(
     async () => statusPayload(),
   );
 
-  // Sandbox prerequisites, checked when the operator clicks Connect: fail
+  // Sandbox prerequisites, checked when the user clicks Connect: fail
   // loud at setup time, never at 3am mid-incident.
   fastify.post(
     "/integrations/github/preflight",
@@ -409,7 +409,7 @@ export async function registerIntegrationRoutes(
   );
 
   // Reveal is a deliberate, non-idempotent action: the plaintext only crosses
-  // the wire when the operator explicitly asks for it.
+  // the wire when the user explicitly asks for it.
   fastify.post(
     "/integrations/alertmanager/credential/reveal",
     { preHandler: requireSession },

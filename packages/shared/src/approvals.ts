@@ -1,4 +1,4 @@
-// An approval has exactly two outcomes. A rejection carries the operator's
+// An approval has exactly two outcomes. A rejection carries the user's
 // comment back to the agent, which is what redirects the work, so there is no
 // third "added context" outcome for the agent to read as success.
 export type ApprovalStatus =

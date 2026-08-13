@@ -14,7 +14,7 @@ import { DurationRow, NumberRow } from "./NumberRow";
 import { CONTROL } from "./layout";
 
 // Both the closed trigger and the open list read from here, so the word an
-// operator sees before opening is the same word they pick.
+// user sees before opening is the same word they pick.
 const NETWORK_LABEL: Record<AgentConfig["sandboxNetwork"], string> = {
   allowlist: "Allowlist (recommended)",
   open: "Open (unrestricted)",

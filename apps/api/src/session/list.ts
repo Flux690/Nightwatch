@@ -40,7 +40,7 @@ function deriveStatus(source: SessionListSource): SessionRunStatus {
   if (isSettled(source)) return "resolved";
   if (report !== null && isActionable(report)) return "action_required";
   if (source.lastKind === "error") return "failed";
-  // Nothing for the operator to act on: the run ended without a recommendation,
+  // Nothing for the user to act on: the run ended without a recommendation,
   // whether or not it named a cause along the way.
   return "inconclusive";
 }

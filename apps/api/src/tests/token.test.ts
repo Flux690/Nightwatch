@@ -377,7 +377,7 @@ describe("Runner token lifecycle (issue 038)", () => {
     });
 
     // The row decided the platform at onboarding; the manifest says which binary
-    // actually dialled in. A disagreement is a real operator error - the Docker
+    // actually dialled in. A disagreement is a real user error - the Docker
     // install line pasted into a cluster - so it is refused, not half-served.
     it("refuses a runner whose manifest contradicts its row", async () => {
       const mint = await server.inject({

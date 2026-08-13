@@ -436,7 +436,7 @@ describe("the investigation record", () => {
     });
 
     // The clock a confirmation is measured against is the write itself, read
-    // from the ledger: a gated call that answered is one the operator released.
+    // from the ledger: a gated call that answered is one the user released.
     function appendRestart(sessionId: string, seq: number, at: string): void {
       appendCall(
         sessionId,
@@ -510,7 +510,7 @@ describe("the investigation record", () => {
         "trigger",
         ["tu-after"],
       );
-      // The operator said no, so nothing changed and the read confirms nothing.
+      // The user said no, so nothing changed and the read confirms nothing.
       expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "cited",
       );
@@ -549,7 +549,7 @@ describe("the investigation record", () => {
       expect(computeConviction(sessionId, getReport(sessionId)!)[id]).toBe(
         "cited",
       );
-      // Nor is it a decision the operator made about a write.
+      // Nor is it a decision the user made about a write.
       expect(gatedCalls(sessionId)).toHaveLength(0);
     });
   });
@@ -642,7 +642,7 @@ describe("the investigation record", () => {
       expect(getReport(sessionId)).toBeUndefined();
 
       // Neither the requests nor the alert briefing NightWarden opened with is
-      // drawn: the operator sees one conversation, with the agent.
+      // drawn: the user sees one conversation, with the agent.
       const drawn = JSON.stringify(buildTranscript(sessionId));
       expect(drawn).not.toContain("Your investigation record");
       expect(drawn).not.toContain("Your investigation is over");
@@ -788,7 +788,7 @@ describe("the investigation record", () => {
        written. */
     describe("a run that acted", () => {
       // A gated call carrying a result: the registry says it needed releasing,
-      // and no rejected outcome on it says the operator released it.
+      // and no rejected outcome on it says the user released it.
       function releasedWrite(sessionId: string, seq: number): void {
         appendCall(
           sessionId,

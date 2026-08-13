@@ -69,7 +69,7 @@ export async function registerSessionRoutes(
   fastify: FastifyInstance,
 ): Promise<void> {
   // Paginated rather than truncated: a hundredth session used to be the last one
-  // the operator could reach, with nothing on screen saying so.
+  // the user could reach, with nothing on screen saying so.
   fastify.get<{
     Querystring: { limit?: string; offset?: string; kind?: string };
   }>("/sessions", { preHandler: requireSession }, async (request, reply) => {
@@ -151,7 +151,7 @@ export async function registerSessionRoutes(
           .send({ error: "session is running: stop it before deleting" });
       }
       /* The sandbox goes with the row. Left behind, its container keeps running
-         and an hour later the idle sweep pushes to the operator's repository for
+         and an hour later the idle sweep pushes to the user's repository for
          a session they deleted. Awaited, not fired and forgotten: a delete is
          rare and manual, and a truthful 204 beats a fast one. */
       await teardown(sessionId, "deleted");
@@ -213,7 +213,7 @@ export async function registerSessionRoutes(
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
       /* What a session is, is declared here and never again: by an alert, or by
-         the operator picking a mode before they typed. Nothing infers it later -
+         the user picking a mode before they typed. Nothing infers it later -
          not the agent mid-conversation, and not the harness from what the run
          happened to record. */
       const investigation = kind === "investigation";

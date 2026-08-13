@@ -2,7 +2,7 @@ import type { ToolSchema } from "../../llm/types.js";
 
 // Offered to the model as a tool because tool-calling is its only channel, but
 // modelled as neither: the result comes from a person, so there is nothing to
-// execute and no policy an operator rule could switch off.
+// execute and no policy a user rule could switch off.
 export interface Elicitation {
   schema: ToolSchema;
 }
@@ -38,7 +38,7 @@ export const ELICITATIONS: Elicitation[] = [
               required: ["label", "description"],
             },
             description:
-              "The answers to offer. List only specific, named choices. Never add a catch-all such as 'Other' or 'None of the above': the operator is always given a free-text box alongside your options, so adding one of your own only duplicates it.",
+              "The answers to offer. List only specific, named choices. Never add a catch-all such as 'Other' or 'None of the above': the user is always given a free-text box alongside your options, so adding one of your own only duplicates it.",
           },
           multiSelect: {
             type: "boolean",

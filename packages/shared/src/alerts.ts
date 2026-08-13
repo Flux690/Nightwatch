@@ -11,7 +11,7 @@ export interface NormalizedAlert {
   annotations: Record<string, string>;
   alertType: string;
   // Null when the label is absent or names a word we cannot rank; `labels` keeps
-  // the operator's own word, which is the only verbatim record of it.
+  // the user's own word, which is the only verbatim record of it.
   severity: AlertSeverity | null;
   firedAt: string;
   // Where the sender says the condition lives. Prometheus puts the expression that
