@@ -428,7 +428,7 @@ describe("SettingsPage", () => {
       const user = userEvent.setup();
       const { router } = setup();
 
-      await openSection(user, /limits/i);
+      await openSection(user, /agent/i);
       const retries = await screen.findByLabelText(/^retries$/i);
       await user.clear(retries);
       await user.type(retries, "5");
@@ -775,11 +775,11 @@ describe("SettingsPage", () => {
     });
   });
 
-  describe("Limits", () => {
+  describe("Agent", () => {
     it("shows durations in the unit a person would say them in", async () => {
       const user = userEvent.setup();
       setup();
-      await openSection(user, /limits/i);
+      await openSection(user, /agent/i);
 
       // 1800000 ms is thirty minutes; nobody should have to do that division.
       expect(await screen.findByLabelText(/check in after/i)).toHaveValue(30);
@@ -792,7 +792,7 @@ describe("SettingsPage", () => {
     it("writes on blur, in milliseconds, and not while still being typed", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup();
-      await openSection(user, /limits/i);
+      await openSection(user, /agent/i);
 
       const checkIn = await screen.findByLabelText(/check in after/i);
       await user.clear(checkIn);

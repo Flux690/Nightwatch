@@ -98,8 +98,16 @@ describe("API-local session store", () => {
     const stored = getSession(m.sessionId);
     expect(stored).toBeDefined();
     expect(stored?.title).toBe("web-01 down");
+    // Not injected and nothing left out: this alert is what opened the session,
+    // which is recorded rather than worked out from when it arrived.
     expect(stored?.alerts).toEqual([
-      { alert, arrivedAt: m.createdAt, clearedAt: null },
+      {
+        alert,
+        arrivedAt: expect.any(String) as string,
+        clearedAt: null,
+        injected: false,
+        droppedAlerts: 0,
+      },
     ]);
   });
 
@@ -122,11 +130,10 @@ describe("API-local session store", () => {
 
     const stored = getSession(m.sessionId)!.alerts;
     expect(stored.map((entry) => entry.alert)).toEqual([alert, later]);
-    // The opening batch shares the session's instant; a later arrival carries
-    // its own, which is what places it at the turn it interrupted. Two clock
-    // reads can tie, so this asserts it is stamped, not that time moved.
-    expect(stored[0]!.arrivedAt).toBe(m.createdAt);
-    expect(stored[1]!.arrivedAt >= m.createdAt).toBe(true);
+    /* Which one opened the session is recorded, not deduced. Both carry an
+       arrival stamp and the two can land in the same millisecond, so anything
+       that compared them would be reading a race rather than a fact. */
+    expect(stored.map((entry) => entry.injected)).toEqual([false, true]);
     expect(stored[1]!.clearedAt).toBeNull();
   });
 

@@ -79,19 +79,163 @@ Any action that writes to a server pauses the loop and shows you an approval car
 
 **Console** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open a finished one and the report takes the main area - the summary, the timeline, what held up and what was ruled out, each with its evidence and charts - with the transcript in a rail on the right that also collapses. While the run is still working the chat has the whole stage instead, because a report being written in front of you is not worth reading. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
 
+## The life of an investigation
+
+Everything below is behaviour you can rely on. Where NightWarden cannot know
+something, it says so rather than guessing - that rule is the reason for most of
+the design here.
+
+### One alert group, one investigation
+
+Your alert source has already decided which alerts belong together. Alertmanager
+groups by the labels in your `group_by`, holds the group open for `group_wait`,
+and posts the whole group as a single webhook. NightWarden takes that grouping
+as given: **one delivery is one group is one investigation.**
+
+It does not regroup on a timer of its own. Two alerts that your Alertmanager put
+in different groups become two investigations however close together they fire,
+because a wrong split costs duplicated work you can see, while a wrong merge
+writes one report about two incidents and stops either from resolving.
+
+If you want more alerts investigated together, widen `group_by` in your
+`alertmanager.yml`. That is the only knob, and it is one you already understand.
+
+This works the same for Grafana Alerting, Mimir, Thanos and VictoriaMetrics:
+all of them notify through Alertmanager or a fork of it, and all of them send
+the same grouping information.
+
+### What is dropped, and what is not
+
+An alert is a **duplicate** when some investigation already covers that exact
+alert and nothing has said the condition recovered. Alertmanager re-sends a
+still-firing alert on `repeat_interval` - as often as every few minutes - and
+every one of those repeats is dropped. Without that, a single incident would
+open a fresh investigation of the identical alert all day.
+
+Two things are _not_ duplicates. An alert that cleared and later fires again
+carries a new start time, so it is a new incident and opens a new investigation.
+And a genuinely different alert in a group already being investigated joins that
+investigation rather than opening another - see below.
+
+If your alert source leaves alerts out of a delivery, which Alertmanager does
+when a group is very large, it says how many. NightWarden passes that straight
+to the agent: _"your alert source left 6 further alerts out of this delivery, so
+this group is larger than what you can see here."_ An investigation working from
+a partial group is told it is working from a partial group.
+
+### Waiting for a free slot
+
+**Ten investigations run at once by default**, a setting under Settings → Agent.
+An investigation waiting on your approval still counts, because starting another
+one only puts a second write in front of the same person.
+
+When every slot is busy, alerts **wait their turn**. They are never dropped -
+your alert source was already told the webhook was accepted, and it has nobody
+to retry to. The Investigations page shows a band saying how many are waiting,
+how many are running, and how long the oldest has waited. A slot frees when a
+run ends, and the alerts that have waited longest go first, as a whole group.
+
+An alert that recovers while it is waiting is never investigated at all. There
+is nothing to look into, and no investigation is created to explain that.
+
+Two things are refused rather than queued, because you are watching the screen
+when they happen: starting an investigation yourself from the console when all
+ten slots are busy, and starting a chat when twenty are already running. You get
+a message immediately instead of a spinner with no end in sight. The chat number
+is a runaway backstop rather than a usage limit; reaching it means something is
+very wrong.
+
+### When another alert fires mid-investigation
+
+If a new alert arrives for a group NightWarden is already investigating, it
+joins that investigation - even if the run is paused waiting for your approval.
+The agent is _told_ the alert fired. It is never asked whether the alert belongs,
+because your alert source already answered that.
+
+The alert appears in the transcript at the point it interrupted, so you can read
+what the agent knew and when. It is also added to the investigation's alert list,
+which means the investigation cannot be called Resolved until that alert clears
+too.
+
+An alert for any other group opens its own investigation, or waits for a slot.
+
+### What a status means
+
+| Status              | What it means                                                 | What happens next                                                      |
+| ------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Investigating**   | A run is working right now                                    | Nothing to do                                                          |
+| **Action required** | It is waiting on you, or it finished with something to act on | Approve, answer, or act on the recommendation                          |
+| **Resolved**        | Every alert on it stopped firing                              | Nothing to do. This is the only status that means the incident is over |
+| **Inconclusive**    | The run ended without anything for you to act on              | Read what it ruled out; it may still recover on its own                |
+| **Failed**          | The run broke - usually the model provider                    | Retried automatically if the cause was temporary; see below            |
+
+**Resolved is never inferred.** It does not mean a fix ran, and it never comes
+from the model saying it found the cause. It means the alert stopped firing,
+confirmed either by your alert source's resolved notification or by asking
+Prometheus whether its rule still holds. When nothing can answer, the record
+says recovery was not confirmed rather than claiming it.
+
+Underneath, a session's run is in exactly one of three states: **running**,
+**suspended** (parked on you), or **done**. Running and suspended both hold one
+of the ten slots. This is what makes the count on the Investigations page true
+rather than an estimate, and what lets a restart tell a run that was alive from
+one that had finished.
+
+### When NightWarden restarts
+
+There is one process and one SQLite file, so a restart is the only way work is
+interrupted. Nothing is held in memory that matters: alerts are written to disk
+the moment they arrive, before anything decides whether there is a slot.
+
+**Alerts still waiting** are still waiting. They start as soon as the API is
+back and a slot is free.
+
+**A run that was working** is picked up. If its last exchange was cut in half,
+NightWarden repairs it where that is safe - a read can simply be run again -
+and unwinds past it where it is not, because a write it cannot prove the outcome
+of must never be replayed. If the alert is still firing and the run was recent,
+it carries on from its last complete exchange. Otherwise it is marked as
+interrupted, so it reads as broken rather than as an investigation that
+concluded nothing.
+
+**A run parked on your approval** is left alone. It is waiting, not broken, and
+it keeps its slot.
+
+There is one narrow case in between. If NightWarden stops in the instant between
+running an approved command and recording its result, it comes back knowing the
+command ran but not what it returned. It does not run it again - that is the one
+thing it must never do. The investigation stops with a note saying exactly that:
+_"whether the call took effect is unknown - check the target before approving it
+again."_
+
+### When a run fails
+
+A failed run is retried **up to three times**, and only when the cause was worth
+waiting out: a dropped connection, a rate limit, a provider having a bad day.
+The retry rides the same schedule that checks whether the alert recovered, so it
+is minutes apart rather than seconds - the run already spent about a minute
+retrying inside itself before giving up.
+
+It is never retried when trying again cannot work. A rejected API key, an empty
+account, or a model that no longer exists fails identically every time, and
+three more attempts would only write three more failures for you to read. Those
+stop and wait for you, and the message says which one it was.
+
+A retry picks up from the last complete exchange, not from the beginning.
+
 ## Features
 
 - **A report, not a wall of chat.** The agent records each claim as it settles it, then writes the report from that record once the run is over: a summary you can paste into a postmortem, a timeline that includes every write it was allowed to make, who was affected, and what to do next. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
 - **It cannot finish without concluding.** A run is not allowed to end on an empty record, or on a claim backed only by a call that returned nothing, and no claim can be recorded at all without citing one. If it cannot find the cause it records what it ruled out and says so.
 - **"Resolved" means the alert stopped firing.** Not that a fix ran, and never because the model said it found the cause. NightWarden confirms recovery against the condition that fired - your alert source's own resolved notification, or by asking Prometheus whether its rule still holds. When nothing can answer, the record says recovery was not confirmed rather than claiming it.
-- **One investigation per alert group.** Relatedness is your alert source's call, not a guess of ours. Alerts your Alertmanager grouped together are investigated together; two groups are two investigations however close together they fire, because a wrong split costs duplicated work you can see while a wrong merge writes one report about two incidents and blocks both from resolving. A later alert in a group already being investigated joins it, and the agent is told it fired rather than asked whether it belongs.
-- **A bounded number at once.** Ten investigations run concurrently by default, a Settings knob. One waiting on your approval keeps its place, because starting another only puts a second write in front of the same person. Beyond that, alerts wait their turn and the Investigations page says how many - nothing is ever dropped, because your alert source was already told the webhook was accepted.
+- **One investigation per alert group.** Relatedness is your alert source's call, not a guess of ours: whatever `group_by` you already configured decides what is investigated together. Ten investigations run at once by default; beyond that alerts wait their turn and nothing is dropped. See [The life of an investigation](#the-life-of-an-investigation).
 - **One choice, made before you type.** Chat answers the question and stops. Investigate works it out and writes a report. Both get the full toolset behind the same approval gate, and an alert always opens an investigation. Nothing infers which you meant afterwards, and a session is what it was created as and never changes underneath you.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which a user cannot rename out from under it.
 - **Human-in-the-loop by default.** Write actions like `RestartDockerService`, `DockerBash`, `RestartK8sWorkload`, and `K8sBash` require explicit approval. Read actions run automatically so the agent can investigate without waiting on you.
 - **Code fixes as draft pull requests.** Connect a GitHub repository and the agent can read the code, build and test a fix inside a hardened per-session Docker sandbox on the API host, and propose it as a draft pull request. A human always reviews and merges on GitHub - NightWarden never merges.
 - **Durable suspend and resume.** A pending approval survives an API restart. You can approve hours later and the agent picks up exactly where it left off, because nothing is held in memory while it waits. A run that was working when the process died survives too: on the next boot the session says it was interrupted rather than quietly reading as an investigation that concluded nothing, and if the alert is still firing and the run was recent, it carries on from its last complete exchange.
+- **A broken run tries again, but only when that can help.** A run that died on a dropped connection or a rate limit is retried up to three times, minutes apart. A run that died on a rejected key, an empty account or a model that no longer exists is not retried at all, because it would fail identically every time - it stops and tells you which one it was.
 - **Works behind NAT.** Runners dial out to the API over WSS. There are no inbound ports to open on your servers.
 - **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one. A fleet-level read with no runner named answers for every runner at once, each answer attributed.

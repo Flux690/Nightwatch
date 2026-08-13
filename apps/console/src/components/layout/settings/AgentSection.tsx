@@ -3,17 +3,19 @@ import type { AgentConfig } from "@nightwarden/shared";
 import { SettingsGroup } from "./SettingsRow";
 import { DurationRow, NumberRow } from "./NumberRow";
 
-interface LimitsSectionProps {
+interface AgentSectionProps {
   config: AgentConfig;
   save: (patch: Partial<AgentConfig>) => void;
 }
 
-// Grouped by what each number applies to, outermost first: the five values
-// operate at three different scopes, which is what made one flat list unreadable.
-export function LimitsSection({
+// Everything about how the agent behaves, grouped by what each number applies
+// to, outermost first: these operate at three different scopes, which is what
+// made one flat list unreadable. Sandbox limits are not here - those describe a
+// container, not the agent.
+export function AgentSection({
   config,
   save,
-}: LimitsSectionProps): React.JSX.Element {
+}: AgentSectionProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-8">
       <SettingsGroup title="Investigation">

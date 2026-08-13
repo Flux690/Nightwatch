@@ -25,11 +25,13 @@ import { registerAlertRoutes } from "../alerts/ingest.js";
 import { dispatcher } from "../dispatcher.js";
 import { updateConfig } from "../config/store.js";
 import {
+  appendErrorMessage,
   countInvestigations,
   getSession,
   listSessionSources,
   markAlertCleared,
   queueDepth,
+  recordRunFailure,
 } from "../db/sessions.js";
 import {
   registerRunner,
@@ -39,7 +41,10 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 import { mountApi } from "./api-server.js";
+import { randomUUID } from "node:crypto";
 import { waitFor } from "./wait.js";
+import { seedAlertSession } from "./session-helper.js";
+import { reconcileRecovery } from "../verification/reconciler.js";
 
 // A free-form finish: no tool call ends the run successfully.
 const FINISH: ScriptedTurn[] = [
@@ -152,6 +157,14 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
         expect(res.statusCode).toBe(200);
         return JSON.parse(res.body) as { enqueued: number; skipped: number };
       });
+  }
+
+  // Every investigation there is, oldest first, so a test can name the one it
+  // just opened without knowing the id promotion minted for it.
+  function investigationIds(): string[] {
+    return listSessionSources(100, 0, "investigation")
+      .sources.map((s) => s.sessionId)
+      .reverse();
   }
 
   function liveSessions(): string[] {
@@ -270,6 +283,68 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
       ]),
     );
     await waitFor(() => countInvestigations() === before + 2);
+  });
+
+  /* Dedup is scoped to the alert, so a repeat no longer re-triggers a run that
+     broke. The sweep already asking whether this incident recovered is what
+     tries again - the same set of sessions, thinning for the same reason.
+
+     Seeded rather than driven to failure: what is under test is which failures
+     earn another attempt, and a run that died on its first turn leaves exactly
+     this - an error row, a classification, and nothing to resume from. */
+  function failedInvestigation(fingerprint: string): string {
+    const sessionId = randomUUID();
+    seedAlertSession(
+      { sessionId, title: "t", createdAt: new Date().toISOString() },
+      [
+        {
+          sourceAlertId: fingerprint,
+          labels: {},
+          alertType: "HighCPU",
+          severity: "warning",
+          firedAt: "2026-07-07T03:00:00.000Z",
+          annotations: {},
+          generatorURL: null,
+          rawPayload: {},
+        },
+      ],
+    );
+    appendErrorMessage(sessionId, "The provider had a server problem.");
+    return sessionId;
+  }
+
+  describe("a run that failed while its alert kept firing", () => {
+    it("is retried when the cause was worth waiting out", async () => {
+      useGatedProvider();
+      const sessionId = failedInvestigation("retry-1");
+      recordRunFailure(sessionId, "transient");
+
+      const pass = await reconcileRecovery(Date.now() + 3_600_000);
+      expect(pass.retried).toBe(1);
+      await settle();
+    });
+
+    it("stops after three attempts, however long the incident runs", async () => {
+      useGatedProvider();
+      const sessionId = failedInvestigation("retry-capped");
+      // Three failures with nothing in between: the count is what is spent, not
+      // the elapsed time, so no amount of further sweeping earns a fourth.
+      for (let i = 0; i < 3; i++) recordRunFailure(sessionId, "transient");
+
+      const pass = await reconcileRecovery(Date.now() + 3_600_000);
+      expect(pass.retried).toBe(0);
+    });
+
+    it("is never retried when trying again cannot work", async () => {
+      useGatedProvider();
+      const sessionId = failedInvestigation("retry-2");
+
+      // A rejected key, an empty account, a model that does not exist: each
+      // fails identically every time, so retrying only writes more failures.
+      recordRunFailure(sessionId, "permanent");
+      const pass = await reconcileRecovery(Date.now() + 3_600_000);
+      expect(pass.retried).toBe(0);
+    });
   });
 
   describe("when every seat is taken", () => {

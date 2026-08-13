@@ -137,9 +137,9 @@ const start = async (): Promise<void> => {
     // Before listen(), so nothing can dispatch into a session this is still
     // deciding about. A run still flagged running was killed with the process.
     const recovered = await recoverDeadRuns();
-    if (recovered.failed > 0 || recovered.released > 0) {
+    if (recovered.failed > 0 || recovered.resumed > 0) {
       fastify.log.info(
-        `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed, ${recovered.released} stuck suspensions released`,
+        `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed`,
       );
     }
     /* Alerts queued when the process died are still queued, and the seats they

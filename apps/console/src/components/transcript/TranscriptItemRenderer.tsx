@@ -74,18 +74,27 @@ function ErrorNotice({ text }: { text: string }): React.JSX.Element {
 // Why the agent changed course here. Deliberately a line, not a card: the
 // report's alert band holds the detail, and this only has to mark the moment.
 function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
+  /* A rule the label rides, not a card: this marks where the ground moved, so it
+     has to span the column to be read as a boundary rather than as another item
+     the agent produced. One hairline, and severity is a dot - the alert type is
+     the thing worth reading. */
   return (
     <div
       role="status"
-      className="animate-in fade-in flex items-baseline gap-2 border-y border-border py-2 text-sm duration-(--duration-slow)"
+      className="animate-in fade-in flex items-center gap-3 py-1 text-sm duration-(--duration-slow)"
     >
-      <span className="font-medium text-muted-foreground">
-        Alert fired during this run
+      <span aria-hidden className="h-px w-6 shrink-0 bg-border" />
+      <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-muted-foreground">
+        <span
+          aria-hidden
+          className={`size-1.5 rounded-full ${
+            item.severity === "critical" ? "bg-fail" : "bg-muted-foreground"
+          }`}
+        />
+        <span className="font-medium text-foreground">{item.alertType}</span>
+        <span>fired during this run</span>
       </span>
-      {item.severity === "critical" && (
-        <span className="font-semibold text-fail">Critical</span>
-      )}
-      <span>{item.alertType}</span>
+      <span aria-hidden className="h-px min-w-0 flex-1 bg-border" />
     </div>
   );
 }

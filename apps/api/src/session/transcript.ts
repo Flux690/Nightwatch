@@ -150,18 +150,17 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     }
   }
 
-  /* Alerts that arrived after this session existed, in arrival order. The ones
-     that opened it are excluded: the report's alert band sits directly above the
-     first of them anyway.
+  /* Alerts that arrived mid-run, in arrival order. The ones that opened the
+     session are excluded: the report's alert band sits above the first of them.
 
-     Compared against the session's own creation rather than its first message.
-     Both are facts about one ordered sequence - alerts are queued, then a session
-     takes them - so an opener always predates it. The first message is written
-     after an LLM round trip, which is a second clock read racing the injection
-     rather than a boundary between them. */
-  const session = getSession(sessionId);
-  const arrivals = (session?.alerts ?? []).filter(
-    (entry) => session !== undefined && entry.arrivedAt > session.createdAt,
+     Read from the row, never worked out from a timestamp. Which alerts opened a
+     session is known when they are written, so recovering it by comparing clocks
+     would be inferring a fact we already had - and those clocks drift, because a
+     session's first message lands only after a round trip to the model.
+     Timestamps still place these in the transcript; they no longer decide what
+     they are. */
+  const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
+    (entry) => entry.injected,
   );
   let nextArrival = 0;
 

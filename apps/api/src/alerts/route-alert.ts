@@ -21,6 +21,7 @@ interface Routed {
 export function routeDelivery(
   groupKey: string,
   firing: NormalizedAlert[],
+  droppedAlerts = 0,
 ): Routed {
   const fresh: NormalizedAlert[] = [];
   let skipped = 0;
@@ -33,7 +34,7 @@ export function routeDelivery(
   const sessionId = sessionCoveringGroup(groupKey);
   if (sessionId !== undefined) {
     for (const alert of fresh) {
-      dispatcher.injectAlert(sessionId, groupKey, alert);
+      dispatcher.injectAlert(sessionId, groupKey, alert, droppedAlerts);
     }
     logger.info(
       { groupKey, sessionId, alertCount: fresh.length },
@@ -44,7 +45,7 @@ export function routeDelivery(
 
   // Durable before any decision about capacity: the sender was answered 200, so
   // a full pool must delay this delivery, never lose it.
-  enqueueAlerts(groupKey, fresh);
+  enqueueAlerts(groupKey, fresh, droppedAlerts);
   logger.info(
     { groupKey, alertCount: fresh.length },
     "alerts queued for investigation",

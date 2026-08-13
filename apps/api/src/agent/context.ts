@@ -53,6 +53,9 @@ export function buildInitialContext(
   alerts: NormalizedAlert[],
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
+  // How many the source left out of the delivery these came in. Rendered rather
+  // than dropped: a group shown short has to say it is short.
+  droppedAlerts = 0,
 ): InitialContext {
   if (!alerts[0]) {
     return buildChatContext(fleetView, opts, true);
@@ -74,12 +77,19 @@ export function buildInitialContext(
       ? "An alert has fired. Investigate it."
       : `${alerts.length} correlated alerts have fired together. Investigate them as one incident.`;
 
+  /* Stated, never guessed at. The sender says how many it left out; without this
+     the agent reads a short group as the whole incident and concludes from it. */
+  const droppedLine =
+    droppedAlerts === 0
+      ? ""
+      : `\nYour alert source left ${droppedAlerts} further alert${droppedAlerts === 1 ? "" : "s"} out of this delivery, so this group is larger than what you can see here. Treat the list above as part of the incident, not all of it.\n`;
+
   const openingTurn = `${opening}
 
 <alert>
 ${alertsSection}
 </alert>
-${buildFleetSummary(fleetView)}
+${droppedLine}${buildFleetSummary(fleetView)}
 Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
   return {

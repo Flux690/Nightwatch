@@ -54,12 +54,18 @@ export interface SessionMeta {
   createdAt: string;
 }
 
-// One alert on a session, with the two facts the alert itself cannot carry:
-// when it joined, and whether the condition has since recovered.
+// One alert on a session, with the facts the alert itself cannot carry: when it
+// joined, whether the condition has since recovered, and how it got here.
 export interface SessionAlert {
   alert: NormalizedAlert;
   arrivedAt: string;
   clearedAt: string | null;
+  // True when it arrived mid-run rather than opening the session. Recorded when
+  // the row is written, because that is when it is known.
+  injected: boolean;
+  // How many alerts the source left out of the delivery this one arrived in.
+  // Zero is the ordinary case and means the group was sent whole.
+  droppedAlerts: number;
 }
 
 // What GET /sessions/:id answers. The session states whether it is under

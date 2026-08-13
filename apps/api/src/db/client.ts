@@ -156,6 +156,14 @@ CREATE INDEX IF NOT EXISTS idx_sessions_seats
 -- The scalars are what anything looks an alert up BY: source_alert_id and
 -- fired_at identify it, cleared_at says whether it is still open. Everything
 -- else is read whole and never queried, so it stays JSON in the alert column.
+-- injected says whether this alert arrived mid-run or opened the session. Written
+-- when the row is, because we know it then: one path assigns a whole group at
+-- once, the other appends to a session already working. Deriving it later from
+-- timestamps would be inferring a fact we already had.
+
+-- dropped_alerts is how many the sender left out of that delivery. A result that
+-- shows less than fired has to say so, and it is per arrival: a later delivery of
+-- the same group can be complete when an earlier one was not.
 CREATE TABLE IF NOT EXISTS alerts (
   id                 INTEGER   PRIMARY KEY,
   session_id         TEXT      REFERENCES sessions(session_id) ON DELETE CASCADE,
@@ -164,6 +172,8 @@ CREATE TABLE IF NOT EXISTS alerts (
   fired_at           TEXT      NOT NULL,
   arrived_at         TEXT      NOT NULL,
   cleared_at         TEXT,
+  injected           INTEGER   NOT NULL DEFAULT 0,
+  dropped_alerts     INTEGER   NOT NULL DEFAULT 0,
   alert              TEXT      NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_session

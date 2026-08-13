@@ -19,21 +19,27 @@ type StoredSession = SessionMeta & {
 };
 
 const INSERT_ALERT = `INSERT INTO alerts
-     (session_id, group_key, source_alert_id, fired_at, arrived_at, cleared_at, alert)
-   VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL, @alert)`;
+     (session_id, group_key, source_alert_id, fired_at, arrived_at, cleared_at,
+      injected, dropped_alerts, alert)
+   VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL,
+      @injected, @droppedAlerts, @alert)`;
 
 function alertParams(
   sessionId: string | null,
   groupKey: string,
   alert: NormalizedAlert,
   arrivedAt: string,
-): Record<string, string | null> {
+  injected: boolean,
+  droppedAlerts: number,
+): Record<string, string | number | null> {
   return {
     sessionId,
     groupKey,
     sourceAlertId: alert.sourceAlertId,
     firedAt: alert.firedAt,
     arrivedAt,
+    injected: injected ? 1 : 0,
+    droppedAlerts,
     alert: JSON.stringify(alert),
   };
 }
@@ -62,6 +68,7 @@ export function createSession(meta: SessionMeta, investigation = false): void {
 export function enqueueAlerts(
   groupKey: string,
   alerts: NormalizedAlert[],
+  droppedAlerts = 0,
 ): void {
   if (alerts.length === 0) return;
   const db = getDb();
@@ -69,7 +76,9 @@ export function enqueueAlerts(
   const arrivedAt = new Date().toISOString();
   db.transaction((): void => {
     for (const alert of alerts) {
-      insert.run(alertParams(null, groupKey, alert, arrivedAt));
+      insert.run(
+        alertParams(null, groupKey, alert, arrivedAt, false, droppedAlerts),
+      );
     }
   })();
 }
@@ -80,10 +89,20 @@ export function appendSessionAlert(
   sessionId: string,
   groupKey: string,
   alert: NormalizedAlert,
+  droppedAlerts = 0,
 ): void {
   getDb()
     .prepare(INSERT_ALERT)
-    .run(alertParams(sessionId, groupKey, alert, new Date().toISOString()));
+    .run(
+      alertParams(
+        sessionId,
+        groupKey,
+        alert,
+        new Date().toISOString(),
+        true,
+        droppedAlerts,
+      ),
+    );
 }
 
 /* Stamps this alert wherever it is still open, queued rows included: an alert
@@ -232,6 +251,8 @@ interface AlertRow {
   sessionId: string;
   arrivedAt: string;
   clearedAt: string | null;
+  injected: number;
+  droppedAlerts: number;
   alert: string;
 }
 
@@ -244,6 +265,8 @@ function toSessionAlert(row: AlertRow): SessionAlert[] {
         alert: JSON.parse(row.alert) as NormalizedAlert,
         arrivedAt: row.arrivedAt,
         clearedAt: row.clearedAt,
+        injected: row.injected === 1,
+        droppedAlerts: row.droppedAlerts,
       },
     ];
   } catch {
@@ -252,7 +275,7 @@ function toSessionAlert(row: AlertRow): SessionAlert[] {
 }
 
 const ALERT_COLUMNS = `session_id AS sessionId, arrived_at AS arrivedAt,
-        cleared_at AS clearedAt, alert`;
+        cleared_at AS clearedAt, injected, dropped_alerts AS droppedAlerts, alert`;
 
 // id ascending is arrival order, which is what the first alert of a batch means
 // to everything that reads one.
@@ -586,6 +609,45 @@ export function releaseRun(sessionId: string): void {
        WHERE session_id = ? AND run_state = 'running'`,
     )
     .run(sessionId);
+}
+
+/* Why the last run failed and how many times we have tried. Recorded at the
+   failure, because `describeLLMError`'s prose cannot be classified afterwards -
+   and the whole point is to never retry a bad key or an empty account. */
+export function recordRunFailure(
+  sessionId: string,
+  kind: "transient" | "permanent",
+): void {
+  getDb()
+    .prepare(
+      `UPDATE sessions
+       SET failure_kind = @kind, failed_attempts = failed_attempts + 1
+       WHERE session_id = @sessionId`,
+    )
+    .run({ sessionId, kind });
+}
+
+// A run that got somewhere clears the record, so a later unrelated failure gets
+// its own three attempts rather than inheriting a spent count.
+export function clearRunFailure(sessionId: string): void {
+  getDb()
+    .prepare(
+      `UPDATE sessions SET failure_kind = NULL, failed_attempts = 0
+       WHERE session_id = ? AND failure_kind IS NOT NULL`,
+    )
+    .run(sessionId);
+}
+
+export function runFailure(
+  sessionId: string,
+): { kind: string; attempts: number } | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT failure_kind AS kind, failed_attempts AS attempts
+       FROM sessions WHERE session_id = ? AND failure_kind IS NOT NULL`,
+    )
+    .get(sessionId) as { kind: string; attempts: number } | undefined;
+  return row;
 }
 
 /* Unconditional, unlike releaseRun: boot recovery uses it to give back a seat

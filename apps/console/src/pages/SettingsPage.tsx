@@ -16,7 +16,7 @@ import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { AccountSection } from "@/components/layout/settings/AccountSection";
-import { LimitsSection } from "@/components/layout/settings/LimitsSection";
+import { AgentSection } from "@/components/layout/settings/AgentSection";
 import {
   ProviderSection,
   type CatalogState,
@@ -36,7 +36,7 @@ const CATALOG_DEBOUNCE_MS = 500;
 
 const SECTIONS = [
   { id: "provider", label: "Provider" },
-  { id: "limits", label: "Limits" },
+  { id: "agent", label: "Agent" },
   { id: "sandbox", label: "Sandbox" },
   { id: "account", label: "Account" },
 ] as const;
@@ -318,8 +318,8 @@ export function SettingsPage(): React.JSX.Element {
           onSave={() => void handleSaveProvider()}
         />
       )}
-      {config && active === "limits" && (
-        <LimitsSection config={config} save={save} />
+      {config && active === "agent" && (
+        <AgentSection config={config} save={save} />
       )}
       {config && active === "sandbox" && (
         <SandboxSection config={config} save={save} />

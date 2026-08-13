@@ -24,6 +24,8 @@ const ON_SESSION: SessionAlert = {
   alert: ALERT,
   arrivedAt: ALERT.firedAt,
   clearedAt: null,
+  injected: false,
+  droppedAlerts: 0,
 };
 
 const RESPONSE: SessionReportResponse = {

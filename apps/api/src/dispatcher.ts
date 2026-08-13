@@ -5,6 +5,8 @@ import {
   appendErrorMessage,
   appendSessionAlert,
   claimRun,
+  clearRunFailure,
+  recordRunFailure,
   getSession,
   isRunning,
   oldestQueuedGroup,
@@ -13,7 +15,7 @@ import {
   sessionExists,
 } from "./db/sessions.js";
 import { hasSeat } from "./run-pool.js";
-import { describeLLMError } from "./llm/failures.js";
+import { describeLLMError, isTransientLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
 import {
   publishQueueChanged,
@@ -38,6 +40,7 @@ interface Dispatcher {
     sessionId: string,
     groupKey: string,
     alert: NormalizedAlert,
+    droppedAlerts?: number,
   ): void;
   drainInbox(sessionId: string): NormalizedAlert[];
   // Aborts the in-flight LLM request for a running session. Returns false if
@@ -80,6 +83,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
 
     void run({ ...input, signal: controller.signal })
       .then((outcome) => {
+        // A run that reached an ending, however it ended, is not a failure any
+        // more - so it stops carrying one and gets its full three attempts back.
+        clearRunFailure(input.sessionId);
         // Single lifecycle owner: exactly one terminal event per run. Completed and
         // stopped runs need theirs here; suspended runs already ended via the loop's
         // interrupt event, and failed runs terminate in the catch below.
@@ -90,6 +96,13 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         logger.error(
           { err, sessionId: input.sessionId },
           "investigation failed",
+        );
+        /* Classified here or not at all: only the error object can say whether
+           trying again could ever work, and it does not survive into the
+           transcript row written below. */
+        recordRunFailure(
+          input.sessionId,
+          isTransientLLMError(err) ? "transient" : "permanent",
         );
         // The failure becomes a durable transcript row rendered like any other
         // message; a synthetic row still unsticks the console if persist fails.
@@ -168,8 +181,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       sessionId: string,
       groupKey: string,
       alert: NormalizedAlert,
+      droppedAlerts = 0,
     ): void {
-      appendSessionAlert(sessionId, groupKey, alert);
+      appendSessionAlert(sessionId, groupKey, alert, droppedAlerts);
       const arr = inbox.get(sessionId) ?? [];
       arr.push(alert);
       inbox.set(sessionId, arr);

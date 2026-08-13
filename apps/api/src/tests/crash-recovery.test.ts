@@ -124,7 +124,6 @@ describe("recovering runs a restart interrupted", () => {
     );
 
     const result = await recoverDeadRuns();
-    expect(result.released).toBe(0);
 
     expect(result.failed).toBe(0);
     expect(isRunning(sessionId)).toBe(false);

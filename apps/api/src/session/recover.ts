@@ -11,7 +11,6 @@ import {
   getSession,
   getTranscriptRows,
   markDone,
-  releaseRun,
   runningSessionIds,
   suspendedSessionIds,
 } from "../db/sessions.js";
@@ -116,42 +115,44 @@ function worthResuming(sessionId: string): boolean {
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
-/* Suspended, but waiting on nothing: approving a call deletes the interrupt row
-   before the resume claims the run, so a crash in that gap leaves this. The
-   approved tool already executed and its result is gone, so the run cannot be
-   resumed - re-running the write is the one thing we must not do. Releasing the
-   state is what gives the seat back; the note is what says why it stopped. */
-function releaseAbandonedSuspensions(): number {
-  let released = 0;
-  for (const sessionId of suspendedSessionIds()) {
-    if (hasPendingHumanInput(sessionId)) continue;
-    try {
-      markDone(sessionId);
-      appendErrorMessage(sessionId, ABANDONED);
-      released++;
-    } catch (err) {
-      logger.warn({ err, sessionId }, "could not release a stuck suspension");
-    }
-  }
-  return released;
+/* Sessions this process could not have left behind, since it has only just
+   started. Two ways a restart strands one, and they need different answers:
+
+   'running' was killed mid-turn. Its last exchange may be repairable, and if the
+   incident is still live it carries on.
+
+   'suspended' with no interrupt row was killed in the gap between approving a
+   call and the resume claiming the run. The write already executed and its
+   result is gone, so there is nothing to carry on from - and re-running it is
+   the one thing we must not do. It is also holding a seat until we say so. */
+function strandedSessions(): Array<{ sessionId: string; killed: boolean }> {
+  const killed = runningSessionIds().map((sessionId) => ({
+    sessionId,
+    killed: true,
+  }));
+  const abandoned = suspendedSessionIds()
+    .filter((sessionId) => !hasPendingHumanInput(sessionId))
+    .map((sessionId) => ({ sessionId, killed: false }));
+  return [...killed, ...abandoned];
 }
 
-/* Every session still flagged running was killed: there is one process, and it
-   has only just started. Runs before the server listens, so nothing can dispatch
-   into a session this is still deciding about. */
+/* Runs before the server listens, so nothing can dispatch into a session this is
+   still deciding about. */
 export async function recoverDeadRuns(): Promise<{
   failed: number;
   resumed: number;
-  released: number;
 }> {
-  const result = {
-    failed: 0,
-    resumed: 0,
-    released: releaseAbandonedSuspensions(),
-  };
-  for (const sessionId of runningSessionIds()) {
-    releaseRun(sessionId);
+  const result = { failed: 0, resumed: 0 };
+  for (const { sessionId, killed } of strandedSessions()) {
+    // markDone rather than releaseRun: an abandoned suspension is not running,
+    // which is exactly why releaseRun would decline to touch it.
+    markDone(sessionId);
     try {
+      if (!killed) {
+        appendErrorMessage(sessionId, ABANDONED);
+        result.failed++;
+        continue;
+      }
       const pending = unansweredCalls(getTranscriptRows(sessionId));
       if (pending.length > 0) {
         await answerPendingCalls(sessionId, pending);

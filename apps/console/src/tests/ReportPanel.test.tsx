@@ -38,7 +38,13 @@ function onSession(
   alert: NormalizedAlert,
   clearedAt: string | null = null,
 ): SessionAlert {
-  return { alert, arrivedAt: alert.firedAt, clearedAt };
+  return {
+    alert,
+    arrivedAt: alert.firedAt,
+    clearedAt,
+    injected: false,
+    droppedAlerts: 0,
+  };
 }
 
 const REPORT: Report = {
