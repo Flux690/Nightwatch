@@ -206,10 +206,11 @@ describe("multi-runner routing", () => {
     const sessionId = randomUUID();
     // The chat route writes the row before dispatching, so that a run always has
     // a session to claim; this drives the dispatcher directly and must do the same.
-    createSession(
-      { sessionId, title: "t", createdAt: new Date().toISOString() },
-      [],
-    );
+    createSession({
+      sessionId,
+      title: "t",
+      createdAt: new Date().toISOString(),
+    });
     dispatcher.dispatch({
       sessionId,
       userMessage: "investigate",

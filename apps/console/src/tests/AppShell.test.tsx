@@ -294,6 +294,60 @@ describe("Shell", () => {
     });
   });
 
+  /* Alerts waiting for a free seat are not sessions, so they cannot be rows: a
+     row promises a transcript and something to open. The band is how the reader
+     learns work is held up, and it names the limit because raising that is the
+     one thing they can do about it. */
+  describe("the alert queue band", () => {
+    it("says nothing while nothing is waiting", async () => {
+      setup({ path: "/investigations" });
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
+
+      expect(screen.queryByText(/alerts? waiting/i)).not.toBeInTheDocument();
+    });
+
+    it("appears when alerts are held up, naming the count and the limit", async () => {
+      setup({ path: "/investigations" });
+      await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
+
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "q1",
+          type: "QUEUE_CHANGED",
+          payload: {
+            waiting: 3,
+            running: 10,
+            limit: 10,
+            oldestArrivedAt: new Date(Date.now() - 4 * 60_000).toISOString(),
+          },
+        });
+      });
+
+      expect(await screen.findByText("3 alerts waiting")).toBeInTheDocument();
+      expect(
+        screen.getByText(/10 of 10 investigations running/),
+      ).toBeInTheDocument();
+
+      // It clears itself the moment the last one starts, rather than lingering
+      // as a stale claim that work is held up.
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "q2",
+          type: "QUEUE_CHANGED",
+          payload: {
+            waiting: 0,
+            running: 10,
+            limit: 10,
+            oldestArrivedAt: null,
+          },
+        });
+      });
+      await waitFor(() =>
+        expect(screen.queryByText(/alerts? waiting/i)).not.toBeInTheDocument(),
+      );
+    });
+  });
+
   describe("the top bar", () => {
     it("gives a page with no controls a lone crumb and no controls row", async () => {
       setup({ path: "/investigations" });

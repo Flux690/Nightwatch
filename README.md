@@ -50,7 +50,7 @@ class console ui;
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
 
-When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. The API opens a session and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
+When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. One webhook delivery is one alert group, and that grouping is yours: whatever `group_by` you already configured decides which alerts are investigated together, and NightWarden never regroups them on a clock of its own. The API opens a session for the group and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
 
 As it works it builds an **investigation record**, one claim at a time. Each time it settles a hunch it writes down what it tested, the verdict it earned and the ids of the tool calls that back it. Nothing it wrote earlier can be edited or deleted, so a claim it later abandoned stays on the record beside the one that replaced it. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
 
@@ -84,6 +84,8 @@ Any action that writes to a server pauses the loop and shows you an approval car
 - **A report, not a wall of chat.** The agent records each claim as it settles it, then writes the report from that record once the run is over: a summary you can paste into a postmortem, a timeline that includes every write it was allowed to make, who was affected, and what to do next. Charts and merged pull requests are drawn from the recorded results, so the report still renders long after your metrics retention has rolled over. Each claim quotes the exact tool call behind it and carries a grade the system worked out from those citations - backed by one source, by two independent ones, or confirmed by a check taken after a fix ran.
 - **It cannot finish without concluding.** A run is not allowed to end on an empty record, or on a claim backed only by a call that returned nothing, and no claim can be recorded at all without citing one. If it cannot find the cause it records what it ruled out and says so.
 - **"Resolved" means the alert stopped firing.** Not that a fix ran, and never because the model said it found the cause. NightWarden confirms recovery against the condition that fired - your alert source's own resolved notification, or by asking Prometheus whether its rule still holds. When nothing can answer, the record says recovery was not confirmed rather than claiming it.
+- **One investigation per alert group.** Relatedness is your alert source's call, not a guess of ours. Alerts your Alertmanager grouped together are investigated together; two groups are two investigations however close together they fire, because a wrong split costs duplicated work you can see while a wrong merge writes one report about two incidents and blocks both from resolving. A later alert in a group already being investigated joins it, and the agent is told it fired rather than asked whether it belongs.
+- **A bounded number at once.** Ten investigations run concurrently by default, a Settings knob. One waiting on your approval keeps its place, because starting another only puts a second write in front of the same person. Beyond that, alerts wait their turn and the Investigations page says how many - nothing is ever dropped, because your alert source was already told the webhook was accepted.
 - **One choice, made before you type.** Chat answers the question and stops. Investigate works it out and writes a report. Both get the full toolset behind the same approval gate, and an alert always opens an investigation. Nothing infers which you meant afterwards, and a session is what it was created as and never changes underneath you.
 - **Docker and Kubernetes, kept apart.** They are two runners, two images and two toolsets, not one runner with a switch. A Docker runner ships no Kubernetes client and a Kubernetes runner ships no Docker client, so the agent is offered Docker tools (`GetDockerLogs`, `RestartDockerService`, ...) on a host and Kubernetes tools (`GetK8sLogs`, `RestartK8sWorkload`, `GetK8sRolloutStatus`, ...) on a cluster, and a command sent to the wrong kind of runner has no handler to reach.
 - **Invisible to its own agent.** NightWarden's control plane is filtered out of every list the agent can reach - the manifest a runner advertises, the service list tool, and the resolver behind every targeted command - so it is never suggested, never addressable, and cannot be restarted mid-investigation. Identity is by container id, which an operator cannot rename out from under it.
@@ -321,7 +323,7 @@ apps/
       agent/            agent loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
                         report.ts is the only place the investigation record is written
                         evidence-source.ts answers which source a cited call questioned
-      alerts/           Alertmanager ingest, dedup, batching
+      alerts/           Alertmanager ingest, dedup, and routing a delivery to its group
       auth/             owner password, runner token minting, fleet ingest credential
       config/           operator settings: the config store, its routes, health and the run-readiness gate
       console/          serves the built console beside the API bundle, with an SPA fallback
@@ -335,7 +337,8 @@ apps/
                         transcript.ts projects stored messages into the render-ready items the console draws,
                         list.ts derives each session's row (its status word, severity)
       ws/               runner registry/routing, command transport
-      dispatcher.ts     single entry point for every investigation
+      dispatcher.ts     single entry point for every investigation, and the run pool's promotions
+      run-pool.ts       how many runs may be in flight, counted per pool from the session rows
       logger.ts         the process logger
       secrets.ts        encrypt/decrypt/mask for every credential stored at rest
   docker-runner/        Executor for one Docker host: the hands

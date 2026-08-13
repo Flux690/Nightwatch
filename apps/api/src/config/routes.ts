@@ -48,6 +48,7 @@ const ConfigPatchSchema = z.object({
     .optional(),
   maxRetries: z.number().int().min(0).optional(),
   requestTimeoutMs: z.number().int().positive().optional(),
+  maxConcurrentInvestigations: z.number().int().positive().optional(),
   checkInAfterMs: z.number().int().positive().optional(),
   toolCallCeilingMs: z.number().int().positive().optional(),
   sandboxIdleTimeoutMs: z.number().int().positive().optional(),

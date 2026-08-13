@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dispatchAlertSession } from "./session-helper.js";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
@@ -863,7 +864,7 @@ describe("durable approval interrupts", () => {
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    dispatcher.dispatch({ alerts: [alert], sessionId });
+    dispatchAlertSession(sessionId, [alert]);
 
     await waitFor(() =>
       events.find(

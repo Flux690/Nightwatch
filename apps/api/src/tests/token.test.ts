@@ -535,14 +535,11 @@ describe("Runner token lifecycle (issue 038)", () => {
   describe("session history after token deletion", () => {
     it("session row survives hard-deleting its runner token", async () => {
       const { id: runnerId } = generateRunnerToken("docker", "history-test");
-      createSession(
-        {
-          sessionId: "sess-history-1",
-          title: "history session",
-          createdAt: new Date().toISOString(),
-        },
-        [],
-      );
+      createSession({
+        sessionId: "sess-history-1",
+        title: "history session",
+        createdAt: new Date().toISOString(),
+      });
 
       await server.inject({
         method: "DELETE",

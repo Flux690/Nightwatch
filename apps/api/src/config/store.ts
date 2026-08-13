@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getDb } from "../db/client.js";
 import {
   DEFAULT_CHECK_IN_AFTER_MS,
+  DEFAULT_MAX_CONCURRENT_INVESTIGATIONS,
   DEFAULT_SANDBOX_ALLOWLIST_HOSTS,
   DEFAULT_SANDBOX_CPUS,
   DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
@@ -31,6 +32,7 @@ type ConfigRow = {
   activeProvider: string | null;
   maxRetries: number;
   requestTimeoutMs: number;
+  maxConcurrentInvestigations: number;
   checkInAfterMs: number;
   toolCallCeilingMs: number;
   sandboxIdleTimeoutMs: number;
@@ -57,6 +59,7 @@ const SELECT_CONFIG = `
   SELECT active_provider    AS activeProvider,
          max_retries        AS maxRetries,
          request_timeout_ms AS requestTimeoutMs,
+         max_concurrent_investigations AS maxConcurrentInvestigations,
          check_in_after_ms  AS checkInAfterMs,
          tool_call_ceiling_ms AS toolCallCeilingMs,
          sandbox_idle_timeout_ms AS sandboxIdleTimeoutMs,
@@ -156,6 +159,7 @@ export function loadConfig(): AgentConfig {
       providers,
       maxRetries: MAX_RETRIES,
       requestTimeoutMs: REQUEST_TIMEOUT_MS,
+      maxConcurrentInvestigations: DEFAULT_MAX_CONCURRENT_INVESTIGATIONS,
       checkInAfterMs: DEFAULT_CHECK_IN_AFTER_MS,
       toolCallCeilingMs: DEFAULT_TOOL_CALL_CEILING_MS,
       sandboxIdleTimeoutMs: DEFAULT_SANDBOX_IDLE_TIMEOUT_MS,
@@ -172,6 +176,7 @@ export function loadConfig(): AgentConfig {
     providers,
     maxRetries: row.maxRetries,
     requestTimeoutMs: row.requestTimeoutMs,
+    maxConcurrentInvestigations: row.maxConcurrentInvestigations,
     checkInAfterMs: row.checkInAfterMs,
     toolCallCeilingMs: row.toolCallCeilingMs,
     sandboxIdleTimeoutMs: row.sandboxIdleTimeoutMs,
@@ -197,12 +202,14 @@ export function loadApiKey(provider: LLMProviderName): string | undefined {
 const UPSERT_CONFIG = `
   INSERT INTO config (
     id, active_provider, max_retries,
-    request_timeout_ms, check_in_after_ms, tool_call_ceiling_ms,
+    request_timeout_ms, max_concurrent_investigations,
+    check_in_after_ms, tool_call_ceiling_ms,
     sandbox_idle_timeout_ms, sandbox_cpus, sandbox_memory_mb,
     sandbox_require_gvisor, sandbox_network, sandbox_allowlist_hosts, updated_at
   ) VALUES (
     @id, @activeProvider, @maxRetries,
-    @requestTimeoutMs, @checkInAfterMs, @toolCallCeilingMs,
+    @requestTimeoutMs, @maxConcurrentInvestigations,
+    @checkInAfterMs, @toolCallCeilingMs,
     @sandboxIdleTimeoutMs, @sandboxCpus, @sandboxMemoryMb,
     @sandboxRequireGvisor, @sandboxNetwork, @sandboxAllowlistHosts, @updatedAt
   )
@@ -210,6 +217,7 @@ const UPSERT_CONFIG = `
     active_provider = excluded.active_provider,
     max_retries = excluded.max_retries,
     request_timeout_ms = excluded.request_timeout_ms,
+    max_concurrent_investigations = excluded.max_concurrent_investigations,
     check_in_after_ms = excluded.check_in_after_ms,
     tool_call_ceiling_ms = excluded.tool_call_ceiling_ms,
     sandbox_idle_timeout_ms = excluded.sandbox_idle_timeout_ms,
@@ -234,6 +242,7 @@ export function updateConfig(patch: GlobalConfigPatch): AgentConfig {
       activeProvider: next.provider,
       maxRetries: next.maxRetries,
       requestTimeoutMs: next.requestTimeoutMs,
+      maxConcurrentInvestigations: next.maxConcurrentInvestigations,
       checkInAfterMs: next.checkInAfterMs,
       toolCallCeilingMs: next.toolCallCeilingMs,
       sandboxIdleTimeoutMs: next.sandboxIdleTimeoutMs,

@@ -140,6 +140,21 @@ export interface ConsoleReportUpdated extends ConsoleEnvelope {
   };
 }
 
+/* Alerts are waiting for a free concurrency seat, or one just started. Not a
+   session event: a queued alert is an alert, so it has no session id to name and
+   nothing to render in the list. The console draws it as a band instead, and the
+   limit rides along because raising it is what the reader can actually do. */
+export interface ConsoleQueueChanged extends ConsoleEnvelope {
+  type: "QUEUE_CHANGED";
+  payload: {
+    waiting: number;
+    running: number;
+    limit: number;
+    // ISO timestamp of the longest-waiting alert, null when nothing waits.
+    oldestArrivedAt: string | null;
+  };
+}
+
 // Discriminated union of all events on the API→console SSE stream.
 // Narrowing on `type` gives callers a typed `payload` for free.
 export type ConsoleEvent =
@@ -154,4 +169,5 @@ export type ConsoleEvent =
   | ConsoleRunRetrying
   | ConsoleRunFailed
   | ConsoleSessionTitleUpdated
-  | ConsoleReportUpdated;
+  | ConsoleReportUpdated
+  | ConsoleQueueChanged;

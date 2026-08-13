@@ -55,7 +55,7 @@ function scriptTitleOnce(text: string): void {
 }
 
 function seedSession(sessionId: string, title: string): void {
-  createSession({ sessionId, title, createdAt: new Date().toISOString() }, []);
+  createSession({ sessionId, title, createdAt: new Date().toISOString() });
 }
 
 describe("session title generation", () => {

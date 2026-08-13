@@ -89,6 +89,10 @@ export interface AgentConfig {
   providers: ProviderSettingsMap;
   maxRetries: number;
   requestTimeoutMs: number;
+  // How many investigations may run at once. Counts the suspended ones too: a
+  // run parked on an approval still holds its seat, because starting another
+  // one only queues a second write behind the same person.
+  maxConcurrentInvestigations: number;
   // How long the agent works before finishing its current step and asking
   // whether to continue. The continue gate is what it reaches, not a kill.
   checkInAfterMs: number;

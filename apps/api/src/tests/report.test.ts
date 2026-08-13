@@ -31,6 +31,8 @@ import {
   savePrometheusIntegration,
 } from "../db/integrations.js";
 import { createSession, appendTranscriptRows } from "../db/sessions.js";
+import { buildSessionMeta } from "../agent/loop.js";
+import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import { buildTranscript } from "../session/transcript.js";
 import { useTempDb } from "./temp-db.js";
 
@@ -133,7 +135,7 @@ describe("the investigation record", () => {
   // tu-1 a Prometheus range query, tu-2 a GitHub change list: two sources, so
   // citing both is corroboration and citing either alone is not.
   function seedTranscript(sessionId: string): void {
-    createSession(
+    seedAlertSession(
       { sessionId, title: "t", createdAt: new Date().toISOString() },
       [alert("seed")],
     );
@@ -619,6 +621,9 @@ describe("the investigation record", () => {
         createContractFakeProvider([{ toolUses: [], text: "All done." }]),
       );
       const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("gate"),
+      ]);
       const outcome = await runSession({
         sessionId,
         alerts: [alert("gate")],
@@ -646,7 +651,7 @@ describe("the investigation record", () => {
 
     it("names only the gap that remains, not the whole contract", async () => {
       const sessionId = randomUUID();
-      createSession(
+      seedAlertSession(
         { sessionId, title: "t", createdAt: new Date().toISOString() },
         [alert("one-gap")],
       );
@@ -681,6 +686,9 @@ describe("the investigation record", () => {
           { toolUses: [], text: "That is my answer." },
         ]),
       );
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("one-gap"),
+      ]);
       await runSession({ sessionId, alerts: [alert("one-gap")] });
 
       const request = completionRequests()[0]!;
@@ -692,7 +700,7 @@ describe("the investigation record", () => {
 
     it("counts a claim backed only by a call that never answered as a gap", async () => {
       const sessionId = randomUUID();
-      createSession(
+      seedAlertSession(
         { sessionId, title: "t", createdAt: new Date().toISOString() },
         [alert("unresolvable")],
       );
@@ -733,6 +741,9 @@ describe("the investigation record", () => {
         ]),
       );
       const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("gate-pass"),
+      ]);
       const outcome = await runSession({
         sessionId,
         alerts: [alert("gate-pass")],
@@ -760,6 +771,7 @@ describe("the investigation record", () => {
         ]),
       );
       const sessionId = randomUUID();
+      seedChatSession(sessionId, "how many containers are running?");
       const outcome = await runSession({
         sessionId,
         userMessage: "how many containers are running?",
@@ -804,11 +816,17 @@ describe("the investigation record", () => {
       it("is asked for a recommendation when nothing can confirm recovery", async () => {
         settledRun();
         const sessionId = randomUUID();
-        createSession(
+        seedAlertSession(
           { sessionId, title: "t", createdAt: new Date().toISOString() },
           [alert("acted-firing")],
         );
         releasedWrite(sessionId, 0);
+
+        seedAlertSession(
+          buildSessionMeta(sessionId, null, undefined),
+
+          [alert("acted-firing")],
+        );
 
         await runSession({ sessionId, alerts: [alert("acted-firing")] });
 
@@ -822,11 +840,17 @@ describe("the investigation record", () => {
       it("refuses a write-up that recommends nothing, and asks again", async () => {
         settledRun(submitTurn(""), submitTurn("cap concurrency at one job"));
         const sessionId = randomUUID();
-        createSession(
+        seedAlertSession(
           { sessionId, title: "t", createdAt: new Date().toISOString() },
           [alert("acted-no-recommendation")],
         );
         releasedWrite(sessionId, 0);
+
+        seedAlertSession(
+          buildSessionMeta(sessionId, null, undefined),
+
+          [alert("acted-no-recommendation")],
+        );
 
         await runSession({
           sessionId,
@@ -845,6 +869,9 @@ describe("the investigation record", () => {
       it("says nothing about recovery to a run that only looked", async () => {
         settledRun();
         const sessionId = randomUUID();
+        seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+          alert("only-looked"),
+        ]);
         await runSession({ sessionId, alerts: [alert("only-looked")] });
 
         // No write was released, so an honest inconclusive ending stands even

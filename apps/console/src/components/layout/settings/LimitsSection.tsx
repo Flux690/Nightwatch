@@ -17,6 +17,13 @@ export function LimitsSection({
   return (
     <div className="flex flex-col gap-8">
       <SettingsGroup title="Investigation">
+        <NumberRow
+          id="settings-max-concurrent"
+          title="Run at once"
+          description="Alerts beyond this wait their turn. One waiting on your approval still counts."
+          value={config.maxConcurrentInvestigations}
+          onCommit={(n) => save({ maxConcurrentInvestigations: n })}
+        />
         <DurationRow
           id="settings-check-in"
           title="Check in after"

@@ -2,11 +2,20 @@ import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
 import { createDispatcher } from "../dispatcher.js";
 import type { RunSessionInput, RunOutcome } from "../agent/loop.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
-import { createSession, getSession } from "../db/sessions.js";
+import { updateConfig } from "../config/store.js";
+import {
+  countInvestigations,
+  createSession,
+  enqueueAlerts,
+  getSession,
+  listSessionSources,
+  queueDepth,
+} from "../db/sessions.js";
+import { seedAlertSession } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 
-// The gate resolves with a run outcome; these tests only exercise dedup/running
-// bookkeeping, so a plain "completed" stands in for every run.
+// The gate resolves with a run outcome; these tests exercise claiming, seats and
+// promotion, so a plain "completed" stands in for every run.
 function deferred(): { promise: Promise<RunOutcome>; resolve: () => void } {
   let resolve!: () => void;
   const promise = new Promise<RunOutcome>((r) => {
@@ -35,61 +44,18 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
   };
 }
 
-function alertInput(
-  sourceAlertId: string,
-  firedAt = FIRED_AT,
-): RunSessionInput {
-  return {
-    sessionId: `s-${sourceAlertId}`,
-    alerts: [makeAlert(sourceAlertId, firedAt)],
-  };
-}
-
-// A whole batch on one session, none of them elected: this is what a 90s window
-// produces, and every member has to dedup.
-function batchInput(
-  sessionId: string,
-  sourceAlertIds: string[],
-): RunSessionInput {
-  return {
-    sessionId,
-    alerts: sourceAlertIds.map((id) => makeAlert(id)),
-  };
-}
-
-// Fakes the durable session->alerts lookup (really getSession(id)?.alerts), so a
-// resumed dispatch (no input.alerts) still resolves via the fallback.
-function fakeAlertLookup(): {
-  getAlertsForSession: (sessionId: string) => NormalizedAlert[];
-  register: (sessionId: string, alerts: NormalizedAlert[]) => void;
-} {
-  const bySession = new Map<string, NormalizedAlert[]>();
-  return {
-    getAlertsForSession: (sessionId) => bySession.get(sessionId) ?? [],
-    register: (sessionId, alerts) => bySession.set(sessionId, alerts),
-  };
-}
-
-// No lookup match for any session — for tests that only exercise input.alerts
-// (the lookup is purely a resume-time fallback) or chat/resume-without-alert.
-function noAlertLookup(): NormalizedAlert[] {
-  return [];
-}
-
-// A resume always has a row: the messages route 404s without one, and the
-// interrupt that drives the approve path is a child of the session. Only a
-// dispatch carrying alerts writes its own row.
+// Every session row exists before anything dispatches into it: the chat route
+// writes it, and promotion writes it together with the alerts it takes.
 function seedSession(sessionId: string, alerts: NormalizedAlert[]): void {
-  createSession(
+  seedAlertSession(
     { sessionId, title: "t", createdAt: new Date().toISOString() },
     alerts,
-    true,
   );
 }
 
 describe("dispatcher", () => {
-  // Dispatching an alert run writes its session and alert rows before the run is
-  // reachable, so this seam needs a database even with the run itself faked.
+  // Claiming a run and counting seats are both reads of the session row, so this
+  // seam needs a database even with the run itself faked.
   let cleanupDb: () => void;
   beforeAll(() => {
     cleanupDb = useTempDb();
@@ -99,317 +65,163 @@ describe("dispatcher", () => {
     vi.unstubAllEnvs();
   });
 
-  it("starts work immediately — no cap, no queue", async () => {
-    const started: string[] = [];
-    const gate = deferred();
-    const d = createDispatcher({
-      run: (input) => {
-        started.push(input.sessionId);
-        return gate.promise;
-      },
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch(alertInput("a"));
-    d.dispatch(alertInput("b"));
-    // Both start immediately — no concurrency ceiling
-    expect(started).toEqual(["s-a", "s-b"]);
-
-    gate.resolve();
-  });
-
-  it("dedup keyed by (fingerprint, startsAt); clears when settled", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch(alertInput("dup", FIRED_AT));
-
-    // Same fingerprint + startsAt (a re-notification) → duplicate
-    expect(d.isInvestigating("dup", FIRED_AT)).toBe(true);
-    // Same fingerprint but a DIFFERENT startsAt: a twin incident that fired
-    // independently (identical labels on another stack) → not a duplicate
-    expect(d.isInvestigating("dup", "2026-07-07T03:05:00.000Z")).toBe(false);
-    expect(d.isInvestigating("never", FIRED_AT)).toBe(false);
-
-    gate.resolve();
-    await flush();
-
-    expect(d.isInvestigating("dup", FIRED_AT)).toBe(false);
-  });
-
-  it("dedups every alert of a batch, not whichever arrived first", async () => {
-    // A window elects no primary, so a re-notification of the tenth member is
-    // as much a duplicate as one of the first. Keying on one would let the rest
-    // through, and each would then be injected into the run already handling it.
-    const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch(batchInput("s-batch", ["first", "second", "third"]));
-
-    for (const id of ["first", "second", "third"]) {
-      expect(d.isInvestigating(id, FIRED_AT)).toBe(true);
-    }
-
-    // An alert that arrives mid-run joins the set the run is covering, so its
-    // own re-notification dedups too.
-    d.injectAlert("s-batch", makeAlert("fourth"));
-    expect(d.isInvestigating("fourth", FIRED_AT)).toBe(true);
-
-    gate.resolve();
-    await flush();
-
-    expect(d.isInvestigating("second", FIRED_AT)).toBe(false);
-  });
-
-  it("getActiveAlertSession returns the running alert session, null otherwise", async () => {
-    const gate = deferred();
-    const lookup = fakeAlertLookup();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: lookup.getAlertsForSession,
-    });
-
-    expect(d.getActiveAlertSession()).toBeNull();
-
-    const input = alertInput("a");
-    lookup.register(input.sessionId, input.alerts!);
-    d.dispatch(input);
-    expect(d.getActiveAlertSession()).toBe("s-a");
-
-    gate.resolve();
-    await flush();
-
-    expect(d.getActiveAlertSession()).toBeNull();
-  });
-
-  it("getActiveAlertSession is null for chat/resume inputs (no alert)", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch({ sessionId: "chat-1" });
-    expect(d.getActiveAlertSession()).toBeNull();
-
-    gate.resolve();
-  });
-
-  it("does not track chat/resume inputs for dedup", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch({ sessionId: "chat-1" });
-    expect(d.isInvestigating("anything", FIRED_AT)).toBe(false);
-
-    gate.resolve();
-  });
-
-  it("isSessionRunning is true while running, false after settled", async () => {
-    const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch(alertInput("a"));
-    expect(d.isSessionRunning("s-a")).toBe(true);
-
-    gate.resolve();
-    await flush();
-
-    expect(d.isSessionRunning("s-a")).toBe(false);
-  });
-
-  it("stop aborts the signal passed to the running input and returns true", async () => {
-    const gate = deferred();
-    let receivedSignal: AbortSignal | undefined;
-    const d = createDispatcher({
-      run: (input) => {
-        receivedSignal = input.signal;
-        return gate.promise;
-      },
-      getAlertsForSession: noAlertLookup,
-    });
-
-    d.dispatch(alertInput("a"));
-    expect(receivedSignal?.aborted).toBe(false);
-
-    expect(d.stop("s-a")).toBe(true);
-    expect(receivedSignal?.aborted).toBe(true);
-
-    gate.resolve();
-    await flush();
-  });
-
-  it("stop returns false for a session that is not running", () => {
-    const d = createDispatcher({
+  it("refuses to dispatch into a session nothing has written", () => {
+    const dispatcher = createDispatcher({
       run: () => Promise.resolve<RunOutcome>("completed"),
-      getAlertsForSession: noAlertLookup,
     });
-
-    expect(d.stop("unknown")).toBe(false);
+    expect(dispatcher.dispatch({ sessionId: "never-created" })).toBe(false);
   });
 
+  /* The conditional UPDATE is the mutex, not a check before it: two dispatches
+     arriving together both reach it and only one changes the row, so the loser is
+     told rather than colliding on the transcript's primary key. */
   it("refuses a second dispatch for a session a run already holds", async () => {
     const gate = deferred();
-    const d = createDispatcher({
-      run: () => gate.promise,
-      getAlertsForSession: noAlertLookup,
-    });
-    seedSession("s-race", []);
+    const dispatcher = createDispatcher({ run: () => gate.promise });
+    const sessionId = "s-race";
+    seedSession(sessionId, [makeAlert("race-1")]);
 
-    expect(d.dispatch({ sessionId: "s-race", userMessage: "one" })).toBe(true);
-    /* The claim is a conditional UPDATE rather than a check followed by a start,
-       so the loser of a race learns it lost instead of beginning a second run
-       that collides on the transcript's primary key. */
-    expect(d.dispatch({ sessionId: "s-race", userMessage: "two" })).toBe(false);
+    expect(dispatcher.dispatch({ sessionId })).toBe(true);
+    expect(dispatcher.dispatch({ sessionId })).toBe(false);
+    expect(dispatcher.isSessionRunning(sessionId)).toBe(true);
 
     gate.resolve();
     await flush();
-
-    // Released on the way out, so the session takes a run again.
-    expect(d.dispatch({ sessionId: "s-race", userMessage: "three" })).toBe(
-      true,
-    );
-    gate.resolve();
-    await flush();
+    expect(dispatcher.isSessionRunning(sessionId)).toBe(false);
+    // Released, so the same session can run again - which is what a resume is.
+    expect(dispatcher.dispatch({ sessionId })).toBe(true);
   });
 
-  it("inbox leftovers re-dispatch as new sessions when the run ends", async () => {
-    const started: string[] = [];
-    const gates = new Map<string, ReturnType<typeof deferred>>();
-    const d = createDispatcher({
-      run: (input) => {
-        started.push(input.sessionId);
-        const g = deferred();
-        gates.set(input.sessionId, g);
-        return g.promise;
+  it("stop aborts the running session's signal, and answers false for an idle one", async () => {
+    let seen: AbortSignal | undefined;
+    const gate = deferred();
+    const dispatcher = createDispatcher({
+      run: (input: RunSessionInput) => {
+        seen = input.signal;
+        return gate.promise;
       },
-      getAlertsForSession: noAlertLookup,
     });
+    const sessionId = "s-stop";
+    seedSession(sessionId, [makeAlert("stop-1")]);
 
-    d.dispatch(alertInput("primary"));
-    const openedId = "s-primary";
+    expect(dispatcher.stop(sessionId)).toBe(false);
+    dispatcher.dispatch({ sessionId });
+    expect(dispatcher.stop(sessionId)).toBe(true);
+    expect(seen?.aborted).toBe(true);
 
-    const leftover = makeAlert("leftover");
-    d.injectAlert(openedId, leftover);
-
-    gates.get(openedId)!.resolve();
-    // Two flushes: the finally block runs, then the newly dispatched run starts.
+    gate.resolve();
     await flush();
-    await flush();
-
-    expect(started.length).toBe(2);
-    expect(started[1]).not.toBe(openedId);
-
-    /* Exactly one session covers it. The alert is durable from the moment it is
-       injected, so leaving it here too would put an alert its run never saw on
-       this session's record, and hold it open until that alert cleared. */
-    expect(
-      getSession(openedId)?.alerts.map((a) => a.alert.sourceAlertId),
-    ).toEqual(["primary"]);
-    expect(
-      getSession(started[1]!)?.alerts.map((a) => a.alert.sourceAlertId),
-    ).toEqual(["leftover"]);
-
-    gates.get(started[1]!)?.resolve();
+    expect(dispatcher.stop(sessionId)).toBe(false);
   });
 
-  // resume dispatch never carries input.alerts; all alert-derived behavior must fall back to the session lookup
-  describe("resumed alert runs (no input.alerts, derived via lookup)", () => {
-    it("getActiveAlertSession recovers the alert session on resume", async () => {
+  describe("promotion", () => {
+    /* A seat is held from the moment a run starts until it ends, so what frees
+       one is a run finishing - and that is the only thing that starts the next
+       waiting group. Nothing polls, and no timer decides. */
+    it("starts a waiting group only when a run ends and frees its seat", async () => {
+      updateConfig({ maxConcurrentInvestigations: 1 });
       const gate = deferred();
-      const lookup = fakeAlertLookup();
-      const d = createDispatcher({
-        run: () => gate.promise,
-        getAlertsForSession: lookup.getAlertsForSession,
-      });
+      const dispatcher = createDispatcher({ run: () => gate.promise });
+      const before = countInvestigations();
 
-      const resumedAlert = makeAlert("resumed");
-      lookup.register("s-resumed", [resumedAlert]);
-      seedSession("s-resumed", [resumedAlert]);
+      const holder = "s-holder";
+      seedSession(holder, [makeAlert("hold-1")]);
+      dispatcher.dispatch({ sessionId: holder });
 
-      // Resume dispatch: no `alert` field, just seed + resumeToolResults.
-      d.dispatch({ sessionId: "s-resumed", seed: [], resumeToolResults: [] });
-
-      expect(d.getActiveAlertSession()).toBe("s-resumed");
+      enqueueAlerts("group-waiting", [makeAlert("wait-1")]);
+      dispatcher.promoteQueued();
+      // The only seat is taken, so the group stays where it is: durable, and
+      // still nobody's.
+      expect(queueDepth().waiting).toBe(1);
+      expect(countInvestigations()).toBe(before + 1);
 
       gate.resolve();
       await flush();
-
-      expect(d.getActiveAlertSession()).toBeNull();
+      expect(queueDepth().waiting).toBe(0);
+      expect(countInvestigations()).toBe(before + 2);
+      updateConfig({ maxConcurrentInvestigations: 10 });
     });
 
-    it("isInvestigating dedup is retained for a resumed alert run", async () => {
+    it("takes the oldest waiting group first, and takes it whole", () => {
+      updateConfig({ maxConcurrentInvestigations: 1 });
       const gate = deferred();
-      const lookup = fakeAlertLookup();
-      const d = createDispatcher({
-        run: () => gate.promise,
-        getAlertsForSession: lookup.getAlertsForSession,
-      });
+      const dispatcher = createDispatcher({ run: () => gate.promise });
 
-      const resumedAlert = makeAlert("resumed-dup");
-      lookup.register("s-resumed-dup", [resumedAlert]);
-      seedSession("s-resumed-dup", [resumedAlert]);
+      enqueueAlerts("group-older", [makeAlert("old-1"), makeAlert("old-2")]);
+      enqueueAlerts("group-newer", [makeAlert("new-1")]);
 
-      d.dispatch({
-        sessionId: "s-resumed-dup",
-        seed: [],
-        resumeToolResults: [],
-      });
+      // One seat, so exactly one group starts and it is the one that arrived
+      // first. The newer group waits rather than being swept in with it.
+      dispatcher.promoteQueued();
+      expect(queueDepth().waiting).toBe(1);
 
-      expect(d.isInvestigating("resumed-dup", FIRED_AT)).toBe(true);
+      const started = investigationAlertIds().find((ids) =>
+        ids.includes("old-1"),
+      );
+      expect(started).toEqual(["old-1", "old-2"]);
+      expect(investigationAlertIds().some((ids) => ids.includes("new-1"))).toBe(
+        false,
+      );
 
       gate.resolve();
-      await flush();
+      updateConfig({ maxConcurrentInvestigations: 10 });
+    });
+  });
 
-      expect(d.isInvestigating("resumed-dup", FIRED_AT)).toBe(false);
+  it("injecting records the alert on the session and hands it to the run once", () => {
+    const dispatcher = createDispatcher({
+      run: () => Promise.resolve<RunOutcome>("completed"),
+    });
+    const sessionId = "s-inject";
+    seedSession(sessionId, [makeAlert("inject-primary")]);
+
+    dispatcher.injectAlert(sessionId, "group-inject", makeAlert("inject-late"));
+
+    // Durable immediately, because the sender was already answered 200.
+    expect(alertIdsOf(sessionId)).toEqual(["inject-primary", "inject-late"]);
+    // The inbox is what tells the model, which is a separate concern from
+    // keeping it - and it is drained exactly once.
+    expect(
+      dispatcher.drainInbox(sessionId).map((a) => a.sourceAlertId),
+    ).toEqual(["inject-late"]);
+    expect(dispatcher.drainInbox(sessionId)).toEqual([]);
+  });
+
+  it("does not count a chat against the investigation seats", () => {
+    const gate = deferred();
+    const dispatcher = createDispatcher({ run: () => gate.promise });
+    const sessionId = "s-chat";
+    createSession({
+      sessionId,
+      title: "t",
+      createdAt: new Date().toISOString(),
     });
 
-    it("inbox leftovers re-dispatch when a resumed alert run ends", async () => {
-      const started: string[] = [];
-      const gates = new Map<string, ReturnType<typeof deferred>>();
-      const lookup = fakeAlertLookup();
-      const d = createDispatcher({
-        run: (input) => {
-          started.push(input.sessionId);
-          const g = deferred();
-          gates.set(input.sessionId, g);
-          return g.promise;
-        },
-        getAlertsForSession: lookup.getAlertsForSession,
-      });
+    updateConfig({ maxConcurrentInvestigations: 1 });
+    dispatcher.dispatch({ sessionId, userMessage: "hello" });
 
-      const resumedAlert = makeAlert("resumed-leftover");
-      lookup.register("s-resumed-leftover", [resumedAlert]);
-      seedSession("s-resumed-leftover", [resumedAlert]);
-      d.dispatch({
-        sessionId: "s-resumed-leftover",
-        seed: [],
-        resumeToolResults: [],
-      });
+    // One chat is running; the investigation pool is still untouched, so a
+    // waiting alert group can start.
+    const before = countInvestigations();
+    enqueueAlerts("group-beside-chat", [makeAlert("beside-1")]);
+    dispatcher.promoteQueued();
+    expect(countInvestigations()).toBe(before + 1);
 
-      const leftover = makeAlert("leftover-after-resume");
-      d.injectAlert("s-resumed-leftover", leftover);
-
-      gates.get("s-resumed-leftover")!.resolve();
-      await flush();
-      await flush();
-
-      expect(started.length).toBe(2);
-      expect(started[1]).not.toBe("s-resumed-leftover");
-
-      gates.get(started[1]!)?.resolve();
-    });
+    gate.resolve();
+    updateConfig({ maxConcurrentInvestigations: 10 });
   });
 });
+
+// Every investigation, as the alert ids it covers - which is what says whether a
+// group was taken whole and whether two groups stayed apart.
+function investigationAlertIds(): string[][] {
+  return listSessionSources(100, 0, "investigation").sources.map((s) =>
+    s.alerts.map((entry) => entry.alert.sourceAlertId),
+  );
+}
+
+function alertIdsOf(sessionId: string): string[] {
+  return (getSession(sessionId)?.alerts ?? []).map(
+    (entry) => entry.alert.sourceAlertId,
+  );
+}

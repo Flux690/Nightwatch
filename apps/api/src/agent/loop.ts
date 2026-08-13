@@ -261,11 +261,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       opensInvestigation,
     );
     const provider = createProvider(systemPrompt, llm, apiKey);
-    createSession(
-      buildSessionMeta(sessionId, alert, input.userMessage),
-      allAlerts,
-      opensInvestigation,
-    );
 
     let persistedCount = 0;
     const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
@@ -317,12 +312,6 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       ? buildInitialContext(allAlerts, fleetView, promptOptions)
       : buildChatContext(fleetView, promptOptions, opensInvestigation);
   const provider = createProvider(systemPrompt, llm, apiKey);
-
-  createSession(
-    buildSessionMeta(sessionId, alert, input.userMessage),
-    allAlerts,
-    opensInvestigation,
-  );
 
   let persistedCount = 0;
   const seqOffset = getNextSeq(sessionId) - (input.seed?.length ?? 0);
@@ -745,12 +734,17 @@ function formatLabels(labels: Record<string, string>): string {
   return rendered || "no labels";
 }
 
-// Its own turn now, so it opens rather than continues: no leading blank lines.
+/* Its own turn, so it opens rather than continues: no leading blank lines.
+
+   Stated, never asked. An injected alert reached this session because the alert
+   source grouped it with the ones already here, under the group_by its operator
+   configured - so whether it belongs is already answered, and asking the model
+   to re-decide would hand a routing call to the thing being routed. */
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
   const header =
     alerts.length === 1
-      ? "Another alert has fired while you were working. Decide whether it is a downstream effect of the incident you are investigating or an independent one, and say which."
-      : `${alerts.length} further alerts have fired while you were working. For each, decide whether it is a downstream effect of the incident you are investigating or an independent one, and say which.`;
+      ? "Another alert in this same alert group has fired while you were working. It is part of the incident you are investigating. Take it into account."
+      : `${alerts.length} further alerts in this same alert group have fired while you were working. They are part of the incident you are investigating. Take them into account.`;
   return (
     header +
     "\n" +

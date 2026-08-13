@@ -18,17 +18,19 @@ type StoredSession = SessionMeta & {
   investigation: boolean;
 };
 
-const INSERT_ALERT = `INSERT INTO session_alerts
-     (session_id, source_alert_id, fired_at, arrived_at, cleared_at, alert)
-   VALUES (@sessionId, @sourceAlertId, @firedAt, @arrivedAt, NULL, @alert)`;
+const INSERT_ALERT = `INSERT INTO alerts
+     (session_id, group_key, source_alert_id, fired_at, arrived_at, cleared_at, alert)
+   VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL, @alert)`;
 
 function alertParams(
-  sessionId: string,
+  sessionId: string | null,
+  groupKey: string,
   alert: NormalizedAlert,
   arrivedAt: string,
-): Record<string, string> {
+): Record<string, string | null> {
   return {
     sessionId,
+    groupKey,
     sourceAlertId: alert.sourceAlertId,
     firedAt: alert.firedAt,
     arrivedAt,
@@ -36,34 +38,38 @@ function alertParams(
   };
 }
 
-// Create the session row once, with the alerts that opened it. Idempotent: a
-// resume re-enters the loop with the same id, and the first title/alerts win -
-// later runs never clobber them.
-export function createSession(
-  meta: SessionMeta,
-  alerts: NormalizedAlert[],
-  investigation = false,
-): void {
-  const db = getDb();
-  const insertSession = db.prepare(
-    `INSERT INTO sessions
-       (session_id, title, investigation, created_at, last_activity_at)
-     VALUES (@sessionId, @title, @investigation, @createdAt, @createdAt)
-     ON CONFLICT(session_id) DO NOTHING`,
-  );
-  const insertAlert = db.prepare(INSERT_ALERT);
-  db.transaction((): void => {
-    const created = insertSession.run({
+const INSERT_SESSION = `INSERT INTO sessions
+     (session_id, title, investigation, created_at, last_activity_at)
+   VALUES (@sessionId, @title, @investigation, @createdAt, @createdAt)
+   ON CONFLICT(session_id) DO NOTHING`;
+
+// Create the session row once. Idempotent: a resume re-enters the loop with the
+// same id, and the first title wins - later runs never clobber it.
+export function createSession(meta: SessionMeta, investigation = false): void {
+  getDb()
+    .prepare(INSERT_SESSION)
+    .run({
       sessionId: meta.sessionId,
       title: meta.title,
       investigation: investigation ? 1 : 0,
       createdAt: meta.createdAt,
     });
-    // Only the call that created the row writes the batch, so a resume cannot
-    // append a second copy of the alerts the session already covers.
-    if (created.changes === 0) return;
+}
+
+/* One delivery's alerts, durable the moment we answer it 200 and before anything
+   decides whether a seat is free. Owned by no session yet: what makes them one
+   prospective investigation is the group key Alertmanager sent, not our timing. */
+export function enqueueAlerts(
+  groupKey: string,
+  alerts: NormalizedAlert[],
+): void {
+  if (alerts.length === 0) return;
+  const db = getDb();
+  const insert = db.prepare(INSERT_ALERT);
+  const arrivedAt = new Date().toISOString();
+  db.transaction((): void => {
     for (const alert of alerts) {
-      insertAlert.run(alertParams(meta.sessionId, alert, meta.createdAt));
+      insert.run(alertParams(null, groupKey, alert, arrivedAt));
     }
   })();
 }
@@ -72,54 +78,146 @@ export function createSession(
 // later places it in the transcript, at the turn it interrupted.
 export function appendSessionAlert(
   sessionId: string,
+  groupKey: string,
   alert: NormalizedAlert,
 ): void {
   getDb()
     .prepare(INSERT_ALERT)
-    .run(alertParams(sessionId, alert, new Date().toISOString()));
+    .run(alertParams(sessionId, groupKey, alert, new Date().toISOString()));
 }
 
-// Releases alerts a run never got to, so the session that picks them up is the
-// only one covering them. Left here they would name alerts this run never saw,
-// and hold the session open until every one of them cleared.
-export function dropSessionAlerts(
-  sessionId: string,
-  alerts: NormalizedAlert[],
-): void {
-  if (alerts.length === 0) return;
-  const db = getDb();
-  const remove = db.prepare(
-    `DELETE FROM session_alerts
-     WHERE session_id = @sessionId
-       AND source_alert_id = @sourceAlertId AND fired_at = @firedAt`,
-  );
-  db.transaction((): void => {
-    for (const alert of alerts) {
-      remove.run({
-        sessionId,
-        sourceAlertId: alert.sourceAlertId,
-        firedAt: alert.firedAt,
-      });
-    }
-  })();
-}
-
-// Stamps this alert wherever it is still open. The first clear wins per alert: a
-// re-fire that clears again says nothing new about that condition. Returns the
-// sessions it touched, which is not the same as the sessions now resolved.
+/* Stamps this alert wherever it is still open, queued rows included: an alert
+   that recovers while waiting for a seat is cleared here and then never promoted,
+   so nothing is investigated after the fact and no session is created to explain.
+   The first clear wins per alert - a re-fire that clears again says nothing new. */
 export function markAlertCleared(
   sourceAlertId: string,
   clearedAt: string,
 ): string[] {
   const rows = getDb()
     .prepare(
-      `UPDATE session_alerts SET cleared_at = @clearedAt
+      `UPDATE alerts SET cleared_at = @clearedAt
        WHERE source_alert_id = @sourceAlertId AND cleared_at IS NULL
        RETURNING session_id AS sessionId`,
     )
-    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string }>;
-  // One session can cover the same alert twice; the caller wants sessions.
-  return [...new Set(rows.map((r) => r.sessionId))];
+    .all({ sourceAlertId, clearedAt }) as Array<{ sessionId: string | null }>;
+  // A queued row has no session to publish against. One session can also cover
+  // the same alert twice; the caller wants sessions.
+  return [
+    ...new Set(
+      rows.map((r) => r.sessionId).filter((id): id is string => id !== null),
+    ),
+  ];
+}
+
+/* Already investigated, and nothing has said the condition recovered. Scoped to
+   uncleared rows rather than to live runs: Alertmanager repeats a firing alert
+   on `repeat_interval`, so a narrower rule opens a fresh investigation of the
+   same alert every few minutes once the first one has finished. */
+export function isAlertCovered(
+  sourceAlertId: string,
+  firedAt: string,
+): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 FROM alerts
+       WHERE source_alert_id = ? AND fired_at = ? AND cleared_at IS NULL
+       LIMIT 1`,
+    )
+    .get(sourceAlertId, firedAt);
+  return row !== undefined;
+}
+
+/* The session an arriving alert joins, or undefined. Alertmanager grouped these
+   together under the user's own `group_by`, so this is their decision arriving as
+   data - never a relationship we inferred from labels or from the fleet. */
+export function sessionCoveringGroup(groupKey: string): string | undefined {
+  const row = getDb()
+    .prepare(
+      `SELECT a.session_id AS sessionId
+       FROM alerts a
+       JOIN sessions s ON s.session_id = a.session_id
+       WHERE a.group_key = ? AND s.run_state IN ('running', 'suspended')
+       LIMIT 1`,
+    )
+    .get(groupKey) as { sessionId: string } | undefined;
+  return row?.sessionId;
+}
+
+// One group of alerts waiting for a seat, ready to become a session.
+export interface QueuedGroup {
+  groupKey: string;
+  alerts: NormalizedAlert[];
+}
+
+function parseAlert(raw: string): NormalizedAlert[] {
+  try {
+    return [JSON.parse(raw) as NormalizedAlert];
+  } catch {
+    return [];
+  }
+}
+
+const QUEUED = `session_id IS NULL AND cleared_at IS NULL`;
+
+/* The next group to investigate, by arrival. Cleared rows are skipped rather
+   than promoted: an alert that recovered while it waited needs no investigation,
+   and opening one to report on a condition that is already over is worse than
+   silence. */
+export function oldestQueuedGroup(): QueuedGroup | undefined {
+  const db = getDb();
+  const head = db
+    .prepare(
+      `SELECT group_key AS groupKey FROM alerts
+       WHERE ${QUEUED} ORDER BY arrived_at ASC, id ASC LIMIT 1`,
+    )
+    .get() as { groupKey: string } | undefined;
+  if (head === undefined) return undefined;
+
+  const rows = db
+    .prepare(
+      `SELECT alert FROM alerts
+       WHERE group_key = ? AND ${QUEUED} ORDER BY id ASC`,
+    )
+    .all(head.groupKey) as Array<{ alert: string }>;
+  const alerts = rows.flatMap((r) => parseAlert(r.alert));
+  return alerts.length === 0 ? undefined : { groupKey: head.groupKey, alerts };
+}
+
+/* Creates the session and takes the group's queued alerts in one transaction. A
+   crash between the two would otherwise leave alerts pointing at a session
+   nothing wrote, or a session covering nothing. */
+export function openSessionForGroup(meta: SessionMeta, groupKey: string): void {
+  const db = getDb();
+  const insertSession = db.prepare(INSERT_SESSION);
+  const assign = db.prepare(
+    `UPDATE alerts SET session_id = @sessionId
+     WHERE group_key = @groupKey AND ${QUEUED}`,
+  );
+  db.transaction((): void => {
+    insertSession.run({
+      sessionId: meta.sessionId,
+      title: meta.title,
+      investigation: 1,
+      createdAt: meta.createdAt,
+    });
+    assign.run({ sessionId: meta.sessionId, groupKey });
+  })();
+}
+
+// What the console's queue band reports: how many alerts are waiting, and how
+// long the one at the front has been waiting.
+export function queueDepth(): {
+  waiting: number;
+  oldestArrivedAt: string | null;
+} {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS waiting, MIN(arrived_at) AS oldestArrivedAt
+       FROM alerts WHERE ${QUEUED}`,
+    )
+    .get() as { waiting: number; oldestArrivedAt: string | null };
+  return row;
 }
 
 // Overwrites unconditionally: the refined title deliberately replaces the
@@ -161,7 +259,7 @@ const ALERT_COLUMNS = `session_id AS sessionId, arrived_at AS arrivedAt,
 function alertsFor(sessionId: string): SessionAlert[] {
   const rows = getDb()
     .prepare(
-      `SELECT ${ALERT_COLUMNS} FROM session_alerts
+      `SELECT ${ALERT_COLUMNS} FROM alerts
        WHERE session_id = ? ORDER BY id ASC`,
     )
     .all(sessionId) as AlertRow[];
@@ -176,7 +274,7 @@ function alertsForMany(sessionIds: string[]): Map<string, SessionAlert[]> {
   const holes = sessionIds.map(() => "?").join(", ");
   const rows = getDb()
     .prepare(
-      `SELECT ${ALERT_COLUMNS} FROM session_alerts
+      `SELECT ${ALERT_COLUMNS} FROM alerts
        WHERE session_id IN (${holes}) ORDER BY id ASC`,
     )
     .all(...sessionIds) as AlertRow[];
@@ -311,6 +409,11 @@ export function appendRowsAndInterrupt(
        (session_id, tool_use_id, kind, completed_results, claimed_at)
      VALUES (@sessionId, @toolUseId, @kind, @completedResults, @claimedAt)`,
   );
+  // Suspending IS the interrupt row, so the state that keeps this session's seat
+  // is written with it rather than by whoever notices afterwards.
+  const suspend = getDb().prepare(
+    `UPDATE sessions SET run_state = 'suspended' WHERE session_id = ?`,
+  );
   const txn = getDb().transaction(() => {
     for (const m of messages) {
       insertMsg.run({
@@ -329,6 +432,7 @@ export function appendRowsAndInterrupt(
       completedResults: JSON.stringify(pendingHumanInput.completedResults),
       claimedAt: pendingHumanInput.claimedAt ?? null,
     });
+    suspend.run(pendingHumanInput.sessionId);
     const last = messages[messages.length - 1];
     if (last) touchSession(last.sessionId, last.timestamp);
   });
@@ -456,40 +560,92 @@ export function countInvestigations(): number {
 
 /* Claims the run slot, answering whether this caller got it. The conditional
    UPDATE is the whole mutex: two racing dispatches both attempt it, one changes
-   a row and one does not, so a second run cannot start behind a stale check. */
-export function markRunning(sessionId: string): boolean {
+   a row and one does not, so a second run cannot start behind a stale check.
+
+   Claimable from 'suspended' as well as 'done', because answering an approval is
+   exactly a suspended session starting a run again - and it is not taking a new
+   seat, it already held one while it waited. Only 'running' refuses. */
+export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
-      `UPDATE sessions SET is_running = 1
-       WHERE session_id = ? AND is_running = 0`,
+      `UPDATE sessions SET run_state = 'running'
+       WHERE session_id = ? AND run_state IN ('done', 'suspended')`,
     )
     .run(sessionId);
   return result.changes > 0;
 }
 
-// Released on every exit path a run has, including the ones that failed.
-export function markIdle(sessionId: string): void {
+/* Released on every exit path a run has, including the ones that failed.
+   Conditional on 'running' so it cannot undo the 'suspended' the loop wrote in
+   the same transaction as the interrupt row: that session is waiting, not idle,
+   and it keeps its seat while it waits. */
+export function releaseRun(sessionId: string): void {
   getDb()
-    .prepare(`UPDATE sessions SET is_running = 0 WHERE session_id = ?`)
+    .prepare(
+      `UPDATE sessions SET run_state = 'done'
+       WHERE session_id = ? AND run_state = 'running'`,
+    )
+    .run(sessionId);
+}
+
+/* Unconditional, unlike releaseRun: boot recovery uses it to give back a seat
+   held by a session suspended on nobody, which releaseRun deliberately will not
+   touch because that session is not running. */
+export function markDone(sessionId: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET run_state = 'done' WHERE session_id = ?`)
     .run(sessionId);
 }
 
 export function isRunning(sessionId: string): boolean {
   const row = getDb()
     .prepare(
-      `SELECT 1 FROM sessions WHERE session_id = ? AND is_running = 1 LIMIT 1`,
+      `SELECT 1 FROM sessions
+       WHERE session_id = ? AND run_state = 'running' LIMIT 1`,
     )
     .get(sessionId);
   return row !== undefined;
 }
 
-// Sessions still holding a condition nobody has seen recover, oldest alert
-// first. What the reconciler works through, and the only reason it wakes up.
+/* Seats in use. An investigation holds one while suspended because the human it
+   is waiting on is the scarce thing: freeing the seat starts another run whose
+   write needs that same person. A chat holds one only while it is actually
+   working - it was started by someone sitting right there. */
+export function countSeats(investigation: boolean): number {
+  const states = investigation ? ["running", "suspended"] : ["running"];
+  const holes = states.map(() => "?").join(", ");
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS taken FROM sessions
+       WHERE investigation = ? AND run_state IN (${holes})`,
+    )
+    .get(investigation ? 1 : 0, ...states) as { taken: number };
+  return row.taken;
+}
+
+// Sessions still holding a condition nobody has seen recover. What the
+// reconciler works through, and the only reason it wakes up. Queued alerts are
+// excluded: nothing has investigated them, so there is no recovery to verify.
 export function sessionIdsWithOpenAlerts(): string[] {
   const rows = getDb()
     .prepare(
-      `SELECT DISTINCT session_id AS sessionId FROM session_alerts
-       WHERE cleared_at IS NULL ORDER BY session_id`,
+      `SELECT DISTINCT session_id AS sessionId FROM alerts
+       WHERE cleared_at IS NULL AND session_id IS NOT NULL
+       ORDER BY session_id`,
+    )
+    .all() as Array<{ sessionId: string }>;
+  return rows.map((r) => r.sessionId);
+}
+
+/* Sessions holding a seat while parked on a human. Read at boot to find the ones
+   parked on nobody: approving deletes the interrupt row before the resume claims
+   the run, so a crash in that gap leaves a session suspended with nothing left to
+   answer it - and, now that suspending holds a seat, holding one forever. */
+export function suspendedSessionIds(): string[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT session_id AS sessionId FROM sessions
+       WHERE run_state = 'suspended'`,
     )
     .all() as Array<{ sessionId: string }>;
   return rows.map((r) => r.sessionId);
@@ -500,7 +656,7 @@ export function sessionIdsWithOpenAlerts(): string[] {
 export function runningSessionIds(): string[] {
   const rows = getDb()
     .prepare(
-      `SELECT session_id AS sessionId FROM sessions WHERE is_running = 1`,
+      `SELECT session_id AS sessionId FROM sessions WHERE run_state = 'running'`,
     )
     .all() as Array<{ sessionId: string }>;
   return rows.map((r) => r.sessionId);

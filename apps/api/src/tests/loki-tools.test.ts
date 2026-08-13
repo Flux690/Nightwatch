@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { seedAlertSession } from "./session-helper.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../secrets.js";
@@ -120,7 +121,7 @@ describe("Loki tools through the tool dispatch", () => {
   function mintSession(alert: NormalizedAlert | null): ToolDispatchContext {
     sessionSeq++;
     const sessionId = `loki-tools-${sessionSeq}`;
-    createSession(
+    seedAlertSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alert ? [alert] : [],
     );

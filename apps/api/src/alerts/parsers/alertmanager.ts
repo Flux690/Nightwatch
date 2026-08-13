@@ -12,11 +12,23 @@ type ParsedAlert = NormalizedAlert;
 // one malformed alert is skipped on its own instead of aborting the batch.
 const alertmanagerWebhookSchema = z.object({
   alerts: z.array(z.unknown()),
+  // Both Alertmanager and Grafana send these; neither is required, because a
+  // BYO sender mimicking the format may carry only the alerts array.
+  groupKey: z.string().min(1).optional(),
+  truncatedAlerts: z.number().int().nonnegative().optional(),
 });
 
-// A cleared notification opens nothing - the condition recovered - but it is
-// the answer to whether an investigation already under way is still needed.
+/* One webhook delivery, which is one alert group. A cleared notification opens
+   nothing - the condition recovered - but it is the answer to whether an
+   investigation already under way is still needed.
+
+   groupKey is the sender's own grouping decision, computed from the group_by
+   the user configured. Trusting it is what makes grouping their choice rather
+   than a window we time. truncatedAlerts is how many the sender dropped from
+   this body: a result that shows less than fired has to say so. */
 export interface ParsedWebhook {
+  groupKey: string;
+  truncatedAlerts: number;
   firing: ParsedAlert[];
   clearedIds: string[];
 }
@@ -70,7 +82,27 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
     });
   }
 
-  return { firing, clearedIds };
+  return {
+    groupKey: result.data.groupKey ?? synthesizeGroupKey(firing),
+    truncatedAlerts: result.data.truncatedAlerts ?? 0,
+    firing,
+    clearedIds,
+  };
+}
+
+/* No groupKey means a sender that is not Alertmanager-shaped, so the delivery
+   itself is the only grouping statement we have: these fired together and were
+   sent together. Derived from the fingerprints so an identical redelivery keys
+   the same, which is what lets it dedup rather than open a second run. */
+function synthesizeGroupKey(firing: ParsedAlert[]): string {
+  const canonical = firing
+    .map((a) => a.sourceAlertId)
+    .sort()
+    .join(",");
+  return (
+    "synthetic-" +
+    createHash("sha256").update(canonical).digest("hex").slice(0, 16)
+  );
 }
 
 // Alertmanager usually supplies a stable `fingerprint`; when a BYO sender omits it, derive one

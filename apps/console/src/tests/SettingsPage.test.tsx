@@ -64,6 +64,7 @@ const CONFIG: AgentConfig = {
     },
   },
   maxRetries: 2,
+  maxConcurrentInvestigations: 10,
   requestTimeoutMs: 120000,
   checkInAfterMs: 1800000,
   toolCallCeilingMs: 600000,

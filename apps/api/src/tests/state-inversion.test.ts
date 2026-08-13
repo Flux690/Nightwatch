@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dispatchAlertSession } from "./session-helper.js";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
@@ -197,21 +198,18 @@ describe("state inversion: persistence and reads are API-local", () => {
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
     const sessionId = randomUUID();
-    dispatcher.dispatch({
-      sessionId,
-      alerts: [
-        {
-          sourceAlertId: `si-${randomUUID()}`,
-          labels: {},
-          alertType: "ContainerDown",
-          severity: "critical",
-          firedAt: new Date().toISOString(),
-          annotations: {},
-          generatorURL: null,
-          rawPayload: {},
-        },
-      ],
-    });
+    dispatchAlertSession(sessionId, [
+      {
+        sourceAlertId: `si-${randomUUID()}`,
+        labels: {},
+        alertType: "ContainerDown",
+        severity: "critical",
+        firedAt: new Date().toISOString(),
+        annotations: {},
+        generatorURL: null,
+        rawPayload: {},
+      },
+    ]);
     // The row carries the flag from the moment it exists - checked here, before
     // the run has produced a report to infer anything from.
     const created = await waitFor(() => getSession(sessionId));

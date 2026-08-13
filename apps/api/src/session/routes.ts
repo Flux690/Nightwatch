@@ -27,6 +27,8 @@ import { buildSeed } from "./seed.js";
 import { teardown } from "../sandbox/workspace.js";
 import { HumanInputError, respondToPendingHumanInput } from "./human-input.js";
 import { dispatcher } from "../dispatcher.js";
+import { hasSeat, seatLimit } from "../run-pool.js";
+import { publishQueueChanged } from "./stream.js";
 import {
   checkLLMReadiness,
   notConfiguredMessage,
@@ -154,6 +156,11 @@ export async function registerSessionRoutes(
          rare and manual, and a truthful 204 beats a fast one. */
       await teardown(sessionId, "deleted");
       deleteSession(sessionId);
+      /* A suspended session holds a seat, and deleting it is the one way that
+         seat is freed without a run ending - so nothing else would notice, and
+         a waiting alert would sit there until the next delivery arrived. */
+      publishQueueChanged();
+      dispatcher.promoteQueued();
       return reply.code(204).send();
     },
   );
@@ -205,19 +212,27 @@ export async function registerSessionRoutes(
           .code(503)
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
-      const sessionId = randomUUID();
       /* What a session is, is declared here and never again: by an alert, or by
          the operator picking a mode before they typed. Nothing infers it later -
          not the agent mid-conversation, and not the harness from what the run
          happened to record. */
       const investigation = kind === "investigation";
+      /* Refused rather than queued, because someone is watching this request:
+         an alert was answered 200 and has nobody to tell, but a person who just
+         pressed a button would only see a spinner. Only new work is checked - a
+         resume is continuing work, and a suspended investigation still holds the
+         seat it will claim back. */
+      if (!hasSeat(investigation)) {
+        return reply.code(503).send({
+          error: investigation
+            ? `All ${seatLimit(true)} investigation slots are busy. Wait for one to finish, or raise the limit in Settings.`
+            : `You've reached the limit of ${seatLimit(false)} simultaneous conversations. Wait for one to finish before starting another.`,
+        });
+      }
+      const sessionId = randomUUID();
       // The row exists before its id is handed out, so a 202 never names a
       // session the next request cannot fetch. The run's own call is idempotent.
-      createSession(
-        buildSessionMeta(sessionId, null, message),
-        [],
-        investigation,
-      );
+      createSession(buildSessionMeta(sessionId, null, message), investigation);
       dispatcher.dispatch({ sessionId, userMessage: message, investigation });
       logger.info({ sessionId, kind }, "session started");
       return reply.code(202).send({ sessionId });

@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { countSeats, queueDepth } from "../db/sessions.js";
+import { seatLimit } from "../run-pool.js";
 import { publishConsoleEvent } from "./bus.js";
 import type { StreamDelta } from "../llm/types.js";
 import type {
   ConsoleInterrupt,
   ConsoleInterruptResolved,
   ConsoleMessage,
+  ConsoleQueueChanged,
   ConsoleReportUpdated,
   ConsoleRunFinished,
   ConsoleRunStopped,
@@ -150,6 +153,24 @@ export function publishReportUpdated(sessionId: string): void {
     messageId: randomUUID(),
     type: "REPORT_UPDATED",
     payload: { sessionId },
+  };
+  publishConsoleEvent(env);
+}
+
+/* The alert queue moved: something was queued, or a seat freed and a group
+   started. Published from the dispatcher and the ingest path rather than
+   computed by the console, so the numbers are the ones the pool actually used. */
+export function publishQueueChanged(): void {
+  const { waiting, oldestArrivedAt } = queueDepth();
+  const env: ConsoleQueueChanged = {
+    messageId: randomUUID(),
+    type: "QUEUE_CHANGED",
+    payload: {
+      waiting,
+      running: countSeats(true),
+      limit: seatLimit(true),
+      oldestArrivedAt,
+    },
   };
   publishConsoleEvent(env);
 }

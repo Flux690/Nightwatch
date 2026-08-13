@@ -4,6 +4,7 @@ import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../secrets.js";
 import { savePrometheusIntegration } from "../db/integrations.js";
 import { createSession } from "../db/sessions.js";
+import { seedAlertSession } from "./session-helper.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
 import type { MetricsRangeResult } from "../agent/tools/prometheus.js";
@@ -87,7 +88,7 @@ describe("Prometheus tools through the tool dispatch", () => {
   function mintSession(...alerts: NormalizedAlert[]): ToolDispatchContext {
     sessionSeq++;
     const sessionId = `prom-tools-${sessionSeq}`;
-    createSession(
+    seedAlertSession(
       { sessionId, title: "test", createdAt: new Date().toISOString() },
       alerts,
     );

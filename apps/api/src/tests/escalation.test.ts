@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dispatchAlertSession } from "./session-helper.js";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
@@ -206,7 +207,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
 
     const { events, close } = await connectConsoleEvents(port, SESSION);
 
-    dispatcher.dispatch({ alerts: [alert], sessionId });
+    dispatchAlertSession(sessionId, [alert]);
 
     await waitFor(() =>
       events.find(

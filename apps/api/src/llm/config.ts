@@ -15,6 +15,11 @@ export function retryDelaysMs(retries: number): number[] {
 
 // seeds the global Config row; loop reads effective values from config, not these constants
 
+// How many investigations may be in flight at once, counting the suspended ones:
+// a run waiting on an approval still holds its seat, because freeing it starts
+// another run whose write needs the same person.
+export const DEFAULT_MAX_CONCURRENT_INVESTIGATIONS = 10;
+
 // How long the agent works before finishing its current step and asking whether
 // to continue. Not a kill switch: the continue gate is what it reaches.
 export const DEFAULT_CHECK_IN_AFTER_MS = 30 * 60_000;

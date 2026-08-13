@@ -1,40 +1,55 @@
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { isDuplicate } from "./dedup.js";
-import { checkInvestigationBudget } from "./rate-limit.js";
-import { batchWindow } from "./batch-window.js";
+import { enqueueAlerts, sessionCoveringGroup } from "../db/sessions.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
+import { publishQueueChanged } from "../session/stream.js";
 
-// The one dedup/budget/dispatch path an inbound alert takes.
-export function routeAlert(alert: NormalizedAlert): "enqueued" | "skipped" {
-  if (isDuplicate(alert)) return "skipped";
+interface Routed {
+  enqueued: number;
+  skipped: number;
+}
 
-  if (batchWindow.has(alert.sourceAlertId, alert.firedAt)) return "skipped";
+/* The one path an inbound delivery takes. One webhook is one alert group, so the
+   group is routed whole rather than alert by alert: splitting it here and
+   regrouping on our own clock would replace the user's group_by with a guess.
 
-  const activeSessionId = dispatcher.getActiveAlertSession();
-  if (activeSessionId !== null) {
-    dispatcher.injectAlert(activeSessionId, alert);
+   An alert joins a live or suspended session only when that session already
+   covers its group. That is Alertmanager's decision arriving as a string, not a
+   relationship inferred from labels, so the model is told an alert fired and is
+   never asked whether it belongs. Everything else waits for its own seat. */
+export function routeDelivery(
+  groupKey: string,
+  firing: NormalizedAlert[],
+): Routed {
+  const fresh: NormalizedAlert[] = [];
+  let skipped = 0;
+  for (const alert of firing) {
+    if (isDuplicate(alert)) skipped++;
+    else fresh.push(alert);
+  }
+  if (fresh.length === 0) return { enqueued: 0, skipped };
+
+  const sessionId = sessionCoveringGroup(groupKey);
+  if (sessionId !== undefined) {
+    for (const alert of fresh) {
+      dispatcher.injectAlert(sessionId, groupKey, alert);
+    }
     logger.info(
-      { alertId: alert.sourceAlertId, sessionId: activeSessionId },
-      "alert injected into active run",
+      { groupKey, sessionId, alertCount: fresh.length },
+      "alerts injected into the run already covering this group",
     );
-    return "enqueued";
+    return { enqueued: fresh.length, skipped };
   }
 
-  // Spent here alone: this is the only branch that opens an investigation, and
-  // an alert joining an open window rides the run that window will start.
-  if (!batchWindow.isOpen() && !checkInvestigationBudget()) {
-    logger.warn(
-      { alertId: alert.sourceAlertId, type: alert.alertType },
-      "investigation budget exhausted for this window",
-    );
-    return "skipped";
-  }
-
-  batchWindow.add(alert);
+  // Durable before any decision about capacity: the sender was answered 200, so
+  // a full pool must delay this delivery, never lose it.
+  enqueueAlerts(groupKey, fresh);
   logger.info(
-    { alertId: alert.sourceAlertId, type: alert.alertType },
-    "alert added to batch window",
+    { groupKey, alertCount: fresh.length },
+    "alerts queued for investigation",
   );
-  return "enqueued";
+  publishQueueChanged();
+  dispatcher.promoteQueued();
+  return { enqueued: fresh.length, skipped };
 }

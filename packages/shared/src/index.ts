@@ -98,6 +98,7 @@ export type {
   ConsoleRunRetrying,
   ConsoleRunFailed,
   ConsoleSessionTitleUpdated,
+  ConsoleQueueChanged,
   ConsoleReportUpdated,
   ConsoleEvent,
 } from "./console-events.js";

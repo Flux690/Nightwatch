@@ -28,6 +28,13 @@ import { generateRunnerToken } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
+import { dispatchAlertSession } from "./session-helper.js";
+import { routeDelivery } from "../alerts/route-alert.js";
+import {
+  countInvestigations,
+  listSessionSources,
+  sessionCoveringGroup,
+} from "../db/sessions.js";
 import { waitFor } from "./wait.js";
 import { dispatcher } from "../dispatcher.js";
 import {
@@ -57,6 +64,23 @@ function webOneManifest() {
 // injected (or state asserted) while a run is parked mid-turn.
 const gate = createGateController();
 
+/* A group key per scenario. Sharing one across tests would be wrong on the
+   product's own terms: a session covering that group is exactly what a later
+   alert in it should join, so a shared key makes one test's session capture the
+   next test's alerts. */
+const MIDRUN_GROUP = '{}:{alertname="MidRun"}';
+const SUSPENDED_GROUP = '{}:{alertname="Suspended"}';
+const RESUME_GROUP = '{}:{alertname="Resume"}';
+const OTHER_GROUP = '{}:{alertname="Unrelated"}';
+
+// Every run this file starts has to be drained before the next test, or a
+// parked provider script is inherited by a run that did not queue it.
+function nothingRunning(): boolean {
+  return !listSessionSources(100, 0, "investigation").sources.some((s) =>
+    dispatcher.isSessionRunning(s.sessionId),
+  );
+}
+
 // Queue one provider per run, in order - a resume/leftover dispatch is a separate run,
 // so chain one script per run. All gated, so each chat() parks until released.
 function queueRuns(...scripts: ScriptedTurn[][]): void {
@@ -85,6 +109,7 @@ const READ: ScriptedTurn = {
 // Alertmanager-shaped body for driving the real POST /alerts/ingest route.
 function alertmanagerBody(
   fingerprint: string,
+  groupKey: string,
   severity = "warning",
   startsAt = new Date().toISOString(),
 ) {
@@ -100,7 +125,7 @@ function alertmanagerBody(
       },
     ],
     version: "4",
-    groupKey: "test",
+    groupKey,
     receiver: "nightwarden",
     status: "firing",
     groupLabels: {},
@@ -165,10 +190,7 @@ describe("mid-run alert injection (loop seam)", () => {
     queueRuns([READ, FINISH]);
 
     const sessionId = randomUUID();
-    dispatcher.dispatch({
-      sessionId,
-      alerts: [alert("primary-mr")],
-    });
+    dispatchAlertSession(sessionId, [alert("primary-mr")], MIDRUN_GROUP);
     // Injection mechanics only: a seeded report satisfies the finish gate. It
     // is a child of the session, and dispatch() creates that row synchronously.
     seedCompleteReport(sessionId);
@@ -179,7 +201,7 @@ describe("mid-run alert injection (loop seam)", () => {
     };
 
     // Inject while parked at turn 1's chat()
-    dispatcher.injectAlert(sessionId, alert("injected-mr"));
+    dispatcher.injectAlert(sessionId, MIDRUN_GROUP, alert("injected-mr"));
 
     // Release turn 1 -> loop executes ListDockerServices, appends the results,
     // drains the inbox and sends the alert as its own turn.
@@ -202,7 +224,9 @@ describe("mid-run alert injection (loop seam)", () => {
     ).toEqual(["primary-mr", "injected-mr"]);
 
     const transcript = buildTranscript(sessionId);
-    expect(JSON.stringify(transcript)).not.toContain("Another alert has fired");
+    expect(JSON.stringify(transcript)).not.toContain(
+      "Another alert in this same alert group",
+    );
     // Where the alert actually landed: it arrived while the model was still
     // composing turn 1, so the tool call that ran afterwards reads afterwards.
     expect(transcript.slice(0, 3).map((i) => i.kind)).toEqual([
@@ -213,7 +237,7 @@ describe("mid-run alert injection (loop seam)", () => {
     unregisterRunner(conn);
   });
 
-  it("an alert for a suspended session starts a new session instead of injecting", async () => {
+  it("an alert in the same group joins a suspended session; another group opens its own", async () => {
     const runnerId = generateRunnerToken("docker", "inject-sus").id;
     // connection with a synced cache is required, mirroring ws/server.ts's reconciliation.
     const susConn = registerRunner({
@@ -247,18 +271,16 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const firedAtOfSuspended = new Date().toISOString();
     const sessionId = randomUUID();
-    dispatcher.dispatch({
+    dispatchAlertSession(
       sessionId,
-      alerts: [alert("primary-sus", firedAtOfSuspended)],
-    });
+      [alert("primary-sus", firedAtOfSuspended)],
+      SUSPENDED_GROUP,
+    );
 
     // Release turn 1 → RestartDockerService is gated → run suspends
     gate.releaseNext();
     await waitFor(() => hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-
-    // After suspension there is no active alert session operator-wide
-    expect(dispatcher.getActiveAlertSession()).toBeNull();
 
     // The interrupt points at the gated call; the transcript row written in the
     // same transaction is what says which tool it was and with what arguments.
@@ -274,66 +296,25 @@ describe("mid-run alert injection (loop seam)", () => {
     // again must not open a second session for it.
     expect(isDuplicate(alert("primary-sus", firedAtOfSuspended))).toBe(true);
 
-    // Dispatching a new alert creates a new session (not injected into the suspended one)
-    const callsBefore = mockCreateProvider.mock.calls.length;
-    const newSessionId = randomUUID();
+    /* Suspended is still covering. The session is parked on a person, not
+       finished, and the alert source has said this new alert belongs with the
+       ones already here - so it rides along and the model is told when the run
+       picks back up, rather than opening a second investigation of one group. */
+    const before = countInvestigations();
+    routeDelivery(SUSPENDED_GROUP, [alert("same-group-while-suspended")]);
+    expect(countInvestigations()).toBe(before);
+    expect(
+      dispatcher.drainInbox(sessionId).map((a) => a.sourceAlertId),
+    ).toEqual(["same-group-while-suspended"]);
 
-    dispatcher.dispatch({
-      sessionId: newSessionId,
-      alerts: [alert("new-after-sus")],
-    });
-    seedCompleteReport(newSessionId);
+    // A different group is a different incident, whatever this session is doing.
+    routeDelivery(OTHER_GROUP, [alert("other-group-while-suspended")]);
+    await waitFor(() => countInvestigations() === before + 1);
 
-    await waitFor(() => mockCreateProvider.mock.calls.length > callsBefore);
-
-    // New session is running independently
-    expect(dispatcher.isSessionRunning(newSessionId)).toBe(true);
-    expect(dispatcher.getActiveAlertSession()).toBe(newSessionId);
-
-    // The suspended session's inbox was not touched
-    expect(dispatcher.drainInbox(sessionId)).toHaveLength(0);
-
-    await gate.releaseUntil(() => !dispatcher.isSessionRunning(newSessionId));
+    // Drain every run this test started, or the next one inherits a parked
+    // provider script and never gets its own.
+    await gate.releaseUntil(() => nothingRunning());
     unregisterRunner(susConn);
-  });
-
-  it("inbox leftovers when a run ends become new sessions", async () => {
-    // R1: free-form finish immediately (loop exits before any appendToolResults,
-    // so the inbox is never drained by the loop). R2: leftover's new session.
-    queueRuns([FINISH], [FINISH]);
-
-    const sessionId = randomUUID();
-    dispatcher.dispatch({
-      sessionId,
-      alerts: [alert("primary-lo")],
-    });
-    seedCompleteReport(sessionId);
-
-    // Inject before releasing — alert sits in inbox
-    dispatcher.injectAlert(sessionId, alert("leftover-lo"));
-
-    const callsBefore = mockCreateProvider.mock.calls.length;
-
-    // Release: chat() resolves with free-form finish → run exits without draining inbox
-    await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
-
-    // The dispatcher's finally block dispatches leftovers as new sessions.
-    // createProvider is called synchronously in the new session's start().
-    await waitFor(() => mockCreateProvider.mock.calls.length > callsBefore, {
-      timeout: 5_000,
-    });
-
-    const newProvider = mockCreateProvider.mock.results[
-      mockCreateProvider.mock.calls.length - 1
-    ]!.value as { start: ReturnType<typeof vi.fn> };
-    const openingMsg = newProvider.start.mock.calls[0]?.[0] as
-      string | undefined;
-    expect(openingMsg).toBeDefined();
-
-    // The leftover session's id is dispatcher-minted, so seed its report only
-    // now that it is the active alert session.
-    seedCompleteReport(dispatcher.getActiveAlertSession()!);
-    await gate.releaseUntil(() => dispatcher.getActiveAlertSession() === null);
   });
 
   // A resume dispatch carries no `alert` field, so the dispatcher must recover alert identity
@@ -381,10 +362,11 @@ describe("mid-run alert injection (loop seam)", () => {
 
     const primaryFiredAt = "2026-07-07T03:00:00.000Z";
     const sessionId = randomUUID();
-    dispatcher.dispatch({
+    dispatchAlertSession(
       sessionId,
-      alerts: [alert("primary-resume", primaryFiredAt)],
-    });
+      [alert("primary-resume", primaryFiredAt)],
+      RESUME_GROUP,
+    );
     seedCompleteReport(sessionId);
     // This run restarts a service, and a run that changed something owes the
     // operator a recommendation - otherwise the finish gate asks for one.
@@ -398,9 +380,9 @@ describe("mid-run alert injection (loop seam)", () => {
     await respondToPendingHumanInput(sessionId, { decision: "approve" });
     await waitFor(() => dispatcher.isSessionRunning(sessionId));
 
-    // The core H3 fix: the resumed session is still recognized as the active
-    // alert investigation even though this dispatch carried no alert.
-    expect(dispatcher.getActiveAlertSession()).toBe(sessionId);
+    // The resumed session is still the one covering this group, even though the
+    // resume dispatch carried no alerts of its own.
+    expect(sessionCoveringGroup(RESUME_GROUP)).toBe(sessionId);
 
     const server = Fastify({ logger: false });
     await mountApi(server, registerAlertRoutes);
@@ -412,7 +394,7 @@ describe("mid-run alert injection (loop seam)", () => {
       method: "POST",
       url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": tokenPlaintext },
-      payload: alertmanagerBody("correlated-resume"),
+      payload: alertmanagerBody("correlated-resume", RESUME_GROUP),
     });
     expect(JSON.parse(correlated.body)).toMatchObject({
       enqueued: 1,
@@ -426,7 +408,12 @@ describe("mid-run alert injection (loop seam)", () => {
       method: "POST",
       url: "/api/alerts/ingest",
       headers: { "x-nightwarden-token": tokenPlaintext },
-      payload: alertmanagerBody("primary-resume", "warning", primaryFiredAt),
+      payload: alertmanagerBody(
+        "primary-resume",
+        RESUME_GROUP,
+        "warning",
+        primaryFiredAt,
+      ),
     });
     expect(JSON.parse(refire.body)).toMatchObject({
       enqueued: 0,

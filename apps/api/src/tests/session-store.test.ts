@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { seedAlertSession } from "./session-helper.js";
 import {
   afterAll,
   afterEach,
@@ -92,7 +93,7 @@ describe("API-local session store", () => {
 
   it("round-trips a session with the alert that opened it", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
 
     const stored = getSession(m.sessionId);
     expect(stored).toBeDefined();
@@ -104,7 +105,7 @@ describe("API-local session store", () => {
 
   it("stores a chat session with no alerts at all", () => {
     const m = meta({ title: "hello" });
-    createSession(m, []);
+    createSession(m);
 
     expect(getSession(m.sessionId)?.alerts).toEqual([]);
   });
@@ -116,8 +117,8 @@ describe("API-local session store", () => {
       sourceAlertId: "later",
       alertType: "HighLatency",
     };
-    createSession(m, [alert]);
-    appendSessionAlert(m.sessionId, later);
+    seedAlertSession(m, [alert], "grp-arrival");
+    appendSessionAlert(m.sessionId, "grp-arrival", later);
 
     const stored = getSession(m.sessionId)!.alerts;
     expect(stored.map((entry) => entry.alert)).toEqual([alert, later]);
@@ -131,8 +132,8 @@ describe("API-local session store", () => {
 
   it("createSession is idempotent and never clobbers the first title", () => {
     const m = meta({ title: "first" });
-    createSession(m, [alert]);
-    createSession({ ...m, title: "second" }, []);
+    seedAlertSession(m, [alert]);
+    createSession({ ...m, title: "second" });
 
     const stored = getSession(m.sessionId);
     expect(stored?.title).toBe("first");
@@ -141,7 +142,7 @@ describe("API-local session store", () => {
 
   it("persists and reads back a transcript ordered by seq", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     // Insert out of order to prove ordering is by seq, not insertion.
     appendTranscriptRows([msg(m.sessionId, 1), msg(m.sessionId, 0)]);
     appendTranscriptRows([msg(m.sessionId, 2)]);
@@ -158,7 +159,7 @@ describe("API-local session store", () => {
     // theirs; the model answered it, so a resume that dropped it would leave
     // that answer replying to nothing.
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     appendTranscriptRows([
       msg(m.sessionId, 0),
       msg(m.sessionId, 1),
@@ -190,7 +191,7 @@ describe("API-local session store", () => {
     // The provider message a reloaded transcript is rebuilt from has nowhere to
     // put our classification, so a reload would otherwise lose it.
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     appendTranscriptRows([
       {
         ...msg(m.sessionId, 0, { kind: "assistant" }),
@@ -214,7 +215,7 @@ describe("API-local session store", () => {
 
   it("rejects a duplicate (session_id, seq) so a hole can never be re-filled", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     appendTranscriptRows([msg(m.sessionId, 0)]);
 
     expect(() => appendTranscriptRows([msg(m.sessionId, 0)])).toThrow();
@@ -222,7 +223,7 @@ describe("API-local session store", () => {
 
   it("appends a batch atomically: a duplicate in the batch rolls back the whole turn", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     appendTranscriptRows([msg(m.sessionId, 0)]);
 
     // seq 1 is new, seq 0 collides; the batch must be all-or-nothing.
@@ -242,9 +243,9 @@ describe("API-local session store", () => {
       createdAt: "2026-02-01T00:00:00.000Z",
     });
     const other = meta({ title: "other" });
-    createSession(older, [alert]);
-    createSession(newer, [alert]);
-    createSession(other, [alert]);
+    seedAlertSession(older, [alert]);
+    seedAlertSession(newer, [alert]);
+    seedAlertSession(other, [alert]);
 
     const list = listSessionSources(100, 0).sources.filter((session) =>
       [other.sessionId, newer.sessionId, older.sessionId].includes(
@@ -259,7 +260,7 @@ describe("API-local session store", () => {
     // than the id tiebreaker's.
     function seedSessions(count: number, prefix: string): void {
       for (let i = 0; i < count; i++) {
-        createSession(
+        seedAlertSession(
           meta({
             title: `${prefix}-${i}`,
             createdAt: `2026-03-01T00:00:${String(i).padStart(2, "0")}.000Z`,
@@ -293,7 +294,7 @@ describe("API-local session store", () => {
         title: "waiting",
         createdAt: "2026-01-01T00:00:00.000Z",
       });
-      createSession(waiting, [alert]);
+      seedAlertSession(waiting, [alert]);
       appendRowsAndInterrupt([msg(waiting.sessionId, 0)], {
         sessionId: waiting.sessionId,
         toolUseId: "tu-float",
@@ -301,7 +302,7 @@ describe("API-local session store", () => {
         completedResults: [],
         claimedAt: null,
       });
-      createSession(meta({ title: "newer than waiting" }), [alert]);
+      seedAlertSession(meta({ title: "newer than waiting" }), [alert]);
 
       const first = listSessionSources(1, 0);
       expect(first.sources[0].sessionId).toBe(waiting.sessionId);
@@ -316,7 +317,7 @@ describe("API-local session store", () => {
 
   it("deleteSession removes the session, its messages, and any pending interrupt", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     appendRowsAndInterrupt([msg(m.sessionId, 0)], {
       sessionId: m.sessionId,
       toolUseId: "tu-del-1",
@@ -338,7 +339,7 @@ describe("API-local session store", () => {
 
   it("deleteSession removes the report (it has no reason to outlive the session)", () => {
     const m = meta();
-    createSession(m, [alert]);
+    seedAlertSession(m, [alert]);
     seedCompleteReport(m.sessionId);
     expect(getReport(m.sessionId)).toBeDefined();
 
@@ -366,13 +367,13 @@ describe("API-local session store", () => {
     // Its own alert id per session: clearing one must not settle another's.
     function investigation(sourceAlertId = randomUUID()): string {
       const m = meta();
-      createSession(m, [{ ...alert, sourceAlertId }], true);
+      seedAlertSession(m, [{ ...alert, sourceAlertId }]);
       return m.sessionId;
     }
 
     it("says nothing about a session that is not under investigation", () => {
       const m = meta();
-      createSession(m, []);
+      createSession(m);
       expect(statusOf(m.sessionId)).toBeNull();
     });
 
@@ -408,7 +409,7 @@ describe("API-local session store", () => {
     // on the strength of something having run.
     it("never resolves a session that fired on no alert", () => {
       const m = meta();
-      createSession(m, [], true);
+      createSession(m, true);
       seedCompleteReport(m.sessionId);
       expect(statusOf(m.sessionId)).toBe("inconclusive");
     });
@@ -435,10 +436,9 @@ describe("API-local session store", () => {
       // still fire is not the incident being over.
       const m = meta();
       const ids = [randomUUID(), randomUUID(), randomUUID()];
-      createSession(
+      seedAlertSession(
         m,
         ids.map((sourceAlertId) => ({ ...alert, sourceAlertId })),
-        true,
       );
       seedCompleteReport(m.sessionId);
 
@@ -523,11 +523,9 @@ describe("API-local session store", () => {
       // plus the external_labels Prometheus attaches on the way to Alertmanager.
       function labelledInvestigation(labels: Record<string, string>): string {
         const m = meta();
-        createSession(
-          m,
-          [{ ...alert, sourceAlertId: randomUUID(), labels }],
-          true,
-        );
+        seedAlertSession(m, [
+          { ...alert, sourceAlertId: randomUUID(), labels },
+        ]);
         return m.sessionId;
       }
 
@@ -652,7 +650,7 @@ describe("API-local session store", () => {
 
       it("has nothing to verify on a session no alert opened", async () => {
         const m = meta();
-        createSession(m, [], true);
+        createSession(m, true);
         await expect(verifyRecovery(m.sessionId)).resolves.toBe("no_condition");
       });
     });
@@ -687,7 +685,7 @@ describe("API-local session store", () => {
     }
     function investigation(sourceAlertId = randomUUID()): string {
       const m = meta();
-      createSession(m, [{ ...alert, sourceAlertId }], true);
+      seedAlertSession(m, [{ ...alert, sourceAlertId }]);
       return m.sessionId;
     }
 
@@ -779,7 +777,7 @@ describe("API-local session store", () => {
 
     it("leaves a session that is not under investigation with no finding", () => {
       const m = meta();
-      createSession(m, []);
+      createSession(m);
       expect(findingOf(m.sessionId)).toBeNull();
     });
 
@@ -787,18 +785,14 @@ describe("API-local session store", () => {
     // only thing rendered.
     it("carries the severity rank and the label's own word apart", () => {
       const m = meta();
-      createSession(
-        m,
-        [
-          {
-            ...alert,
-            sourceAlertId: randomUUID(),
-            severity: null,
-            labels: { severity: "P1" },
-          },
-        ],
-        true,
-      );
+      seedAlertSession(m, [
+        {
+          ...alert,
+          sourceAlertId: randomUUID(),
+          severity: null,
+          labels: { severity: "P1" },
+        },
+      ]);
       expect(rowOf(m.sessionId)).toMatchObject({
         severity: null,
         severityLabel: "P1",
@@ -811,20 +805,20 @@ describe("API-local session store", () => {
   describe("the page's counts and its kind filter", () => {
     function investigation(): string {
       const m = meta();
-      createSession(m, [{ ...alert, sourceAlertId: randomUUID() }], true);
+      seedAlertSession(m, [{ ...alert, sourceAlertId: randomUUID() }]);
       return m.sessionId;
     }
 
     it("totals every investigation, so a record's place in the queue is true", () => {
       const before = listSessionPage(1, 0).investigationTotal;
       investigation();
-      createSession(meta(), []); // a chat adds nothing to the total
+      createSession(meta()); // a chat adds nothing to the total
       expect(listSessionPage(1, 0).investigationTotal).toBe(before + 1);
     });
 
     it("filters the rows by kind, leaving the counts alone", () => {
       const chat = meta();
-      createSession(chat, []);
+      createSession(chat);
       const only = listSessionPage(500, 0, "investigation");
       expect(only.rows.every((r) => r.investigation)).toBe(true);
       expect(only.rows.some((r) => r.sessionId === chat.sessionId)).toBe(false);

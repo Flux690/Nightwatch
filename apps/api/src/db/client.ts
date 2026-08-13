@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS config (
   active_provider           TEXT,
   max_retries               INTEGER   NOT NULL DEFAULT 3,
   request_timeout_ms        INTEGER   NOT NULL DEFAULT 120000,
+  max_concurrent_investigations INTEGER NOT NULL DEFAULT 10,
   check_in_after_ms         INTEGER   NOT NULL DEFAULT 1800000,
   tool_call_ceiling_ms      INTEGER   NOT NULL DEFAULT 600000,
   sandbox_idle_timeout_ms   INTEGER   NOT NULL DEFAULT 3600000,
@@ -111,14 +112,23 @@ CREATE TABLE IF NOT EXISTS integrations (
 -- list sorts on it: derived, it is a correlated subquery the sort has to run for
 -- every session in the table before it can apply a LIMIT.
 
--- is_running is claimed by a conditional UPDATE, so it is the mutex as well as
--- the flag. There is one process, which is why it needs no TTL and no heartbeat:
--- anything still set at boot was killed, because this process just started.
+-- run_state is claimed by a conditional UPDATE, so it is the mutex as well as the
+-- state. There is one process, which is why it needs no TTL and no heartbeat:
+-- anything left 'running' at boot was killed, because this process just started.
+
+-- 'suspended' is its own state rather than an absence, because a suspended
+-- investigation still holds a concurrency seat: releasing it would start a sixth
+-- run whose write also needs the one human already holding up this one.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   investigation        INTEGER   NOT NULL DEFAULT 0,
-  is_running           INTEGER   NOT NULL DEFAULT 0,
+  run_state            TEXT      NOT NULL DEFAULT 'done'
+                                 CHECK (run_state IN ('running', 'suspended', 'done')),
+  -- How many times a failed run has been retried, and whether the last failure
+  -- was worth retrying at all. Prose in the transcript cannot be classified later.
+  failed_attempts      INTEGER   NOT NULL DEFAULT 0,
+  failure_kind         TEXT      CHECK (failure_kind IN ('transient', 'permanent')),
   report               TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL
@@ -127,31 +137,50 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- queries a page load actually runs.
 CREATE INDEX IF NOT EXISTS idx_sessions_kind_activity
   ON sessions(investigation, last_activity_at DESC);
+-- Concurrency seats are counted per pool on every admission decision.
+CREATE INDEX IF NOT EXISTS idx_sessions_seats
+  ON sessions(investigation, run_state);
 
--- One row per alert this session covers, in arrival order, each carrying when it
--- joined and when it cleared. A batch elects no primary, so recovery is a fact
--- about each alert and the session resolves only once they have all cleared.
+-- One row per alert, in arrival order, each carrying when it joined and when it
+-- cleared. A group elects no primary, so recovery is a fact about each alert and
+-- the session resolves only once they have all cleared.
+
+-- session_id is NULL while an alert waits for a free concurrency seat. That is
+-- the whole queue: an alert waiting to be investigated is an alert, not a
+-- session with no transcript, so nothing has to hide a half-built row.
+
+-- group_key is Alertmanager's own, from the webhook body. It decides which
+-- alerts share an investigation, which makes grouping the user's own group_by
+-- config rather than anything we infer.
 
 -- The scalars are what anything looks an alert up BY: source_alert_id and
 -- fired_at identify it, cleared_at says whether it is still open. Everything
 -- else is read whole and never queried, so it stays JSON in the alert column.
-CREATE TABLE IF NOT EXISTS session_alerts (
+CREATE TABLE IF NOT EXISTS alerts (
   id                 INTEGER   PRIMARY KEY,
-  session_id         TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+  session_id         TEXT      REFERENCES sessions(session_id) ON DELETE CASCADE,
+  group_key          TEXT      NOT NULL,
   source_alert_id    TEXT      NOT NULL,
   fired_at           TEXT      NOT NULL,
   arrived_at         TEXT      NOT NULL,
   cleared_at         TEXT,
   alert              TEXT      NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_session_alerts_session
-  ON session_alerts(session_id, id);
-CREATE INDEX IF NOT EXISTS idx_session_alerts_source
-  ON session_alerts(source_alert_id, fired_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_session
+  ON alerts(session_id, id);
+CREATE INDEX IF NOT EXISTS idx_alerts_source
+  ON alerts(source_alert_id, fired_at);
 -- Partial on purpose: the reconciler asks "what is still open" on a timer for
 -- the life of the install, and cleared alerts only ever accumulate.
-CREATE INDEX IF NOT EXISTS idx_session_alerts_open
-  ON session_alerts(session_id) WHERE cleared_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alerts_open
+  ON alerts(session_id) WHERE cleared_at IS NULL;
+-- The queue, in arrival order. Partial because promotion only ever asks about
+-- alerts no session has taken yet.
+CREATE INDEX IF NOT EXISTS idx_alerts_queued
+  ON alerts(arrived_at) WHERE session_id IS NULL;
+-- Routing asks, per delivery, whether a live session already covers this group.
+CREATE INDEX IF NOT EXISTS idx_alerts_group
+  ON alerts(group_key);
 
 -- The durable transcript, and the only record of what ran, keyed by the natural
 -- (session_id, seq). kind because not every row is a conversation turn: an error

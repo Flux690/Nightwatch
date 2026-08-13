@@ -3,7 +3,7 @@ import {
   parseAlertmanager,
   type ParsedWebhook,
 } from "./parsers/alertmanager.js";
-import { routeAlert } from "./route-alert.js";
+import { routeDelivery } from "./route-alert.js";
 import {
   findAlertSourceKindByToken,
   setAlertSourceReceived,
@@ -82,12 +82,7 @@ export async function registerAlertRoutes(
       }
     }
 
-    let enqueued = 0;
-    let skipped = 0;
-    for (const alert of parsed.firing) {
-      if (routeAlert(alert) === "enqueued") enqueued++;
-      else skipped++;
-    }
+    const { enqueued, skipped } = routeDelivery(parsed.groupKey, parsed.firing);
 
     return reply
       .code(200)

@@ -10,8 +10,10 @@ import {
   getNextSeq,
   getSession,
   getTranscriptRows,
-  markIdle,
+  markDone,
+  releaseRun,
   runningSessionIds,
+  suspendedSessionIds,
 } from "../db/sessions.js";
 import { dispatcher } from "../dispatcher.js";
 import { logger } from "../logger.js";
@@ -24,6 +26,9 @@ const RESUME_WINDOW_MS = 15 * 60_000;
 
 const INTERRUPTED =
   "This investigation was interrupted: NightWarden stopped while it was running.";
+
+const ABANDONED =
+  "This investigation was interrupted: NightWarden stopped just after the approved call ran, so its result was lost. Whether the call took effect is unknown - check the target before approving it again.";
 
 interface PendingCall {
   toolUseId: string;
@@ -111,22 +116,41 @@ function worthResuming(sessionId: string): boolean {
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
+/* Suspended, but waiting on nothing: approving a call deletes the interrupt row
+   before the resume claims the run, so a crash in that gap leaves this. The
+   approved tool already executed and its result is gone, so the run cannot be
+   resumed - re-running the write is the one thing we must not do. Releasing the
+   state is what gives the seat back; the note is what says why it stopped. */
+function releaseAbandonedSuspensions(): number {
+  let released = 0;
+  for (const sessionId of suspendedSessionIds()) {
+    if (hasPendingHumanInput(sessionId)) continue;
+    try {
+      markDone(sessionId);
+      appendErrorMessage(sessionId, ABANDONED);
+      released++;
+    } catch (err) {
+      logger.warn({ err, sessionId }, "could not release a stuck suspension");
+    }
+  }
+  return released;
+}
+
 /* Every session still flagged running was killed: there is one process, and it
    has only just started. Runs before the server listens, so nothing can dispatch
    into a session this is still deciding about. */
 export async function recoverDeadRuns(): Promise<{
   failed: number;
   resumed: number;
+  released: number;
 }> {
-  const result = { failed: 0, resumed: 0 };
+  const result = {
+    failed: 0,
+    resumed: 0,
+    released: releaseAbandonedSuspensions(),
+  };
   for (const sessionId of runningSessionIds()) {
-    // Written in one transaction with its transcript rows, so an interrupt row
-    // means the run suspended rather than died. It is waiting, not broken.
-    if (hasPendingHumanInput(sessionId)) {
-      markIdle(sessionId);
-      continue;
-    }
-    markIdle(sessionId);
+    releaseRun(sessionId);
     try {
       const pending = unansweredCalls(getTranscriptRows(sessionId));
       if (pending.length > 0) {

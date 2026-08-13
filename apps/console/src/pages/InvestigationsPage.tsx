@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { SessionListRow } from "@nightwarden/shared";
@@ -53,12 +54,49 @@ function InvestigationRow({
   );
 }
 
+/* Alerts waiting for a free seat are not sessions, so they are not rows: they
+   have no transcript, no finding and nothing to open. A band says how many are
+   waiting and why, and names the limit - which is the one thing the reader can
+   change about it. */
+function QueueBand({ queue }: { queue: QueueState }): React.JSX.Element | null {
+  if (queue.waiting === 0) return null;
+  const alerts = queue.waiting === 1 ? "1 alert" : `${queue.waiting} alerts`;
+  return (
+    <p className="mb-4 flex h-7 items-center gap-2 rounded-lg bg-card px-3 text-sm">
+      <Spinner aria-hidden className="size-3.5" role="none" />
+      <span className="font-medium">{alerts} waiting</span>
+      <span className="text-muted-foreground">
+        {queue.running} of {queue.limit} investigations running
+        {queue.oldestArrivedAt !== null &&
+          ` · oldest waiting ${timeAgo(queue.oldestArrivedAt)}`}
+      </span>
+    </p>
+  );
+}
+
+interface QueueState {
+  waiting: number;
+  running: number;
+  limit: number;
+  oldestArrivedAt: string | null;
+}
+
 export function InvestigationsPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { sessions, isLoading, hasMore, isLoadingMore, loadMore } =
     useSessions("investigation");
+  const [queue, setQueue] = useState<QueueState>({
+    waiting: 0,
+    running: 0,
+    limit: 0,
+    oldestArrivedAt: null,
+  });
 
   useConsoleEvents((env) => {
+    if (env.type === "QUEUE_CHANGED") {
+      setQueue(env.payload);
+      return;
+    }
     if (env.type === "SESSION_TITLE_UPDATED") {
       const { sessionId, title } = env.payload;
       renameSession(queryClient, "investigation", sessionId, title);
@@ -84,6 +122,7 @@ export function InvestigationsPage(): React.JSX.Element {
 
   return (
     <Page crumbs={[{ label: "Investigations" }]} measure="full">
+      <QueueBand queue={queue} />
       {!isLoading && groups.length === 0 && (
         <p className="text-sm text-muted-foreground">No investigations yet</p>
       )}

@@ -8,7 +8,7 @@ import { registerTokenRoutes } from "./auth/token.js";
 import { registerWsRoutes } from "./ws/server.js";
 import { registerConsoleEventRoutes } from "./session/events.js";
 import { registerAlertRoutes } from "./alerts/ingest.js";
-import { batchWindow } from "./alerts/batch-window.js";
+import { dispatcher } from "./dispatcher.js";
 import {
   RECONCILE_TICK_MS,
   reconcileRecovery,
@@ -137,11 +137,15 @@ const start = async (): Promise<void> => {
     // Before listen(), so nothing can dispatch into a session this is still
     // deciding about. A run still flagged running was killed with the process.
     const recovered = await recoverDeadRuns();
-    if (recovered.failed > 0) {
+    if (recovered.failed > 0 || recovered.released > 0) {
       fastify.log.info(
-        `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed`,
+        `interrupted runs: ${recovered.failed} marked failed, ${recovered.resumed} resumed, ${recovered.released} stuck suspensions released`,
       );
     }
+    /* Alerts queued when the process died are still queued, and the seats they
+       were waiting for were freed by recovery above. Nothing else would notice
+       until the next delivery arrived. */
+    dispatcher.promoteQueued();
     /* An alert usually clears minutes after the run that fixed it has ended, so
        something has to keep asking. Unref'd: a pending sweep is no reason to
        hold the process open, and the server keeps the loop alive anyway. */
@@ -169,10 +173,6 @@ function shutdown(signal: NodeJS.Signals): void {
   fastify.log.info({ signal }, "shutting down");
   const failsafe = setTimeout(() => process.exit(1), 5000);
   failsafe.unref();
-  // Everything the batch window holds was already answered 200, and up to 90
-  // seconds of it used to vanish on a graceful deploy. Dispatching writes the
-  // session and its alerts before the run is reachable, so they survive.
-  batchWindow.flush();
   // Sandbox containers cannot outlive the process that started them: without
   // this they run until the next boot reaps them, holding their reservations.
   // Their checkouts stay, and boot salvage does the git work with time for it.

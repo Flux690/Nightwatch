@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { seedAlertSession } from "./session-helper.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
 
@@ -16,7 +17,7 @@ import {
   createSession,
   getTranscriptRows,
   isRunning,
-  markRunning,
+  claimRun,
 } from "../db/sessions.js";
 import { recoverDeadRuns } from "../session/recover.js";
 import { buildSeed } from "../session/seed.js";
@@ -38,13 +39,11 @@ const alert: NormalizedAlert = {
 // because nothing got the chance to clear it.
 function killedRun(rows: TranscriptRow[] = [], at = new Date()): string {
   const sessionId = randomUUID();
-  createSession(
-    { sessionId, title: "t", createdAt: at.toISOString() },
-    [alert],
-    true,
-  );
+  seedAlertSession({ sessionId, title: "t", createdAt: at.toISOString() }, [
+    alert,
+  ]);
   if (rows.length > 0) appendTranscriptRows(rows);
-  markRunning(sessionId);
+  claimRun(sessionId);
   return sessionId;
 }
 
@@ -106,13 +105,13 @@ describe("recovering runs a restart interrupted", () => {
 
   it("leaves a session waiting on a human alone: it suspended, it did not die", async () => {
     const sessionId = randomUUID();
-    createSession(
+    seedAlertSession(
       { sessionId, title: "t", createdAt: new Date().toISOString() },
       [alert],
-      true,
     );
-    // The interrupt row and its transcript rows are written in one transaction,
-    // so this state means the run parked itself rather than being killed.
+    // The interrupt row, its transcript rows and the suspended state are written
+    // in one transaction, so this means the run parked itself rather than being
+    // killed - and it keeps its seat for as long as it waits.
     appendRowsAndInterrupt(
       [callTurn(sessionId, 0, "tu-gated", "RestartDockerService", {})],
       {
@@ -123,9 +122,9 @@ describe("recovering runs a restart interrupted", () => {
         claimedAt: null,
       },
     );
-    markRunning(sessionId);
 
     const result = await recoverDeadRuns();
+    expect(result.released).toBe(0);
 
     expect(result.failed).toBe(0);
     expect(isRunning(sessionId)).toBe(false);

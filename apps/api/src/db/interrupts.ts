@@ -85,22 +85,6 @@ export function getPendingHumanInputBySessionId(
   return row ? parseRow(row) : undefined;
 }
 
-// Dedup: true if a session for this alert is durably suspended.
-export function hasPendingHumanInputForAlert(
-  sourceAlertId: string,
-  firedAt: string,
-): boolean {
-  const row = getDb()
-    .prepare(
-      `SELECT 1 FROM session_alerts sa
-       JOIN pending_human_input pi ON pi.session_id = sa.session_id
-       WHERE sa.source_alert_id = ? AND sa.fired_at = ?
-       LIMIT 1`,
-    )
-    .get(sourceAlertId, firedAt);
-  return row != null;
-}
-
 // 409 guard: true if this session has pending human input.
 export function hasPendingHumanInput(sessionId: string): boolean {
   const row = getDb()

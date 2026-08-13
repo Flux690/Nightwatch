@@ -21,12 +21,17 @@ import { mockCreateProvider } from "./llm-factory-mock.js";
 
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
-import { seedCompleteReport } from "./report-helper.js";
 import { registerAlertRoutes } from "../alerts/ingest.js";
-import { batchWindow } from "../alerts/batch-window.js";
 import { dispatcher } from "../dispatcher.js";
+import { updateConfig } from "../config/store.js";
 import {
-  markRunnerAlive,
+  countInvestigations,
+  getSession,
+  listSessionSources,
+  markAlertCleared,
+  queueDepth,
+} from "../db/sessions.js";
+import {
   registerRunner,
   setRunnerManifest,
   unregisterRunner,
@@ -34,14 +39,15 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 import { mountApi } from "./api-server.js";
+import { waitFor } from "./wait.js";
 
 // A free-form finish: no tool call ends the run successfully.
 const FINISH: ScriptedTurn[] = [
   { toolUses: [], text: "Investigation complete." },
 ];
 
-// Shared FIFO gate. In gated mode a run parks on chat() so it stays "active"
-// long enough to assert derived dedup against it; releaseAll() lets it finish.
+// Shared FIFO gate. In gated mode a run parks on chat() so it stays live long
+// enough to assert against it; releaseAll() lets it finish.
 const gate = createGateController();
 
 function useGatedProvider(): void {
@@ -56,66 +62,61 @@ function useImmediateProvider(): void {
   );
 }
 
-// One firing alert with a caller-chosen fingerprint (sourceAlertId) and severity, so dedup and
-// rate-limit drive precisely; container defaults to web-01 but each test can pick its own.
-function alertBody(
-  fingerprint: string,
-  severity = "warning",
-  container = "web-01",
-  startsAt = new Date().toISOString(),
-) {
+interface AlertSpec {
+  fingerprint: string;
+  container?: string;
+  startsAt?: string;
+  status?: "firing" | "resolved";
+}
+
+/* One webhook delivery, which is one alert group. groupKey is what Alertmanager
+   computed from the operator's group_by, and it is the only thing that decides
+   which alerts share an investigation - so every test names it explicitly. */
+function delivery(groupKey: string, alerts: AlertSpec[], truncated = 0) {
   return {
-    alerts: [
-      {
-        status: "firing",
-        labels: { alertname: "HighCPU", severity, container },
-        annotations: { summary: "CPU high" },
-        startsAt,
-        endsAt: "0001-01-01T00:00:00Z",
-        fingerprint,
+    alerts: alerts.map((a) => ({
+      status: a.status ?? "firing",
+      labels: {
+        alertname: "HighCPU",
+        severity: "warning",
+        container: a.container ?? "web-01",
       },
-    ],
+      annotations: { summary: "CPU high" },
+      startsAt: a.startsAt ?? "2026-07-07T03:00:00.000Z",
+      endsAt: "0001-01-01T00:00:00Z",
+      fingerprint: a.fingerprint,
+    })),
     version: "4",
-    groupKey: "test",
+    groupKey,
+    truncatedAlerts: truncated,
     receiver: "nightwarden",
     status: "firing",
-    groupLabels: {},
+    groupLabels: { alertname: "HighCPU" },
     commonLabels: {},
     commonAnnotations: {},
     externalURL: "http://localhost:9093",
   };
 }
 
-describe("POST /alerts/ingest dispatch behavior", () => {
+describe("POST /alerts/ingest: one delivery, one investigation", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
-  let connA: RunnerConnection;
-  let connB: RunnerConnection;
+  let conn: RunnerConnection;
+  let token: string;
 
-  // Two runners advertising distinct services keep the fleet non-empty for
-  // ingest and give the mixed-batch test a matched and an unmatched identity.
   beforeAll(async () => {
     cleanupDb = useTempDb();
-    connA = registerRunner({
-      runnerId: "dispatch-runner-a-token",
+    conn = registerRunner({
+      runnerId: "ingest-runner",
       platform: "docker",
       send: () => {},
       close: () => {},
     });
     setRunnerManifest(
-      "dispatch-runner-a-token",
+      "ingest-runner",
       manifest("host-web-01", [dockerService("web-01")]),
     );
-    connB = registerRunner({
-      runnerId: "dispatch-runner-b-token",
-      platform: "docker",
-      send: () => {},
-      close: () => {},
-    });
-    setRunnerManifest(
-      "dispatch-runner-b-token",
-      manifest("host-web-02", [dockerService("web-02")]),
-    );
+    token = generateAlertSourceToken("ingest");
     server = Fastify({ logger: false });
     await mountApi(server, registerAlertRoutes);
     await server.ready();
@@ -123,27 +124,22 @@ describe("POST /alerts/ingest dispatch behavior", () => {
 
   afterAll(async () => {
     await server.close();
-    unregisterRunner(connA);
-    unregisterRunner(connB);
+    unregisterRunner(conn);
     cleanupDb();
     vi.unstubAllEnvs();
   });
 
   afterEach(async () => {
-    // Drain any parked runs so a later test never inherits a held dedup key.
-    // Released reportless finishes re-park while the finish gate nudges, so
-    // release repeatedly until every straggler has finalized and completed.
-    vi.useRealTimers();
-    for (let i = 0; i < 6 && dispatcher.getActiveAlertSession() !== null; i++) {
-      gate.releaseAll();
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
+    // Drain parked runs so a later test never inherits a held seat. A released
+    // finish re-parks while the finish gate nudges, so release repeatedly.
+    await settle();
     gate.releaseAll();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    updateConfig({ maxConcurrentInvestigations: 10 });
   });
 
   function ingest(
-    token: string,
-    body: ReturnType<typeof alertBody>,
+    body: ReturnType<typeof delivery>,
   ): Promise<{ enqueued: number; skipped: number }> {
     return server
       .inject({
@@ -158,241 +154,171 @@ describe("POST /alerts/ingest dispatch behavior", () => {
       });
   }
 
-  // A released finish re-parks while the finish gate nudges, so keep releasing
-  // until the run has actually ended.
-  async function settleRun(): Promise<void> {
-    for (
-      let i = 0;
-      i < 40 && dispatcher.getActiveAlertSession() !== null;
-      i++
-    ) {
+  function liveSessions(): string[] {
+    return listSessionSources(100, 0, "investigation")
+      .sources.map((s) => s.sessionId)
+      .filter((id) => dispatcher.isSessionRunning(id));
+  }
+
+  function alertIdsOf(sessionId: string): string[] {
+    return (getSession(sessionId)?.alerts ?? []).map(
+      (entry) => entry.alert.sourceAlertId,
+    );
+  }
+
+  // A released finish re-parks while the finish gate nudges for a record, so
+  // one release is not the end of a run - keep releasing until nothing is live.
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 40 && liveSessions().length > 0; i++) {
       gate.releaseAll();
-      await vi.advanceTimersByTimeAsync(10);
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
     }
   }
 
-  it("drops a duplicate alert while its run is active, then re-investigates after it ends", async () => {
-    const token = generateAlertSourceToken("dedup");
-    // A re-notification carries the SAME startsAt - that pairing is the dedup key.
-    const firedAt = "2026-07-07T03:00:00.000Z";
-    // Fake only setTimeout/clearTimeout for the batch window. Fastify's internal
-    // setImmediate is NOT faked, so inject() continues to work correctly.
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    useGatedProvider(); // runs park on the gate -> stay active
-
-    const first = await ingest(
-      token,
-      alertBody("dup-1", "warning", "web-01", firedAt),
-    );
-    expect(first).toMatchObject({ enqueued: 1, skipped: 0 });
-
-    // advanceTimersByTimeAsync flushes the microtask queue at each step, which is required
-    // since waitFor itself uses setTimeout.
-    await vi.advanceTimersByTimeAsync(90_001);
-    expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(true);
-
-    // Same fingerprint + startsAt while the first run is still active -> dropped.
-    const dupe = await ingest(
-      token,
-      alertBody("dup-1", "warning", "web-01", firedAt),
-    );
-    expect(dupe).toMatchObject({ enqueued: 0, skipped: 1 });
-
-    // A twin incident - same fingerprint, its own startsAt - is NOT a duplicate.
-    const twin = await ingest(
-      token,
-      alertBody("dup-1", "warning", "web-01", "2026-07-07T03:09:00.000Z"),
-    );
-    expect(twin).toMatchObject({ enqueued: 1, skipped: 0 });
-
-    // End the active run; a seeded report satisfies the finish gate so the
-    // released free-form finish completes it, and the dedup key clears.
-    seedCompleteReport(dispatcher.getActiveAlertSession()!);
-    // The free-form finish is followed by the composition turn, which parks on
-    // the same gate. The clock is faked here, so this drives the loop itself
-    // rather than reaching for releaseUntil.
-    while (dispatcher.getActiveAlertSession() !== null) {
-      gate.releaseAll();
-      await vi.advanceTimersByTimeAsync(50);
-    }
-    expect(dispatcher.isInvestigating("dup-1", firedAt)).toBe(false);
-
-    // The same alert now starts a fresh investigation - no 24h suppression.
-    const refire = await ingest(
-      token,
-      alertBody("dup-1", "warning", "web-01", firedAt),
-    );
-    expect(refire).toMatchObject({ enqueued: 1, skipped: 0 });
-    // Advance the refire's batch window so no stray timer outlives this test;
-    // it parks on the gate and is drained by afterEach.
-    await vi.advanceTimersByTimeAsync(90_001);
-  });
-
-  // Counting alerts throws away evidence that was free and leaves the hour
-  // spent for the next incident.
-  it("a storm costs one investigation: every later alert joins the run already going", async () => {
-    const token = generateAlertSourceToken("storm");
-    useGatedProvider(); // the run parks, so later alerts meet an active session
-    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-    // The counter is global module state; jump past any window earlier tests
-    // opened so this one counts from zero.
-    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
-    markRunnerAlive(connA);
-    markRunnerAlive(connB);
-
-    expect(
-      await ingest(token, alertBody("storm-0", "warning", "web-02")),
-    ).toMatchObject({ enqueued: 1, skipped: 0 });
-    await vi.advanceTimersByTimeAsync(90_001);
-    const sessionId = dispatcher.getActiveAlertSession();
-    expect(sessionId).not.toBeNull();
-
-    // Well past the old 30-alert ceiling, and none of it is refused.
-    for (let i = 1; i <= 40; i++) {
-      markRunnerAlive(connB);
-      expect(
-        await ingest(token, alertBody(`storm-${i}`, "warning", "web-02")),
-      ).toMatchObject({ enqueued: 1, skipped: 0 });
-    }
-    expect(dispatcher.getActiveAlertSession()).toBe(sessionId);
-
-    // The storm spent one of the thirty, so an unrelated incident minutes later
-    // is still investigated - the case the old counter could not serve.
-    seedCompleteReport(sessionId!);
-    gate.releaseAll();
-    await vi.advanceTimersByTimeAsync(50);
-    markRunnerAlive(connB);
-    expect(
-      await ingest(token, alertBody("storm-other", "warning", "web-02")),
-    ).toMatchObject({ enqueued: 1, skipped: 0 });
-    await vi.advanceTimersByTimeAsync(90_001);
-  });
-
-  it("fires what the window is holding on shutdown, instead of dropping alerts already answered 200", async () => {
-    const token = generateAlertSourceToken("flush");
+  /* The governing rule, and the whole point of the fix: relatedness is the alert
+     source's decision, so two groups are two incidents however close together
+     they fire. Nothing here waits on a window, because there is no longer one. */
+  it("two alerts in different groups, ten seconds apart, open two investigations", async () => {
     useGatedProvider();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    await settleRun();
-    markRunnerAlive(connA);
+    const before = countInvestigations();
 
-    const firedAt = "2026-07-09T04:00:00.000Z";
-    expect(
-      await ingest(token, alertBody("flush-1", "warning", "web-01", firedAt)),
-    ).toMatchObject({ enqueued: 1, skipped: 0 });
-    // Held, with up to ninety seconds still to run: this is the state a deploy
-    // used to discard.
-    expect(batchWindow.isOpen()).toBe(true);
+    await ingest(delivery('{}:{alertname="Redis"}', [{ fingerprint: "r-1" }]));
+    await waitFor(() => countInvestigations() === before + 1);
 
-    batchWindow.flush();
-    await vi.advanceTimersByTimeAsync(0);
+    await ingest(
+      delivery('{}:{alertname="Payments"}', [
+        { fingerprint: "p-1", container: "web-01" },
+      ]),
+    );
+    await waitFor(() => countInvestigations() === before + 2);
 
-    expect(batchWindow.isOpen()).toBe(false);
-    expect(dispatcher.isInvestigating("flush-1", firedAt)).toBe(true);
+    expect(liveSessions()).toHaveLength(2);
   });
 
-  it("budgets thirty investigations an hour, whatever severity opened them, and resets after the window", async () => {
-    const token = generateAlertSourceToken("budget");
-    useGatedProvider(); // parked runs end on demand, so each incident is its own
-    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-    // Installing fake timers rewinds to real time, which can land inside a
-    // window an earlier test opened; a day clears any of them.
-    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
-    markRunnerAlive(connA);
-    markRunnerAlive(connB);
+  it("one delivery carrying three alerts opens one investigation covering all of them", async () => {
+    useGatedProvider();
+    const before = countInvestigations();
 
-    // An inherited run would swallow the first alert as an injection.
-    await settleRun();
-    expect(dispatcher.getActiveAlertSession()).toBeNull();
-    expect(batchWindow.isOpen()).toBe(false);
+    const result = await ingest(
+      delivery('{}:{alertname="Cascade"}', [
+        { fingerprint: "c-1" },
+        { fingerprint: "c-2" },
+        { fingerprint: "c-3" },
+      ]),
+    );
+    expect(result).toMatchObject({ enqueued: 3, skipped: 0 });
 
-    // Thirty separate incidents. Each run has to end before the next alert, or
-    // that alert joins it instead of opening an investigation of its own.
-    for (let i = 0; i < 30; i++) {
-      markRunnerAlive(connB);
-      expect(
-        await ingest(token, alertBody(`bg-${i}`, "warning", "web-02")),
-      ).toMatchObject({ enqueued: 1, skipped: 0 });
-      await vi.advanceTimersByTimeAsync(90_001);
-      seedCompleteReport(dispatcher.getActiveAlertSession()!);
-      gate.releaseAll();
-      await settleRun();
-      expect(dispatcher.getActiveAlertSession()).toBeNull();
-    }
-
-    // The 31st run of the hour is refused, and "critical" buys no exemption.
-    markRunnerAlive(connB);
-    expect(
-      await ingest(token, alertBody("bg-over", "critical", "web-02")),
-    ).toMatchObject({ enqueued: 0, skipped: 1 });
-
-    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
-    markRunnerAlive(connB);
-    expect(
-      await ingest(token, alertBody("bg-after", "warning", "web-02")),
-    ).toMatchObject({ enqueued: 1, skipped: 0 });
-    await vi.advanceTimersByTimeAsync(90_001);
+    await waitFor(() => countInvestigations() === before + 1);
+    const [sessionId] = liveSessions();
+    expect(alertIdsOf(sessionId!).sort()).toEqual(["c-1", "c-2", "c-3"]);
   });
 
-  it("dispatches matched and unmatched alerts alike - no identity gate at ingest", async () => {
-    const token = generateAlertSourceToken("mixed-batch");
+  it("a new alert in a group already being investigated joins that run", async () => {
+    useGatedProvider();
+    const groupKey = '{}:{alertname="Joining"}';
+    const before = countInvestigations();
+
+    await ingest(delivery(groupKey, [{ fingerprint: "j-1" }]));
+    await waitFor(() => countInvestigations() === before + 1);
+    const [sessionId] = liveSessions();
+
+    await ingest(delivery(groupKey, [{ fingerprint: "j-2" }]));
+
+    // Same investigation, now covering both: no second row, and the alert is on
+    // the session so resolution waits for it too.
+    expect(countInvestigations()).toBe(before + 1);
+    expect(alertIdsOf(sessionId!).sort()).toEqual(["j-1", "j-2"]);
+  });
+
+  /* Alertmanager repeats a still-firing alert on repeat_interval, as often as
+     every few minutes. Scoped to the run rather than the alert, this would open
+     a fresh investigation of the identical alert every time one finished. */
+  it("a repeat of the same alert is dropped even after its investigation ended", async () => {
     useImmediateProvider();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const groupKey = '{}:{alertname="Repeating"}';
+    const spec = { fingerprint: "rep-1", startsAt: "2026-07-07T03:00:00.000Z" };
+    const before = countInvestigations();
 
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/alerts/ingest",
-      headers: { "x-nightwarden-token": token },
-      payload: {
-        alerts: [
-          {
-            status: "firing",
-            labels: {
-              alertname: "HighCPU",
-              severity: "warning",
-              container: "web-01",
-            },
-            annotations: { summary: "CPU high" },
-            startsAt: new Date().toISOString(),
-            endsAt: "0001-01-01T00:00:00Z",
-            fingerprint: "mixed-match",
-          },
-          {
-            status: "firing",
-            labels: {
-              alertname: "HighCPU",
-              severity: "warning",
-              container: "ghost-service",
-            },
-            annotations: { summary: "CPU high" },
-            startsAt: new Date().toISOString(),
-            endsAt: "0001-01-01T00:00:00Z",
-            fingerprint: "mixed-no-match",
-          },
-        ],
-        version: "4",
-        groupKey: "test",
-        receiver: "nightwarden",
-        status: "firing",
-        groupLabels: {},
-        commonLabels: {},
-        commonAnnotations: {},
-        externalURL: "http://localhost:9093",
-      },
+    await ingest(delivery(groupKey, [spec]));
+    await waitFor(() => countInvestigations() === before + 1);
+    await waitFor(() => liveSessions().length === 0);
+
+    const repeat = await ingest(delivery(groupKey, [spec]));
+    expect(repeat).toMatchObject({ enqueued: 0, skipped: 1 });
+    expect(countInvestigations()).toBe(before + 1);
+  });
+
+  it("the same alert firing again after it cleared is a new incident", async () => {
+    useImmediateProvider();
+    const groupKey = '{}:{alertname="Flapping"}';
+    const before = countInvestigations();
+
+    await ingest(
+      delivery(groupKey, [
+        { fingerprint: "f-1", startsAt: "2026-07-07T03:00:00.000Z" },
+      ]),
+    );
+    await waitFor(() => countInvestigations() === before + 1);
+    await waitFor(() => liveSessions().length === 0);
+    markAlertCleared("f-1", new Date().toISOString());
+
+    // A different startsAt is a different incident, which is what the pairing of
+    // fingerprint and fired-at is for.
+    await ingest(
+      delivery(groupKey, [
+        { fingerprint: "f-1", startsAt: "2026-07-07T09:00:00.000Z" },
+      ]),
+    );
+    await waitFor(() => countInvestigations() === before + 2);
+  });
+
+  describe("when every seat is taken", () => {
+    it("queues the delivery rather than dropping what it already answered 200", async () => {
+      useGatedProvider();
+      updateConfig({ maxConcurrentInvestigations: 1 });
+      const before = countInvestigations();
+
+      await ingest(
+        delivery('{}:{alertname="First"}', [{ fingerprint: "q-1" }]),
+      );
+      await waitFor(() => countInvestigations() === before + 1);
+
+      const queued = await ingest(
+        delivery('{}:{alertname="Second"}', [{ fingerprint: "q-2" }]),
+      );
+      // Accepted, not skipped: the sender was told 200 and has nobody to retry to.
+      expect(queued).toMatchObject({ enqueued: 1, skipped: 0 });
+      expect(countInvestigations()).toBe(before + 1);
+      expect(queueDepth().waiting).toBe(1);
+
+      // A seat frees, and the alert that was waiting becomes an investigation of
+      // its own rather than joining the one that just ended.
+      await settle();
+      await waitFor(() => countInvestigations() === before + 2);
+      expect(queueDepth().waiting).toBe(0);
     });
 
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as {
-      received: number;
-      enqueued: number;
-      skipped: number;
-    };
-    expect(body.received).toBe(2);
-    expect(body.enqueued).toBe(2);
-    expect(body.skipped).toBe(0);
+    it("never investigates an alert that recovered while it waited", async () => {
+      useGatedProvider();
+      updateConfig({ maxConcurrentInvestigations: 1 });
+      const before = countInvestigations();
 
-    // Both joined one window: draining it closes that window, so no 90s timer
-    // outlives this file and fires into a torn-down suite.
-    await vi.advanceTimersByTimeAsync(90_001);
-    expect(batchWindow.isOpen()).toBe(false);
+      await ingest(
+        delivery('{}:{alertname="Holder"}', [{ fingerprint: "w-1" }]),
+      );
+      await waitFor(() => countInvestigations() === before + 1);
+      await ingest(
+        delivery('{}:{alertname="Waiter"}', [{ fingerprint: "w-2" }]),
+      );
+      expect(queueDepth().waiting).toBe(1);
+
+      // The resolved notification lands while it is still queued.
+      markAlertCleared("w-2", new Date().toISOString());
+      expect(queueDepth().waiting).toBe(0);
+
+      await settle();
+      // No session was opened to report on a condition that was already over.
+      expect(countInvestigations()).toBe(before + 1);
+    });
   });
 });

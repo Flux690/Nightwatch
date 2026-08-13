@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { seedChatSession } from "./session-helper.js";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -269,10 +270,11 @@ describe("repo tools through registry dispatch", () => {
        existed, so its readPaths can only have come from the transcript - which
        is the point, since the model's context says it read the file. */
     const resumed = "aaaabbbb-0000-4000-8000-0000000000ff";
-    createSession(
-      { sessionId: resumed, title: "t", createdAt: new Date().toISOString() },
-      [],
-    );
+    createSession({
+      sessionId: resumed,
+      title: "t",
+      createdAt: new Date().toISOString(),
+    });
     appendTranscriptRows([
       {
         sessionId: resumed,
@@ -427,6 +429,7 @@ describe("repo work and the time budget", () => {
       { toolUses: [], text: "Done." },
     ]);
 
+    seedChatSession(sessionId, "fix the repo");
     const run = runSession({ sessionId, userMessage: "fix the repo" });
     // Park turn 1 until the deadline has passed.
     await new Promise((r) => setTimeout(r, 400));

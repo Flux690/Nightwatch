@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dispatchAlertSession } from "./session-helper.js";
 import {
   afterAll,
   afterEach,
@@ -130,7 +131,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alerts: [makeAlert("nginx")] });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -166,7 +167,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alerts: [makeAlert("nginx")] });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -199,7 +200,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alerts: [makeAlert("nginx")] });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -231,7 +232,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alerts: [makeAlert("nginx")] });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -261,7 +262,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({ sessionId, alerts: [makeAlert("nginx")] });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
@@ -278,10 +279,7 @@ describe("fleet summary injection", () => {
       setScript([FINISH]);
 
       const sessionId = randomUUID();
-      dispatcher.dispatch({
-        sessionId,
-        alerts: [makeAlert("nginx")],
-      });
+      dispatchAlertSession(sessionId, [makeAlert("nginx")]);
       await waitFor(() => !dispatcher.isSessionRunning(sessionId));
 
       const msg = captureStartMessage();
