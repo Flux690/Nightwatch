@@ -52,6 +52,8 @@ linkStyle default stroke:#888,stroke-width:1.5;
 
 When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. One webhook delivery is one alert group, and that grouping is yours: whatever `group_by` you already configured decides which alerts are investigated together, and NightWarden never regroups them on a clock of its own. The API opens a session for the group and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
 
+**What the agent is handed about an alert** is everything the alert carried and nothing invented: its labels, its annotations, when it fired, and the service it resolves to when the fleet advertises one. It also gets the PromQL expression that fired, decoded out of the link Prometheus puts in the alert, so it knows the threshold without spending a call to find it. Annotations are given as text and are never dereferenced - a `runbook_url` reaches the model as a fact, and nothing follows it, because fetching a URL out of an alert body is a request an attacker who can write an annotation would be choosing for you.
+
 As it works it builds an **investigation record**, one claim at a time. Each time it settles a hunch it writes down what it tested, the verdict it earned and the ids of the tool calls that back it. Nothing it wrote earlier can be edited or deleted, so a claim it later abandoned stays on the record beside the one that replaced it. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
 
 When the run is over the agent is handed that record back with every investigation tool taken away and one left, and writes the report from it: a summary, a timeline, who was affected, and what you should do. Writing it last means it is written knowing how the investigation ended, and it can add only the prose the record has no room for, so what it says cannot outrun what the record holds.
@@ -69,7 +71,27 @@ If nothing can answer - Prometheus unreachable, the rule renamed, no metrics int
 
 A run that had you approve a write and then goes quiet while the condition is still firing is pushed back and asked what you should do about it. It is never asked to try again: repeating a write that did not work is the exact mistake this catches.
 
-Any action that writes to a server pauses the loop and shows you an approval card. Nothing resumes until you approve, reject, or answer. When a GitHub repository is connected and the cause is in your code, the same loop checks the code out into an isolated sandbox on the API host, builds and tests a fix there, and leaves a draft pull request for you to review.
+**What a tool does and what you permit are two separate facts.** Every tool
+declares an _effect_ - whether the call reads or writes - and a _policy_ -
+whether it runs on its own or waits for you. Reads run freely so the agent can
+investigate without waking anyone. Writes pause the loop and show you an
+approval card, and nothing resumes until you approve, reject, or answer. The two
+are recorded apart on purpose: there is no separate list of gated actions that
+could fall out of step with the actions themselves, so the gate cannot be
+forgotten when a tool is added.
+
+Asking you a question is not a tool. It is offered to the model as one, because
+tool-calling is the only channel it has to request anything, but it carries no
+implementation and no policy - it always suspends, and no setting can turn that
+off.
+
+The agent is also told what an approved write did: a rejection comes back saying
+you refused and that nothing changed, so it redirects rather than trying the
+same call again. And when the same write has already run in this investigation,
+the approval card says how many times. Restarting a service a fifth time is a
+decision, not a mistake, so it is reported and never refused.
+
+When a GitHub repository is connected and the cause is in your code, the same loop checks the code out into an isolated sandbox on the API host, builds and tests a fix there, and leaves a draft pull request for you to review.
 
 ### The three pieces
 
@@ -208,6 +230,26 @@ thing it must never do. The investigation stops with a note saying exactly that:
 _"whether the call took effect is unknown - check the target before approving it
 again."_
 
+### Stopping, checking in, and running out of room
+
+**You can stop a run.** The stop is checked between a turn's tool calls and the
+approval gate, so a run you stopped ends as stopped rather than parking an
+approval card nobody is going to answer.
+
+**A long run checks in rather than being killed.** After its time budget
+(Settings → Agent, thirty minutes by default) it finishes the step it is on and
+asks whether to continue. Say no and it writes up what it has rather than
+stopping mid-thought. Every repository tool call extends the sandbox's own idle
+timer, so a run doing real code work does not have its checkout swept from under
+it.
+
+**A conversation can outgrow the model's context window.** Tool results are the
+bulk of it, and a long investigation on a small window will eventually be
+refused by the provider. When that happens the run stops and says so plainly,
+naming the two things that work: start a new session, or pick a model with a
+larger window under Settings → Provider. The conversation is kept whole, because
+in an agentic transcript the middle is where every piece of evidence lives.
+
 ### When a run fails
 
 A failed run is retried **up to three times**, and only when the cause was worth
@@ -222,6 +264,86 @@ three more attempts would only write three more failures for you to read. Those
 stop and wait for you, and the message says which one it was.
 
 A retry picks up from the last complete exchange, not from the beginning.
+
+## What the agent can see
+
+The agent works only through typed tools. Each one returns a structured result,
+and each result is kept in full so the report can quote it months later. What
+follows is what those tools reach, and where they stop - because a tool that
+quietly shows you less than it looked at is worse than one that finds nothing.
+
+### The evidence it has
+
+|                              | Needs            | What it answers                                                                    |
+| ---------------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| **Containers and workloads** | a runner         | State, config, image and digest, restarts, resource stats, events, processes       |
+| **Service logs**             | a runner or Loki | What the service actually printed, windowed and filtered                           |
+| **Metrics**                  | Prometheus       | An instant reading, a range around the alert, what rules exist, what metrics exist |
+| **Host vitals**              | a Docker runner  | CPU, memory, disk, network, kernel ring buffer, allowlisted host files             |
+| **Changes**                  | GitHub           | Merged pull requests and commits in a window                                       |
+| **The code**                 | GitHub           | Read, edit, build and test inside a sandbox; open a draft pull request             |
+
+A runner is optional. Prometheus and Loki alone are a working install - the
+agent investigates on metrics and logs, and simply has no container evidence to
+reach for. It is told which tools it has, so it never proposes one it lacks.
+
+### Every result has a ceiling
+
+A single tool result may occupy **30,000 characters**. Tools that can return a
+lot drop whole items to stay under it and say in the result what they left out
+and how to ask a narrower question.
+
+A result still over the line after that is refused **whole**, and the agent is
+told to narrow the call and run it again. It is never truncated, because half a
+JSON result parses cleanly as a smaller truth - a list of three failing pods cut
+to two reads as two failing pods, and nothing about it looks wrong.
+
+### Reading logs
+
+**Windows.** Loki and Docker logs take `since` and `until`, so the agent can
+walk backwards through a noisy period rather than re-reading the newest lines
+forever. When a result is capped it names the timestamp of its oldest line, and
+that is the cursor for the next call.
+
+Kubernetes logs take only `since`. The Kubernetes API has no end-time parameter
+at all, so the tool offers the window the platform can honour and says where the
+limit comes from.
+
+**Filtering.** `contains` keeps lines holding any of the given words; `excludes`
+drops them, and is applied first so an excluded line never comes back. Both
+match **plain text, ignoring case, on whole lines** - deliberately not regular
+expressions, because a pattern the model wrote, run over hundreds of thousands
+of lines on your server, is a risk the runner would be wearing on your behalf.
+
+**The tail is read before any filtering.** So the result carries how many lines
+were actually searched and whether it reached the end of what the engine holds.
+That matters: "two matches" out of two hundred lines searched and "two matches"
+out of two hundred thousand are different findings, and only one of them is
+evidence of anything.
+
+### Where evidence expires
+
+Kubernetes deletes events on a timer, commonly an hour, and does not report what
+that timer is set to. So an empty event list can mean the workload is healthy or
+it can mean the evidence aged out before anyone looked. The result says which
+window was searched, how many events sit before it, and that a window past the
+common TTL may be asking for events that no longer exist.
+
+A deleted pod's events stay unattributable. An event carries no owner reference,
+and matching on name prefixes is a guess, so events belonging to a pod that has
+gone are left out rather than credited to a workload that may not own them.
+
+### Absence is never treated as evidence
+
+This is the rule the three sections above are instances of. A result that shows
+less than the tool searched has to say so: what was looked at, what was left
+out, and what the call cannot speak for. An empty list that cannot distinguish
+"nothing happened" from "we did not look there" is a defect, because the agent
+reads both as the first and stops.
+
+Where the gap cannot be closed, the result states the limit rather than guessing
+past it. A wrong fact is worse than a stated unknown, and a stated unknown is
+itself a finding.
 
 ## Features
 
