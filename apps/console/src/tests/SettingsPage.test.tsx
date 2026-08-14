@@ -394,6 +394,34 @@ describe("SettingsPage", () => {
       expect(await screen.findByText(/somewhere else/i)).toBeInTheDocument();
     });
 
+    /* The four tabs are one component behind one route, so a tab change keeps
+       the draft in memory. Asking there offered to discard something that was
+       not going anywhere, and then asked again on every tab after it. */
+    it("does not ask between its own tabs, and still asks on the way out", async () => {
+      const user = userEvent.setup();
+      const { router } = setup();
+
+      await screen.findByLabelText(/^model$/i, { selector: "input" });
+      await pickModel(user, "claude-opus-4-8");
+      await act(async () => {
+        await router.navigate({
+          to: "/settings/$section",
+          params: { section: "agent" },
+        });
+      });
+
+      expect(
+        await screen.findByLabelText(/check in after/i),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+
+      // Still armed: the draft survived the tab change, so leaving still costs it.
+      act(() => {
+        void router.navigate({ to: "/agent" });
+      });
+      expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+    });
+
     it("puts the confirmation on one surface, right-aligned, with the destructive fill", async () => {
       const user = userEvent.setup();
       const { router } = setup();

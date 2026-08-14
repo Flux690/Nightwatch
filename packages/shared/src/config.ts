@@ -127,7 +127,3 @@ export interface ResolvedLLMConfig {
   // adapter with no ladder sends no reasoning params at all rather than guessing.
   reasoning: ReasoningDescriptor | null;
 }
-
-// A setup problem the console surfaces app-wide (a banner), computed server-side
-// from the config, fleet and integrations. Advisory except llm-not-configured,
-// which is also enforced: without a model nothing can run at all.

@@ -21,7 +21,7 @@ export function AgentSection({
       <SettingsGroup title="Investigation">
         <NumberRow
           id="settings-max-concurrent"
-          title="Run at once"
+          title="Maximum concurrent investigations"
           description="Alerts beyond this wait their turn. One waiting on your approval still counts."
           value={config.maxConcurrentInvestigations}
           onCommit={(n) => save({ maxConcurrentInvestigations: n })}
