@@ -18,14 +18,9 @@ import type { Tool, ToolExecuteResult } from "./types.js";
 // field, which stores a row nobody can read.
 const prose = z.string().trim().min(1);
 
-/* An empty string is how a required field says "none" under the draft-07
-   constraints the schema is written to, so an optional value arrives as "" and
-   becomes absent here rather than being stored as a blank.
-
-   Absence is accepted as well as emptiness. The wire schema asks for every one
-   of these, but the stored shape has always allowed them to be missing, and a
-   model that omits one has written a thinner report, not a broken one - failing
-   the whole call over it would throw away the fields it did fill in. */
+/* An empty string is how the draft-07 schema says "none", and absence is taken
+   the same way: a model that omits one wrote a thinner report, not a broken one,
+   and failing the call would discard the fields it did fill in. */
 const optionalProse = z
   .string()
   .optional()
@@ -63,10 +58,8 @@ const SUBMIT_REPORT_INPUT = z.object({
   recommendation: optionalProse,
 });
 
-/* Defensive seatbelt behind the provider's own schema enforcement, and the one
-   place a corrupt call becomes a correction rather than a corrupt record. The
-   message names the fields that failed, because the model gets exactly one more
-   attempt and "invalid input" tells it nothing about which one. */
+// Names the fields that failed: the model gets exactly one more attempt, and
+// "invalid input" tells it nothing about which one.
 function malformed(message: string): ToolExecuteResult {
   return { content: message, outcome: "system" };
 }

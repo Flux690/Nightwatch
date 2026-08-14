@@ -3,15 +3,9 @@ import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { dbPath } from "../env/paths.js";
 
-// No upgrade migrations: pre-production, so a schema change is applied by
-// recreating the database, not by migrating data.
+// No migrations: a schema change is applied by recreating the database.
 const SCHEMA = `
 
--- The fleet: one row per installed runner.
-
--- platform is what this runner IS, fixed at onboarding. It is never derived from
--- what the runner reports, so the row is authoritative before it ever connects;
--- the CHECK makes a typo a write failure rather than a runner that matches nothing.
 CREATE TABLE IF NOT EXISTS runner (
   id             TEXT     PRIMARY KEY,
   token          TEXT     NOT NULL UNIQUE,
@@ -22,16 +16,8 @@ CREATE TABLE IF NOT EXISTS runner (
   last_used_at   TEXT
 );
 
-
--- Configuration: how the loop behaves, and how to reach one model.
-
--- Loop and sandbox policy, which is provider-independent. Anything that
--- describes how to reach one model lives in provider_config below.
 CREATE TABLE IF NOT EXISTS config (
   id                        TEXT      PRIMARY KEY,
-  -- Which provider_config row is live. NULL means the user has not picked
-  -- yet, which the run gate refuses on; a default would make a fresh install
-  -- look configured while holding no API key.
   active_provider           TEXT,
   max_retries               INTEGER   NOT NULL DEFAULT 3,
   request_timeout_ms        INTEGER   NOT NULL DEFAULT 120000,
@@ -43,17 +29,12 @@ CREATE TABLE IF NOT EXISTS config (
   sandbox_memory_mb         INTEGER   NOT NULL DEFAULT 4096,
   sandbox_require_gvisor    INTEGER   NOT NULL DEFAULT 0,
   sandbox_network           TEXT      NOT NULL DEFAULT 'allowlist',
-  -- One host per line, so the continuation lines are flush left on purpose:
-  -- indenting them would put leading spaces inside the stored default.
   sandbox_allowlist_hosts   TEXT      NOT NULL DEFAULT 'registry.npmjs.org
 registry.yarnpkg.com
 repo.yarnpkg.com',
   updated_at                TEXT      NOT NULL
 );
 
--- One row per provider, so switching the active one cannot carry the previous
--- one's key or base URL across. The catalog facts are captured when the model
--- is saved, so starting a run never has to reach the network.
 CREATE TABLE IF NOT EXISTS provider_config (
   provider            TEXT      PRIMARY KEY,
   model               TEXT,
@@ -73,12 +54,6 @@ CREATE TABLE IF NOT EXISTS user (
   updated_at      TEXT      NOT NULL
 );
 
-
--- Inbound alerts and outbound integrations.
-
--- One row per alert-source card ('alertmanager', 'grafana', ...), each owning
--- its own inbound nwi_ credential: rotation affects one source, and
--- last_received_at makes per-source delivery status authoritative.
 CREATE TABLE IF NOT EXISTS alert_sources (
   kind                TEXT   PRIMARY KEY,
   token_hash          TEXT   NOT NULL UNIQUE,
@@ -87,9 +62,6 @@ CREATE TABLE IF NOT EXISTS alert_sources (
   created_at          TEXT   NOT NULL
 );
 
--- One row per pull-integration, with per-kind JSON config and an encrypted
--- credential that is NULL when the kind has none. Neither is ever returned by
--- an endpoint. A new integration is a row, never a table.
 CREATE TABLE IF NOT EXISTS integrations (
   kind                TEXT   PRIMARY KEY,
   config              TEXT   NOT NULL,
@@ -98,72 +70,23 @@ CREATE TABLE IF NOT EXISTS integrations (
   created_at          TEXT   NOT NULL
 );
 
-
--- Sessions and everything that belongs to one. Each child cascades with its
--- session (foreign_keys is enabled below), because none of it is reachable or
--- meaningful once the session is gone.
-
--- investigation is what the session IS, carried from the moment it exists, and
--- it is a one-way ratchet that never clears.
-
--- report is the investigation record, null until the agent's first finding, and
--- one-to-one with the session it cannot outlive.
--- last_activity_at is denormalised from the transcript's newest row, because the
--- list sorts on it: derived, it is a correlated subquery the sort has to run for
--- every session in the table before it can apply a LIMIT.
-
--- run_state is claimed by a conditional UPDATE, so it is the mutex as well as the
--- state. There is one process, which is why it needs no TTL and no heartbeat:
--- anything left 'running' at boot was killed, because this process just started.
-
--- 'suspended' is its own state rather than an absence, because a suspended
--- investigation still holds a concurrency seat: releasing it would start a sixth
--- run whose write also needs the one human already holding up this one.
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,
   title                TEXT      NOT NULL DEFAULT '',
   investigation        INTEGER   NOT NULL DEFAULT 0,
   run_state            TEXT      NOT NULL DEFAULT 'done'
                                  CHECK (run_state IN ('running', 'suspended', 'done')),
-  -- How many times a failed run has been retried, and whether the last failure
-  -- was worth retrying at all. Prose in the transcript cannot be classified later.
   failed_attempts      INTEGER   NOT NULL DEFAULT 0,
   failure_kind         TEXT      CHECK (failure_kind IN ('transient', 'permanent')),
   report               TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL
 );
--- Serves both the queue's filtered sort and its total, which are the two
--- queries a page load actually runs.
 CREATE INDEX IF NOT EXISTS idx_sessions_kind_activity
   ON sessions(investigation, last_activity_at DESC);
--- Concurrency seats are counted per pool on every admission decision.
 CREATE INDEX IF NOT EXISTS idx_sessions_seats
   ON sessions(investigation, run_state);
 
--- One row per alert, in arrival order, each carrying when it joined and when it
--- cleared. A group elects no primary, so recovery is a fact about each alert and
--- the session resolves only once they have all cleared.
-
--- session_id is NULL while an alert waits for a free concurrency seat. That is
--- the whole queue: an alert waiting to be investigated is an alert, not a
--- session with no transcript, so nothing has to hide a half-built row.
-
--- group_key is Alertmanager's own, from the webhook body. It decides which
--- alerts share an investigation, which makes grouping the user's own group_by
--- config rather than anything we infer.
-
--- The scalars are what anything looks an alert up BY: source_alert_id and
--- fired_at identify it, cleared_at says whether it is still open. Everything
--- else is read whole and never queried, so it stays JSON in the alert column.
--- injected says whether this alert arrived mid-run or opened the session. Written
--- when the row is, because we know it then: one path assigns a whole group at
--- once, the other appends to a session already working. Deriving it later from
--- timestamps would be inferring a fact we already had.
-
--- dropped_alerts is how many the sender left out of that delivery. A result that
--- shows less than fired has to say so, and it is per arrival: a later delivery of
--- the same group can be complete when an earlier one was not.
 CREATE TABLE IF NOT EXISTS alerts (
   id                 INTEGER   PRIMARY KEY,
   session_id         TEXT      REFERENCES sessions(session_id) ON DELETE CASCADE,
@@ -180,25 +103,13 @@ CREATE INDEX IF NOT EXISTS idx_alerts_session
   ON alerts(session_id, id);
 CREATE INDEX IF NOT EXISTS idx_alerts_source
   ON alerts(source_alert_id, fired_at);
--- Partial on purpose: the reconciler asks "what is still open" on a timer for
--- the life of the install, and cleared alerts only ever accumulate.
 CREATE INDEX IF NOT EXISTS idx_alerts_open
   ON alerts(session_id) WHERE cleared_at IS NULL;
--- The queue, in arrival order. Partial because promotion only ever asks about
--- alerts no session has taken yet.
 CREATE INDEX IF NOT EXISTS idx_alerts_queued
   ON alerts(arrived_at) WHERE session_id IS NULL;
--- Routing asks, per delivery, whether a live session already covers this group.
 CREATE INDEX IF NOT EXISTS idx_alerts_group
   ON alerts(group_key);
 
--- The durable transcript, and the only record of what ran, keyed by the natural
--- (session_id, seq). kind because not every row is a conversation turn: an error
--- row is our own note, a nightwarden row is the harness talking to the model.
-
--- canonical holds our portable form of the turn plus the vendor's verbatim
--- message, so a resume on the same dialect replays byte-exact and a switched
--- provider still reads it.
 CREATE TABLE IF NOT EXISTS session_transcript (
   session_id     TEXT      NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
   seq            INTEGER   NOT NULL,
@@ -208,13 +119,7 @@ CREATE TABLE IF NOT EXISTS session_transcript (
   timestamp      TEXT      NOT NULL,
   PRIMARY KEY (session_id, seq)
 );
--- What a suspended run is waiting on. One per session: the loop gates on the
--- first write or question of a turn and stops there. tool_use_id points at the
--- gated call, which the transcript holds under that same id.
 
--- completed_results are the turn's other calls, parked here because a transcript
--- answering some of a turn's calls and not others is a conversation that cannot
--- be replayed. They go back the moment the gated call is answered too.
 CREATE TABLE IF NOT EXISTS pending_human_input (
   session_id            TEXT   NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
   tool_use_id           TEXT   NOT NULL,
@@ -223,7 +128,6 @@ CREATE TABLE IF NOT EXISTS pending_human_input (
   claimed_at            TEXT,
   PRIMARY KEY (session_id)
 );
-
 
 `;
 
@@ -235,8 +139,7 @@ export function getDb(): Database.Database {
     mkdirSync(dirname(path), { recursive: true });
     const db = new Database(path);
     db.pragma("journal_mode = WAL");
-    // Enforce the declared foreign keys (off by default in SQLite); this is what
-    // makes ON DELETE CASCADE fire and forbids orphan rows.
+    // Off by default in SQLite, so ON DELETE CASCADE fires only once it is on.
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
     _db = db;
@@ -244,14 +147,7 @@ export function getDb(): Database.Database {
   return _db;
 }
 
-// Open eagerly at boot so a misconfigured data path fails fast rather than on
-// the first request.
-//
-// A claim is deliberately NOT cleared here. A row still claimed after a restart
-// means the API died between approving a write and recording its result, so
-// whether it ran is unknown - and clearing the claim would offer the user a
-// button that runs it a second time. It stays claimed and the respond route
-// refuses it, which is the honest answer to a question nobody can answer.
+// Eager, so a misconfigured data path fails at boot rather than at 3am.
 export function initDb(): void {
   getDb();
 }

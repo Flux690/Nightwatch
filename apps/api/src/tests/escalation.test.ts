@@ -26,7 +26,6 @@ import { registerConsoleEventRoutes } from "../session/events.js";
 import { connectConsoleEvents } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import { dispatcher } from "../dispatcher.js";
 import { getTranscriptRows } from "../db/sessions.js";
 import {
   registerRunner,

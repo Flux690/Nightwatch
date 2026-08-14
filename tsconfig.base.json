@@ -8,6 +8,11 @@
     // Nothing emits through tsc (esbuild bundles the apps, Vite builds the
     // console), so a type-only import left unmarked would survive into the
     // bundle as a runtime import of a binding that does not exist.
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    // A binding nothing reads is usually the residue of a change that half
+    // happened - the import left behind when its last caller went. Failing the
+    // build is what makes deleting things safe to do thoroughly.
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   }
 }

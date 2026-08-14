@@ -113,16 +113,9 @@ function worthResuming(sessionId: string): boolean {
   return Date.now() - new Date(last).getTime() <= RESUME_WINDOW_MS;
 }
 
-/* Sessions this process could not have left behind, since it has only just
-   started. Two ways a restart strands one, and they need different answers:
-
-   'running' was killed mid-turn. Its last exchange may be repairable, and if the
-   incident is still live it carries on.
-
-   'suspended' with no interrupt row was killed in the gap between approving a
-   call and the resume claiming the run. The write already executed and its
-   result is gone, so there is nothing to carry on from - and re-running it is
-   the one thing we must not do. It is also holding a seat until we say so. */
+/* 'running' was killed mid-turn and may be repairable. 'suspended' with no
+   interrupt row died between approving a call and claiming the resume: the write
+   already ran and its result is gone, and it holds a seat until we say so. */
 function strandedSessions(): Array<{ sessionId: string; killed: boolean }> {
   const killed = runningSessionIds().map((sessionId) => ({
     sessionId,

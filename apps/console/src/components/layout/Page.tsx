@@ -25,10 +25,9 @@ interface Crumb {
   to?: string;
 }
 
-/* The one page shell, and the only one. `measure` names the page's own column
-   from the container block in styles.css. "full" keeps the stage's padding and
-   drops the column, which is what a list of one-line rows wants; "none" gives
-   up the padding too, which is what a report beside a rail needs. */
+/* `measure` names the page's own column from styles.css. "full" keeps the
+   stage's padding and drops the column, for a list of one-line rows; "none"
+   gives up the padding too, for a report beside a rail. */
 export function Page({
   crumbs,
   beside,

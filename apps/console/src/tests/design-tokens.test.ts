@@ -291,10 +291,9 @@ describe("the scale", () => {
     }
   });
 
-  /* Why a wash can be trusted at a depth nobody declared: its ink sits above
-     the whole surface ramp, so compositing it can only ever lighten. A rung
-     used this way lifts at one depth and sinks at the next, which is the bug
-     that put a menu row darker than the menu it opened on. */
+  /* A wash's ink sits above the whole surface ramp, so compositing it can only
+     lighten. A rung used this way lifts at one depth and sinks at the next,
+     which put a menu row darker than the menu it opened on. */
   it("keeps a depth-independent state above every surface it can land on", () => {
     expect(overlays.size).toBeGreaterThan(0);
     for (const [name, { ink, alpha }] of overlays) {

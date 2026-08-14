@@ -55,14 +55,9 @@ function requireGatedCall(
   return call;
 }
 
-/* The claim is a compare-and-swap, so a failure means someone else holds it -
-   either a request still in flight, or a process that died holding it. Age tells
-   them apart: nothing legitimate holds a claim for longer than the ceiling a tool
-   call is allowed, because the request would have returned by then.
-
-   "stale" is the crash-recovery path, and it is why the claim is never cleared at
-   boot: the write may have run before the process died and nothing recorded
-   whether it did. Running it again is the one thing we must not do. */
+/* A compare-and-swap, so a failure means someone else holds it - a live request,
+   or a process that died holding it. Age tells them apart. "stale" is why the
+   claim is never cleared at boot: the write may already have run. */
 function claim(sessionId: string, claimedAt: string | null): "held" | "stale" {
   if (claimPendingHumanInput(sessionId)) return "held";
   const heldForMs =

@@ -18,14 +18,9 @@ const alertmanagerWebhookSchema = z.object({
   truncatedAlerts: z.number().int().nonnegative().optional(),
 });
 
-/* One webhook delivery, which is one alert group. A cleared notification opens
-   nothing - the condition recovered - but it is the answer to whether an
-   investigation already under way is still needed.
-
-   groupKey is the sender's own grouping decision, computed from the group_by
-   the user configured. Trusting it is what makes grouping their choice rather
-   than a window we time. truncatedAlerts is how many the sender dropped from
-   this body: a result that shows less than fired has to say so. */
+/* One delivery is one alert group. groupKey is the sender's own grouping, from
+   the group_by the user configured, and trusting it is what makes grouping their
+   choice. The count beside it is how many they left out of this body. */
 export interface ParsedWebhook {
   groupKey: string;
   truncatedAlerts: number;
@@ -90,10 +85,8 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
   };
 }
 
-/* No groupKey means a sender that is not Alertmanager-shaped, so the delivery
-   itself is the only grouping statement we have: these fired together and were
-   sent together. Derived from the fingerprints so an identical redelivery keys
-   the same, which is what lets it dedup rather than open a second run. */
+// A sender that is not Alertmanager-shaped: the delivery is the only grouping
+// there is. Keyed off the fingerprints, so a redelivery dedups instead.
 function synthesizeGroupKey(firing: ParsedAlert[]): string {
   const canonical = firing
     .map((a) => a.sourceAlertId)

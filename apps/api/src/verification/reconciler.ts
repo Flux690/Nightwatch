@@ -9,14 +9,9 @@ import { buildSeed } from "../session/seed.js";
 import { logger } from "../logger.js";
 import { verifyRecovery } from "./recovery.js";
 
-/* An alert clears when its condition stops being true, which is rarely the
-   instant a run ends. A fix lands, the rule's `for:` duration elapses, and the
-   alert goes quiet minutes later with nobody listening. This is the ear.
-
-   The trigger is deliberately not tied to anything the agent did: a bash call
-   may only have read, a pull request is not a fix until someone merges it, and
-   a restart takes minutes to show. Nothing here tries to detect that a fix
-   happened. It asks about every condition still open, less and less often. */
+/* An alert clears when its condition stops being true, rarely the instant a run
+   ends. Nothing here detects that a fix happened - a bash call may only have
+   read. It asks about every open condition, less and less often. */
 
 interface Step {
   // The oldest an alert can be for this step to apply.
@@ -46,10 +41,9 @@ const MAX_RUN_RETRIES = 3;
    alternative is a column that exists only to describe a schedule. */
 const lastAsked = new Map<string, number>();
 
-/* How long we have been watching, which is what the backoff thins out. Anchored
-   on the session rather than on the alert's own firedAt: an alert that has been
-   firing for a month is a brand new incident to an install that just ingested
-   it, and anchoring on firedAt would retire it before the first question. */
+/* Anchored on the session rather than the alert's firedAt: an alert firing for a
+   month is a brand new incident to an install that just ingested it, and firedAt
+   would retire it before the first question. */
 function watchingSince(sessionId: string): number {
   const created = getSession(sessionId)?.createdAt;
   return created === undefined ? Date.now() : new Date(created).getTime();
@@ -97,15 +91,9 @@ export async function reconcileRecovery(
   return result;
 }
 
-/* A run that died on something worth waiting out, on an incident still firing.
-   It rides this sweep rather than a timer of its own: the set of sessions worth
-   retrying is exactly the set worth asking about, and the same thinning applies
-   for the same reason. A run that already spent its in-request retries needs
-   minutes, not seconds.
-
-   Never a permanent failure. A bad key, an empty account or a model that does
-   not exist fails identically every time, and three more attempts only writes
-   three more failures for the same person to read. */
+/* Rides this sweep rather than its own timer: the sessions worth retrying are
+   exactly the ones worth asking about. Never a permanent failure - a bad key or
+   a missing model fails identically every time. */
 function retryFailedRun(sessionId: string): boolean {
   const failure = runFailure(sessionId);
   if (failure === undefined) return false;

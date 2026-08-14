@@ -75,10 +75,8 @@ function ErrorNotice({ text }: { text: string }): React.JSX.Element {
 // Why the agent changed course here. Deliberately a line, not a card: the
 // report's alert band holds the detail, and this only has to mark the moment.
 function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
-  /* A rule the label rides, not a card: this marks where the ground moved, so it
-     has to span the column to be read as a boundary rather than as another item
-     the agent produced. One hairline, and severity is a dot - the alert type is
-     the thing worth reading. */
+  // A rule the label rides, not a card: it has to span the column to read as a
+  // boundary rather than as another item the agent produced.
   return (
     <div
       role="status"

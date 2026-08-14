@@ -26,10 +26,9 @@ interface OpenPullRequestHooks {
   composeBody(filesChanged: string[]): string;
 }
 
-/* Nothing gates creation: the PR is a draft proposal, the repo's own CI and
-   the human merge are the verification layers. Commits, pushes, then
-   create-or-updates by branch identity - one PR per session, which is also what
-   makes a retry after a crash update the proposal rather than open a second one. */
+/* Nothing gates creation: the PR is a draft, and the repo's CI and the human
+   merge are the review layers. One PR per session by branch identity, which is
+   what makes a retry after a crash update it rather than open a second. */
 export async function openPullRequest(
   ws: Workspace,
   input: { title: string },

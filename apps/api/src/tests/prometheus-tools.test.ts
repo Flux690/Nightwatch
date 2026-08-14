@@ -3,7 +3,6 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../secrets.js";
 import { savePrometheusIntegration } from "../db/integrations.js";
-import { createSession } from "../db/sessions.js";
 import { seedAlertSession } from "./session-helper.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";

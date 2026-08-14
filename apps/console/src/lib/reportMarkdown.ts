@@ -17,10 +17,8 @@ const VERDICT_WORD: Record<Verdict, string> = {
   disproven: "Disproven",
 };
 
-/* The calls a claim rests on, carried out with it. An exported postmortem that
-   names a finding but not what backed it is only the model's word for it, and
-   the export is read where the transcript is not. The reading is computed from
-   the recorded result, exactly as the console computes it. */
+// An exported postmortem naming a finding but not what backed it is only the
+// model's word for it, and the export is read where the transcript is not.
 function citedLines(
   ids: string[],
   evidence: Map<string, ResolvedEvidence>,
@@ -91,10 +89,8 @@ export function reportToMarkdown(
   const settled = claims.filter((h) => h.verdict !== "disproven");
   const ruledOut = claims.filter((h) => h.verdict === "disproven");
 
-  // One claim with its verdict, its reason and what backs it. The evidence is
-  // carried inline because the export is read where the transcript is not: a
-  // verdict without it is only the model's word, in a document that outlives
-  // the console session it came from.
+  // Evidence inline, because the export outlives the console session it came
+  // from and a verdict without it is only the model's word.
   const claimBlock = (heading: string, rows: typeof claims): string =>
     [
       `## ${heading}`,

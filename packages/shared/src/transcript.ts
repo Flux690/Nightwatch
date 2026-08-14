@@ -89,11 +89,9 @@ export interface ContinueCardItem {
   state: ToolCallState;
 }
 
-/* Where the write-up happened, in the transcript rather than beside it: the
-   report is produced by a turn like any other, and the reader watched the turns
-   before it. `building` is live only - it is the phase of a turn in flight, so
-   there is nothing to reconstruct after a reload; the other two are read back
-   from whether the session holds a written report. */
+/* In the transcript rather than beside it: the report is produced by a turn like
+   any other. `building` is live only, being the phase of a turn in flight; the
+   other two are read back from whether the session holds a report. */
 export interface ReportCardItem {
   kind: "report_card";
   id: string;

@@ -6,10 +6,6 @@ import type {
 import { addressName, manifestedConnections } from "./fleet.js";
 import type { RunnerConnection } from "./fleet.js";
 
-// How a runner command is addressed: by service target key, or by the runner itself.
-// Declared per tool in the registry, never inferred from input shape.
-type RouteBy = "service" | "runner";
-
 // A fan-out wider than this is noise, not evidence: the model cannot read ten
 // hosts' filesystems in one turn and the token cost is real.
 const MAX_FANOUT = 8;

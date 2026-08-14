@@ -12,10 +12,8 @@ import type { ToolResult, ToolUse } from "../llm/types.js";
 type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {
-  /* One tool_result per non-gated tool_use, so every block in the assistant
-     message is answered even when a later one suspends the run. Each carries
-     its own outcome, which is what the loop stamps onto the persisted part -
-     the provider round-trip in between has nowhere to put it. */
+  // One per non-gated tool_use, so every block is answered even when a later one
+  // suspends. Each carries its outcome, which the loop stamps onto the part.
   toolResults: ToolResult[];
   // The single gated call to suspend on, or null if the turn had none. At most
   // one per turn; subsequent gated calls are rejected inline.

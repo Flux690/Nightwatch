@@ -7,7 +7,6 @@ import {
   claimRun,
   clearRunFailure,
   recordRunFailure,
-  getSession,
   isRunning,
   oldestQueuedGroup,
   openSessionForGroup,
@@ -59,10 +58,8 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
   const controllers = new Map<string, AbortController>();
 
   function start(input: RunSessionInput): boolean {
-    /* Claimed durably before anything else, so a restart can tell a run that was
-       alive from one that concluded, and so a second dispatch cannot start. The
-       two ways to lose the claim are told apart: one is a race, the other is a
-       caller that dispatched into a session nothing had written. */
+    // Claimed durably first, so a restart can tell a run that was alive from one
+    // that concluded, and a second dispatch cannot start.
     if (!sessionExists(input.sessionId)) {
       logger.error(
         { sessionId: input.sessionId },

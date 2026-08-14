@@ -189,10 +189,8 @@ export function computeConviction(
   return graded;
 }
 
-// Something for the user to act on: a written recommendation, or a cited
-// root cause that amounts to one. Read by the status derivation and by the
-// report gate, so what the list calls actionable and what the gate accepts
-// cannot disagree.
+// Read by the status derivation and by the report gate, so what the list calls
+// actionable and what the gate accepts cannot disagree.
 export function isActionable(report: Report | null): boolean {
   if (report === null) return false;
   const recommended = (report.submitted?.recommendation ?? "").trim() !== "";
@@ -210,13 +208,9 @@ export function isActionable(report: Report | null): boolean {
 export type ReportGap =
   { kind: "empty_record" } | { kind: "unresolvable_citation"; ids: string[] };
 
-/* A run that recorded what it tested has finished, whether or not any of it
-   turned out to be the cause: "I could not conclude, here is what I checked" is
-   a complete record, and the gate must never push a model past it.
-
-   Two kinds, not four. A hypothesis is recorded settled, so none can be left
-   open; and RecordHypothesis refuses a claim citing nothing, so an uncited root
-   cause cannot reach the record to be caught here. */
+/* "I could not conclude, here is what I checked" is a complete record, and the
+   gate must never push a model past it. Two kinds, not four: a hypothesis is
+   recorded settled, and an uncited claim never reaches the record. */
 export function reportGaps(sessionId: string): ReportGap[] {
   const report = getReport(sessionId);
   const hypotheses = report?.hypotheses ?? [];

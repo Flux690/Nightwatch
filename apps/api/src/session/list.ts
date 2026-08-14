@@ -14,10 +14,8 @@ import {
 import { isActionable } from "../agent/report.js";
 import { dispatcher } from "../dispatcher.js";
 
-/* The alert that fired is what says the incident is over, so a write running
-   while it still fires settles nothing - and whether a write even happened is a
-   question nothing can answer, since an approved shell command may only have
-   read. The condition is the one signal that means what it says. */
+// The condition is the one signal that means what it says: whether a write even
+// happened is unanswerable, since an approved shell command may only have read.
 function isSettled(source: SessionListSource): boolean {
   return (
     source.alerts.length > 0 &&
@@ -25,14 +23,9 @@ function isSettled(source: SessionListSource): boolean {
   );
 }
 
-/* Derived from the alerts, the dispatcher and the hypothesis rows, never from
-   anything the model declared. A crash is checked before an unconcluded run, so
-   a run that broke reads as broken rather than as one that stood down.
-
-   Total by construction: every investigation lands in exactly one group. The
-   fall-through used to answer null, which put a record in no group on the page
-   while still counting in the queue total - so the stepper read "3 / 12" over
-   eleven rows. */
+/* Derived, never declared by the model. A crash is checked before an unconcluded
+   run, so a broken run reads as broken. Total by construction: a fall-through of
+   null put a record in no group while still counting in the queue total. */
 function deriveStatus(source: SessionListSource): SessionRunStatus {
   const report = source.report;
   if (source.awaitingHumanInput) return "action_required";

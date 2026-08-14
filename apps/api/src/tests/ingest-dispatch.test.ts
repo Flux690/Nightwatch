@@ -159,14 +159,6 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
       });
   }
 
-  // Every investigation there is, oldest first, so a test can name the one it
-  // just opened without knowing the id promotion minted for it.
-  function investigationIds(): string[] {
-    return listSessionSources(100, 0, "investigation")
-      .sources.map((s) => s.sessionId)
-      .reverse();
-  }
-
   function liveSessions(): string[] {
     return listSessionSources(100, 0, "investigation")
       .sources.map((s) => s.sessionId)
@@ -285,13 +277,9 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     await waitFor(() => countInvestigations() === before + 2);
   });
 
-  /* Dedup is scoped to the alert, so a repeat no longer re-triggers a run that
-     broke. The sweep already asking whether this incident recovered is what
-     tries again - the same set of sessions, thinning for the same reason.
-
-     Seeded rather than driven to failure: what is under test is which failures
-     earn another attempt, and a run that died on its first turn leaves exactly
-     this - an error row, a classification, and nothing to resume from. */
+  /* A repeat no longer re-triggers a broken run, so the recovery sweep is what
+     tries again. Seeded rather than driven to failure: what is under test is
+     which failures earn another attempt. */
   function failedInvestigation(fingerprint: string): string {
     const sessionId = randomUUID();
     seedAlertSession(

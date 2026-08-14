@@ -294,10 +294,8 @@ describe("Shell", () => {
     });
   });
 
-  /* Alerts waiting for a free seat are not sessions, so they cannot be rows: a
-     row promises a transcript and something to open. The band is how the reader
-     learns work is held up, and it names the limit because raising that is the
-     one thing they can do about it. */
+  // Not sessions, so not rows: a row promises a transcript and something to open.
+  // The band names the limit, because raising it is what the reader can do.
   describe("the alert queue band", () => {
     it("says nothing while nothing is waiting", async () => {
       setup({ path: "/investigations" });
@@ -459,10 +457,8 @@ describe("Shell", () => {
       expect(screen.getByRole("textbox")).toBeInTheDocument();
     });
 
-    /* No session crosses between the two families, so nothing has to survive
-       the crossing. The mode is picked before the first turn runs and the route
-       follows from it, which is what let the portal that used to carry the chat
-       between /agent and /investigations be deleted outright. */
+    // No session crosses between the two families, so nothing has to survive the
+    // crossing - which is what let the portal carrying chat between them go.
     it("sends an investigation straight to its record, never through /agent", async () => {
       const user = userEvent.setup();
       const { router } = setup();

@@ -9,10 +9,8 @@ import {
   openSessionForGroup,
 } from "../db/sessions.js";
 
-/* Seeds an alert-opened session by the only route production has: the alerts are
-   queued under a group key, then a session takes them. Bypassing that with a
-   direct insert would build a session whose alerts never passed through the
-   queue, which is a shape ingest cannot produce. */
+// By the only route production has: queued under a group key, then taken. A
+// direct insert would build a shape ingest cannot produce.
 export function seedAlertSession(
   meta: SessionMeta,
   alerts: NormalizedAlert[],

@@ -28,9 +28,7 @@ import {
   getLokiIntegration,
 } from "../db/integrations.js";
 import {
-  createSession,
   appendErrorMessage,
-  appendSessionAlert,
   appendTranscriptRows,
   appendRowsAndInterrupt,
   getNextSeq,
@@ -69,11 +67,8 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-/* Our classification of how a call went, put back onto the part on the way to
-   disk. It cannot survive the provider: `outcome` is not a wire field, and one
-   dialect carries no error flag at all, so a snapshot always comes back without
-   it. The run knew it before the row existed, which is what makes stamping here
-   an act of remembering rather than of guessing. */
+/* `outcome` is not a wire field, so a provider snapshot always comes back
+   without it. The run knew it before the row existed; this puts it back. */
 function stampOutcomes(
   parts: MessagePart[],
   outcomes: ReadonlyMap<string, ToolOutcome>,
@@ -285,10 +280,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // one the user typed.
   const harnessTurns = new Set<number>();
 
-  /* Every outcome this run has seen, by the call it belongs to. Held for the
-     whole run rather than the turn: a snapshot re-persists nothing already
-     written, but a resumed turn's results are stamped from what the suspend
-     parked, which arrived on this run's input rather than from its own tools. */
+  // Held for the run, not the turn: a resumed turn's results are stamped from
+  // what the suspend parked rather than from tools this run ran.
   const seenOutcomes = new Map<string, ToolOutcome>();
   const noteOutcomes = (results: readonly ToolResult[]): void => {
     for (const result of results) {
@@ -465,21 +458,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
-  /* The report turn: every investigation tool is taken away and one is put back,
-     so the only thing the model can do from here is the thing being asked of it.
-     The ledger rides the request rather than being left to context - the timeline
-     copies call ids verbatim, and turn forty is the worst place to copy a string
-     from. An ending without a report is still an ending: the record renders on
-     its own. */
+  /* Every investigation tool taken away and one put back, so the only thing the
+     model can do is the thing being asked. The ledger rides the request: turn
+     forty is the worst place to copy a call id from. */
   const writeReport = async (
     unrecovered: boolean,
     turn: number,
   ): Promise<RunOutcome> => {
-    /* Said out loud, because until now it was said only to the server log: the
-       record renders on its own, so an investigation with no write-up looked
-       exactly like one whose model chose not to write much. The row is what the
-       console reads back after a reload, and what the Try again button sits
-       under. */
+    // Said out loud rather than only to the server log: an investigation with no
+    // write-up looked exactly like one whose model chose not to write much.
     const notWritten = (why: string): RunOutcome => {
       log.warn({ turn }, "report turn failed; the record stands without one");
       appendErrorMessage(sessionId, `${why} Your findings below are complete.`);
@@ -535,11 +522,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         return "stopped";
       }
 
-      /* Checked here as the investigating turns already check it, and checked
-         before the tool result: a reply cut off mid-call carries truncated
+      /* Before the tool result: a reply cut off mid-call carries half-written
          arguments, so the refusal below would report a schema fault and hide the
-         real cause. Neither of these is worth a second attempt - the same
-         request produces the same ceiling and the same refusal. */
+         real cause. Neither is worth a second attempt - the ceiling stands. */
       if (written.stopReason === "max_tokens") {
         return notWritten(
           `The report was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`,
@@ -847,10 +832,7 @@ function formatLabels(labels: Record<string, string>): string {
 }
 
 /* Its own turn, so it opens rather than continues: no leading blank lines.
-
-   Stated, never asked. An injected alert reached this session because the alert
-   source grouped it with the ones already here, under the group_by its user
-   configured - so whether it belongs is already answered, and asking the model
+   Stated, never asked - the alert source already grouped it, and asking the model
    to re-decide would hand a routing call to the thing being routed. */
 function formatInjectedAlerts(alerts: NormalizedAlert[]): string {
   const header =

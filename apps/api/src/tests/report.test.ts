@@ -27,15 +27,7 @@ import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
 import { buildSeed } from "../session/seed.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
-import {
-  deletePrometheusIntegration,
-  savePrometheusIntegration,
-} from "../db/integrations.js";
-import {
-  createSession,
-  appendTranscriptRows,
-  getTranscriptRows,
-} from "../db/sessions.js";
+import { appendTranscriptRows, getTranscriptRows } from "../db/sessions.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import { buildTranscript } from "../session/transcript.js";
@@ -101,10 +93,8 @@ describe("the investigation record", () => {
     commits: [],
   });
 
-  // One ledger entry: the call and the result it answered with, at a chosen
-  // instant so a read after a remediation is distinguishable from one before.
-  // `outcome` rides the result part, which is where production writes it: the
-  // run knows how a call went before the row answering it exists.
+  // One ledger entry at a chosen instant, so a read after a remediation is
+  // distinguishable from one before. `outcome` rides the part, as production does.
   function appendCall(
     sessionId: string,
     seq: number,
@@ -586,10 +576,8 @@ describe("the investigation record", () => {
       );
     });
 
-    /* The mechanism the three tests above rest on. A provider is handed the
-       wire's error flag and nothing else - one dialect has not even got that -
-       so the class is put back onto the part on the way to disk. Without it a
-       reloaded run cannot tell a miss from a crash from a refusal. */
+    // A provider carries the wire's error flag and nothing else, so the class is
+    // put back on the way to disk. Without it a reload cannot tell miss from crash.
     it("keeps the outcome class on the persisted result, not beside it", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
@@ -857,11 +845,9 @@ describe("the investigation record", () => {
       expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
-    /* The report is the largest single output of the run - a summary, a timeline
-       array, an impact and a recommendation, with thinking spending the budget
-       first - so the output ceiling is where it most often dies. It used to die
-       into a server log: the reader got a record with no write-up and nothing
-       saying why, or that trying again would help. */
+    /* The largest single output of the run, with thinking spending the budget
+       first, so the output ceiling is where it most often dies. It used to die
+       into a server log, leaving no write-up and nothing saying why. */
     it("says the report was cut off rather than ending with nothing", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
@@ -898,11 +884,9 @@ describe("the investigation record", () => {
       expect(reportRequests()).toHaveLength(1);
     });
 
-    /* Try again is the same loop entered again, not a second way to make a
-       report: the transcript is replayed, the finish gate fires, and the report
-       turn runs with everything the run had. The sentence that re-enters is
-       NightWarden's, so the reader who pressed a button is never shown words in
-       their own voice that they did not write. */
+    /* The same loop entered again, not a second way to make a report. The
+       sentence that re-enters is NightWarden's, so a reader who pressed a button
+       is never shown words in their own voice that they did not write. */
     it("writes the report on a second entry, without speaking as the user", async () => {
       mockCreateProvider
         .mockImplementationOnce(() =>
@@ -988,11 +972,9 @@ describe("the investigation record", () => {
       expect(getReport(sessionId)).toBeUndefined();
     });
 
-    /* The gate holds a run that acted to a different standard from one that only
-       looked. "I could not work out the cause" is a complete ending; releasing a
-       write and then going quiet with the condition still firing is not - and
-       that demand lands on the report turn, where the recommendation is
-       written. */
+    /* A run that acted is held to a different standard from one that only looked:
+       "I could not work out the cause" is a complete ending, releasing a write
+       and then going quiet with the condition still firing is not. */
     describe("a run that acted", () => {
       // A gated call carrying a result: the registry says it needed releasing,
       // and no rejected outcome on it says the user released it.

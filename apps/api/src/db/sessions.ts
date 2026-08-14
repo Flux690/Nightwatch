@@ -105,10 +105,8 @@ export function appendSessionAlert(
     );
 }
 
-/* Stamps this alert wherever it is still open, queued rows included: an alert
-   that recovers while waiting for a seat is cleared here and then never promoted,
-   so nothing is investigated after the fact and no session is created to explain.
-   The first clear wins per alert - a re-fire that clears again says nothing new. */
+// Queued rows included: an alert that recovers while waiting for a seat is
+// cleared here and never promoted. First clear wins.
 export function markAlertCleared(
   sourceAlertId: string,
   clearedAt: string,
@@ -129,10 +127,8 @@ export function markAlertCleared(
   ];
 }
 
-/* Already investigated, and nothing has said the condition recovered. Scoped to
-   uncleared rows rather than to live runs: Alertmanager repeats a firing alert
-   on `repeat_interval`, so a narrower rule opens a fresh investigation of the
-   same alert every few minutes once the first one has finished. */
+// Scoped to uncleared rows rather than live runs: Alertmanager repeats a firing
+// alert, so a narrower rule reopens the same one every few minutes.
 export function isAlertCovered(
   sourceAlertId: string,
   firedAt: string,
@@ -179,10 +175,8 @@ function parseAlert(raw: string): NormalizedAlert[] {
 
 const QUEUED = `session_id IS NULL AND cleared_at IS NULL`;
 
-/* The next group to investigate, by arrival. Cleared rows are skipped rather
-   than promoted: an alert that recovered while it waited needs no investigation,
-   and opening one to report on a condition that is already over is worse than
-   silence. */
+// Cleared rows are skipped rather than promoted: opening an investigation into a
+// condition that is already over is worse than silence.
 export function oldestQueuedGroup(): QueuedGroup | undefined {
   const db = getDb();
   const head = db
@@ -581,13 +575,9 @@ export function countInvestigations(): number {
   return row.total;
 }
 
-/* Claims the run slot, answering whether this caller got it. The conditional
-   UPDATE is the whole mutex: two racing dispatches both attempt it, one changes
-   a row and one does not, so a second run cannot start behind a stale check.
-
-   Claimable from 'suspended' as well as 'done', because answering an approval is
-   exactly a suspended session starting a run again - and it is not taking a new
-   seat, it already held one while it waited. Only 'running' refuses. */
+/* The conditional UPDATE is the whole mutex: two racing dispatches both attempt
+   it and one changes a row. Claimable from 'suspended' too, which is a session
+   resuming on the seat it already held. Only 'running' refuses. */
 export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
@@ -598,10 +588,8 @@ export function claimRun(sessionId: string): boolean {
   return result.changes > 0;
 }
 
-/* Released on every exit path a run has, including the ones that failed.
-   Conditional on 'running' so it cannot undo the 'suspended' the loop wrote in
-   the same transaction as the interrupt row: that session is waiting, not idle,
-   and it keeps its seat while it waits. */
+// Conditional on 'running' so it cannot undo the 'suspended' written with the
+// interrupt row: that session is waiting, not idle, and it keeps its seat.
 export function releaseRun(sessionId: string): void {
   getDb()
     .prepare(
@@ -669,10 +657,9 @@ export function isRunning(sessionId: string): boolean {
   return row !== undefined;
 }
 
-/* Seats in use. An investigation holds one while suspended because the human it
-   is waiting on is the scarce thing: freeing the seat starts another run whose
-   write needs that same person. A chat holds one only while it is actually
-   working - it was started by someone sitting right there. */
+/* An investigation holds a seat while suspended because the human it waits on is
+   the scarce thing. A chat holds one only while working - someone was sitting
+   right there when it started. */
 export function countSeats(investigation: boolean): number {
   const states = investigation ? ["running", "suspended"] : ["running"];
   const holes = states.map(() => "?").join(", ");
@@ -699,10 +686,9 @@ export function sessionIdsWithOpenAlerts(): string[] {
   return rows.map((r) => r.sessionId);
 }
 
-/* Sessions holding a seat while parked on a human. Read at boot to find the ones
-   parked on nobody: approving deletes the interrupt row before the resume claims
-   the run, so a crash in that gap leaves a session suspended with nothing left to
-   answer it - and, now that suspending holds a seat, holding one forever. */
+/* Read at boot to find the ones parked on nobody: approving deletes the interrupt
+   row before the resume claims the run, so a crash in that gap leaves a session
+   suspended forever, holding a seat. */
 export function suspendedSessionIds(): string[] {
   const rows = getDb()
     .prepare(

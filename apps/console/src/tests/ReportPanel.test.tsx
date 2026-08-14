@@ -360,10 +360,8 @@ describe("ReportPanel", () => {
       }),
     );
 
-    /* The worst line, once, as the reading. The body is not quoted at all: a
-       report that reprints two hundred log lines is a transcript with extra
-       steps, and the transcript is one click away. That is also what settles
-       the duplicated line for good - there is no second copy to collide with. */
+    // The worst line once, as the reading. The body is not quoted: a report that
+    // reprints two hundred log lines is a transcript with extra steps.
     expect(screen.getAllByText(/cannot allocate 2\.2GB buffer/)).toHaveLength(
       1,
     );

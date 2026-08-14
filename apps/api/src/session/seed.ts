@@ -6,10 +6,9 @@ function hasToolCall(message: TranscriptRow): boolean {
   return message.parts.some((p) => p.type === "tool_call");
 }
 
-/* Everything from the first call nothing answered onward. A conversation ending
-   on an unanswered `tool_use` is one every provider rejects outright, which is
-   what a crash between writing the assistant turn and running its tools leaves
-   behind. Turns after it go too: keeping them would keep the unanswered call. */
+/* A conversation ending on an unanswered `tool_use` is one every provider
+   rejects, and it is what a crash between writing the assistant turn and running
+   its tools leaves. Later turns go too: keeping them keeps the unanswered call. */
 function throughLastAnsweredExchange(rows: TranscriptRow[]): TranscriptRow[] {
   const answered = new Set<string>();
   for (const row of rows) {

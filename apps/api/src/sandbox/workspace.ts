@@ -71,11 +71,9 @@ export interface WorkspaceOptions {
       patch: { title: string; body: string },
     ): Promise<void>;
   };
-  /* Paths this session has already read. A workspace is re-provisioned whenever
-     one is not live - a restart, or the idle sweep between two turns - and
-     without this the model's next edit is refused for a file its own context
-     says it read. The host supplies them: it has the transcript, and the sandbox
-     keeps no history of its own. */
+  /* A workspace is re-provisioned whenever one is not live, and without this the
+     model's next edit is refused for a file its own context says it read. The
+     host supplies them: it has the transcript, the sandbox has no history. */
   readPaths?(): string[];
   onStatus?(stage: SandboxStage): void;
   log?: SandboxLog;
@@ -369,10 +367,9 @@ export async function withWorkspace<T>(
 // others mean the session is going whether that work finishes or not.
 export type TeardownReason = "idle" | "deleted" | "disconnected";
 
-/* One rule, no modes: never drop a checkout without first trying to push it, and
-   if the push fails keep the checkout and destroy the container anyway. The
-   container is disposable and cheap to recreate; the work is neither, and boot
-   salvage is the one retry for every reason. */
+/* One rule, no modes: never drop a checkout without trying to push it, and if the
+   push fails keep the checkout and destroy the container anyway. The container is
+   cheap to recreate; the work is not. */
 export async function teardown(
   sessionId: string,
   reason: TeardownReason,
@@ -421,10 +418,9 @@ export async function teardownAll(reason: TeardownReason): Promise<void> {
   await Promise.all([...sessions.keys()].map((id) => teardown(id, reason)));
 }
 
-/* Shutdown keeps every checkout and only stops the containers, which is the same
-   rule reached from the other side: nothing is being dropped, so nothing needs
-   pushing. Containers cannot outlive the process that started them, and the git
-   work belongs to the next boot's salvage, which has time for it. */
+/* The same rule from the other side: nothing is dropped, so nothing needs
+   pushing. Containers cannot outlive the process, and the git work belongs to
+   the next boot's salvage, which has time for it. */
 export async function releaseContainers(): Promise<void> {
   const entries = [...sessions.values()];
   sessions.clear();

@@ -54,10 +54,8 @@ export interface ToolResultPart {
   // The wire fact a provider needs. Derived from `outcome` by `isToolFailure`,
   // so the two cannot disagree about whether something went wrong.
   isError?: boolean;
-  /* Our own classification, which no wire format carries - one dialect has no
-     error flag at all. Stamped here from what the run already knew rather than
-     read back off the provider, which is what lets it live with the call it
-     describes instead of in a table beside it. */
+  // Our own classification, which no wire format carries. Stamped from what the
+  // run knew, which is what lets it live with the call instead of beside it.
   outcome?: ToolOutcome;
 }
 

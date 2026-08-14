@@ -1,14 +1,9 @@
 import { loadConfig } from "./config/store.js";
 import { countSeats } from "./db/sessions.js";
 
-/* How many runs may be in flight at once. Two pools, because what starts them
-   differs: an alert storm is machine-generated and can produce fifty runs in a
-   minute, while chats are human-initiated and self-limiting. Neither can take
-   the other's seat.
-
-   What binds is token spend per concurrent run and better-sqlite3 being
-   synchronous, so every persist() blocks the loop for everyone. Both scale with
-   concurrent runs whatever started them. */
+/* Two pools, because what starts them differs: an alert storm can produce fifty
+   runs in a minute, chats are human-initiated and self-limiting. What binds is
+   token spend and better-sqlite3 being synchronous, and both scale with runs. */
 
 // A backstop rather than a usage limit, which is why it is a constant and the
 // investigation limit is a setting: reaching it means something is very wrong.

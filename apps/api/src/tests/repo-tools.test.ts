@@ -265,10 +265,8 @@ describe("repo tools through registry dispatch", () => {
   });
 
   it("keeps the reads it made when the workspace is provisioned again", async () => {
-    /* A workspace is rebuilt whenever one is not live: a restart, or the idle
-       sweep firing between two turns. This session's workspace has never
-       existed, so its readPaths can only have come from the transcript - which
-       is the point, since the model's context says it read the file. */
+    // This session's workspace has never existed, so its readPaths can only have
+    // come from the transcript - which is the point.
     const resumed = "aaaabbbb-0000-4000-8000-0000000000ff";
     createSession({
       sessionId: resumed,

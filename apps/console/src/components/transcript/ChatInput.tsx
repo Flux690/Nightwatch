@@ -21,10 +21,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 
-/* What the user is asking for, picked before they type. Investigate opens a
-   session that writes a report at the end; Chat answers and stops. Declared, not
-   inferred - the person asking knows which one they want, and no classifier
-   guesses on their behalf. */
+// Investigate opens a session that writes a report; Chat answers and stops.
+// Declared, not inferred - no classifier guesses on the asker's behalf.
 const MODE_LABEL: Record<SessionKind, string> = {
   chat: "Chat",
   investigation: "Investigate",

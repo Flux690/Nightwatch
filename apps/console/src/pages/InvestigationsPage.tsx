@@ -54,10 +54,8 @@ function InvestigationRow({
   );
 }
 
-/* Alerts waiting for a free seat are not sessions, so they are not rows: they
-   have no transcript, no finding and nothing to open. A band says how many are
-   waiting and why, and names the limit - which is the one thing the reader can
-   change about it. */
+// Alerts waiting for a seat are not sessions, so not rows: no transcript, no
+// finding, nothing to open. The band names the limit, which the reader can change.
 function QueueBand({ queue }: { queue: QueueState }): React.JSX.Element | null {
   if (queue.waiting === 0) return null;
   const alerts = queue.waiting === 1 ? "1 alert" : `${queue.waiting} alerts`;

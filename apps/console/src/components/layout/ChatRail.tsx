@@ -4,9 +4,8 @@ import { SessionView } from "@/pages/SessionView";
 import { readStoredNumber, writeStoredNumber } from "@/lib/persisted";
 import { cn } from "@/lib/utils";
 
-/* The conversation beside the record. How wide it should be is a question about
-   the user's screen and the shape of their work, not one this layout can
-   answer, so they set it and it outlives the session: a width you have to set
+/* How wide it should be is a question about the user's screen, not one this
+   layout can answer, so they set it and it outlives the session: a width you set
    again every night is worse than one you cannot set at all. */
 
 const WIDTH_KEY = "nightwarden.rail.width";

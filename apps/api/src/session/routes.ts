@@ -151,10 +151,9 @@ export async function registerSessionRoutes(
           .code(409)
           .send({ error: "session is running: stop it before deleting" });
       }
-      /* The sandbox goes with the row. Left behind, its container keeps running
-         and an hour later the idle sweep pushes to the user's repository for
-         a session they deleted. Awaited, not fired and forgotten: a delete is
-         rare and manual, and a truthful 204 beats a fast one. */
+      /* Left behind, the container keeps running and the idle sweep pushes to the
+         user's repository for a session they deleted. Awaited, not fired and
+         forgotten: a delete is rare, and a truthful 204 beats a fast one. */
       await teardown(sessionId, "deleted");
       deleteSession(sessionId);
       /* A suspended session holds a seat, and deleting it is the one way that
@@ -166,11 +165,9 @@ export async function registerSessionRoutes(
     },
   );
 
-  /* Try again on a run that ended without its write-up. No body: the sentence
-     sent to the model is the server's, kept beside the other prompts rather than
-     composed by whoever pressed the button. The seed replays the whole
-     transcript, so the model writes up with everything it had - this is the same
-     loop and the same tool, entered again, not a second way to make a report. */
+  /* No body: the sentence sent to the model is the server's, kept beside the
+     other prompts rather than composed by whoever pressed the button. The same
+     loop and the same tool, entered again - not a second way to make a report. */
   fastify.post<{ Params: { id: string } }>(
     "/sessions/:id/report/retry",
     { preHandler: requireSession },
@@ -252,16 +249,12 @@ export async function registerSessionRoutes(
           .code(503)
           .send({ error: notConfiguredMessage(readiness.missing) });
       }
-      /* What a session is, is declared here and never again: by an alert, or by
-         the user picking a mode before they typed. Nothing infers it later -
-         not the agent mid-conversation, and not the harness from what the run
-         happened to record. */
+      // Declared here and never again. Nothing infers it later - not the agent
+      // mid-conversation, and not the harness from what the run recorded.
       const investigation = kind === "investigation";
-      /* Refused rather than queued, because someone is watching this request:
-         an alert was answered 200 and has nobody to tell, but a person who just
-         pressed a button would only see a spinner. Only new work is checked - a
-         resume is continuing work, and a suspended investigation still holds the
-         seat it will claim back. */
+      /* Refused rather than queued, because someone is watching: an alert was
+         answered 200 and has nobody to tell, a person would see a spinner with no
+         end. Only new work is checked; a resume already holds its seat. */
       if (!hasSeat(investigation)) {
         return reply.code(503).send({
           error: investigation
@@ -302,10 +295,8 @@ export async function registerSessionRoutes(
           .send({ error: "session is busy: awaiting approval" });
       }
       const seed = buildSeed(sessionId);
-      /* The claim inside dispatch decides it, not a check up here: two requests
-         arriving together both reach it and only one changes the row, so the
-         loser is told rather than starting a second run that would collide on
-         the transcript's primary key. */
+      // The claim inside dispatch decides it, not a check up here: the loser is
+      // told rather than colliding on the transcript's primary key.
       if (!dispatcher.dispatch({ sessionId, seed, userMessage: message })) {
         return reply
           .code(409)

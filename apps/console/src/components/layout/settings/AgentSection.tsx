@@ -8,10 +8,8 @@ interface AgentSectionProps {
   save: (patch: Partial<AgentConfig>) => void;
 }
 
-// Everything about how the agent behaves, grouped by what each number applies
-// to, outermost first: these operate at three different scopes, which is what
-// made one flat list unreadable. Sandbox limits are not here - those describe a
-// container, not the agent.
+// Grouped by what each number applies to, outermost first: three scopes, which
+// is what made one flat list unreadable. Sandbox limits describe a container.
 export function AgentSection({
   config,
   save,

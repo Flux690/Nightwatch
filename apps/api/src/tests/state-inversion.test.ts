@@ -36,7 +36,6 @@ import {
 } from "./console-events-helper.js";
 
 import { registerSessionRoutes } from "../session/routes.js";
-import { dispatcher } from "../dispatcher.js";
 import { getSession } from "../db/sessions.js";
 import { hasReport } from "../db/reports.js";
 import { buildInitialContext } from "../agent/context.js";

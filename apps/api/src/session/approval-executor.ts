@@ -5,10 +5,9 @@ import { logger } from "../logger.js";
 import { findTool, executeTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 
-/* What the model is sent back and how the console draws the settled card, in
-   one value, so the transcript cannot say "failed" where the model was told
-   otherwise. Never throws: any fault becomes a failure result, so the run
-   resumes instead of the card wedging. */
+/* One value, so the transcript cannot say "failed" where the model was told
+   otherwise. Never throws: any fault becomes a failure result, so the run resumes
+   instead of the card wedging. */
 export async function executeApprovedTool(
   pending: PendingHumanInput,
   call: { name: string; input: Record<string, unknown> },

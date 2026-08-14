@@ -104,19 +104,13 @@ export function InvestigationRecordPage(): React.JSX.Element {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = session?.title ?? "";
 
-  /* A run in flight has the whole stage: the transcript is the live view, and a
-     report drawn beside it would be a document being written in front of the
-     reader.
-
-     Which view is on screen is the reader's, not the run's. Arriving from the
-     list is already a deliberate act, so it lands on the record; watching a run
-     end swaps nothing until the report card is clicked, because a page that
-     rearranges itself mid-sentence has moved under the person reading it. */
+  /* Which view is on screen is the reader's, not the run's. Arriving from the
+     list is deliberate, so it lands on the record; watching a run end swaps
+     nothing until the card is clicked. */
   const [openedReport, setOpenedReport] = useState(false);
-  /* Latched at the first load and never re-read, which is the whole point: the
-     run ending must not move the reader. Set during render rather than from an
-     effect so the first painted frame is already the right one - via an effect
-     there is a frame of the other view before it corrects itself. */
+  /* Latched at the first load and never re-read: the run ending must not move the
+     reader. Set during render rather than from an effect, so the first painted
+     frame is already the right one. */
   const followedRun = useRef<boolean | null>(null);
   if (followedRun.current === null && session !== null) {
     followedRun.current = session.running;
@@ -162,11 +156,9 @@ export function InvestigationRecordPage(): React.JSX.Element {
       /* The menu acts on the investigation, so it sits after its name rather
          than at the far edge: the crumb truncates at its own ceiling and the
          menu follows wherever the name ends, sliding left for a short title. */
-      /* Everything this page offers rides the one bar, so there is no controls
-         row beneath it and the rail's edge runs the full height of the stage.
-         The menu sits against the name because it acts on the record; the
-         stepper and the rail toggle are right-aligned because they act on the
-         queue and on the layout, not on this investigation. */
+      /* One bar, so the rail's edge runs the full height of the stage. The menu
+         sits against the name because it acts on the record; the stepper and the
+         rail toggle are right-aligned because they do not. */
       beside={
         <>
           <DropdownMenu>

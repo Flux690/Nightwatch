@@ -199,14 +199,9 @@ interface FiringInstance {
   state: string;
 }
 
-/* Whether Prometheus still holds this alerting rule firing. Asking the rules API
-   rather than re-evaluating the expression ourselves: this is the same rule, on
-   the same evaluation interval, that fired the alert in the first place, so
-   nothing here can disagree with what would fire it again.
-
-   `null` means Prometheus does not know a rule by that name - it was renamed,
-   removed, or the alert came from somewhere else - which is a different answer
-   from "it is not firing" and must not be read as recovery. */
+/* Asks the rules API rather than re-evaluating ourselves: this is the same rule
+   on the same interval that fired the alert. `null` means no rule by that name -
+   renamed, removed, or from elsewhere - which is not "it is not firing". */
 export async function firingInstancesOf(
   baseUrl: string,
   authHeader: string | null,

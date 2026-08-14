@@ -4,7 +4,6 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
 import { encrypt } from "../secrets.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
-import { createSession } from "../db/sessions.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
 import type { GetRecentChangesResult } from "../agent/tools/github.js";

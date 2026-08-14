@@ -190,10 +190,8 @@ function writeLine(call: GatedCall): string {
   return `${call.at}  ${call.toolName}${target}  ${call.decision}`;
 }
 
-/* Handed to the model on the report turn, with every investigation tool taken
-   away and only SubmitInvestigationReport left. The ledger is repeated here
-   rather than left to context: the timeline cites call ids verbatim, and a
-   forty-turn context is the worst place to copy a string from. */
+// The ledger is repeated here rather than left to context: the timeline cites
+// call ids verbatim, and a forty-turn context is a bad place to copy one from.
 export function reportRequest(
   hypotheses: Hypothesis[],
   writes: GatedCall[],
@@ -225,12 +223,8 @@ export function reportRetry(problem: string): string {
   return `${problem} Call SubmitInvestigationReport again.`;
 }
 
-/* A person pressed Try again, so the run re-enters through the ordinary message
-   path and the finish gate takes it back to the report turn. Deliberately not
-   "continue": that word invites the model to investigate further, and there is
-   nothing left to find - the record is closed and only the write-up is missing.
-
-   Server-side because it is prompt text. Composed in the console it would drift
-   from reportRequest the first time one of the two was edited. */
+/* Deliberately not "continue": that invites more investigating, and there is
+   nothing left to find. Server-side because it is prompt text - composed in the
+   console it would drift from reportRequest the first time either was edited. */
 export const REPORT_RETRY_REQUEST =
   "Your investigation is over and its record is complete, but the report was never written. Do not investigate further and do not call any other tool. Write it up now.";

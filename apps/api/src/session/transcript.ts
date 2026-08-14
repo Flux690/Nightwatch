@@ -83,10 +83,9 @@ export function toolCallCard(
   return { kind: "tool_card", toolUseId, toolName, input, state };
 }
 
-/* How many times this same write already ran in this investigation, counted from
-   the transcript itself. Repeating a fix is rarely fixing it, and 3am is exactly
-   when that pattern is easiest to miss. It reports, it never refuses - a person
-   who restarts a fifth time has made a decision, not a mistake. */
+/* Repeating a fix is rarely fixing it, and 3am is when that is easiest to miss.
+   It reports, it never refuses - a person who restarts a fifth time has made a
+   decision, not a mistake. */
 function priorRunsOf(
   toolName: string,
   input: Record<string, unknown>,
@@ -98,14 +97,9 @@ function priorRunsOf(
     .length;
 }
 
-/* The one card nothing in the transcript records, because the write-up is a
-   column on the session rather than a turn. Read back from that column: a stored
-   report is one that was written, and a finished investigation whose ledger
-   holds claims but no write-up is one where the report turn did not land - the
-   error row above it says why, and the card is what offers to try again.
-
-   A session parked on a human has not reached the report turn at all, so it gets
-   no card rather than one claiming a failure that has not happened. */
+/* Read back from the report column, since the write-up is not a turn: a finished
+   investigation with claims but no report is one where the report turn did not
+   land. A session parked on a human has not reached that turn, so it gets none. */
 function reportCard(sessionId: string): TranscriptItem | null {
   const session = getSession(sessionId);
   if (session === undefined || !session.investigation) return null;
@@ -177,15 +171,9 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     }
   }
 
-  /* Alerts that arrived mid-run, in arrival order. The ones that opened the
-     session are excluded: the report's alert band sits above the first of them.
-
-     Read from the row, never worked out from a timestamp. Which alerts opened a
-     session is known when they are written, so recovering it by comparing clocks
-     would be inferring a fact we already had - and those clocks drift, because a
-     session's first message lands only after a round trip to the model.
-     Timestamps still place these in the transcript; they no longer decide what
-     they are. */
+  /* The ones that opened the session are excluded: the report's alert band sits
+     above them. Read from the row rather than compared clocks - which alerts
+     opened a session is known when they are written. */
   const arrivals = (getSession(sessionId)?.alerts ?? []).filter(
     (entry) => entry.injected,
   );

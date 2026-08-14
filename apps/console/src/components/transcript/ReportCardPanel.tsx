@@ -7,12 +7,9 @@ import type { ReportCardItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
 import { openReport } from "./openReport.js";
 
-/* The write-up, where it happened. The reader watched every turn before this
-   one, so the turn that produces the report belongs in the same column rather
-   than the page rearranging itself the moment the run stops.
-
-   Nothing opens on its own: a report that slides in over the message being read
-   is the page moving under the reader. */
+/* The turn that produces the report belongs in the same column as the turns
+   before it. Nothing opens on its own: a report that slides in over the message
+   being read is the page moving under the reader. */
 export function ReportCardPanel({
   item,
   retrying = false,

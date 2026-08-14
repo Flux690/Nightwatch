@@ -176,10 +176,8 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     await resolvePending(sessionId);
 
-    // Reloading is the only way a user sees a finished investigation, so the
-    // decision has to be reconstructible from the database, not from the browser
-    // that made it. Nothing stores it: the registry says the call was gated and
-    // the outcome says it was declined.
+    // The decision has to be reconstructible from the database, not the browser
+    // that made it: the registry says gated, the outcome says declined.
     const items = await getTranscript(sessionId);
     const card = items.find((i) => i.kind === "approval_card");
     expect(card?.kind === "approval_card" && card.state).toMatchObject({

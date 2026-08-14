@@ -14,7 +14,6 @@ mockCreateProvider.mockImplementation(() => scriptRunner.create());
 import {
   appendRowsAndInterrupt,
   appendTranscriptRows,
-  createSession,
   getTranscriptRows,
   isRunning,
   claimRun,
@@ -142,10 +141,8 @@ describe("recovering runs a restart interrupted", () => {
 
     await recoverDeadRuns();
 
-    /* The replay runs in a different process from the one that proposed the
-       call, so how it went has to ride the row it writes: there is nowhere else
-       left to put it. GetRecentChanges has no GitHub integration here, so it
-       answers with a class rather than cleanly. */
+    // The replay runs in a different process, so how it went has to ride the row
+    // it writes. No GitHub integration here, so the call answers with a class.
     const answering = getTranscriptRows(sessionId)
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-read");

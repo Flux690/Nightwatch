@@ -10,14 +10,9 @@ interface Routed {
   skipped: number;
 }
 
-/* The one path an inbound delivery takes. One webhook is one alert group, so the
-   group is routed whole rather than alert by alert: splitting it here and
-   regrouping on our own clock would replace the user's group_by with a guess.
-
-   An alert joins a live or suspended session only when that session already
-   covers its group. That is Alertmanager's decision arriving as a string, not a
-   relationship inferred from labels, so the model is told an alert fired and is
-   never asked whether it belongs. Everything else waits for its own seat. */
+/* One webhook is one group, routed whole: splitting it and regrouping on our own
+   clock would replace the user's group_by with a guess. An alert joins a live or
+   suspended session only when that session already covers its group. */
 export function routeDelivery(
   groupKey: string,
   firing: NormalizedAlert[],

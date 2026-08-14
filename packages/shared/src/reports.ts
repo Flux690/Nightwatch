@@ -1,8 +1,5 @@
-// The investigation record, in two parts with two authors and two moments. The
-// ledger is rows the agent appends as it works; the composed report is written
-// once at the end, over the ledger, and adds only what the ledger has no field
-// for. Status, conviction, the evidence and what ran are all answered by the
-// system.
+// Two parts, two authors, two moments: the ledger the agent appends to as it
+// works, and the report written once at the end over a ledger already complete.
 
 import type { ToolOutcome } from "./messages.js";
 
@@ -85,15 +82,9 @@ export interface Report {
   updatedAt: string;
 }
 
-/* What a cited call produced, so the console looks a renderer up rather than
-   sniffing the result's shape for one. Declared on the tool that produces it and
-   read back from the registry, never guessed from the result: a tool's own
-   declaration cannot drift from what it returns, and a shape test can.
-
-   Coarser than the renderers on purpose - series, comparison and single reading
-   are all `metric`, because which of the three to draw is a fact about this
-   result that the renderer already works out. A crashed call needs no kind:
-   `outcome` below already says so. */
+/* So the console looks a renderer up rather than sniffing the result's shape.
+   Declared on the tool, never guessed: a declaration cannot drift from what the
+   tool returns, a shape test can. Coarser than the renderers on purpose. */
 export type EvidenceKind =
   "metric" | "logs" | "change" | "state" | "diff" | "text";
 

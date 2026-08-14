@@ -201,10 +201,9 @@ export function SessionView({
 
   const session = useSession(activeSessionId);
 
-  /* Arriving at a session that is already working. The live state below is this
-     component's, so leaving and returning starts it empty; the snapshot is the
-     only thing that can say a run is in flight. Read once per session, because
-     after that the stream is the truth and a refetch mid-suspend would undo it. */
+  /* The live state below is this component's, so leaving and returning starts it
+     empty and only the snapshot can say a run is in flight. Read once: after
+     that the stream is the truth and a refetch mid-suspend would undo it. */
   const seededFor = useRef<string | null>(null);
   useEffect(() => {
     if (activeSessionId === null || session === null) return;
@@ -416,10 +415,8 @@ export function SessionView({
     [respond],
   );
 
-  /* Not a new mechanism: the same loop, the same tool, the same seeded
-     transcript. The route exists so the sentence handed to the model is
-     versioned beside the other sentences handed to the model, rather than being
-     composed here and drifting from them. */
+  // The same loop, tool and seed. The route exists so the sentence handed to the
+  // model is versioned beside the others rather than composed here.
   const retryReport = useMutation({
     mutationFn: () =>
       apiFetch<void>(`/api/sessions/${activeSessionId}/report/retry`, {

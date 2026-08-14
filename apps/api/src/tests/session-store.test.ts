@@ -194,10 +194,8 @@ describe("API-local session store", () => {
   });
 
   it("carries a tool call's outcome class into the rebuilt transcript", () => {
-    /* The run stamps it onto the result part on the way to disk, because the
-       provider message the transcript is rebuilt from has nowhere to put our
-       own classification - one dialect carries no error flag at all. Without
-       it a reload draws a miss in the same red as a crash. */
+    // Stamped onto the part on the way to disk, because the provider message has
+    // nowhere to put it. Without it a reload draws a miss as a crash.
     const m = meta();
     seedAlertSession(m, [alert]);
     appendTranscriptRows([
@@ -565,10 +563,8 @@ describe("API-local session store", () => {
         expect(statusOf(sessionId)).toBe("resolved");
       });
 
-      /* The whole point of the reconciler: a fix lands, the rule's `for:`
-         elapses, and the alert goes quiet minutes after the run that fixed it
-         has ended. Nothing was listening for that before, and the finish gate
-         cannot be, because it only ever runs at the instant a run ends. */
+      // A fix lands, the rule's `for:` elapses, and the alert goes quiet minutes
+      // after the run ended. The finish gate cannot hear that; the sweep can.
       it("resolves after the run ended, with no webhook, when the sweep next asks", async () => {
         const sessionId = investigation();
         seedCompleteReport(sessionId);

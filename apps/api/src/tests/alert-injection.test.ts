@@ -64,10 +64,8 @@ function webOneManifest() {
 // injected (or state asserted) while a run is parked mid-turn.
 const gate = createGateController();
 
-/* A group key per scenario. Sharing one across tests would be wrong on the
-   product's own terms: a session covering that group is exactly what a later
-   alert in it should join, so a shared key makes one test's session capture the
-   next test's alerts. */
+// One per scenario: a session covering a group is exactly what a later alert in
+// it should join, so a shared key makes one test capture the next test's alerts.
 const MIDRUN_GROUP = '{}:{alertname="MidRun"}';
 const SUSPENDED_GROUP = '{}:{alertname="Suspended"}';
 const RESUME_GROUP = '{}:{alertname="Resume"}';
@@ -296,10 +294,8 @@ describe("mid-run alert injection (loop seam)", () => {
     // again must not open a second session for it.
     expect(isDuplicate(alert("primary-sus", firedAtOfSuspended))).toBe(true);
 
-    /* Suspended is still covering. The session is parked on a person, not
-       finished, and the alert source has said this new alert belongs with the
-       ones already here - so it rides along and the model is told when the run
-       picks back up, rather than opening a second investigation of one group. */
+    // Suspended is still covering: parked on a person, not finished. The alert
+    // rides along rather than opening a second investigation of one group.
     const before = countInvestigations();
     routeDelivery(SUSPENDED_GROUP, [alert("same-group-while-suspended")]);
     expect(countInvestigations()).toBe(before);

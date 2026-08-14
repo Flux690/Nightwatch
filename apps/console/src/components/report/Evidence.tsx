@@ -10,13 +10,9 @@ import { ChangesList, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
 import { plotFrom } from "./plot.js";
 
-/* One cited tool call, shown under the claim it backs.
-
-   Readings only: a chart, a list of merged changes, or the one line the result
+/* Readings only: a chart, a list of merged changes, or the one line the result
    amounts to. The raw body is deliberately absent - a report that quotes two
-   hundred log lines is a transcript with extra steps, and the transcript is one
-   click away. That also settles the duplicate-line problem for good: with no
-   body beneath it, the reading cannot repeat itself. */
+   hundred log lines is a transcript with extra steps, one click away. */
 export function Evidence({
   entry,
   alert,

@@ -15,11 +15,9 @@ import { StatusText, type StatusTone } from "@/components/ui/status";
 import { revealToolCall } from "@/components/transcript/revealToolCall";
 import { Evidence } from "./Evidence.js";
 
-/* The investigation as a document. Two authors on one page: the prose at the
-   top is the model's, written in one call once the run was over; everything
-   beneath it - what backs a claim, how well, and what actually ran - is the
-   system answering for itself. The headings are nominal throughout, because
-   there is no "we" here: there is NightWarden, and there is the record. */
+/* Two authors on one page: the prose at the top is the model's, everything
+   beneath it - what backs a claim, how well, what actually ran - is the system
+   answering for itself. The headings are nominal: there is no "we" here. */
 
 // Colour is kept for the two verdicts that change what a user does next.
 // The rest are set in the ink hierarchy: a page where every label shouts says
@@ -271,10 +269,8 @@ export function ReportPanel({
   const ruledOut = ranked.filter((h) => h.verdict === "disproven");
   const timeline = mergedTimeline(submitted?.timeline ?? [], decisions);
 
-  /* A piece of evidence is drawn in full once per report; every later citation
-     of it is named and linked instead. Filled while rendering on purpose - the
-     order claims appear in is the order the reader meets them in, so the first
-     drawing is the one they can scroll back to. */
+  // Drawn in full once per report; later citations are named and linked. Filled
+  // while rendering, so the first drawing is the one the reader can scroll back to.
   const drawn = new Set<string>();
   const citedUnder = (ids: string[]): React.JSX.Element | null => {
     const cited = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
@@ -297,10 +293,8 @@ export function ReportPanel({
     );
   };
 
-  /* The verdict label is dropped under "Ruled out", where the heading already
-     says it. The conviction mark is not: how well a dismissal is backed is the
-     same question as how well a cause is, and the reader who doubts the verdict
-     is exactly the one who needs it. */
+  // The verdict label is dropped under "Ruled out" - the heading says it. The
+  // conviction mark is not: the reader who doubts the verdict needs it most.
   const claimRow = (h: Hypothesis, withVerdict: boolean): React.JSX.Element => (
     <li key={h.id}>
       <div className="flex items-baseline gap-2">

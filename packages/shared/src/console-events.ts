@@ -140,10 +140,9 @@ export interface ConsoleReportUpdated extends ConsoleEnvelope {
   };
 }
 
-/* Alerts are waiting for a free concurrency seat, or one just started. Not a
-   session event: a queued alert is an alert, so it has no session id to name and
-   nothing to render in the list. The console draws it as a band instead, and the
-   limit rides along because raising it is what the reader can actually do. */
+/* Not a session event: a queued alert is an alert, with no session id to name
+   and nothing to render in the list. The limit rides along because raising it is
+   what the reader can actually do. */
 export interface ConsoleQueueChanged extends ConsoleEnvelope {
   type: "QUEUE_CHANGED";
   payload: {
