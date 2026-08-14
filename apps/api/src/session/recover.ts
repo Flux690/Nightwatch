@@ -3,7 +3,6 @@ import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { recordToolOutcome } from "../db/tool-outcomes.js";
 import {
   appendErrorMessage,
   appendTranscriptRows,
@@ -80,13 +79,12 @@ async function answerPendingCalls(
       toolUseId: call.toolUseId,
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
     });
-    if (outcome !== undefined)
-      recordToolOutcome(sessionId, call.toolUseId, outcome);
     parts.push({
       type: "tool_result",
       toolCallId: call.toolUseId,
       output: content,
       ...(isToolFailure(outcome) && { isError: true }),
+      ...(outcome !== undefined && { outcome }),
     });
     texts.push(content);
   }

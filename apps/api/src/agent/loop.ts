@@ -53,8 +53,10 @@ import { dispatcher } from "../dispatcher.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
+  MessagePart,
   NormalizedAlert,
   SubmittedReport,
+  ToolOutcome,
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
@@ -67,6 +69,23 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
+/* Our classification of how a call went, put back onto the part on the way to
+   disk. It cannot survive the provider: `outcome` is not a wire field, and one
+   dialect carries no error flag at all, so a snapshot always comes back without
+   it. The run knew it before the row existed, which is what makes stamping here
+   an act of remembering rather than of guessing. */
+function stampOutcomes(
+  parts: MessagePart[],
+  outcomes: ReadonlyMap<string, ToolOutcome>,
+): MessagePart[] {
+  if (outcomes.size === 0) return parts;
+  return parts.map((part) => {
+    if (part.type !== "tool_result") return part;
+    const outcome = outcomes.get(part.toolCallId);
+    return outcome === undefined ? part : { ...part, outcome };
+  });
+}
+
 // Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot index
 // so rows the seed skipped never collide. `harnessTurns` names the indices
 // NightWarden authored, which the provider cannot tell from the user's.
@@ -76,6 +95,7 @@ function persistNewTurns(
   fromCount: number,
   seqOffset: number,
   harnessTurns: ReadonlySet<number>,
+  outcomes: ReadonlyMap<string, ToolOutcome>,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
@@ -88,7 +108,7 @@ function persistNewTurns(
       seq: seqOffset + i,
       kind: harnessTurns.has(i) ? "nightwarden" : m.role,
       content: m.content,
-      parts: m.parts,
+      parts: stampOutcomes(m.parts, outcomes),
       ...(m.native && { native: m.native }),
       timestamp: new Date().toISOString(),
     });
@@ -264,6 +284,20 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   // by the time the diff is persisted a harness turn is indistinguishable from
   // one the user typed.
   const harnessTurns = new Set<number>();
+
+  /* Every outcome this run has seen, by the call it belongs to. Held for the
+     whole run rather than the turn: a snapshot re-persists nothing already
+     written, but a resumed turn's results are stamped from what the suspend
+     parked, which arrived on this run's input rather than from its own tools. */
+  const seenOutcomes = new Map<string, ToolOutcome>();
+  const noteOutcomes = (results: readonly ToolResult[]): void => {
+    for (const result of results) {
+      if (result.outcome !== undefined) {
+        seenOutcomes.set(result.tool_use_id, result.outcome);
+      }
+    }
+  };
+
   const sendHarnessMessage = (provider: LLMProvider, text: string): void => {
     provider.appendUserMessage(text);
     harnessTurns.add(provider.snapshot().length - 1);
@@ -297,6 +331,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       persistedCount,
       seqOffset,
       harnessTurns,
+      seenOutcomes,
     );
     if (signal?.aborted) {
       log.info("run stopped by user during the closing turn");
@@ -345,6 +380,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   if (input.resumeToolResults && input.resumeToolResults.length > 0) {
     // Resume from a durable interrupt: seed the prior transcript, then append
     // the resolved tool_results turn so the next chat() sees a complete context.
+    noteOutcomes(input.resumeToolResults);
     if (input.seed) {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
@@ -356,6 +392,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       persistedCount,
       seqOffset,
       harnessTurns,
+      seenOutcomes,
     );
   } else if (input.seed && input.seed.length > 0) {
     provider.seed(input.seed);
@@ -370,6 +407,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         persistedCount,
         seqOffset,
         harnessTurns,
+        seenOutcomes,
       );
     } else if (input.harnessMessage) {
       sendHarnessMessage(provider, input.harnessMessage);
@@ -379,6 +417,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         persistedCount,
         seqOffset,
         harnessTurns,
+        seenOutcomes,
       );
     }
   } else {
@@ -394,6 +433,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       persistedCount,
       seqOffset,
       harnessTurns,
+      seenOutcomes,
     );
     // Brand-new session only: refine the title in the background. Chat uses the
     // message; an alert, a compact summary.
@@ -408,6 +448,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       persistedCount,
       seqOffset,
       harnessTurns,
+      seenOutcomes,
     );
   };
 
@@ -520,6 +561,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         },
         log,
       });
+      noteOutcomes(toolResults);
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
       persist();
 
@@ -677,6 +719,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       log,
     });
 
+    noteOutcomes(toolResults);
+
     // A turn's tools outlive the stop that arrives during them, so the gate is
     // reached already aborted; suspending here parks an interrupt on a dead run.
     if (signal?.aborted) {
@@ -702,6 +746,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         persistedCount,
         seqOffset,
         harnessTurns,
+        seenOutcomes,
         interrupt,
       );
       // Publish HUMAN_INPUT_REQUIRED after the row is durably in the DB.
@@ -770,6 +815,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     persistedCount,
     seqOffset,
     harnessTurns,
+    seenOutcomes,
     continueInterrupt,
   );
   publishTranscriptItem({

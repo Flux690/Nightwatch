@@ -13,7 +13,6 @@ import type {
 } from "@nightwarden/shared";
 import { amendReport, appendToReport, getReport } from "../db/reports.js";
 import { getTranscriptRows } from "../db/sessions.js";
-import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput, wasGated } from "../session/transcript.js";
 import { findTool } from "./tools/toolset.js";
@@ -35,6 +34,9 @@ interface LedgerEntry {
   toolName: string;
   input: Record<string, unknown>;
   result: string | null;
+  // Absent when the call simply answered. Carried on the result part it belongs
+  // to, so one walk answers both what a call returned and how it went.
+  outcome?: ToolOutcome;
   timestamp: string;
 }
 
@@ -57,7 +59,10 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
         byToolUseId.set(part.id, entry);
       } else if (part.type === "tool_result") {
         const entry = byToolUseId.get(part.toolCallId);
-        if (entry) entry.result = part.output;
+        if (entry) {
+          entry.result = part.output;
+          if (part.outcome !== undefined) entry.outcome = part.outcome;
+        }
       }
     }
   }
@@ -100,11 +105,10 @@ export function resolveEvidence(
 ): ResolvedEvidence[] {
   const cited = citedIds(report);
   if (cited.size === 0) return [];
-  const outcomes = getToolOutcomes(sessionId);
   const resolved: ResolvedEvidence[] = [];
-  for (const { toolUseId, toolName, input, result } of ledgerIn(sessionId)) {
+  for (const entry of ledgerIn(sessionId)) {
+    const { toolUseId, toolName, input, result, outcome } = entry;
     if (!cited.has(toolUseId) || result === null) continue;
-    const outcome = outcomes.get(toolUseId);
     resolved.push({
       toolUseId,
       toolName,
@@ -138,10 +142,9 @@ function convictionOf(
    from the session's own ledger. The registry says a call was gated, the outcome
    says it was declined, and who decided is not recorded: there is one user. */
 export function gatedCalls(sessionId: string): GatedCall[] {
-  const outcomes = getToolOutcomes(sessionId);
   return ledgerIn(sessionId).flatMap((entry) => {
     if (!wasGated(entry.toolName) || entry.result === null) return [];
-    const outcome = outcomes.get(entry.toolUseId);
+    const { outcome } = entry;
     return [
       {
         toolUseId: entry.toolUseId,
@@ -162,14 +165,11 @@ export function gatedCalls(sessionId: string): GatedCall[] {
 // The instant the last released write answered, which is what makes a later read
 // a confirmation rather than another observation. A declined call changed
 // nothing, so it never starts that clock.
-function lastExecutedAt(
-  ledger: Map<string, LedgerEntry>,
-  outcomes: Map<string, ToolOutcome>,
-): string | null {
+function lastExecutedAt(ledger: Map<string, LedgerEntry>): string | null {
   let latest: string | null = null;
   for (const entry of ledger.values()) {
     if (entry.result === null || !wasGated(entry.toolName)) continue;
-    if (outcomes.get(entry.toolUseId) === "rejected") continue;
+    if (entry.outcome === "rejected") continue;
     if (latest === null || entry.timestamp > latest) latest = entry.timestamp;
   }
   return latest;
@@ -180,7 +180,7 @@ export function computeConviction(
   report: Report,
 ): ReportConviction {
   const ledger = new Map(ledgerIn(sessionId).map((e) => [e.toolUseId, e]));
-  const executedAt = lastExecutedAt(ledger, getToolOutcomes(sessionId));
+  const executedAt = lastExecutedAt(ledger);
   const graded: ReportConviction = {};
   for (const row of report.hypotheses) {
     const conviction = convictionOf(row.evidenceIds, ledger, executedAt);

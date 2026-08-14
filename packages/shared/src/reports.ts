@@ -4,7 +4,7 @@
 // for. Status, conviction, the evidence and what ran are all answered by the
 // system.
 
-import type { ToolOutcome } from "./transcript.js";
+import type { ToolOutcome } from "./messages.js";
 
 // How a hypothesis resolved. Five, because without a home for "symptom of
 // something upstream" the model must overclaim a root cause or say nothing. A

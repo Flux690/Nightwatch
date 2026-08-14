@@ -141,10 +141,14 @@ export type {
   WireDialect,
   NativeEnvelope,
   CanonicalMessage,
-} from "./messages.js";
-export { messagePartsToText } from "./messages.js";
-export type {
   ToolOutcome,
+} from "./messages.js";
+export {
+  messagePartsToText,
+  TOOL_OUTCOMES,
+  isToolOutcome,
+} from "./messages.js";
+export type {
   ToolCallState,
   UserTurnItem,
   AgentTextItem,
@@ -158,11 +162,7 @@ export type {
   AlertArrivedItem,
   TranscriptItem,
 } from "./transcript.js";
-export {
-  transcriptItemKey,
-  TOOL_OUTCOMES,
-  isToolOutcome,
-} from "./transcript.js";
+export { transcriptItemKey } from "./transcript.js";
 export type {
   Verdict,
   Conviction,

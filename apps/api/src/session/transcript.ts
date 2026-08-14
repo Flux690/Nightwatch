@@ -11,7 +11,6 @@ import {
 } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { getSession, getTranscriptRows, isRunning } from "../db/sessions.js";
-import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { findTool, isElicitation } from "../agent/tools/toolset.js";
 
 // The tool input's target key. A write addresses a service by it, and a tool
@@ -153,8 +152,6 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   // transcript rows below, which hold it already.
   const pending = getPendingHumanInputBySessionId(sessionId) ?? null;
 
-  const outcomes = getToolOutcomes(sessionId);
-
   // A decision the user already made, reconstructed rather than stored: the
   // registry says the call needed one, and the outcome says which way it went.
   const decisionFor = (
@@ -166,11 +163,16 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     return outcomes.get(toolUseId) === "rejected" ? "rejected" : "approved";
   };
 
+  // One pass for both: a result and how it went arrive on the same part.
   const results = new Map<string, string>();
+  const outcomes = new Map<string, ToolOutcome>();
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool_result") {
         results.set(part.toolCallId, part.output);
+        if (part.outcome !== undefined) {
+          outcomes.set(part.toolCallId, part.outcome);
+        }
       }
     }
   }

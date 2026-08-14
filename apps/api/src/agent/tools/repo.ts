@@ -18,7 +18,6 @@ import {
   SandboxUnavailableError,
 } from "../../sandbox/errors.js";
 import { classifyGitHubError, gitHubErrorDetail } from "./github.js";
-import { getToolOutcomes } from "../../db/tool-outcomes.js";
 import { logger } from "../../logger.js";
 import { publishSandboxStatus } from "../../session/stream.js";
 import {
@@ -68,9 +67,20 @@ const PATH_UNLOCKING_TOOLS: ReadonlySet<string> = new Set(["Read", "Write"]);
    not make the model read files it already read. A call that recorded an outcome
    did not answer cleanly, and only a clean answer showed the model anything. */
 function readPathsFor(sessionId: string): string[] {
-  const outcomes = getToolOutcomes(sessionId);
+  const rows = getTranscriptRows(sessionId);
+  // Any outcome at all means the call did not answer cleanly, `partial`
+  // included: a fan-out that half answered showed the model half a file.
+  const outcomes = new Set(
+    rows.flatMap((row) =>
+      row.parts.flatMap((part) =>
+        part.type === "tool_result" && part.outcome !== undefined
+          ? [part.toolCallId]
+          : [],
+      ),
+    ),
+  );
   const paths: string[] = [];
-  for (const row of getTranscriptRows(sessionId)) {
+  for (const row of rows) {
     for (const part of row.parts) {
       if (part.type !== "tool_call") continue;
       if (!PATH_UNLOCKING_TOOLS.has(part.name)) continue;

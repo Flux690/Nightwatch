@@ -1,7 +1,11 @@
 // Provider-neutral contract. The investigation domain talks to LLMs only
 // through these shapes, never to a vendor SDK directly.
 
-import type { MessagePart, NativeEnvelope } from "@nightwarden/shared";
+import type {
+  MessagePart,
+  NativeEnvelope,
+  ToolOutcome,
+} from "@nightwarden/shared";
 
 export interface ToolSchema {
   name: string;
@@ -24,6 +28,10 @@ export interface ToolResult {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  /* Carried alongside the wire fields, never sent: adapters read the three above
+     and ignore this. It rides here so a result that crosses a suspend - parked
+     in the interrupt row as JSON - comes back knowing how it went. */
+  outcome?: ToolOutcome;
 }
 
 export interface ChatResponse {

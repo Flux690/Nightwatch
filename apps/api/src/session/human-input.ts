@@ -3,7 +3,6 @@ import {
   deletePendingHumanInput,
   getPendingHumanInputBySessionId,
 } from "../db/interrupts.js";
-import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { findToolCall } from "../db/sessions.js";
 import { loadConfig } from "../config/store.js";
 import { dispatcher } from "../dispatcher.js";
@@ -13,11 +12,7 @@ import { publishInterruptResolved, publishTranscriptItem } from "./stream.js";
 import { toolCallCard } from "./transcript.js";
 import { buildSeed } from "./seed.js";
 import { executeApprovedTool } from "./approval-executor.js";
-import type {
-  ApprovalResponse,
-  RespondRequest,
-  ToolOutcome,
-} from "@nightwarden/shared";
+import type { ApprovalResponse, RespondRequest } from "@nightwarden/shared";
 
 export class HumanInputError extends Error {
   constructor(
@@ -97,11 +92,13 @@ function unpause(
   completedResults: ToolResult[],
   gatedResult: ToolResult,
   card: { toolName: string; input: Record<string, unknown> },
-  outcome?: ToolOutcome,
 ): HumanInputActionResult {
   ensureDeleted(sessionId);
 
   const resolvedAt = new Date().toISOString();
+  // Read off the result rather than passed beside it: how a call went belongs
+  // to the call, and two ways to say it is one way to say two things.
+  const { outcome } = gatedResult;
 
   publishTranscriptItem({
     sessionId,
@@ -210,7 +207,6 @@ export async function respondToPendingHumanInput(
       { sessionId, tool: call.name, toolUseId: pending.toolUseId },
       "stale claim: a previous attempt died holding it, outcome unknown",
     );
-    recordToolOutcome(sessionId, pending.toolUseId, "system");
     return unpause(
       sessionId,
       pending.toolUseId,
@@ -221,9 +217,9 @@ export async function respondToPendingHumanInput(
         content:
           "This call was already attempted and the outcome is unknown - it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
         is_error: true,
+        outcome: "system",
       },
       { toolName: call.name, input: call.input },
-      "system",
     );
   }
 
@@ -243,7 +239,7 @@ export async function respondToPendingHumanInput(
   if (decision === "approve") {
     // executeApprovedTool never throws - every fault becomes an is_error result -
     // so the approve path always reaches unpause() and the run always resumes.
-    const { result, outcome } = await executeApprovedTool(pending, call);
+    const result = await executeApprovedTool(pending, call);
     logger.info({ sessionId, tool: call.name }, "approved");
     return unpause(
       sessionId,
@@ -252,7 +248,6 @@ export async function respondToPendingHumanInput(
       pending.completedResults,
       result,
       { toolName: call.name, input: call.input },
-      outcome,
     );
   }
 
@@ -267,10 +262,10 @@ export async function respondToPendingHumanInput(
         : "They gave no reason. Take the rejection itself as the signal"
     }, then continue the investigation with a different approach. Do not call this tool again with the same arguments.`,
     is_error: true,
+    // The one outcome a human authors. The output carries the refusal we sent
+    // the model, which reads as a failure; only this says a person chose it.
+    outcome: "rejected",
   };
-  // The one outcome a human authors. The transcript carries the refusal we sent
-  // the model, which reads as a failure; only this says a person chose it.
-  recordToolOutcome(sessionId, pending.toolUseId, "rejected");
   logger.info({ sessionId, tool: call.name }, "rejected");
   return unpause(
     sessionId,
@@ -279,6 +274,5 @@ export async function respondToPendingHumanInput(
     pending.completedResults,
     gatedResult,
     { toolName: call.name, input: call.input },
-    "rejected",
   );
 }

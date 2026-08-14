@@ -208,17 +208,6 @@ CREATE TABLE IF NOT EXISTS session_transcript (
   timestamp      TEXT      NOT NULL,
   PRIMARY KEY (session_id, seq)
 );
-
--- How a tool call ended, as the API classified it. Our own reading, which the
--- model never saw: parts above are rebuilt from the vendor's message and one
--- dialect carries no error flag at all, so it has nowhere to ride but here.
-CREATE TABLE IF NOT EXISTS tool_outcomes (
-  session_id     TEXT   NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
-  tool_use_id    TEXT   NOT NULL,
-  outcome        TEXT   NOT NULL,
-  PRIMARY KEY (session_id, tool_use_id)
-);
-
 -- What a suspended run is waiting on. One per session: the loop gates on the
 -- first write or question of a turn and stops there. tool_use_id points at the
 -- gated call, which the transcript holds under that same id.

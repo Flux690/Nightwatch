@@ -33,7 +33,6 @@ import { recordHypothesis } from "../agent/report.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { getReport } from "../db/reports.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
-import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
 import {
@@ -195,8 +194,10 @@ describe("API-local session store", () => {
   });
 
   it("carries a tool call's outcome class into the rebuilt transcript", () => {
-    // The provider message a reloaded transcript is rebuilt from has nowhere to
-    // put our classification, so a reload would otherwise lose it.
+    /* The run stamps it onto the result part on the way to disk, because the
+       provider message the transcript is rebuilt from has nowhere to put our
+       own classification - one dialect carries no error flag at all. Without
+       it a reload draws a miss in the same red as a crash. */
     const m = meta();
     seedAlertSession(m, [alert]);
     appendTranscriptRows([
@@ -204,11 +205,15 @@ describe("API-local session store", () => {
         ...msg(m.sessionId, 0, { kind: "assistant" }),
         parts: [
           { type: "tool_call", id: "tu-miss", name: "Read", input: {} },
-          { type: "tool_result", toolCallId: "tu-miss", output: "not found" },
+          {
+            type: "tool_result",
+            toolCallId: "tu-miss",
+            output: "not found",
+            outcome: "expected_miss",
+          },
         ],
       },
     ]);
-    recordToolOutcome(m.sessionId, "tu-miss", "expected_miss");
 
     const card = buildTranscript(m.sessionId).find(
       (item) => item.kind === "tool_card",

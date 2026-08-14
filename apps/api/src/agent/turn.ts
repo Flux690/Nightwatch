@@ -2,7 +2,6 @@ import { executeTool, resolvePolicy } from "./tools/toolset.js";
 import { isToolFailure } from "./tools/types.js";
 import type { OfferedToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
-import { recordToolOutcome } from "../db/tool-outcomes.js";
 import { publishTranscriptItem } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
 import type { logger } from "../logger.js";
@@ -13,8 +12,10 @@ import type { ToolResult, ToolUse } from "../llm/types.js";
 type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {
-  // One tool_result per non-gated tool_use, so every block in the assistant
-  // message is answered even when a later one suspends the run.
+  /* One tool_result per non-gated tool_use, so every block in the assistant
+     message is answered even when a later one suspends the run. Each carries
+     its own outcome, which is what the loop stamps onto the persisted part -
+     the provider round-trip in between has nowhere to put it. */
   toolResults: ToolResult[];
   // The single gated call to suspend on, or null if the turn had none. At most
   // one per turn; subsequent gated calls are rejected inline.
@@ -45,8 +46,8 @@ export async function processToolUses(params: {
         tool_use_id: call.id,
         content: "Another gated action is pending. Retry after it resolves.",
         is_error: true,
+        outcome: "system",
       });
-      recordToolOutcome(sessionId, call.id, "system");
       return;
     }
     gated = { tool: call, kind };
@@ -69,8 +70,8 @@ export async function processToolUses(params: {
         tool_use_id: tool.id,
         content: `Tool "${tool.name}" is not available in this investigation. Do not retry.`,
         is_error: true,
+        outcome: "system",
       });
-      recordToolOutcome(sessionId, tool.id, "system");
       continue;
     }
 
@@ -96,10 +97,8 @@ export async function processToolUses(params: {
       tool_use_id: tool.id,
       content,
       is_error: isToolFailure(outcome),
+      ...(outcome !== undefined && { outcome }),
     });
-    if (outcome !== undefined) {
-      recordToolOutcome(sessionId, tool.id, outcome);
-    }
     publishTranscriptItem({
       sessionId,
       item: toolCallCard({

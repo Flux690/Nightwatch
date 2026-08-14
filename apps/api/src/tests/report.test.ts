@@ -14,7 +14,7 @@ vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
 
 import { mockCreateProvider } from "./llm-factory-mock.js";
 
-import type { NormalizedAlert } from "@nightwarden/shared";
+import type { NormalizedAlert, ToolOutcome } from "@nightwarden/shared";
 import { runSession } from "../agent/loop.js";
 import {
   computeConviction,
@@ -27,12 +27,15 @@ import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
 import { buildSeed } from "../session/seed.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
-import { recordToolOutcome } from "../db/tool-outcomes.js";
 import {
   deletePrometheusIntegration,
   savePrometheusIntegration,
 } from "../db/integrations.js";
-import { createSession, appendTranscriptRows } from "../db/sessions.js";
+import {
+  createSession,
+  appendTranscriptRows,
+  getTranscriptRows,
+} from "../db/sessions.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { seedAlertSession, seedChatSession } from "./session-helper.js";
 import { buildTranscript } from "../session/transcript.js";
@@ -100,12 +103,15 @@ describe("the investigation record", () => {
 
   // One ledger entry: the call and the result it answered with, at a chosen
   // instant so a read after a remediation is distinguishable from one before.
+  // `outcome` rides the result part, which is where production writes it: the
+  // run knows how a call went before the row answering it exists.
   function appendCall(
     sessionId: string,
     seq: number,
     entry: { id: string; name: string; input: Record<string, unknown> },
     output: string,
     at: string,
+    outcome?: ToolOutcome,
   ): void {
     appendTranscriptRows([
       {
@@ -128,7 +134,14 @@ describe("the investigation record", () => {
         seq: seq + 1,
         kind: "user",
         content: "results",
-        parts: [{ type: "tool_result", toolCallId: entry.id, output }],
+        parts: [
+          {
+            type: "tool_result",
+            toolCallId: entry.id,
+            output,
+            ...(outcome !== undefined && { outcome }),
+          },
+        ],
         timestamp: at,
       },
     ]);
@@ -513,7 +526,12 @@ describe("the investigation record", () => {
 
     // The clock a confirmation is measured against is the write itself, read
     // from the ledger: a gated call that answered is one the user released.
-    function appendRestart(sessionId: string, seq: number, at: string): void {
+    function appendRestart(
+      sessionId: string,
+      seq: number,
+      at: string,
+      outcome?: ToolOutcome,
+    ): void {
       appendCall(
         sessionId,
         seq,
@@ -524,6 +542,7 @@ describe("the investigation record", () => {
         },
         "restarted",
         at,
+        outcome,
       );
     }
 
@@ -567,11 +586,41 @@ describe("the investigation record", () => {
       );
     });
 
+    /* The mechanism the three tests above rest on. A provider is handed the
+       wire's error flag and nothing else - one dialect has not even got that -
+       so the class is put back onto the part on the way to disk. Without it a
+       reloaded run cannot tell a miss from a crash from a refusal. */
+    it("keeps the outcome class on the persisted result, not beside it", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          {
+            toolUses: [
+              { id: "tu-gone", name: "GetK8sLogs", input: { target: "x" } },
+            ],
+            text: "",
+          },
+          { toolUses: [], text: "done" },
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("stamped"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("stamped")] });
+
+      // No Kubernetes runner is connected, so the tool is not in the offered
+      // set and the turn answers with a class rather than a result.
+      const answering = getTranscriptRows(sessionId)
+        .flatMap((row) => row.parts)
+        .find((p) => p.type === "tool_result" && p.toolCallId === "tu-gone");
+      expect(answering).toMatchObject({ outcome: "system", isError: true });
+    });
+
     it("never counts a declined call as the write a later read confirms", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
-      appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z");
-      recordToolOutcome(sessionId, "tu-restart", "rejected");
+      appendRestart(sessionId, 4, "2026-07-03T02:05:00.000Z", "rejected");
       appendCall(
         sessionId,
         6,

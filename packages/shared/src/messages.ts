@@ -21,11 +21,44 @@ export interface ToolCallPart {
   input: Record<string, unknown>;
 }
 
+/* Why a call did not simply answer, absent when it did. Recorded rather than
+   derived from a boolean, so a file under a different name reads as a miss
+   instead of in the same red as a crash. The type is derived from the list. */
+export const TOOL_OUTCOMES = [
+  // Some runners in a fan-out answered and some did not; the envelope names which.
+  "partial",
+  // The tool worked and the thing asked for is not there.
+  "expected_miss",
+  // Transient: a timeout, an unreachable runner, an upstream that may recover.
+  "retryable",
+  // Credentials or scope refused it, so widening access is the fix.
+  "permission",
+  // The tool itself broke.
+  "system",
+  // The user said no, so it never ran. The only member a human authors, and the
+  // only record that a gated call was declined: the output holds the refusal we
+  // sent the model, not the decision behind it.
+  "rejected",
+] as const;
+
+export type ToolOutcome = (typeof TOOL_OUTCOMES)[number];
+
+export function isToolOutcome(value: unknown): value is ToolOutcome {
+  return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
+}
+
 export interface ToolResultPart {
   type: "tool_result";
   toolCallId: string;
   output: string;
+  // The wire fact a provider needs. Derived from `outcome` by `isToolFailure`,
+  // so the two cannot disagree about whether something went wrong.
   isError?: boolean;
+  /* Our own classification, which no wire format carries - one dialect has no
+     error flag at all. Stamped here from what the run already knew rather than
+     read back off the provider, which is what lets it live with the call it
+     describes instead of in a table beside it. */
+  outcome?: ToolOutcome;
 }
 
 export type MessagePart =
