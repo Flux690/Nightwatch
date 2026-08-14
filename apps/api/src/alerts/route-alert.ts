@@ -16,7 +16,9 @@ interface Routed {
 export function routeDelivery(
   groupKey: string,
   firing: NormalizedAlert[],
-  droppedAlerts = 0,
+  // Required, not defaulted: a caller that forgets it silently tells every
+  // investigation the group was whole.
+  droppedAlerts: number,
 ): Routed {
   const fresh: NormalizedAlert[] = [];
   let skipped = 0;

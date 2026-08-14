@@ -297,14 +297,14 @@ describe("mid-run alert injection (loop seam)", () => {
     // Suspended is still covering: parked on a person, not finished. The alert
     // rides along rather than opening a second investigation of one group.
     const before = countInvestigations();
-    routeDelivery(SUSPENDED_GROUP, [alert("same-group-while-suspended")]);
+    routeDelivery(SUSPENDED_GROUP, [alert("same-group-while-suspended")], 0);
     expect(countInvestigations()).toBe(before);
     expect(
       dispatcher.drainInbox(sessionId).map((a) => a.sourceAlertId),
     ).toEqual(["same-group-while-suspended"]);
 
     // A different group is a different incident, whatever this session is doing.
-    routeDelivery(OTHER_GROUP, [alert("other-group-while-suspended")]);
+    routeDelivery(OTHER_GROUP, [alert("other-group-while-suspended")], 0);
     await waitFor(() => countInvestigations() === before + 1);
 
     // Drain every run this test started, or the next one inherits a parked

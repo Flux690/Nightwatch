@@ -12,6 +12,7 @@ import type { FastifyInstance } from "fastify";
 import {
   createContractFakeProvider,
   createGateController,
+  type ContractFakeProvider,
   type ScriptedTurn,
 } from "./contract-fake-provider.js";
 
@@ -216,6 +217,26 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     await waitFor(() => countInvestigations() === before + 1);
     const [sessionId] = liveSessions();
     expect(alertIdsOf(sessionId!).sort()).toEqual(["c-1", "c-2", "c-3"]);
+  });
+
+  /* Asserted through the opening turn rather than the stored row: the count
+     crosses the parser, the router, the alert rows and the prompt, and any one
+     of them dropping it leaves the agent reading a partial group as a whole. */
+  it("tells the agent how many alerts the sender left out of a delivery", async () => {
+    useGatedProvider();
+    const before = countInvestigations();
+
+    await ingest(
+      delivery('{}:{alertname="Withheld"}', [{ fingerprint: "wh-1" }], 6),
+    );
+    await waitFor(() => countInvestigations() === before + 1);
+
+    const provider = mockCreateProvider.mock.results.at(-1)
+      ?.value as ContractFakeProvider;
+    await waitFor(() => provider.start.mock.calls.length > 0);
+    expect(provider.start.mock.calls[0]?.[0]).toContain(
+      "left 6 further alerts out of this delivery",
+    );
   });
 
   it("a new alert in a group already being investigated joins that run", async () => {
