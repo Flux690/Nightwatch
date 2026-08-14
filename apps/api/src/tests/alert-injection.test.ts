@@ -213,7 +213,7 @@ describe("mid-run alert injection (loop seam)", () => {
     expect(injection).toContain("injected-mr");
 
     // Release turn 2 and every turn after it: the free-form finish is followed
-    // by the composition turn, which parks on this gate like any other.
+    // by the report turn, which parks on this gate like any other.
     await gate.releaseUntil(() => !dispatcher.isSessionRunning(sessionId));
 
     // The alert is on the session's own row, and the user sees it as an

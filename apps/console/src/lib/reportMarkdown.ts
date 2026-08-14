@@ -59,6 +59,14 @@ export function reportToMarkdown(
 
   const submitted = report?.report.submitted ?? null;
   if (submitted !== null) {
+    // Headline as its own line above the deck, since a postmortem is skimmed by
+    // its first line the same way the console is.
+    if (submitted.headline !== undefined) {
+      sections.push(`**${submitted.headline}**`);
+    }
+    if (submitted.affected !== undefined) {
+      sections.push(`Affected: ${submitted.affected}`);
+    }
     sections.push(submitted.summary);
     if (submitted.timeline.length > 0) {
       sections.push(

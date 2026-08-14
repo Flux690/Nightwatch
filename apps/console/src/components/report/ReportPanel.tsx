@@ -10,7 +10,9 @@ import type {
   Verdict,
 } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { StatusText, type StatusTone } from "@/components/ui/status";
+import { revealToolCall } from "@/components/transcript/revealToolCall";
 import { Evidence } from "./Evidence.js";
 
 /* The investigation as a document. Two authors on one page: the prose at the
@@ -146,7 +148,37 @@ function mergedTimeline(
   return [...written, ...actions].sort((a, b) => a.at.localeCompare(b.at));
 }
 
-function TimelineRow({ entry }: { entry: TimelineEntry }): React.JSX.Element {
+/* The call behind a moment, as a chip that reaches it. The model has been paying
+   tokens on this id since the schema first asked for one; until now nothing
+   drew it, so a timeline entry claimed a fact and hid what showed it. */
+function EvidenceChip({
+  entry,
+  evidence,
+}: {
+  entry: TimelineEntry;
+  evidence: Map<string, ResolvedEvidence>;
+}): React.JSX.Element | null {
+  const cited =
+    entry.evidenceId === undefined ? undefined : evidence.get(entry.evidenceId);
+  if (cited === undefined) return null;
+  return (
+    <Button
+      variant="link"
+      className="h-auto shrink-0 p-0 font-mono text-sm text-ink-subtle"
+      onClick={() => revealToolCall(cited.toolUseId)}
+    >
+      {cited.toolName}
+    </Button>
+  );
+}
+
+function TimelineRow({
+  entry,
+  evidence,
+}: {
+  entry: TimelineEntry;
+  evidence: Map<string, ResolvedEvidence>;
+}): React.JSX.Element {
   const action = entry.action;
   return (
     <li className="flex gap-3">
@@ -154,7 +186,10 @@ function TimelineRow({ entry }: { entry: TimelineEntry }): React.JSX.Element {
         {clockOf(entry.at)}
       </span>
       {action === undefined ? (
-        <span className="min-w-0 text-sm">{entry.what}</span>
+        <>
+          <span className="min-w-0 flex-1 text-sm">{entry.what}</span>
+          <EvidenceChip entry={entry} evidence={evidence} />
+        </>
       ) : (
         <span className="flex min-w-0 items-baseline gap-2">
           <StatusText tone={decisionView(action).tone}>
@@ -288,14 +323,28 @@ export function ReportPanel({
     <div className="mx-auto w-full max-w-report px-8 py-6">
       <AlertBand alerts={alerts} />
       <header>
-        {/* The lede is the answer. Until the run has been written up there is
-            no answer to lead with, so the leading claim stands in for it. */}
+        {/* Headline then deck, which is what the two fields are for: the one
+            sentence that is the answer, and the paragraph that expands it. A
+            report written before `headline` existed has only the summary, so
+            that leads instead; before any write-up, the leading claim does. */}
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-[-0.3px]">
-          {submitted === null ? "Investigation" : submitted.summary}
+          {submitted === null
+            ? "Investigation"
+            : (submitted.headline ?? submitted.summary)}
         </h1>
         {submitted === null && findings[0] !== undefined && (
           <p className="m-0 mt-2 text-lg font-medium">
             {findings[0].statement}
+          </p>
+        )}
+        {submitted?.headline !== undefined && (
+          <p className="m-0 mt-2 text-base text-muted-foreground">
+            {submitted.summary}
+          </p>
+        )}
+        {submitted?.affected !== undefined && (
+          <p className="m-0 mt-2 text-sm text-ink-subtle">
+            Affected: {submitted.affected}
           </p>
         )}
       </header>
@@ -305,7 +354,11 @@ export function ReportPanel({
           <SectionHeading>Timeline</SectionHeading>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {timeline.map((entry, i) => (
-              <TimelineRow key={`${entry.at}-${i}`} entry={entry} />
+              <TimelineRow
+                key={`${entry.at}-${i}`}
+                entry={entry}
+                evidence={byId}
+              />
             ))}
           </ul>
         </section>

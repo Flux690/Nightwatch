@@ -78,6 +78,7 @@ function TranscriptColumn({
   submittingToolUseId,
   onResolve,
   onAnswer,
+  onRetryReport,
 }: {
   persistedItems: TranscriptItem[];
   liveItems: TranscriptItem[];
@@ -93,6 +94,7 @@ function TranscriptColumn({
     reason?: string,
   ) => void;
   onAnswer: (toolUseId: string, answer: string | string[]) => void;
+  onRetryReport: () => void;
 }): React.JSX.Element {
   const persistedItems = useMemo(() => {
     if (lastEchoText === null) return fetched;
@@ -160,6 +162,7 @@ function TranscriptColumn({
             }
             onResolve={onResolve}
             onAnswer={onAnswer}
+            onRetryReport={onRetryReport}
           />
         </MessageScrollerItem>
       ))}
@@ -413,6 +416,28 @@ export function SessionView({
     [respond],
   );
 
+  /* Not a new mechanism: the same loop, the same tool, the same seeded
+     transcript. The route exists so the sentence handed to the model is
+     versioned beside the other sentences handed to the model, rather than being
+     composed here and drifting from them. */
+  const retryReport = useMutation({
+    mutationFn: () =>
+      apiFetch<void>(`/api/sessions/${activeSessionId}/report/retry`, {
+        method: "POST",
+      }),
+    onError: (err) => {
+      toast.show({
+        title: "Could not write the report",
+        message: err instanceof Error ? err.message : "Try again.",
+        variant: "error",
+      });
+    },
+  });
+
+  const handleRetryReport = useCallback(() => {
+    retryReport.mutate();
+  }, [retryReport]);
+
   const handleAnswer = useCallback(
     (toolUseId: string, answer: string | string[]) => {
       const text = Array.isArray(answer) ? answer.join(", ") : answer;
@@ -488,6 +513,7 @@ export function SessionView({
               submittingToolUseId={submittingToolUseId}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
+              onRetryReport={handleRetryReport}
             />
           </MessageScrollerViewport>
           <MessageScrollerButton direction="end" />
@@ -511,6 +537,7 @@ export function SessionView({
               }
               onResolve={handleResolve}
               onAnswer={handleAnswer}
+              onRetryReport={handleRetryReport}
             />
           </div>
         )}

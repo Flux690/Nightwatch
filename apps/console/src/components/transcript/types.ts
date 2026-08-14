@@ -11,6 +11,7 @@ export type {
   ApprovalCardItem,
   ClarificationCardItem,
   ContinueCardItem,
+  ReportCardItem,
   AlertArrivedItem,
   TranscriptItem,
 } from "@nightwarden/shared";

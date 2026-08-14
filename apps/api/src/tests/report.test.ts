@@ -23,6 +23,8 @@ import {
   resolveEvidence,
 } from "../agent/report.js";
 import { REPORT_TOOLS, SUBMIT_REPORT_TOOL } from "../agent/tools/report.js";
+import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
+import { buildSeed } from "../session/seed.js";
 import { executeTool } from "../agent/tools/toolset.js";
 import { getReport } from "../db/reports.js";
 import { recordToolOutcome } from "../db/tool-outcomes.js";
@@ -186,7 +188,7 @@ describe("the investigation record", () => {
     return hypotheses[hypotheses.length - 1]!.id;
   }
 
-  // The composition turn's tool, which is never in the toolset: the loop
+  // The report turn's tool, which is never in the toolset: the loop
   // attaches it alone once the ledger gate has passed.
   async function submit(
     sessionId: string,
@@ -264,6 +266,9 @@ describe("the investigation record", () => {
           evidenceIds: [],
         });
         expect(result.outcome).toBe("system");
+        // The one rule broken most often, so the refusal says what to do about
+        // it rather than only which field failed.
+        expect(String(result.content)).toContain("at least one citation");
       }
       expect(getReport(sessionId)).toBeUndefined();
     });
@@ -299,7 +304,7 @@ describe("the investigation record", () => {
     });
   });
 
-  describe("the composed report", () => {
+  describe("the written report", () => {
     it("writes the prose the ledger has no field for, over a ledger it leaves alone", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
@@ -326,7 +331,7 @@ describe("the investigation record", () => {
         impact: "nine minutes of failed reads",
         recommendation: "revert PR #482",
       });
-      // The ledger it was composed from is untouched by the composing.
+      // The ledger it was written from is untouched by the writing.
       expect(report.hypotheses).toHaveLength(1);
       expect(report.hypotheses[0]!.verdict).toBe("root_cause");
     });
@@ -359,6 +364,77 @@ describe("the investigation record", () => {
       expect(timeline[0]!.what).toBe("PR #482 merged");
       expect(timeline[0]!.evidenceId).toBeUndefined();
       expect(timeline[1]!.evidenceId).toBeUndefined();
+    });
+
+    /* The lane describes the moment, not the call behind it, so an id that names
+       nothing costs the row its citation and never its strand. */
+    it("keeps a row's lane when its citation is dropped", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+
+      await submit(sessionId, {
+        headline: "PR #482 raised the memory floor and web-01 was OOM-killed",
+        affected: "web-01",
+        summary: "the limit was lowered",
+        timeline: [
+          {
+            at: "2026-07-03T01:40:00.000Z",
+            what: "PR #482 merged",
+            lane: "change",
+            evidenceId: "tu-invented",
+          },
+        ],
+        impact: "",
+        recommendation: "revert it",
+      });
+
+      const submitted = getReport(sessionId)!.submitted!;
+      expect(submitted.headline).toBe(
+        "PR #482 raised the memory floor and web-01 was OOM-killed",
+      );
+      expect(submitted.affected).toBe("web-01");
+      expect(submitted.timeline[0]!.lane).toBe("change");
+      expect(submitted.timeline[0]!.evidenceId).toBeUndefined();
+    });
+
+    /* A field left out is a thinner report, not a broken one: failing the call
+       would throw away the fields the model did fill in. A field that is present
+       and blank means "none", which is how the wire schema says optional. */
+    it("stores a report that omits the optional prose, and reads a blank as none", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+      await record(sessionId, "the cache bump leaks", "root_cause", ["tu-1"]);
+
+      await submit(sessionId, {
+        headline: "   ",
+        summary: "the limit was lowered",
+        timeline: [],
+        impact: "",
+        recommendation: "revert it",
+      });
+
+      const submitted = getReport(sessionId)!.submitted!;
+      expect(submitted.headline).toBeUndefined();
+      expect(submitted.affected).toBeUndefined();
+      expect(submitted.summary).toBe("the limit was lowered");
+    });
+
+    // One more attempt is all it gets, so "invalid input" would tell it nothing.
+    it("names the field that failed rather than refusing the whole call blindly", async () => {
+      const sessionId = randomUUID();
+      seedTranscript(sessionId);
+
+      const refused = await submit(sessionId, {
+        summary: "",
+        timeline: [],
+        impact: "",
+        recommendation: "",
+      });
+
+      expect(refused.outcome).toBe("system");
+      expect(String(refused.content)).toContain("summary");
+      expect(getReport(sessionId)?.submitted ?? null).toBeNull();
     });
   });
 
@@ -569,7 +645,7 @@ describe("the investigation record", () => {
         m.startsWith("Your investigation record"),
       );
     }
-    function compositionRequests(index = 0): string[] {
+    function reportRequests(index = 0): string[] {
       return harnessMessages(index).filter((m) =>
         m.startsWith("Your investigation is over"),
       );
@@ -614,7 +690,7 @@ describe("the investigation record", () => {
       };
     }
 
-    it("asks a run that recorded nothing for the record, then composes anyway", async () => {
+    it("asks a run that recorded nothing for the record, then writes up anyway", async () => {
       // Every turn is a free-form finish; the gate should push back MAX_NUDGES
       // times before giving up and composing from what there is.
       mockCreateProvider.mockImplementationOnce(() =>
@@ -633,7 +709,7 @@ describe("the investigation record", () => {
       const requests = completionRequests();
       expect(requests).toHaveLength(3);
       expect(requests[0]).toContain("recorded nothing");
-      // Four investigating turns, then both composition attempts - the scripted
+      // Four investigating turns, then both report attempts - the scripted
       // model never calls the tool, so the run ends with no report at all.
       const provider = mockCreateProvider.mock.results[0]!.value as {
         chat: ReturnType<typeof vi.fn>;
@@ -732,7 +808,89 @@ describe("the investigation record", () => {
       expect(gaps.map((g) => g.kind)).toEqual(["unresolvable_citation"]);
     });
 
-    it("passes silently once the ledger holds a settled claim, then composes", async () => {
+    /* The report is the largest single output of the run - a summary, a timeline
+       array, an impact and a recommendation, with thinking spending the budget
+       first - so the output ceiling is where it most often dies. It used to die
+       into a server log: the reader got a record with no write-up and nothing
+       saying why, or that trying again would help. */
+    it("says the report was cut off rather than ending with nothing", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          recordTurn("root_cause", "the disk filled up"),
+          { toolUses: [], text: "I am done." },
+          { toolUses: [], text: "", stopReason: "max_tokens" },
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("cut-off"),
+      ]);
+
+      const outcome = await runSession({
+        sessionId,
+        alerts: [alert("cut-off")],
+      });
+      expect(outcome).toBe("completed");
+
+      const drawn = JSON.stringify(buildTranscript(sessionId));
+      expect(drawn).toContain("cut off at this model's output limit");
+      expect(drawn).toContain("Your findings below are complete.");
+      // The ledger survives the failure: it is the half worth keeping.
+      expect(getReport(sessionId)!.hypotheses).toHaveLength(1);
+      expect(getReport(sessionId)!.submitted).toBeNull();
+
+      /* One report turn, not two. The same request against the same ceiling
+         truncates identically, so a second attempt only writes a second failure
+         for the reader to scroll past. */
+      const provider = mockCreateProvider.mock.results[0]!.value as {
+        chat: ReturnType<typeof vi.fn>;
+      };
+      expect(provider.chat).toHaveBeenCalledTimes(3);
+      expect(reportRequests()).toHaveLength(1);
+    });
+
+    /* Try again is the same loop entered again, not a second way to make a
+       report: the transcript is replayed, the finish gate fires, and the report
+       turn runs with everything the run had. The sentence that re-enters is
+       NightWarden's, so the reader who pressed a button is never shown words in
+       their own voice that they did not write. */
+    it("writes the report on a second entry, without speaking as the user", async () => {
+      mockCreateProvider
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            recordTurn("root_cause", "the disk filled up"),
+            { toolUses: [], text: "I am done." },
+            { toolUses: [], text: "", stopReason: "max_tokens" },
+          ]),
+        )
+        .mockImplementationOnce(() =>
+          createContractFakeProvider([
+            { toolUses: [], text: "" },
+            submitTurn("free up the disk"),
+          ]),
+        );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("retry"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("retry")] });
+      expect(getReport(sessionId)!.submitted).toBeNull();
+
+      await runSession({
+        sessionId,
+        seed: buildSeed(sessionId),
+        harnessMessage: REPORT_RETRY_REQUEST,
+      });
+
+      expect(getReport(sessionId)!.submitted).toMatchObject({
+        recommendation: "free up the disk",
+      });
+      const drawn = JSON.stringify(buildTranscript(sessionId));
+      expect(drawn).not.toContain("Your investigation is over and its record");
+    });
+
+    it("passes silently once the ledger holds a settled claim, then writes up", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
           recordTurn("disproven", "the disk filled up"),
@@ -751,10 +909,10 @@ describe("the investigation record", () => {
       expect(outcome).toBe("completed");
 
       expect(completionRequests()).toHaveLength(0);
-      expect(compositionRequests()).toHaveLength(1);
+      expect(reportRequests()).toHaveLength(1);
       // The ledger rides the request, so the timeline can copy ids from nearby.
-      expect(compositionRequests()[0]).toContain("RECORDED FINDINGS");
-      expect(compositionRequests()[0]).toContain("the disk filled up");
+      expect(reportRequests()[0]).toContain("RECORDED FINDINGS");
+      expect(reportRequests()[0]).toContain("the disk filled up");
 
       const report = getReport(sessionId)!;
       expect(report.hypotheses[0]!.verdict).toBe("disproven");
@@ -764,7 +922,7 @@ describe("the investigation record", () => {
       });
     });
 
-    it("does not compose a chat, which keeps no record at all", async () => {
+    it("does not write up a chat, which keeps no record at all", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
           { toolUses: [], text: "Nine containers." },
@@ -784,7 +942,7 @@ describe("the investigation record", () => {
     /* The gate holds a run that acted to a different standard from one that only
        looked. "I could not work out the cause" is a complete ending; releasing a
        write and then going quiet with the condition still firing is not - and
-       that demand lands on the composition turn, where the recommendation is
+       that demand lands on the report turn, where the recommendation is
        written. */
     describe("a run that acted", () => {
       // A gated call carrying a result: the registry says it needed releasing,
@@ -830,7 +988,7 @@ describe("the investigation record", () => {
 
         await runSession({ sessionId, alerts: [alert("acted-firing")] });
 
-        const request = compositionRequests()[0]!;
+        const request = reportRequests()[0]!;
         // Never "try again": repeating a write that did not work is the failure
         // this gate exists to catch.
         expect(request).not.toContain("try again");
@@ -877,7 +1035,7 @@ describe("the investigation record", () => {
         // No write was released, so an honest inconclusive ending stands even
         // though the alert never cleared.
         expect(completionRequests()).toHaveLength(0);
-        const request = compositionRequests()[0]!;
+        const request = reportRequests()[0]!;
         expect(request).not.toContain("is still firing");
         expect(request).not.toContain("Nothing can confirm");
       });

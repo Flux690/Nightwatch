@@ -294,7 +294,7 @@ interface GateController {
   releaseNext: () => void;
   releaseAll: () => void;
   // Releases every turn as it arrives until `done` holds. An investigation ends
-  // with a composition turn and possibly a retry, so it parks more times than
+  // with a report turn and possibly a retry, so it parks more times than
   // its script has turns - a test about dispatch mechanics should not have to
   // count them. Real timers only; a faked-clock test drives its own loop.
   releaseUntil: (done: () => boolean, timeoutMs?: number) => Promise<void>;

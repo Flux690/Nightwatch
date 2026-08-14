@@ -3,8 +3,8 @@ import { buildInitialContext, buildChatContext } from "./context.js";
 import type { PromptOptions } from "./prompts/system.js";
 import {
   completionRequest,
-  compositionRequest,
-  compositionRetry,
+  reportRequest,
+  reportRetry,
 } from "./prompts/report.js";
 import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
@@ -44,6 +44,7 @@ import {
   publishTranscriptItem,
 } from "../session/stream.js";
 import { toolCallCard } from "../session/transcript.js";
+import type { ReportCardItem } from "@nightwarden/shared";
 import {
   generateSessionTitle,
   buildAlertTitleSource,
@@ -105,6 +106,18 @@ function persistNewTurns(
   return snap.length;
 }
 
+// One id, because a session has one report: a later phase replaces the card
+// rather than stacking a second one under the first.
+function publishReportCard(
+  sessionId: string,
+  phase: ReportCardItem["state"]["phase"],
+): void {
+  publishTranscriptItem({
+    sessionId,
+    item: { kind: "report_card", id: "report", state: { phase } },
+  });
+}
+
 /* null alert = chat session; title from user message. A placeholder either way:
    the title model replaces it seconds later. Shared with the chat route, which
    writes the row before handing out its id. */
@@ -128,17 +141,17 @@ export function buildSessionMeta(
 // handled by the dispatcher's catch - never returned here.
 export type RunOutcome = "completed" | "suspended" | "stopped";
 
-// Finish-gate pushback cap: after this many nudges the run composes anyway
+// Finish-gate pushback cap: after this many nudges the run writes up anyway
 // rather than looping; the time budget bounds it as well.
 const MAX_NUDGES = 3;
 
-// The composition turn has one tool and one job, so a second failure is a model
-// that cannot do it rather than one that misread the request.
-const MAX_COMPOSE_ATTEMPTS = 2;
+// The report turn has one tool and one job, so a second failure is a model that
+// cannot do it rather than one that misread the request.
+const MAX_REPORT_ATTEMPTS = 2;
 
 // What is wrong with the report just written, read back from the record rather
 // than from the call that wrote it.
-function compositionProblem(
+function problemWithReport(
   submitted: SubmittedReport | null,
   unrecovered: boolean,
 ): string | null {
@@ -154,9 +167,9 @@ function compositionProblem(
 
 export interface RunSessionInput {
   sessionId: string;
-  // Everything that fired inside the 90s batch window, all of it opening this
-  // session. No member is elected: they are investigated as one incident.
-  // Absent on a resume, which recovers them from the session row.
+  // The alert group opening this session, as the sender grouped it. No member is
+  // elected: they are investigated as one incident. Absent on a resume, which
+  // recovers them from the session row.
   alerts?: NormalizedAlert[];
   seed?: ProviderMessage[];
   userMessage?: string;
@@ -166,11 +179,15 @@ export interface RunSessionInput {
   // Present on resume: the full tool_results for the suspended turn
   // (completedResults from interrupt row + the newly resolved gated result).
   resumeToolResults?: ToolResult[];
+  /* A turn NightWarden opens rather than the user, so it is stored as ours and
+     never drawn: the reader pressed a button, and a sentence they did not write
+     appearing in their own voice is a lie about who said what. */
+  harnessMessage?: string;
   // Aborts the LLM request in flight when the dispatcher stops this run.
   signal?: AbortSignal;
-  // When true: seed prior transcript and run exactly one wrap-up turn (no tools),
+  // When true: seed prior transcript and run exactly one closing turn (no tools),
   // then finish. Used when the user declines a continue-request interrupt.
-  wrapUp?: boolean;
+  standDown?: boolean;
 }
 
 export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
@@ -253,8 +270,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   };
 
   // User declined a continue-request: replay the transcript and run one free-form
-  // wrap-up turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
-  if (input.wrapUp) {
+  // closing turn (no tools). Seed already carries the investigation, so skip the alert/fleet context build below.
+  if (input.standDown) {
     const { systemPrompt } = buildChatContext(
       undefined,
       undefined,
@@ -268,7 +285,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       provider.seed(input.seed);
       persistedCount = input.seed.length;
     }
-    log.info("time budget ended: user chose to end, running wrap-up turn");
+    log.info("time budget ended: user chose to end, running closing turn");
     try {
       await chatWithRetries(provider, []);
     } catch (err) {
@@ -282,7 +299,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       harnessTurns,
     );
     if (signal?.aborted) {
-      log.info("run stopped by user during end wrap-up");
+      log.info("run stopped by user during the closing turn");
       return "stopped";
     }
     log.info("investigation ended after user declined to continue");
@@ -354,6 +371,15 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         seqOffset,
         harnessTurns,
       );
+    } else if (input.harnessMessage) {
+      sendHarnessMessage(provider, input.harnessMessage);
+      persistedCount = persistNewTurns(
+        provider,
+        sessionId,
+        persistedCount,
+        seqOffset,
+        harnessTurns,
+      );
     }
   } else {
     // An alert has no human to type the first turn, so NightWarden writes it.
@@ -398,62 +424,94 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const outOfTime = AbortSignal.timeout(config.checkInAfterMs);
   const runSignal = signal ? AbortSignal.any([signal, outOfTime]) : outOfTime;
 
-  /* The composition turn: every investigation tool is taken away and one is put
-     back, so the only thing the model can do from here is the thing being asked
-     of it. The ledger rides the request rather than being left to context - the
-     timeline copies call ids verbatim, and turn forty is the worst place to copy
-     a string from. An ending without a report is still an ending: the record
-     renders on its own. */
-  const compose = async (
+  /* The report turn: every investigation tool is taken away and one is put back,
+     so the only thing the model can do from here is the thing being asked of it.
+     The ledger rides the request rather than being left to context - the timeline
+     copies call ids verbatim, and turn forty is the worst place to copy a string
+     from. An ending without a report is still an ending: the record renders on
+     its own. */
+  const writeReport = async (
     unrecovered: boolean,
     turn: number,
   ): Promise<RunOutcome> => {
+    /* Said out loud, because until now it was said only to the server log: the
+       record renders on its own, so an investigation with no write-up looked
+       exactly like one whose model chose not to write much. The row is what the
+       console reads back after a reload, and what the Try again button sits
+       under. */
+    const notWritten = (why: string): RunOutcome => {
+      log.warn({ turn }, "report turn failed; the record stands without one");
+      appendErrorMessage(sessionId, `${why} Your findings below are complete.`);
+      publishReportCard(sessionId, "failed");
+      return "completed";
+    };
+
+    publishReportCard(sessionId, "building");
     let problem: string | null = null;
-    for (let attempt = 1; attempt <= MAX_COMPOSE_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= MAX_REPORT_ATTEMPTS; attempt++) {
       sendHarnessMessage(
         provider,
         problem === null
-          ? compositionRequest(
+          ? reportRequest(
               getReport(sessionId)?.hypotheses ?? [],
               gatedCalls(sessionId),
               unrecovered,
             )
-          : compositionRetry(problem),
+          : reportRetry(problem),
       );
       persist();
 
-      let composed: ChatResponse;
+      let written: ChatResponse;
       try {
-        composed = await chatWithRetries(
+        written = await chatWithRetries(
           provider,
           [SUBMIT_REPORT_TOOL.schema],
           runSignal,
         );
       } catch (err) {
         if (signal?.aborted) {
-          log.info("run stopped by user while composing the report");
+          log.info("run stopped by user while writing the report");
           persist();
+          // The card is mid-spinner on their screen, and the turn it was
+          // spinning for is gone. It ends offering the one thing left to do.
+          publishReportCard(sessionId, "failed");
           return "stopped";
         }
         // The budget ran out with the record already complete. Ending without
         // the write-up is honest; pushing past the user's ceiling is not.
         if (outOfTime.aborted) {
-          log.warn("time budget reached while composing the report");
           persist();
-          return "completed";
+          return notWritten(
+            "The time budget ran out before the report could be written.",
+          );
         }
         throw err;
       }
       persist();
       if (signal?.aborted) {
-        log.info("run stopped by user while composing the report");
+        log.info("run stopped by user while writing the report");
+        publishReportCard(sessionId, "failed");
         return "stopped";
       }
 
+      /* Checked here as the investigating turns already check it, and checked
+         before the tool result: a reply cut off mid-call carries truncated
+         arguments, so the refusal below would report a schema fault and hide the
+         real cause. Neither of these is worth a second attempt - the same
+         request produces the same ceiling and the same refusal. */
+      if (written.stopReason === "max_tokens") {
+        return notWritten(
+          `The report was cut off at this model's output limit of ${llm.maxOutputTokens} tokens, so it was never finished. Raise the limit or pick a model with a larger one under Settings, Provider, then try again.`,
+        );
+      }
+      if (written.stopReason === "refusal") {
+        return notWritten("The model declined to write the report.");
+      }
+
       const { toolResults } = await processToolUses({
-        toolUses: composed.toolUses,
-        // Composition offers one tool and no way to reach a human: the record is
-        // already closed, so there is nothing left to ask about.
+        toolUses: written.toolUses,
+        // The report turn offers one tool and no way to reach a human: the record
+        // is already closed, so there is nothing left to ask about.
         offered: { tools: [SUBMIT_REPORT_TOOL], elicitations: [] },
         sessionId,
         execCtx: {
@@ -465,21 +523,20 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
       persist();
 
-      problem = compositionProblem(
+      problem = problemWithReport(
         getReport(sessionId)?.submitted ?? null,
         unrecovered,
       );
       if (problem === null) {
         log.info({ turn, attempt }, "investigation report written");
+        publishReportCard(sessionId, "ready");
         return "completed";
       }
-      log.warn({ turn, attempt, problem }, "composition turn refused");
+      log.warn({ turn, attempt, problem }, "report turn refused");
     }
-    log.warn(
-      { turn },
-      "composition failed; the record stands without a report",
+    return notWritten(
+      `The model did not write the report after ${MAX_REPORT_ATTEMPTS} attempts. ${problem ?? ""}`.trim(),
     );
-    return "completed";
   };
 
   while (Date.now() < deadline) {
@@ -558,7 +615,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         return "completed";
       }
       // Ledger gate: the record must be complete before it can be written up.
-      // Push back up to MAX_NUDGES times, then compose from what there is - the
+      // Push back up to MAX_NUDGES times, then write up from what there is - the
       // status an unfinished record derives to is already the honest one.
       const gaps = reportGaps(sessionId);
       // Read, not asked: the reconciler and the resolved webhook both stamp the
@@ -590,7 +647,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         }
         log.warn(
           { turn, gaps: gaps.map((g) => g.kind), recovery },
-          "finish gate: request cap reached, composing incomplete",
+          "finish gate: request cap reached, writing up incomplete",
         );
       }
       /* Only a run that acted must recommend. "I could not work out the cause,
@@ -599,7 +656,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       const released = gatedCalls(sessionId).some(
         (c) => c.decision === "approved",
       );
-      return compose(released && recovery === "unconfirmed", turn);
+      return writeReport(released && recovery === "unconfirmed", turn);
     }
 
     const execCtx: Omit<ToolDispatchContext, "toolUseId"> = {

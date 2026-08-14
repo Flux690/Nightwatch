@@ -258,7 +258,7 @@ describe("continue-request interrupts", () => {
     close();
   });
 
-  it("ending runs a wrap-up turn and finishes the investigation", async () => {
+  it("ending runs a closing turn and finishes the investigation", async () => {
     updateConfig({ checkInAfterMs: 0 });
     setScript([FINISH_TURN]);
 
@@ -309,7 +309,7 @@ describe("continue-request interrupts", () => {
       ),
     );
 
-    // Interrupt row gone, wrap-up run completes
+    // Interrupt row gone, closing run completes
     await waitFor(() => !hasPendingHumanInput(sessionId));
     await waitFor(() => !dispatcher.isSessionRunning(sessionId));
     expect(dispatcher.isSessionRunning(sessionId)).toBe(false);

@@ -245,7 +245,7 @@ export class OpenRouterProvider implements LLMProvider {
         signal,
       });
       // Listened for unconditionally so accumulated text survives the
-      // no-callback wrap-up turn.
+      // no-callback closing turn.
       stream.on("chunk", (chunk) => {
         for (const entry of reasoningDetails(chunk)) {
           if (

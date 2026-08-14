@@ -57,12 +57,29 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["summary", "timeline", "impact", "recommendation"],
+    required: [
+      "headline",
+      "affected",
+      "summary",
+      "timeline",
+      "impact",
+      "recommendation",
+    ],
     properties: {
+      headline: {
+        type: "string",
+        description:
+          "One sentence, under about 120 characters, naming what broke and why. This is the line someone reads at three in the morning before deciding whether to get up, and often the only line they read. State the cause, not the symptom: 'the retry loop added in PR #482 exhausted the payments-api connection pool', never 'payments-api returned errors'.",
+      },
+      affected: {
+        type: "string",
+        description:
+          "A short noun phrase naming who or what was hit, for the band at the top of the report: 'the checkout path', 'all payments-api pods in prod'. Not a sentence, and not a duplicate of the impact field below, which says for how long and how badly.",
+      },
       summary: {
         type: "string",
         description:
-          "Two or three sentences: what broke, why, and where it stands now. This is the first thing the user reads and may be the only thing they read. Name the service, the value and the change.",
+          "Two or three sentences expanding the headline: what broke, why, and where it stands now. Name the service, the value and the change.",
       },
       timeline: {
         type: "array",
@@ -71,7 +88,7 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["at", "what", "evidenceId"],
+          required: ["at", "what", "lane", "evidenceId"],
           properties: {
             at: {
               type: "string",
@@ -81,6 +98,12 @@ export const SUBMIT_INVESTIGATION_REPORT_SCHEMA: ToolSchema = {
             what: {
               type: "string",
               description: "One sentence, in the past tense.",
+            },
+            lane: {
+              type: "string",
+              enum: ["change", "signal", "agent"],
+              description:
+                "Which strand this moment belongs to. 'change' is something a human or a deploy did to the system: a merge, a rollout, a config edit. 'signal' is the system reacting: an alert firing, a metric crossing a threshold, a pod restarting. 'agent' is something you did while investigating. Writes you released are added for you and are not any of these.",
             },
             evidenceId: {
               type: "string",
@@ -167,11 +190,11 @@ function writeLine(call: GatedCall): string {
   return `${call.at}  ${call.toolName}${target}  ${call.decision}`;
 }
 
-/* Handed to the model on the composition turn, with every investigation tool
-   taken away and only SubmitInvestigationReport left. The ledger is repeated
-   here rather than left to context: the timeline cites call ids verbatim, and a
+/* Handed to the model on the report turn, with every investigation tool taken
+   away and only SubmitInvestigationReport left. The ledger is repeated here
+   rather than left to context: the timeline cites call ids verbatim, and a
    forty-turn context is the worst place to copy a string from. */
-export function compositionRequest(
+export function reportRequest(
   hypotheses: Hypothesis[],
   writes: GatedCall[],
   unrecovered: boolean,
@@ -196,8 +219,18 @@ export function compositionRequest(
   return sections.join("\n\n");
 }
 
-// The composition turn came back wrong. One sentence naming what to fix, and the
+// The report turn came back wrong. One sentence naming what to fix, and the
 // same tool offered again - there is nothing else it can do from here.
-export function compositionRetry(problem: string): string {
+export function reportRetry(problem: string): string {
   return `${problem} Call SubmitInvestigationReport again.`;
 }
+
+/* A person pressed Try again, so the run re-enters through the ordinary message
+   path and the finish gate takes it back to the report turn. Deliberately not
+   "continue": that word invites the model to investigate further, and there is
+   nothing left to find - the record is closed and only the write-up is missing.
+
+   Server-side because it is prompt text. Composed in the console it would drift
+   from reportRequest the first time one of the two was edited. */
+export const REPORT_RETRY_REQUEST =
+  "Your investigation is over and its record is complete, but the report was never written. Do not investigate further and do not call any other tool. Write it up now.";

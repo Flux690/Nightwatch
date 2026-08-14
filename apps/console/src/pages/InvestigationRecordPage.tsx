@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
@@ -17,6 +17,7 @@ import { ChatRail } from "@/components/layout/ChatRail";
 import { SessionView } from "@/pages/SessionView";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ReportPanel } from "@/components/report/ReportPanel";
+import { onOpenReport } from "@/components/transcript/openReport";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -105,10 +106,26 @@ export function InvestigationRecordPage(): React.JSX.Element {
 
   /* A run in flight has the whole stage: the transcript is the live view, and a
      report drawn beside it would be a document being written in front of the
-     reader. The record takes over the moment the run stops - written up or not,
-     because a run that crashed before its write-up still has a ledger worth
-     reading. */
-  const working = session?.running ?? false;
+     reader.
+
+     Which view is on screen is the reader's, not the run's. Arriving from the
+     list is already a deliberate act, so it lands on the record; watching a run
+     end swaps nothing until the report card is clicked, because a page that
+     rearranges itself mid-sentence has moved under the person reading it. */
+  const [openedReport, setOpenedReport] = useState(false);
+  /* Latched at the first load and never re-read, which is the whole point: the
+     run ending must not move the reader. Set during render rather than from an
+     effect so the first painted frame is already the right one - via an effect
+     there is a frame of the other view before it corrects itself. */
+  const followedRun = useRef<boolean | null>(null);
+  if (followedRun.current === null && session !== null) {
+    followedRun.current = session.running;
+  }
+  useEffect(() => onOpenReport(() => setOpenedReport(true)), []);
+
+  // Unknown reads as the record, which is what the page showed before there was
+  // anything to follow, so a session still loading never flashes the transcript.
+  const working = followedRun.current === true && !openedReport;
 
   const remove = useMutation({
     mutationFn: () =>

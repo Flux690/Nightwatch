@@ -114,6 +114,17 @@ export interface ContinueCardItem {
   state: ToolCallState;
 }
 
+/* Where the write-up happened, in the transcript rather than beside it: the
+   report is produced by a turn like any other, and the reader watched the turns
+   before it. `building` is live only - it is the phase of a turn in flight, so
+   there is nothing to reconstruct after a reload; the other two are read back
+   from whether the session holds a written report. */
+export interface ReportCardItem {
+  kind: "report_card";
+  id: string;
+  state: { phase: "building" | "ready" | "failed" };
+}
+
 // An alert that fired while the run was already working, placed where it
 // interrupted. The report holds the detail; this says only that the ground
 // moved here, so the agent changing course has a visible cause.
@@ -133,6 +144,7 @@ export type TranscriptItem =
   | ApprovalCardItem
   | ClarificationCardItem
   | ContinueCardItem
+  | ReportCardItem
   | AlertArrivedItem;
 
 // Stable identity for a card, so a live update finds the item it belongs to.

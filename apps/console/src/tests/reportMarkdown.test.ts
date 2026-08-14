@@ -62,6 +62,7 @@ const RESPONSE: SessionReportResponse = {
     {
       toolUseId: "tu-stats",
       toolName: "GetDockerStats",
+      kind: "metric",
       input: { target: "docker/encodr/payments-worker" },
       result: JSON.stringify({
         cpuPercent: 3.1,
@@ -91,6 +92,31 @@ describe("reportToMarkdown", () => {
     expect(md.match(/GetDockerStats/g)).toHaveLength(2);
     // A citation naming no call carries nothing rather than an empty bullet.
     expect(md).not.toContain("tu-gone");
+  });
+
+  /* The export is read where the console is not, so the line that decides
+     whether anyone keeps reading has to survive the trip. */
+  it("carries the headline and who was affected into the export", () => {
+    const md = reportToMarkdown("encodr-worker memory", [], {
+      ...RESPONSE,
+      report: {
+        ...RESPONSE.report,
+        submitted: {
+          ...RESPONSE.report.submitted!,
+          headline: "PR #812 doubled the ffmpeg buffer and the worker died",
+          affected: "the transcode queue",
+        },
+      },
+    });
+
+    expect(md).toContain(
+      "**PR #812 doubled the ffmpeg buffer and the worker died**",
+    );
+    expect(md).toContain("Affected: the transcode queue");
+    // The deck still travels: the headline replaced nothing, it leads.
+    expect(md).toContain(
+      "encodr-worker exhausted its limit buffering two large jobs",
+    );
   });
 
   it("leads with the write-up, then the record it was composed from", () => {

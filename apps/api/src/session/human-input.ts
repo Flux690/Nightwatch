@@ -157,7 +157,7 @@ export async function respondToPendingHumanInput(
       dispatcher.dispatch({
         sessionId,
         seed: buildSeed(sessionId),
-        wrapUp: true,
+        standDown: true,
       });
       return {
         sessionId,

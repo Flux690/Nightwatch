@@ -1,5 +1,6 @@
 import type {
   Conviction,
+  EvidenceKind,
   GatedCall,
   Hypothesis,
   Report,
@@ -15,6 +16,7 @@ import { getTranscriptRows } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { publishReportUpdated } from "../session/stream.js";
 import { targetKeyFromInput, wasGated } from "../session/transcript.js";
+import { findTool } from "./tools/toolset.js";
 import { evidenceSource } from "./evidence-source.js";
 
 // The report domain service: the only place the record is written, and the owner
@@ -82,6 +84,13 @@ function citedIds(report: Report): Set<string> {
   ]);
 }
 
+// What to draw a cited call as, from the tool's own declaration. A name the
+// registry no longer knows - a tool renamed in an upgrade - reads as plain text,
+// which is the honest fallback: the result is still quotable, just not typed.
+function evidenceKind(toolName: string): EvidenceKind {
+  return findTool(toolName)?.evidence ?? "text";
+}
+
 // In the order the calls happened, which is the order they are worth reading. A
 // citation whose call has not answered resolves to nothing: there is nothing to
 // quote. The outcome rides along - a cited miss and a cited crash differ.
@@ -99,6 +108,7 @@ export function resolveEvidence(
     resolved.push({
       toolUseId,
       toolName,
+      kind: evidenceKind(toolName),
       input,
       result,
       ...(outcome !== undefined && { outcome }),
@@ -181,7 +191,7 @@ export function computeConviction(
 
 // Something for the user to act on: a written recommendation, or a cited
 // root cause that amounts to one. Read by the status derivation and by the
-// composition gate, so what the list calls actionable and what the gate accepts
+// report gate, so what the list calls actionable and what the gate accepts
 // cannot disagree.
 export function isActionable(report: Report | null): boolean {
   if (report === null) return false;
@@ -195,7 +205,7 @@ export function isActionable(report: Report | null): boolean {
 }
 
 // One named thing missing from the ledger, checked before the run is allowed to
-// compose. A list rather than a boolean so the completion request can name only
+// write up. A list rather than a boolean so the completion request can name only
 // what is absent, and so a gap that survives a request can be logged as itself.
 export type ReportGap =
   { kind: "empty_record" } | { kind: "unresolvable_citation"; ids: string[] };
@@ -272,13 +282,15 @@ export function recordHypothesis(
 }
 
 interface SubmitReportInput {
+  headline?: string;
+  affected?: string;
   summary: string;
   timeline: TimelineEntry[];
   impact: string;
   recommendation: string;
 }
 
-// The composition turn's one write. Citations are filtered the same way a
+// The report turn's one write. Citations are filtered the same way a
 // hypothesis's are, so a timeline entry cannot point at a call that never
 // happened. Written whole rather than appended: it is authored once.
 export function submitReport(
@@ -286,12 +298,21 @@ export function submitReport(
   input: SubmitReportInput,
 ): RecordOutcome {
   const known = new Set(ledgerIn(sessionId).map((e) => e.toolUseId));
+  // A citation naming no call is dropped and the entry kept, exactly as a
+  // hypothesis's is. The lane survives either way: it describes the moment, not
+  // the call, so an unresolvable id must not cost the row its strand.
   const timeline = input.timeline.map((entry) =>
     entry.evidenceId !== undefined && known.has(entry.evidenceId)
       ? entry
-      : { at: entry.at, what: entry.what },
+      : {
+          at: entry.at,
+          what: entry.what,
+          ...(entry.lane !== undefined && { lane: entry.lane }),
+        },
   );
   const submitted: SubmittedReport = {
+    ...(input.headline !== undefined && { headline: input.headline }),
+    ...(input.affected !== undefined && { affected: input.affected }),
     summary: input.summary,
     timeline,
     impact: input.impact,

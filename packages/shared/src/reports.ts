@@ -31,12 +31,20 @@ export interface Hypothesis {
   recordedAt: string;
 }
 
+// Which strand of the incident a moment belongs to. `action` is absent here
+// because it is not the model's to claim: a released write is contributed by the
+// system, and carries `action` below instead.
+export type TimelineLane = "change" | "signal" | "agent";
+
 // One moment in what happened. The model authors these; the system contributes
 // a row for every released write, so an action cannot be left off a timeline
 // the model did not author in full.
 export interface TimelineEntry {
   at: string;
   what: string;
+  // Which lane draws it. Absent on a system row, and on any report written
+  // before the field existed.
+  lane?: TimelineLane;
   // The call that shows this happened, when one does.
   evidenceId?: string;
   // Absent on the model's own entries. Present on a system row, which names the
@@ -53,6 +61,12 @@ export interface TimelineEntry {
 // complete. Nothing here restates the ledger: no verdicts, no hypotheses, no
 // re-copied citations. It is the prose the ledger has nowhere to put.
 export interface SubmittedReport {
+  // One sentence, the whole answer. `summary` was doing headline and deck at
+  // once and was good at neither. Empty on a report written before it existed.
+  headline?: string;
+  // A short noun phrase naming who was hit. Written by the model today; a blast
+  // radius derived from downstream edges once the topology graph can compute one.
+  affected?: string;
   // What broke, why, and where it stands now. The lede.
   summary: string;
   timeline: TimelineEntry[];
@@ -71,11 +85,24 @@ export interface Report {
   updatedAt: string;
 }
 
+/* What a cited call produced, so the console looks a renderer up rather than
+   sniffing the result's shape for one. Declared on the tool that produces it and
+   read back from the registry, never guessed from the result: a tool's own
+   declaration cannot drift from what it returns, and a shape test can.
+
+   Coarser than the renderers on purpose - series, comparison and single reading
+   are all `metric`, because which of the three to draw is a fact about this
+   result that the renderer already works out. A crashed call needs no kind:
+   `outcome` below already says so. */
+export type EvidenceKind =
+  "metric" | "logs" | "changes" | "state" | "diff" | "text";
+
 // One cited tool call, resolved from the transcript at read time so the report
 // quotes what ran rather than storing a second copy of it.
 export interface ResolvedEvidence {
   toolUseId: string;
   toolName: string;
+  kind: EvidenceKind;
   input: Record<string, unknown>;
   result: string;
   // Absent when the call answered. A cited miss is often the evidence itself -

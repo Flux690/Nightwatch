@@ -14,6 +14,7 @@ function wrap(
   opts?: {
     onResolve?: (toolUseId: string, action: "approve" | "reject") => void;
     onAnswer?: (toolUseId: string, answer: string | string[]) => void;
+    onRetryReport?: () => void;
   },
 ): void {
   render(
@@ -26,6 +27,7 @@ function wrap(
           item={item}
           onResolve={opts?.onResolve}
           onAnswer={opts?.onAnswer}
+          onRetryReport={opts?.onRetryReport}
         />
       </div>
     </TestProviders>,
@@ -238,6 +240,50 @@ describe("TranscriptItemRenderer", () => {
       await user.click(screen.getByRole("button", { name: /cancel/i }));
 
       expect(onResolve).toHaveBeenCalledWith("continue-uuid-1", "reject");
+    });
+  });
+
+  describe("report_card", () => {
+    const card = (phase: "building" | "ready" | "failed"): TranscriptItem => ({
+      kind: "report_card",
+      id: "report",
+      state: { phase },
+    });
+
+    it("says the report is being written while the turn is in flight", () => {
+      wrap(card("building"));
+
+      expect(screen.getByTestId("report-card")).toHaveAttribute(
+        "data-phase",
+        "building",
+      );
+      expect(
+        screen.getByText(/writing the investigation report/i),
+      ).toBeInTheDocument();
+    });
+
+    /* Nothing opens on its own: a report that arrives over the message being
+       read is the page moving under the reader. */
+    it("waits to be opened rather than opening itself", async () => {
+      const user = userEvent.setup();
+      const opened = vi.fn();
+      window.addEventListener("nw:open-report", opened);
+      wrap(card("ready"));
+
+      expect(opened).not.toHaveBeenCalled();
+      await user.click(screen.getByRole("button", { name: /open report/i }));
+      expect(opened).toHaveBeenCalled();
+      window.removeEventListener("nw:open-report", opened);
+    });
+
+    it("offers another attempt when the report was never written", async () => {
+      const user = userEvent.setup();
+      const onRetryReport = vi.fn();
+      wrap(card("failed"), { onRetryReport });
+
+      expect(screen.getByText(/report was not written/i)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: /try again/i }));
+      expect(onRetryReport).toHaveBeenCalled();
     });
   });
 

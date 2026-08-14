@@ -1,4 +1,4 @@
-import type { Platform, ToolOutcome } from "@nightwarden/shared";
+import type { EvidenceKind, Platform, ToolOutcome } from "@nightwarden/shared";
 import type { ToolSchema } from "../../llm/types.js";
 
 export interface ToolExecuteResult {
@@ -51,6 +51,12 @@ interface ToolCommon {
   schema: ToolSchema;
   effect: "read" | "write";
   policy: ToolPolicy;
+  /* What a citation of this call is worth showing as. Required, and declared
+     here rather than in a lookup table beside it, for the reason `policy` is:
+     a separate list is a list that can be forgotten when a tool is added, and
+     the report would then draw new evidence as plain text without anyone
+     noticing. */
+  evidence: EvidenceKind;
   // A write safe to run twice, which is what lets a call caught by a crash be
   // replayed instead of unwound. Only ever true where the tool says why.
   idempotent?: true;

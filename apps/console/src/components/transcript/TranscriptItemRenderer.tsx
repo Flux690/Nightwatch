@@ -20,6 +20,7 @@ import { ToolCard } from "./toolPresentation.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
+import { ReportCardPanel } from "./ReportCardPanel.js";
 
 function UserTurn({
   text,
@@ -157,6 +158,7 @@ export function TranscriptItemRenderer({
   submitting = false,
   onResolve,
   onAnswer,
+  onRetryReport,
 }: {
   item: TranscriptItem;
   submitting?: boolean;
@@ -166,6 +168,7 @@ export function TranscriptItemRenderer({
     reason?: string,
   ) => void;
   onAnswer?: (toolUseId: string, answer: string | string[]) => void;
+  onRetryReport?: () => void;
 }): React.JSX.Element {
   switch (item.kind) {
     case "user_turn":
@@ -203,6 +206,14 @@ export function TranscriptItemRenderer({
           onAnswer={
             onAnswer ? (answer) => onAnswer(item.toolUseId, answer) : undefined
           }
+        />
+      );
+    case "report_card":
+      return (
+        <ReportCardPanel
+          item={item}
+          retrying={submitting}
+          onRetry={onRetryReport}
         />
       );
     case "continue_card":

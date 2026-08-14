@@ -85,6 +85,7 @@ const EVIDENCE: ResolvedEvidence[] = [
   {
     toolUseId: "tu-stats",
     toolName: "GetDockerStats",
+    kind: "metric",
     input: { target: "docker/encodr/payments-worker" },
     result: JSON.stringify({
       cpuPercent: 3.1,
@@ -95,6 +96,7 @@ const EVIDENCE: ResolvedEvidence[] = [
   {
     toolUseId: "tu-changes",
     toolName: "GetRecentChanges",
+    kind: "changes",
     input: {},
     result: JSON.stringify({
       pullRequests: [
@@ -143,6 +145,69 @@ describe("ReportPanel", () => {
       screen.getByText("Nine minutes of failed payment writes"),
     ).toBeInTheDocument();
     expect(screen.getByText("Revert PR #482")).toBeInTheDocument();
+  });
+
+  /* Two fields doing two jobs: the sentence someone reads at 02:14, and the
+     paragraph that expands it. Before `headline` existed the summary did both
+     and was good at neither, so a report stored then still leads with it. */
+  it("leads with the headline and demotes the summary to the deck", () => {
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          submitted: {
+            ...REPORT.submitted!,
+            headline: "PR #482's cache bump exhausted payments-worker's memory",
+            affected: "the payments write path",
+          },
+        },
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: "PR #482's cache bump exhausted payments-worker's memory",
+        level: 1,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "payments-worker was OOM-killed after PR #482 raised its floor",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/the payments write path/)).toBeInTheDocument();
+  });
+
+  /* The model has paid tokens on a timeline citation since the schema first
+     asked for one, and nothing drew it: the row claimed a fact and hid what
+     showed it. The chip reaches the call rather than redrawing its result. */
+  it("reaches the cited call from a timeline row", () => {
+    const scrollIntoView = vi.fn();
+    vi.spyOn(document, "getElementById").mockReturnValue({
+      scrollIntoView,
+    } as unknown as HTMLElement);
+
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          submitted: {
+            ...REPORT.submitted!,
+            timeline: [
+              {
+                at: "2026-07-21T12:05:00.000Z",
+                what: "PR #482 merged",
+                lane: "change",
+                evidenceId: "tu-changes",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "GetRecentChanges" }));
+    expect(scrollIntoView).toHaveBeenCalled();
   });
 
   it("falls back to the leading claim until the run has been written up", () => {
@@ -281,6 +346,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-log",
             toolName: "GetDockerLogs",
+            kind: "logs",
             input: { target: "docker/encodr/payments-worker" },
             result: JSON.stringify({
               lines: [
@@ -346,6 +412,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-now",
             toolName: "QueryMetrics",
+            kind: "metric",
             input: { query: "redis_memory_used_bytes" },
             result: JSON.stringify({
               resultType: "vector",
@@ -379,6 +446,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-top",
             toolName: "QueryMetrics",
+            kind: "metric",
             input: { query: "topk(2, container_memory_rss)" },
             result: JSON.stringify({
               resultType: "vector",
@@ -415,6 +483,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-miss",
             toolName: "ReadHostFile",
+            kind: "text",
             input: { path: "/etc/redis/redis.conf" },
             result: "File not found: /etc/redis/redis.conf",
             outcome: "expected_miss",
@@ -441,6 +510,7 @@ describe("ReportPanel", () => {
           {
             toolUseId: "tu-range",
             toolName: "QueryMetricsRange",
+            kind: "metric",
             input: { query: "container_memory_rss" },
             result: JSON.stringify({
               resultType: "matrix",

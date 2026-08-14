@@ -19,6 +19,7 @@ import {
   sessionExists,
 } from "../db/sessions.js";
 import { buildSessionMeta } from "../agent/loop.js";
+import { REPORT_RETRY_REQUEST } from "../agent/prompts/report.js";
 import { listSessionPage } from "./list.js";
 import { buildTranscript } from "./transcript.js";
 import { requireSession } from "../auth/session.js";
@@ -162,6 +163,45 @@ export async function registerSessionRoutes(
       publishQueueChanged();
       dispatcher.promoteQueued();
       return reply.code(204).send();
+    },
+  );
+
+  /* Try again on a run that ended without its write-up. No body: the sentence
+     sent to the model is the server's, kept beside the other prompts rather than
+     composed by whoever pressed the button. The seed replays the whole
+     transcript, so the model writes up with everything it had - this is the same
+     loop and the same tool, entered again, not a second way to make a report. */
+  fastify.post<{ Params: { id: string } }>(
+    "/sessions/:id/report/retry",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const sessionId = request.params.id;
+      const session = getSession(sessionId);
+      if (session === undefined) {
+        return reply.code(404).send({ error: "unknown session" });
+      }
+      if (!session.investigation) {
+        return reply
+          .code(409)
+          .send({ error: "a chat keeps no record to write up" });
+      }
+      if (hasPendingHumanInput(sessionId)) {
+        return reply
+          .code(409)
+          .send({ error: "session is busy: awaiting approval" });
+      }
+      const started = dispatcher.dispatch({
+        sessionId,
+        seed: buildSeed(sessionId),
+        harnessMessage: REPORT_RETRY_REQUEST,
+      });
+      if (!started) {
+        return reply
+          .code(409)
+          .send({ error: "session is busy: a run is already in flight" });
+      }
+      logger.info({ sessionId }, "writing the report again");
+      return reply.code(202).send({ sessionId });
     },
   );
 

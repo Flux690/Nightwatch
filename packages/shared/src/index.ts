@@ -154,6 +154,7 @@ export type {
   ApprovalCardItem,
   ClarificationCardItem,
   ContinueCardItem,
+  ReportCardItem,
   AlertArrivedItem,
   TranscriptItem,
 } from "./transcript.js";
@@ -168,8 +169,10 @@ export type {
   Hypothesis,
   GatedCall,
   TimelineEntry,
+  TimelineLane,
   SubmittedReport,
   Report,
+  EvidenceKind,
   ResolvedEvidence,
   ReportConviction,
   SessionReportResponse,

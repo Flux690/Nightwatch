@@ -224,6 +224,7 @@ export const LOKI_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
+    evidence: "logs",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
@@ -378,6 +379,7 @@ export const LOKI_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
+    evidence: "metric",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
@@ -463,6 +465,7 @@ export const LOKI_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
+    evidence: "text",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {

@@ -5,8 +5,12 @@ import type {
   ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
-import { getPendingHumanInputBySessionId } from "../db/interrupts.js";
-import { getSession, getTranscriptRows } from "../db/sessions.js";
+import {
+  getPendingHumanInputBySessionId,
+  hasPendingHumanInput,
+} from "../db/interrupts.js";
+import { getReport } from "../db/reports.js";
+import { getSession, getTranscriptRows, isRunning } from "../db/sessions.js";
 import { getToolOutcomes } from "../db/tool-outcomes.js";
 import { findTool, isElicitation } from "../agent/tools/toolset.js";
 
@@ -93,6 +97,27 @@ function priorRunsOf(
   if (target === null) return 0;
   return approved.filter((a) => a.toolName === toolName && a.target === target)
     .length;
+}
+
+/* The one card nothing in the transcript records, because the write-up is a
+   column on the session rather than a turn. Read back from that column: a stored
+   report is one that was written, and a finished investigation whose ledger
+   holds claims but no write-up is one where the report turn did not land - the
+   error row above it says why, and the card is what offers to try again.
+
+   A session parked on a human has not reached the report turn at all, so it gets
+   no card rather than one claiming a failure that has not happened. */
+function reportCard(sessionId: string): TranscriptItem | null {
+  const session = getSession(sessionId);
+  if (session === undefined || !session.investigation) return null;
+  if (getReport(sessionId)?.submitted != null) {
+    return { kind: "report_card", id: "report", state: { phase: "ready" } };
+  }
+  if (isRunning(sessionId) || hasPendingHumanInput(sessionId)) return null;
+  const hypotheses = getReport(sessionId)?.hypotheses ?? [];
+  return hypotheses.length === 0
+    ? null
+    : { kind: "report_card", id: "report", state: { phase: "failed" } };
 }
 
 // A tool call's state, in precedence order: what the session is suspended on
@@ -282,6 +307,10 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       severity: entry.alert.severity,
     });
   }
+
+  // Last, because writing up is the last thing a run does.
+  const report = reportCard(sessionId);
+  if (report !== null) items.push(report);
 
   return items;
 }

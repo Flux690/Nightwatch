@@ -203,7 +203,7 @@ describe("toolset assembly by fleet capabilities", () => {
         (t) => t.schema.name,
       );
       expect(investigating).toContain("RecordHypothesis");
-      // The composition turn's tool is the loop's to attach, never the
+      // The report turn's tool is the loop's to attach, never the
       // toolset's: offered here it would let a run write itself up mid-work.
       expect(investigating).not.toContain("SubmitInvestigationReport");
     });
