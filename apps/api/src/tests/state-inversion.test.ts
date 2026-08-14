@@ -206,6 +206,7 @@ describe("state inversion: persistence and reads are API-local", () => {
         firedAt: new Date().toISOString(),
         annotations: {},
         generatorURL: null,
+        values: {},
         rawPayload: {},
       },
     ]);
@@ -295,6 +296,7 @@ describe("state inversion: opening alert context stays alert-scoped", () => {
       firedAt: new Date().toISOString(),
       annotations: {},
       generatorURL: null,
+      values: {},
       rawPayload: {},
     };
 

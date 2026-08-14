@@ -127,6 +127,7 @@ function setup(
     github?: GitHubIntegrationStatus;
     runners?: RunnerRecord[];
     ingestConfigured?: boolean;
+    grafanaConfigured?: boolean;
     lastReceivedAt?: string | null;
     prometheusConfigured?: boolean;
     lokiConfigured?: boolean;
@@ -136,6 +137,7 @@ function setup(
     github = NOT_CONFIGURED,
     runners = [],
     ingestConfigured = false,
+    grafanaConfigured = false,
     lastReceivedAt = null,
     prometheusConfigured = false,
     lokiConfigured = false,
@@ -149,22 +151,24 @@ function setup(
           ? runners
           : url === "/api/integrations/alerting/alertmanager"
             ? { configured: ingestConfigured, lastReceivedAt }
-            : url === "/api/integrations/prometheus"
-              ? {
-                  configured: prometheusConfigured,
-                  url: prometheusConfigured ? "http://prom:9090" : null,
-                  hasAuth: false,
-                  validatedAt: null,
-                }
-              : url === "/api/integrations/loki"
+            : url === "/api/integrations/alerting/grafana"
+              ? { configured: grafanaConfigured, lastReceivedAt: null }
+              : url === "/api/integrations/prometheus"
                 ? {
-                    configured: lokiConfigured,
-                    url: lokiConfigured ? "http://loki:3100" : null,
+                    configured: prometheusConfigured,
+                    url: prometheusConfigured ? "http://prom:9090" : null,
                     hasAuth: false,
-                    hasOrgId: false,
                     validatedAt: null,
                   }
-                : github;
+                : url === "/api/integrations/loki"
+                  ? {
+                      configured: lokiConfigured,
+                      url: lokiConfigured ? "http://loki:3100" : null,
+                      hasAuth: false,
+                      hasOrgId: false,
+                      validatedAt: null,
+                    }
+                  : github;
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -200,9 +204,10 @@ describe("IntegrationsPage", () => {
 
       await screen.findByText("GitHub");
       expect(categoryHeadings()).toEqual([
-        "Fleet",
         "Alerting",
-        "Observability",
+        "Metrics",
+        "Logs",
+        "Fleet",
         "Code",
       ]);
     });
@@ -217,9 +222,10 @@ describe("IntegrationsPage", () => {
         ).toBeInTheDocument();
       });
       expect(categoryHeadings()).toEqual([
-        "Fleet",
         "Alerting",
-        "Observability",
+        "Metrics",
+        "Logs",
+        "Fleet",
         "Code",
       ]);
     });
@@ -301,12 +307,14 @@ describe("IntegrationsPage", () => {
       const user = userEvent.setup();
       setup({ ingestConfigured: false });
 
-      await screen.findByText("Alertmanager");
+      await screen.findByText("Prometheus Alertmanager");
       expect(
-        within(cardFor("Alertmanager")).queryByText(/receiving|waiting/i),
+        within(cardFor("Prometheus Alertmanager")).queryByText(
+          /receiving|waiting/i,
+        ),
       ).not.toBeInTheDocument();
 
-      await user.click(cardFor("Alertmanager"));
+      await user.click(cardFor("Prometheus Alertmanager"));
       expect(
         await screen.findByText(/alertmanager destination/i),
       ).toBeInTheDocument();
@@ -325,6 +333,29 @@ describe("IntegrationsPage", () => {
       });
       const receiving = await screen.findByText("Receiving");
       expect(receiving).toHaveClass("text-success");
+    });
+
+    /* Two senders are two credentials and two deliveries. A shared status would
+       report one sender's first alert on the other's card, which is the one
+       thing this line exists to tell the truth about. */
+    it("reports each sender's own delivery, not the other's", async () => {
+      setup({
+        ingestConfigured: true,
+        lastReceivedAt: new Date().toISOString(),
+        grafanaConfigured: true,
+      });
+
+      await screen.findByText("Grafana Alerting");
+      await waitFor(() => {
+        expect(
+          within(cardFor("Prometheus Alertmanager")).getByText("Receiving"),
+        ).toBeInTheDocument();
+      });
+      expect(
+        within(cardFor("Grafana Alerting")).getByText(
+          "Waiting for first alert",
+        ),
+      ).toBeInTheDocument();
     });
   });
 

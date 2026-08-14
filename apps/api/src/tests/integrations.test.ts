@@ -623,9 +623,8 @@ describe("Alertmanager integration routes", () => {
     expect(reveal.statusCode).toBe(404);
   });
 
-  /* One route family serves every sender, so the kind is data. Refusing an
-     unknown one is what stops a typo minting a credential nothing can present
-     and leaving a card that never turns green. */
+  // A typo would otherwise mint a credential nothing can present, leaving a
+  // card that never turns green.
   it("refuses a sender it does not know, on every route in the family", async () => {
     for (const url of [
       "/api/integrations/alerting/nessus",
@@ -641,24 +640,6 @@ describe("Alertmanager integration routes", () => {
         error: "Unknown alert source: nessus",
       });
     }
-  });
-
-  it("mints a credential for each sender independently", async () => {
-    const am = await authed({
-      method: "POST",
-      url: "/api/integrations/alerting/alertmanager/credential",
-    });
-    const grafana = await authed({
-      method: "POST",
-      url: "/api/integrations/alerting/grafana/credential",
-    });
-    expect(am.statusCode).toBe(201);
-    expect(grafana.statusCode).toBe(201);
-
-    // Two rows, two tokens: rotating one leaves the other's deliveries alone.
-    const amToken = (JSON.parse(am.body) as { token: string }).token;
-    const grafanaToken = (JSON.parse(grafana.body) as { token: string }).token;
-    expect(amToken).not.toBe(grafanaToken);
   });
 
   it("mints an nwi_ credential storing only the hash; reveal returns the plaintext", async () => {

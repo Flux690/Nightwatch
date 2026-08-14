@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type {
-  DeliveryContext,
-  NormalizedAlert,
-  SessionMeta,
-} from "@nightwarden/shared";
+import type { NormalizedAlert, SessionMeta } from "@nightwarden/shared";
+import type { DeliveryContext } from "../alerts/delivery.js";
 import { mintSession } from "../auth/session.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { dispatcher } from "../dispatcher.js";

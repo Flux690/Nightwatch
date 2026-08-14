@@ -1,6 +1,5 @@
 import type {
   AlertGroupContext,
-  DeliveryContext,
   MessagePart,
   NativeEnvelope,
   NormalizedAlert,
@@ -10,6 +9,7 @@ import type {
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
+import type { DeliveryContext } from "../alerts/delivery.js";
 import { getDb } from "./client.js";
 import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 
@@ -26,9 +26,8 @@ const INSERT_ALERT = `INSERT INTO alerts
    VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL,
       @injected, @droppedAlerts, @groupContext, @alert)`;
 
-/* The delivery's own facts are denormalised onto every alert it carried: a row
-   is durable before any session owns it, so there is nowhere else they could
-   live that a queued alert could still be read from. */
+// Denormalised onto every alert the delivery carried: a row is durable before
+// any session owns it, so a queued alert has nowhere else to read them from.
 function alertParams(
   sessionId: string | null,
   groupKey: string,

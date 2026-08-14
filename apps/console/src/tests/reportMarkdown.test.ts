@@ -17,6 +17,7 @@ const ALERT: NormalizedAlert = {
   firedAt: "2026-07-21T12:00:00.000Z",
   annotations: {},
   generatorURL: null,
+  values: {},
   rawPayload: {},
 };
 

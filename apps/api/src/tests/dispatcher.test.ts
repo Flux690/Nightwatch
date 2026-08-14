@@ -40,6 +40,7 @@ function makeAlert(sourceAlertId: string, firedAt = FIRED_AT): NormalizedAlert {
     firedAt,
     annotations: {},
     generatorURL: null,
+    values: {},
     rawPayload: {},
   };
 }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type {
+  AlertSourceKind,
   GitHubIntegrationStatus,
   LokiIntegrationStatus,
   PrometheusIntegrationStatus,
@@ -11,15 +12,11 @@ import { Boxes, Server } from "lucide-react";
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
+import { ALERT_SOURCE_CONTENT } from "./alertSourceContent";
 
-const CATEGORIES = [
-  "Fleet",
-  "Alerting",
-  "Observability",
-  "Code",
-  "Channels",
-  "Trackers",
-] as const;
+// Named for what a connection gives an investigation. A section appears with
+// its first card.
+const CATEGORIES = ["Alerting", "Metrics", "Logs", "Fleet", "Code"] as const;
 
 type Category = (typeof CATEGORIES)[number];
 
@@ -78,6 +75,44 @@ function CatalogCard({
   );
 }
 
+interface AlertSourceStatus {
+  configured: boolean;
+  lastReceivedAt: string | null;
+}
+
+function useAlertSource(kind: AlertSourceKind): AlertSourceStatus | undefined {
+  return useQuery<AlertSourceStatus>({
+    queryKey: ["alert-source", kind],
+    queryFn: () =>
+      apiFetch<AlertSourceStatus>(`/api/integrations/alerting/${kind}`),
+  }).data;
+}
+
+/* The status line is delivery, not configuration: a minted credential nobody
+   has posted with says so, because a card reading Connected on a sender that
+   has never delivered is the failure this whole surface exists to catch. */
+function alertSourceCard(
+  kind: AlertSourceKind,
+  description: string,
+  status: AlertSourceStatus | undefined,
+): IntegrationCard {
+  const content = ALERT_SOURCE_CONTENT[kind];
+  return {
+    title: content.label,
+    description,
+    category: "Alerting",
+    logo: <img src={content.logo} alt="" className="size-5" />,
+    to: `/integrations/alerting/${kind}`,
+    status:
+      status?.configured !== true
+        ? null
+        : status.lastReceivedAt !== null
+          ? "Receiving"
+          : "Waiting for first alert",
+    statusVariant: status?.lastReceivedAt !== null ? "success" : "muted",
+  };
+}
+
 export function IntegrationsPage(): React.JSX.Element {
   const navigate = useNavigate();
 
@@ -92,16 +127,10 @@ export function IntegrationsPage(): React.JSX.Element {
     queryFn: () => apiFetch<RunnerRecord[]>("/api/runners"),
   });
 
-  const { data: ingest } = useQuery<{
-    configured: boolean;
-    lastReceivedAt: string | null;
-  }>({
-    queryKey: ["alertmanager-integration"],
-    queryFn: () =>
-      apiFetch<{ configured: boolean; lastReceivedAt: string | null }>(
-        "/api/integrations/alerting/alertmanager",
-      ),
-  });
+  // One query per sender: each has its own credential and its own delivery
+  // proof, so one status line can never stand for the other's.
+  const alertmanager = useAlertSource("alertmanager");
+  const grafana = useAlertSource("grafana");
 
   const { data: prometheus } = useQuery<PrometheusIntegrationStatus>({
     queryKey: ["prometheus-integration"],
@@ -156,26 +185,21 @@ export function IntegrationsPage(): React.JSX.Element {
       "Read pod state, events and logs, and roll a deployment on approval.",
       "cluster",
     ),
-    {
-      title: "Alertmanager",
-      description:
-        "Forward the alerts that open an investigation the moment one fires.",
-      category: "Alerting",
-      logo: <img src="/logos/alertmanager.svg" alt="" className="size-5" />,
-      to: "/integrations/alerting/alertmanager",
-      status:
-        ingest?.configured !== true
-          ? null
-          : ingest.lastReceivedAt !== null
-            ? "Receiving"
-            : "Waiting for first alert",
-      statusVariant: ingest?.lastReceivedAt !== null ? "success" : "muted",
-    },
+    alertSourceCard(
+      "alertmanager",
+      "Forward the alerts that open an investigation the moment one fires.",
+      alertmanager,
+    ),
+    alertSourceCard(
+      "grafana",
+      "Forward alerts from Grafana's own alerting, through a webhook contact point.",
+      grafana,
+    ),
     {
       title: "Prometheus",
       description:
         "Query your metrics to confirm a symptom and chart what backs it.",
-      category: "Observability",
+      category: "Metrics",
       logo: <img src="/logos/prometheus.svg" alt="" className="size-5" />,
       to: "/integrations/prometheus",
       status: prometheus?.configured === true ? "Connected" : null,
@@ -184,7 +208,7 @@ export function IntegrationsPage(): React.JSX.Element {
       title: "Loki",
       description:
         "Search your logs for the errors behind an alert and quote them as evidence.",
-      category: "Observability",
+      category: "Logs",
       logo: <img src="/logos/loki.svg" alt="" className="size-5" />,
       to: "/integrations/loki",
       status: loki?.configured === true ? "Connected" : null,

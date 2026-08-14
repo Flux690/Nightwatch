@@ -22,11 +22,8 @@ import {
   publishRunFinished,
   publishRunStopped,
 } from "./session/stream.js";
-import type {
-  DeliveryContext,
-  NormalizedAlert,
-  TranscriptRow,
-} from "@nightwarden/shared";
+import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
+import type { DeliveryContext } from "./alerts/delivery.js";
 
 // Alert, chat, and resume all funnel through dispatch(). Concurrency is the run
 // pool; what an alert joins is Alertmanager's group key, never our timing.

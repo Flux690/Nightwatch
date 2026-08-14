@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, TriangleAlert } from "lucide-react";
+import type { AlertSourceKind } from "@nightwarden/shared";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Page } from "@/components/layout/Page";
@@ -11,6 +13,7 @@ import { ICON_UI } from "@/lib/iconProps";
 import { timeAgo } from "@/lib/time";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
+import { ALERT_SOURCE_CONTENT } from "./alertSourceContent";
 
 interface CredentialStatus {
   configured: boolean;
@@ -20,49 +23,38 @@ interface CredentialStatus {
 
 const MASKED_TOKEN = "nwi_ ••••••••";
 
-function receiverSnippet(ingestUrl: string, token: string): string {
-  return [
-    "receivers:",
-    "  - name: nightwarden",
-    "    webhook_configs:",
-    `      - url: '${ingestUrl}'`,
-    "        http_config:",
-    "          authorization:",
-    "            type: Bearer",
-    `            credentials: '${token}'`,
-  ].join("\n");
-}
-
-export function AlertmanagerPage(): React.JSX.Element {
+export function AlertSourcePage({
+  kind,
+}: {
+  kind: AlertSourceKind;
+}): React.JSX.Element {
+  const content = ALERT_SOURCE_CONTENT[kind];
   const queryClient = useQueryClient();
   const [token, setToken] = useState<string | null>(null);
   const [confirmRotate, setConfirmRotate] = useState(false);
 
+  const base = `/api/integrations/alerting/${kind}`;
+  // Keyed by kind: two senders are two credentials with two status lines, and a
+  // shared key would show one sender's delivery proof on the other's card.
+  const queryKey = ["alert-source", kind];
+
   const { data: status, isLoading } = useQuery<CredentialStatus>({
-    queryKey: ["alertmanager-integration"],
-    queryFn: () =>
-      apiFetch<CredentialStatus>("/api/integrations/alerting/alertmanager"),
+    queryKey,
+    queryFn: () => apiFetch<CredentialStatus>(base),
   });
 
   const generate = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>(
-        "/api/integrations/alerting/alertmanager/credential",
-        {
-          method: "POST",
-        },
-      ),
+      apiFetch<{ token: string }>(`${base}/credential`, { method: "POST" }),
     onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
       if (rotating) {
         toast.success(
-          "Credential rotated - paste the updated receiver into your Alertmanager",
+          `Credential rotated - paste the updated credential into ${content.label}`,
         );
       }
-      await queryClient.invalidateQueries({
-        queryKey: ["alertmanager-integration"],
-      });
+      await queryClient.invalidateQueries({ queryKey });
     },
     onError: (err) =>
       toast.show({
@@ -74,12 +66,9 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const reveal = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>(
-        "/api/integrations/alerting/alertmanager/credential/reveal",
-        {
-          method: "POST",
-        },
-      ),
+      apiFetch<{ token: string }>(`${base}/credential/reveal`, {
+        method: "POST",
+      }),
     onSuccess: ({ token: revealed }) => setToken(revealed),
     onError: (err) =>
       toast.show({
@@ -125,7 +114,7 @@ export function AlertmanagerPage(): React.JSX.Element {
     <Page
       crumbs={[
         { label: "Integrations", to: "/integrations" },
-        { label: "Alertmanager" },
+        { label: content.label },
       ]}
       controls={
         showStatus && status ? (
@@ -147,8 +136,7 @@ export function AlertmanagerPage(): React.JSX.Element {
     >
       <div className="flex flex-col gap-8">
         <p className="max-w-3xl text-sm text-muted-foreground">
-          Forward alerts from the Alertmanager you already run. One credential
-          covers the whole fleet.
+          {content.blurb}
         </p>
 
         {isLoading && (
@@ -161,21 +149,27 @@ export function AlertmanagerPage(): React.JSX.Element {
         {status && (
           <>
             <section className="flex flex-col gap-2">
-              <p className="text-sm font-semibold">
-                1. Paste this receiver into your alertmanager.yml
-              </p>
+              <p className="text-sm font-semibold">{content.setupStep}</p>
               <CopyableSnippet
-                label="Copy Alertmanager receiver"
-                text={receiverSnippet(status.ingestUrl, token ?? MASKED_TOKEN)}
+                label={content.copyLabel}
+                text={content.snippet(status.ingestUrl, token ?? MASKED_TOKEN)}
                 actions={snippetActions}
                 copyable={token !== null}
               />
             </section>
 
+            {/* Stated where they are set: these fail without reporting. */}
+            {content.warnings.map((warning) => (
+              <Alert key={warning} variant="warning" className="max-w-3xl">
+                <TriangleAlert {...ICON_UI} />
+                <AlertDescription>{warning}</AlertDescription>
+              </Alert>
+            ))}
+
             {configured && (
               <section className="flex flex-col gap-2">
-                <p className="text-sm font-semibold">2. Reload Alertmanager</p>
-                {/* Delivery is observed, never probed: Alertmanager dials in, so
+                <p className="text-sm font-semibold">{content.confirmStep}</p>
+                {/* Delivery is observed, never probed: the sender dials in, so
                     the status line is the proof. A button posting from this
                     browser would exercise a leg that already demonstrably works. */}
                 <p className="max-w-3xl text-sm text-muted-foreground">
@@ -201,7 +195,7 @@ export function AlertmanagerPage(): React.JSX.Element {
         open={confirmRotate}
         onOpenChange={setConfirmRotate}
         title="Rotate credential?"
-        description="The current credential stops working immediately, and your Alertmanager stops delivering until you paste the updated receiver."
+        description={content.rotateDescription}
         confirmLabel="Rotate"
         destructive
         onConfirm={() => generate.mutate()}

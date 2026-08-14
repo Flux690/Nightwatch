@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireSession } from "../auth/session.js";
 import { decrypt, encrypt } from "../secrets.js";
 import {
@@ -384,16 +384,15 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  /* An alert source is a push source: its credential is minted here (the config
-     plane); deliveries hit /alerts/ingest (the data plane) with that token. One
-     family for every kind, so a new sender is a kind rather than three routes. */
-  fastify.get<{ Params: { kind: string } }>(
+  // Credential minted here (the config plane); deliveries hit /alerts/ingest
+  // (the data plane) with it. One family, so a new sender is a kind.
+  const knownSender = [requireSession, requireKnownAlertSource];
+
+  fastify.get<AlertSourceRoute>(
     "/integrations/alerting/:kind",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const kind = alertSourceKindOr404(request.params.kind, reply);
-      if (kind === null) return reply;
-      const source = getAlertSource(kind);
+    { preHandler: knownSender },
+    async (request) => {
+      const source = getAlertSource(request.params.kind);
       return {
         configured: source !== null,
         ingestUrl: `${publicUrl(request)}/api/alerts/ingest`,
@@ -404,25 +403,22 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  fastify.post<{ Params: { kind: string } }>(
+  fastify.post<AlertSourceRoute>(
     "/integrations/alerting/:kind/credential",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const kind = alertSourceKindOr404(request.params.kind, reply);
-      if (kind === null) return reply;
-      return reply.code(201).send({ token: generateAlertSourceToken(kind) });
-    },
+    { preHandler: knownSender },
+    async (request, reply) =>
+      reply
+        .code(201)
+        .send({ token: generateAlertSourceToken(request.params.kind) }),
   );
 
   // Reveal is a deliberate, non-idempotent action: the plaintext only crosses
   // the wire when the user explicitly asks for it.
-  fastify.post<{ Params: { kind: string } }>(
+  fastify.post<AlertSourceRoute>(
     "/integrations/alerting/:kind/credential/reveal",
-    { preHandler: requireSession },
+    { preHandler: knownSender },
     async (request, reply) => {
-      const kind = alertSourceKindOr404(request.params.kind, reply);
-      if (kind === null) return reply;
-      const token = getAlertSourcePlaintext(kind);
+      const token = getAlertSourcePlaintext(request.params.kind);
       if (token === null) {
         return reply
           .code(404)
@@ -433,13 +429,21 @@ export async function registerIntegrationRoutes(
   );
 }
 
-// Null means the reply has been sent. Checked against the shared list so the
-// console and the API cannot disagree about which senders exist.
-function alertSourceKindOr404(
-  value: string,
+/* The handlers below run only for a sender the build knows, so they read the
+   kind as one. Guarded the way requireSession guards a caller's identity: the
+   check is the route's precondition, not a branch inside every handler. */
+interface AlertSourceRoute {
+  Params: { kind: AlertSourceKind };
+}
+
+// Checked against the shared list, so the console and the API cannot disagree
+// about which senders exist.
+async function requireKnownAlertSource(
+  request: FastifyRequest<{ Params: { kind: string } }>,
   reply: FastifyReply,
-): AlertSourceKind | null {
-  if (isAlertSourceKind(value)) return value;
-  void reply.code(404).send({ error: `Unknown alert source: ${value}` });
-  return null;
+): Promise<void> {
+  const { kind } = request.params;
+  if (!isAlertSourceKind(kind)) {
+    await reply.code(404).send({ error: `Unknown alert source: ${kind}` });
+  }
 }

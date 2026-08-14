@@ -10,9 +10,9 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { TestProviders } from "./renderWithProviders.js";
-import type { RunnerRecord } from "@nightwarden/shared";
+import type { AlertSourceKind, RunnerRecord } from "@nightwarden/shared";
 
-import { AlertmanagerPage } from "../pages/AlertmanagerPage.js";
+import { AlertSourcePage } from "../pages/AlertSourcePage.js";
 
 const INGEST_TOKEN = "nwi_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345";
 const ROTATED_TOKEN = "nwi_rotated999999999999999999999999";
@@ -56,12 +56,12 @@ function jsonOk(body: unknown, status = 200) {
   });
 }
 
-function renderAlertmanagerRoute() {
+function renderAlertmanagerRoute(kind: AlertSourceKind = "alertmanager") {
   const rootRoute = createRootRoute();
   const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations/alerting/alertmanager",
-    component: AlertmanagerPage,
+    component: () => <AlertSourcePage kind={kind} />,
   });
   const integrationsRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -94,6 +94,7 @@ function setup(
     lastReceivedAt?: string | null;
     runners?: RunnerRecord[];
     validate?: unknown;
+    kind?: AlertSourceKind;
   } = {},
 ) {
   const {
@@ -101,7 +102,9 @@ function setup(
     lastReceivedAt = null,
     runners = [dockerRunner("prod-web-01")],
     validate = MATCHED_VALIDATE,
+    kind = "alertmanager",
   } = opts;
+  const base = `/api/integrations/alerting/${kind}`;
   let rotated = false;
 
   const clipboardWrite = vi.fn().mockResolvedValue(undefined);
@@ -114,19 +117,13 @@ function setup(
     .fn()
     .mockImplementation((url: string, init?: RequestInit) => {
       if (url === "/api/runners") return jsonOk(runners);
-      if (
-        url === "/api/integrations/alerting/alertmanager/credential" &&
-        init?.method === "POST"
-      ) {
+      if (url === `${base}/credential` && init?.method === "POST") {
         rotated = true;
         return jsonOk({ token: ROTATED_TOKEN }, 201);
       }
-      if (
-        url === "/api/integrations/alerting/alertmanager/credential/reveal" &&
-        init?.method === "POST"
-      )
+      if (url === `${base}/credential/reveal` && init?.method === "POST")
         return jsonOk({ token: INGEST_TOKEN });
-      if (url === "/api/integrations/alerting/alertmanager")
+      if (url === base)
         return jsonOk({
           configured: configured || rotated,
           ingestUrl: INGEST_URL,
@@ -138,7 +135,7 @@ function setup(
     });
   vi.stubGlobal("fetch", fetchMock);
 
-  const view = renderAlertmanagerRoute();
+  const view = renderAlertmanagerRoute(kind);
   return { fetchMock, clipboardWrite, view };
 }
 
@@ -147,7 +144,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AlertmanagerPage", () => {
+describe("AlertSourcePage", () => {
   it("unconfigured: previews the masked receiver, mints only on demand, then fills in the real token", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ configured: false });
@@ -217,6 +214,28 @@ describe("AlertmanagerPage", () => {
     expect(
       screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // One page serves every sender, so the setup and the settings that fail
+  // silently both have to come from the kind rather than from Alertmanager.
+  it("renders each sender's own setup and its own quiet failures", async () => {
+    const { view } = setup({ configured: true });
+    await screen.findByText(/waiting for first alert/i);
+    expect(
+      screen.getByText(/send_resolved at its default/),
+    ).toBeInTheDocument();
+    view.unmount();
+    vi.unstubAllGlobals();
+
+    setup({ kind: "grafana", configured: true });
+    await screen.findByText(/waiting for first alert/i);
+    expect(screen.getByText(/Contact points/)).toBeInTheDocument();
+    // A contact point is a form, so no alertmanager.yml is offered.
+    expect(screen.queryByText(/receivers:/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Custom Payload empty/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Disable resolved message off/),
+    ).toBeInTheDocument();
   });
 
   it("delivery state: Receiving with a relative time once an alert has landed", async () => {

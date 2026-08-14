@@ -1,9 +1,9 @@
 import type {
   AlertGroupContext,
-  DeliveryContext,
   FleetRunner,
   NormalizedAlert,
 } from "@nightwarden/shared";
+import type { DeliveryContext } from "../alerts/delivery.js";
 import {
   budgetLine,
   CHAT_PROMPT,
@@ -89,7 +89,7 @@ export function buildInitialContext(
   const droppedLine =
     droppedAlerts === 0
       ? ""
-      : `\nYour alert source left ${droppedAlerts} further alert${droppedAlerts === 1 ? "" : "s"} out of this delivery, so this group is larger than what you can see here. Treat the list above as part of the incident, not all of it.\n`;
+      : `\nThe alert source left ${droppedAlerts} further alert${droppedAlerts === 1 ? "" : "s"} out of this delivery, so this group is larger than what you can see here. Treat the list above as part of the incident, not all of it.\n`;
 
   const openingTurn = `${opening}
 
@@ -105,9 +105,8 @@ Begin now. Start with whichever read tool most directly addresses this alert typ
   };
 }
 
-/* Why these alerts arrived together, in the sender's own words. Given rather
-   than left to be intersected: a batch the agent cannot explain reads as a
-   coincidence, and it stops looking for what the members share. */
+// Given rather than left to be intersected: a batch the agent cannot explain
+// reads as a coincidence, and it stops looking for what the members share.
 function formatGroupContext(context: AlertGroupContext | null): string {
   if (context === null) return "";
   const lines: string[] = [];
@@ -192,8 +191,14 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
     condition === null ? "" : `\ncondition that fired: ${condition}`;
   const linkLine =
     alert.generatorURL === null ? "" : `\nlink: ${alert.generatorURL}`;
+  // The reading that tripped the rule, where the sender supplies one. It is the
+  // only measurement here, so it is never the whole picture.
+  const values = Object.entries(alert.values)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+  const valuesLine = values ? `\nvalues at fire time: ${values}` : "";
   return `id: ${alert.sourceAlertId}
 target: ${targetLine}
 type: ${alert.alertType}${severityLine}
-fired at: ${alert.firedAt}${labelLine}${formatAnnotations(alert.annotations)}${conditionLine}${linkLine}`;
+fired at: ${alert.firedAt}${labelLine}${formatAnnotations(alert.annotations)}${conditionLine}${valuesLine}${linkLine}`;
 }

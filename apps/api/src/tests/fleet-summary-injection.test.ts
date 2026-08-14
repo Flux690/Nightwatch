@@ -61,6 +61,7 @@ function makeAlert(service: string): NormalizedAlert {
     firedAt: new Date().toISOString(),
     annotations: {},
     generatorURL: null,
+    values: {},
     rawPayload: {},
   };
 }

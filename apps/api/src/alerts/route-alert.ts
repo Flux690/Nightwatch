@@ -1,4 +1,5 @@
-import type { DeliveryContext, NormalizedAlert } from "@nightwarden/shared";
+import type { NormalizedAlert } from "@nightwarden/shared";
+import type { DeliveryContext } from "./delivery.js";
 import { isDuplicate } from "./dedup.js";
 import { enqueueAlerts, sessionCoveringGroup } from "../db/sessions.js";
 import { dispatcher } from "../dispatcher.js";

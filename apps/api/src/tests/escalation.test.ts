@@ -201,6 +201,7 @@ describe("termination paths: every run ends in model text, no escalation", () =>
       firedAt: new Date().toISOString(),
       annotations: {},
       generatorURL: null,
+      values: {},
       rawPayload: {},
     };
 

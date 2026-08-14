@@ -21,7 +21,7 @@ The important part is what it will not do. NightWarden never changes anything on
 flowchart LR
 
 %% Infrastructure
-monitoring["Your monitoring<br/>Prometheus · Loki · Alertmanager<br/>(or any webhook source)"]
+monitoring["Your monitoring<br/>Prometheus · Loki · Alertmanager<br/>(or Grafana Alerting)"]
 runner["Runner<br/>Docker · Kubernetes · Host Metrics"]
 
 %% Brain
@@ -50,9 +50,11 @@ class console ui;
 linkStyle default stroke:#888,stroke-width:1.5;
 ```
 
-When an alert fires, your Alertmanager (or any webhook source) posts it to the API's ingest endpoint. One webhook delivery is one alert group, and that grouping is yours: whatever `group_by` you already configured decides which alerts are investigated together, and NightWarden never regroups them on a clock of its own. The API opens a session for the group and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
+When an alert fires, your Alertmanager or Grafana Alerting posts it to the API's ingest endpoint. One webhook delivery is one alert group, and that grouping is yours: whatever `group_by` you already configured decides which alerts are investigated together, and NightWarden never regroups them on a clock of its own. The API opens a session for the group and runs the agent loop: it calls read-only tools on the relevant runner - service logs, process lists, metrics - feeds the results back to the model, and keeps going until the model proposes a fix or asks you a question.
 
-**What the agent is handed about an alert** is everything the alert carried and nothing invented: its labels, its annotations, when it fired, and the service it resolves to when the fleet advertises one. It also gets the PromQL expression that fired, decoded out of the link Prometheus puts in the alert, so it knows the threshold without spending a call to find it. Annotations are given as text and are never dereferenced - a `runbook_url` reaches the model as a fact, and nothing follows it, because fetching a URL out of an alert body is a request an attacker who can write an annotation would be choosing for you.
+**What the agent is handed about an alert** is everything the alert carried and nothing invented: its labels, its annotations, when it fired, and the service it resolves to when the fleet advertises one. It also gets the PromQL expression that fired, decoded out of the link Prometheus puts in the alert, so it knows the threshold without spending a call to find it, and the numbers the rule evaluated to at that instant where the sender reports them. Annotations are given as text and are never dereferenced - a `runbook_url` reaches the model as a fact, and nothing follows it, because fetching a URL out of an alert body is a request an attacker who can write an annotation would be choosing for you.
+
+**It is also told why these alerts arrived together.** A delivery carries the labels your `group_by` resolved to, the labels every alert in the group holds, and any annotations they share. Your alert source has already worked that out, so the agent is given it rather than left to intersect the labels and guess whether what they share is the incident or a coincidence.
 
 As it works it builds an **investigation record**, one claim at a time. Each time it settles a hunch it writes down what it tested, the verdict it earned and the ids of the tool calls that back it. Nothing it wrote earlier can be edited or deleted, so a claim it later abandoned stays on the record beside the one that replaced it. How well each claim is backed is worked out by the system from those citations, never claimed by the model.
 
@@ -62,7 +64,7 @@ The run cannot end on an empty record, or on a claim whose only citations are ca
 
 **A fix is not believed until the alert says so.** NightWarden never asks the model whether its fix worked - it re-checks the condition that fired, and there are two independent ways it learns the answer:
 
-1. **Your alert source tells it.** When Alertmanager posts the resolved notification for an alert, that alert is marked cleared. This is the ordinary path and needs no configuration beyond a webhook receiver, where `send_resolved` is already the default.
+1. **Your alert source tells it.** When your sender posts the resolved notification for an alert, that alert is marked cleared. This is the ordinary path and needs no configuration beyond a webhook receiver: Alertmanager's `send_resolved` is already the default, and Grafana sends one unless you turn it off.
 2. **NightWarden asks Prometheus itself.** For as long as an investigation has a condition nobody has seen recover, NightWarden asks Prometheus whether the alerting rule that fired still holds an instance matching this alert, through the rules API. That is the same rule on the same evaluation interval that fired in the first place - not a query NightWarden composed, and not a threshold it guessed. A rule that is `pending` counts as still firing. It asks often while the incident is live and progressively less as it ages, because the realistic timeline is that a fix lands, the rule's `for:` duration elapses, and the alert goes quiet some minutes after the run that fixed it has already ended.
 
 Both write the same record, so they cross-check each other: if you have turned `send_resolved` off, the second path still notices the recovery.
@@ -145,7 +147,7 @@ investigation rather than opening another - see below.
 
 If your alert source leaves alerts out of a delivery, which Alertmanager does
 when a group is very large, it says how many. NightWarden passes that straight
-to the agent: _"your alert source left 6 further alerts out of this delivery, so
+to the agent: _"the alert source left 6 further alerts out of this delivery, so
 this group is larger than what you can see here."_ An investigation working from
 a partial group is told it is working from a partial group.
 
@@ -366,7 +368,7 @@ itself a finding.
 - **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one. A fleet-level read with no runner named answers for every runner at once, each answer attributed.
 - **No external infrastructure.** All durable state is one SQLite file in the state directory.
-- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager (or any Alertmanager-format webhook source) at the ingest endpoint. Nothing to rip out - NightWarden plugs into the stack you already run.
+- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Nothing to rip out - NightWarden plugs into the stack you already run.
 
 ## Getting started
 
@@ -396,7 +398,7 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**. Four plugs matter here: the **Runner** (an executor on your hosts), **Alertmanager** (where your alerts come from), **Prometheus** (metric evidence), and **Loki** (log evidence). None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, Prometheus, or Loki).
+In the console go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, Prometheus, or Loki).
 
 **Add a runner.** Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Either wizard is three steps and needs no manual config editing:
 
@@ -404,7 +406,14 @@ In the console go to **Integrations**. Four plugs matter here: the **Runner** (a
 2. **Install the runner** - NightWarden mints a runner token and shows a ready-to-run install command with the token baked in. Copy it and run it on the target host or cluster. The runner dials back out over WSS and appears in your fleet within seconds.
 3. **Confirm what it sees** - the runner's advertised services, with the full identity key each one resolves under. Read straight from the manifest it already sent, so checking the wiring costs nothing and starts nothing.
 
-**Wire your alerts.** NightWarden does not ship a monitoring stack - forward alerts from the Alertmanager you already run. The **Alertmanager** card hands you one ready-made receiver snippet (URL and bearer credential baked in) to paste into your `alertmanager.yml`, and that is the whole setup: an alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync. The card's status reflects delivery rather than configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". The credential belongs to this alert source - one for the whole fleet (never per runner), and rotating it affects Alertmanager deliveries only. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header and speaks the Alertmanager webhook format, recognizing it by the shape of the body (`{ alerts: [...] }`) rather than by any client-controlled header. You can also start an investigation at any time from the console chat, with no alert source at all.
+**Wire your alerts.** NightWarden does not ship a monitoring stack - forward alerts from the one you already run. Two senders are offered under **Alerting**, and you can connect either or both:
+
+- **Prometheus Alertmanager** hands you a ready-made receiver snippet to paste into your `alertmanager.yml`. Leave `send_resolved` at its default of true: the resolved notification is one of the two ways an investigation learns the alert stopped firing.
+- **Grafana Alerting** hands you the URL and credential for a Webhook contact point. Leave **Custom Payload** empty - a custom body replaces the one NightWarden reads - and leave **Disable resolved message** off, for the same reason as `send_resolved`.
+
+Each mints its own credential and reports its own deliveries, so rotating one leaves the other alone. NightWarden generates that credential; you paste it into the sender. The card's status reflects delivery rather than configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". A credential covers the whole fleet and is never per runner.
+
+That is the whole setup: an alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header, and recognizes a delivery by the shape of its body (`{ alerts: [...] }`) rather than by any client-controlled header. Anything that produces that envelope is accepted, which is why Mimir, Thanos and VictoriaMetrics need nothing of their own - they all notify through Alertmanager or a fork of it. You can also start an investigation at any time from the console chat, with no alert source at all.
 
 **Connect Prometheus.** The **Prometheus** card takes the base URL of the Prometheus you already run (and, only if yours sits behind auth, a verbatim `Authorization` header value, stored encrypted). NightWarden only ever reads: the agent gains two query tools - an instant lookup and a range query windowed around the alert - so it can tell whether a metric climbed for hours or spiked at deploy time, with zero runners installed. The connection is probed with a real query before it saves, so a successful connect is itself the proof it is reachable. Keep Prometheus off the public internet; NightWarden needs to reach it over your private network.
 
@@ -593,7 +602,7 @@ apps/
       agent/            agent loop, prompts/, tools/ (per-domain schemas assembled in toolset.ts)
                         report.ts is the only place the investigation record is written
                         evidence-source.ts answers which source a cited call questioned
-      alerts/           Alertmanager ingest, dedup, and routing a delivery to its group
+      alerts/           alert ingest, dedup, and routing a delivery to its group
       auth/             owner password, runner token minting, fleet ingest credential
       config/           user settings: the config store, its routes, health and the run-readiness gate
       console/          serves the built console beside the API bundle, with an SPA fallback

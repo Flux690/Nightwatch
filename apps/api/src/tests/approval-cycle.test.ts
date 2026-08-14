@@ -840,6 +840,7 @@ describe("durable approval interrupts", () => {
       firedAt: new Date().toISOString(),
       annotations: {},
       generatorURL: null,
+      values: {},
       rawPayload: {},
     };
 

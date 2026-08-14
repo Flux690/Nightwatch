@@ -19,6 +19,7 @@ const ALERT: NormalizedAlert = {
   firedAt: FIRED_AT,
   annotations: {},
   generatorURL: null,
+  values: {},
   rawPayload: {},
 };
 

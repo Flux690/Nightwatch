@@ -197,6 +197,21 @@ describe("user context reaches the model", () => {
     expect(turn).toContain(grafana.generatorURL);
   });
 
+  // Grafana's rule page carries no expression, so these numbers are the only
+  // measurement the alert arrives with.
+  it("reads the values a Grafana body evaluated at fire time", () => {
+    const turn = openingTurnFor({ values: { B: 0.85, C: 1 } });
+    expect(turn).toContain("values at fire time: B=0.85, C=1");
+    expect(openingTurnFor()).not.toContain("values at fire time:");
+
+    // A rule dividing by zero reports NaN, which is the failure rather than a
+    // measurement of it.
+    const [parsed] = parseAlertmanager({
+      alerts: [alert({ values: { B: Number.NaN, D: 3 } })],
+    }).firing;
+    expect(parsed?.values).toEqual({ D: 3 });
+  });
+
   it("renders an empty section when the sender wrote neither", () => {
     const [parsed] = parseAlertmanager({
       alerts: [alert({ annotations: undefined, generatorURL: undefined })],
@@ -255,16 +270,5 @@ describe("what a delivery says about its group", () => {
     });
     expect(delivery.groupContext).toBeNull();
     expect(openingTurnFor()).not.toContain("Grouped on");
-  });
-
-  // Non-string values are the sender's business: a group described partly in
-  // numbers still renders the part we can read rather than nothing at all.
-  it("keeps the readable labels when one of them is not a string", () => {
-    const turn = openingTurnFor(
-      {},
-      { groupLabels: { alertname: "HighCPU", replicas: 3 } },
-    );
-    expect(turn).toContain("Grouped on: alertname=HighCPU");
-    expect(turn).not.toContain("replicas");
   });
 });

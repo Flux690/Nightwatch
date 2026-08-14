@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type {
-  AlertGroupContext,
-  DeliveryContext,
-  NormalizedAlert,
-} from "@nightwarden/shared";
+import type { AlertGroupContext, NormalizedAlert } from "@nightwarden/shared";
+import type { DeliveryContext } from "../delivery.js";
 import { logger } from "../../logger.js";
 
 // Parsing IS normalization: no location and no target is ever stamped on an alert.
@@ -80,6 +77,7 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
         typeof alert["generatorURL"] === "string"
           ? alert["generatorURL"]
           : null,
+      values: toNumberMap(alert["values"]),
       rawPayload: alert,
     });
   }
@@ -136,6 +134,19 @@ function synthesizeFingerprint(labels: Record<string, string>): string {
     "synthetic-" +
     createHash("sha256").update(canonical).digest("hex").slice(0, 16)
   );
+}
+
+// Non-finite is dropped rather than rendered: NaN and Infinity are what a
+// division by zero in the rule looks like, and neither is a measurement.
+function toNumberMap(value: unknown): Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return out;
 }
 
 function toStringMap(value: unknown): Record<string, string> {

@@ -142,6 +142,7 @@ function alert(sourceAlertId: string, firedAt?: string): NormalizedAlert {
     firedAt: firedAt ?? new Date().toISOString(),
     annotations: {},
     generatorURL: null,
+    values: {},
     rawPayload: {},
   };
 }

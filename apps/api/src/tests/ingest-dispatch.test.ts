@@ -219,9 +219,8 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
     expect(alertIdsOf(sessionId!).sort()).toEqual(["c-1", "c-2", "c-3"]);
   });
 
-  /* Asserted through the opening turn rather than the stored row: the count
-     crosses the parser, the router, the alert rows and the prompt, and any one
-     of them dropping it leaves the agent reading a partial group as a whole. */
+  // Asserted through the opening turn, not the row: the count crosses four
+  // layers and any one of them dropping it is the same defect.
   it("tells the agent how many alerts the sender left out of a delivery", async () => {
     useGatedProvider();
     const before = countInvestigations();
@@ -314,6 +313,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
           firedAt: "2026-07-07T03:00:00.000Z",
           annotations: {},
           generatorURL: null,
+          values: {},
           rawPayload: {},
         },
       ],

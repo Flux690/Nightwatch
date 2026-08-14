@@ -31,6 +31,7 @@ const alert: NormalizedAlert = {
   firedAt: "2026-06-13T00:00:00.000Z",
   annotations: {},
   generatorURL: null,
+  values: {},
   rawPayload: {},
 };
 

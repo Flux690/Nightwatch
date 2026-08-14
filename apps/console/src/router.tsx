@@ -16,7 +16,7 @@ import { AgentPage } from "./pages/AgentPage.js";
 import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddRunnerPage } from "./pages/AddRunnerPage.js";
 import { RunnerListPage } from "./pages/RunnerListPage.js";
-import { AlertmanagerPage } from "./pages/AlertmanagerPage.js";
+import { AlertSourcePage } from "./pages/AlertSourcePage.js";
 import { PrometheusPage } from "./pages/PrometheusPage.js";
 import { LokiPage } from "./pages/LokiPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
@@ -139,7 +139,13 @@ const addKubernetesClusterRoute = createRoute({
 const alertmanagerRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/integrations/alerting/alertmanager",
-  component: AlertmanagerPage,
+  component: () => <AlertSourcePage kind="alertmanager" />,
+});
+
+const grafanaAlertingRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/integrations/alerting/grafana",
+  component: () => <AlertSourcePage kind="grafana" />,
 });
 
 const prometheusRoute = createRoute({
@@ -186,6 +192,7 @@ export const routeTree = rootRoute.addChildren([
     kubernetesClustersRoute,
     addKubernetesClusterRoute,
     alertmanagerRoute,
+    grafanaAlertingRoute,
     prometheusRoute,
     lokiRoute,
     settingsIndexRoute,
