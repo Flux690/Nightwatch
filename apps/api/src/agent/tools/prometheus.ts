@@ -127,7 +127,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "metric",
+    evidenceKind: "metric",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
@@ -188,7 +188,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "metric",
+    evidenceKind: "metric",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
@@ -276,7 +276,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
@@ -332,7 +332,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
@@ -382,7 +382,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {

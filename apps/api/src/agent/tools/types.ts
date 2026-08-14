@@ -56,7 +56,7 @@ interface ToolCommon {
      a separate list is a list that can be forgotten when a tool is added, and
      the report would then draw new evidence as plain text without anyone
      noticing. */
-  evidence: EvidenceKind;
+  evidenceKind: EvidenceKind;
   // A write safe to run twice, which is what lets a call caught by a crash be
   // replayed instead of unwound. Only ever true where the tool says why.
   idempotent?: true;

@@ -95,7 +95,7 @@ export interface Report {
    result that the renderer already works out. A crashed call needs no kind:
    `outcome` below already says so. */
 export type EvidenceKind =
-  "metric" | "logs" | "changes" | "state" | "diff" | "text";
+  "metric" | "logs" | "change" | "state" | "diff" | "text";
 
 // One cited tool call, resolved from the transcript at read time so the report
 // quotes what ran rather than storing a second copy of it.

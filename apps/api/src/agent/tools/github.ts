@@ -181,7 +181,7 @@ export const GITHUB_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "changes",
+    evidenceKind: "change",
     timeoutMs: 60_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {

@@ -88,7 +88,7 @@ function citedIds(report: Report): Set<string> {
 // registry no longer knows - a tool renamed in an upgrade - reads as plain text,
 // which is the honest fallback: the result is still quotable, just not typed.
 function evidenceKind(toolName: string): EvidenceKind {
-  return findTool(toolName)?.evidence ?? "text";
+  return findTool(toolName)?.evidenceKind ?? "text";
 }
 
 // In the order the calls happened, which is the order they are worth reading. A

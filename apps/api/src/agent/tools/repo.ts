@@ -286,7 +286,7 @@ export const REPO_TOOLS: Tool[] = [
     },
     effect: "read",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -339,7 +339,7 @@ export const REPO_TOOLS: Tool[] = [
     },
     effect: "write",
     policy: "auto",
-    evidence: "diff",
+    evidenceKind: "diff",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -384,7 +384,7 @@ export const REPO_TOOLS: Tool[] = [
     },
     effect: "write",
     policy: "auto",
-    evidence: "diff",
+    evidenceKind: "diff",
     timeoutMs: 60_000,
     on: "api",
     execute: (input, ctx) => {
@@ -426,7 +426,7 @@ export const REPO_TOOLS: Tool[] = [
     },
     effect: "write",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     timeoutMs: 300_000,
     on: "api",
     execute: (input, ctx) => {
@@ -476,7 +476,7 @@ export const REPO_TOOLS: Tool[] = [
     // gate, and gating creation would stall the 3am AFK flow this exists for.
     effect: "write",
     policy: "auto",
-    evidence: "changes",
+    evidenceKind: "change",
     // One PR per session branch, created or updated by branch identity, so a
     // second call after a crash refreshes the proposal rather than opening one.
     idempotent: true,

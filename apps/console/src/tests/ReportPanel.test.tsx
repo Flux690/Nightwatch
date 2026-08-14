@@ -96,7 +96,7 @@ const EVIDENCE: ResolvedEvidence[] = [
   {
     toolUseId: "tu-changes",
     toolName: "GetRecentChanges",
-    kind: "changes",
+    kind: "change",
     input: {},
     result: JSON.stringify({
       pullRequests: [

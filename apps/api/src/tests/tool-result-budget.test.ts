@@ -25,7 +25,7 @@ function toolReturning(content: unknown): Tool {
     },
     effect: "read",
     policy: "auto",
-    evidence: "text",
+    evidenceKind: "text",
     on: "api",
     execute: () => Promise.resolve({ content }),
   };

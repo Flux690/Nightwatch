@@ -95,7 +95,7 @@ export const REPORT_TOOLS: Tool[] = [
     policy: "auto",
     // Citable: a claim may rest on the call that recorded it, and what that
     // shows is its own sentence rather than a measurement to draw.
-    evidence: "text",
+    evidenceKind: "text",
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
       const parsed = RECORD_HYPOTHESIS_INPUT.safeParse(input);
@@ -123,7 +123,7 @@ export const SUBMIT_REPORT_TOOL: Tool = {
   schema: SUBMIT_INVESTIGATION_REPORT_SCHEMA,
   effect: "read",
   policy: "auto",
-  evidence: "text",
+  evidenceKind: "text",
   on: "api",
   execute: async (input, ctx): Promise<ToolExecuteResult> => {
     const parsed = SUBMIT_REPORT_INPUT.safeParse(input);
