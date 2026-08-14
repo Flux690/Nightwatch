@@ -330,7 +330,7 @@ describe("mid-run alert injection (loop seam)", () => {
   // from the session itself, or correlated alerts misroute into new sessions and re-fires go undeduped.
   it("after approve-resume, a correlated alert injects into the resumed session and the original alert is deduped", async () => {
     const runnerId = generateRunnerToken("docker", "inject-resume").id;
-    const tokenPlaintext = generateAlertSourceToken("inject-resume");
+    const tokenPlaintext = generateAlertSourceToken("alertmanager");
     const conn = registerRunner({
       runnerId: runnerId,
       platform: "docker",

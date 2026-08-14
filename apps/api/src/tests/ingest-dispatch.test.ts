@@ -122,7 +122,7 @@ describe("POST /alerts/ingest: one delivery, one investigation", () => {
       "ingest-runner",
       manifest("host-web-01", [dockerService("web-01")]),
     );
-    token = generateAlertSourceToken("ingest");
+    token = generateAlertSourceToken("alertmanager");
     server = Fastify({ logger: false });
     await mountApi(server, registerAlertRoutes);
     await server.ready();

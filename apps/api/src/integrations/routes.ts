@@ -19,6 +19,8 @@ import {
   getAlertSource,
   getAlertSourcePlaintext,
 } from "../db/alert-sources.js";
+import { isAlertSourceKind } from "@nightwarden/shared";
+import type { AlertSourceKind } from "@nightwarden/shared";
 import {
   GitHubApiError,
   listRepos,
@@ -382,39 +384,45 @@ export async function registerIntegrationRoutes(
     },
   );
 
-  // Alertmanager is a push source: its credential is minted here (the config
-  // plane); deliveries hit /alerts/ingest (the data plane) with that token.
-  fastify.get(
-    "/integrations/alertmanager",
+  /* An alert source is a push source: its credential is minted here (the config
+     plane); deliveries hit /alerts/ingest (the data plane) with that token. One
+     family for every kind, so a new sender is a kind rather than three routes. */
+  fastify.get<{ Params: { kind: string } }>(
+    "/integrations/alerting/:kind",
     { preHandler: requireSession },
-    async (request) => {
-      const source = getAlertSource("alertmanager");
+    async (request, reply) => {
+      const kind = alertSourceKindOr404(request.params.kind, reply);
+      if (kind === null) return reply;
+      const source = getAlertSource(kind);
       return {
         configured: source !== null,
         ingestUrl: `${publicUrl(request)}/api/alerts/ingest`,
-        // Delivery proof, not configuration state: null until the user's
-        // Alertmanager actually posts, and again after a rotation.
+        // Delivery proof, not configuration state: null until that sender
+        // actually posts, and again after a rotation.
         lastReceivedAt: source?.lastReceivedAt ?? null,
       };
     },
   );
 
-  fastify.post(
-    "/integrations/alertmanager/credential",
+  fastify.post<{ Params: { kind: string } }>(
+    "/integrations/alerting/:kind/credential",
     { preHandler: requireSession },
-    async (_request, reply) => {
-      const token = generateAlertSourceToken("alertmanager");
-      return reply.code(201).send({ token });
+    async (request, reply) => {
+      const kind = alertSourceKindOr404(request.params.kind, reply);
+      if (kind === null) return reply;
+      return reply.code(201).send({ token: generateAlertSourceToken(kind) });
     },
   );
 
   // Reveal is a deliberate, non-idempotent action: the plaintext only crosses
   // the wire when the user explicitly asks for it.
-  fastify.post(
-    "/integrations/alertmanager/credential/reveal",
+  fastify.post<{ Params: { kind: string } }>(
+    "/integrations/alerting/:kind/credential/reveal",
     { preHandler: requireSession },
-    async (_request, reply) => {
-      const token = getAlertSourcePlaintext("alertmanager");
+    async (request, reply) => {
+      const kind = alertSourceKindOr404(request.params.kind, reply);
+      if (kind === null) return reply;
+      const token = getAlertSourcePlaintext(kind);
       if (token === null) {
         return reply
           .code(404)
@@ -423,4 +431,15 @@ export async function registerIntegrationRoutes(
       return { token };
     },
   );
+}
+
+// Null means the reply has been sent. Checked against the shared list so the
+// console and the API cannot disagree about which senders exist.
+function alertSourceKindOr404(
+  value: string,
+  reply: FastifyReply,
+): AlertSourceKind | null {
+  if (isAlertSourceKind(value)) return value;
+  void reply.code(404).send({ error: `Unknown alert source: ${value}` });
+  return null;
 }

@@ -602,13 +602,13 @@ describe("Alertmanager integration routes", () => {
   it("reports not configured with the ingest URL; reveal 404s; a session is required", async () => {
     const unauthed = await server.inject({
       method: "GET",
-      url: "/api/integrations/alertmanager",
+      url: "/api/integrations/alerting/alertmanager",
     });
     expect(unauthed.statusCode).toBe(401);
 
     const res = await authed({
       method: "GET",
-      url: "/api/integrations/alertmanager",
+      url: "/api/integrations/alerting/alertmanager",
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as Record<string, unknown>;
@@ -618,15 +618,53 @@ describe("Alertmanager integration routes", () => {
 
     const reveal = await authed({
       method: "POST",
-      url: "/api/integrations/alertmanager/credential/reveal",
+      url: "/api/integrations/alerting/alertmanager/credential/reveal",
     });
     expect(reveal.statusCode).toBe(404);
+  });
+
+  /* One route family serves every sender, so the kind is data. Refusing an
+     unknown one is what stops a typo minting a credential nothing can present
+     and leaving a card that never turns green. */
+  it("refuses a sender it does not know, on every route in the family", async () => {
+    for (const url of [
+      "/api/integrations/alerting/nessus",
+      "/api/integrations/alerting/nessus/credential",
+      "/api/integrations/alerting/nessus/credential/reveal",
+    ]) {
+      const res = await authed({
+        method: url.endsWith("alerting/nessus") ? "GET" : "POST",
+        url,
+      });
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body)).toMatchObject({
+        error: "Unknown alert source: nessus",
+      });
+    }
+  });
+
+  it("mints a credential for each sender independently", async () => {
+    const am = await authed({
+      method: "POST",
+      url: "/api/integrations/alerting/alertmanager/credential",
+    });
+    const grafana = await authed({
+      method: "POST",
+      url: "/api/integrations/alerting/grafana/credential",
+    });
+    expect(am.statusCode).toBe(201);
+    expect(grafana.statusCode).toBe(201);
+
+    // Two rows, two tokens: rotating one leaves the other's deliveries alone.
+    const amToken = (JSON.parse(am.body) as { token: string }).token;
+    const grafanaToken = (JSON.parse(grafana.body) as { token: string }).token;
+    expect(amToken).not.toBe(grafanaToken);
   });
 
   it("mints an nwi_ credential storing only the hash; reveal returns the plaintext", async () => {
     const res = await authed({
       method: "POST",
-      url: "/api/integrations/alertmanager/credential",
+      url: "/api/integrations/alerting/alertmanager/credential",
     });
     expect(res.statusCode).toBe(201);
     const { token } = JSON.parse(res.body) as { token: string };
@@ -642,13 +680,13 @@ describe("Alertmanager integration routes", () => {
 
     const reveal = await authed({
       method: "POST",
-      url: "/api/integrations/alertmanager/credential/reveal",
+      url: "/api/integrations/alerting/alertmanager/credential/reveal",
     });
     expect(JSON.parse(reveal.body)).toEqual({ token });
 
     const status = await authed({
       method: "GET",
-      url: "/api/integrations/alertmanager",
+      url: "/api/integrations/alerting/alertmanager",
     });
     expect(JSON.parse(status.body)).toMatchObject({ configured: true });
   });
@@ -656,14 +694,14 @@ describe("Alertmanager integration routes", () => {
   it("rotation replaces the hash and resets the delivery stamp", async () => {
     const first = await authed({
       method: "POST",
-      url: "/api/integrations/alertmanager/credential",
+      url: "/api/integrations/alerting/alertmanager/credential",
     });
     const { token: oldToken } = JSON.parse(first.body) as { token: string };
     setAlertSourceReceived("alertmanager", "2026-07-18T03:12:00.000Z");
 
     const before = await authed({
       method: "GET",
-      url: "/api/integrations/alertmanager",
+      url: "/api/integrations/alerting/alertmanager",
     });
     expect(
       (JSON.parse(before.body) as { lastReceivedAt: string | null })
@@ -672,7 +710,7 @@ describe("Alertmanager integration routes", () => {
 
     const second = await authed({
       method: "POST",
-      url: "/api/integrations/alertmanager/credential",
+      url: "/api/integrations/alerting/alertmanager/credential",
     });
     const { token: newToken } = JSON.parse(second.body) as { token: string };
     expect(newToken).not.toBe(oldToken);

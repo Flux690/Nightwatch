@@ -138,7 +138,7 @@ const addKubernetesClusterRoute = createRoute({
 
 const alertmanagerRoute = createRoute({
   getParentRoute: () => appRoute,
-  path: "/integrations/alertmanager",
+  path: "/integrations/alerting/alertmanager",
   component: AlertmanagerPage,
 });
 

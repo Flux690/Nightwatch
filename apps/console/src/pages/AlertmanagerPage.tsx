@@ -40,14 +40,18 @@ export function AlertmanagerPage(): React.JSX.Element {
 
   const { data: status, isLoading } = useQuery<CredentialStatus>({
     queryKey: ["alertmanager-integration"],
-    queryFn: () => apiFetch<CredentialStatus>("/api/integrations/alertmanager"),
+    queryFn: () =>
+      apiFetch<CredentialStatus>("/api/integrations/alerting/alertmanager"),
   });
 
   const generate = useMutation({
     mutationFn: () =>
-      apiFetch<{ token: string }>("/api/integrations/alertmanager/credential", {
-        method: "POST",
-      }),
+      apiFetch<{ token: string }>(
+        "/api/integrations/alerting/alertmanager/credential",
+        {
+          method: "POST",
+        },
+      ),
     onSuccess: async ({ token: minted }) => {
       const rotating = status?.configured === true;
       setToken(minted);
@@ -71,7 +75,7 @@ export function AlertmanagerPage(): React.JSX.Element {
   const reveal = useMutation({
     mutationFn: () =>
       apiFetch<{ token: string }>(
-        "/api/integrations/alertmanager/credential/reveal",
+        "/api/integrations/alerting/alertmanager/credential/reveal",
         {
           method: "POST",
         },

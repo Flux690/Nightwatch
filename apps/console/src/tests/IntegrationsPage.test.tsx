@@ -86,7 +86,7 @@ function renderCatalogRoute(qc: QueryClient) {
   });
   const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/alertmanager",
+    path: "/integrations/alerting/alertmanager",
     component: () => <div>Alertmanager destination</div>,
   });
   const prometheusRoute = createRoute({
@@ -147,7 +147,7 @@ function setup(
       const body =
         url === "/api/runners"
           ? runners
-          : url === "/api/integrations/alertmanager"
+          : url === "/api/integrations/alerting/alertmanager"
             ? { configured: ingestConfigured, lastReceivedAt }
             : url === "/api/integrations/prometheus"
               ? {

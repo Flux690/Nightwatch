@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "./client.js";
 import { hashToken } from "./runner.js";
 import { encrypt, decrypt } from "../secrets.js";
+import type { AlertSourceKind } from "@nightwarden/shared";
 
 interface AlertSourceRow {
   kind: string;
@@ -9,7 +10,7 @@ interface AlertSourceRow {
   createdAt: string;
 }
 
-export function getAlertSource(kind: string): AlertSourceRow | null {
+export function getAlertSource(kind: AlertSourceKind): AlertSourceRow | null {
   const row = getDb()
     .prepare(
       `SELECT kind, last_received_at, created_at FROM alert_sources WHERE kind = ?`,
@@ -27,7 +28,7 @@ export function getAlertSource(kind: string): AlertSourceRow | null {
 
 // Rotation resets last_received_at: deliveries made with the previous
 // credential prove nothing about the new one, so status regresses to waiting.
-export function generateAlertSourceToken(kind: string): string {
+export function generateAlertSourceToken(kind: AlertSourceKind): string {
   const plaintext = "nwi_" + randomBytes(32).toString("base64url");
   getDb()
     .prepare(
@@ -47,7 +48,7 @@ export function generateAlertSourceToken(kind: string): string {
   return plaintext;
 }
 
-export function getAlertSourcePlaintext(kind: string): string | null {
+export function getAlertSourcePlaintext(kind: AlertSourceKind): string | null {
   const row = getDb()
     .prepare(`SELECT token_encrypted FROM alert_sources WHERE kind = ?`)
     .get(kind) as { token_encrypted: string } | undefined;

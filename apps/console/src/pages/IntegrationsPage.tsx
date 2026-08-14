@@ -99,7 +99,7 @@ export function IntegrationsPage(): React.JSX.Element {
     queryKey: ["alertmanager-integration"],
     queryFn: () =>
       apiFetch<{ configured: boolean; lastReceivedAt: string | null }>(
-        "/api/integrations/alertmanager",
+        "/api/integrations/alerting/alertmanager",
       ),
   });
 
@@ -162,7 +162,7 @@ export function IntegrationsPage(): React.JSX.Element {
         "Forward the alerts that open an investigation the moment one fires.",
       category: "Alerting",
       logo: <img src="/logos/alertmanager.svg" alt="" className="size-5" />,
-      to: "/integrations/alertmanager",
+      to: "/integrations/alerting/alertmanager",
       status:
         ingest?.configured !== true
           ? null

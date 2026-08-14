@@ -112,7 +112,7 @@ function setup({
       return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
     }
     // Configured, so the page has a status line to put in its controls row.
-    if (url.includes("/integrations/alertmanager")) {
+    if (url.includes("/integrations/alerting/alertmanager")) {
       return Promise.resolve({
         ok: true,
         json: () =>
@@ -363,7 +363,7 @@ describe("Shell", () => {
     });
 
     it("gives a record its breadcrumb, with the collection linked", async () => {
-      setup({ path: "/integrations/alertmanager" });
+      setup({ path: "/integrations/alerting/alertmanager" });
 
       expect(await currentCrumb()).toHaveTextContent("Alertmanager");
       // The breadcrumb absorbed the standalone back link: the way up is the
@@ -375,7 +375,7 @@ describe("Shell", () => {
     });
 
     it("renders the controls row on a page that has controls", async () => {
-      setup({ path: "/integrations/alertmanager" });
+      setup({ path: "/integrations/alerting/alertmanager" });
 
       const controls = await screen.findByRole("group", {
         name: /page controls/i,

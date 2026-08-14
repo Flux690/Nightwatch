@@ -86,7 +86,7 @@ function renderAddServerRoute() {
   });
   const alertmanagerRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/alertmanager",
+    path: "/integrations/alerting/alertmanager",
     component: () => <div>Alertmanager destination</div>,
   });
   const router = createRouter({

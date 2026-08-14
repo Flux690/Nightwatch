@@ -1,5 +1,16 @@
 export type AlertSeverity = "critical" | "warning" | "info";
 
+/* Every sender NightWarden mints a credential for. One row per kind, so an
+   operator sees one card and one credential each; the kind decides which card
+   and which status line, never how a body is parsed. */
+export const ALERT_SOURCE_KINDS = ["alertmanager", "grafana"] as const;
+
+export type AlertSourceKind = (typeof ALERT_SOURCE_KINDS)[number];
+
+export function isAlertSourceKind(value: string): value is AlertSourceKind {
+  return (ALERT_SOURCE_KINDS as readonly string[]).includes(value);
+}
+
 // No target: an alert names no service on its own. `labels` is the whole input, and
 // resolution asks the live fleet which advertised service they describe, so nothing
 // speculative is ever stored.
