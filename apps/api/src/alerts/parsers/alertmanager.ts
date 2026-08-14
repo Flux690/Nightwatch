@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { NormalizedAlert } from "@nightwarden/shared";
+import type {
+  AlertGroupContext,
+  DeliveryContext,
+  NormalizedAlert,
+} from "@nightwarden/shared";
 import { logger } from "../../logger.js";
 
 // Parsing IS normalization: no location and no target is ever stamped on an alert.
@@ -12,10 +16,13 @@ type ParsedAlert = NormalizedAlert;
 // one malformed alert is skipped on its own instead of aborting the batch.
 const alertmanagerWebhookSchema = z.object({
   alerts: z.array(z.unknown()),
-  // Both Alertmanager and Grafana send these; neither is required, because a
+  // Both Alertmanager and Grafana send these; none is required, because a
   // BYO sender mimicking the format may carry only the alerts array.
   groupKey: z.string().min(1).optional(),
   truncatedAlerts: z.number().int().nonnegative().optional(),
+  groupLabels: z.unknown().optional(),
+  commonLabels: z.unknown().optional(),
+  commonAnnotations: z.unknown().optional(),
 });
 
 /* One delivery is one alert group. groupKey is the sender's own grouping, from
@@ -23,7 +30,7 @@ const alertmanagerWebhookSchema = z.object({
    choice. The count beside it is how many they left out of this body. */
 export interface ParsedWebhook {
   groupKey: string;
-  truncatedAlerts: number;
+  delivery: DeliveryContext;
   firing: ParsedAlert[];
   clearedIds: string[];
 }
@@ -79,10 +86,30 @@ export function parseAlertmanager(body: unknown): ParsedWebhook {
 
   return {
     groupKey: result.data.groupKey ?? synthesizeGroupKey(firing),
-    truncatedAlerts: result.data.truncatedAlerts ?? 0,
+    delivery: {
+      droppedAlerts: result.data.truncatedAlerts ?? 0,
+      groupContext: toGroupContext(result.data),
+    },
     firing,
     clearedIds,
   };
+}
+
+// Null rather than three empty maps when the sender supplied none of it, so the
+// prompt can tell "grouped on nothing" from "said nothing about the group".
+function toGroupContext(envelope: {
+  groupLabels?: unknown;
+  commonLabels?: unknown;
+  commonAnnotations?: unknown;
+}): AlertGroupContext | null {
+  const context = {
+    groupLabels: toStringMap(envelope.groupLabels),
+    commonLabels: toStringMap(envelope.commonLabels),
+    commonAnnotations: toStringMap(envelope.commonAnnotations),
+  };
+  return Object.values(context).some((m) => Object.keys(m).length > 0)
+    ? context
+    : null;
 }
 
 // A sender that is not Alertmanager-shaped: the delivery is the only grouping

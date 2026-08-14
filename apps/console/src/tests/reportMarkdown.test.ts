@@ -26,6 +26,7 @@ const ON_SESSION: SessionAlert = {
   clearedAt: null,
   injected: false,
   droppedAlerts: 0,
+  groupContext: null,
 };
 
 const RESPONSE: SessionReportResponse = {

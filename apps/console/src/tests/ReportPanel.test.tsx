@@ -44,6 +44,7 @@ function onSession(
     clearedAt,
     injected: false,
     droppedAlerts: 0,
+    groupContext: null,
   };
 }
 

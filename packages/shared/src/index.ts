@@ -1,4 +1,9 @@
-export type { AlertSeverity, NormalizedAlert } from "./alerts.js";
+export type {
+  AlertGroupContext,
+  AlertSeverity,
+  DeliveryContext,
+  NormalizedAlert,
+} from "./alerts.js";
 export type { AuthStatusResponse } from "./auth.js";
 export type {
   DockerServiceIdentity,

@@ -51,6 +51,7 @@ import { dispatcher } from "../dispatcher.js";
 import { getFleetView } from "../ws/fleet.js";
 import { logger } from "../logger.js";
 import type {
+  AlertGroupContext,
   MessagePart,
   NormalizedAlert,
   SubmittedReport,
@@ -354,16 +355,19 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   };
   const { systemPrompt, openingTurn } =
     allAlerts.length > 0
-      ? buildInitialContext(
-          allAlerts,
-          fleetView,
-          promptOptions,
+      ? buildInitialContext(allAlerts, fleetView, promptOptions, {
           // The worst any delivery of this group admitted to leaving out.
-          (stored?.alerts ?? []).reduce(
+          droppedAlerts: (stored?.alerts ?? []).reduce(
             (n, e) => Math.max(n, e.droppedAlerts),
             0,
           ),
-        )
+          // The most recent delivery that described the group: later ones are
+          // the same group re-notified, and the newest labels are the live ones.
+          groupContext: (stored?.alerts ?? []).reduce<AlertGroupContext | null>(
+            (latest, e) => e.groupContext ?? latest,
+            null,
+          ),
+        })
       : buildChatContext(fleetView, promptOptions, opensInvestigation);
   const provider = createProvider(systemPrompt, llm, apiKey);
 

@@ -11,7 +11,7 @@ import {
   listSessionSources,
   queueDepth,
 } from "../db/sessions.js";
-import { seedAlertSession } from "./session-helper.js";
+import { seedAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import { useTempDb } from "./temp-db.js";
 
 // The gate resolves with a run outcome; these tests exercise claiming, seats and
@@ -128,7 +128,7 @@ describe("dispatcher", () => {
       seedSession(holder, [makeAlert("hold-1")]);
       dispatcher.dispatch({ sessionId: holder });
 
-      enqueueAlerts("group-waiting", [makeAlert("wait-1")]);
+      enqueueAlerts("group-waiting", [makeAlert("wait-1")], WHOLE_DELIVERY);
       dispatcher.promoteQueued();
       // The only seat is taken, so the group stays where it is: durable, and
       // still nobody's.
@@ -147,8 +147,12 @@ describe("dispatcher", () => {
       const gate = deferred();
       const dispatcher = createDispatcher({ run: () => gate.promise });
 
-      enqueueAlerts("group-older", [makeAlert("old-1"), makeAlert("old-2")]);
-      enqueueAlerts("group-newer", [makeAlert("new-1")]);
+      enqueueAlerts(
+        "group-older",
+        [makeAlert("old-1"), makeAlert("old-2")],
+        WHOLE_DELIVERY,
+      );
+      enqueueAlerts("group-newer", [makeAlert("new-1")], WHOLE_DELIVERY);
 
       // One seat, so exactly one group starts and it is the one that arrived
       // first. The newer group waits rather than being swept in with it.
@@ -175,7 +179,12 @@ describe("dispatcher", () => {
     const sessionId = "s-inject";
     seedSession(sessionId, [makeAlert("inject-primary")]);
 
-    dispatcher.injectAlert(sessionId, "group-inject", makeAlert("inject-late"));
+    dispatcher.injectAlert(
+      sessionId,
+      "group-inject",
+      makeAlert("inject-late"),
+      WHOLE_DELIVERY,
+    );
 
     // Durable immediately, because the sender was already answered 200.
     expect(alertIdsOf(sessionId)).toEqual(["inject-primary", "inject-late"]);
@@ -203,7 +212,7 @@ describe("dispatcher", () => {
     // One chat is running; the investigation pool is still untouched, so a
     // waiting alert group can start.
     const before = countInvestigations();
-    enqueueAlerts("group-beside-chat", [makeAlert("beside-1")]);
+    enqueueAlerts("group-beside-chat", [makeAlert("beside-1")], WHOLE_DELIVERY);
     dispatcher.promoteQueued();
     expect(countInvestigations()).toBe(before + 1);
 

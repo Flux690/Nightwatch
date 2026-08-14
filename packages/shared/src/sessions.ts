@@ -1,4 +1,8 @@
-import type { AlertSeverity, NormalizedAlert } from "./alerts.js";
+import type {
+  AlertGroupContext,
+  AlertSeverity,
+  NormalizedAlert,
+} from "./alerts.js";
 import type { MessagePart, NativeEnvelope } from "./messages.js";
 import type { TranscriptItem } from "./transcript.js";
 
@@ -66,6 +70,9 @@ export interface SessionAlert {
   // How many alerts the source left out of the delivery this one arrived in.
   // Zero is the ordinary case and means the group was sent whole.
   droppedAlerts: number;
+  // What that delivery said about the group as a whole. Null when the sender
+  // supplied none of it.
+  groupContext: AlertGroupContext | null;
 }
 
 // What GET /sessions/:id answers. The session states whether it is under

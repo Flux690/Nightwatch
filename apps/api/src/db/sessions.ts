@@ -1,4 +1,6 @@
 import type {
+  AlertGroupContext,
+  DeliveryContext,
   MessagePart,
   NativeEnvelope,
   NormalizedAlert,
@@ -20,17 +22,20 @@ type StoredSession = SessionMeta & {
 
 const INSERT_ALERT = `INSERT INTO alerts
      (session_id, group_key, source_alert_id, fired_at, arrived_at, cleared_at,
-      injected, dropped_alerts, alert)
+      injected, dropped_alerts, group_context, alert)
    VALUES (@sessionId, @groupKey, @sourceAlertId, @firedAt, @arrivedAt, NULL,
-      @injected, @droppedAlerts, @alert)`;
+      @injected, @droppedAlerts, @groupContext, @alert)`;
 
+/* The delivery's own facts are denormalised onto every alert it carried: a row
+   is durable before any session owns it, so there is nowhere else they could
+   live that a queued alert could still be read from. */
 function alertParams(
   sessionId: string | null,
   groupKey: string,
   alert: NormalizedAlert,
   arrivedAt: string,
   injected: boolean,
-  droppedAlerts: number,
+  delivery: DeliveryContext,
 ): Record<string, string | number | null> {
   return {
     sessionId,
@@ -39,7 +44,11 @@ function alertParams(
     firedAt: alert.firedAt,
     arrivedAt,
     injected: injected ? 1 : 0,
-    droppedAlerts,
+    droppedAlerts: delivery.droppedAlerts,
+    groupContext:
+      delivery.groupContext === null
+        ? null
+        : JSON.stringify(delivery.groupContext),
     alert: JSON.stringify(alert),
   };
 }
@@ -68,7 +77,7 @@ export function createSession(meta: SessionMeta, investigation = false): void {
 export function enqueueAlerts(
   groupKey: string,
   alerts: NormalizedAlert[],
-  droppedAlerts = 0,
+  delivery: DeliveryContext,
 ): void {
   if (alerts.length === 0) return;
   const db = getDb();
@@ -77,7 +86,7 @@ export function enqueueAlerts(
   db.transaction((): void => {
     for (const alert of alerts) {
       insert.run(
-        alertParams(null, groupKey, alert, arrivedAt, false, droppedAlerts),
+        alertParams(null, groupKey, alert, arrivedAt, false, delivery),
       );
     }
   })();
@@ -89,7 +98,7 @@ export function appendSessionAlert(
   sessionId: string,
   groupKey: string,
   alert: NormalizedAlert,
-  droppedAlerts = 0,
+  delivery: DeliveryContext,
 ): void {
   getDb()
     .prepare(INSERT_ALERT)
@@ -100,7 +109,7 @@ export function appendSessionAlert(
         alert,
         new Date().toISOString(),
         true,
-        droppedAlerts,
+        delivery,
       ),
     );
 }
@@ -247,6 +256,7 @@ interface AlertRow {
   clearedAt: string | null;
   injected: number;
   droppedAlerts: number;
+  groupContext: string | null;
   alert: string;
 }
 
@@ -261,6 +271,10 @@ function toSessionAlert(row: AlertRow): SessionAlert[] {
         clearedAt: row.clearedAt,
         injected: row.injected === 1,
         droppedAlerts: row.droppedAlerts,
+        groupContext:
+          row.groupContext === null
+            ? null
+            : (JSON.parse(row.groupContext) as AlertGroupContext),
       },
     ];
   } catch {
@@ -269,7 +283,8 @@ function toSessionAlert(row: AlertRow): SessionAlert[] {
 }
 
 const ALERT_COLUMNS = `session_id AS sessionId, arrived_at AS arrivedAt,
-        cleared_at AS clearedAt, injected, dropped_alerts AS droppedAlerts, alert`;
+        cleared_at AS clearedAt, injected, dropped_alerts AS droppedAlerts,
+        group_context AS groupContext, alert`;
 
 // id ascending is arrival order, which is what the first alert of a batch means
 // to everything that reads one.

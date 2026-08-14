@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { seedAlertSession } from "./session-helper.js";
+import { seedAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import {
   afterAll,
   afterEach,
@@ -106,6 +106,7 @@ describe("API-local session store", () => {
         clearedAt: null,
         injected: false,
         droppedAlerts: 0,
+        groupContext: null,
       },
     ]);
   });
@@ -125,7 +126,7 @@ describe("API-local session store", () => {
       alertType: "HighLatency",
     };
     seedAlertSession(m, [alert], "grp-arrival");
-    appendSessionAlert(m.sessionId, "grp-arrival", later);
+    appendSessionAlert(m.sessionId, "grp-arrival", later, WHOLE_DELIVERY);
 
     const stored = getSession(m.sessionId)!.alerts;
     expect(stored.map((entry) => entry.alert)).toEqual([alert, later]);

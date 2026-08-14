@@ -85,7 +85,7 @@ export async function registerAlertRoutes(
     const { enqueued, skipped } = routeDelivery(
       parsed.groupKey,
       parsed.firing,
-      parsed.truncatedAlerts,
+      parsed.delivery,
     );
 
     return reply

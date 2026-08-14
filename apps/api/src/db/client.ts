@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   cleared_at         TEXT,
   injected           INTEGER   NOT NULL DEFAULT 0,
   dropped_alerts     INTEGER   NOT NULL DEFAULT 0,
+  group_context      TEXT,
   alert              TEXT      NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_session

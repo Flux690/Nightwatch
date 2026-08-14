@@ -22,7 +22,11 @@ import {
   publishRunFinished,
   publishRunStopped,
 } from "./session/stream.js";
-import type { NormalizedAlert, TranscriptRow } from "@nightwarden/shared";
+import type {
+  DeliveryContext,
+  NormalizedAlert,
+  TranscriptRow,
+} from "@nightwarden/shared";
 
 // Alert, chat, and resume all funnel through dispatch(). Concurrency is the run
 // pool; what an alert joins is Alertmanager's group key, never our timing.
@@ -39,7 +43,7 @@ interface Dispatcher {
     sessionId: string,
     groupKey: string,
     alert: NormalizedAlert,
-    droppedAlerts?: number,
+    delivery: DeliveryContext,
   ): void;
   drainInbox(sessionId: string): NormalizedAlert[];
   // Aborts the in-flight LLM request for a running session. Returns false if
@@ -178,9 +182,9 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
       sessionId: string,
       groupKey: string,
       alert: NormalizedAlert,
-      droppedAlerts = 0,
+      delivery: DeliveryContext,
     ): void {
-      appendSessionAlert(sessionId, groupKey, alert, droppedAlerts);
+      appendSessionAlert(sessionId, groupKey, alert, delivery);
       const arr = inbox.get(sessionId) ?? [];
       arr.push(alert);
       inbox.set(sessionId, arr);

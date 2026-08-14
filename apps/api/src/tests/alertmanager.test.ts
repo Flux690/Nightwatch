@@ -18,10 +18,20 @@ function alert(
   };
 }
 
-// What the model reads, built from a webhook body the way a real ingest does.
-function openingTurnFor(overrides: Record<string, unknown> = {}): string {
-  const { firing } = parseAlertmanager({ alerts: [alert(overrides)] });
-  return buildInitialContext(firing).openingTurn ?? "";
+// What the model reads, built from a webhook body the way a real ingest does:
+// the delivery's own facts travel with its alerts rather than being dropped.
+function openingTurnFor(
+  overrides: Record<string, unknown> = {},
+  envelope: Record<string, unknown> = {},
+): string {
+  const { firing, delivery } = parseAlertmanager({
+    alerts: [alert(overrides)],
+    ...envelope,
+  });
+  return (
+    buildInitialContext(firing, undefined, undefined, delivery).openingTurn ??
+    ""
+  );
 }
 
 describe("parseAlertmanager", () => {
@@ -212,5 +222,49 @@ describe("user context reaches the model", () => {
     const turn = openingTurnFor({ generatorURL: "not a url" });
     expect(turn).not.toContain("condition that fired:");
     expect(turn).toContain("link: not a url");
+  });
+});
+
+// Facts about the envelope rather than about any alert in it. The sender has
+// already worked out why these belong together; nothing here re-derives it.
+describe("what a delivery says about its group", () => {
+  it("tells the model what the group was formed on and what its alerts share", () => {
+    const turn = openingTurnFor(
+      {},
+      {
+        groupLabels: { alertname: "HighCPU", namespace: "prod" },
+        commonLabels: { cluster: "eu-1" },
+        commonAnnotations: { runbook_url: "https://runbooks/cpu" },
+      },
+    );
+    expect(turn).toContain("Grouped on: alertname=HighCPU, namespace=prod");
+    expect(turn).toContain("Held by every alert in this group: cluster=eu-1");
+    expect(turn).toContain(
+      "Shared annotations: runbook_url=https://runbooks/cpu",
+    );
+  });
+
+  // Alertmanager sends all three keys on every delivery and leaves them empty
+  // when a group shares nothing, so empty has to read as "said nothing".
+  it("renders no group section when the sender described no group", () => {
+    const { delivery } = parseAlertmanager({
+      alerts: [alert()],
+      groupLabels: {},
+      commonLabels: {},
+      commonAnnotations: {},
+    });
+    expect(delivery.groupContext).toBeNull();
+    expect(openingTurnFor()).not.toContain("Grouped on");
+  });
+
+  // Non-string values are the sender's business: a group described partly in
+  // numbers still renders the part we can read rather than nothing at all.
+  it("keeps the readable labels when one of them is not a string", () => {
+    const turn = openingTurnFor(
+      {},
+      { groupLabels: { alertname: "HighCPU", replicas: 3 } },
+    );
+    expect(turn).toContain("Grouped on: alertname=HighCPU");
+    expect(turn).not.toContain("replicas");
   });
 });

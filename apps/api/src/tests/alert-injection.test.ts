@@ -28,7 +28,7 @@ import { generateRunnerToken } from "../db/runner.js";
 import { generateAlertSourceToken } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
-import { dispatchAlertSession } from "./session-helper.js";
+import { dispatchAlertSession, WHOLE_DELIVERY } from "./session-helper.js";
 import { routeDelivery } from "../alerts/route-alert.js";
 import {
   countInvestigations,
@@ -199,7 +199,12 @@ describe("mid-run alert injection (loop seam)", () => {
     };
 
     // Inject while parked at turn 1's chat()
-    dispatcher.injectAlert(sessionId, MIDRUN_GROUP, alert("injected-mr"));
+    dispatcher.injectAlert(
+      sessionId,
+      MIDRUN_GROUP,
+      alert("injected-mr"),
+      WHOLE_DELIVERY,
+    );
 
     // Release turn 1 -> loop executes ListDockerServices, appends the results,
     // drains the inbox and sends the alert as its own turn.
@@ -297,14 +302,22 @@ describe("mid-run alert injection (loop seam)", () => {
     // Suspended is still covering: parked on a person, not finished. The alert
     // rides along rather than opening a second investigation of one group.
     const before = countInvestigations();
-    routeDelivery(SUSPENDED_GROUP, [alert("same-group-while-suspended")], 0);
+    routeDelivery(
+      SUSPENDED_GROUP,
+      [alert("same-group-while-suspended")],
+      WHOLE_DELIVERY,
+    );
     expect(countInvestigations()).toBe(before);
     expect(
       dispatcher.drainInbox(sessionId).map((a) => a.sourceAlertId),
     ).toEqual(["same-group-while-suspended"]);
 
     // A different group is a different incident, whatever this session is doing.
-    routeDelivery(OTHER_GROUP, [alert("other-group-while-suspended")], 0);
+    routeDelivery(
+      OTHER_GROUP,
+      [alert("other-group-while-suspended")],
+      WHOLE_DELIVERY,
+    );
     await waitFor(() => countInvestigations() === before + 1);
 
     // Drain every run this test started, or the next one inherits a parked

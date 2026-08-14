@@ -1,4 +1,9 @@
-import type { FleetRunner, NormalizedAlert } from "@nightwarden/shared";
+import type {
+  AlertGroupContext,
+  DeliveryContext,
+  FleetRunner,
+  NormalizedAlert,
+} from "@nightwarden/shared";
 import {
   budgetLine,
   CHAT_PROMPT,
@@ -53,10 +58,12 @@ export function buildInitialContext(
   alerts: NormalizedAlert[],
   fleetView?: FleetRunner[],
   opts: PromptOptions = DEFAULT_PROMPT_OPTIONS,
-  // How many the source left out of the delivery these came in. Rendered rather
-  // than dropped: a group shown short has to say it is short.
-  droppedAlerts = 0,
+  // What the delivery said about itself. Rendered rather than dropped: a group
+  // shown short has to say it is short, and one grouped on a label the agent
+  // cannot see reads as an arbitrary batch.
+  delivery: DeliveryContext = { droppedAlerts: 0, groupContext: null },
 ): InitialContext {
+  const { droppedAlerts, groupContext } = delivery;
   if (!alerts[0]) {
     return buildChatContext(fleetView, opts, true);
   }
@@ -89,13 +96,29 @@ export function buildInitialContext(
 <alert>
 ${alertsSection}
 </alert>
-${droppedLine}${buildFleetSummary(fleetView)}
+${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}
 Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
   return {
     systemPrompt: systemPromptFor(opts, true),
     openingTurn,
   };
+}
+
+/* Why these alerts arrived together, in the sender's own words. Given rather
+   than left to be intersected: a batch the agent cannot explain reads as a
+   coincidence, and it stops looking for what the members share. */
+function formatGroupContext(context: AlertGroupContext | null): string {
+  if (context === null) return "";
+  const lines: string[] = [];
+  const render = (label: string, map: Record<string, string>): void => {
+    const pairs = Object.entries(map).map(([k, v]) => `${k}=${v}`);
+    if (pairs.length > 0) lines.push(`${label}: ${pairs.join(", ")}`);
+  };
+  render("Grouped on", context.groupLabels);
+  render("Held by every alert in this group", context.commonLabels);
+  render("Shared annotations", context.commonAnnotations);
+  return lines.length === 0 ? "" : `\n<group>\n${lines.join("\n")}\n</group>\n`;
 }
 
 // Rendered whenever any runner is connected: it carries the addresses the optional

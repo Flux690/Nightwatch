@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { NormalizedAlert, SessionMeta } from "@nightwarden/shared";
+import type {
+  DeliveryContext,
+  NormalizedAlert,
+  SessionMeta,
+} from "@nightwarden/shared";
 import { mintSession } from "../auth/session.js";
 import { buildSessionMeta } from "../agent/loop.js";
 import { dispatcher } from "../dispatcher.js";
@@ -8,6 +12,13 @@ import {
   enqueueAlerts,
   openSessionForGroup,
 } from "../db/sessions.js";
+
+// A sender that withheld nothing and described the group not at all: the shape
+// every test that is not about the envelope wants.
+export const WHOLE_DELIVERY: DeliveryContext = {
+  droppedAlerts: 0,
+  groupContext: null,
+};
 
 // By the only route production has: queued under a group key, then taken. A
 // direct insert would build a shape ingest cannot produce.
@@ -20,7 +31,7 @@ export function seedAlertSession(
     createSession(meta, true);
     return;
   }
-  enqueueAlerts(groupKey, alerts);
+  enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
   openSessionForGroup(meta, groupKey);
 }
 
@@ -34,7 +45,7 @@ export function dispatchAlertSession(
 ): boolean {
   // Queued first, then the session takes them - the order promotion uses, and
   // what makes an opening alert predate the session it opened.
-  enqueueAlerts(groupKey, alerts);
+  enqueueAlerts(groupKey, alerts, WHOLE_DELIVERY);
   openSessionForGroup(
     buildSessionMeta(sessionId, alerts[0] ?? null, undefined),
     groupKey,
