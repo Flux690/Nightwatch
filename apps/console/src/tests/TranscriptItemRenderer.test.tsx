@@ -287,6 +287,36 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
+  /* Both names are the API's, so a rename there silently changes what the
+     transcript shows. Pinned here because that is exactly how the last one
+     went unnoticed. */
+  describe("the report tools", () => {
+    it("draws nothing for the submission the report card already announces", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-report",
+        toolName: "SubmitInvestigationReport",
+        input: { headline: "Pool exhausted" },
+        state: { phase: "complete", result: "recorded" },
+      });
+      expect(
+        screen.queryByText(/SubmitInvestigationReport/),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText(/recorded/)).not.toBeInTheDocument();
+    });
+
+    it("draws a recorded hypothesis, which is a step the reader can follow", () => {
+      wrap({
+        kind: "tool_card",
+        toolUseId: "tu-hypo",
+        toolName: "RecordHypothesis",
+        input: { statement: "The pool was exhausted" },
+        state: { phase: "complete", result: "recorded" },
+      });
+      expect(screen.getByText(/RecordHypothesis/)).toBeInTheDocument();
+    });
+  });
+
   describe("repo tool cards", () => {
     const DIFF_RESULT = {
       path: "src/app.ts",
@@ -373,7 +403,7 @@ describe("TranscriptItemRenderer", () => {
       wrap({
         kind: "tool_card",
         toolUseId: "tu-5",
-        toolName: "QueryPrometheus",
+        toolName: "SomeToolWeDoNotRender",
         input: { target: "docker/api/api" },
         state: { phase: "complete", result: "cpu 0.91\nmem 0.44" },
       });
@@ -384,7 +414,7 @@ describe("TranscriptItemRenderer", () => {
 
       await userEvent
         .setup()
-        .click(screen.getByRole("button", { name: /QueryPrometheus/ }));
+        .click(screen.getByRole("button", { name: /SomeToolWeDoNotRender/ }));
       expect(screen.getByText(/mem 0.44/)).toBeInTheDocument();
     });
 

@@ -364,12 +364,6 @@ function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
   );
 }
 
-const RECORDING_TOOLS = new Set([
-  "ProposeHypothesis",
-  "ResolveHypothesis",
-  "ProposeFix",
-]);
-
 /* The presentation registry. Tools whose result IS a rendered artifact keep
    their bespoke component; everything else is a row. */
 export function ToolCard({
@@ -385,9 +379,9 @@ export function ToolCard({
         ? (item.state.result ?? null)
         : null;
 
-  // The report has its own panel; showing its bookkeeping as a step in the
-  // transcript is noise the reader has to skip past.
-  if (RECORDING_TOOLS.has(toolName)) return null;
+  // The report card already announces this act, so a row for it would say the
+  // same thing twice. Recording a hypothesis is a step, and stays visible.
+  if (toolName === "SubmitInvestigationReport") return null;
 
   if (toolName === "Edit" || toolName === "Write") {
     const change = result === null ? null : parseFileChange(result);
