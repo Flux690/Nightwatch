@@ -509,6 +509,19 @@ describe("TranscriptItemRenderer", () => {
       expect(notice.querySelector(".prose")).toBeNull();
     });
   });
+  describe("compaction", () => {
+    it("says the context was summarised and that the record is untouched", () => {
+      wrap({ kind: "compaction", id: "assistant-4-0" });
+
+      const notice = screen.getByRole("status");
+      expect(notice).toHaveTextContent("Context summarised");
+      /* The reader's actual question on seeing this: did the evidence go? It did
+         not - the model forgot, the transcript did not, and a compacted tool
+         result is still citable in the report. */
+      expect(notice).toHaveTextContent("stays in the record");
+    });
+  });
+
   describe("reveal from the report", () => {
     it("marks the named tool row without opening it, leaving the others untouched", async () => {
       const { revealToolCall } =

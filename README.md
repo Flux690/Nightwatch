@@ -250,11 +250,23 @@ timer, so a run doing real code work does not have its checkout swept from under
 it.
 
 **A conversation can outgrow the model's context window.** Tool results are the
-bulk of it, and a long investigation on a small window will eventually be
-refused by the provider. When that happens the run stops and says so plainly,
-naming the two things that work: start a new session, or pick a model with a
-larger window under Settings → Provider. The conversation is kept whole, because
-in an agentic transcript the middle is where every piece of evidence lives.
+bulk of it, and a long investigation eventually reaches the limit. What happens
+then depends on the model.
+
+Where the provider can summarise - Anthropic models whose catalog says they
+support it - NightWarden asks for that instead of letting the request be
+refused. The model is handed a summary of the earlier part of the conversation
+and carries on, and the transcript marks where that happened. **Nothing leaves
+the record.** Every tool result is kept in full, so the report still quotes and
+charts evidence the model itself no longer holds, and every claim still cites
+the exact call behind it. The threshold is derived from the model's own
+published window, never a number NightWarden invented.
+
+Where the provider cannot, the run stops and says so plainly, naming the two
+things that work: start a new session, or pick a model with a larger window
+under Settings → Provider. OpenRouter is deliberately left on that path: it
+truncates from the middle of a conversation rather than summarising, and in an
+agentic transcript the middle is where every piece of evidence lives.
 
 ### When a run fails
 

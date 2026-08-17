@@ -98,6 +98,25 @@ function AlertArrived({ item }: { item: AlertArrivedItem }): React.JSX.Element {
   );
 }
 
+/* A fact about the run rather than about the incident, so it is a rule like an
+   arriving alert and not a card: nothing produced it. The second clause is the
+   reader's actual question - the model forgot, the record did not. */
+function Compaction(): React.JSX.Element {
+  return (
+    <div
+      role="status"
+      className="animate-in fade-in flex items-center gap-3 py-1 text-sm duration-(--duration-slow)"
+    >
+      <span aria-hidden className="h-px w-6 shrink-0 bg-border" />
+      <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-muted-foreground">
+        <span className="font-medium text-foreground">Context summarised</span>
+        <span>to fit the model; everything above stays in the record</span>
+      </span>
+      <span aria-hidden className="h-px min-w-0 flex-1 bg-border" />
+    </div>
+  );
+}
+
 function ThinkingBlock({
   item,
 }: {
@@ -180,6 +199,8 @@ export function TranscriptItemRenderer({
       return <ErrorNotice text={item.text} />;
     case "alert_arrived":
       return <AlertArrived item={item} />;
+    case "compaction":
+      return <Compaction />;
     case "thinking":
       return <ThinkingBlock item={item} />;
     case "tool_card":

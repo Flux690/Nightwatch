@@ -42,6 +42,8 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   provider: "openrouter",
   model: "anthropic/claude-opus-5",
   maxOutputTokens: 4096,
+  maxInputTokens: null,
+  compaction: false,
   maxRetries: 0,
   requestTimeoutMs: 10_000,
   reasoningLevel: null,

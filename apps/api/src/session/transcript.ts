@@ -238,6 +238,8 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
           id,
           text: part.text,
         });
+      } else if (part.type === "compaction") {
+        items.push({ kind: "compaction", id });
       } else if (part.type === "reasoning") {
         if (part.text.trim()) {
           items.push({

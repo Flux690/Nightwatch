@@ -52,6 +52,8 @@ type ProviderRow = {
   apiKeyEncrypted: string | null;
   reasoningLevel: string | null;
   maxOutputTokens: number | null;
+  maxInputTokens: number | null;
+  compaction: number;
   reasoning: string | null;
 };
 
@@ -77,6 +79,8 @@ const SELECT_PROVIDER = `
          api_key_encrypted     AS apiKeyEncrypted,
          reasoning_level       AS reasoningLevel,
          max_output_tokens     AS maxOutputTokens,
+         max_input_tokens      AS maxInputTokens,
+         compaction,
          reasoning
   FROM provider_config WHERE provider = ?
 `;
@@ -137,6 +141,8 @@ function toSettings(row: ProviderRow | undefined): ProviderSettings {
     apiKeyMasked: maskStored(row?.apiKeyEncrypted ?? null),
     reasoningLevel: row?.reasoningLevel ?? null,
     maxOutputTokens: row?.maxOutputTokens ?? null,
+    maxInputTokens: row?.maxInputTokens ?? null,
+    compaction: row?.compaction === 1,
     reasoning: parseReasoning(row?.reasoning ?? null),
   };
 }
@@ -261,6 +267,8 @@ export interface ProviderPatch {
   baseUrl?: string | null;
   reasoningLevel?: string | null;
   maxOutputTokens?: number | null;
+  maxInputTokens?: number | null;
+  compaction?: boolean;
   reasoning?: ReasoningDescriptor | null;
   // Plaintext; encrypted here so no caller has to remember to.
   apiKey?: string;
@@ -269,10 +277,12 @@ export interface ProviderPatch {
 const UPSERT_PROVIDER = `
   INSERT INTO provider_config (
     provider, model, base_url, api_key_encrypted,
-    reasoning_level, max_output_tokens, reasoning, updated_at
+    reasoning_level, max_output_tokens, max_input_tokens, compaction,
+    reasoning, updated_at
   ) VALUES (
     @provider, @model, @baseUrl, @apiKeyEncrypted,
-    @reasoningLevel, @maxOutputTokens, @reasoning, @updatedAt
+    @reasoningLevel, @maxOutputTokens, @maxInputTokens, @compaction,
+    @reasoning, @updatedAt
   )
   ON CONFLICT(provider) DO UPDATE SET
     model = excluded.model,
@@ -280,6 +290,8 @@ const UPSERT_PROVIDER = `
     api_key_encrypted = excluded.api_key_encrypted,
     reasoning_level = excluded.reasoning_level,
     max_output_tokens = excluded.max_output_tokens,
+    max_input_tokens = excluded.max_input_tokens,
+    compaction = excluded.compaction,
     reasoning = excluded.reasoning,
     updated_at = excluded.updated_at
 `;
@@ -313,6 +325,16 @@ export function updateProvider(
         patch.maxOutputTokens !== undefined
           ? patch.maxOutputTokens
           : (existing?.maxOutputTokens ?? null),
+      maxInputTokens:
+        patch.maxInputTokens !== undefined
+          ? patch.maxInputTokens
+          : (existing?.maxInputTokens ?? null),
+      compaction:
+        patch.compaction !== undefined
+          ? patch.compaction
+            ? 1
+            : 0
+          : (existing?.compaction ?? 0),
       reasoning:
         patch.reasoning !== undefined
           ? patch.reasoning && JSON.stringify(patch.reasoning)

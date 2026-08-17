@@ -108,6 +108,15 @@ export interface AlertArrivedItem {
   severity: AlertSeverity | null;
 }
 
+// Where the provider summarised everything above to keep the conversation
+// inside its window. A fact about the run the reader should not have to infer
+// from a token count; the evidence itself is untouched, since a compacted tool
+// result is still in the record and still citable.
+export interface CompactionItem {
+  kind: "compaction";
+  id: string;
+}
+
 export type TranscriptItem =
   | UserTurnItem
   | AgentTextItem
@@ -118,7 +127,8 @@ export type TranscriptItem =
   | ClarificationCardItem
   | ContinueCardItem
   | ReportCardItem
-  | AlertArrivedItem;
+  | AlertArrivedItem
+  | CompactionItem;
 
 // Stable identity for a card, so a live update finds the item it belongs to.
 export function transcriptItemKey(item: TranscriptItem): string {

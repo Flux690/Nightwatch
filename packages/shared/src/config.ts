@@ -54,6 +54,13 @@ export interface ModelOption {
   reasoning: ReasoningDescriptor | null;
   // The model's own output ceiling, null when its catalog does not publish one.
   maxOutputTokens: number | null;
+  // The model's context window, null when its catalog does not publish one.
+  // Read rather than assumed: it is what a compaction trigger is derived from.
+  maxInputTokens: number | null;
+  // Whether the provider summarises a conversation that outgrows the window
+  // rather than refusing it. Stated by the catalog or false - a provider that
+  // truncates instead is not this, and never claims it.
+  compaction: boolean;
 }
 
 // How to reach one provider. Each keeps its own credentials, so switching the
@@ -72,6 +79,9 @@ export interface ProviderSettings {
   // Captured from the catalog when the model is saved, so nothing has to reach
   // the network to start a run. Null means the catalog published no ceiling.
   maxOutputTokens: number | null;
+  // Captured with it, on the same terms.
+  maxInputTokens: number | null;
+  compaction: boolean;
   // The chosen model's ladder, captured with it rather than looked up again, so the
   // settings form draws its reasoning control from the config it already has.
   // Null when the model exposes no reasoning control.
@@ -118,6 +128,11 @@ export interface ResolvedLLMConfig {
   baseUrl?: string;
   // The chosen model's own ceiling, or a constant when it published none.
   maxOutputTokens: number;
+  /* The window and whether this model summarises rather than refusing when a
+     conversation outgrows it. Both are facts the catalog stated; what to do with
+     them is each adapter's own arithmetic, so no threshold is decided here. */
+  maxInputTokens: number | null;
+  compaction: boolean;
   maxRetries: number;
   requestTimeoutMs: number;
   // The user's pick, in the provider's vocabulary; each adapter translates

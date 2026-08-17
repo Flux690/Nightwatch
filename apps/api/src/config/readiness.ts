@@ -41,6 +41,10 @@ export function checkLLMReadiness(): LLMReadiness {
       model,
       baseUrl: settings.baseUrl,
       maxOutputTokens: settings.maxOutputTokens ?? MAX_OUTPUT_TOKENS,
+      // No constant stands in for these two: a window we guessed would set a
+      // compaction threshold the model never published.
+      maxInputTokens: settings.maxInputTokens,
+      compaction: settings.compaction,
       maxRetries: config.maxRetries,
       requestTimeoutMs: config.requestTimeoutMs,
       reasoningLevel: settings.reasoningLevel,

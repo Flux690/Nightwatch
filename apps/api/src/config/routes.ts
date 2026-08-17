@@ -110,6 +110,8 @@ async function withModelFacts(
   return {
     ...patch,
     maxOutputTokens: chosen.maxOutputTokens,
+    maxInputTokens: chosen.maxInputTokens,
+    compaction: chosen.compaction,
     reasoning: chosen.reasoning,
     // A level carried over from the previous model may not exist on this one,
     // so it re-resolves rather than being stored as something unsendable.

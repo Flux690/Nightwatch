@@ -59,8 +59,17 @@ export interface ToolResultPart {
   outcome?: ToolOutcome;
 }
 
+/* Where the provider summarised the conversation to keep it inside the window.
+   Drawn, never replayed: like ReasoningPart, the block itself rides in the
+   message's `native` envelope, so rebuilding from parts drops it - which is
+   exactly what a provider that cannot accept one needs. It carries no summary
+   text, because the turns it summarises are still in the transcript below it. */
+export interface CompactionPart {
+  type: "compaction";
+}
+
 export type MessagePart =
-  TextPart | ReasoningPart | ToolCallPart | ToolResultPart;
+  TextPart | ReasoningPart | ToolCallPart | ToolResultPart | CompactionPart;
 
 // The wire shape a native message is written in, not the configured provider:
 // one provider can speak several dialects whose messages are not interchangeable.
@@ -89,7 +98,7 @@ export function messagePartsToText(parts: MessagePart[]): string {
     if (part.type === "text") out.push(part.text);
     else if (part.type === "reasoning") out.push(part.text);
     else if (part.type === "tool_call") out.push(`[tool: ${part.name}]`);
-    else out.push(part.output);
+    else if (part.type === "tool_result") out.push(part.output);
   }
   return out.join("\n");
 }

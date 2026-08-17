@@ -27,6 +27,8 @@ function configuredConfig(): ResolvedLLMConfig {
     provider: "anthropic",
     model: "test-model",
     maxOutputTokens: 4096,
+    maxInputTokens: null,
+    compaction: false,
     maxRetries: 0,
     requestTimeoutMs: 10_000,
     reasoningLevel: null,

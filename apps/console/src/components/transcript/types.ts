@@ -13,5 +13,6 @@ export type {
   ContinueCardItem,
   ReportCardItem,
   AlertArrivedItem,
+  CompactionItem,
   TranscriptItem,
 } from "@nightwarden/shared";

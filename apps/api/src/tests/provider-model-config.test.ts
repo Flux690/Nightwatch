@@ -43,10 +43,13 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
 }
 
 // One entry of Anthropic's /v1/models, with the effort levels under test.
-// low/medium/high are non-null in the schema; xhigh is nullable.
+// low/medium/high are non-null in the schema; xhigh is nullable. Context
+// management is omitted unless a case asks for it, which is the shape a model
+// that cannot compact answers with.
 function anthropicModel(
   id: string,
   effort: { xhigh?: boolean; max?: boolean },
+  contextManagement?: { compact: boolean },
 ): Record<string, unknown> {
   return {
     id,
@@ -63,6 +66,14 @@ function anthropicModel(
         supported: true,
         types: { adaptive: { supported: true }, enabled: { supported: true } },
       },
+      ...(contextManagement !== undefined && {
+        context_management: {
+          supported: true,
+          clear_thinking_20251015: null,
+          clear_tool_uses_20250919: null,
+          compact_20260112: { supported: contextManagement.compact },
+        },
+      }),
     },
   };
 }
@@ -381,6 +392,39 @@ describe("provider/model config seam", () => {
       });
     });
 
+    it("captures the context window and compaction support, so nothing reaches the network to start a run", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              ...anthropicModel(
+                "claude-opus-5",
+                { max: true },
+                { compact: true },
+              ),
+              max_input_tokens: 200_000,
+            },
+          ],
+        }),
+      );
+
+      const first = await patchModel("claude-opus-5");
+      expect(first.providers.anthropic.maxInputTokens).toBe(200_000);
+      expect(first.providers.anthropic.compaction).toBe(true);
+
+      // A model that cannot compact must clear both, or the next run compacts
+      // against a window belonging to the model before it.
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [anthropicModel("claude-small", {})],
+        }),
+      );
+      const second = await patchModel("claude-small");
+
+      expect(second.providers.anthropic.compaction).toBe(false);
+      expect(second.providers.anthropic.maxInputTokens).toBeNull();
+    });
+
     it("re-resolves a level the new model does not support, rather than storing something unsendable", async () => {
       // max is legal on the first model and absent from the second.
       stubFetch(() =>
@@ -510,6 +554,48 @@ describe("provider/model config seam", () => {
 
       expect(models[0]?.maxOutputTokens).toBe(128_000);
       expect(models[1]?.maxOutputTokens).toBeNull();
+    });
+
+    it("Anthropic: carries the context window and whether the model can compact", async () => {
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              ...anthropicModel("claude-opus-5", {}, { compact: true }),
+              max_input_tokens: 200_000,
+            },
+            {
+              ...anthropicModel("claude-opus-4-6", {}, { compact: false }),
+              max_input_tokens: 200_000,
+            },
+            { ...anthropicModel("claude-legacy", {}), max_input_tokens: null },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.maxInputTokens).toBe(200_000);
+      expect(models[0]?.compaction).toBe(true);
+      // Advertised but unsupported is a no, and so is saying nothing at all:
+      // compaction is only ever offered where the catalog states it.
+      expect(models[1]?.compaction).toBe(false);
+      expect(models[2]?.compaction).toBe(false);
+      expect(models[2]?.maxInputTokens).toBeNull();
+    });
+
+    it("OpenRouter: never claims compaction, which the gateway truncates instead of summarising", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [{ id: "some/model", reasoning: { mandatory: false } }],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.compaction).toBe(false);
+      expect(models[0]?.maxInputTokens).toBeNull();
     });
 
     it("OpenRouter: uses the model's stated levels and its own default, never a guessed one", async () => {

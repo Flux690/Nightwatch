@@ -143,6 +143,7 @@ export type {
   ReasoningPart,
   ToolCallPart,
   ToolResultPart,
+  CompactionPart,
   MessagePart,
   WireDialect,
   NativeEnvelope,
@@ -166,6 +167,7 @@ export type {
   ContinueCardItem,
   ReportCardItem,
   AlertArrivedItem,
+  CompactionItem,
   TranscriptItem,
 } from "./transcript.js";
 export { transcriptItemKey } from "./transcript.js";
