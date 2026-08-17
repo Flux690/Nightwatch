@@ -3,6 +3,7 @@ import type {
   ReasoningDescriptor,
   ResolvedLLMConfig,
 } from "@nightwarden/shared";
+import type { ToolSchema } from "../llm/types.js";
 import type OpenAI from "openai";
 
 // Mocked stream object returned by client.chat.completions.stream().
@@ -50,7 +51,7 @@ const BASE_CONFIG: ResolvedLLMConfig = {
   reasoning: LADDER,
 };
 
-const READ_TOOL = {
+const READ_TOOL: ToolSchema = {
   name: "ListDockerServices",
   description: "List containers.",
   input_schema: {

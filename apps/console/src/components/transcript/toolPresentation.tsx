@@ -4,6 +4,8 @@ import { ICON_INLINE } from "@/lib/iconProps";
 import { Button } from "@/components/ui/button";
 import { onRevealToolCall, REVEAL_MS } from "./revealToolCall.js";
 import { cn } from "@/lib/utils";
+import { isTool } from "@nightwarden/shared";
+import type { ToolName } from "@nightwarden/shared";
 import { asRecord, stringAt as inputString } from "@/lib/toolResult";
 import type { ToolCallState, ToolCardItem, ToolOutcome } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
@@ -19,7 +21,12 @@ import { findingFor, formatBytes } from "./toolFindings.js";
 // for something a person is meant to read.
 const BODY_MAX_LINES = 8;
 
-const SHELL_TOOLS = new Set(["DockerBash", "K8sBash", "Bash"]);
+// Shared with the approval card, which labels the same three as one action.
+export const SHELL_TOOLS: readonly ToolName[] = [
+  "DockerBash",
+  "K8sBash",
+  "Bash",
+];
 
 // Fleet tools address a service by target key; host tools name a server. Shared
 // with the report, so a cited call names its target the same way there.
@@ -185,18 +192,18 @@ function ToolBody({
   const record = asRecord(result);
 
   if (record !== null) {
-    if (toolName === "GetDockerLogs" || toolName === "GetK8sLogs") {
+    if (isTool(toolName, "GetDockerLogs", "GetK8sLogs")) {
       return <LogLines lines={stringList(record["lines"])} />;
     }
 
-    if (toolName === "GetDockerEvents" || toolName === "GetK8sEvents") {
+    if (isTool(toolName, "GetDockerEvents", "GetK8sEvents")) {
       const events = Array.isArray(record["events"])
         ? (record["events"] as Record<string, unknown>[])
         : [];
       return <EventList events={events} />;
     }
 
-    if (toolName === "GetDockerStats" || toolName === "GetK8sStats") {
+    if (isTool(toolName, "GetDockerStats", "GetK8sStats")) {
       const rows: [string, string][] = [];
       const cpu = record["cpuPercent"];
       const used = record["memoryUsedBytes"];
@@ -209,7 +216,7 @@ function ToolBody({
       return <KeyValues rows={rows} />;
     }
 
-    if (toolName === "GetHostMemory") {
+    if (isTool(toolName, "GetHostMemory")) {
       const rows: [string, string][] = [];
       const total = record["totalBytes"];
       const available = record["availableBytes"];
@@ -225,7 +232,7 @@ function ToolBody({
       return <KeyValues rows={rows} />;
     }
 
-    if (toolName === "GetDockerConfig" || toolName === "GetK8sConfig") {
+    if (isTool(toolName, "GetDockerConfig", "GetK8sConfig")) {
       const rows: [string, string][] = [];
       for (const key of ["name", "image", "restartPolicy"]) {
         const value = record[key];
@@ -239,7 +246,7 @@ function ToolBody({
     // Shell tools: the command, then its output. Keyed on the tool name, not on the
     // presence of an exitCode - plenty of results carry one without being a shell
     // command, and deserve their own shape rather than an empty terminal.
-    if (SHELL_TOOLS.has(toolName)) {
+    if (isTool(toolName, ...SHELL_TOOLS)) {
       const argv = Array.isArray(input["command"])
         ? (input["command"] as unknown[]).map(String).join(" ")
         : (inputString(input, "command") ?? "");
@@ -381,15 +388,15 @@ export function ToolCard({
 
   // The report card already announces this act, so a row for it would say the
   // same thing twice. Recording a hypothesis is a step, and stays visible.
-  if (toolName === "SubmitInvestigationReport") return null;
+  if (isTool(toolName, "SubmitInvestigationReport")) return null;
 
-  if (toolName === "Edit" || toolName === "Write") {
+  if (isTool(toolName, "Edit", "Write")) {
     const change = result === null ? null : parseFileChange(result);
     if (change !== null)
       return <DiffCard toolName={toolName} change={change} />;
   }
 
-  if (toolName === "OpenPullRequest") {
+  if (isTool(toolName, "OpenPullRequest")) {
     const pr = result === null ? null : parsePullRequestResult(result);
     if (pr !== null) return <PRCard pr={pr} />;
   }

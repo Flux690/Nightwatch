@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApprovalCardItem } from "./types.js";
-import { ToolCard } from "./toolPresentation.js";
+import { SHELL_TOOLS, ToolCard } from "./toolPresentation.js";
+import { isTool } from "@nightwarden/shared";
 import { InterruptCard } from "./InterruptCard.js";
 
 /* The only bordered block in the stream, which is what makes it unmissable
@@ -64,17 +65,11 @@ function ordinal(n: number): string {
 // to click without reading. Derived from the tool, so it cannot overstate.
 function actionLabel(toolName: string, input: Record<string, unknown>): string {
   const service = serviceOf(input);
-  switch (toolName) {
-    case "RestartDockerService":
-    case "RestartK8sWorkload":
-      return service ? `Restart ${service}` : "Restart service";
-    case "DockerBash":
-    case "K8sBash":
-    case "Bash":
-      return "Run this command";
-    default:
-      return `Run ${toolName}`;
+  if (isTool(toolName, "RestartDockerService", "RestartK8sWorkload")) {
+    return service ? `Restart ${service}` : "Restart service";
   }
+  if (isTool(toolName, ...SHELL_TOOLS)) return "Run this command";
+  return `Run ${toolName}`;
 }
 
 export function ApprovalCardPanel({

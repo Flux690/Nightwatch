@@ -19,7 +19,7 @@ const CTX: ToolDispatchContext = {
 function toolReturning(content: unknown): Tool {
   return {
     schema: {
-      name: "Oversized",
+      name: "GetDockerLogs",
       description: "",
       input_schema: { type: "object", properties: {} },
     },
@@ -44,7 +44,7 @@ describe("the ceiling on one tool result", () => {
     expect(result.outcome).toBe("system");
     // Not one character of it: a prefix would read as the whole answer.
     expect(result.content).not.toContain("connection refused");
-    expect(result.content).toContain("Oversized");
+    expect(result.content).toContain("GetDockerLogs");
     expect(result.content).toContain(String(MAX_TOOL_RESULT_CHARS));
     expect(result.content).toMatch(/narrow the call/i);
   });

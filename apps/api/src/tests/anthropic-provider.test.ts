@@ -3,6 +3,7 @@ import type {
   ReasoningDescriptor,
   ResolvedLLMConfig,
 } from "@nightwarden/shared";
+import type { ToolSchema } from "../llm/types.js";
 
 const mockFinalMessage = vi.fn();
 const mockAnthropicOn = vi.fn().mockReturnThis();
@@ -56,7 +57,7 @@ const COMPACTING_CONFIG: ResolvedLLMConfig = {
   compaction: true,
 };
 
-const READ_TOOL = {
+const READ_TOOL: ToolSchema = {
   name: "ListDockerServices",
   description: "List containers.",
   input_schema: {

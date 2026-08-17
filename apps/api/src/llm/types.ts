@@ -4,11 +4,14 @@
 import type {
   MessagePart,
   NativeEnvelope,
+  ToolName,
   ToolOutcome,
 } from "@nightwarden/shared";
 
 export interface ToolSchema {
-  name: string;
+  // Checked against the shared list, so a tool the console draws by name cannot
+  // be added or renamed here without the other end being made to agree.
+  name: ToolName;
   description: string;
   input_schema: {
     type: "object";

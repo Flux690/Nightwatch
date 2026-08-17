@@ -83,6 +83,8 @@ export type {
   HostFileInput,
   HostFileResult,
 } from "./tools/host.js";
+export { TOOL_NAMES, isTool } from "./tools/names.js";
+export type { ToolName } from "./tools/names.js";
 export type {
   WsEnvelope,
   RunnerCommandMessage,
