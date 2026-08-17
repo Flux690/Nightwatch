@@ -3,12 +3,12 @@ import { getSession, markAlertCleared } from "../db/sessions.js";
 import { logger } from "../logger.js";
 import { publishReportUpdated } from "../session/stream.js";
 import type { VerificationSource } from "./source.js";
-import { prometheusSource } from "./sources/prometheus.js";
+import { metricsRulesSource } from "./sources/metrics-rules.js";
 
 /* Every source that can answer whether a condition is still true. A static list
    for the same reason the tool registry is one: what the system can do is
    decided at build time, not discovered at runtime. */
-const SOURCES: readonly VerificationSource[] = [prometheusSource];
+const SOURCES: readonly VerificationSource[] = [metricsRulesSource];
 
 export type RecoveryState =
   // Every alert that opened this investigation has cleared. The only state that

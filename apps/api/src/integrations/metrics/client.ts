@@ -1,31 +1,45 @@
-import { describeNetworkFailure } from "./reachability.js";
-type PrometheusErrorCode =
-  "network" | "unauthorized" | "bad_query" | "bad_response";
+import type { MetricsErrorCode } from "@nightwarden/shared";
+import { describeNetworkFailure } from "../reachability.js";
 
-export class PrometheusApiError extends Error {
+/* The Prometheus HTTP API, and nothing else. Every backend we support speaks
+   it - Prometheus, VictoriaMetrics, Mimir, Thanos and their hosted forms - so
+   there is one client here and no per-product adapter. What varies is the
+   endpoint it is handed, which is decided in backends.ts. */
+
+export class MetricsApiError extends Error {
   constructor(
-    readonly code: PrometheusErrorCode,
+    readonly code: MetricsErrorCode,
     readonly status: number,
     message: string,
   ) {
     super(message);
-    this.name = "PrometheusApiError";
+    this.name = "MetricsApiError";
   }
+}
+
+/* One address the API dials, with its credential already resolved. `name` is
+   the product's own, used only in error text so a failure names the thing the
+   user configured rather than "the metrics backend". */
+export interface MetricsEndpoint {
+  url: string;
+  authorization: string | null;
+  orgId: string | null;
+  name: string;
 }
 
 // One series per labelset; instant results are normalized to a single-entry
 // values array so the tools handle vector and matrix results identically.
-export interface PrometheusSeries {
+export interface MetricsSeries {
   metric: Record<string, string>;
   values: Array<[number, string]>;
 }
 
-export interface PrometheusQueryData {
+export interface MetricsQueryData {
   resultType: string;
-  series: PrometheusSeries[];
+  series: MetricsSeries[];
 }
 
-// Server-side evaluation cap, kept under the tools' 30s budget so Prometheus
+// Server-side evaluation cap, kept under the tools' 30s budget so the backend
 // gives up before the tool timeout turns the failure opaque.
 const QUERY_TIMEOUT = "25s";
 
@@ -35,17 +49,21 @@ function joinUrl(baseUrl: string, path: string): string {
 
 // Queries go as POST form bodies: PromQL can exceed URL limits, and label
 // values stay out of access logs (same posture as tokens-never-in-URLs).
-async function prometheusFetch(
-  baseUrl: string,
-  authHeader: string | null,
+async function metricsFetch(
+  endpoint: MetricsEndpoint,
   path: string,
   form?: Record<string, string>,
 ): Promise<Response> {
   const headers: Record<string, string> = { "User-Agent": "nightwarden" };
-  if (authHeader !== null) headers["Authorization"] = authHeader;
+  if (endpoint.authorization !== null) {
+    headers["Authorization"] = endpoint.authorization;
+  }
+  // Mimir requires a tenant whenever multi-tenancy is on and ignores it when
+  // off, so sending it where one is configured is always safe.
+  if (endpoint.orgId !== null) headers["X-Scope-OrgID"] = endpoint.orgId;
   let res: Response;
   try {
-    res = await fetch(joinUrl(baseUrl, path), {
+    res = await fetch(joinUrl(endpoint.url, path), {
       headers:
         form === undefined
           ? headers
@@ -56,17 +74,17 @@ async function prometheusFetch(
       }),
     });
   } catch (err) {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "network",
       0,
-      describeNetworkFailure(err, "Prometheus"),
+      describeNetworkFailure(err, endpoint.name),
     );
   }
   if (res.status === 401 || res.status === 403) {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "unauthorized",
       res.status,
-      "Prometheus rejected the credential",
+      `${endpoint.name} rejected the credential`,
     );
   }
   return res;
@@ -74,29 +92,32 @@ async function prometheusFetch(
 
 // The envelope is narrowed field-by-field so a drifted payload degrades into
 // a typed error, never a crash mid-investigation.
-async function parseEnvelope(res: Response): Promise<PrometheusQueryData> {
+async function parseEnvelope(
+  endpoint: MetricsEndpoint,
+  res: Response,
+): Promise<MetricsQueryData> {
   let body: Record<string, unknown>;
   try {
     body = (await res.json()) as Record<string, unknown>;
   } catch {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "bad_response",
       res.status,
-      `Prometheus returned a non-JSON body (HTTP ${res.status}) - is this URL a Prometheus API endpoint?`,
+      `${endpoint.name} returned a non-JSON body (HTTP ${res.status}) - is this URL a Prometheus-compatible API endpoint?`,
     );
   }
   if (body["status"] === "error") {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "bad_query",
       res.status,
       typeof body["error"] === "string" ? body["error"] : "query failed",
     );
   }
   if (!res.ok || body["status"] !== "success") {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "bad_response",
       res.status,
-      `Prometheus returned ${res.status} without a success envelope`,
+      `${endpoint.name} returned ${res.status} without a success envelope`,
     );
   }
   const data = body["data"] as Record<string, unknown> | undefined;
@@ -109,6 +130,7 @@ async function parseEnvelope(res: Response): Promise<PrometheusQueryData> {
 // The success envelope every non-query endpoint answers with. `what` names the
 // call so a drifted payload says which read failed rather than only that one did.
 async function jsonBody(
+  endpoint: MetricsEndpoint,
   res: Response,
   what: string,
 ): Promise<Record<string, unknown>> {
@@ -116,23 +138,23 @@ async function jsonBody(
   try {
     body = (await res.json()) as Record<string, unknown>;
   } catch {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "bad_response",
       res.status,
-      `Prometheus returned a non-JSON body (HTTP ${res.status}) ${what}`,
+      `${endpoint.name} returned a non-JSON body (HTTP ${res.status}) ${what}`,
     );
   }
   if (!res.ok || body["status"] !== "success") {
-    throw new PrometheusApiError(
+    throw new MetricsApiError(
       "bad_response",
       res.status,
-      `Prometheus returned ${res.status} ${what}`,
+      `${endpoint.name} returned ${res.status} ${what}`,
     );
   }
   return body;
 }
 
-function narrowSeries(entry: unknown): PrometheusSeries {
+function narrowSeries(entry: unknown): MetricsSeries {
   const e = (entry ?? {}) as Record<string, unknown>;
   const metric: Record<string, string> = {};
   if (typeof e["metric"] === "object" && e["metric"] !== null) {
@@ -156,43 +178,36 @@ function narrowSeries(entry: unknown): PrometheusSeries {
 }
 
 export async function instantQuery(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
   query: string,
   timeIso?: string,
-): Promise<PrometheusQueryData> {
-  const res = await prometheusFetch(baseUrl, authHeader, "/api/v1/query", {
+): Promise<MetricsQueryData> {
+  const res = await metricsFetch(endpoint, "/api/v1/query", {
     query,
     timeout: QUERY_TIMEOUT,
     ...(timeIso !== undefined && { time: timeIso }),
   });
-  return parseEnvelope(res);
+  return parseEnvelope(endpoint, res);
 }
 
 export async function rangeQuery(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
   query: string,
   startIso: string,
   endIso: string,
   stepSeconds: number,
-): Promise<PrometheusQueryData> {
-  const res = await prometheusFetch(
-    baseUrl,
-    authHeader,
-    "/api/v1/query_range",
-    {
-      query,
-      start: startIso,
-      end: endIso,
-      step: String(stepSeconds),
-      timeout: QUERY_TIMEOUT,
-    },
-  );
-  return parseEnvelope(res);
+): Promise<MetricsQueryData> {
+  const res = await metricsFetch(endpoint, "/api/v1/query_range", {
+    query,
+    start: startIso,
+    end: endIso,
+    step: String(stepSeconds),
+    timeout: QUERY_TIMEOUT,
+  });
+  return parseEnvelope(endpoint, res);
 }
 
-// One currently-active instance of an alerting rule, as Prometheus itself sees
+// One currently-active instance of an alerting rule, as the backend itself sees
 // it. The labels identify which instance, since one rule fires per series.
 interface FiringInstance {
   labels: Record<string, string>;
@@ -203,14 +218,13 @@ interface FiringInstance {
    on the same interval that fired the alert. `null` means no rule by that name -
    renamed, removed, or from elsewhere - which is not "it is not firing". */
 export async function firingInstancesOf(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
   ruleName: string,
 ): Promise<FiringInstance[] | null> {
   const body = await jsonBody(
-    await prometheusFetch(
-      baseUrl,
-      authHeader,
+    endpoint,
+    await metricsFetch(
+      endpoint,
       `/api/v1/rules?type=alert&rule_name[]=${encodeURIComponent(ruleName)}`,
     ),
     "listing rules",
@@ -224,8 +238,8 @@ export async function firingInstancesOf(
     const list = (group as Record<string, unknown>)["rules"];
     return Array.isArray(list) ? list : [];
   });
-  // The filter is a server-side hint, not a guarantee: an older Prometheus
-  // ignores rule_name[] and answers with everything.
+  /* The filter is a server-side hint, not a guarantee: an older Prometheus
+     ignores rule_name[], and vmalert documents no support for it at all. */
   const named = rules.filter(
     (rule) => (rule as Record<string, unknown>)["name"] === ruleName,
   );
@@ -249,7 +263,7 @@ export async function firingInstancesOf(
   });
 }
 
-// One alerting rule as Prometheus holds it: the expression it evaluates and
+// One alerting rule as the backend holds it: the expression it evaluates and
 // whether it is currently firing.
 export interface AlertingRule {
   name: string;
@@ -259,11 +273,11 @@ export interface AlertingRule {
 }
 
 export async function alertingRules(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
 ): Promise<AlertingRule[]> {
   const body = await jsonBody(
-    await prometheusFetch(baseUrl, authHeader, "/api/v1/rules?type=alert"),
+    endpoint,
+    await metricsFetch(endpoint, "/api/v1/rules?type=alert"),
     "listing rules",
   );
   const groups = (body["data"] as Record<string, unknown> | undefined)?.[
@@ -292,15 +306,15 @@ export async function alertingRules(
     });
 }
 
-// The names Prometheus is currently storing, optionally narrowed by substring.
+// The names the backend is currently storing, optionally narrowed by substring.
 // Matched here rather than server-side: /label/__name__/values takes no filter.
 export async function metricNames(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
   contains: string | null,
 ): Promise<string[]> {
   const body = await jsonBody(
-    await prometheusFetch(baseUrl, authHeader, "/api/v1/label/__name__/values"),
+    endpoint,
+    await metricsFetch(endpoint, "/api/v1/label/__name__/values"),
     "listing metric names",
   );
   const data = body["data"];
@@ -312,9 +326,9 @@ export async function metricNames(
   return all.filter((name) => name.toLowerCase().includes(needle));
 }
 
-// What a metric is and what it is measured in. Prometheus only knows this for
-// metrics an exporter declared with HELP and TYPE, so an answer is often empty.
-interface MetricMetadata {
+// What a metric is and what it is measured in. Only known for metrics an
+// exporter declared with HELP and TYPE, and some backends store none at all.
+export interface MetricMetadata {
   metric: string;
   type: string;
   unit: string;
@@ -322,14 +336,13 @@ interface MetricMetadata {
 }
 
 export async function metricMetadata(
-  baseUrl: string,
-  authHeader: string | null,
+  endpoint: MetricsEndpoint,
   metric: string,
 ): Promise<MetricMetadata | null> {
   const body = await jsonBody(
-    await prometheusFetch(
-      baseUrl,
-      authHeader,
+    endpoint,
+    await metricsFetch(
+      endpoint,
       `/api/v1/metadata?metric=${encodeURIComponent(metric)}`,
     ),
     "reading metric metadata",

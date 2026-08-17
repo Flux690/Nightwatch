@@ -3,7 +3,7 @@ import { GITHUB_TOOLS } from "./tools/github.js";
 import { HOST_TOOLS } from "./tools/host.js";
 import { K8S_TOOLS } from "./tools/kubernetes.js";
 import { LOKI_TOOLS } from "./tools/loki.js";
-import { PROMETHEUS_TOOLS } from "./tools/prometheus.js";
+import { METRICS_TOOLS } from "./tools/metrics.js";
 import { REPO_TOOLS } from "./tools/repo.js";
 import type { Tool } from "./tools/types.js";
 
@@ -16,7 +16,7 @@ const LIBRARIES: ReadonlyArray<readonly [string, Tool[]]> = [
   ["kubernetes", K8S_TOOLS],
   ["repo", REPO_TOOLS],
   ["github", GITHUB_TOOLS],
-  ["prometheus", PROMETHEUS_TOOLS],
+  ["metrics", METRICS_TOOLS],
   ["loki", LOKI_TOOLS],
 ];
 

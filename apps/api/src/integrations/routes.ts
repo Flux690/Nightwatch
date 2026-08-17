@@ -7,9 +7,6 @@ import {
   getGitHubIntegration,
   saveGitHubIntegration,
   updateGitHubIntegrationRepo,
-  deletePrometheusIntegration,
-  getPrometheusIntegration,
-  savePrometheusIntegration,
   deleteLokiIntegration,
   getLokiIntegration,
   saveLokiIntegration,
@@ -27,7 +24,6 @@ import {
   ownerIsOrganization,
   validateRepoAccess,
 } from "./github.js";
-import { PrometheusApiError, instantQuery } from "./prometheus.js";
 import { LokiApiError, probeLoki } from "./loki.js";
 import { preflight } from "../sandbox/preflight.js";
 import { teardownAll } from "../sandbox/workspace.js";
@@ -35,18 +31,12 @@ import { logger } from "../logger.js";
 import { publicUrl } from "../env/public-url.js";
 import type {
   GitHubIntegrationStatus,
-  PrometheusIntegrationStatus,
   LokiIntegrationStatus,
 } from "@nightwarden/shared";
 
 const ReposBodySchema = z.object({
   token: z.string().min(1).optional(),
   page: z.number().int().positive().optional(),
-});
-
-const PrometheusConnectSchema = z.object({
-  url: z.string().min(1),
-  authHeader: z.string().min(1).optional(),
 });
 
 const LokiConnectSchema = z.object({
@@ -88,37 +78,6 @@ async function sendGitHubError(
 ): Promise<FastifyReply> {
   if (err instanceof GitHubApiError) {
     const status = err.code === "network" ? 502 : err.status;
-    return reply.code(status).send({ error: err.message, code: err.code });
-  }
-  throw err;
-}
-
-function prometheusStatusPayload(): PrometheusIntegrationStatus {
-  const row = getPrometheusIntegration();
-  if (!row) {
-    return { configured: false, url: null, hasAuth: false, validatedAt: null };
-  }
-  return {
-    configured: true,
-    url: row.baseUrl,
-    hasAuth: row.authHeaderEncrypted !== null,
-    validatedAt: row.validatedAt,
-  };
-}
-
-// bad_query maps to 400 explicitly: Prometheus reports envelope errors with
-// HTTP 200, which must not leak through as a success status.
-async function sendPrometheusError(
-  reply: FastifyReply,
-  err: unknown,
-): Promise<FastifyReply> {
-  if (err instanceof PrometheusApiError) {
-    const status =
-      err.code === "unauthorized"
-        ? err.status
-        : err.code === "bad_query"
-          ? 400
-          : 502;
     return reply.code(status).send({ error: err.message, code: err.code });
   }
   throw err;
@@ -297,48 +256,6 @@ export async function registerIntegrationRoutes(
       await teardownAll("disconnected");
       deleteGitHubIntegration();
       logger.info("github integration disconnected");
-      return reply.code(204).send();
-    },
-  );
-
-  // Status only - like GitHub, the credential never rides any response.
-  fastify.get(
-    "/integrations/prometheus",
-    { preHandler: requireSession },
-    async () => prometheusStatusPayload(),
-  );
-
-  // Connect: probe with a real query before saving, so a bad URL or credential
-  // fails loud at setup time, never at 3am mid-incident.
-  fastify.post(
-    "/integrations/prometheus",
-    { preHandler: requireSession },
-    async (request, reply) => {
-      const parsed = PrometheusConnectSchema.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.message });
-      }
-      const { url, authHeader } = parsed.data;
-      try {
-        await instantQuery(url, authHeader ?? null, "up");
-        savePrometheusIntegration({
-          baseUrl: url,
-          authHeaderEncrypted: authHeader ? encrypt(authHeader) : null,
-        });
-        logger.info({ url }, "prometheus integration configured");
-        return await reply.code(201).send(prometheusStatusPayload());
-      } catch (err) {
-        return sendPrometheusError(reply, err);
-      }
-    },
-  );
-
-  fastify.delete(
-    "/integrations/prometheus",
-    { preHandler: requireSession },
-    async (_request, reply) => {
-      deletePrometheusIntegration();
-      logger.info("prometheus integration disconnected");
       return reply.code(204).send();
     },
   );

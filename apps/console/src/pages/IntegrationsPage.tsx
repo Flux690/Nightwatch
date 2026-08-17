@@ -4,15 +4,17 @@ import type {
   AlertSourceKind,
   GitHubIntegrationStatus,
   LokiIntegrationStatus,
-  PrometheusIntegrationStatus,
+  MetricsBackendStatus,
   RunnerRecord,
 } from "@nightwarden/shared";
+import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
 import { Boxes, Server } from "lucide-react";
 
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
 import { ALERT_SOURCE_CONTENT } from "./alertSourceContent";
+import { METRICS_BACKEND_CONTENT } from "./metricsBackendContent";
 
 // Named for what a connection gives an investigation. A section appears with
 // its first card.
@@ -132,10 +134,12 @@ export function IntegrationsPage(): React.JSX.Element {
   const alertmanager = useAlertSource("alertmanager");
   const grafana = useAlertSource("grafana");
 
-  const { data: prometheus } = useQuery<PrometheusIntegrationStatus>({
-    queryKey: ["prometheus-integration"],
+  // One query for every backend: the grid draws a card per product and each
+  // says how many of that product are connected.
+  const { data: metrics } = useQuery<MetricsBackendStatus[]>({
+    queryKey: ["metrics-backends"],
     queryFn: () =>
-      apiFetch<PrometheusIntegrationStatus>("/api/integrations/prometheus"),
+      apiFetch<MetricsBackendStatus[]>("/api/integrations/metrics"),
   });
 
   const { data: loki } = useQuery<LokiIntegrationStatus>({
@@ -195,17 +199,29 @@ export function IntegrationsPage(): React.JSX.Element {
       "Forward alerts from Grafana's own alerting, through a webhook contact point.",
       grafana,
     ),
+    ...METRICS_BACKEND_KINDS.map((kind): IntegrationCard => {
+      const content = METRICS_BACKEND_CONTENT[kind];
+      const connected = (metrics ?? []).filter((b) => b.kind === kind);
+      /* A backend with no rules endpoint is connected and still cannot confirm
+         a recovery, so the card says which rather than a flat "Connected". */
+      const blind = connected.filter((b) => b.rules === null).length;
+      return {
+        title: content.label,
+        description: content.cardDescription,
+        category: "Metrics",
+        logo: <img src={content.logo} alt="" className="size-5" />,
+        to: `/integrations/metrics/${kind}`,
+        status:
+          connected.length === 0
+            ? null
+            : blind > 0
+              ? "Connected, no rules endpoint"
+              : "Connected",
+        statusVariant: blind > 0 ? "muted" : "success",
+      };
+    }),
     {
-      title: "Prometheus",
-      description:
-        "Query your metrics to confirm a symptom and chart what backs it.",
-      category: "Metrics",
-      logo: <img src="/logos/prometheus.svg" alt="" className="size-5" />,
-      to: "/integrations/prometheus",
-      status: prometheus?.configured === true ? "Connected" : null,
-    },
-    {
-      title: "Loki",
+      title: "Grafana Loki",
       description:
         "Search your logs for the errors behind an alert and quote them as evidence.",
       category: "Logs",

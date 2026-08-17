@@ -24,9 +24,9 @@ import {
 import { loadConfig } from "../config/store.js";
 import {
   getGitHubIntegration,
-  getPrometheusIntegration,
   getLokiIntegration,
 } from "../db/integrations.js";
+import { hasMetricsBackend } from "../integrations/metrics/backends.js";
 import {
   appendErrorMessage,
   appendTranscriptRows,
@@ -581,7 +581,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       platforms,
       {
         github: getGitHubIntegration() !== null,
-        prometheus: getPrometheusIntegration() !== null,
+        metrics: hasMetricsBackend(),
         loki: getLokiIntegration() !== null,
       },
       opensInvestigation,

@@ -12,10 +12,8 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 
 import { registerIntegrationRoutes } from "../integrations/routes.js";
-import {
-  deletePrometheusIntegration,
-  deleteLokiIntegration,
-} from "../db/integrations.js";
+import { registerMetricsRoutes } from "../integrations/metrics/routes.js";
+import { deleteLokiIntegration } from "../db/integrations.js";
 import { setAlertSourceReceived } from "../db/alert-sources.js";
 import { useTempDb } from "./temp-db.js";
 import { mintTestSession } from "./session-helper.js";
@@ -415,33 +413,33 @@ describe("GitHub integration routes", () => {
   });
 });
 
-describe("Prometheus integration routes", () => {
+// The success envelope a Prometheus-compatible backend answers a probe with.
+const PROM_OK = {
+  status: "success",
+  data: { resultType: "vector", result: [] },
+};
+
+describe("metrics backend routes", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let SESSION: string;
-
-  const PROM_OK = {
-    status: "success",
-    data: { resultType: "vector", result: [] },
-  };
 
   beforeAll(async () => {
     cleanupDb = useTempDb();
     SESSION = await mintTestSession();
     server = Fastify({ logger: false });
-    await mountApi(server, registerIntegrationRoutes);
+    await mountApi(server, registerMetricsRoutes);
     await server.ready();
   });
 
   afterAll(async () => {
     await server.close();
     cleanupDb();
-    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    deletePrometheusIntegration();
+    getDb().prepare("DELETE FROM metrics_backends").run();
   });
 
   function authed(opts: {
@@ -457,84 +455,133 @@ describe("Prometheus integration routes", () => {
     });
   }
 
-  it("reports not configured before onboarding and requires a session", async () => {
+  it("lists nothing before onboarding and requires a session", async () => {
     const unauthed = await server.inject({
       method: "GET",
-      url: "/api/integrations/prometheus",
+      url: "/api/integrations/metrics",
     });
     expect(unauthed.statusCode).toBe(401);
 
     const res = await authed({
       method: "GET",
-      url: "/api/integrations/prometheus",
+      url: "/api/integrations/metrics",
     });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({
-      configured: false,
-      url: null,
-      hasAuth: false,
-      validatedAt: null,
-    });
+    expect(JSON.parse(res.body)).toEqual([]);
   });
 
-  it("connects after a successful probe: slash-tolerant URL, form body, verbatim auth, encrypted storage", async () => {
-    const mock = stubFetch((url, init) => {
-      expect(url).toBe("http://prom.internal:9090/api/v1/query");
-      expect(init?.method).toBe("POST");
-      expect(String(init?.body)).toContain("query=up");
-      expect((init?.headers as Record<string, string>)["Authorization"]).toBe(
-        "Bearer secret-123",
+  it("probes both endpoints before saving, since a rules URL that answers nothing is the failure this exists to prevent", async () => {
+    const asked: string[] = [];
+    const mock = stubFetch((url) => {
+      asked.push(url);
+      return jsonResponse(
+        url.includes("/rules")
+          ? { status: "success", data: { groups: [] } }
+          : PROM_OK,
       );
-      return jsonResponse(PROM_OK);
     });
 
     const res = await authed({
       method: "POST",
-      url: "/api/integrations/prometheus",
+      url: "/api/integrations/metrics",
       payload: {
-        url: "http://prom.internal:9090/",
-        authHeader: "Bearer secret-123",
+        kind: "victoriametrics",
+        label: "vm-prod",
+        query: { url: "http://vmselect:8481/select/0/prometheus" },
+        rules: { url: "http://vmalert:8880" },
       },
     });
-    expect(res.statusCode).toBe(201);
-    expect(JSON.parse(res.body)).toEqual({
-      configured: true,
-      url: "http://prom.internal:9090/",
-      hasAuth: true,
-      validatedAt: expect.any(String),
-    });
-    expect(mock).toHaveBeenCalledTimes(1);
 
-    const row = getDb()
-      .prepare(
-        "SELECT secret_encrypted FROM integrations WHERE kind = 'prometheus'",
-      )
-      .get() as { secret_encrypted: string };
-    expect(decrypt(row.secret_encrypted)).toBe("Bearer secret-123");
-    expect(row.secret_encrypted).not.toContain("secret-123");
+    expect(res.statusCode).toBe(201);
+    expect(asked).toEqual([
+      "http://vmselect:8481/select/0/prometheus/api/v1/query",
+      "http://vmalert:8880/api/v1/rules?type=alert",
+    ]);
+    expect(mock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(res.body)).toMatchObject({
+      kind: "victoriametrics",
+      label: "vm-prod",
+      query: { url: "http://vmselect:8481/select/0/prometheus" },
+      rules: { url: "http://vmalert:8880" },
+    });
   });
 
-  it("connects without an auth header, sending none and reporting hasAuth: false", async () => {
+  /* Grafana Cloud hands out an instance id and a token, never a base64 blob, so
+     the pair is encoded here and stored as the one credential everything else
+     reads. */
+  it("encodes a basic pair into one Authorization header and never stores the parts", async () => {
+    let sawAuth: string | undefined;
     stubFetch((_url, init) => {
-      expect(
-        (init?.headers as Record<string, string>)["Authorization"],
-      ).toBeUndefined();
+      sawAuth = (init?.headers as Record<string, string>)["Authorization"];
       return jsonResponse(PROM_OK);
     });
 
+    await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload: {
+        kind: "mimir",
+        label: "grafana-cloud",
+        query: {
+          url: "https://prometheus-prod-01.grafana.net/api/prom",
+          basicUsername: "123456",
+          basicPassword: "glc-token",
+        },
+      },
+    });
+
+    const expected = `Basic ${Buffer.from("123456:glc-token", "utf8").toString("base64")}`;
+    expect(sawAuth).toBe(expected);
+    const row = getDb()
+      .prepare("SELECT query_auth_encrypted AS a FROM metrics_backends")
+      .get() as { a: string };
+    expect(decrypt(row.a)).toBe(expected);
+    expect(row.a).not.toContain("glc-token");
+  });
+
+  /* A legitimate configuration, not an error - and the one the console has to
+     say out loud, because without it recovery can never be confirmed. */
+  it("accepts a backend with no rules endpoint and reports the gap as null", async () => {
+    stubFetch(() => jsonResponse(PROM_OK));
+
     const res = await authed({
       method: "POST",
-      url: "/api/integrations/prometheus",
-      payload: { url: "http://prom.internal:9090" },
+      url: "/api/integrations/metrics",
+      payload: {
+        kind: "victoriametrics",
+        label: "vm-no-alerting",
+        query: { url: "http://vmsingle:8428" },
+      },
     });
+
     expect(res.statusCode).toBe(201);
-    expect(JSON.parse(res.body)).toMatchObject({
-      configured: true,
-      hasAuth: false,
+    expect(JSON.parse(res.body).rules).toBeNull();
+  });
+
+  it("refuses a second backend sharing a name, which a tool call could not tell apart", async () => {
+    stubFetch(() => jsonResponse(PROM_OK));
+    const payload = {
+      kind: "prometheus",
+      label: "Prometheus",
+      query: { url: "http://prom-a:9090" },
+    };
+    await authed({ method: "POST", url: "/api/integrations/metrics", payload });
+
+    const second = await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload: { ...payload, query: { url: "http://prom-b:9090" } },
     });
+
+    expect(second.statusCode).toBe(409);
   });
 
   it("refuses to save when the probe fails - envelope error maps to 400, unreachable to 502", async () => {
+    const payload = {
+      kind: "prometheus",
+      label: "Prometheus",
+      query: { url: "http://prom.internal:9090" },
+    };
     stubFetch(() =>
       jsonResponse(
         { status: "error", errorType: "bad_data", error: "unknown function" },
@@ -543,8 +590,8 @@ describe("Prometheus integration routes", () => {
     );
     const badQuery = await authed({
       method: "POST",
-      url: "/api/integrations/prometheus",
-      payload: { url: "http://prom.internal:9090" },
+      url: "/api/integrations/metrics",
+      payload,
     });
     expect(badQuery.statusCode).toBe(400);
     expect(JSON.parse(badQuery.body).code).toBe("bad_query");
@@ -554,17 +601,43 @@ describe("Prometheus integration routes", () => {
     });
     const unreachable = await authed({
       method: "POST",
-      url: "/api/integrations/prometheus",
-      payload: { url: "http://prom.internal:9090" },
+      url: "/api/integrations/metrics",
+      payload,
     });
     expect(unreachable.statusCode).toBe(502);
     expect(JSON.parse(unreachable.body).code).toBe("network");
 
     const status = await authed({
       method: "GET",
-      url: "/api/integrations/prometheus",
+      url: "/api/integrations/metrics",
     });
-    expect(JSON.parse(status.body).configured).toBe(false);
+    expect(JSON.parse(status.body)).toEqual([]);
+  });
+
+  it("disconnects by id and answers 404 for one that never existed", async () => {
+    stubFetch(() => jsonResponse(PROM_OK));
+    const created = await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload: {
+        kind: "thanos",
+        label: "thanos-query",
+        query: { url: "http://thanos:10902" },
+      },
+    });
+    const { id } = JSON.parse(created.body) as { id: string };
+
+    const gone = await authed({
+      method: "DELETE",
+      url: `/api/integrations/metrics/${id}`,
+    });
+    expect(gone.statusCode).toBe(204);
+
+    const missing = await authed({
+      method: "DELETE",
+      url: "/api/integrations/metrics/not-a-backend",
+    });
+    expect(missing.statusCode).toBe(404);
   });
 });
 

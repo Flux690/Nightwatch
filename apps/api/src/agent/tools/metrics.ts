@@ -1,16 +1,19 @@
-import { decrypt } from "../../secrets.js";
-import { getPrometheusIntegration } from "../../db/integrations.js";
 import {
-  PrometheusApiError,
+  MetricsApiError,
   alertingRules,
   instantQuery,
   metricMetadata,
   metricNames,
   rangeQuery,
   type AlertingRule,
-  type PrometheusQueryData,
-  type PrometheusSeries,
-} from "../../integrations/prometheus.js";
+  type MetricsQueryData,
+  type MetricsSeries,
+} from "../../integrations/metrics/client.js";
+import {
+  listMetricsBackends,
+  soleMetricsBackend,
+  type MetricsBackend,
+} from "../../integrations/metrics/backends.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { fitWithinBudget } from "./result-budget.js";
 import type { Tool, ToolExecuteResult } from "./types.js";
@@ -18,7 +21,7 @@ import type { Tool, ToolExecuteResult } from "./types.js";
 // API-local by design: these shapes never cross the runner wire.
 interface MetricsQueryResult {
   resultType: string;
-  series: PrometheusSeries[];
+  series: MetricsSeries[];
   seriesOmitted?: number;
 }
 
@@ -50,6 +53,15 @@ const TARGET_POINTS_PER_SERIES = 200;
 const MAX_METRIC_NAMES = 100;
 const MAX_ALERT_RULES = 50;
 
+/* Consulted only when more than one backend is connected, exactly as `runner`
+   is consulted only for a shared target key. Named after the context block that
+   lists them, so the model copies a name rather than inventing one. */
+const BACKEND_PROPERTY = {
+  type: "string",
+  description:
+    "The name of one metrics backend, written exactly as the METRICS BACKENDS list gives it. Supply this only when that list shows more than one; with a single backend connected it is the only one there is, and naming it changes nothing.",
+} as const;
+
 function clampedNumber(
   input: Record<string, unknown>,
   key: string,
@@ -65,7 +77,7 @@ function clampedNumber(
 
 // Capped by count, then by size: a range query returns twenty series of two
 // hundred points each, which is several times what one result may occupy.
-function capSeries(data: PrometheusQueryData): MetricsQueryResult {
+function capSeries(data: MetricsQueryData): MetricsQueryResult {
   const { kept, dropped } = fitWithinBudget(data.series.slice(0, MAX_SERIES));
   const omitted = data.series.length - MAX_SERIES + dropped;
   return {
@@ -75,24 +87,58 @@ function capSeries(data: PrometheusQueryData): MetricsQueryResult {
   };
 }
 
-function notConfigured(): ToolExecuteResult {
+/* Which backend this call means. One connected needs no argument; several make
+   the argument required, because guessing which of two Prometheus clusters was
+   meant would answer a question nobody asked. */
+function resolveBackend(
+  input: Record<string, unknown>,
+): MetricsBackend | ToolExecuteResult {
+  const all = listMetricsBackends();
+  if (all.length === 0) {
+    return {
+      content:
+        "No metrics backend is connected. The user can connect one from the Integrations page. Continue without metric evidence.",
+      outcome: "permission",
+    };
+  }
+  const named = input["backend"];
+  if (typeof named !== "string" || named.trim() === "") {
+    const sole = soleMetricsBackend();
+    if (sole !== null) return sole;
+    return {
+      content: `More than one metrics backend is connected, so name the one you mean in "backend": ${all
+        .map((b) => b.label)
+        .join(", ")}.`,
+      outcome: "system",
+    };
+  }
+  const wanted = named.trim().toLowerCase();
+  const match = all.find((b) => b.label.toLowerCase() === wanted);
+  if (match !== undefined) return match;
   return {
-    content:
-      "Prometheus integration is not configured. The user can connect it from the Integrations page. Continue without metric evidence.",
-    outcome: "permission",
+    content: `No metrics backend is named "${named.trim()}". The connected ones are: ${all
+      .map((b) => b.label)
+      .join(", ")}.`,
+    outcome: "system",
   };
 }
 
+function isBackend(
+  resolved: MetricsBackend | ToolExecuteResult,
+): resolved is MetricsBackend {
+  return "capabilities" in resolved;
+}
+
 function corrective(err: unknown): ToolExecuteResult {
-  if (err instanceof PrometheusApiError) {
+  if (err instanceof MetricsApiError) {
     if (err.code === "bad_query") {
       return {
-        content: `Prometheus rejected the query: ${err.message}. Fix the PromQL and retry.`,
+        content: `The backend rejected the query: ${err.message}. Fix the PromQL and retry.`,
         outcome: "system",
       };
     }
     return {
-      content: `Prometheus request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
+      content: `Metrics request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
       outcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }
@@ -102,12 +148,12 @@ function corrective(err: unknown): ToolExecuteResult {
   };
 }
 
-export const PROMETHEUS_TOOLS: Tool[] = [
+export const METRICS_TOOLS: Tool[] = [
   {
     schema: {
       name: "QueryMetrics",
       description:
-        "Evaluate a PromQL expression against the connected Prometheus at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
+        "Evaluate a PromQL expression against the connected metrics backend at a single moment in time, which gives you one number rather than a series. Use it to read a value as it was when the alert fired, or as it is now. When you need to know how a value behaved over time, such as whether it climbed steadily or spiked, use QueryMetricsRange instead.",
       input_schema: {
         type: "object",
         properties: {
@@ -121,6 +167,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             description:
               "Which moment to evaluate at. 'now', the default, reads the current value. 'alert' reads the value as of the instant the alert that opened this investigation fired; on a session no alert opened, it means the same as 'now'.",
           },
+          backend: BACKEND_PROPERTY,
         },
         required: ["query"],
       },
@@ -131,18 +178,15 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const integration = getPrometheusIntegration();
-      if (integration === null) return notConfigured();
+      const backend = resolveBackend(input);
+      if (!isBackend(backend)) return backend;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
         return { content: "query must be a PromQL string", outcome: "system" };
       }
       try {
         const data = await instantQuery(
-          integration.baseUrl,
-          integration.authHeaderEncrypted
-            ? decrypt(integration.authHeaderEncrypted)
-            : null,
+          backend.query,
           query,
           input["at"] === "alert"
             ? alertAnchorFor(ctx.sessionId).toISOString()
@@ -159,7 +203,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "QueryMetricsRange",
       description:
-        "Evaluate a PromQL expression against the connected Prometheus across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
+        "Evaluate a PromQL expression against the connected metrics backend across a window of time around the alert, or around now if no alert started this session. This is how you see the shape of a problem: whether a value rose gradually or jumped, and whether it recovered afterwards. Use rate() and aggregations to keep the number of returned series small, because only the first twenty are returned.",
       input_schema: {
         type: "object",
         properties: {
@@ -182,6 +226,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             description:
               "How far apart the sampled points are. Omit this and a step is chosen that fits roughly 200 points across the window.",
           },
+          backend: BACKEND_PROPERTY,
         },
         required: ["query"],
       },
@@ -192,8 +237,8 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input, ctx): Promise<ToolExecuteResult> => {
-      const integration = getPrometheusIntegration();
-      if (integration === null) return notConfigured();
+      const backend = resolveBackend(input);
+      if (!isBackend(backend)) return backend;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
         return { content: "query must be a PromQL string", outcome: "system" };
@@ -235,10 +280,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
 
       try {
         const data = await rangeQuery(
-          integration.baseUrl,
-          integration.authHeaderEncrypted
-            ? decrypt(integration.authHeaderEncrypted)
-            : null,
+          backend.query,
           query,
           start.toISOString(),
           end.toISOString(),
@@ -261,7 +303,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "ListMetricNames",
       description:
-        "List the metric names this Prometheus is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
+        "List the metric names this backend is currently storing, narrowed by a substring. Call it before querying a metric you have not already seen in an alert label or an earlier result: a PromQL expression naming a metric that does not exist returns no series, which reads as 'the value is fine' rather than as a mistake. Returns names only, not values or labels.",
       input_schema: {
         type: "object",
         properties: {
@@ -270,6 +312,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             description:
               "Case-insensitive substring the name must contain, such as 'memory' or 'http_request'. Omit to list everything, which on a busy fleet is thousands of names.",
           },
+          backend: BACKEND_PROPERTY,
         },
         required: [],
       },
@@ -280,15 +323,12 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const integration = getPrometheusIntegration();
-      if (integration === null) return notConfigured();
+      const backend = resolveBackend(input);
+      if (!isBackend(backend)) return backend;
       const contains = input["contains"];
       try {
         const names = await metricNames(
-          integration.baseUrl,
-          integration.authHeaderEncrypted
-            ? decrypt(integration.authHeaderEncrypted)
-            : null,
+          backend.query,
           typeof contains === "string" && contains.trim() !== ""
             ? contains.trim()
             : null,
@@ -296,7 +336,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
         if (names.length === 0) {
           return {
             content:
-              "No metric names matched. Widen the substring, or drop it to see what this Prometheus stores at all.",
+              "No metric names matched. Widen the substring, or drop it to see what this backend stores at all.",
             outcome: "expected_miss",
           };
         }
@@ -317,7 +357,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "GetMetricMetadata",
       description:
-        "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Prometheus only knows this for metrics an exporter declared, so an answer is often absent; absence says nothing about whether the metric exists.",
+        "Read what a metric measures and how: its type (counter, gauge, histogram, summary), its unit where the exporter declared one, and its help text. A counter only means something through rate() and a raw read of one is meaningless, so check the type before writing an expression against an unfamiliar metric. Not every backend stores this, and the result says so when it does not.",
       input_schema: {
         type: "object",
         properties: {
@@ -326,6 +366,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             description:
               "The exact metric name, as it appears in ListMetricNames or in a series you have already queried.",
           },
+          backend: BACKEND_PROPERTY,
         },
         required: ["metric"],
       },
@@ -336,23 +377,27 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const integration = getPrometheusIntegration();
-      if (integration === null) return notConfigured();
+      const backend = resolveBackend(input);
+      if (!isBackend(backend)) return backend;
       const metric = input["metric"];
       if (typeof metric !== "string" || metric.trim() === "") {
         return { content: "metric must be a name", outcome: "system" };
       }
+      /* Stated, not discovered: VictoriaMetrics answers this endpoint with an
+         empty object for every metric that has ever existed, so calling it and
+         reporting the emptiness would be a fact about VictoriaMetrics dressed
+         as a fact about the metric. */
+      if (!backend.capabilities.metricMetadata) {
+        return {
+          content: `${backend.label} does not implement the metric metadata API - it answers with an empty result for every metric, so nothing here can tell you the type or unit of "${metric.trim()}". This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,
+          outcome: "expected_miss",
+        };
+      }
       try {
-        const meta = await metricMetadata(
-          integration.baseUrl,
-          integration.authHeaderEncrypted
-            ? decrypt(integration.authHeaderEncrypted)
-            : null,
-          metric.trim(),
-        );
+        const meta = await metricMetadata(backend.query, metric.trim());
         if (meta === null) {
           return {
-            content: `No exporter declared metadata for "${metric.trim()}". The metric may still exist and be queryable.`,
+            content: `No exporter declared metadata for "${metric.trim()}" on ${backend.label}. The metric may still exist and be queryable.`,
             outcome: "expected_miss",
           };
         }
@@ -367,7 +412,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     schema: {
       name: "ListAlertRules",
       description:
-        "List the alerting rules this Prometheus evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
+        "List the alerting rules this backend evaluates, each with the PromQL expression it tests and whether it is firing now. This is how you read the condition behind an alert rather than inferring it from the alert's labels: the expression names the metric, the threshold and the window that fired. Returns rule definitions and current state, not the history of when a rule fired.",
       input_schema: {
         type: "object",
         properties: {
@@ -376,6 +421,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
             description:
               "Case-insensitive substring the rule name must contain. Omit to list every rule.",
           },
+          backend: BACKEND_PROPERTY,
         },
         required: [],
       },
@@ -386,20 +432,24 @@ export const PROMETHEUS_TOOLS: Tool[] = [
     timeoutMs: 30_000,
     on: "api",
     execute: async (input): Promise<ToolExecuteResult> => {
-      const integration = getPrometheusIntegration();
-      if (integration === null) return notConfigured();
+      const backend = resolveBackend(input);
+      if (!isBackend(backend)) return backend;
+      /* A backend with no rules endpoint has not told us it evaluates no rules;
+         it has told us nothing. VictoriaMetrics serves them from vmalert alone,
+         and Grafana Cloud from the Grafana stack behind another credential. */
+      if (backend.rules === null) {
+        return {
+          content: `No rules endpoint is configured for ${backend.label}, so nothing here can say which alerting rules it evaluates or whether any is firing. This is a gap in the connection, not an absence of rules. The user can add the rules URL on the Integrations page - on VictoriaMetrics it is vmalert's address, and on Grafana Cloud the Grafana stack's.`,
+          outcome: "permission",
+        };
+      }
       const contains = input["contains"];
       const needle =
         typeof contains === "string" && contains.trim() !== ""
           ? contains.trim().toLowerCase()
           : null;
       try {
-        const rules = await alertingRules(
-          integration.baseUrl,
-          integration.authHeaderEncrypted
-            ? decrypt(integration.authHeaderEncrypted)
-            : null,
-        );
+        const rules = await alertingRules(backend.rules);
         const matched =
           needle === null
             ? rules
@@ -408,7 +458,7 @@ export const PROMETHEUS_TOOLS: Tool[] = [
           return {
             content:
               needle === null
-                ? "This Prometheus evaluates no alerting rules."
+                ? `${backend.label} evaluates no alerting rules.`
                 : `No alerting rule name contains "${contains as string}".`,
             outcome: "expected_miss",
           };

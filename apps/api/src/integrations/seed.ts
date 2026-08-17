@@ -1,12 +1,8 @@
-import {
-  getLokiIntegration,
-  getPrometheusIntegration,
-  saveLokiIntegration,
-  savePrometheusIntegration,
-} from "../db/integrations.js";
+import { getLokiIntegration, saveLokiIntegration } from "../db/integrations.js";
+import { listMetricsBackendRows, saveMetricsBackend } from "../db/metrics.js";
 import { encrypt } from "../secrets.js";
 import { logger } from "../logger.js";
-import { instantQuery } from "./prometheus.js";
+import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
 
 // A first-boot seed, never a live source: an integration the user has already
@@ -18,13 +14,19 @@ export async function seedIntegrationsFromEnv(): Promise<void> {
 }
 
 async function seedPrometheus(): Promise<void> {
-  if (getPrometheusIntegration() !== null) return;
+  if (listMetricsBackendRows().length > 0) return;
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
   const authHeader = process.env["PROMETHEUS_AUTH_HEADER"] ?? null;
+  const endpoint = {
+    url,
+    authorization: authHeader,
+    orgId: null,
+    name: "Prometheus",
+  };
 
   try {
-    await instantQuery(url, authHeader, "up");
+    await instantQuery(endpoint, "up");
   } catch (err) {
     logger.warn(
       { url, err },
@@ -33,11 +35,20 @@ async function seedPrometheus(): Promise<void> {
     return;
   }
 
-  savePrometheusIntegration({
-    baseUrl: url,
-    authHeaderEncrypted: authHeader ? encrypt(authHeader) : null,
+  /* Seeded as its own rules endpoint, which is true of Prometheus and of
+     nothing else: every other backend serves rules elsewhere, and there is no
+     second environment variable to guess one from. */
+  saveMetricsBackend({
+    kind: "prometheus",
+    label: "Prometheus",
+    queryUrl: url,
+    queryAuthEncrypted: authHeader ? encrypt(authHeader) : null,
+    queryOrgId: null,
+    rulesUrl: url,
+    rulesAuthEncrypted: authHeader ? encrypt(authHeader) : null,
+    rulesOrgId: null,
   });
-  logger.info({ url }, "prometheus integration seeded from environment");
+  logger.info({ url }, "prometheus backend seeded from environment");
 }
 
 async function seedLoki(): Promise<void> {

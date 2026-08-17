@@ -31,14 +31,6 @@ export interface GitHubErrorBody {
   orgApprovalUrl?: string;
 }
 
-export interface PrometheusIntegrationStatus {
-  configured: boolean;
-  url: string | null;
-  // Whether an Authorization header is stored - the value itself never leaves the API.
-  hasAuth: boolean;
-  validatedAt: string | null;
-}
-
 export type LokiErrorCode =
   "network" | "unauthorized" | "bad_query" | "bad_response";
 

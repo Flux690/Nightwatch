@@ -12,8 +12,6 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { generateRunnerToken } from "../db/runner.js";
 import {
-  deletePrometheusIntegration,
-  savePrometheusIntegration,
   deleteLokiIntegration,
   saveLokiIntegration,
 } from "../db/integrations.js";
@@ -32,7 +30,13 @@ import {
   unregisterRunner,
 } from "../ws/fleet.js";
 import type { RunnerConnection } from "../ws/fleet.js";
-import { clearTestLLM, configureTestLLM, useTempDb } from "./temp-db.js";
+import {
+  clearTestLLM,
+  configureTestLLM,
+  connectTestMetrics,
+  useTempDb,
+} from "./temp-db.js";
+import { deleteMetricsBackend } from "../db/metrics.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 import { mountApi } from "./api-server.js";
 
@@ -247,16 +251,13 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     });
     expect(res.statusCode).toBe(503);
     const body = JSON.parse(res.body) as { error: string };
-    expect(body.error).toMatch(/runner|prometheus|loki/i);
+    expect(body.error).toMatch(/runner|metrics|loki/i);
     // The webhook DID deliver: the stamp lands before the evidence gate, so the
     // page shows "receiving" even while investigation is blocked.
     expect(lastReceived()).not.toBeNull();
 
     // Prometheus alone is a sufficient evidence source - the agentless path.
-    savePrometheusIntegration({
-      baseUrl: "http://prom.internal:9090",
-      authHeaderEncrypted: null,
-    });
+    const backendId = connectTestMetrics();
     const promOnly = await server.inject({
       method: "POST",
       url: "/api/alerts/ingest",
@@ -267,7 +268,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect((JSON.parse(promOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
-    deletePrometheusIntegration();
+    deleteMetricsBackend(backendId);
 
     // Loki alone is likewise sufficient - a logs-first, no-metrics fleet.
     saveLokiIntegration({

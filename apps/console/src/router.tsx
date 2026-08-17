@@ -17,7 +17,8 @@ import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddRunnerPage } from "./pages/AddRunnerPage.js";
 import { RunnerListPage } from "./pages/RunnerListPage.js";
 import { AlertSourcePage } from "./pages/AlertSourcePage.js";
-import { PrometheusPage } from "./pages/PrometheusPage.js";
+import { MetricsBackendPage } from "./pages/MetricsBackendPage.js";
+import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
 import { LokiPage } from "./pages/LokiPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
@@ -148,11 +149,16 @@ const grafanaAlertingRoute = createRoute({
   component: () => <AlertSourcePage kind="grafana" />,
 });
 
-const prometheusRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/integrations/prometheus",
-  component: PrometheusPage,
-});
+/* One page serves every metrics backend, parameterized by the product the
+   route names - the shape the two alert sources already use. What differs
+   between them is words, which live in METRICS_BACKEND_CONTENT. */
+const metricsRoutes = METRICS_BACKEND_KINDS.map((kind) =>
+  createRoute({
+    getParentRoute: () => appRoute,
+    path: `/integrations/metrics/${kind}`,
+    component: () => <MetricsBackendPage kind={kind} />,
+  }),
+);
 
 const settingsIndexRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -193,7 +199,7 @@ export const routeTree = rootRoute.addChildren([
     addKubernetesClusterRoute,
     alertmanagerRoute,
     grafanaAlertingRoute,
-    prometheusRoute,
+    ...metricsRoutes,
     lokiRoute,
     settingsIndexRoute,
     settingsRoute,

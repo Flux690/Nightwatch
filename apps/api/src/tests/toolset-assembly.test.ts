@@ -160,15 +160,15 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(names).not.toContain("GetK8sLogs");
     });
 
-    it("the Prometheus gate controls the metrics tools, independent of platform", () => {
+    it("the metrics gate controls the metrics tools, independent of platform", () => {
       const connected = getToolSchemas(new Set([]), {
         github: false,
-        prometheus: true,
+        metrics: true,
       }).map((s) => s.name);
       expect(connected).toContain("QueryMetrics");
       expect(connected).toContain("QueryMetricsRange");
       const disconnected = getToolSchemas(undefined, {
-        prometheus: false,
+        metrics: false,
       }).map((s) => s.name);
       expect(disconnected).not.toContain("QueryMetrics");
       expect(disconnected).not.toContain("QueryMetricsRange");
@@ -177,7 +177,7 @@ describe("toolset assembly by fleet capabilities", () => {
     it("the Loki gate controls the log tools, independent of platform", () => {
       const connected = getToolSchemas(new Set([]), {
         github: false,
-        prometheus: false,
+        metrics: false,
         loki: true,
       }).map((s) => s.name);
       expect(connected).toContain("QueryLogs");

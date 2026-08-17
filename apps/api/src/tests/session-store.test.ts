@@ -15,7 +15,8 @@ import type {
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
-import { useTempDb } from "./temp-db.js";
+import { connectTestMetrics, useTempDb } from "./temp-db.js";
+import { deleteMetricsBackend } from "../db/metrics.js";
 
 import {
   createSession,
@@ -35,10 +36,7 @@ import { getReport } from "../db/reports.js";
 import { seedCompleteReport, seedRecommendation } from "./report-helper.js";
 import { buildSeed } from "../session/seed.js";
 import { buildTranscript } from "../session/transcript.js";
-import {
-  deletePrometheusIntegration,
-  savePrometheusIntegration,
-} from "../db/integrations.js";
+import {} from "../db/integrations.js";
 import { verifyRecovery } from "../verification/recovery.js";
 import { reconcileRecovery } from "../verification/reconciler.js";
 
@@ -541,19 +539,21 @@ describe("API-local session store", () => {
         return m.sessionId;
       }
 
+      let backendId: string;
+
       beforeEach(() => {
-        savePrometheusIntegration({
-          baseUrl: "http://prom.test",
-          authHeaderEncrypted: null,
+        backendId = connectTestMetrics({
+          queryUrl: "http://prom.test",
+          rulesUrl: "http://prom.test",
         });
       });
 
       afterEach(() => {
         vi.unstubAllGlobals();
-        deletePrometheusIntegration();
+        deleteMetricsBackend(backendId);
       });
 
-      it("resolves once Prometheus no longer holds the rule firing", async () => {
+      it("resolves once the rules API no longer holds the rule firing", async () => {
         const sessionId = investigation();
         seedCompleteReport(sessionId);
         expect(statusOf(sessionId)).toBe("inconclusive");

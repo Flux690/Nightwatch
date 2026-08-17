@@ -133,45 +133,6 @@ export function deleteGitHubIntegration(): void {
   deleteIntegration(GITHUB);
 }
 
-const PROMETHEUS = "prometheus";
-
-interface PrometheusConfig {
-  baseUrl: string;
-}
-
-interface PrometheusIntegrationRow {
-  baseUrl: string;
-  authHeaderEncrypted: string | null;
-  validatedAt: string;
-  createdAt: string;
-}
-
-export function getPrometheusIntegration(): PrometheusIntegrationRow | null {
-  const row = getIntegration(PROMETHEUS);
-  if (!row) return null;
-  const config = JSON.parse(row.config) as PrometheusConfig;
-  return {
-    baseUrl: config.baseUrl,
-    authHeaderEncrypted: row.secretEncrypted,
-    validatedAt: row.validatedAt,
-    createdAt: row.createdAt,
-  };
-}
-
-export function savePrometheusIntegration(input: {
-  baseUrl: string;
-  authHeaderEncrypted: string | null;
-}): void {
-  saveIntegration(PROMETHEUS, {
-    config: { baseUrl: input.baseUrl } satisfies PrometheusConfig,
-    secretEncrypted: input.authHeaderEncrypted,
-  });
-}
-
-export function deletePrometheusIntegration(): void {
-  deleteIntegration(PROMETHEUS);
-}
-
 const LOKI = "loki";
 
 interface LokiConfig {

@@ -4,6 +4,7 @@ import type {
   NormalizedAlert,
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
+import { listMetricsBackends } from "../integrations/metrics/backends.js";
 import {
   budgetLine,
   CHAT_PROMPT,
@@ -47,7 +48,9 @@ export function buildChatContext(
   // `runner` parameter is drawn from.
   return {
     systemPrompt:
-      systemPromptFor(opts, investigation) + buildFleetSummary(fleetView),
+      systemPromptFor(opts, investigation) +
+      buildFleetSummary(fleetView) +
+      buildMetricsSummary(),
     openingTurn: null,
   };
 }
@@ -96,7 +99,7 @@ export function buildInitialContext(
 <alert>
 ${alertsSection}
 </alert>
-${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}
+${formatGroupContext(groupContext)}${droppedLine}${buildFleetSummary(fleetView)}${buildMetricsSummary()}
 Begin now. Start with whichever read tool most directly addresses this alert type. When you have applied a fix or worked out what the fix should be, state the cause and that fix in plain text.`;
 
   return {
@@ -144,6 +147,24 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
     return `${name}: ${targets}`;
   });
   return `\n<fleet-summary>\nEach line names one Docker host or Kubernetes cluster, followed by the target keys it advertises. A key marked "(shared)" is advertised by more than one, so a call naming that key must also say which one you mean.\n${lines.join("\n")}\n</fleet-summary>\n`;
+}
+
+/* Only when there is a choice to make. One backend needs no name and printing
+   it would invite the model to pass an argument that changes nothing; several
+   make the `backend` parameter required, exactly as a shared target key makes
+   `runner` required. A backend with no rules endpoint says so here rather than
+   only in the result of the call that discovers it. */
+function buildMetricsSummary(): string {
+  const backends = listMetricsBackends();
+  if (backends.length < 2) return "";
+  const lines = backends.map((b) => {
+    const rules =
+      b.rules === null
+        ? "no rules endpoint, so it cannot say whether an alerting rule is firing"
+        : "serves alerting rules";
+    return `${b.label}: ${b.capabilities.label}, ${rules}`;
+  });
+  return `\n<metrics-backends>\nMore than one metrics backend is connected, so every metrics call must name the one you mean in its "backend" argument, written exactly as it appears here.\n${lines.join("\n")}\n</metrics-backends>\n`;
 }
 
 // Prometheus puts the expression that fired in the generator link's query string,

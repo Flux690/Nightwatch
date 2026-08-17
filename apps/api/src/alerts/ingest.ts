@@ -10,10 +10,8 @@ import {
 } from "../db/alert-sources.js";
 import { markAlertCleared } from "../db/sessions.js";
 import { publishReportUpdated } from "../session/stream.js";
-import {
-  getLokiIntegration,
-  getPrometheusIntegration,
-} from "../db/integrations.js";
+import { getLokiIntegration } from "../db/integrations.js";
+import { hasMetricsBackend } from "../integrations/metrics/backends.js";
 import { extractBearerToken } from "../auth/bearer.js";
 import { getFleetView } from "../ws/fleet.js";
 import {
@@ -64,12 +62,12 @@ export async function registerAlertRoutes(
     // logs) makes an investigation worth starting; misroute protection is downstream.
     if (
       getFleetView().length === 0 &&
-      getPrometheusIntegration() === null &&
+      !hasMetricsBackend() &&
       getLokiIntegration() === null
     ) {
       return reply.code(503).send({
         error:
-          "no evidence source available - connect a runner or the Prometheus or Loki integration to investigate alerts",
+          "no evidence source available - connect a runner, a metrics backend, or Loki to investigate alerts",
       });
     }
 

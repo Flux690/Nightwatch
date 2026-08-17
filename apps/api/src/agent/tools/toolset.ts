@@ -9,7 +9,7 @@ import { GITHUB_TOOLS } from "./github.js";
 import { HOST_TOOLS } from "./host.js";
 import { K8S_TOOLS } from "./kubernetes.js";
 import { LOKI_TOOLS } from "./loki.js";
-import { PROMETHEUS_TOOLS } from "./prometheus.js";
+import { METRICS_TOOLS } from "./metrics.js";
 import { REPO_TOOLS } from "./repo.js";
 import { REPORT_TOOLS } from "./report.js";
 import type {
@@ -30,7 +30,7 @@ export const TOOL_REGISTRY: Tool[] = [
   ...K8S_TOOLS,
   ...REPO_TOOLS,
   ...GITHUB_TOOLS,
-  ...PROMETHEUS_TOOLS,
+  ...METRICS_TOOLS,
   ...LOKI_TOOLS,
   ...REPORT_TOOLS,
 ];
@@ -104,7 +104,7 @@ export function resolvePolicy(
 // live state, so a disconnected integration strips its tools from the next turn.
 interface IntegrationConnections {
   github?: boolean;
-  prometheus?: boolean;
+  metrics?: boolean;
   loki?: boolean;
 }
 
@@ -123,7 +123,7 @@ export function effectiveToolset(
   connections: IntegrationConnections = {},
   investigation = true,
 ): OfferedToolset {
-  const { github = true, prometheus = true, loki = true } = connections;
+  const { github = true, metrics = true, loki = true } = connections;
   const has = (platform: Platform): boolean =>
     platforms === undefined || platforms.has(platform);
   return {
@@ -133,7 +133,7 @@ export function effectiveToolset(
       ...(has("docker") ? [...DOCKER_TOOLS, ...HOST_TOOLS] : []),
       ...(has("kubernetes") ? K8S_TOOLS : []),
       ...(github ? [...REPO_TOOLS, ...GITHUB_TOOLS] : []),
-      ...(prometheus ? PROMETHEUS_TOOLS : []),
+      ...(metrics ? METRICS_TOOLS : []),
       ...(loki ? LOKI_TOOLS : []),
       // The record is the investigation's, so a chat is offered no way to write
       // one. What a session is was decided before the run started.

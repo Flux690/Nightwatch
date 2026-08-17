@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearTestLLM, useTempDb } from "./temp-db.js";
+import { clearTestLLM, connectTestMetrics, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
 import { seedIntegrationsFromEnv } from "../integrations/seed.js";
-import {
-  getLokiIntegration,
-  getPrometheusIntegration,
-  savePrometheusIntegration,
-} from "../db/integrations.js";
+import { listMetricsBackendRows } from "../db/metrics.js";
+import { getLokiIntegration } from "../db/integrations.js";
 
 // Every supported provider, as data: a new one is a row here, not a copied test,
 // so it cannot be added without the seed being proven for it.
@@ -164,15 +161,19 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(getPrometheusIntegration()).toMatchObject({
-      baseUrl: "http://prom.internal:9090",
+    expect(listMetricsBackendRows()[0]).toMatchObject({
+      kind: "prometheus",
+      queryUrl: "http://prom.internal:9090",
+      // Prometheus serves its own rules, which is what makes recovery
+      // verification work on a seeded install with nothing else configured.
+      rulesUrl: "http://prom.internal:9090",
     });
     expect(getLokiIntegration()).toMatchObject({
       baseUrl: "http://loki.internal:3100",
       orgId: "tenant-a",
     });
     // The credential is stored encrypted, never in the clear.
-    expect(getPrometheusIntegration()?.authHeaderEncrypted).not.toContain(
+    expect(listMetricsBackendRows()[0]?.queryAuthEncrypted).not.toContain(
       "prom-secret",
     );
   });
@@ -183,21 +184,18 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(getPrometheusIntegration()).toBeNull();
+    expect(listMetricsBackendRows()).toHaveLength(0);
   });
 
   it("never overwrites an integration the user already connected", async () => {
-    savePrometheusIntegration({
-      baseUrl: "http://chosen-by-user:9090",
-      authHeaderEncrypted: null,
-    });
+    connectTestMetrics({ queryUrl: "http://chosen-by-user:9090" });
     vi.stubEnv("PROMETHEUS_URL", "http://from-stale-compose-file:9090");
     const fetchMock = answering(true);
     vi.stubGlobal("fetch", fetchMock);
 
     await seedIntegrationsFromEnv();
 
-    expect(getPrometheusIntegration()?.baseUrl).toBe(
+    expect(listMetricsBackendRows()[0]?.queryUrl).toBe(
       "http://chosen-by-user:9090",
     );
     // Not even probed: the database already owns this one.
@@ -207,7 +205,7 @@ describe("first-boot integration seed from the environment", () => {
   it("does nothing when the variables are absent", async () => {
     await seedIntegrationsFromEnv();
 
-    expect(getPrometheusIntegration()).toBeNull();
+    expect(listMetricsBackendRows()).toHaveLength(0);
     expect(getLokiIntegration()).toBeNull();
   });
 });

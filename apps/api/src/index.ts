@@ -21,6 +21,7 @@ import { recoverDeadRuns } from "./session/recover.js";
 import { registerRunnerRoutes } from "./runners/routes.js";
 import { registerInstallRoutes } from "./runners/install.js";
 import { registerIntegrationRoutes } from "./integrations/routes.js";
+import { registerMetricsRoutes } from "./integrations/metrics/routes.js";
 import { registerConsoleRoutes } from "./console/serve.js";
 import { buildAuthHeader } from "./integrations/github.js";
 import { reapOrphans } from "./sandbox/docker.js";
@@ -70,7 +71,7 @@ const fastify = Fastify({
 
 await fastify.register(FastifyWebSocket);
 
-// Under /api so the console owns every other path: /integrations/prometheus
+// Under /api so the console owns every other path: /integrations/metrics
 // and /sessions/:id each name both a page and an endpoint.
 await fastify.register(
   async (api) => {
@@ -84,6 +85,7 @@ await fastify.register(
     await registerRunnerRoutes(api);
     await registerInstallRoutes(api);
     await registerIntegrationRoutes(api);
+    await registerMetricsRoutes(api);
   },
   { prefix: "/api" },
 );

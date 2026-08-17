@@ -89,9 +89,9 @@ function renderCatalogRoute(qc: QueryClient) {
     path: "/integrations/alerting/alertmanager",
     component: () => <div>Alertmanager destination</div>,
   });
-  const prometheusRoute = createRoute({
+  const metricsRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/integrations/prometheus",
+    path: "/integrations/metrics/prometheus",
     component: () => <div>Prometheus destination</div>,
   });
   const lokiRoute = createRoute({
@@ -108,7 +108,7 @@ function renderCatalogRoute(qc: QueryClient) {
       kubernetesRoute,
       addKubernetesRoute,
       alertmanagerRoute,
-      prometheusRoute,
+      metricsRoute,
       lokiRoute,
     ]),
     history: createMemoryHistory({ initialEntries: ["/integrations"] }),
@@ -129,7 +129,7 @@ function setup(
     ingestConfigured?: boolean;
     grafanaConfigured?: boolean;
     lastReceivedAt?: string | null;
-    prometheusConfigured?: boolean;
+    metrics?: unknown[];
     lokiConfigured?: boolean;
   } = {},
 ) {
@@ -139,7 +139,7 @@ function setup(
     ingestConfigured = false,
     grafanaConfigured = false,
     lastReceivedAt = null,
-    prometheusConfigured = false,
+    metrics = [],
     lokiConfigured = false,
   } = opts;
 
@@ -153,13 +153,8 @@ function setup(
             ? { configured: ingestConfigured, lastReceivedAt }
             : url === "/api/integrations/alerting/grafana"
               ? { configured: grafanaConfigured, lastReceivedAt: null }
-              : url === "/api/integrations/prometheus"
-                ? {
-                    configured: prometheusConfigured,
-                    url: prometheusConfigured ? "http://prom:9090" : null,
-                    hasAuth: false,
-                    validatedAt: null,
-                  }
+              : url === "/api/integrations/metrics"
+                ? metrics
                 : url === "/api/integrations/loki"
                   ? {
                       configured: lokiConfigured,
@@ -359,10 +354,21 @@ describe("IntegrationsPage", () => {
     });
   });
 
-  describe("Prometheus and Loki", () => {
+  describe("metrics and logs", () => {
     it("navigates to each page and reports connected once configured", async () => {
       const user = userEvent.setup();
-      const { view } = setup({ prometheusConfigured: true });
+      const { view } = setup({
+        metrics: [
+          {
+            id: "b1",
+            kind: "prometheus",
+            label: "Prometheus",
+            query: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
+            rules: { url: "http://prom:9090", hasAuth: false, hasOrgId: false },
+            validatedAt: "2026-08-01T00:00:00.000Z",
+          },
+        ],
+      });
 
       await screen.findByText("Prometheus");
       await waitFor(() => {
@@ -378,10 +384,10 @@ describe("IntegrationsPage", () => {
       vi.unstubAllGlobals();
 
       setup({ lokiConfigured: true });
-      await screen.findByText("Loki");
+      await screen.findByText("Grafana Loki");
       await waitFor(() => {
         expect(
-          within(cardFor("Loki")).getByText("Connected"),
+          within(cardFor("Grafana Loki")).getByText("Connected"),
         ).toBeInTheDocument();
       });
     });

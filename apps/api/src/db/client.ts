@@ -64,6 +64,30 @@ CREATE TABLE IF NOT EXISTS alert_sources (
   created_at          TEXT   NOT NULL
 );
 
+-- Its own table rather than a row in integrations, for the reason alert_sources
+-- has one: the shape differs. There are many of these, and each holds two
+-- addresses and two credentials - a rules API often lives on another host
+-- behind another token, which one config blob and one secret cannot express.
+CREATE TABLE IF NOT EXISTS metrics_backends (
+  id                    TEXT   PRIMARY KEY,
+  kind                  TEXT   NOT NULL,
+  -- Unique because it is how a tool call addresses one, the way a runner is
+  -- addressed by its name. Two backends a model cannot tell apart is a
+  -- configuration the connect route refuses rather than one we resolve.
+  label                 TEXT   NOT NULL UNIQUE,
+  query_url             TEXT   NOT NULL,
+  query_auth_encrypted  TEXT,
+  query_org_id          TEXT,
+  -- Null when this backend serves no rules API we can reach. Recorded rather
+  -- than inferred: it is the difference between an alert that can be confirmed
+  -- recovered and one that never can.
+  rules_url             TEXT,
+  rules_auth_encrypted  TEXT,
+  rules_org_id          TEXT,
+  validated_at          TEXT   NOT NULL,
+  created_at            TEXT   NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS integrations (
   kind                TEXT   PRIMARY KEY,
   config              TEXT   NOT NULL,

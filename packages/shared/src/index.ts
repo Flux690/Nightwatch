@@ -84,6 +84,14 @@ export type {
   HostFileResult,
 } from "./tools/host.js";
 export { TOOL_NAMES, isTool } from "./tools/names.js";
+export { METRICS_BACKEND_KINDS, isMetricsBackendKind } from "./metrics.js";
+export type {
+  MetricsBackendKind,
+  MetricsBackendStatus,
+  MetricsEndpointInput,
+  MetricsEndpointStatus,
+  MetricsErrorCode,
+} from "./metrics.js";
 export type { ToolName } from "./tools/names.js";
 export type {
   WsEnvelope,
@@ -207,7 +215,6 @@ export type {
   GitHubRepoSummary,
   GitHubRepoPage,
   GitHubErrorBody,
-  PrometheusIntegrationStatus,
   LokiErrorCode,
   LokiIntegrationStatus,
 } from "./integrations.js";
