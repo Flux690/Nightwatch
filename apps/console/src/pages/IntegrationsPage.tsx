@@ -8,7 +8,7 @@ import type {
   RunnerRecord,
 } from "@nightwarden/shared";
 import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
-import { Boxes, Server } from "lucide-react";
+import { Activity, Boxes, Server } from "lucide-react";
 
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
@@ -209,7 +209,12 @@ export function IntegrationsPage(): React.JSX.Element {
         title: content.label,
         description: content.cardDescription,
         category: "Metrics",
-        logo: <img src={content.logo} alt="" className="size-5" />,
+        logo:
+          content.logo === null ? (
+            <Activity className="size-5" />
+          ) : (
+            <img src={content.logo} alt="" className="size-5" />
+          ),
         to: `/integrations/metrics/${kind}`,
         status:
           connected.length === 0
