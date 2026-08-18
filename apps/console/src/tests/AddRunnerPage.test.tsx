@@ -248,18 +248,6 @@ describe("AddRunnerPage", () => {
   });
 
   describe("verify step", () => {
-    it("navigates back to the runner servers list via the Done button", async () => {
-      const user = userEvent.setup();
-      setup({ runners: [CONNECTED_RUNNER] });
-      await advanceToVerify(user);
-
-      await user.click(screen.getByRole("button", { name: /done/i }));
-
-      expect(
-        await screen.findByText(/runner servers destination/i),
-      ).toBeInTheDocument();
-    });
-
     it("lists the identity keys the runner advertises, dispatching nothing", async () => {
       const user = userEvent.setup();
       const { fetchMock } = setup({

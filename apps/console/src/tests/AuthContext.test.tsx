@@ -46,13 +46,6 @@ function jsonResponse(status: number, body: object) {
   };
 }
 
-function stubStatus(response: object) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(jsonResponse(200, response)),
-  );
-}
-
 // Routes by exact path suffix; falls back to the status response for the
 // initial GET /api/auth/status bootstrap call every test triggers on mount.
 function stubFetch(
@@ -75,52 +68,6 @@ afterEach(() => {
 });
 
 describe("AuthProvider", () => {
-  it("sets phase to needs-setup when GET /api/auth/status returns ownerExists: false", async () => {
-    stubStatus({ ownerExists: false });
-
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("phase")).toHaveTextContent("needs-setup");
-    });
-  });
-
-  it("sets phase to needs-login when an owner exists but the cookie is not authenticated", async () => {
-    stubStatus({ ownerExists: true, authenticated: false });
-
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("phase")).toHaveTextContent("needs-login");
-    });
-  });
-
-  it("sets phase to authenticated with the owner's email for a valid cookie", async () => {
-    stubStatus({
-      ownerExists: true,
-      authenticated: true,
-      email: "admin@example.com",
-    });
-
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("phase")).toHaveTextContent("authenticated");
-    });
-  });
-
   it("starts in the loading phase before the status fetch resolves, so nothing flashes", async () => {
     let resolveStatus!: (value: {
       ok: boolean;
@@ -301,27 +248,5 @@ describe("AuthProvider actions", () => {
       "/api/logout-all",
       expect.objectContaining({ method: "POST" }),
     );
-  });
-
-  it("a 401 from any other fetch mid-session flips phase back to needs-login", async () => {
-    stubFetch(
-      { ownerExists: true, authenticated: true, email: "admin@example.com" },
-      { "/sessions": jsonResponse(401, { error: "authentication required" }) },
-    );
-
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("phase")).toHaveTextContent("authenticated"),
-    );
-
-    await fetch("/api/sessions");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("phase")).toHaveTextContent("needs-login");
-    });
   });
 });

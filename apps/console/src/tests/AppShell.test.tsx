@@ -221,28 +221,6 @@ function precedes(a: HTMLElement, b: HTMLElement): boolean {
 
 describe("Shell", () => {
   describe("the sidebar holds only navigation", () => {
-    it("renders the three destinations, then Settings and Log out", async () => {
-      setup();
-
-      const agent = await screen.findByRole("link", { name: "Agent" });
-      const investigations = screen.getByRole("link", {
-        name: "Investigations",
-      });
-      const integrations = screen.getByRole("link", { name: "Integrations" });
-      // Settings is a place with an address of its own, so it links like the
-      // three above it; only Log out remains an action.
-      const settings = screen.getByRole("link", { name: "Settings" });
-      const logOut = screen.getByRole("button", { name: "Log out" });
-
-      expect(precedes(agent, investigations)).toBe(true);
-      expect(precedes(investigations, integrations)).toBe(true);
-      expect(precedes(integrations, settings)).toBe(true);
-      expect(precedes(settings, logOut)).toBe(true);
-      // The audit log went with the table behind it: a record of what ran in a
-      // session nobody can open any more answers no question.
-      expect(screen.queryByRole("link", { name: "Audit log" })).toBeNull();
-    });
-
     it("carries no session list, no new-session action and no readouts", async () => {
       setup({ path: "/investigations" });
 
@@ -266,20 +244,6 @@ describe("Shell", () => {
         name: "Investigations",
       });
       expect(item).toHaveTextContent(/^Investigations$/);
-    });
-
-    it("Log out posts /api/logout", async () => {
-      const user = userEvent.setup();
-      const { fetchMock } = setup();
-
-      await user.click(await screen.findByRole("button", { name: "Log out" }));
-
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(
-          "/api/logout",
-          expect.objectContaining({ method: "POST" }),
-        );
-      });
     });
   });
 

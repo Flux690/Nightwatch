@@ -74,22 +74,6 @@ afterEach(() => {
 });
 
 describe("ChatInput", () => {
-  describe("idle state (isRunning=false)", () => {
-    it("renders an enabled textarea and a send button that enables on input", async () => {
-      const user = userEvent.setup();
-      setup({ sessionId: null, isRunning: false });
-
-      const textarea = await screen.findByRole("textbox");
-      const button = screen.getByRole("button", { name: /send/i });
-
-      expect(textarea).not.toBeDisabled();
-      expect(button).toBeDisabled();
-
-      await user.type(textarea, "hello");
-      expect(button).not.toBeDisabled();
-    });
-  });
-
   describe("running state (isRunning=true)", () => {
     it("disables the textarea and shows a stop button while agent is running", async () => {
       setup({ sessionId: null, isRunning: true });

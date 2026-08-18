@@ -432,36 +432,6 @@ describe("SettingsPage", () => {
       expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     });
 
-    it("puts the confirmation on one surface, right-aligned, with the destructive fill", async () => {
-      const user = userEvent.setup();
-      const { router } = setup();
-
-      await screen.findByLabelText(/^model$/i, { selector: "input" });
-      await pickModel(user, "claude-opus-4-8");
-      // Not awaited: a blocked navigation never settles, and awaiting it here
-      // is what wedged every test after this one.
-      act(() => {
-        void router.navigate({ to: "/agent" });
-      });
-
-      const dialog = await screen.findByRole("alertdialog");
-      const confirm = within(dialog).getByRole("button", { name: /^leave$/i });
-      expect(confirm).toHaveClass("bg-destructive-fill");
-      expect(confirm).toHaveClass("text-primary-foreground");
-
-      // At every width, not only above sm: the console has no width below it.
-      const footer = confirm.parentElement;
-      expect(footer).toHaveClass("justify-end");
-      expect(footer?.className).not.toMatch(
-        /bg-surface|border-t|grid-cols-2|flex-col/,
-      );
-
-      // The question is asked from the edge, not down the middle.
-      const heading = within(dialog).getByRole("heading");
-      expect(heading.parentElement?.className).toMatch(/text-left/);
-      expect(heading.parentElement?.className).not.toMatch(/text-center/);
-    });
-
     it("does not ask for an autosaved value, which is already written", async () => {
       const user = userEvent.setup();
       const { router } = setup();

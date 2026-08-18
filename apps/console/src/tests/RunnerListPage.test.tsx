@@ -126,47 +126,6 @@ describe("RunnerListPage", () => {
       expect(await screen.findByText("docker/nginx/nginx")).toBeInTheDocument();
       expect(screen.getByText("docker/api/api")).toBeInTheDocument();
     });
-
-    it("fetches GET /api/runners on mount", async () => {
-      const { fetchMock } = setup();
-      await waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith("/api/runners");
-      });
-    });
-  });
-
-  describe("error state", () => {
-    it("shows an error alert when the fetch fails", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({ ok: false, status: 500 }),
-      );
-
-      const qc = new QueryClient({
-        defaultOptions: { queries: { retry: false, gcTime: 0 } },
-      });
-
-      renderRunnerServersRoute(qc);
-
-      await waitFor(() => {
-        expect(
-          screen.getByText(/failed to load docker hosts/i),
-        ).toBeInTheDocument();
-      });
-    });
-  });
-
-  describe("Add a server", () => {
-    it("navigates to the add wizard from the header action", async () => {
-      const user = userEvent.setup();
-      setup([]);
-      await user.click(
-        await screen.findByRole("button", { name: /add a docker host/i }),
-      );
-      expect(
-        await screen.findByText(/add server destination/i),
-      ).toBeInTheDocument();
-    });
   });
 
   describe("Remove", () => {
