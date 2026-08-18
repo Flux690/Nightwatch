@@ -262,11 +262,18 @@
      rail, so neither host states a width on its behalf. */
   --container-report: 920px;
   --container-chat: 760px;
+  /* Form controls, which stay near their label rather than running the column
+     the help text beside them does. One holds an address or a secret, the
+     other a short choice. */
+  --container-control: 480px;
+  --container-control-sm: 240px;
 
   /* Structure - fixed widths of the frame itself, not measures of content. */
   /* Where the rail rests, and its floor. The operator drags it wider and the
      rail writes this property back inline, so this is the value it starts at. */
   --container-rail: 420px;
+  /* How wide a title runs before it is cut short. */
+  --container-title: 448px;
   --container-sidebar: 250px;
   --container-sidebar-icon: 52px;
   --container-sidebar-sheet: 288px;

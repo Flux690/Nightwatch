@@ -14,7 +14,6 @@ import type { AlertSourceKind, RunnerRecord } from "@nightwarden/shared";
 
 import { AlertSourcePage } from "../pages/AlertSourcePage.js";
 
-const INGEST_TOKEN = "nwi_aBcDeFgHiJkLmNoPqRsTuVwXyZ12345";
 const ROTATED_TOKEN = "nwi_rotated999999999999999999999999";
 const INGEST_URL = "http://api.test/alerts/ingest";
 
@@ -121,8 +120,7 @@ function setup(
         rotated = true;
         return jsonOk({ token: ROTATED_TOKEN }, 201);
       }
-      if (url === `${base}/credential/reveal` && init?.method === "POST")
-        return jsonOk({ token: INGEST_TOKEN });
+      if (url === base && init?.method === "DELETE") return jsonOk({}, 204);
       if (url === base)
         return jsonOk({
           configured: configured || rotated,
@@ -145,75 +143,58 @@ afterEach(() => {
 });
 
 describe("AlertSourcePage", () => {
-  it("unconfigured: previews the masked receiver, mints only on demand, then fills in the real token", async () => {
+  it("shows the whole setup without minting, then reveals the credential once", async () => {
     const user = userEvent.setup();
     const { fetchMock } = setup({ configured: false });
 
     const generateButton = await screen.findByRole("button", {
       name: /generate credential/i,
     });
-    // The full setup layout is visible up front; viewing it never creates a secret.
+    // Viewing the setup never creates a secret, and the block carries a
+    // placeholder rather than a live one - it is safe to copy anywhere.
     expect(screen.getByText(/receivers:/)).toBeInTheDocument();
-    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
+    expect(screen.getByText(/paste your credential here/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       "/api/integrations/alerting/alertmanager/credential",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(
-      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /test webhook/i }),
-    ).not.toBeInTheDocument();
 
     await user.click(generateButton);
-    await waitFor(() => {
-      expect(
-        screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
-      ).toBeGreaterThan(0);
-    });
-    expect(
-      screen.getByRole("button", { name: /copy alertmanager receiver/i }),
-    ).toBeInTheDocument();
+
+    await screen.findByText(new RegExp(ROTATED_TOKEN));
+    expect(screen.getByText(/not shown again/i)).toBeInTheDocument();
+    // The block still carries the placeholder: the secret lives on its own.
+    expect(screen.getByText(/paste your credential here/)).toBeInTheDocument();
     // Mid-setup is steps, not a status report: no waiting badge yet.
     expect(
       screen.queryByText(/waiting for first alert/i),
     ).not.toBeInTheDocument();
   });
 
-  it("configured: receiver stays visible with a masked token until Show token", async () => {
+  it("hides the credential for good once it has been saved, offering no way back", async () => {
     const user = userEvent.setup();
-    const { fetchMock } = setup({ configured: true });
+    setup({ configured: false });
 
-    await screen.findByText(/waiting for first alert/i);
-    // The YAML structure is always on the page; only the secret is masked.
-    expect(screen.getByText(/receivers:/)).toBeInTheDocument();
-    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
-    ).not.toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: /generate credential/i }),
+    );
+    await screen.findByText(new RegExp(ROTATED_TOKEN));
 
-    await user.click(screen.getByRole("button", { name: /show token/i }));
+    await user.click(screen.getByRole("button", { name: /i've saved it/i }));
+
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/integrations/alerting/alertmanager/credential/reveal",
-        expect.objectContaining({ method: "POST" }),
-      );
+      expect(
+        screen.queryByText(new RegExp(ROTATED_TOKEN)),
+      ).not.toBeInTheDocument();
     });
+    // Nothing on the page can fetch it back; rotating is the only way to a
+    // working credential again.
     expect(
-      screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getByRole("button", { name: /copy alertmanager receiver/i }),
-    ).toBeInTheDocument();
-    // Revealing is not setup: the status line stays put, no layout jump.
-    expect(screen.getByText(/waiting for first alert/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /hide token/i }));
-    expect(screen.getByText(/••••••••/)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /copy alertmanager receiver/i }),
+      screen.queryByRole("button", { name: /show token/i }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /rotate credential/i }),
+    ).toBeInTheDocument();
   });
 
   // One page serves every sender, so the setup and the settings that fail
@@ -248,46 +229,45 @@ describe("AlertSourcePage", () => {
     expect(screen.getByText(/last alert 2h ago/i)).toBeInTheDocument();
   });
 
-  it("rotating confirms in a dialog, swaps the new token in place, and drops back to setup mode", async () => {
+  it("rotating confirms in a dialog, then shows the new credential once", async () => {
     const user = userEvent.setup();
-    setup({
-      configured: true,
-      lastReceivedAt: "2026-07-17T01:00:00.000Z",
-    });
+    setup({ configured: true, lastReceivedAt: "2026-07-17T01:00:00.000Z" });
 
+    // The consequence lives in the dialog; nothing mints until confirmed.
     await user.click(
-      await screen.findByRole("button", { name: /show token/i }),
-    );
-    await waitFor(() => {
-      expect(
-        screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
-      ).toBeGreaterThan(0);
-    });
-
-    // The consequence lives in the dialog, not inline; nothing mints until confirmed.
-    await user.click(
-      screen.getByRole("button", { name: /rotate credential/i }),
+      await screen.findByRole("button", { name: /rotate credential/i }),
     );
     expect(
       await screen.findByText(/stops delivering until you paste/i),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText(new RegExp(INGEST_TOKEN)).length,
-    ).toBeGreaterThan(0);
+      screen.queryByText(new RegExp(ROTATED_TOKEN)),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^rotate$/i }));
-    await waitFor(() => {
-      expect(
-        screen.getAllByText(new RegExp(ROTATED_TOKEN)).length,
-      ).toBeGreaterThan(0);
-    });
-    expect(
-      screen.queryByText(new RegExp(INGEST_TOKEN)),
-    ).not.toBeInTheDocument();
+
+    await screen.findByText(new RegExp(ROTATED_TOKEN));
+    expect(screen.getByText(/not shown again/i)).toBeInTheDocument();
     // Post-rotate the user is mid-setup again: steps, no status line.
     expect(
       screen.queryByText(/waiting for first alert/i),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/receiving/i)).not.toBeInTheDocument();
+  });
+
+  it("disconnects, which is the revoke the page never had", async () => {
+    const user = userEvent.setup();
+    const { fetchMock } = setup({ configured: true });
+
+    await user.click(
+      await screen.findByRole("button", { name: /disconnect/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /^disconnect$/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/integrations/alerting/alertmanager",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
   });
 });

@@ -394,7 +394,7 @@ export function GitHubConnectPage(): React.JSX.Element {
       ]}
     >
       <div className="flex flex-col gap-6">
-        <p className="max-w-3xl text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Let investigations read the bound repository, verify a fix, and
           propose it as a draft pull request. NightWarden never merges.
         </p>
@@ -448,7 +448,7 @@ export function GitHubConnectPage(): React.JSX.Element {
                   autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  className="max-w-90"
+                  className="max-w-control"
                 />
                 <Button
                   size="sm"

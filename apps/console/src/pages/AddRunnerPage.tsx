@@ -150,7 +150,7 @@ export function AddRunnerPage({
 
       {step === 0 && (
         <div className="flex flex-col gap-8">
-          <Field className="max-w-120">
+          <Field>
             <FieldLabel htmlFor="display-name">
               Display name (optional)
             </FieldLabel>
@@ -160,6 +160,7 @@ export function AddRunnerPage({
               are identified by what your infrastructure already publishes.
             </FieldDescription>
             <Input
+              className="max-w-control"
               id="display-name"
               placeholder={
                 platform === "docker" ? "e.g. prod-web-01" : "e.g. prod-cluster"

@@ -85,15 +85,15 @@ describe("MetricsBackendPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("posts both endpoints under the name the agent will address", async () => {
+  // The name is the server's to derive, so the form never asks for one.
+  it("posts both endpoints and asks the user for no name", async () => {
     const user = userEvent.setup();
     const posted = stubApi([]);
     renderPage("victoriametrics");
 
-    await user.clear(await screen.findByLabelText("Name"));
-    await user.type(screen.getByLabelText("Name"), "vm-prod");
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     await user.type(
-      screen.getByLabelText("Query URL"),
+      await screen.findByLabelText("Query URL"),
       "http://vmselect:8481/select/0/prometheus",
     );
     await user.type(
@@ -105,7 +105,6 @@ describe("MetricsBackendPage", () => {
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({
       kind: "victoriametrics",
-      label: "vm-prod",
       query: { url: "http://vmselect:8481/select/0/prometheus" },
       rules: { url: "http://vmalert:8880" },
     });

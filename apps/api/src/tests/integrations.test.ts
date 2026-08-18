@@ -486,7 +486,6 @@ describe("metrics backend routes", () => {
       url: "/api/integrations/metrics",
       payload: {
         kind: "victoriametrics",
-        label: "vm-prod",
         query: { url: "http://vmselect:8481/select/0/prometheus" },
         rules: { url: "http://vmalert:8880" },
       },
@@ -500,7 +499,8 @@ describe("metrics backend routes", () => {
     expect(mock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(res.body)).toMatchObject({
       kind: "victoriametrics",
-      label: "vm-prod",
+      // Derived from the product rather than asked for.
+      label: "VictoriaMetrics",
       query: { url: "http://vmselect:8481/select/0/prometheus" },
       rules: { url: "http://vmalert:8880" },
     });
@@ -521,7 +521,6 @@ describe("metrics backend routes", () => {
       url: "/api/integrations/metrics",
       payload: {
         kind: "mimir",
-        label: "grafana-cloud",
         query: {
           url: "https://prometheus-prod-01.grafana.net/api/prom",
           basicUsername: "123456",
@@ -549,7 +548,6 @@ describe("metrics backend routes", () => {
       url: "/api/integrations/metrics",
       payload: {
         kind: "victoriametrics",
-        label: "vm-no-alerting",
         query: { url: "http://vmsingle:8428" },
       },
     });
@@ -558,28 +556,30 @@ describe("metrics backend routes", () => {
     expect(JSON.parse(res.body).rules).toBeNull();
   });
 
-  it("refuses a second backend sharing a name, which a tool call could not tell apart", async () => {
+  it("names a second backend of the same kind rather than asking the user to", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
     const payload = {
       kind: "prometheus",
-      label: "Prometheus",
       query: { url: "http://prom-a:9090" },
     };
-    await authed({ method: "POST", url: "/api/integrations/metrics", payload });
-
+    const first = await authed({
+      method: "POST",
+      url: "/api/integrations/metrics",
+      payload,
+    });
     const second = await authed({
       method: "POST",
       url: "/api/integrations/metrics",
       payload: { ...payload, query: { url: "http://prom-b:9090" } },
     });
 
-    expect(second.statusCode).toBe(409);
+    expect(JSON.parse(first.body).label).toBe("Prometheus");
+    expect(JSON.parse(second.body).label).toBe("Prometheus 2");
   });
 
   it("refuses to save when the probe fails - envelope error maps to 400, unreachable to 502", async () => {
     const payload = {
       kind: "prometheus",
-      label: "Prometheus",
       query: { url: "http://prom.internal:9090" },
     };
     stubFetch(() =>
@@ -621,7 +621,6 @@ describe("metrics backend routes", () => {
       url: "/api/integrations/metrics",
       payload: {
         kind: "thanos",
-        label: "thanos-query",
         query: { url: "http://thanos:10902" },
       },
     });
@@ -660,7 +659,7 @@ describe("Alertmanager integration routes", () => {
     vi.unstubAllEnvs();
   });
 
-  function authed(opts: { method: "GET" | "POST"; url: string }) {
+  function authed(opts: { method: "GET" | "POST" | "DELETE"; url: string }) {
     return server.inject({
       method: opts.method,
       url: opts.url,
@@ -699,15 +698,16 @@ describe("Alertmanager integration routes", () => {
   // A typo would otherwise mint a credential nothing can present, leaving a
   // card that never turns green.
   it("refuses a sender it does not know, on every route in the family", async () => {
-    for (const url of [
-      "/api/integrations/alerting/nessus",
-      "/api/integrations/alerting/nessus/credential",
-      "/api/integrations/alerting/nessus/credential/reveal",
-    ]) {
-      const res = await authed({
-        method: url.endsWith("alerting/nessus") ? "GET" : "POST",
-        url,
-      });
+    const routes = [
+      { method: "GET" as const, url: "/api/integrations/alerting/nessus" },
+      {
+        method: "POST" as const,
+        url: "/api/integrations/alerting/nessus/credential",
+      },
+      { method: "DELETE" as const, url: "/api/integrations/alerting/nessus" },
+    ];
+    for (const route of routes) {
+      const res = await authed(route);
       expect(res.statusCode).toBe(404);
       expect(JSON.parse(res.body)).toMatchObject({
         error: "Unknown alert source: nessus",
@@ -715,7 +715,7 @@ describe("Alertmanager integration routes", () => {
     }
   });
 
-  it("mints an nwi_ credential storing only the hash; reveal returns the plaintext", async () => {
+  it("mints an nwi_ credential, stores only its hash, and never hands it back", async () => {
     const res = await authed({
       method: "POST",
       url: "/api/integrations/alerting/alertmanager/credential",
@@ -732,11 +732,13 @@ describe("Alertmanager integration routes", () => {
     expect(row.token_hash).toBe(sha256hex(token));
     expect(row.token_hash).not.toContain("nwi_");
 
+    // Shown once at mint and never again: nothing stores a readable copy, so
+    // no route can answer with one.
     const reveal = await authed({
       method: "POST",
       url: "/api/integrations/alerting/alertmanager/credential/reveal",
     });
-    expect(JSON.parse(reveal.body)).toEqual({ token });
+    expect(reveal.statusCode).toBe(404);
 
     const status = await authed({
       method: "GET",

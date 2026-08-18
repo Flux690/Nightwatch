@@ -150,7 +150,7 @@ export function AgentPage(): React.JSX.Element {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="max-w-md gap-1 rounded-full px-2"
+                  className="max-w-title gap-1 rounded-full px-2"
                 >
                   <span className="min-w-0 truncate">{title}</span>
                   <ChevronDown

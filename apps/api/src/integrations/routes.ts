@@ -12,9 +12,9 @@ import {
   saveLokiIntegration,
 } from "../db/integrations.js";
 import {
+  deleteAlertSource,
   generateAlertSourceToken,
   getAlertSource,
-  getAlertSourcePlaintext,
 } from "../db/alert-sources.js";
 import { isAlertSourceKind } from "@nightwarden/shared";
 import type { AlertSourceKind } from "@nightwarden/shared";
@@ -329,19 +329,15 @@ export async function registerIntegrationRoutes(
         .send({ token: generateAlertSourceToken(request.params.kind) }),
   );
 
-  // Reveal is a deliberate, non-idempotent action: the plaintext only crosses
-  // the wire when the user explicitly asks for it.
-  fastify.post<AlertSourceRoute>(
-    "/integrations/alerting/:kind/credential/reveal",
+  // Deleting the row is the revoke: the credential stops matching on the next
+  // delivery, which is the only place it is ever checked.
+  fastify.delete<AlertSourceRoute>(
+    "/integrations/alerting/:kind",
     { preHandler: knownSender },
     async (request, reply) => {
-      const token = getAlertSourcePlaintext(request.params.kind);
-      if (token === null) {
-        return reply
-          .code(404)
-          .send({ error: "No ingest credential configured" });
-      }
-      return { token };
+      deleteAlertSource(request.params.kind);
+      logger.info({ kind: request.params.kind }, "alert source disconnected");
+      return reply.code(204).send();
     },
   );
 }

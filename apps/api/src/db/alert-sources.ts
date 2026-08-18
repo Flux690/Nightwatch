@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { getDb } from "./client.js";
 import { hashToken } from "./runner.js";
-import { encrypt, decrypt } from "../secrets.js";
+import { encrypt } from "../secrets.js";
 import type { AlertSourceKind } from "@nightwarden/shared";
 
 interface AlertSourceRow {
@@ -48,14 +48,6 @@ export function generateAlertSourceToken(kind: AlertSourceKind): string {
   return plaintext;
 }
 
-export function getAlertSourcePlaintext(kind: AlertSourceKind): string | null {
-  const row = getDb()
-    .prepare(`SELECT token_encrypted FROM alert_sources WHERE kind = ?`)
-    .get(kind) as { token_encrypted: string } | undefined;
-  if (!row) return null;
-  return decrypt(row.token_encrypted);
-}
-
 export function setAlertSourceReceived(kind: string, receivedAt: string): void {
   getDb()
     .prepare(
@@ -81,4 +73,8 @@ export function findAlertSourceKindByToken(plaintext: string): string | null {
     }
   }
   return null;
+}
+
+export function deleteAlertSource(kind: AlertSourceKind): void {
+  getDb().prepare(`DELETE FROM alert_sources WHERE kind = ?`).run(kind);
 }

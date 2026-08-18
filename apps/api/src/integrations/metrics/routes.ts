@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { isMetricsBackendKind } from "@nightwarden/shared";
-import type { MetricsBackendStatus } from "@nightwarden/shared";
+import type {
+  MetricsBackendKind,
+  MetricsBackendStatus,
+} from "@nightwarden/shared";
 import { requireSession } from "../../auth/session.js";
 import {
   deleteMetricsBackend,
@@ -30,12 +33,25 @@ const EndpointSchema = z.object({
 
 const ConnectSchema = z.object({
   kind: z.string().refine(isMetricsBackendKind, "unknown metrics backend"),
-  label: z.string().min(1).max(60),
   query: EndpointSchema,
   // Absent is a legitimate configuration and a stated limitation, not an
   // error: without it the investigation can never confirm the alert cleared.
   rules: EndpointSchema.optional(),
 });
+
+/* Derived, never asked for: the product's own name is unique until a second of
+   the same kind is connected, and then it is that name with a number. */
+function availableName(kind: MetricsBackendKind): string {
+  const taken = new Set(
+    listMetricsBackendRows().map((row) => row.label.toLowerCase()),
+  );
+  const base = METRICS_PRESETS[kind].label;
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
 
 function statusPayload(): MetricsBackendStatus[] {
   const rows = new Map(listMetricsBackendRows().map((r) => [r.id, r]));
@@ -84,16 +100,8 @@ export async function registerMetricsRoutes(
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.message });
       }
-      const { kind, label, query, rules } = parsed.data;
-      const taken = listMetricsBackendRows().some(
-        (row) => row.label.toLowerCase() === label.trim().toLowerCase(),
-      );
-      if (taken) {
-        return reply.code(409).send({
-          error: `Another metrics backend is already called "${label.trim()}". A tool call addresses one by name, so two cannot share it.`,
-        });
-      }
-      const name = label.trim() || METRICS_PRESETS[kind].label;
+      const { kind, query, rules } = parsed.data;
+      const name = availableName(kind);
       try {
         await instantQuery(endpointFrom(query, name), "up");
         if (rules !== undefined) {
@@ -101,7 +109,7 @@ export async function registerMetricsRoutes(
         }
         const id = saveMetricsBackend({
           kind,
-          label: label.trim(),
+          label: name,
           queryUrl: query.url,
           queryAuthEncrypted: encryptedAuthorization(query),
           queryOrgId: query.orgId ?? null,

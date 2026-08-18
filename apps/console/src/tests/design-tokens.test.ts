@@ -428,6 +428,28 @@ function expectUtilityValues(
 // 1.5 and 2.5 are the 6px and 10px half-steps; density needs them.
 const SPACING = ["0", "1", "1.5", "2", "2.5", "3", "4", "6", "8", "12"];
 
+describe("widths", () => {
+  /* styles.css states the rule: every width resolves to a container token. A
+     raw `max-w-120` on a Field is how help text ended up clamped to half the
+     column it had. components/ui is exempt, carrying its own defaults. */
+  it("names a container token rather than a raw width", () => {
+    const declared = [...css.matchAll(/--container-([a-z-]+):/g)].map(
+      (m) => m[1],
+    );
+    for (const [path, text] of SOURCES) {
+      if (path.includes(join("components", "ui"))) continue;
+      for (const match of text.matchAll(/\bmax-w-([a-z0-9-]+)/g)) {
+        const value = match[1] ?? "";
+        // Tailwind's own keywords stay: they are relationships, not measures.
+        if (["full", "none", "fit", "min", "max", "screen"].includes(value)) {
+          continue;
+        }
+        expect(declared, `\`${match[0]}\` in ${path}`).toContain(value);
+      }
+    }
+  });
+});
+
 describe("radius", () => {
   it("declares one set, and no rung outside it", () => {
     const rungs = [...css.matchAll(/--radius(-[a-z0-9]*)?:/g)].map((m) => m[1]);

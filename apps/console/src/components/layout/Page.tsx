@@ -70,7 +70,7 @@ export function Page({
             <Breadcrumb className="min-w-0">
               {/* The ceiling a long title truncates against, so what sits beside
                 it has somewhere to be. */}
-              <BreadcrumbList className="max-w-md flex-nowrap text-sm font-medium">
+              <BreadcrumbList className="max-w-title flex-nowrap text-sm font-medium">
                 {crumbs.map((crumb, i) => (
                   <Fragment key={crumb.label}>
                     {i > 0 && <BreadcrumbSeparator />}

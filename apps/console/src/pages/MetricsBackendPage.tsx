@@ -65,12 +65,13 @@ function EndpointFields({
 }): React.JSX.Element {
   return (
     <>
-      <Field className="max-w-120">
+      <Field>
         <FieldLabel htmlFor={`${idPrefix}-auth`}>
           Authorization header (optional)
         </FieldLabel>
         <FieldDescription>{authHelp}</FieldDescription>
         <Input
+          className="max-w-control"
           id={`${idPrefix}-auth`}
           type="password"
           placeholder="Bearer ..."
@@ -80,12 +81,13 @@ function EndpointFields({
           }
         />
       </Field>
-      <div className="flex max-w-120 gap-3">
+      <div className="flex max-w-control gap-3">
         <Field className="flex-1">
           <FieldLabel htmlFor={`${idPrefix}-user`}>
             Username (optional)
           </FieldLabel>
           <Input
+            className="max-w-control"
             id={`${idPrefix}-user`}
             value={draft.basicUsername}
             onChange={(e) =>
@@ -98,6 +100,7 @@ function EndpointFields({
             Password (optional)
           </FieldLabel>
           <Input
+            className="max-w-control"
             id={`${idPrefix}-pass`}
             type="password"
             value={draft.basicPassword}
@@ -107,12 +110,13 @@ function EndpointFields({
           />
         </Field>
       </div>
-      <Field className="max-w-120">
+      <Field>
         <FieldLabel htmlFor={`${idPrefix}-org`}>Tenant (optional)</FieldLabel>
         <FieldDescription>
           Sent as X-Scope-OrgID. Required by Mimir whenever multi-tenancy is on.
         </FieldDescription>
         <Input
+          className="max-w-control"
           id={`${idPrefix}-org`}
           value={draft.orgId}
           onChange={(e) => onChange({ ...draft, orgId: e.currentTarget.value })}
@@ -130,7 +134,6 @@ export function MetricsBackendPage({
   const content = METRICS_BACKEND_CONTENT[kind];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [label, setLabel] = useState(content.label);
   const [query, setQuery] = useState<EndpointDraft>(EMPTY);
   const [rules, setRules] = useState<EndpointDraft>(EMPTY);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -151,7 +154,6 @@ export function MetricsBackendPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind,
-          label: label.trim(),
           query: toInput(query),
           // Absent rather than empty: a backend with no rules endpoint is a
           // supported configuration, and the card says what it costs.
@@ -195,9 +197,7 @@ export function MetricsBackendPage({
       ]}
     >
       <div className="flex flex-col gap-8">
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          {content.blurb}
-        </p>
+        <p className="text-sm text-muted-foreground">{content.blurb}</p>
 
         {isLoading && (
           <div className="flex items-center gap-2">
@@ -255,29 +255,17 @@ export function MetricsBackendPage({
           </h2>
 
           {content.warnings.map((warning) => (
-            <Alert key={warning} className="max-w-120">
+            <Alert key={warning}>
               <TriangleAlert {...ICON_UI} />
               <AlertDescription>{warning}</AlertDescription>
             </Alert>
           ))}
 
-          <Field className="max-w-120">
-            <FieldLabel htmlFor="metrics-label">Name</FieldLabel>
-            <FieldDescription>
-              How the agent addresses this one in a tool call, so it has to be
-              unique. Only matters when you connect more than one.
-            </FieldDescription>
-            <Input
-              id="metrics-label"
-              value={label}
-              onChange={(e) => setLabel(e.currentTarget.value)}
-            />
-          </Field>
-
-          <Field className="max-w-120">
+          <Field>
             <FieldLabel htmlFor="metrics-query-url">Query URL</FieldLabel>
             <FieldDescription>{content.queryHelp}</FieldDescription>
             <Input
+              className="max-w-control"
               id="metrics-query-url"
               placeholder={content.queryPlaceholder}
               value={query.url}
@@ -293,12 +281,13 @@ export function MetricsBackendPage({
             authHelp={content.authHelp}
           />
 
-          <Field className="max-w-120">
+          <Field>
             <FieldLabel htmlFor="metrics-rules-url">
               Rules URL (optional)
             </FieldLabel>
             <FieldDescription>{content.rulesHelp}</FieldDescription>
             <Input
+              className="max-w-control"
               id="metrics-rules-url"
               placeholder={content.rulesPlaceholder}
               value={rules.url}
@@ -317,7 +306,7 @@ export function MetricsBackendPage({
           )}
 
           {connectError !== null && (
-            <Alert variant="destructive" className="max-w-120">
+            <Alert variant="destructive">
               <AlertTitle>Could not connect</AlertTitle>
               <AlertDescription>{connectError}</AlertDescription>
             </Alert>
@@ -325,11 +314,7 @@ export function MetricsBackendPage({
 
           <Button
             className="self-start"
-            disabled={
-              query.url.trim() === "" ||
-              label.trim() === "" ||
-              connect.isPending
-            }
+            disabled={query.url.trim() === "" || connect.isPending}
             onClick={() => connect.mutate()}
           >
             {connect.isPending && <Spinner className="size-4" />}

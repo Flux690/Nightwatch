@@ -179,9 +179,7 @@ export function RunnerListPage({
       {/* Withheld while the list is empty: the empty state already says what
           this is and what to do, and saying it twice reads as a stutter. */}
       {connected.length > 0 && (
-        <p className="-mt-2 mb-4 max-w-3xl text-sm text-muted-foreground">
-          {copy.blurb}
-        </p>
+        <p className="-mt-2 mb-4 text-sm text-muted-foreground">{copy.blurb}</p>
       )}
 
       {removeError !== null && (
@@ -211,14 +209,14 @@ export function RunnerListPage({
       )}
 
       {!isLoading && !isError && connected.length > 1 && (
-        <Field className="mb-3 max-w-60">
+        <Field className="mb-3">
           <FieldLabel id="runner-sort-label">Sort by</FieldLabel>
           <Select
             items={SORT_LABEL}
             value={sortField}
             onValueChange={(value) => handleSort(value as SortField)}
           >
-            <SelectTrigger id="runner-sort">
+            <SelectTrigger id="runner-sort" className="max-w-control-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
