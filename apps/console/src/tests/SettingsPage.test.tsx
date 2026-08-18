@@ -759,13 +759,15 @@ describe("SettingsPage", () => {
       ).toEqual(["Select a provider", "Anthropic", "OpenRouter"]);
     });
 
-    it("takes the Base URL placeholder from the provider's own default", async () => {
+    /* A real value, not ghost text. As a placeholder it read as filled in
+       while the stored value was empty, which is how an OpenRouter key ended
+       up being sent to OpenAI's own endpoint. */
+    it("fills the Base URL with the provider's own default", async () => {
       const user = userEvent.setup();
       setup();
       await openSection(user, /provider/i);
 
-      expect(await screen.findByLabelText(/base url/i)).toHaveAttribute(
-        "placeholder",
+      expect(await screen.findByLabelText(/base url/i)).toHaveValue(
         "https://api.anthropic.com",
       );
     });

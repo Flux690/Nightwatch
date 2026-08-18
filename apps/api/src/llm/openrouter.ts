@@ -214,7 +214,9 @@ export class OpenRouterProvider implements LLMProvider {
     // row once at first boot, never again.
     this.client = new OpenAI({
       apiKey,
-      baseURL: config.baseUrl,
+      // Never left to the SDK: unset, the openai package talks to OpenAI, and
+      // an OpenRouter key sent there comes back 401.
+      baseURL: config.baseUrl ?? OPENROUTER_DEFAULT_BASE_URL,
       timeout: config.requestTimeoutMs,
       // Retries live in withLLMRetries alone. Leaving the SDK's own on would
       // multiply with that ladder, turning one logical call into a dozen.

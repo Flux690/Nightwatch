@@ -138,11 +138,11 @@ export function ProviderSection({
             id="settings-base-url"
             className={CONTROL.text}
             disabled={block === null}
-            placeholder={
+            value={
+              block?.baseUrl ??
               providers.find((p) => p.name === form.provider)?.defaultBaseUrl ??
               ""
             }
-            value={block?.baseUrl ?? ""}
             onChange={(e) =>
               onProviderField("baseUrl", e.currentTarget.value || undefined)
             }

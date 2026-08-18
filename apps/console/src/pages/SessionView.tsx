@@ -303,13 +303,17 @@ export function SessionView({
         // A persisted row, not a lifecycle signal - never touch isRunning here.
         // The optimistic echo clears once its own turn lands.
         setPendingEcho(null);
-        // Streamed text and reasoning carry ephemeral ids the refetch cannot
-        // match, so an assistant or error row drops them; tool cards key on
-        // toolUseId and are updated in place instead.
-        if (message.kind === "assistant" || message.kind === "error") {
-          setLiveItems([]);
-        }
-        void queryClient.invalidateQueries({ queryKey: ["session", sid] });
+        /* Streamed text carries ephemeral ids the refetch cannot match, so an
+           assistant or error row drops it - but only once the saved copy has
+           arrived. Dropping first leaves the turn blank until the refetch
+           lands, which reads as the page flickering. */
+        const streamed =
+          message.kind === "assistant" || message.kind === "error";
+        void queryClient
+          .invalidateQueries({ queryKey: ["session", sid] })
+          .then(() => {
+            if (streamed) setLiveItems([]);
+          });
         return;
       }
 
