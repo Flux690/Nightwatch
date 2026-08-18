@@ -8,7 +8,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
-import type { SessionListRow } from "@nightwarden/shared";
+import type { SessionAlert, SessionListRow } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
 import { routeTree } from "@/router";
@@ -73,6 +73,27 @@ const INVESTIGATIONS = [
   }),
 ];
 
+function alertOn(alertType: string, clearedAt: string | null): SessionAlert {
+  return {
+    alert: {
+      sourceAlertId: `${alertType}-1`,
+      labels: { alertname: alertType },
+      annotations: {},
+      alertType,
+      severity: "critical",
+      firedAt: "2026-08-19T02:14:00.000Z",
+      generatorURL: null,
+      values: {},
+      rawPayload: null,
+    },
+    arrivedAt: "2026-08-19T02:14:00.000Z",
+    clearedAt,
+    injected: false,
+    droppedAlerts: 0,
+    groupContext: null,
+  };
+}
+
 // The real route tree, not a copy of it: the redirect, the two session route
 // families and the pages they land on are exactly what ships.
 function setup({
@@ -87,6 +108,13 @@ function setup({
   let investigation = false;
   const setInvestigation = (value: boolean): void => {
     investigation = value;
+  };
+
+  // What a record's own fetch answers, so a case can change it under an open
+  // page the way the recovery sweep does.
+  let alerts: SessionAlert[] = [];
+  const setAlerts = (next: SessionAlert[]): void => {
+    alerts = next;
   };
 
   const fetchMock = vi.fn().mockImplementation((url: string) => {
@@ -149,7 +177,7 @@ function setup({
             createdAt: "2026-06-13T00:00:00.000Z",
             investigation: known !== undefined || investigation,
             running: false,
-            alerts: [],
+            alerts,
             transcript: [],
           }),
       });
@@ -189,7 +217,7 @@ function setup({
     </TestProviders>,
   );
 
-  return { router, qc, fetchMock, setInvestigation };
+  return { router, qc, fetchMock, setInvestigation, setAlerts };
 }
 
 afterEach(() => {
@@ -728,6 +756,27 @@ describe("Shell", () => {
       expect(
         screen.queryByRole("region", { name: "Action required" }),
       ).not.toBeInTheDocument();
+    });
+
+    /* The sweep clears the alert minutes after the run ended, so the record is
+       already open when it happens. */
+    it("shows a recovery discovered after the page was opened", async () => {
+      const { setAlerts } = setup({ path: "/investigations/inv-done" });
+      setAlerts([alertOn("HighMemoryUsage", null)]);
+
+      await screen.findByText("HighMemoryUsage");
+      expect(screen.queryByText("Recovered")).not.toBeInTheDocument();
+
+      setAlerts([alertOn("HighMemoryUsage", "2026-08-19T02:31:00.000Z")]);
+      act(() => {
+        MockEventSource.broadcast({
+          messageId: "m1",
+          type: "REPORT_UPDATED",
+          payload: { sessionId: "inv-done" },
+        });
+      });
+
+      expect(await screen.findByText("Recovered")).toBeInTheDocument();
     });
 
     it("offers Copy report as Markdown and Delete, and never Mark as resolved", async () => {
