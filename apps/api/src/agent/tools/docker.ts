@@ -1,12 +1,12 @@
 import { REASON_PROPERTY } from "./reason.js";
 import type { Tool } from "./types.js";
 
-// The service's target key, copied verbatim from the FLEET SUMMARY or a list
+// The service's target key, copied verbatim from the <fleet-summary> block or a list
 // result - never assembled by hand. The API expands it to the structured identity.
 const TARGET_PROPERTY = {
   type: "string",
   description:
-    "The service's target key, copied exactly as it appears in the FLEET SUMMARY or in a ListDockerServices result, for example docker/web/api. Copy the whole string; never assemble one yourself from parts.",
+    "The service's target key, copied exactly as it appears in the <fleet-summary> block or in a ListDockerServices result, for example docker/web/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
 // Consulted only when the target key is ambiguous. Supplied by the model from the fleet
@@ -14,7 +14,7 @@ const TARGET_PROPERTY = {
 const RUNNER_PROPERTY = {
   type: "string",
   description:
-    "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. Supply this only when the FLEET SUMMARY marks this target as shared, meaning two hosts advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
+    "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Supply this only when the <fleet-summary> block marks this target as shared, meaning two hosts advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -31,7 +31,7 @@ export const DOCKER_TOOLS: Tool[] = [
           runner: {
             type: "string",
             description:
-              "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
+              "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
           },
         },
       },

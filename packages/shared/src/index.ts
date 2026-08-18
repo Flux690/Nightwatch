@@ -84,10 +84,10 @@ export type {
   HostFileResult,
 } from "./tools/host.js";
 export { TOOL_NAMES, isTool } from "./tools/names.js";
-export { METRICS_BACKEND_KINDS, isMetricsBackendKind } from "./metrics.js";
+export { METRICS_SOURCE_KINDS, isMetricsSourceKind } from "./metrics.js";
 export type {
-  MetricsBackendKind,
-  MetricsBackendStatus,
+  MetricsSourceKind,
+  MetricsSourceStatus,
   MetricsEndpointInput,
   MetricsEndpointStatus,
   MetricsErrorCode,

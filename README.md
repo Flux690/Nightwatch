@@ -65,11 +65,11 @@ The run cannot end on an empty record, or on a claim whose only citations are ca
 **A fix is not believed until the alert says so.** NightWarden never asks the model whether its fix worked - it re-checks the condition that fired, and there are two independent ways it learns the answer:
 
 1. **Your alert source tells it.** When your sender posts the resolved notification for an alert, that alert is marked cleared. This is the ordinary path and needs no configuration beyond a webhook receiver: Alertmanager's `send_resolved` is already the default, and Grafana sends one unless you turn it off.
-2. **NightWarden asks the rules API itself.** For as long as an investigation has a condition nobody has seen recover, NightWarden asks whether the alerting rule that fired still holds an instance matching this alert. That is the same rule on the same evaluation interval that fired in the first place - not a query NightWarden composed, and not a threshold it guessed. Which address serves that API is something you tell it, because it is not always the one you query: VictoriaMetrics serves rules from vmalert alone, Grafana Cloud from your Grafana stack behind a different credential, and a Grafana-managed alert rule lives in Grafana rather than in any metrics backend at all. A rule that is `pending` counts as still firing. It asks often while the incident is live and progressively less as it ages, because the realistic timeline is that a fix lands, the rule's `for:` duration elapses, and the alert goes quiet some minutes after the run that fixed it has already ended.
+2. **NightWarden asks the rules API itself.** For as long as an investigation has a condition nobody has seen recover, NightWarden asks whether the alerting rule that fired still holds an instance matching this alert. That is the same rule on the same evaluation interval that fired in the first place - not a query NightWarden composed, and not a threshold it guessed. Which address serves that API is something you tell it, because it is not always the one you query: VictoriaMetrics serves rules from vmalert alone, Grafana Cloud from your Grafana stack behind a different credential, and a Grafana-managed alert rule lives in Grafana rather than in any metrics source at all. A rule that is `pending` counts as still firing. It asks often while the incident is live and progressively less as it ages, because the realistic timeline is that a fix lands, the rule's `for:` duration elapses, and the alert goes quiet some minutes after the run that fixed it has already ended.
 
 Both write the same record, so they cross-check each other: if you have turned `send_resolved` off, the second path still notices the recovery.
 
-If nothing can answer - the backend unreachable, the rule renamed, no rules endpoint configured - the investigation says the fix ran but recovery was never confirmed. It does not read "Resolved". An unanswerable question is never treated as a yes.
+If nothing can answer - the source unreachable, the rule renamed, no rules endpoint configured - the investigation says the fix ran but recovery was never confirmed. It does not read "Resolved". An unanswerable question is never treated as a yes.
 
 A run that had you approve a write and then goes quiet while the condition is still firing is pushed back and asked what you should do about it. It is never asked to try again: repeating a write that did not work is the exact mistake this catches.
 
@@ -292,16 +292,16 @@ quietly shows you less than it looked at is worse than one that finds nothing.
 
 ### The evidence it has
 
-|                              | Needs             | What it answers                                                                    |
-| ---------------------------- | ----------------- | ---------------------------------------------------------------------------------- |
-| **Containers and workloads** | a runner          | State, config, image and digest, restarts, resource stats, events, processes       |
-| **Service logs**             | a runner or Loki  | What the service actually printed, windowed and filtered                           |
-| **Metrics**                  | a metrics backend | An instant reading, a range around the alert, what rules exist, what metrics exist |
-| **Host vitals**              | a Docker runner   | CPU, memory, disk, network, kernel ring buffer, allowlisted host files             |
-| **Changes**                  | GitHub            | Merged pull requests and commits in a window                                       |
-| **The code**                 | GitHub            | Read, edit, build and test inside a sandbox; open a draft pull request             |
+|                              | Needs            | What it answers                                                                    |
+| ---------------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| **Containers and workloads** | a runner         | State, config, image and digest, restarts, resource stats, events, processes       |
+| **Service logs**             | a runner or Loki | What the service actually printed, windowed and filtered                           |
+| **Metrics**                  | a metrics source | An instant reading, a range around the alert, what rules exist, what metrics exist |
+| **Host vitals**              | a Docker runner  | CPU, memory, disk, network, kernel ring buffer, allowlisted host files             |
+| **Changes**                  | GitHub           | Merged pull requests and commits in a window                                       |
+| **The code**                 | GitHub           | Read, edit, build and test inside a sandbox; open a draft pull request             |
 
-A runner is optional. A metrics backend and Loki alone are a working install - the
+A runner is optional. A metrics source and Loki alone are a working install - the
 agent investigates on metrics and logs, and simply has no container evidence to
 reach for. It is told which tools it has, so it never proposes one it lacks.
 
@@ -380,8 +380,8 @@ itself a finding.
 - **Bring your own key.** Use Anthropic directly, or OpenRouter for everything else. Inference goes straight to your provider and your key never leaves your network.
 - **Multi-runner.** One API coordinates as many runners as you have hosts and clusters, and a single investigation can span more than one. A fleet-level read with no runner named answers for every runner at once, each answer attributed.
 - **No external infrastructure.** All durable state is one SQLite file in the state directory.
-- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Those same four are queryable as metrics backends - one client and a preset each, because they all speak the Prometheus API - and you can connect several at once, including two of the same kind. Nothing to rip out - NightWarden plugs into the stack you already run.
-- **A rules endpoint of its own.** Recovery is confirmed by asking whether the rule that fired still holds, and the address serving that is not always the one you query: vmalert on VictoriaMetrics, your Grafana stack on Grafana Cloud, a separate ruler on a microservices Mimir. Each connection names its own, with its own credential, so recovery verification works on the backends people actually deploy rather than only on single-binary Prometheus.
+- **Bring your own monitoring.** Point your existing Prometheus, Loki, and Alertmanager or Grafana Alerting at the ingest endpoint. Anything that sends the Alertmanager envelope is accepted, which covers Mimir, Thanos and VictoriaMetrics too. Those same four are queryable as metrics sources - one client and a preset each, because they all speak the Prometheus API - and you can connect several at once, including two of the same kind. Nothing to rip out - NightWarden plugs into the stack you already run.
+- **A rules endpoint of its own.** Recovery is confirmed by asking whether the rule that fired still holds, and the address serving that is not always the one you query: vmalert on VictoriaMetrics, your Grafana stack on Grafana Cloud, a separate ruler on a microservices Mimir. Each connection names its own, with its own credential, so recovery verification works on the products people actually deploy rather than only on single-binary Prometheus.
 
 ## Getting started
 
@@ -411,7 +411,7 @@ pnpm dev
 
 This runs the API on port 3000 and the console on port 5173 with live reload. Open `http://localhost:5173` and set an owner password on first visit.
 
-In the console go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics backend, or Loki).
+In the console go to **Integrations**, where each card is grouped by what it gives an investigation: **Alerting** (where your alerts come from), **Metrics**, **Logs**, **Fleet** (executors on your hosts), and **Code**. None is strictly required to start a chat investigation; alert-triggered investigations need an alert source plus at least one evidence source (a runner, a metrics source, or Loki).
 
 **Add a runner.** Two paths, because a host and a cluster install differently: **Docker hosts** hands you a `docker run` line, **Kubernetes clusters** a `kubectl apply` manifest. Either wizard is three steps and needs no manual config editing:
 
@@ -434,9 +434,9 @@ That is the whole setup: an alert resolves to a service from the Compose labels 
 
 **Each card asks for a rules URL as well as a query URL**, and it is worth filling in. It is the address NightWarden asks whether the rule that fired still holds, which is one of the two ways an investigation learns the alert stopped firing. On Prometheus and Thanos it is the same URL as the query one. On VictoriaMetrics it is vmalert, a separate binary, because vmsingle and vmselect do not serve alerting rules at all. On Grafana Cloud it is your Grafana stack, behind a service account token rather than the metrics credential - and that is also how a Grafana-managed alert rule is reached, whatever you query for metrics. Leave it empty and the connection still works for queries, but investigations opened by its alerts can never reach Resolved on their own; the card says so.
 
-**Connect more than one.** Each backend is named, and the name is how a tool call addresses it, so two of the same kind is an ordinary setup: a prod and a staging Prometheus, or Thanos beside the VictoriaMetrics it is being migrated to. With one connected the agent names nothing; with several it is told which exist and must say which it means.
+**Connect more than one.** Each source is named, and the name is how a tool call addresses it, so two of the same kind is an ordinary setup: a prod and a staging Prometheus, or Thanos beside the VictoriaMetrics it is being migrated to. With one connected the agent names nothing; with several it is told which exist and must say which it means.
 
-**What a backend cannot answer, it says.** VictoriaMetrics does not implement the metric metadata API - it returns an empty result for every metric that has ever existed - so asking it what a metric measures reports that limitation rather than reporting the metric as undeclared, which would be a fact about VictoriaMetrics dressed as a fact about your metric.
+**What a source cannot answer, it says.** VictoriaMetrics does not implement the metric metadata API - it returns an empty result for every metric that has ever existed - so asking it what a metric measures reports that limitation rather than reporting the metric as undeclared, which would be a fact about VictoriaMetrics dressed as a fact about your metric.
 
 **Reachable from where.** Both evidence URLs are dialled by the API, from its own machine, so an address that works in your browser is not the test. The two cases that catch people out: containerized, `localhost` means the API's own container, not the host it runs on - use `host.docker.internal:9090` for a service beside it on the same host (the shipped compose file maps that name on Linux, where Docker does not provide it). On a separate host, use an address routable on your private network. A failed probe reports what actually went wrong - a name that would not resolve, a port with nothing listening, a timeout, an expired certificate - rather than a generic failure, so the fix is usually in the message.
 
@@ -491,7 +491,7 @@ Open `PUBLIC_URL`, create the owner account, then go to **Settings → Provider*
 | `LOG_LEVEL`                           | no       | Pino log level for the API process, e.g. `debug`, `info`, `warn`, `error` (default: `info`).                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `NIGHTWARDEN_DOCKER_RUNNER_IMAGE`     | no       | Image the console's Docker-host install command hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-docker-runner:latest`; override it to pin a tag or to serve the image from a private registry.                                                                                                                                                                                                                                                                                                                                 |
 | `NIGHTWARDEN_KUBERNETES_RUNNER_IMAGE` | no       | Image the console's Kubernetes manifest hands out. Defaults to `ghcr.io/prabhatmattoo/nightwarden-kubernetes-runner:latest`.                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `PROMETHEUS_URL`                      | no       | Seeds a Prometheus metrics backend on first boot only, so a fresh install comes up configured without opening a browser. Probed before it saves; an address that does not answer is logged and left unconfigured. Prometheus serves its own rules, so the seeded backend uses this address for both.                                                                                                                                                                                                                                     |
+| `PROMETHEUS_URL`                      | no       | Seeds a Prometheus metrics source on first boot only, so a fresh install comes up configured without opening a browser. Probed before it saves; an address that does not answer is logged and left unconfigured. Prometheus serves its own rules, so the seeded source uses this address for both.                                                                                                                                                                                                                                       |
 | `PROMETHEUS_AUTH_HEADER`              | no       | Verbatim `Authorization` header value for the above, stored encrypted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `LOKI_URL`                            | no       | Seeds the Loki integration on first boot only, on the same terms as `PROMETHEUS_URL`.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `LOKI_AUTH_HEADER`                    | no       | Verbatim `Authorization` header value for Loki, stored encrypted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -632,7 +632,7 @@ apps/
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
       integrations/     GitHub / Loki clients and connect/status routes
                         metrics/ one Prometheus-API client, the per-product presets and
-                        what each backend cannot answer
+                        what each source cannot answer
       llm/              provider factory (Anthropic / OpenRouter)
       runners/          runner registry and the one install-artifact endpoint
       sandbox/          per-session code sandbox: container lifecycle, git, install, egress proxy, boot salvage, repo tool handlers
@@ -688,7 +688,7 @@ packages/
       approvals.ts      approval and clarification shapes
       config.ts         agent + sandbox settings shape
       integrations.ts   integration payloads (GitHub, Loki)
-      metrics.ts        metrics backend kinds, endpoint inputs and statuses
+      metrics.ts        metrics source kinds, endpoint inputs and statuses
       alerts.ts         normalized alert shapes
       auth.ts           owner auth payloads
       runner.ts         Platform, the two manifest shapes, and the fleet view

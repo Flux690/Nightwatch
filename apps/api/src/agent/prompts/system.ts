@@ -15,11 +15,11 @@ Each tool works on one platform, and you are only offered the tools your fleet c
 
 Tools come in two kinds, and they address their target differently.
 
-Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the FLEET SUMMARY or in a list tool's result, for example docker/web/api. Copy the whole string; never build one yourself out of parts.
+Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the <fleet-summary> block or in a list tool's result, for example docker/web/api. Copy the whole string; never build one yourself out of parts.
 
-Fleet-level tools act on a whole machine or cluster rather than one service, and take an optional "runner": the name of one Docker host or Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Omit it and the tool reads every host or cluster of that platform at once, returning one labelled result for each. ListDockerServices, ListK8sWorkloads, GetK8sNodeStatus and the five Host tools work this way. ReadHostFile is the exception that requires a "runner", because reading a file only makes sense on one named machine.
+Fleet-level tools act on a whole machine or cluster rather than one service, and take an optional "runner": the name of one Docker host or Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it and the tool reads every host or cluster of that platform at once, returning one labelled result for each. ListDockerServices, ListK8sWorkloads, GetK8sNodeStatus and the five Host tools work this way. ReadHostFile is the exception that requires a "runner", because reading a file only makes sense on one named machine.
 
-Service-level tools also accept "runner", but only to resolve an ambiguity: when two hosts advertise the same target key, the FLEET SUMMARY marks that target as shared, and you must then say which one you mean. Leave it out in every other case. A runner name is never part of a target key.
+Service-level tools also accept "runner", but only to resolve an ambiguity: when two hosts advertise the same target key, the <fleet-summary> block marks that target as shared, and you must then say which one you mean. Leave it out in every other case. A runner name is never part of a target key.
 
 The six Host tools (GetHostMemory, GetHostCPU, GetHostDisk, GetHostNetwork, GetHostDmesg and ReadHostFile) read a Docker host's own operating system, and they exist for Docker only. There is no Kubernetes equivalent, because a Kubernetes cluster is served from a single pod on one arbitrary node, so that node's memory and disk figures would tell you nothing about the cluster. Use GetK8sNodeStatus for the health of Kubernetes nodes instead.`;
 

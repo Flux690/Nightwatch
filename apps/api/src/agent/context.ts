@@ -4,7 +4,7 @@ import type {
   NormalizedAlert,
 } from "@nightwarden/shared";
 import type { DeliveryContext } from "../alerts/delivery.js";
-import { listMetricsBackends } from "../integrations/metrics/backends.js";
+import { listMetricsSources } from "../integrations/metrics/sources.js";
 import {
   budgetLine,
   CHAT_PROMPT,
@@ -149,20 +149,19 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   return `\n<fleet-summary>\nEach line names one Docker host or Kubernetes cluster, followed by the target keys it advertises. A key marked "(shared)" is advertised by more than one, so a call naming that key must also say which one you mean.\n${lines.join("\n")}\n</fleet-summary>\n`;
 }
 
-/* Only when there is a choice to make. One backend needs no name; several make
-   the `backend` parameter required, exactly as a shared target key makes
-   `runner` required. */
+// Only when there is a choice to make: several sources make `metricsSource`
+// required, exactly as a shared target key makes `runner` required.
 function buildMetricsSummary(): string {
-  const backends = listMetricsBackends();
-  if (backends.length < 2) return "";
-  const lines = backends.map((b) => {
+  const sources = listMetricsSources();
+  if (sources.length < 2) return "";
+  const lines = sources.map((b) => {
     const rules =
       b.rules === null
         ? "no rules endpoint, so it cannot say whether an alerting rule is firing"
         : "serves alerting rules";
     return `${b.label}: ${b.capabilities.label}, ${rules}`;
   });
-  return `\n<metrics-backends>\nMore than one metrics backend is connected, so every metrics call must name the one you mean in its "backend" argument, written exactly as it appears here.\n${lines.join("\n")}\n</metrics-backends>\n`;
+  return `\n<metrics-sources>\nMore than one metrics source is connected, so every metrics call must name the one you mean in its "metricsSource" argument, written exactly as it appears here.\n${lines.join("\n")}\n</metrics-sources>\n`;
 }
 
 // Prometheus puts the expression that fired in the generator link's query string,
@@ -194,7 +193,7 @@ function formatAlert(alert: NormalizedAlert, fleet: FleetRunner[]): string {
     resolution.kind === "resolved"
       ? resolution.key
       : resolution.kind === "ambiguous"
-        ? `${resolution.key}, which is advertised by more than one: ${resolution.runners.join(", ")}. Pass runner="<name>" on your calls to say which one you mean.`
+        ? `${resolution.key}, which is advertised by more than one: ${resolution.runners.join(", ")}. Name the one you mean in the "runner" argument on your calls.`
         : "not identified. Match the labels below against a known service, or call a list tool to find it.";
   const labels = Object.entries(alert.labels)
     .map(([k, v]) => `${k}=${v}`)

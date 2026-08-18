@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { TriangleAlert } from "lucide-react";
 import type {
-  MetricsBackendKind,
-  MetricsBackendStatus,
+  MetricsSourceKind,
+  MetricsSourceStatus,
   MetricsEndpointInput,
 } from "@nightwarden/shared";
 
@@ -19,7 +19,7 @@ import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
-import { METRICS_BACKEND_CONTENT } from "./metricsBackendContent";
+import { METRICS_SOURCE_CONTENT } from "./metricsSourceContent";
 import { INTEGRATION_CATALOG } from "./integrationCatalog";
 import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
@@ -128,12 +128,12 @@ function EndpointFields({
   );
 }
 
-export function MetricsBackendPage({
+export function MetricsSourcePage({
   kind,
 }: {
-  kind: MetricsBackendKind;
+  kind: MetricsSourceKind;
 }): React.JSX.Element {
-  const content = METRICS_BACKEND_CONTENT[kind];
+  const content = METRICS_SOURCE_CONTENT[kind];
   const identity = INTEGRATION_CATALOG[kind];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -142,23 +142,22 @@ export function MetricsBackendPage({
   const [connectError, setConnectError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
 
-  const { data: backends, isLoading } = useQuery<MetricsBackendStatus[]>({
-    queryKey: ["metrics-backends"],
-    queryFn: () =>
-      apiFetch<MetricsBackendStatus[]>("/api/integrations/metrics"),
+  const { data: sources, isLoading } = useQuery<MetricsSourceStatus[]>({
+    queryKey: ["metrics-sources"],
+    queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
   });
 
-  const mine = (backends ?? []).filter((b) => b.kind === kind);
+  const mine = (sources ?? []).filter((b) => b.kind === kind);
 
   const connect = useMutation({
     mutationFn: () =>
-      apiFetch<MetricsBackendStatus>("/api/integrations/metrics", {
+      apiFetch<MetricsSourceStatus>("/api/integrations/metrics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind,
           query: toInput(query),
-          // Absent rather than empty: a backend with no rules endpoint is a
+          // Absent rather than empty: a source with no rules endpoint is a
           // supported configuration, and the card says what it costs.
           ...(rules.url.trim() !== "" && { rules: toInput(rules) }),
         }),
@@ -168,7 +167,7 @@ export function MetricsBackendPage({
       setQuery(EMPTY);
       setRules(EMPTY);
       toast.success(`${identity.label} connected`);
-      await queryClient.invalidateQueries({ queryKey: ["metrics-backends"] });
+      await queryClient.invalidateQueries({ queryKey: ["metrics-sources"] });
     },
     onError: (err) =>
       setConnectError(
@@ -181,7 +180,7 @@ export function MetricsBackendPage({
       apiFetch<void>(`/api/integrations/metrics/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
       toast.success(`${identity.label} disconnected`);
-      await queryClient.invalidateQueries({ queryKey: ["metrics-backends"] });
+      await queryClient.invalidateQueries({ queryKey: ["metrics-sources"] });
       void navigate({ to: "/integrations" });
     },
     onError: (err) =>
@@ -211,18 +210,18 @@ export function MetricsBackendPage({
 
         {mine.length > 0 && (
           <section className="flex flex-col gap-4">
-            {mine.map((backend) => (
-              <div key={backend.id} className="flex flex-col gap-2">
+            {mine.map((source) => (
+              <div key={source.id} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{backend.label}</p>
+                  <p className="text-sm font-medium">{source.label}</p>
                   <StatusText tone="ok">Connected</StatusText>
-                  {backend.query.hasAuth && <MetaText>Auth</MetaText>}
-                  {backend.query.hasOrgId && <MetaText>{`Tenant`}</MetaText>}
+                  {source.query.hasAuth && <MetaText>Auth</MetaText>}
+                  {source.query.hasOrgId && <MetaText>{`Tenant`}</MetaText>}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {backend.query.url}
+                  {source.query.url}
                 </p>
-                {backend.rules === null ? (
+                {source.rules === null ? (
                   /* Said on the card rather than discovered at 3am: this is the
                      difference between an investigation that can close itself
                      and one that never can. */
@@ -230,20 +229,20 @@ export function MetricsBackendPage({
                     <TriangleAlert {...ICON_UI} className="shrink-0" />
                     <span>
                       No rules endpoint. Investigations cannot confirm an alert
-                      stopped firing through this backend, so they will not
-                      reach Resolved on their own.
+                      stopped firing through this source, so they will not reach
+                      Resolved on their own.
                     </span>
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Rules: {backend.rules.url}
+                    Rules: {source.rules.url}
                   </p>
                 )}
                 <Button
                   size="xs"
                   variant="secondary"
                   className="self-start"
-                  onClick={() => setConfirmRemove(backend.id)}
+                  onClick={() => setConfirmRemove(source.id)}
                 >
                   Disconnect
                 </Button>
@@ -330,7 +329,7 @@ export function MetricsBackendPage({
         open={confirmRemove !== null}
         onOpenChange={(open) => !open && setConfirmRemove(null)}
         title={`Disconnect ${identity.label}?`}
-        description="Investigations lose metric evidence from this backend until it is reconnected."
+        description="Investigations lose metric evidence from this source until it is reconnected."
         confirmLabel="Disconnect"
         destructive
         onConfirm={() => {

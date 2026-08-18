@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { vi } from "vitest";
 import { getDb, resetDb } from "../db/client.js";
-import { saveMetricsBackend, type MetricsBackendInput } from "../db/metrics.js";
+import { saveMetricsSource, type MetricsSourceInput } from "../db/metrics.js";
 import { updateConfig, updateProvider } from "../config/store.js";
 
 // Call at the top of beforeAll before anything opens the lazy db; pair the
@@ -31,12 +31,12 @@ export function clearTestLLM(): void {
   getDb().prepare(`DELETE FROM provider_config`).run();
 }
 
-// One connected Prometheus, serving its own rules: the ordinary single-backend
+// One connected Prometheus, serving its own rules: the ordinary single-source
 // install every seam downstream of a metrics connection assumes.
 export function connectTestMetrics(
-  over: Partial<MetricsBackendInput> = {},
+  over: Partial<MetricsSourceInput> = {},
 ): string {
-  return saveMetricsBackend({
+  return saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: "http://prom.internal:9090",

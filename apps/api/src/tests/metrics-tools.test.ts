@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { saveMetricsBackend } from "../db/metrics.js";
+import { saveMetricsSource } from "../db/metrics.js";
 import { seedAlertSession } from "./session-helper.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
@@ -99,9 +99,9 @@ describe("metrics tools through the tool dispatch", () => {
   }
 
   function connect(
-    over: Partial<Parameters<typeof saveMetricsBackend>[0]> = {},
+    over: Partial<Parameters<typeof saveMetricsSource>[0]> = {},
   ): void {
-    saveMetricsBackend({
+    saveMetricsSource({
       kind: "prometheus",
       label: "Prometheus",
       queryUrl: "http://prom.internal:9090",
@@ -134,7 +134,7 @@ describe("metrics tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
     expect(result.outcome).toBe("permission");
-    expect(result.content).toContain("No metrics backend is connected");
+    expect(result.content).toContain("No metrics source is connected");
     expect(mock.requests).toHaveLength(0);
   });
 
@@ -272,7 +272,7 @@ describe("metrics tools through the tool dispatch", () => {
   /* Discovery, so an expression names a metric that exists. A PromQL query
      against a metric nobody exports returns no series, which reads as "the
      value is fine" rather than as a typo - the failure these tools remove. */
-  describe("reading what the backend holds", () => {
+  describe("reading what the source holds", () => {
     function installDiscoveryMock(payloads: Record<string, unknown>): void {
       vi.stubGlobal(
         "fetch",
@@ -409,9 +409,9 @@ describe("metrics tools through the tool dispatch", () => {
     });
 
     /* An empty answer the agent reads as "nothing is wrong" is the failure the
-       whole result discipline exists against, and three of the backends we
+       whole result discipline exists against, and three of the sources we
        support cannot answer questions the tools ask. */
-    describe("what a backend cannot answer, said rather than shown as absence", () => {
+    describe("what a source cannot answer, said rather than shown as absence", () => {
       it("names VictoriaMetrics' missing metadata API instead of reporting the metric as undeclared", async () => {
         connect({ kind: "victoriametrics", label: "vm" });
 
@@ -445,7 +445,7 @@ describe("metrics tools through the tool dispatch", () => {
     });
 
     describe("addressing one of several", () => {
-      it("refuses to guess which backend was meant, and names them", async () => {
+      it("refuses to guess which source was meant, and names them", async () => {
         connect({ label: "prom-prod" });
         connect({ label: "prom-staging", queryUrl: "http://staging:9090" });
 
@@ -468,7 +468,7 @@ describe("metrics tools through the tool dispatch", () => {
 
         await executeTool(
           findTool("QueryMetrics")!,
-          { query: "up", backend: "PROM-STAGING" },
+          { query: "up", metricsSource: "PROM-STAGING" },
           mintSession(ALERT),
         );
 
@@ -488,7 +488,7 @@ describe("metrics tools through the tool dispatch", () => {
           mintSession(ALERT),
         );
         expect(result.outcome).toBe("permission");
-        expect(result.content).toContain("No metrics backend is connected");
+        expect(result.content).toContain("No metrics source is connected");
       }
     });
   });

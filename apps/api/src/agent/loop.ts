@@ -26,7 +26,7 @@ import {
   getGitHubIntegration,
   getLokiIntegration,
 } from "../db/integrations.js";
-import { hasMetricsBackend } from "../integrations/metrics/backends.js";
+import { hasMetricsSource } from "../integrations/metrics/sources.js";
 import {
   appendErrorMessage,
   appendTranscriptRows,
@@ -581,7 +581,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       platforms,
       {
         github: getGitHubIntegration() !== null,
-        metrics: hasMetricsBackend(),
+        metrics: hasMetricsSource(),
         loki: getLokiIntegration() !== null,
       },
       opensInvestigation,

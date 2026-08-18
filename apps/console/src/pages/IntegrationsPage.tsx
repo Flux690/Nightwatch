@@ -4,10 +4,10 @@ import type {
   AlertSourceKind,
   GitHubIntegrationStatus,
   LokiIntegrationStatus,
-  MetricsBackendStatus,
+  MetricsSourceStatus,
   RunnerRecord,
 } from "@nightwarden/shared";
-import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
+import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
@@ -131,12 +131,11 @@ export function IntegrationsPage(): React.JSX.Element {
   const alertmanager = useAlertSource("alertmanager");
   const grafana = useAlertSource("grafana");
 
-  // One query for every backend: the grid draws a card per product and each
+  // One query for every source: the grid draws a card per product and each
   // says how many of that product are connected.
-  const { data: metrics } = useQuery<MetricsBackendStatus[]>({
-    queryKey: ["metrics-backends"],
-    queryFn: () =>
-      apiFetch<MetricsBackendStatus[]>("/api/integrations/metrics"),
+  const { data: metrics } = useQuery<MetricsSourceStatus[]>({
+    queryKey: ["metrics-sources"],
+    queryFn: () => apiFetch<MetricsSourceStatus[]>("/api/integrations/metrics"),
   });
 
   const { data: loki } = useQuery<LokiIntegrationStatus>({
@@ -172,10 +171,10 @@ export function IntegrationsPage(): React.JSX.Element {
     platformCard("kubernetes", "cluster"),
     alertSourceCard("alertmanager", alertmanager),
     alertSourceCard("grafana", grafana),
-    ...METRICS_BACKEND_KINDS.map((kind): IntegrationCard => {
+    ...METRICS_SOURCE_KINDS.map((kind): IntegrationCard => {
       const identity = INTEGRATION_CATALOG[kind];
       const connected = (metrics ?? []).filter((b) => b.kind === kind);
-      /* A backend with no rules endpoint is connected and still cannot confirm
+      /* A source with no rules endpoint is connected and still cannot confirm
          a recovery, so the card says which rather than a flat "Connected". */
       const blind = connected.filter((b) => b.rules === null).length;
       return {

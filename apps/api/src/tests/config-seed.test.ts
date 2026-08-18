@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTestLLM, connectTestMetrics, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
 import { seedIntegrationsFromEnv } from "../integrations/seed.js";
-import { listMetricsBackendRows } from "../db/metrics.js";
+import { listMetricsSourceRows } from "../db/metrics.js";
 import { getDb } from "../db/client.js";
 import { getLokiIntegration } from "../db/integrations.js";
 
@@ -162,7 +162,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsBackendRows()[0]).toMatchObject({
+    expect(listMetricsSourceRows()[0]).toMatchObject({
       kind: "prometheus",
       queryUrl: "http://prom.internal:9090",
       // Prometheus serves its own rules, which is what makes recovery
@@ -174,7 +174,7 @@ describe("first-boot integration seed from the environment", () => {
       orgId: "tenant-a",
     });
     // The accessor hands back plaintext; the column never holds it.
-    expect(listMetricsBackendRows()[0]?.queryAuthorization).toBe(
+    expect(listMetricsSourceRows()[0]?.queryAuthorization).toBe(
       "Bearer prom-secret",
     );
     const stored = getDb()
@@ -189,7 +189,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsBackendRows()).toHaveLength(0);
+    expect(listMetricsSourceRows()).toHaveLength(0);
   });
 
   it("never overwrites an integration the user already connected", async () => {
@@ -200,7 +200,7 @@ describe("first-boot integration seed from the environment", () => {
 
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsBackendRows()[0]?.queryUrl).toBe(
+    expect(listMetricsSourceRows()[0]?.queryUrl).toBe(
       "http://chosen-by-user:9090",
     );
     // Not even probed: the database already owns this one.
@@ -210,7 +210,7 @@ describe("first-boot integration seed from the environment", () => {
   it("does nothing when the variables are absent", async () => {
     await seedIntegrationsFromEnv();
 
-    expect(listMetricsBackendRows()).toHaveLength(0);
+    expect(listMetricsSourceRows()).toHaveLength(0);
     expect(getLokiIntegration()).toBeNull();
   });
 });

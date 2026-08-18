@@ -149,7 +149,7 @@ describe("parseAlertmanager", () => {
 
 // The user's own explanation and the expression that fired are context only:
 // both enrich the prompt and neither decides anything.
-/* The opening turn names the connected metrics backends, so building one now
+/* The opening turn names the connected metrics sources, so building one now
    reads the database and must never reach the real one. */
 describe("user context reaches the model", () => {
   let cleanupDb: () => void;

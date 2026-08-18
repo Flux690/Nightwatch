@@ -1,9 +1,9 @@
-import type { MetricsBackendKind } from "@nightwarden/shared";
+import type { MetricsSourceKind } from "@nightwarden/shared";
 
-/* Only text differs between backends. Connecting, probing and disconnecting are
+/* Only text differs between sources. Connecting, probing and disconnecting are
    one code path serving every kind, the way the alert sources are. What is
    worth saying per product is where the rules live and what breaks quietly. */
-export interface MetricsBackendContent {
+export interface MetricsSourceContent {
   queryPlaceholder: string;
   queryHelp: string;
   // Absent when the query endpoint serves its own rules and the second field is
@@ -18,9 +18,9 @@ export interface MetricsBackendContent {
 const RULES_WHY =
   "Without it an investigation can never confirm the alert stopped firing.";
 
-export const METRICS_BACKEND_CONTENT: Record<
-  MetricsBackendKind,
-  MetricsBackendContent
+export const METRICS_SOURCE_CONTENT: Record<
+  MetricsSourceKind,
+  MetricsSourceContent
 > = {
   prometheus: {
     queryPlaceholder: "http://prometheus.internal:9090",

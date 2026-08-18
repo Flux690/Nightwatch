@@ -418,13 +418,13 @@ describe("GitHub integration routes", () => {
   });
 });
 
-// The success envelope a Prometheus-compatible backend answers a probe with.
+// The success envelope a Prometheus-compatible source answers a probe with.
 const PROM_OK = {
   status: "success",
   data: { resultType: "vector", result: [] },
 };
 
-describe("metrics backend routes", () => {
+describe("metrics source routes", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
   let SESSION: string;
@@ -542,7 +542,7 @@ describe("metrics backend routes", () => {
 
   /* A legitimate configuration, not an error - and the one the console has to
      say out loud, because without it recovery can never be confirmed. */
-  it("accepts a backend with no rules endpoint and reports the gap as null", async () => {
+  it("accepts a source with no rules endpoint and reports the gap as null", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
 
     const res = await authed({
@@ -558,7 +558,7 @@ describe("metrics backend routes", () => {
     expect(JSON.parse(res.body).rules).toBeNull();
   });
 
-  it("names a second backend of the same kind rather than asking the user to", async () => {
+  it("names a second source of the same kind rather than asking the user to", async () => {
     stubFetch(() => jsonResponse(PROM_OK));
     const payload = {
       kind: "prometheus",
@@ -636,7 +636,7 @@ describe("metrics backend routes", () => {
 
     const missing = await authed({
       method: "DELETE",
-      url: "/api/integrations/metrics/not-a-backend",
+      url: "/api/integrations/metrics/not-a-source",
     });
     expect(missing.statusCode).toBe(404);
   });

@@ -1,4 +1,4 @@
-import type { MetricsBackendKind } from "@nightwarden/shared";
+import type { MetricsSourceKind } from "@nightwarden/shared";
 
 /* What differs between products, as data rather than behaviour. A gap declared
    here is one a tool result states out loud, because an empty answer reads to
@@ -16,7 +16,7 @@ export interface MetricsPreset {
   rulesOnQueryEndpoint: boolean;
 }
 
-export const METRICS_PRESETS: Record<MetricsBackendKind, MetricsPreset> = {
+export const METRICS_PRESETS: Record<MetricsSourceKind, MetricsPreset> = {
   prometheus: {
     label: "Prometheus",
     metricMetadata: true,

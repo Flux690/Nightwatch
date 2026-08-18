@@ -1,7 +1,7 @@
 import type { MetricsErrorCode } from "@nightwarden/shared";
 import { describeNetworkFailure } from "../reachability.js";
 
-/* The Prometheus HTTP API, and nothing else. Every backend we support speaks
+/* The Prometheus HTTP API, and nothing else. Every source we support speaks
    it, so there is one client here and no per-product adapter; what varies is
    the endpoint it is handed. */
 
@@ -18,7 +18,7 @@ export class MetricsApiError extends Error {
 
 /* One address the API dials, with its credential already resolved. `name` is
    the product's own, used only in error text so a failure names the thing the
-   user configured rather than "the metrics backend". */
+   user configured rather than "the metrics source". */
 export interface MetricsEndpoint {
   url: string;
   authorization: string | null;
@@ -38,7 +38,7 @@ export interface MetricsQueryData {
   series: MetricsSeries[];
 }
 
-// Server-side evaluation cap, kept under the tools' 30s budget so the backend
+// Server-side evaluation cap, kept under the tools' 30s budget so the source
 // gives up before the tool timeout turns the failure opaque.
 const QUERY_TIMEOUT = "25s";
 
@@ -206,7 +206,7 @@ export async function rangeQuery(
   return parseEnvelope(endpoint, res);
 }
 
-// One currently-active instance of an alerting rule, as the backend itself sees
+// One currently-active instance of an alerting rule, as the source itself sees
 // it. The labels identify which instance, since one rule fires per series.
 interface FiringInstance {
   labels: Record<string, string>;
@@ -262,7 +262,7 @@ export async function firingInstancesOf(
   });
 }
 
-// One alerting rule as the backend holds it: the expression it evaluates and
+// One alerting rule as the source holds it: the expression it evaluates and
 // whether it is currently firing.
 export interface AlertingRule {
   name: string;
@@ -305,7 +305,7 @@ export async function alertingRules(
     });
 }
 
-// The names the backend is currently storing, optionally narrowed by substring.
+// The names the source is currently storing, optionally narrowed by substring.
 // Matched here rather than server-side: /label/__name__/values takes no filter.
 export async function metricNames(
   endpoint: MetricsEndpoint,
@@ -326,7 +326,7 @@ export async function metricNames(
 }
 
 // What a metric is and what it is measured in. Only known for metrics an
-// exporter declared with HELP and TYPE, and some backends store none at all.
+// exporter declared with HELP and TYPE, and some sources store none at all.
 export interface MetricMetadata {
   metric: string;
   type: string;

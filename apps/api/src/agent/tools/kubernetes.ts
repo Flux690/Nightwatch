@@ -1,12 +1,12 @@
 import { REASON_PROPERTY } from "./reason.js";
 import type { Tool } from "./types.js";
 
-// The workload's target key, copied verbatim from the FLEET SUMMARY or a list
+// The workload's target key, copied verbatim from the <fleet-summary> block or a list
 // result - never assembled by hand. The API expands it to the structured identity.
 const TARGET_PROPERTY = {
   type: "string",
   description:
-    "The workload's target key, copied exactly as it appears in the FLEET SUMMARY or in a ListK8sWorkloads result, for example kubernetes/shop/api. Copy the whole string; never assemble one yourself from parts.",
+    "The workload's target key, copied exactly as it appears in the <fleet-summary> block or in a ListK8sWorkloads result, for example kubernetes/shop/api. Copy the whole string; never assemble one yourself from parts.",
 } as const;
 
 // The container sub-selector is not part of the key: it rides alongside `target`
@@ -22,7 +22,7 @@ const CONTAINER_PROPERTY = {
 const RUNNER_PROPERTY = {
   type: "string",
   description:
-    "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Supply this only when the FLEET SUMMARY marks this target as shared, meaning two clusters advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
+    "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Supply this only when the <fleet-summary> block marks this target as shared, meaning two clusters advertise the same target key and it would otherwise be ambiguous which one you mean. Omit it in every other case.",
 } as const;
 
 // Read tools: run unattended, so each is a narrow typed question - never
@@ -44,7 +44,7 @@ export const K8S_TOOLS: Tool[] = [
           runner: {
             type: "string",
             description:
-              "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
+              "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
       },
@@ -221,7 +221,7 @@ export const K8S_TOOLS: Tool[] = [
           runner: {
             type: "string",
             description:
-              "The name of one Kubernetes cluster, written exactly as the FLEET SUMMARY lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
+              "The name of one Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it to read every Kubernetes cluster at once, which returns one labelled result per cluster.",
           },
         },
       },

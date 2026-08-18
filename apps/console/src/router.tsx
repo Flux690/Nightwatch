@@ -17,8 +17,8 @@ import { GitHubConnectPage } from "./pages/GitHubConnectPage.js";
 import { AddRunnerPage } from "./pages/AddRunnerPage.js";
 import { RunnerListPage } from "./pages/RunnerListPage.js";
 import { AlertSourcePage } from "./pages/AlertSourcePage.js";
-import { MetricsBackendPage } from "./pages/MetricsBackendPage.js";
-import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
+import { MetricsSourcePage } from "./pages/MetricsSourcePage.js";
+import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 import { LokiPage } from "./pages/LokiPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 
@@ -149,14 +149,14 @@ const grafanaAlertingRoute = createRoute({
   component: () => <AlertSourcePage kind="grafana" />,
 });
 
-/* One page serves every metrics backend, parameterized by the product the
+/* One page serves every metrics source, parameterized by the product the
    route names - the shape the two alert sources already use. What differs
-   between them is words, which live in METRICS_BACKEND_CONTENT. */
-const metricsRoutes = METRICS_BACKEND_KINDS.map((kind) =>
+   between them is words, which live in METRICS_SOURCE_CONTENT. */
+const metricsRoutes = METRICS_SOURCE_KINDS.map((kind) =>
   createRoute({
     getParentRoute: () => appRoute,
     path: `/integrations/metrics/${kind}`,
-    component: () => <MetricsBackendPage kind={kind} />,
+    component: () => <MetricsSourcePage kind={kind} />,
   }),
 );
 

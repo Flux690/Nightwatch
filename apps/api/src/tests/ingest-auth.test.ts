@@ -36,7 +36,7 @@ import {
   connectTestMetrics,
   useTempDb,
 } from "./temp-db.js";
-import { deleteMetricsBackend } from "../db/metrics.js";
+import { deleteMetricsSource } from "../db/metrics.js";
 import { dockerService, manifest } from "./manifest-helper.js";
 import { mountApi } from "./api-server.js";
 
@@ -257,7 +257,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect(lastReceived()).not.toBeNull();
 
     // Prometheus alone is a sufficient evidence source - the agentless path.
-    const backendId = connectTestMetrics();
+    const sourceId = connectTestMetrics();
     const promOnly = await server.inject({
       method: "POST",
       url: "/api/alerts/ingest",
@@ -268,7 +268,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     expect((JSON.parse(promOnly.body) as { enqueued: number }).enqueued).toBe(
       1,
     );
-    deleteMetricsBackend(backendId);
+    deleteMetricsSource(sourceId);
 
     // Loki alone is likewise sufficient - a logs-first, no-metrics fleet.
     saveLokiIntegration({

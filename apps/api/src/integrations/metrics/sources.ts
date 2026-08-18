@@ -1,13 +1,13 @@
 import type {
-  MetricsBackendKind,
-  MetricsBackendStatus,
+  MetricsSourceKind,
+  MetricsSourceStatus,
   MetricsEndpointInput,
   MetricsEndpointStatus,
 } from "@nightwarden/shared";
 import {
-  getMetricsBackendRow,
-  listMetricsBackendRows,
-  type MetricsBackendRow,
+  getMetricsSourceRow,
+  listMetricsSourceRows,
+  type MetricsSourceRow,
 } from "../../db/metrics.js";
 import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
@@ -15,9 +15,9 @@ import type { MetricsEndpoint } from "./client.js";
 /* One stored row resolved into the addresses the API dials. Every caller asks
    here, so nowhere else decrypts a credential or decides whether a rules API
    exists. */
-export interface MetricsBackend {
+export interface MetricsSource {
   id: string;
-  kind: MetricsBackendKind;
+  kind: MetricsSourceKind;
   label: string;
   query: MetricsEndpoint;
   // Null when nothing can be asked whether the rule that fired still holds.
@@ -25,7 +25,7 @@ export interface MetricsBackend {
   capabilities: MetricsPreset;
 }
 
-function resolve(row: MetricsBackendRow): MetricsBackend {
+function resolve(row: MetricsSourceRow): MetricsSource {
   const preset = METRICS_PRESETS[row.kind];
   const name = row.label || preset.label;
   return {
@@ -51,25 +51,25 @@ function resolve(row: MetricsBackendRow): MetricsBackend {
   };
 }
 
-export function listMetricsBackends(): MetricsBackend[] {
-  return listMetricsBackendRows().map(resolve);
+export function listMetricsSources(): MetricsSource[] {
+  return listMetricsSourceRows().map(resolve);
 }
 
-export function getMetricsBackend(id: string): MetricsBackend | null {
-  const row = getMetricsBackendRow(id);
+export function getMetricsSource(id: string): MetricsSource | null {
+  const row = getMetricsSourceRow(id);
   return row === null ? null : resolve(row);
 }
 
-/* Which backend a call with no `backend` argument means. Exactly one connected
+/* Which source a call with no `source` argument means. Exactly one connected
    is the ordinary install and needs no argument; with several the tools require
    one, the way a target key advertised by more than one runner does. */
-export function soleMetricsBackend(): MetricsBackend | null {
-  const all = listMetricsBackends();
+export function soleMetricsSource(): MetricsSource | null {
+  const all = listMetricsSources();
   return all.length === 1 ? (all[0] ?? null) : null;
 }
 
-export function hasMetricsBackend(): boolean {
-  return listMetricsBackendRows().length > 0;
+export function hasMetricsSource(): boolean {
+  return listMetricsSourceRows().length > 0;
 }
 
 /* A basic pair becomes one Authorization value here. Encoded rather than asked
@@ -109,15 +109,15 @@ function endpointStatus(endpoint: MetricsEndpoint): MetricsEndpointStatus {
 }
 
 export function statusOf(
-  backend: MetricsBackend,
+  source: MetricsSource,
   validatedAt: string,
-): MetricsBackendStatus {
+): MetricsSourceStatus {
   return {
-    id: backend.id,
-    kind: backend.kind,
-    label: backend.label,
-    query: endpointStatus(backend.query),
-    rules: backend.rules === null ? null : endpointStatus(backend.rules),
+    id: source.id,
+    kind: source.kind,
+    label: source.label,
+    query: endpointStatus(source.query),
+    rules: source.rules === null ? null : endpointStatus(source.rules),
     validatedAt,
   };
 }

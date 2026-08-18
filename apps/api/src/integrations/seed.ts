@@ -1,5 +1,5 @@
 import { getLokiIntegration, saveLokiIntegration } from "../db/integrations.js";
-import { listMetricsBackendRows, saveMetricsBackend } from "../db/metrics.js";
+import { listMetricsSourceRows, saveMetricsSource } from "../db/metrics.js";
 import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
@@ -13,7 +13,7 @@ export async function seedIntegrationsFromEnv(): Promise<void> {
 }
 
 async function seedPrometheus(): Promise<void> {
-  if (listMetricsBackendRows().length > 0) return;
+  if (listMetricsSourceRows().length > 0) return;
   const url = process.env["PROMETHEUS_URL"];
   if (!url) return;
   const authHeader = process.env["PROMETHEUS_AUTH_HEADER"] ?? null;
@@ -35,9 +35,9 @@ async function seedPrometheus(): Promise<void> {
   }
 
   /* Seeded as its own rules endpoint, which is true of Prometheus and of
-     nothing else: every other backend serves rules elsewhere, and there is no
+     nothing else: every other source serves rules elsewhere, and there is no
      second environment variable to guess one from. */
-  saveMetricsBackend({
+  saveMetricsSource({
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: url,
@@ -47,7 +47,7 @@ async function seedPrometheus(): Promise<void> {
     rulesAuthorization: authHeader,
     rulesOrgId: null,
   });
-  logger.info({ url }, "prometheus backend seeded from environment");
+  logger.info({ url }, "prometheus source seeded from environment");
 }
 
 async function seedLoki(): Promise<void> {

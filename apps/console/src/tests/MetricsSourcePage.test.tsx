@@ -16,21 +16,21 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import type {
-  MetricsBackendKind,
-  MetricsBackendStatus,
+  MetricsSourceKind,
+  MetricsSourceStatus,
 } from "@nightwarden/shared";
 
 import { TestProviders } from "./renderWithProviders.js";
-import { MetricsBackendPage } from "../pages/MetricsBackendPage.js";
+import { MetricsSourcePage } from "../pages/MetricsSourcePage.js";
 import { INTEGRATION_CATALOG } from "../pages/integrationCatalog.js";
 
 // The page navigates on disconnect, so it needs a real router around it.
-function renderPage(kind: MetricsBackendKind) {
+function renderPage(kind: MetricsSourceKind) {
   const rootRoute = createRootRoute();
   const page = createRoute({
     getParentRoute: () => rootRoute,
     path: "/integrations/metrics/$kind",
-    component: () => <MetricsBackendPage kind={kind} />,
+    component: () => <MetricsSourcePage kind={kind} />,
   });
   const integrations = createRoute({
     getParentRoute: () => rootRoute,
@@ -55,7 +55,7 @@ function renderPage(kind: MetricsBackendKind) {
   );
 }
 
-function connected(over: Partial<MetricsBackendStatus> = {}) {
+function connected(over: Partial<MetricsSourceStatus> = {}) {
   return {
     id: "b1",
     kind: "victoriametrics",
@@ -86,7 +86,7 @@ function stubApi(list: unknown[]) {
   return posted;
 }
 
-describe("MetricsBackendPage", () => {
+describe("MetricsSourcePage", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -119,7 +119,7 @@ describe("MetricsBackendPage", () => {
 
   /* A supported configuration that costs something specific, so the page says
      what it costs rather than reporting a plain "Connected". */
-  it("says a backend with no rules endpoint can never reach Resolved", async () => {
+  it("says a source with no rules endpoint can never reach Resolved", async () => {
     stubApi([connected({ rules: null })]);
     renderPage("victoriametrics");
 

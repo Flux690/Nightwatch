@@ -25,7 +25,7 @@ import { registerSessionRoutes } from "../session/routes.js";
 import { registerConsoleEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
-import { deleteMetricsBackend } from "../db/metrics.js";
+import { deleteMetricsSource } from "../db/metrics.js";
 import { mountApi } from "./api-server.js";
 
 describe("POST /sessions/:id/stop", () => {
@@ -106,7 +106,7 @@ describe("POST /sessions/:id/stop", () => {
   // The stop lands while the turn's read is still running, so the run reaches
   // the write already aborted - the only window this can happen in.
   it("ends a run as stopped when the stop lands on a turn holding a write", async () => {
-    const backendId = connectTestMetrics({ queryUrl: "http://prom.test" });
+    const sourceId = connectTestMetrics({ queryUrl: "http://prom.test" });
     mockCreateProvider.mockImplementationOnce(() =>
       createContractFakeProvider([
         {
@@ -191,6 +191,6 @@ describe("POST /sessions/:id/stop", () => {
 
     console.close();
     vi.unstubAllGlobals();
-    deleteMetricsBackend(backendId);
+    deleteMetricsSource(sourceId);
   });
 });

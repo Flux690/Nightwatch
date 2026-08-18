@@ -1,20 +1,18 @@
-/* Every metrics backend speaks the Prometheus HTTP API, so there is one client
+/* Every metrics source speaks the Prometheus HTTP API, so there is one client
    and no per-product adapter. What differs is configuration: where the rules
-   live, how the credential is presented, and what the backend cannot answer. */
+   live, how the credential is presented, and what the source cannot answer. */
 
-export const METRICS_BACKEND_KINDS = [
+export const METRICS_SOURCE_KINDS = [
   "prometheus",
   "victoriametrics",
   "mimir",
   "thanos",
 ] as const;
 
-export type MetricsBackendKind = (typeof METRICS_BACKEND_KINDS)[number];
+export type MetricsSourceKind = (typeof METRICS_SOURCE_KINDS)[number];
 
-export function isMetricsBackendKind(
-  value: string,
-): value is MetricsBackendKind {
-  return (METRICS_BACKEND_KINDS as readonly string[]).includes(value);
+export function isMetricsSourceKind(value: string): value is MetricsSourceKind {
+  return (METRICS_SOURCE_KINDS as readonly string[]).includes(value);
 }
 
 /* What the console sends for one endpoint: an Authorization value and a tenant,
@@ -37,10 +35,10 @@ export interface MetricsEndpointStatus {
   hasOrgId: boolean;
 }
 
-export interface MetricsBackendStatus {
+export interface MetricsSourceStatus {
   id: string;
-  kind: MetricsBackendKind;
-  // What the user called it. Only ever shown; a tool addresses a backend by id.
+  kind: MetricsSourceKind;
+  // What the user called it, and what a tool call names in `metricsSource`.
   label: string;
   query: MetricsEndpointStatus;
   /* Null when no rules endpoint is configured, which the console says out loud.

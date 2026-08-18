@@ -16,7 +16,7 @@ import type {
   SessionMeta,
 } from "@nightwarden/shared";
 import { connectTestMetrics, useTempDb } from "./temp-db.js";
-import { deleteMetricsBackend } from "../db/metrics.js";
+import { deleteMetricsSource } from "../db/metrics.js";
 
 import {
   createSession,
@@ -539,10 +539,10 @@ describe("API-local session store", () => {
         return m.sessionId;
       }
 
-      let backendId: string;
+      let sourceId: string;
 
       beforeEach(() => {
-        backendId = connectTestMetrics({
+        sourceId = connectTestMetrics({
           queryUrl: "http://prom.test",
           rulesUrl: "http://prom.test",
         });
@@ -550,7 +550,7 @@ describe("API-local session store", () => {
 
       afterEach(() => {
         vi.unstubAllGlobals();
-        deleteMetricsBackend(backendId);
+        deleteMetricsSource(sourceId);
       });
 
       it("resolves once the rules API no longer holds the rule firing", async () => {

@@ -1,4 +1,4 @@
-import type { MetricsBackendKind } from "@nightwarden/shared";
+import type { MetricsSourceKind } from "@nightwarden/shared";
 import {
   allIntegrations,
   deleteIntegrationById,
@@ -7,14 +7,14 @@ import {
   putIntegration,
   type IntegrationRow,
 } from "./integrations.js";
-import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
+import { METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
-/* A metrics backend is a connection like any other; only its config shape is
+/* A metrics source is a connection like any other; only its config shape is
    its own. Two endpoints and two credentials fit because `secrets` is a map. */
 
-export interface MetricsBackendRow {
+export interface MetricsSourceRow {
   id: string;
-  kind: MetricsBackendKind;
+  kind: MetricsSourceKind;
   label: string;
   queryUrl: string;
   queryAuthorization: string | null;
@@ -36,11 +36,11 @@ interface MetricsConfig {
   rules: Endpoint | null;
 }
 
-function toBackend(row: IntegrationRow): MetricsBackendRow {
+function toSource(row: IntegrationRow): MetricsSourceRow {
   const config = row.config as unknown as MetricsConfig;
   return {
     id: row.id,
-    kind: row.kind as MetricsBackendKind,
+    kind: row.kind as MetricsSourceKind,
     label: row.name,
     queryUrl: config.query.url,
     queryAuthorization: row.secrets["query"] ?? null,
@@ -54,24 +54,24 @@ function toBackend(row: IntegrationRow): MetricsBackendRow {
 }
 
 function isMetricsRow(row: IntegrationRow): boolean {
-  return (METRICS_BACKEND_KINDS as readonly string[]).includes(row.kind);
+  return (METRICS_SOURCE_KINDS as readonly string[]).includes(row.kind);
 }
 
-export function listMetricsBackendRows(): MetricsBackendRow[] {
-  return allIntegrations().filter(isMetricsRow).map(toBackend);
+export function listMetricsSourceRows(): MetricsSourceRow[] {
+  return allIntegrations().filter(isMetricsRow).map(toSource);
 }
 
-export function getMetricsBackendRow(id: string): MetricsBackendRow | null {
+export function getMetricsSourceRow(id: string): MetricsSourceRow | null {
   const row = integrationById(id);
-  return row === null || !isMetricsRow(row) ? null : toBackend(row);
+  return row === null || !isMetricsRow(row) ? null : toSource(row);
 }
 
-export function countMetricsBackendsOfKind(kind: MetricsBackendKind): number {
+export function countMetricsSourcesOfKind(kind: MetricsSourceKind): number {
   return integrationsOfKind(kind).length;
 }
 
-export interface MetricsBackendInput {
-  kind: MetricsBackendKind;
+export interface MetricsSourceInput {
+  kind: MetricsSourceKind;
   label: string;
   queryUrl: string;
   queryAuthorization: string | null;
@@ -81,8 +81,8 @@ export interface MetricsBackendInput {
   rulesOrgId: string | null;
 }
 
-export function saveMetricsBackend(
-  input: MetricsBackendInput,
+export function saveMetricsSource(
+  input: MetricsSourceInput,
   id?: string,
 ): string {
   const secrets: Record<string, string> = {};
@@ -109,7 +109,7 @@ export function saveMetricsBackend(
   );
 }
 
-export function deleteMetricsBackend(id: string): boolean {
+export function deleteMetricsSource(id: string): boolean {
   const row = integrationById(id);
   if (row === null || !isMetricsRow(row)) return false;
   return deleteIntegrationById(id);

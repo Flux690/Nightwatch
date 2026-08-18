@@ -1,4 +1,4 @@
-import { ALERT_SOURCE_KINDS, METRICS_BACKEND_KINDS } from "@nightwarden/shared";
+import { ALERT_SOURCE_KINDS, METRICS_SOURCE_KINDS } from "@nightwarden/shared";
 
 /* What an integration is called, what it looks like, and what it gives an
    investigation. One description serves the grid card and the page header, so
@@ -8,7 +8,7 @@ export const INTEGRATION_SLUGS = [
   "docker",
   "kubernetes",
   ...ALERT_SOURCE_KINDS,
-  ...METRICS_BACKEND_KINDS,
+  ...METRICS_SOURCE_KINDS,
   "loki",
   "github",
 ] as const;

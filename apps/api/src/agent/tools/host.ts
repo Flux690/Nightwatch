@@ -6,7 +6,7 @@ import type { Tool } from "./types.js";
 const RUNNER_PROPERTY = {
   type: "string",
   description:
-    "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
+    "The name of one Docker host, written exactly as the <fleet-summary> block lists it. Omit it to read every Docker host at once, which returns one labelled result per host.",
 } as const;
 
 // Said on every one of the six, because a description sits next to the decision
@@ -138,7 +138,7 @@ export const HOST_TOOLS: Tool[] = [
           runner: {
             type: "string",
             description:
-              "The name of one Docker host, written exactly as the FLEET SUMMARY lists it. This is required, because reading a file only makes sense on one named machine.",
+              "The name of one Docker host, written exactly as the <fleet-summary> block lists it. This is required, because reading a file only makes sense on one named machine.",
           },
         },
         required: ["path", "runner"],

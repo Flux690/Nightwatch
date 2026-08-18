@@ -1,26 +1,26 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { isMetricsBackendKind } from "@nightwarden/shared";
+import { isMetricsSourceKind } from "@nightwarden/shared";
 import type {
-  MetricsBackendKind,
-  MetricsBackendStatus,
+  MetricsSourceKind,
+  MetricsSourceStatus,
 } from "@nightwarden/shared";
 import { requireSession } from "../../auth/session.js";
 import {
-  deleteMetricsBackend,
-  getMetricsBackendRow,
-  listMetricsBackendRows,
-  saveMetricsBackend,
+  deleteMetricsSource,
+  getMetricsSourceRow,
+  listMetricsSourceRows,
+  saveMetricsSource,
 } from "../../db/metrics.js";
 import { logger } from "../../logger.js";
 import { MetricsApiError, instantQuery, alertingRules } from "./client.js";
 import {
   authorizationOf,
   endpointFrom,
-  getMetricsBackend,
-  listMetricsBackends,
+  getMetricsSource,
+  listMetricsSources,
   statusOf,
-} from "./backends.js";
+} from "./sources.js";
 import { METRICS_PRESETS } from "./presets.js";
 
 const EndpointSchema = z.object({
@@ -32,7 +32,7 @@ const EndpointSchema = z.object({
 });
 
 const ConnectSchema = z.object({
-  kind: z.string().refine(isMetricsBackendKind, "unknown metrics backend"),
+  kind: z.string().refine(isMetricsSourceKind, "unknown metrics source"),
   query: EndpointSchema,
   // Absent is a legitimate configuration and a stated limitation, not an
   // error: without it the investigation can never confirm the alert cleared.
@@ -41,9 +41,9 @@ const ConnectSchema = z.object({
 
 /* Derived, never asked for: the product's own name is unique until a second of
    the same kind is connected, and then it is that name with a number. */
-function availableName(kind: MetricsBackendKind): string {
+function availableName(kind: MetricsSourceKind): string {
   const taken = new Set(
-    listMetricsBackendRows().map((row) => row.label.toLowerCase()),
+    listMetricsSourceRows().map((row) => row.label.toLowerCase()),
   );
   const base = METRICS_PRESETS[kind].label;
   if (!taken.has(base.toLowerCase())) return base;
@@ -53,15 +53,15 @@ function availableName(kind: MetricsBackendKind): string {
   }
 }
 
-function statusPayload(): MetricsBackendStatus[] {
-  const rows = new Map(listMetricsBackendRows().map((r) => [r.id, r]));
-  return listMetricsBackends().flatMap((backend) => {
-    const row = rows.get(backend.id);
-    return row === undefined ? [] : [statusOf(backend, row.validatedAt)];
+function statusPayload(): MetricsSourceStatus[] {
+  const rows = new Map(listMetricsSourceRows().map((r) => [r.id, r]));
+  return listMetricsSources().flatMap((source) => {
+    const row = rows.get(source.id);
+    return row === undefined ? [] : [statusOf(source, row.validatedAt)];
   });
 }
 
-// bad_query maps to 400 explicitly: a Prometheus-compatible backend reports
+// bad_query maps to 400 explicitly: a Prometheus-compatible source reports
 // envelope errors with HTTP 200, which must not leak through as a success.
 async function sendMetricsError(
   reply: FastifyReply,
@@ -107,7 +107,7 @@ export async function registerMetricsRoutes(
         if (rules !== undefined) {
           await alertingRules(endpointFrom(rules, `${name} rules`));
         }
-        const id = saveMetricsBackend({
+        const id = saveMetricsSource({
           kind,
           label: name,
           queryUrl: query.url,
@@ -118,11 +118,11 @@ export async function registerMetricsRoutes(
             rules === undefined ? null : authorizationOf(rules),
           rulesOrgId: rules?.orgId ?? null,
         });
-        logger.info({ kind, id, url: query.url }, "metrics backend connected");
-        const saved = getMetricsBackend(id);
-        const row = getMetricsBackendRow(id);
+        logger.info({ kind, id, url: query.url }, "metrics source connected");
+        const saved = getMetricsSource(id);
+        const row = getMetricsSourceRow(id);
         if (saved === null || row === null) {
-          return reply.code(500).send({ error: "backend was not stored" });
+          return reply.code(500).send({ error: "source was not stored" });
         }
         return await reply.code(201).send(statusOf(saved, row.validatedAt));
       } catch (err) {
@@ -135,10 +135,10 @@ export async function registerMetricsRoutes(
     "/integrations/metrics/:id",
     { preHandler: requireSession },
     async (request, reply) => {
-      if (!deleteMetricsBackend(request.params.id)) {
-        return reply.code(404).send({ error: "No such metrics backend" });
+      if (!deleteMetricsSource(request.params.id)) {
+        return reply.code(404).send({ error: "No such metrics source" });
       }
-      logger.info({ id: request.params.id }, "metrics backend disconnected");
+      logger.info({ id: request.params.id }, "metrics source disconnected");
       return reply.code(204).send();
     },
   );
