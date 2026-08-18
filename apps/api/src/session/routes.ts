@@ -111,6 +111,7 @@ export async function registerSessionRoutes(
         sessionId: session.sessionId,
         title: session.title,
         createdAt: session.createdAt,
+        lastActivityAt: session.lastActivityAt,
         investigation: session.investigation,
         running: dispatcher.isSessionRunning(request.params.id),
         alerts: session.alerts,

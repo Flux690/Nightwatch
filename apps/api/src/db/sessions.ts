@@ -18,6 +18,7 @@ import { isHumanInputKind, type PendingHumanInput } from "./interrupts.js";
 type StoredSession = SessionMeta & {
   alerts: SessionAlert[];
   investigation: boolean;
+  lastActivityAt: string;
 };
 
 const INSERT_ALERT = `INSERT INTO alerts
@@ -737,15 +738,18 @@ export function getSession(sessionId: string): StoredSession | undefined {
   const row = getDb()
     .prepare(
       `SELECT session_id AS sessionId, title, investigation,
-              created_at AS createdAt
+              created_at AS createdAt, last_activity_at AS lastActivityAt
        FROM sessions WHERE session_id = ?`,
     )
-    .get(sessionId) as (SessionMeta & { investigation: number }) | undefined;
+    .get(sessionId) as
+    | (SessionMeta & { investigation: number; lastActivityAt: string })
+    | undefined;
   if (!row) return undefined;
   return {
     sessionId: row.sessionId,
     title: row.title,
     createdAt: row.createdAt,
+    lastActivityAt: row.lastActivityAt,
     investigation: row.investigation === 1,
     alerts: alertsFor(sessionId),
   };

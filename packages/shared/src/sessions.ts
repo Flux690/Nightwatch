@@ -79,6 +79,9 @@ export interface SessionAlert {
 // investigation itself, so no consumer infers it from a run's leftovers.
 export interface SessionDetail extends SessionMeta {
   investigation: boolean;
+  // The last thing that happened on it. There is no end time to store - a run
+  // can die without writing one - so this is what a finished record is timed to.
+  lastActivityAt: string;
   // Whether a run is in flight right now. The stream carries the deltas; without
   // this the snapshot has three endings and no beginning, so a session rejoined
   // mid-run reads as idle until the next event happens to land.
