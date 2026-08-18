@@ -4,8 +4,8 @@ import type {
   SessionKind,
   SessionListPage,
   SessionRunStatus,
-  Verdict,
 } from "@nightwarden/shared";
+import { leadingHypothesis } from "@nightwarden/shared";
 import {
   countInvestigations,
   listSessionSources,
@@ -47,28 +47,8 @@ const WAITING_ON: Record<
   continue: "Waiting to continue",
 };
 
-// Most confident first. Disproven leads nothing, so it is absent from the
-// ranking rather than last in it.
-const CONFIDENCE: Verdict[] = [
-  "root_cause",
-  "trigger",
-  "contributing_factor",
-  "symptom",
-];
-
-// Rows are appended in proposal order, so `<=` lets the newer of two equally
-// confident claims lead - the one the run reached last.
 function leadingClaim(report: Report | null): Hypothesis | null {
-  let best: Hypothesis | null = null;
-  let bestRank = CONFIDENCE.length;
-  for (const h of report?.hypotheses ?? []) {
-    const rank = CONFIDENCE.indexOf(h.verdict);
-    if (rank !== -1 && rank <= bestRank) {
-      best = h;
-      bestRank = rank;
-    }
-  }
-  return best;
+  return leadingHypothesis(report?.hypotheses ?? []);
 }
 
 // What it waits on when nobody is gating it: the recommendation it wrote, or the

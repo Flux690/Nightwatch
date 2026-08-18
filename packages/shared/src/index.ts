@@ -195,6 +195,7 @@ export type {
   ReportConviction,
   SessionReportResponse,
 } from "./reports.js";
+export { rankHypotheses, leadingHypothesis } from "./reports.js";
 export type {
   CatalogError,
   LLMProviderName,

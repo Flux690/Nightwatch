@@ -28,6 +28,38 @@ export interface Hypothesis {
   recordedAt: string;
 }
 
+// Most confident first. `disproven` sorts last and never leads: it is what the
+// run ruled out, not what it concluded.
+const VERDICT_ORDER: readonly Verdict[] = [
+  "root_cause",
+  "trigger",
+  "contributing_factor",
+  "symptom",
+  "disproven",
+];
+
+/* One ordering, so the queue row and the report cannot name different leading
+   claims. Equal confidence breaks on recording order, newest first: that is the
+   conclusion the run reached after the most work. */
+export function rankHypotheses(hypotheses: Hypothesis[]): Hypothesis[] {
+  return hypotheses
+    .map((hypothesis, recorded) => ({ hypothesis, recorded }))
+    .sort(
+      (a, b) =>
+        VERDICT_ORDER.indexOf(a.hypothesis.verdict) -
+          VERDICT_ORDER.indexOf(b.hypothesis.verdict) ||
+        b.recorded - a.recorded,
+    )
+    .map(({ hypothesis }) => hypothesis);
+}
+
+// What the run currently stands behind, or null when it stands behind nothing.
+export function leadingHypothesis(hypotheses: Hypothesis[]): Hypothesis | null {
+  return (
+    rankHypotheses(hypotheses).find((h) => h.verdict !== "disproven") ?? null
+  );
+}
+
 // Which strand of the incident a moment belongs to. `action` is absent here
 // because it is not the model's to claim: a released write is contributed by the
 // system, and carries `action` below instead.

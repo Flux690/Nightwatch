@@ -9,6 +9,7 @@ import type {
   TimelineEntry,
   Verdict,
 } from "@nightwarden/shared";
+import { rankHypotheses } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { StatusText, type StatusTone } from "@/components/ui/status";
@@ -32,15 +33,6 @@ const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
   symptom: { label: "Symptom", className: "text-muted-foreground" },
   disproven: { label: "Disproven", className: "text-muted-foreground" },
 };
-
-// Most confident first, so the claim that decides what happens next leads.
-const CONFIDENCE: Verdict[] = [
-  "root_cause",
-  "trigger",
-  "contributing_factor",
-  "symptom",
-  "disproven",
-];
 
 function SectionHeading({
   children,
@@ -262,9 +254,7 @@ export function ReportPanel({
   // existed carries no key at all, and an absent one must read as "not written
   // up yet", not as an object to reach into.
   const submitted = report.submitted ?? null;
-  const ranked = [...report.hypotheses].sort(
-    (a, b) => CONFIDENCE.indexOf(a.verdict) - CONFIDENCE.indexOf(b.verdict),
-  );
+  const ranked = rankHypotheses(report.hypotheses);
   const findings = ranked.filter((h) => h.verdict !== "disproven");
   const ruledOut = ranked.filter((h) => h.verdict === "disproven");
   const timeline = mergedTimeline(submitted?.timeline ?? [], decisions);
