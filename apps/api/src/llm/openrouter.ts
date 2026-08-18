@@ -137,7 +137,10 @@ export function describeOpenRouterModels(data: unknown): ModelOption[] {
       {
         id,
         reasoning: reasoning === null ? null : describeReasoning(reasoning),
-        maxOutputTokens: maxCompletionTokens(entry["top_provider"]),
+        maxOutputTokens: maxCompletionTokens(
+          entry["top_provider"],
+          entry["context_length"],
+        ),
         /* The gateway drops messages from the middle rather than summarising, which in
            an agentic transcript is where every tool result lives. */
         maxInputTokens: null,
@@ -171,10 +174,17 @@ function describeReasoning(
   };
 }
 
-function maxCompletionTokens(topProvider: unknown): number | null {
+/* A ceiling equal to the whole window is not a ceiling: input and output share
+   that budget, so sending it as max_tokens overflows by the size of the prompt
+   and every request is refused. Read as "none published" and take the default. */
+function maxCompletionTokens(
+  topProvider: unknown,
+  contextLength: unknown,
+): number | null {
   if (typeof topProvider !== "object" || topProvider === null) return null;
   const max = (topProvider as Record<string, unknown>)["max_completion_tokens"];
-  return typeof max === "number" && max > 0 ? max : null;
+  if (typeof max !== "number" || max <= 0) return null;
+  return typeof contextLength === "number" && max >= contextLength ? null : max;
 }
 
 // OpenRouter speaks the OpenAI chat-completions wire format, so the `openai`

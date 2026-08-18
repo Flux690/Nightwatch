@@ -647,6 +647,34 @@ describe("provider/model config seam", () => {
       expect(models[0]?.reasoning?.defaultLevel).toBe("medium");
     });
 
+    /* Found against the live gateway: a free model published a completion
+       ceiling equal to its whole context, we sent it as max_tokens, and every
+       request was refused for asking for one token more than the window. */
+    it("OpenRouter: reads a ceiling equal to the window as no ceiling at all", async () => {
+      useOpenRouter();
+      stubFetch(() =>
+        mockResponse(200, {
+          data: [
+            {
+              id: "vendor/whole-window:free",
+              context_length: 512_000,
+              top_provider: { max_completion_tokens: 512_000 },
+            },
+            {
+              id: "vendor/real-ceiling",
+              context_length: 200_000,
+              top_provider: { max_completion_tokens: 8_192 },
+            },
+          ],
+        }),
+      );
+
+      const models = await getModels();
+
+      expect(models[0]?.maxOutputTokens).toBeNull();
+      expect(models[1]?.maxOutputTokens).toBe(8_192);
+    });
+
     it("OpenRouter: refuses to offer an off switch for a mandatory model, which rejects it", async () => {
       useOpenRouter();
       stubFetch(() =>
