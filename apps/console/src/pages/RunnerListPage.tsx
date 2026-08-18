@@ -25,27 +25,25 @@ import {
 } from "@/components/ui/empty";
 import { ICON_DISPLAY, ICON_INLINE } from "@/lib/iconProps";
 import { apiFetch } from "@/api/client";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
 // The two platforms are genuinely different things - a machine running
 // containers, and a cluster - so each gets its own noun, page and install path.
 
 export const PLATFORM_COPY: Record<
   Platform,
-  { plural: string; singular: string; blurb: string; emptyHint: string }
+  { plural: string; singular: string; emptyHint: string }
 > = {
   docker: {
     plural: "Docker hosts",
     singular: "Docker host",
-    blurb:
-      "A runner sits on each host and collects the evidence investigations need. Read-only by default; every write waits for your approval.",
     emptyHint:
       "The runner connected but sees no containers. That usually means the Docker socket is not mounted.",
   },
   kubernetes: {
     plural: "Kubernetes clusters",
     singular: "Kubernetes cluster",
-    blurb:
-      "One runner per cluster, not per node. It collects the evidence investigations need, read-only by default; every write waits for your approval.",
     emptyHint:
       "The runner connected but sees no workloads. That usually means its service account cannot list them.",
   },
@@ -179,7 +177,9 @@ export function RunnerListPage({
       {/* Withheld while the list is empty: the empty state already says what
           this is and what to do, and saying it twice reads as a stutter. */}
       {connected.length > 0 && (
-        <p className="-mt-2 mb-4 text-sm text-muted-foreground">{copy.blurb}</p>
+        <div className="-mt-2 mb-4">
+          <IntegrationHeader identity={INTEGRATION_CATALOG[platform]} />
+        </div>
       )}
 
       {removeError !== null && (

@@ -8,11 +8,6 @@ export interface AlertSourceField {
 }
 
 export interface AlertSourceContent {
-  label: string;
-  // Named rather than derived from the kind: Alertmanager ships as part of
-  // Prometheus and is recognised by that mark.
-  logo: string;
-  blurb: string;
   setupStep: string;
   confirmStep: string;
   fields: (ingestUrl: string) => AlertSourceField[];
@@ -47,10 +42,6 @@ function alertmanagerTemplate(ingestUrl: string): {
 export const ALERT_SOURCE_CONTENT: Record<AlertSourceKind, AlertSourceContent> =
   {
     alertmanager: {
-      label: "Prometheus Alertmanager",
-      logo: "/logos/prometheus.svg",
-      blurb:
-        "Forward alerts from the Alertmanager you already run. One credential covers the whole fleet.",
       setupStep: "1. Add this receiver to your alertmanager.yml",
       confirmStep: "2. Reload Alertmanager",
       fields: (ingestUrl) => [{ label: "Ingest URL", value: ingestUrl }],
@@ -62,10 +53,6 @@ export const ALERT_SOURCE_CONTENT: Record<AlertSourceKind, AlertSourceContent> =
         "The current credential stops working immediately, and your Alertmanager stops delivering until you paste the new one into the receiver.",
     },
     grafana: {
-      label: "Grafana Alerting",
-      logo: "/logos/grafana.svg",
-      blurb:
-        "Forward alerts from Grafana's own alerting. Add a Webhook contact point and point it here.",
       setupStep:
         "1. In Grafana, go to Alerting - Contact points - Add contact point, choose Webhook, and fill in these values",
       confirmStep: "2. Save the contact point and route an alert to it",

@@ -8,13 +8,11 @@ import type {
   RunnerRecord,
 } from "@nightwarden/shared";
 import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
-import { Boxes, Server } from "lucide-react";
 
 import { Page, SECTION_HEADING } from "@/components/layout/Page";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
-import { ALERT_SOURCE_CONTENT } from "./alertSourceContent";
-import { METRICS_BACKEND_CONTENT } from "./metricsBackendContent";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
 
 // Named for what a connection gives an investigation. A section appears with
 // its first card.
@@ -26,7 +24,7 @@ interface IntegrationCard {
   title: string;
   description: string;
   category: Category;
-  logo: React.ReactNode;
+  logo: string;
   to: string;
   // null renders no status line at all: six repetitions of "Not connected"
   // crowd out the ones that matter. "muted" is configured but not yet proven.
@@ -46,13 +44,13 @@ function CatalogCard({
       type="button"
       aria-label={card.title}
       onClick={onOpen}
-      className="flex h-39 flex-col gap-3 rounded-lg bg-card p-4 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
+      className="flex h-39 flex-col gap-3 rounded-lg p-4 text-left ring-1 ring-border transition-colors hover:bg-surface-hover"
     >
       <span className="flex items-center gap-2">
         {/* The square is white because vendor logos are drawn for light
             ground; anything monochrome inherits dark ink from it. */}
         <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-white text-background">
-          {card.logo}
+          <img src={card.logo} alt="" className="size-5" />
         </span>
         <span className="min-w-0 text-sm leading-tight font-medium">
           {card.title}
@@ -95,15 +93,14 @@ function useAlertSource(kind: AlertSourceKind): AlertSourceStatus | undefined {
    has never delivered is the failure this whole surface exists to catch. */
 function alertSourceCard(
   kind: AlertSourceKind,
-  description: string,
   status: AlertSourceStatus | undefined,
 ): IntegrationCard {
-  const content = ALERT_SOURCE_CONTENT[kind];
+  const identity = INTEGRATION_CATALOG[kind];
   return {
-    title: content.label,
-    description,
+    title: identity.label,
+    description: identity.description,
     category: "Alerting",
-    logo: <img src={content.logo} alt="" className="size-5" />,
+    logo: identity.logo,
     to: `/integrations/alerting/${kind}`,
     status:
       status?.configured !== true
@@ -154,62 +151,38 @@ export function IntegrationsPage(): React.JSX.Element {
   // rather than its wizard, which is a step you choose from there.
   function platformCard(
     platform: "docker" | "kubernetes",
-    title: string,
-    description: string,
     noun: string,
   ): IntegrationCard {
+    const identity = INTEGRATION_CATALOG[platform];
     const count = connectedRunners.filter(
       (r) => r.platform === platform,
     ).length;
     return {
-      title,
-      description,
+      title: identity.label,
+      description: identity.description,
       category: "Fleet",
-      logo:
-        platform === "docker" ? (
-          <Server className="size-5" />
-        ) : (
-          <Boxes className="size-5" />
-        ),
+      logo: identity.logo,
       to: `/integrations/${platform}`,
       status: count > 0 ? `${count} ${count === 1 ? noun : `${noun}s`}` : null,
     };
   }
 
   const cards: IntegrationCard[] = [
-    platformCard(
-      "docker",
-      "Docker hosts",
-      "Read container state, logs and stats, and restart a service on approval.",
-      "host",
-    ),
-    platformCard(
-      "kubernetes",
-      "Kubernetes clusters",
-      "Read pod state, events and logs, and roll a deployment on approval.",
-      "cluster",
-    ),
-    alertSourceCard(
-      "alertmanager",
-      "Forward the alerts that open an investigation the moment one fires.",
-      alertmanager,
-    ),
-    alertSourceCard(
-      "grafana",
-      "Forward alerts from Grafana's own alerting, through a webhook contact point.",
-      grafana,
-    ),
+    platformCard("docker", "host"),
+    platformCard("kubernetes", "cluster"),
+    alertSourceCard("alertmanager", alertmanager),
+    alertSourceCard("grafana", grafana),
     ...METRICS_BACKEND_KINDS.map((kind): IntegrationCard => {
-      const content = METRICS_BACKEND_CONTENT[kind];
+      const identity = INTEGRATION_CATALOG[kind];
       const connected = (metrics ?? []).filter((b) => b.kind === kind);
       /* A backend with no rules endpoint is connected and still cannot confirm
          a recovery, so the card says which rather than a flat "Connected". */
       const blind = connected.filter((b) => b.rules === null).length;
       return {
-        title: content.label,
-        description: content.cardDescription,
+        title: identity.label,
+        description: identity.description,
         category: "Metrics",
-        logo: <img src={content.logo} alt="" className="size-5" />,
+        logo: identity.logo,
         to: `/integrations/metrics/${kind}`,
         status:
           connected.length === 0
@@ -221,20 +194,18 @@ export function IntegrationsPage(): React.JSX.Element {
       };
     }),
     {
-      title: "Grafana Loki",
-      description:
-        "Search your logs for the errors behind an alert and quote them as evidence.",
+      title: INTEGRATION_CATALOG.loki.label,
+      description: INTEGRATION_CATALOG.loki.description,
+      logo: INTEGRATION_CATALOG.loki.logo,
       category: "Logs",
-      logo: <img src="/logos/loki.svg" alt="" className="size-5" />,
       to: "/integrations/loki",
       status: loki?.configured === true ? "Connected" : null,
     },
     {
-      title: "GitHub",
-      description:
-        "Read the code behind a failure, verify a fix, and open a draft pull request.",
+      title: INTEGRATION_CATALOG.github.label,
+      description: INTEGRATION_CATALOG.github.description,
+      logo: INTEGRATION_CATALOG.github.logo,
       category: "Code",
-      logo: <img src="/logos/github.svg" alt="" className="size-5" />,
       to: "/integrations/github",
       status: github?.configured === true ? "Connected" : null,
     },

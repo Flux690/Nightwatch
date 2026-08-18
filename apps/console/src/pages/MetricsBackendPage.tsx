@@ -20,6 +20,8 @@ import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
 import { METRICS_BACKEND_CONTENT } from "./metricsBackendContent";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
 interface EndpointDraft {
   url: string;
@@ -113,7 +115,7 @@ function EndpointFields({
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-org`}>Tenant (optional)</FieldLabel>
         <FieldDescription>
-          Sent as X-Scope-OrgID. Required by Mimir whenever multi-tenancy is on.
+          Mimir requires a tenant when multi-tenancy is on.
         </FieldDescription>
         <Input
           className="max-w-control"
@@ -132,6 +134,7 @@ export function MetricsBackendPage({
   kind: MetricsBackendKind;
 }): React.JSX.Element {
   const content = METRICS_BACKEND_CONTENT[kind];
+  const identity = INTEGRATION_CATALOG[kind];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [query, setQuery] = useState<EndpointDraft>(EMPTY);
@@ -164,7 +167,7 @@ export function MetricsBackendPage({
     onSuccess: async () => {
       setQuery(EMPTY);
       setRules(EMPTY);
-      toast.success(`${content.label} connected`);
+      toast.success(`${identity.label} connected`);
       await queryClient.invalidateQueries({ queryKey: ["metrics-backends"] });
     },
     onError: (err) =>
@@ -177,7 +180,7 @@ export function MetricsBackendPage({
     mutationFn: (id: string) =>
       apiFetch<void>(`/api/integrations/metrics/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
-      toast.success(`${content.label} disconnected`);
+      toast.success(`${identity.label} disconnected`);
       await queryClient.invalidateQueries({ queryKey: ["metrics-backends"] });
       void navigate({ to: "/integrations" });
     },
@@ -193,11 +196,11 @@ export function MetricsBackendPage({
     <Page
       crumbs={[
         { label: "Integrations", to: "/integrations" },
-        { label: content.label },
+        { label: identity.label },
       ]}
     >
       <div className="flex flex-col gap-8">
-        <p className="text-sm text-muted-foreground">{content.blurb}</p>
+        <IntegrationHeader identity={identity} />
 
         {isLoading && (
           <div className="flex items-center gap-2">
@@ -326,7 +329,7 @@ export function MetricsBackendPage({
       <ConfirmDialog
         open={confirmRemove !== null}
         onOpenChange={(open) => !open && setConfirmRemove(null)}
-        title={`Disconnect ${content.label}?`}
+        title={`Disconnect ${identity.label}?`}
         description="Investigations lose metric evidence from this backend until it is reconnected."
         confirmLabel="Disconnect"
         destructive

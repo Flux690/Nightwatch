@@ -15,6 +15,8 @@ import { timeAgo } from "@/lib/time";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
 import { ALERT_SOURCE_CONTENT } from "./alertSourceContent";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
 interface CredentialStatus {
   configured: boolean;
@@ -28,6 +30,7 @@ export function AlertSourcePage({
   kind: AlertSourceKind;
 }): React.JSX.Element {
   const content = ALERT_SOURCE_CONTENT[kind];
+  const identity = INTEGRATION_CATALOG[kind];
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // Set only by a mint, cleared only by the user saying they have copied it.
@@ -72,7 +75,7 @@ export function AlertSourcePage({
   const disconnect = useMutation({
     mutationFn: () => apiFetch<void>(base, { method: "DELETE" }),
     onSuccess: async () => {
-      toast.success(`${content.label} disconnected`);
+      toast.success(`${identity.label} disconnected`);
       await queryClient.invalidateQueries({ queryKey });
       void navigate({ to: "/integrations" });
     },
@@ -91,7 +94,7 @@ export function AlertSourcePage({
     <Page
       crumbs={[
         { label: "Integrations", to: "/integrations" },
-        { label: content.label },
+        { label: identity.label },
       ]}
       controls={
         configured && !unsaved && status ? (
@@ -112,7 +115,7 @@ export function AlertSourcePage({
       }
     >
       <div className="flex flex-col gap-8">
-        <p className="text-sm text-muted-foreground">{content.blurb}</p>
+        <IntegrationHeader identity={identity} />
 
         {isLoading && (
           <div className="flex items-center gap-2">
@@ -219,7 +222,7 @@ export function AlertSourcePage({
       <ConfirmDialog
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
-        title={`Disconnect ${content.label}?`}
+        title={`Disconnect ${identity.label}?`}
         description="The credential stops working immediately and further deliveries are refused. Investigations already open are unaffected."
         confirmLabel="Disconnect"
         destructive

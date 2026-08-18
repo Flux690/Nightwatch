@@ -13,6 +13,8 @@ import { Page } from "@/components/layout/Page";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { toast } from "@/lib/toast";
 import { ApiError, apiFetch } from "@/api/client";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
 export function LokiPage(): React.JSX.Element {
   const queryClient = useQueryClient();
@@ -77,10 +79,7 @@ export function LokiPage(): React.JSX.Element {
       ]}
     >
       <div className="flex flex-col gap-8">
-        <p className="text-sm text-muted-foreground">
-          Connect the Loki you already run so investigations can read your logs.
-          Read-only, and works with zero runners installed.
-        </p>
+        <IntegrationHeader identity={INTEGRATION_CATALOG.loki} />
 
         {isLoading && (
           <div className="flex items-center gap-2">
@@ -94,9 +93,8 @@ export function LokiPage(): React.JSX.Element {
             <Field>
               <FieldLabel htmlFor="loki-url">Loki URL</FieldLabel>
               <FieldDescription>
-                The base URL of your Loki. NightWarden connects from its own
-                machine, so the address has to work from there, not from this
-                browser. Don&apos;t expose Loki to the public internet.
+                NightWarden dials this from its own machine, so it must be
+                reachable from there.
               </FieldDescription>
               <Input
                 className="max-w-control"
@@ -111,8 +109,7 @@ export function LokiPage(): React.JSX.Element {
                 Authorization header (optional)
               </FieldLabel>
               <FieldDescription>
-                Only if your Loki sits behind auth: the full header value, sent
-                as-is and stored encrypted.
+                Add this only if your Loki sits behind authentication.
               </FieldDescription>
               <Input
                 className="max-w-control"
@@ -126,8 +123,8 @@ export function LokiPage(): React.JSX.Element {
             <Field>
               <FieldLabel htmlFor="loki-org">Tenant ID (optional)</FieldLabel>
               <FieldDescription>
-                For multi-tenant Loki (Grafana Cloud, or auth_enabled): the
-                X-Scope-OrgID value. Leave blank for single-tenant Loki.
+                Multi-tenant Loki needs a tenant here; single-tenant Loki does
+                not.
               </FieldDescription>
               <Input
                 className="max-w-control"

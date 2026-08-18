@@ -155,9 +155,7 @@ export function AddRunnerPage({
               Display name (optional)
             </FieldLabel>
             <FieldDescription>
-              Only tells connected runners apart, in the console and when the
-              agent addresses one directly. It affects nothing else: services
-              are identified by what your infrastructure already publishes.
+              This name only tells your runners apart in the console.
             </FieldDescription>
             <Input
               className="max-w-control"

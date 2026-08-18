@@ -29,6 +29,8 @@ import { expiryDaysFrom } from "@/hooks/useGitHubExpiryDays";
 import { ICON_UI } from "@/lib/iconProps";
 import { toast } from "@/lib/toast";
 import { apiFetch } from "@/api/client";
+import { INTEGRATION_CATALOG } from "./integrationCatalog";
+import { IntegrationHeader } from "@/components/layout/IntegrationHeader";
 
 /* Repo selection stays on GitHub's own picker, the user's deliberate consent
    moment; no `issues` permission since NightWarden opens PRs, not issues. */
@@ -394,10 +396,7 @@ export function GitHubConnectPage(): React.JSX.Element {
       ]}
     >
       <div className="flex flex-col gap-6">
-        <p className="text-sm text-muted-foreground">
-          Let investigations read the bound repository, verify a fix, and
-          propose it as a draft pull request. NightWarden never merges.
-        </p>
+        <IntegrationHeader identity={INTEGRATION_CATALOG.github} />
         {preflightIssue !== null && (
           <Alert variant="destructive">
             <AlertTitle>Code sandbox prerequisites missing</AlertTitle>

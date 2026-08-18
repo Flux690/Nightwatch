@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +22,7 @@ import type {
 
 import { TestProviders } from "./renderWithProviders.js";
 import { MetricsBackendPage } from "../pages/MetricsBackendPage.js";
+import { INTEGRATION_CATALOG } from "../pages/integrationCatalog.js";
 
 // The page navigates on disconnect, so it needs a real router around it.
 function renderPage(kind: MetricsBackendKind) {
@@ -118,6 +125,20 @@ describe("MetricsBackendPage", () => {
 
     const warning = await screen.findByText(/No rules endpoint/);
     expect(warning.textContent).toMatch(/will not\s+reach Resolved/);
+  });
+
+  /* The page opens with the same identity the grid card carries, from one
+     description rather than two that can drift apart. */
+  it("heads the page with the product's mark, name and description", async () => {
+    stubApi([]);
+    renderPage("victoriametrics");
+
+    // The breadcrumb carries the name too, so the assertion is scoped.
+    const header = await screen.findByTestId("integration-header");
+    expect(within(header).getByText("VictoriaMetrics")).toBeInTheDocument();
+    expect(
+      within(header).getByText(INTEGRATION_CATALOG.victoriametrics.description),
+    ).toBeInTheDocument();
   });
 
   it("warns that VictoriaMetrics answers nothing for metric metadata", async () => {
