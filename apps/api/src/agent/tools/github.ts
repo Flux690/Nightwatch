@@ -1,5 +1,4 @@
 import type { ToolOutcome } from "@nightwarden/shared";
-import { decrypt } from "../../secrets.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
 import { alertAnchorFor } from "./alert-anchor.js";
 import { ITEM_BUDGET_CHARS, fitWithinBudget } from "./result-budget.js";
@@ -206,7 +205,7 @@ export const GITHUB_TOOLS: Tool[] = [
       // Like the repo tools, this never throws into the loop: every failure
       // becomes a corrective result the agent can act on.
       try {
-        const token = decrypt(integration.tokenEncrypted);
+        const token = integration.token;
         const branch = await defaultBranch(token, repoOwner, repoName);
         const [{ pullRequests, mergeShas, note }, allCommits] =
           await Promise.all([

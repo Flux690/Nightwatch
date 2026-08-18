@@ -421,10 +421,12 @@ In the console go to **Integrations**, where each card is grouped by what it giv
 
 **Wire your alerts.** NightWarden does not ship a monitoring stack - forward alerts from the one you already run. Two senders are offered under **Alerting**, and you can connect either or both:
 
-- **Prometheus Alertmanager** hands you a ready-made receiver snippet to paste into your `alertmanager.yml`. Leave `send_resolved` at its default of true: the resolved notification is one of the two ways an investigation learns the alert stopped firing.
+- **Prometheus Alertmanager** hands you the ingest URL, the credential, and a receiver block to paste into your `alertmanager.yml`. The block carries a placeholder where the credential goes rather than the credential itself, so it is safe to paste into a ticket or a config repo. Leave `send_resolved` at its default of true: the resolved notification is one of the two ways an investigation learns the alert stopped firing.
 - **Grafana Alerting** hands you the URL and credential for a Webhook contact point. Leave **Custom Payload** empty - a custom body replaces the one NightWarden reads - and leave **Disable resolved message** off, for the same reason as `send_resolved`.
 
-Each mints its own credential and reports its own deliveries, so rotating one leaves the other alone. NightWarden generates that credential; you paste it into the sender. The card's status reflects delivery rather than configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". A credential covers the whole fleet and is never per runner.
+Each mints its own credential and reports its own deliveries, so rotating one leaves the other alone. The card's status reflects delivery rather than configuration - "Waiting for first alert" until a webhook actually lands, then "Receiving". A credential covers the whole fleet and is never per runner.
+
+**The credential is shown once.** NightWarden stores only a hash of it, so no screen and no endpoint can show it again - copy it when it is generated. Lose it and **Rotate** issues a new one, which stops the old one working the moment it is created. **Disconnect** revokes it outright and refuses further deliveries.
 
 That is the whole setup: an alert resolves to a service from the Compose labels and Kubernetes workload names your infrastructure already publishes, so there is nothing to label and nothing to keep in sync. The ingest endpoint accepts the token via either an `Authorization: Bearer` header or an `X-NightWarden-Token` header, and recognizes a delivery by the shape of its body (`{ alerts: [...] }`) rather than by any client-controlled header. Anything that produces that envelope is accepted, which is why Mimir, Thanos and VictoriaMetrics need nothing of their own - they all notify through Alertmanager or a fork of it. You can also start an investigation at any time from the console chat, with no alert source at all.
 
@@ -626,9 +628,10 @@ apps/
       config/           user settings: the config store, its routes, health and the run-readiness gate
       console/          serves the built console beside the API bundle, with an SPA fallback
       db/               SQLite schema and table modules (FKs on, no migrations)
+                        integrations.ts holds every configured connection in one table
       env/              values fixed at boot from the environment: state-directory paths, PUBLIC_URL, the master key
       integrations/     GitHub / Loki clients and connect/status routes
-                        metrics/ one Prometheus-API client, its auth, the per-product presets and
+                        metrics/ one Prometheus-API client, the per-product presets and
                         what each backend cannot answer
       llm/              provider factory (Anthropic / OpenRouter)
       runners/          runner registry and the one install-artifact endpoint

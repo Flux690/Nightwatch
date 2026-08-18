@@ -28,7 +28,6 @@ import { reapOrphans } from "./sandbox/docker.js";
 import { salvageWorkspaces } from "./sandbox/salvage.js";
 import { releaseContainers } from "./sandbox/workspace.js";
 import { COMMIT_AUTHOR } from "./agent/tools/repo.js";
-import { decrypt } from "./secrets.js";
 import { getGitHubIntegration } from "./db/integrations.js";
 import {
   nightwardenDir,
@@ -126,7 +125,7 @@ const start = async (): Promise<void> => {
             new Error("GitHub integration is not configured"),
           );
         }
-        return Promise.resolve(buildAuthHeader(decrypt(row.tokenEncrypted)));
+        return Promise.resolve(buildAuthHeader(row.token));
       },
       commitAuthor: COMMIT_AUTHOR,
       log: logger,

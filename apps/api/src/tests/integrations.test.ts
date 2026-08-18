@@ -63,6 +63,21 @@ function stubFetch(
   return mock;
 }
 
+/* The secret column holds one encrypted value whose plaintext is a map, so a
+   test reads the key it wrote rather than the column. */
+function rawSecrets(kind: string): string {
+  const row = getDb()
+    .prepare("SELECT secrets FROM integrations WHERE kind = ?")
+    .get(kind) as { secrets: string | null } | undefined;
+  return row?.secrets ?? "";
+}
+
+function storedSecret(kind: string, key: string): string | undefined {
+  const raw = rawSecrets(kind);
+  if (raw === "") return undefined;
+  return (JSON.parse(decrypt(raw)) as Record<string, string>)[key];
+}
+
 describe("GitHub integration routes", () => {
   let server: FastifyInstance;
   let cleanupDb: () => void;
@@ -259,13 +274,8 @@ describe("GitHub integration routes", () => {
         expiresAt: EXPIRY_ISO,
       });
 
-      const row = getDb()
-        .prepare(
-          "SELECT secret_encrypted FROM integrations WHERE kind = 'github'",
-        )
-        .get() as { secret_encrypted: string };
-      expect(row.secret_encrypted).not.toContain(TOKEN);
-      expect(decrypt(row.secret_encrypted)).toBe(TOKEN);
+      expect(rawSecrets("github")).not.toContain(TOKEN);
+      expect(storedSecret("github", "token")).toBe(TOKEN);
     });
 
     it("uses the stored token for the picker proxy after binding", async () => {
@@ -354,12 +364,7 @@ describe("GitHub integration routes", () => {
       const headers = (calledInit?.headers ?? {}) as Record<string, string>;
       expect(headers["Authorization"]).toBe(`Bearer ${TOKEN}`);
 
-      const row = getDb()
-        .prepare(
-          "SELECT secret_encrypted FROM integrations WHERE kind = 'github'",
-        )
-        .get() as { secret_encrypted: string };
-      expect(decrypt(row.secret_encrypted)).toBe(TOKEN);
+      expect(storedSecret("github", "token")).toBe(TOKEN);
     });
 
     it("surfaces repo_not_found the same way bind does, without accepting a token", async () => {
@@ -439,7 +444,7 @@ describe("metrics backend routes", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    getDb().prepare("DELETE FROM metrics_backends").run();
+    getDb().prepare("DELETE FROM integrations").run();
   });
 
   function authed(opts: {
@@ -531,11 +536,8 @@ describe("metrics backend routes", () => {
 
     const expected = `Basic ${Buffer.from("123456:glc-token", "utf8").toString("base64")}`;
     expect(sawAuth).toBe(expected);
-    const row = getDb()
-      .prepare("SELECT query_auth_encrypted AS a FROM metrics_backends")
-      .get() as { a: string };
-    expect(decrypt(row.a)).toBe(expected);
-    expect(row.a).not.toContain("glc-token");
+    expect(storedSecret("mimir", "query")).toBe(expected);
+    expect(rawSecrets("mimir")).not.toContain("glc-token");
   });
 
   /* A legitimate configuration, not an error - and the one the console has to
@@ -726,7 +728,7 @@ describe("Alertmanager integration routes", () => {
 
     const row = getDb()
       .prepare(
-        "SELECT token_hash FROM alert_sources WHERE kind = 'alertmanager'",
+        "SELECT token_hash FROM integrations WHERE kind = 'alertmanager'",
       )
       .get() as { token_hash: string };
     expect(row.token_hash).toBe(sha256hex(token));
@@ -773,12 +775,12 @@ describe("Alertmanager integration routes", () => {
 
     const row = getDb()
       .prepare(
-        "SELECT token_hash, last_received_at FROM alert_sources WHERE kind = 'alertmanager'",
+        "SELECT token_hash, last_used_at FROM integrations WHERE kind = 'alertmanager'",
       )
-      .get() as { token_hash: string; last_received_at: string | null };
+      .get() as { token_hash: string; last_used_at: string | null };
     expect(row.token_hash).toBe(sha256hex(newToken));
     expect(row.token_hash).not.toBe(sha256hex(oldToken));
-    expect(row.last_received_at).toBeNull();
+    expect(row.last_used_at).toBeNull();
   });
 });
 
@@ -869,12 +871,10 @@ describe("Loki integration routes", () => {
     expect(String(mock.mock.calls[0]?.[0])).not.toContain("secret-123");
 
     const row = getDb()
-      .prepare(
-        "SELECT config, secret_encrypted FROM integrations WHERE kind = 'loki'",
-      )
-      .get() as { config: string; secret_encrypted: string };
-    expect(decrypt(row.secret_encrypted)).toBe("Bearer secret-123");
-    expect(row.secret_encrypted).not.toContain("secret-123");
+      .prepare("SELECT config FROM integrations WHERE kind = 'loki'")
+      .get() as { config: string };
+    expect(storedSecret("loki", "authorization")).toBe("Bearer secret-123");
+    expect(rawSecrets("loki")).not.toContain("secret-123");
     expect(JSON.parse(row.config)).toEqual({
       baseUrl: "http://loki.internal:3100/",
       orgId: "team-a",

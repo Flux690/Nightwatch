@@ -1,4 +1,3 @@
-import { decrypt } from "../../secrets.js";
 import { getLokiIntegration } from "../../db/integrations.js";
 import {
   LokiApiError,
@@ -139,10 +138,6 @@ function nsToIso(ns: string): string {
   }
 }
 
-function decryptedAuth(authHeaderEncrypted: string | null): string | null {
-  return authHeaderEncrypted ? decrypt(authHeaderEncrypted) : null;
-}
-
 function notConfigured(): ToolExecuteResult {
   return {
     content:
@@ -270,7 +265,7 @@ export const LOKI_TOOLS: Tool[] = [
       try {
         const data = await queryLogRange(
           integration.baseUrl,
-          decryptedAuth(integration.authHeaderEncrypted),
+          integration.authorization,
           integration.orgId,
           query,
           start,
@@ -421,7 +416,7 @@ export const LOKI_TOOLS: Tool[] = [
       try {
         const data = await queryMetricRange(
           integration.baseUrl,
-          decryptedAuth(integration.authHeaderEncrypted),
+          integration.authorization,
           integration.orgId,
           query,
           start,
@@ -472,7 +467,7 @@ export const LOKI_TOOLS: Tool[] = [
       const integration = getLokiIntegration();
       if (integration === null) return notConfigured();
       const { baseUrl, orgId } = integration;
-      const auth = decryptedAuth(integration.authHeaderEncrypted);
+      const auth = integration.authorization;
       const { start, end } = anchoredWindow(
         ctx.sessionId,
         DISCOVERY_LOOKBACK_MINUTES,

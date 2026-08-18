@@ -15,7 +15,7 @@ import {
 import { logger } from "../../logger.js";
 import { MetricsApiError, instantQuery, alertingRules } from "./client.js";
 import {
-  encryptedAuthorization,
+  authorizationOf,
   endpointFrom,
   getMetricsBackend,
   listMetricsBackends,
@@ -111,11 +111,11 @@ export async function registerMetricsRoutes(
           kind,
           label: name,
           queryUrl: query.url,
-          queryAuthEncrypted: encryptedAuthorization(query),
+          queryAuthorization: authorizationOf(query),
           queryOrgId: query.orgId ?? null,
           rulesUrl: rules?.url ?? null,
-          rulesAuthEncrypted:
-            rules === undefined ? null : encryptedAuthorization(rules),
+          rulesAuthorization:
+            rules === undefined ? null : authorizationOf(rules),
           rulesOrgId: rules?.orgId ?? null,
         });
         logger.info({ kind, id, url: query.url }, "metrics backend connected");

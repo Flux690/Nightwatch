@@ -19,7 +19,6 @@ import {
   createScriptRunner,
 } from "./contract-fake-provider.js";
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
 import {
   deleteGitHubIntegration,
@@ -178,7 +177,7 @@ beforeAll(() => {
   installGitMock();
   installDockerMock();
   saveGitHubIntegration({
-    tokenEncrypted: encrypt("github_pat_fixture"),
+    token: "github_pat_fixture",
     repoOwner: "acme",
     repoName: "api",
     tokenExpiresAt: null,
@@ -215,7 +214,7 @@ describe("repo tools through registry dispatch", () => {
       expect(result.content).toContain("Integrations page");
     } finally {
       saveGitHubIntegration({
-        tokenEncrypted: encrypt("github_pat_fixture"),
+        token: "github_pat_fixture",
         repoOwner: "acme",
         repoName: "api",
         tokenExpiresAt: null,

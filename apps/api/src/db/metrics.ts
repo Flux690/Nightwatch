@@ -1,99 +1,116 @@
-import { randomUUID } from "node:crypto";
 import type { MetricsBackendKind } from "@nightwarden/shared";
-import { getDb } from "./client.js";
+import {
+  allIntegrations,
+  deleteIntegrationById,
+  integrationById,
+  integrationsOfKind,
+  putIntegration,
+  type IntegrationRow,
+} from "./integrations.js";
+import { METRICS_BACKEND_KINDS } from "@nightwarden/shared";
 
-/* Rows only. Decrypting a credential and deciding what a backend can answer
-   belong to integrations/metrics/backends.ts; this file knows SQL. */
+/* A metrics backend is a connection like any other; only its config shape is
+   its own. Two endpoints and two credentials fit because `secrets` is a map. */
 
 export interface MetricsBackendRow {
   id: string;
   kind: MetricsBackendKind;
   label: string;
   queryUrl: string;
-  queryAuthEncrypted: string | null;
+  queryAuthorization: string | null;
   queryOrgId: string | null;
-  // Null together: an endpoint without a URL is not an endpoint.
   rulesUrl: string | null;
-  rulesAuthEncrypted: string | null;
+  rulesAuthorization: string | null;
   rulesOrgId: string | null;
   validatedAt: string;
   createdAt: string;
 }
 
-const SELECT = `
-  SELECT id, kind, label,
-         query_url            AS queryUrl,
-         query_auth_encrypted AS queryAuthEncrypted,
-         query_org_id         AS queryOrgId,
-         rules_url            AS rulesUrl,
-         rules_auth_encrypted AS rulesAuthEncrypted,
-         rules_org_id         AS rulesOrgId,
-         validated_at         AS validatedAt,
-         created_at           AS createdAt
-  FROM metrics_backends
-`;
+interface Endpoint {
+  url: string;
+  orgId: string | null;
+}
 
-// Oldest first, so the list a user reads is the order they connected them in
-// and does not reshuffle when one is re-verified.
+interface MetricsConfig {
+  query: Endpoint;
+  rules: Endpoint | null;
+}
+
+function toBackend(row: IntegrationRow): MetricsBackendRow {
+  const config = row.config as unknown as MetricsConfig;
+  return {
+    id: row.id,
+    kind: row.kind as MetricsBackendKind,
+    label: row.name,
+    queryUrl: config.query.url,
+    queryAuthorization: row.secrets["query"] ?? null,
+    queryOrgId: config.query.orgId,
+    rulesUrl: config.rules?.url ?? null,
+    rulesAuthorization: row.secrets["rules"] ?? null,
+    rulesOrgId: config.rules?.orgId ?? null,
+    validatedAt: row.validatedAt ?? row.createdAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function isMetricsRow(row: IntegrationRow): boolean {
+  return (METRICS_BACKEND_KINDS as readonly string[]).includes(row.kind);
+}
+
 export function listMetricsBackendRows(): MetricsBackendRow[] {
-  return getDb()
-    .prepare(`${SELECT} ORDER BY created_at ASC, id ASC`)
-    .all() as MetricsBackendRow[];
+  return allIntegrations().filter(isMetricsRow).map(toBackend);
 }
 
 export function getMetricsBackendRow(id: string): MetricsBackendRow | null {
-  const row = getDb().prepare(`${SELECT} WHERE id = ?`).get(id) as
-    MetricsBackendRow | undefined;
-  return row ?? null;
+  const row = integrationById(id);
+  return row === null || !isMetricsRow(row) ? null : toBackend(row);
+}
+
+export function countMetricsBackendsOfKind(kind: MetricsBackendKind): number {
+  return integrationsOfKind(kind).length;
 }
 
 export interface MetricsBackendInput {
   kind: MetricsBackendKind;
   label: string;
   queryUrl: string;
-  queryAuthEncrypted: string | null;
+  queryAuthorization: string | null;
   queryOrgId: string | null;
   rulesUrl: string | null;
-  rulesAuthEncrypted: string | null;
+  rulesAuthorization: string | null;
   rulesOrgId: string | null;
 }
 
-const INSERT = `
-  INSERT INTO metrics_backends (
-    id, kind, label, query_url, query_auth_encrypted, query_org_id,
-    rules_url, rules_auth_encrypted, rules_org_id, validated_at, created_at
-  ) VALUES (
-    @id, @kind, @label, @queryUrl, @queryAuthEncrypted, @queryOrgId,
-    @rulesUrl, @rulesAuthEncrypted, @rulesOrgId, @validatedAt, @createdAt
-  )
-  ON CONFLICT(id) DO UPDATE SET
-    kind                 = excluded.kind,
-    label                = excluded.label,
-    query_url            = excluded.query_url,
-    query_auth_encrypted = excluded.query_auth_encrypted,
-    query_org_id         = excluded.query_org_id,
-    rules_url            = excluded.rules_url,
-    rules_auth_encrypted = excluded.rules_auth_encrypted,
-    rules_org_id         = excluded.rules_org_id,
-    validated_at         = excluded.validated_at
-`;
-
-/* Saving always means "this configuration just proved itself against a live
-   probe", so validated_at bumps on every write; created_at survives an edit. */
 export function saveMetricsBackend(
   input: MetricsBackendInput,
-  id = randomUUID(),
+  id?: string,
 ): string {
-  const now = new Date().toISOString();
-  getDb()
-    .prepare(INSERT)
-    .run({ ...input, id, validatedAt: now, createdAt: now });
-  return id;
+  const secrets: Record<string, string> = {};
+  if (input.queryAuthorization !== null) {
+    secrets["query"] = input.queryAuthorization;
+  }
+  if (input.rulesAuthorization !== null) {
+    secrets["rules"] = input.rulesAuthorization;
+  }
+  return putIntegration(
+    {
+      kind: input.kind,
+      name: input.label,
+      config: {
+        query: { url: input.queryUrl, orgId: input.queryOrgId },
+        rules:
+          input.rulesUrl === null
+            ? null
+            : { url: input.rulesUrl, orgId: input.rulesOrgId },
+      } satisfies MetricsConfig,
+      secrets,
+    },
+    id,
+  );
 }
 
 export function deleteMetricsBackend(id: string): boolean {
-  return (
-    getDb().prepare(`DELETE FROM metrics_backends WHERE id = ?`).run(id)
-      .changes > 0
-  );
+  const row = integrationById(id);
+  if (row === null || !isMetricsRow(row)) return false;
+  return deleteIntegrationById(id);
 }

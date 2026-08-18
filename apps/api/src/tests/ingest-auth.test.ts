@@ -274,7 +274,7 @@ describe("POST /alerts/ingest with nwi_ fleet-wide credential", () => {
     saveLokiIntegration({
       baseUrl: "http://loki.internal:3100",
       orgId: null,
-      authHeaderEncrypted: null,
+      authorization: null,
     });
     const lokiOnly = await server.inject({
       method: "POST",

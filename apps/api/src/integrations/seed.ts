@@ -1,6 +1,5 @@
 import { getLokiIntegration, saveLokiIntegration } from "../db/integrations.js";
 import { listMetricsBackendRows, saveMetricsBackend } from "../db/metrics.js";
-import { encrypt } from "../secrets.js";
 import { logger } from "../logger.js";
 import { instantQuery } from "./metrics/client.js";
 import { probeLoki } from "./loki.js";
@@ -42,10 +41,10 @@ async function seedPrometheus(): Promise<void> {
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: url,
-    queryAuthEncrypted: authHeader ? encrypt(authHeader) : null,
+    queryAuthorization: authHeader,
     queryOrgId: null,
     rulesUrl: url,
-    rulesAuthEncrypted: authHeader ? encrypt(authHeader) : null,
+    rulesAuthorization: authHeader,
     rulesOrgId: null,
   });
   logger.info({ url }, "prometheus backend seeded from environment");
@@ -71,7 +70,7 @@ async function seedLoki(): Promise<void> {
   saveLokiIntegration({
     baseUrl: url,
     orgId,
-    authHeaderEncrypted: authHeader ? encrypt(authHeader) : null,
+    authorization: authHeader,
   });
   logger.info({ url }, "loki integration seeded from environment");
 }

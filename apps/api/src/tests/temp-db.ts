@@ -40,10 +40,10 @@ export function connectTestMetrics(
     kind: "prometheus",
     label: "Prometheus",
     queryUrl: "http://prom.internal:9090",
-    queryAuthEncrypted: null,
+    queryAuthorization: null,
     queryOrgId: null,
     rulesUrl: "http://prom.internal:9090",
-    rulesAuthEncrypted: null,
+    rulesAuthorization: null,
     rulesOrgId: null,
     ...over,
   });

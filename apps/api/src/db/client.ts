@@ -56,45 +56,28 @@ CREATE TABLE IF NOT EXISTS user (
   updated_at      TEXT      NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS alert_sources (
-  kind                TEXT   PRIMARY KEY,
-  token_hash          TEXT   NOT NULL UNIQUE,
-  token_encrypted     TEXT   NOT NULL,
-  last_received_at    TEXT,
-  created_at          TEXT   NOT NULL
-);
-
--- Its own table rather than a row in integrations, for the reason alert_sources
--- has one: the shape differs. There are many of these, and each holds two
--- addresses and two credentials - a rules API often lives on another host
--- behind another token, which one config blob and one secret cannot express.
-CREATE TABLE IF NOT EXISTS metrics_backends (
-  id                    TEXT   PRIMARY KEY,
-  kind                  TEXT   NOT NULL,
-  -- Unique because it is how a tool call addresses one, the way a runner is
-  -- addressed by its name. Two backends a model cannot tell apart is a
-  -- configuration the connect route refuses rather than one we resolve.
-  label                 TEXT   NOT NULL UNIQUE,
-  query_url             TEXT   NOT NULL,
-  query_auth_encrypted  TEXT,
-  query_org_id          TEXT,
-  -- Null when this backend serves no rules API we can reach. Recorded rather
-  -- than inferred: it is the difference between an alert that can be confirmed
-  -- recovered and one that never can.
-  rules_url             TEXT,
-  rules_auth_encrypted  TEXT,
-  rules_org_id          TEXT,
-  validated_at          TEXT   NOT NULL,
-  created_at            TEXT   NOT NULL
-);
-
+-- One row per configured connection, whatever it connects to. Config lives in
+-- JSON only that kind's accessor reads, and secrets is one encrypted value
+-- whose plaintext is a map - which is what lets one row carry two credentials.
 CREATE TABLE IF NOT EXISTS integrations (
-  kind                TEXT   PRIMARY KEY,
-  config              TEXT   NOT NULL,
-  secret_encrypted    TEXT,
-  validated_at        TEXT   NOT NULL,
-  created_at          TEXT   NOT NULL
+  id            TEXT   PRIMARY KEY,
+  kind          TEXT   NOT NULL,
+  -- How a tool call addresses one. Derived from the kind, never asked for.
+  name          TEXT   NOT NULL,
+  config        TEXT   NOT NULL,
+  secrets       TEXT,
+  -- Set only for a sender that presents a credential to us. Unique so two can
+  -- never collide; SQLite permits many NULLs, so outbound rows cost nothing.
+  token_hash    TEXT   UNIQUE,
+  validated_at  TEXT,
+  -- When a sender last delivered. Proof of delivery, not of configuration.
+  last_used_at  TEXT,
+  created_at    TEXT   NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_integrations_name
+  ON integrations(name);
+CREATE INDEX IF NOT EXISTS idx_integrations_kind
+  ON integrations(kind);
 
 CREATE TABLE IF NOT EXISTS sessions (
   session_id           TEXT      PRIMARY KEY,

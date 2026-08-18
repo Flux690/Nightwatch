@@ -11,7 +11,6 @@ vi.mock("node:child_process", () => ({ execFile: execFileMock }));
 vi.mock("dockerode", () => ({ default: MockDocker }));
 
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../secrets.js";
 import { updateConfig } from "../config/store.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
@@ -223,7 +222,7 @@ beforeAll(() => {
   installDockerMock();
   installGitHubMock();
   saveGitHubIntegration({
-    tokenEncrypted: encrypt("github_pat_fixture"),
+    token: "github_pat_fixture",
     repoOwner: "acme",
     repoName: "api",
     tokenExpiresAt: null,

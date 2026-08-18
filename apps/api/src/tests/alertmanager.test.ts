@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseAlertmanager } from "../alerts/parsers/alertmanager.js";
 import { buildInitialContext } from "../agent/context.js";
+import { useTempDb } from "./temp-db.js";
 
 // What a webhook body becomes, and what the model is then told about it.
 // Identity derivation lives in service-identity.test.ts.
@@ -148,7 +149,17 @@ describe("parseAlertmanager", () => {
 
 // The user's own explanation and the expression that fired are context only:
 // both enrich the prompt and neither decides anything.
+/* The opening turn names the connected metrics backends, so building one now
+   reads the database and must never reach the real one. */
 describe("user context reaches the model", () => {
+  let cleanupDb: () => void;
+  beforeAll(() => {
+    cleanupDb = useTempDb();
+  });
+  afterAll(() => {
+    cleanupDb();
+  });
+
   const ANNOTATIONS = {
     summary: "API latency above threshold",
     description: "p99 has exceeded 2s for 10 minutes on web-01.",
@@ -243,6 +254,14 @@ describe("user context reaches the model", () => {
 // Facts about the envelope rather than about any alert in it. The sender has
 // already worked out why these belong together; nothing here re-derives it.
 describe("what a delivery says about its group", () => {
+  let cleanupDb: () => void;
+  beforeAll(() => {
+    cleanupDb = useTempDb();
+  });
+  afterAll(() => {
+    cleanupDb();
+  });
+
   it("tells the model what the group was formed on and what its alerts share", () => {
     const turn = openingTurnFor(
       {},

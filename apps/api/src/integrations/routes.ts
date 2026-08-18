@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireSession } from "../auth/session.js";
-import { decrypt, encrypt } from "../secrets.js";
 import {
   deleteGitHubIntegration,
   getGitHubIntegration,
@@ -97,7 +96,7 @@ function lokiStatusPayload(): LokiIntegrationStatus {
   return {
     configured: true,
     url: row.baseUrl,
-    hasAuth: row.authHeaderEncrypted !== null,
+    hasAuth: row.authorization !== null,
     hasOrgId: row.orgId !== null,
     validatedAt: row.validatedAt,
   };
@@ -149,8 +148,7 @@ export async function registerIntegrationRoutes(
         return reply.code(400).send({ error: parsed.error.message });
       }
       const stored = getGitHubIntegration();
-      const token =
-        parsed.data.token ?? (stored ? decrypt(stored.tokenEncrypted) : null);
+      const token = parsed.data.token ?? stored?.token ?? null;
       if (!token) {
         return reply
           .code(400)
@@ -184,7 +182,7 @@ export async function registerIntegrationRoutes(
       try {
         const validated = await validateRepoAccess(token, owner, name);
         saveGitHubIntegration({
-          tokenEncrypted: encrypt(token),
+          token,
           repoOwner: owner,
           repoName: name,
           tokenExpiresAt: validated.expiresAt,
@@ -223,7 +221,7 @@ export async function registerIntegrationRoutes(
       }
       const [owner, name] = parsed.data.repo.split("/") as [string, string];
       try {
-        const token = decrypt(stored.tokenEncrypted);
+        const token = stored.token;
         await validateRepoAccess(token, owner, name);
         updateGitHubIntegrationRepo(owner, name);
         logger.info(
@@ -281,7 +279,7 @@ export async function registerIntegrationRoutes(
         saveLokiIntegration({
           baseUrl: url,
           orgId: orgId ?? null,
-          authHeaderEncrypted: authHeader ? encrypt(authHeader) : null,
+          authorization: authHeader ?? null,
         });
         logger.info({ url }, "loki integration configured");
         return await reply.code(201).send(lokiStatusPayload());

@@ -9,7 +9,6 @@ import {
   listMetricsBackendRows,
   type MetricsBackendRow,
 } from "../../db/metrics.js";
-import { decrypt, encrypt } from "../../secrets.js";
 import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
 
@@ -26,17 +25,6 @@ export interface MetricsBackend {
   capabilities: MetricsPreset;
 }
 
-// A credential that will not decrypt reads as absent rather than crashing the
-// call: a rotated SECRET_KEY should degrade to "unauthorized", not to a 500.
-function plaintext(encrypted: string | null): string | null {
-  if (encrypted === null) return null;
-  try {
-    return decrypt(encrypted);
-  } catch {
-    return null;
-  }
-}
-
 function resolve(row: MetricsBackendRow): MetricsBackend {
   const preset = METRICS_PRESETS[row.kind];
   const name = row.label || preset.label;
@@ -46,7 +34,7 @@ function resolve(row: MetricsBackendRow): MetricsBackend {
     label: name,
     query: {
       url: row.queryUrl,
-      authorization: plaintext(row.queryAuthEncrypted),
+      authorization: row.queryAuthorization,
       orgId: row.queryOrgId,
       name,
     },
@@ -55,7 +43,7 @@ function resolve(row: MetricsBackendRow): MetricsBackend {
         ? null
         : {
             url: row.rulesUrl,
-            authorization: plaintext(row.rulesAuthEncrypted),
+            authorization: row.rulesAuthorization,
             orgId: row.rulesOrgId,
             name: `${name} rules`,
           },
@@ -96,13 +84,6 @@ export function authorizationOf(input: MetricsEndpointInput): string | null {
   }
   const pair = `${input.basicUsername}:${input.basicPassword}`;
   return `Basic ${Buffer.from(pair, "utf8").toString("base64")}`;
-}
-
-export function encryptedAuthorization(
-  input: MetricsEndpointInput,
-): string | null {
-  const authorization = authorizationOf(input);
-  return authorization === null ? null : encrypt(authorization);
 }
 
 // The endpoint the API will dial for a configuration nobody has saved yet,

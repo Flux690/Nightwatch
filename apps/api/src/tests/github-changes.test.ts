@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { seedAlertSession } from "./session-helper.js";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../secrets.js";
 import { saveGitHubIntegration } from "../db/integrations.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { parsedContent } from "./tool-result.js";
@@ -139,7 +138,7 @@ describe("GetRecentChanges through the tool dispatch", () => {
 
   function connectGitHub(): void {
     saveGitHubIntegration({
-      tokenEncrypted: encrypt("ghp_test_token"),
+      token: "ghp_test_token",
       repoOwner: "acme",
       repoName: "shop",
       tokenExpiresAt: null,

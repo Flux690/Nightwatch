@@ -1,4 +1,3 @@
-import { decrypt } from "../../secrets.js";
 import { proxyDir, workspacesDir } from "../../env/paths.js";
 import { loadConfig } from "../../config/store.js";
 import { getGitHubIntegration } from "../../db/integrations.js";
@@ -112,7 +111,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
           new SandboxUnavailableError("GitHub integration was disconnected"),
         );
       }
-      return Promise.resolve(buildAuthHeader(decrypt(row.tokenEncrypted)));
+      return Promise.resolve(buildAuthHeader(row.token));
     },
     limits: { cpus: config.sandboxCpus, memoryMb: config.sandboxMemoryMb },
     idleTimeoutMs: config.sandboxIdleTimeoutMs,
@@ -143,7 +142,7 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
     if (row === null) {
       throw new SandboxUnavailableError("GitHub integration was disconnected");
     }
-    return decrypt(row.tokenEncrypted);
+    return row.token;
   }
 }
 

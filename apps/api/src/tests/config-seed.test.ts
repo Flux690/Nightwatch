@@ -3,6 +3,7 @@ import { clearTestLLM, connectTestMetrics, useTempDb } from "./temp-db.js";
 import { loadApiKey, loadConfig, seedConfigFromEnv } from "../config/store.js";
 import { seedIntegrationsFromEnv } from "../integrations/seed.js";
 import { listMetricsBackendRows } from "../db/metrics.js";
+import { getDb } from "../db/client.js";
 import { getLokiIntegration } from "../db/integrations.js";
 
 // Every supported provider, as data: a new one is a row here, not a copied test,
@@ -172,10 +173,14 @@ describe("first-boot integration seed from the environment", () => {
       baseUrl: "http://loki.internal:3100",
       orgId: "tenant-a",
     });
-    // The credential is stored encrypted, never in the clear.
-    expect(listMetricsBackendRows()[0]?.queryAuthEncrypted).not.toContain(
-      "prom-secret",
+    // The accessor hands back plaintext; the column never holds it.
+    expect(listMetricsBackendRows()[0]?.queryAuthorization).toBe(
+      "Bearer prom-secret",
     );
+    const stored = getDb()
+      .prepare("SELECT secrets FROM integrations WHERE kind = 'prometheus'")
+      .get() as { secrets: string };
+    expect(stored.secrets).not.toContain("prom-secret");
   });
 
   it("leaves an unreachable URL unconfigured rather than saving something broken", async () => {

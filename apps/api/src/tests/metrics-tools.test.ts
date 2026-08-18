@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NormalizedAlert } from "@nightwarden/shared";
 import { useTempDb } from "./temp-db.js";
-import { encrypt } from "../secrets.js";
 import { saveMetricsBackend } from "../db/metrics.js";
 import { seedAlertSession } from "./session-helper.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
@@ -106,10 +105,10 @@ describe("metrics tools through the tool dispatch", () => {
       kind: "prometheus",
       label: "Prometheus",
       queryUrl: "http://prom.internal:9090",
-      queryAuthEncrypted: encrypt("Bearer tok"),
+      queryAuthorization: "Bearer tok",
       queryOrgId: null,
       rulesUrl: "http://prom.internal:9090",
-      rulesAuthEncrypted: encrypt("Bearer tok"),
+      rulesAuthorization: "Bearer tok",
       rulesOrgId: null,
       ...over,
     });
@@ -430,7 +429,7 @@ describe("metrics tools through the tool dispatch", () => {
       });
 
       it("says a missing rules endpoint is a gap in the connection, not an absence of rules", async () => {
-        connect({ rulesUrl: null, rulesAuthEncrypted: null });
+        connect({ rulesUrl: null, rulesAuthorization: null });
 
         const result = await executeTool(
           findTool("ListAlertRules")!,
