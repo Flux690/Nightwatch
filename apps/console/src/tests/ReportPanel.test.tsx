@@ -306,9 +306,10 @@ describe("ReportPanel", () => {
   it("puts the tool output that backs a claim underneath the claim", () => {
     render(panel());
 
-    // The reading the claim rests on, computed from the tool's own result, so
-    // checking the claim costs a glance rather than two clicks into the transcript.
-    expect(screen.getByText(/mem 511 MB of 512 MB/)).toBeInTheDocument();
+    // The readings the claim rests on, drawn because the tool declares itself a
+    // measurement, so checking the claim costs a glance rather than two clicks.
+    expect(screen.getByText("memory used")).toBeInTheDocument();
+    expect(screen.getByText("511 MB")).toBeInTheDocument();
     expect(screen.getByText("GetDockerStats")).toBeInTheDocument();
     expect(screen.getByText("payments-worker")).toBeInTheDocument();
 
@@ -335,10 +336,10 @@ describe("ReportPanel", () => {
     // One call is one measurement: read three times down the page it reads as
     // three, and a report that looks like more evidence than it has is worse
     // than one that looks like less.
-    expect(screen.getAllByText(/mem 511 MB of 512 MB/)).toHaveLength(1);
+    expect(screen.getAllByText("511 MB")).toHaveLength(1);
   });
 
-  it("reads a log rather than reprinting it, and links to the transcript", () => {
+  it("quotes the log lines a claim rests on, and says what they came out of", () => {
     render(
       panel({
         report: {
@@ -363,12 +364,17 @@ describe("ReportPanel", () => {
       }),
     );
 
-    // The worst line once, as the reading. The body is not quoted: a report that
-    // reprints two hundred log lines is a transcript with extra steps.
+    /* A log-based claim with no log lines under it cannot be checked at a
+       glance, which is what the citation was for. Each line appears once: the
+       excerpt replaces the one-line reading rather than repeating it. */
     expect(screen.getAllByText(/cannot allocate 2\.2GB buffer/)).toHaveLength(
       1,
     );
-    expect(screen.queryByText(/job 4471 accepted/)).not.toBeInTheDocument();
+    expect(screen.getByText(/job 4471 accepted/)).toBeInTheDocument();
+    // What the excerpt cannot speak for, in the result's own numbers.
+    expect(
+      screen.getByText(/2 of 2 shown, 2 lines searched/),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /show in transcript/i }),
     ).toBeInTheDocument();
@@ -497,6 +503,48 @@ describe("ReportPanel", () => {
     // would carry the failure word and the failure colour instead.
     expect(screen.getByText(/File not found/)).toBeInTheDocument();
     expect(screen.queryByText(/Failed/)).not.toBeInTheDocument();
+  });
+
+  /* A host tool declares itself a measurement but answers a fan-out of plain
+     readings rather than a series, so the chart reader found nothing in it and
+     the claim was left with a bare tool name under it. */
+  it("draws the readings of a measurement that carries no series, per runner", () => {
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          submitted: null,
+          hypotheses: [{ ...REPORT.hypotheses[0]!, evidenceIds: ["tu-host"] }],
+        },
+        evidence: [
+          {
+            toolUseId: "tu-host",
+            toolName: "GetHostMemory",
+            kind: "metric",
+            input: {},
+            result: JSON.stringify({
+              byRunner: [
+                {
+                  runner: "web-01",
+                  result: {
+                    totalBytes: 16_000_000_000,
+                    availableBytes: 800_000_000,
+                    usedPercent: 95,
+                    oomKillerFiredRecently: true,
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByText("web-01")).toBeInTheDocument();
+    expect(screen.getByText("available")).toBeInTheDocument();
+    expect(screen.getByText("763 MB")).toBeInTheDocument();
+    expect(screen.getByText("used")).toBeInTheDocument();
+    expect(screen.getByText("95%")).toBeInTheDocument();
   });
 
   it("draws a chart from the cited metrics result, not from a stored copy", () => {

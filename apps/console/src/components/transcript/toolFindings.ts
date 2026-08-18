@@ -195,6 +195,54 @@ const FORMATTERS: Record<string, Formatter> = {
   },
 };
 
+/* The two measurements whose numbers live in arrays, so nothing above reaches
+   them: the fullest filesystem and the worst-off pod are what each was asked
+   for, and without a line here they render as a bare tool name. */
+FORMATTERS["GetHostDisk"] = (record) => {
+  const mounts = (byRunner(record) ?? [{ runner: "", result: record }]).flatMap(
+    ({ runner, result }) =>
+      (arr(result, "filesystems") ?? []).flatMap((entry) => {
+        const fs = entry as Record<string, unknown>;
+        const used = num(fs, "usedPercent");
+        const mount = str(fs, "mount");
+        return used === null || mount === null ? [] : [{ runner, used, mount }];
+      }),
+  );
+  const worst = mounts.reduce<(typeof mounts)[number] | null>(
+    (acc, fs) => (acc === null || fs.used > acc.used ? fs : acc),
+    null,
+  );
+  if (worst === null) return null;
+  const named = worst.runner ? `${worst.runner}: ` : "";
+  return {
+    text: `${named}${worst.mount} ${formatPercent(worst.used)} full`,
+    tone: worst.used >= 90 ? "bad" : "normal",
+  };
+};
+
+FORMATTERS["GetK8sStats"] = (record) => {
+  const pods = arr(record, "pods");
+  if (!pods) return null;
+  const containers = pods.flatMap((entry) =>
+    (arr(entry as Record<string, unknown>, "containers") ?? []).map(
+      (c) => c as Record<string, unknown>,
+    ),
+  );
+  const restarts = containers.reduce(
+    (total, c) => total + (num(c, "restartCount") ?? 0),
+    0,
+  );
+  const killed = containers.some(
+    (c) => str(c, "lastTerminationReason") === "OOMKilled",
+  );
+  const counted = `${pods.length} pod${pods.length === 1 ? "" : "s"} · ${restarts} restart${restarts === 1 ? "" : "s"}`;
+  if (killed) return { text: `OOMKilled · ${counted}`, tone: "bad" };
+  if (record["metricsAvailable"] === false) {
+    return { text: `${counted} · no metrics-server`, tone: "normal" };
+  }
+  return { text: counted, tone: restarts > 0 ? "bad" : "normal" };
+};
+
 // A PR that opened renders as its own card, so this row is only ever reached by
 // the outcome that did not: the message is the whole answer.
 FORMATTERS["OpenPullRequest"] = (r) => {
