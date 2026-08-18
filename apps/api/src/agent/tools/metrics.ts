@@ -457,7 +457,7 @@ export const METRICS_TOOLS: Tool[] = [
           return {
             content:
               needle === null
-                ? `${backend.label} evaluates no alerting rules.`
+                ? `${backend.label} returned no alerting rules. That is not proof it evaluates none: a VictoriaMetrics query endpoint answers this the same way, with an empty list, when the rules actually live in vmalert.`
                 : `No alerting rule name contains "${contains as string}".`,
             outcome: "expected_miss",
           };
