@@ -35,9 +35,11 @@ export function ReportCardPanel({
     );
   }
 
+  // Resolved: the strong edge is how a card says it is waiting on a decision,
+  // and a report that is ready announces a fact instead.
   if (phase === "ready") {
     return (
-      <InterruptCard data-testid="report-card" data-phase="ready">
+      <InterruptCard data-testid="report-card" data-phase="ready" resolved>
         <div className="flex items-center justify-between gap-3">
           <span className="flex min-w-0 items-center gap-2 text-sm">
             <FileText {...ICON_UI} className="shrink-0 text-muted-foreground" />

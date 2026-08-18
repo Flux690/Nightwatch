@@ -104,10 +104,9 @@ export function InvestigationRecordPage(): React.JSX.Element {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const title = session?.title ?? "";
 
-  /* Which view is on screen is the reader's, not the run's. Arriving from the
-     list is deliberate, so it lands on the record; watching a run end swaps
-     nothing until the card is clicked. */
-  const [openedReport, setOpenedReport] = useState(false);
+  /* A count rather than a flag: the card is still clickable once the report is
+     already the view, where the swap is a no-op and re-aiming is the answer. */
+  const [openRequests, setOpenRequests] = useState(0);
   /* Latched at the first load and never re-read: the run ending must not move the
      reader. Set during render rather than from an effect, so the first painted
      frame is already the right one. */
@@ -115,11 +114,25 @@ export function InvestigationRecordPage(): React.JSX.Element {
   if (followedRun.current === null && session !== null) {
     followedRun.current = session.running;
   }
-  useEffect(() => onOpenReport(() => setOpenedReport(true)), []);
+  useEffect(
+    () => onOpenReport(() => setOpenRequests((asked) => asked + 1)),
+    [],
+  );
 
   // Unknown reads as the record, which is what the page showed before there was
   // anything to follow, so a session still loading never flashes the transcript.
-  const working = followedRun.current === true && !openedReport;
+  const working = followedRun.current === true && openRequests === 0;
+
+  // In an effect rather than the handler, so the first request finds the column
+  // the render it triggered has just mounted.
+  const reportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (openRequests === 0) return;
+    const column = reportRef.current;
+    if (column === null) return;
+    column.scrollTop = 0;
+    column.focus();
+  }, [openRequests]);
 
   const remove = useMutation({
     mutationFn: () =>
@@ -246,7 +259,11 @@ export function InvestigationRecordPage(): React.JSX.Element {
         /* Positioned, so the expanded rail covers the report rather than pushing
            it out. The report stays mounted underneath and comes back unscrolled. */
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <div className="min-w-0 flex-1 overflow-y-auto [contain:layout]">
+          <div
+            ref={reportRef}
+            tabIndex={-1}
+            className="min-w-0 flex-1 overflow-y-auto [contain:layout]"
+          >
             <ReportPanel
               report={report?.report ?? null}
               decisions={report?.decisions ?? []}
