@@ -47,9 +47,8 @@ export function anthropicAuthHeaders(apiKey: string): Record<string, string> {
 }
 
 /* Server-side compaction: the conversation is summarised rather than refused
-   when it outgrows the window. Safe here because clearing costs the model its
-   memory and not our record - the full tool result stays in the transcript and
-   the citation handle is the tool_use_id. */
+   when it outgrows the window. Safe because the full tool result stays in the
+   transcript - the model forgets, the record does not. */
 const COMPACTION_BETA = "compact-2026-01-12";
 
 // One identifier, which Anthropic uses both as the edit type on a request and
@@ -331,10 +330,8 @@ export class AnthropicProvider implements LLMProvider {
     };
   }
 
-  /* Ask the model to summarise rather than refuse once the conversation reaches
-     a share of its window. Both facts come from the catalog, so a model that
-     stated neither is sent nothing at all and keeps today's behaviour: the run
-     ends on the provider's refusal, naming the two things that work. */
+  /* Both facts come from the catalog, so a model that stated neither is sent
+     nothing and keeps today's behaviour: the run ends on the provider's refusal. */
   private compactionParams(): CompactionParams {
     const window = this.config.maxInputTokens;
     if (!this.config.compaction || window === null) return {};
@@ -426,11 +423,9 @@ export class AnthropicProvider implements LLMProvider {
   }
 }
 
-/* Everything the provider summarised away, so a message it cannot accept is
-   never sent one. The turns the block stood for are still in the transcript, so
-   what is lost is the model's shortcut and not the conversation. Null when
-   nothing else was in the message: an empty content array is itself rejected,
-   and a turn that held only a summary answers for no tool call. */
+/* The turns a compaction block stood for are still in the transcript, so
+   dropping it costs the model a shortcut and not the conversation. Null when it
+   was the only block: an empty content array is itself rejected. */
 function withoutCompaction(m: BetaMessageParam): BetaMessageParam | null {
   if (typeof m.content === "string") return m;
   const kept = m.content.filter((b) => b.type !== "compaction");
@@ -471,10 +466,9 @@ function toParts(m: BetaMessageParam): MessagePart[] {
   return parts;
 }
 
-/* Rebuild from parts for a message another dialect wrote. Reasoning and
-   compaction are dropped rather than replayed: a thinking block without its
-   original signature is rejected, and a compaction block belongs to the
-   conversation the other provider never had. */
+// Rebuild from parts for a message another dialect wrote. Reasoning and
+// compaction are dropped: a thinking block without its signature is rejected,
+// and a compaction block belongs to a conversation the other provider never had.
 function toNativeMessage(m: ProviderMessage): BetaMessageParam {
   const blocks: Anthropic.Beta.BetaContentBlockParam[] = [];
   for (const part of m.parts) {

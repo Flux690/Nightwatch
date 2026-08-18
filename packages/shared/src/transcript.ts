@@ -108,10 +108,8 @@ export interface AlertArrivedItem {
   severity: AlertSeverity | null;
 }
 
-// Where the provider summarised everything above to keep the conversation
-// inside its window. A fact about the run the reader should not have to infer
-// from a token count; the evidence itself is untouched, since a compacted tool
-// result is still in the record and still citable.
+// Where the provider summarised everything above to fit its window. The
+// evidence is untouched: a compacted tool result is still in the record.
 export interface CompactionItem {
   kind: "compaction";
   id: string;

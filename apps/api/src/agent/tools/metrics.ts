@@ -383,10 +383,9 @@ export const METRICS_TOOLS: Tool[] = [
       if (typeof metric !== "string" || metric.trim() === "") {
         return { content: "metric must be a name", outcome: "system" };
       }
-      /* Stated, not discovered: VictoriaMetrics answers this endpoint with an
-         empty object for every metric that has ever existed, so calling it and
-         reporting the emptiness would be a fact about VictoriaMetrics dressed
-         as a fact about the metric. */
+      /* Stated, not discovered: VictoriaMetrics answers this endpoint with an empty
+         object for every metric, so reporting the emptiness would be a fact about
+         VictoriaMetrics dressed as a fact about the metric. */
       if (!backend.capabilities.metricMetadata) {
         return {
           content: `${backend.label} does not implement the metric metadata API - it answers with an empty result for every metric, so nothing here can tell you the type or unit of "${metric.trim()}". This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,

@@ -42,10 +42,9 @@ function stubFetch(impl: (url: string) => ReturnType<typeof mockResponse>) {
   );
 }
 
-// One entry of Anthropic's /v1/models, with the effort levels under test.
-// low/medium/high are non-null in the schema; xhigh is nullable. Context
-// management is omitted unless a case asks for it, which is the shape a model
-// that cannot compact answers with.
+// One entry of Anthropic's /v1/models. low/medium/high are non-null in the
+// schema; xhigh is nullable. Context management is omitted unless a case asks,
+// which is the shape a model that cannot compact answers with.
 function anthropicModel(
   id: string,
   effort: { xhigh?: boolean; max?: boolean },

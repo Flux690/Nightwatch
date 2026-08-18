@@ -1,10 +1,8 @@
 import type { MetricsBackendKind } from "@nightwarden/shared";
 
-/* What differs between products, as data. Not behaviour: every one of them
-   speaks the same API, so a preset can only say what a backend is called and
-   what it cannot answer. A gap declared here is a gap a tool result states out
-   loud, because an empty answer the agent reads as "nothing is wrong" is the
-   failure this whole codebase is arranged against. */
+/* What differs between products, as data rather than behaviour. A gap declared
+   here is one a tool result states out loud, because an empty answer reads to
+   the agent as "nothing is wrong". */
 export interface MetricsPreset {
   // The product's own name, as its vendor writes it.
   label: string;

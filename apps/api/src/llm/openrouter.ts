@@ -138,10 +138,8 @@ export function describeOpenRouterModels(data: unknown): ModelOption[] {
         id,
         reasoning: reasoning === null ? null : describeReasoning(reasoning),
         maxOutputTokens: maxCompletionTokens(entry["top_provider"]),
-        /* The gateway truncates from the middle of a conversation rather than
-           summarising, which in an agentic transcript is where every tool result
-           lives - so it is never offered as compaction. The per-result cap is
-           the bound on this provider. */
+        /* The gateway drops messages from the middle rather than summarising, which in
+           an agentic transcript is where every tool result lives. */
         maxInputTokens: null,
         compaction: false,
       },

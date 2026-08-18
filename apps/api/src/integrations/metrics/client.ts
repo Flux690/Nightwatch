@@ -2,9 +2,8 @@ import type { MetricsErrorCode } from "@nightwarden/shared";
 import { describeNetworkFailure } from "../reachability.js";
 
 /* The Prometheus HTTP API, and nothing else. Every backend we support speaks
-   it - Prometheus, VictoriaMetrics, Mimir, Thanos and their hosted forms - so
-   there is one client here and no per-product adapter. What varies is the
-   endpoint it is handed, which is decided in backends.ts. */
+   it, so there is one client here and no per-product adapter; what varies is
+   the endpoint it is handed. */
 
 export class MetricsApiError extends Error {
   constructor(

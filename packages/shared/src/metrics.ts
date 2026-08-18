@@ -17,11 +17,9 @@ export function isMetricsBackendKind(
   return (METRICS_BACKEND_KINDS as readonly string[]).includes(value);
 }
 
-/* What the console sends for one endpoint. Two independent things, the shape
-   Loki already uses here: an Authorization value and a tenant. A basic pair is
-   offered as its own field because a Grafana Cloud user is handed an instance
-   id and a token, never a base64 blob - the API encodes it, so the credential
-   still arrives as one Authorization value and is stored once. */
+/* What the console sends for one endpoint: an Authorization value and a tenant,
+   the shape Loki already uses. A basic pair is its own field because Grafana
+   Cloud hands out an instance id and a token, never a base64 blob. */
 export interface MetricsEndpointInput {
   url: string;
   authHeader?: string;

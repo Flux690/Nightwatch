@@ -149,11 +149,9 @@ function buildFleetSummary(fleetView: FleetRunner[] | undefined): string {
   return `\n<fleet-summary>\nEach line names one Docker host or Kubernetes cluster, followed by the target keys it advertises. A key marked "(shared)" is advertised by more than one, so a call naming that key must also say which one you mean.\n${lines.join("\n")}\n</fleet-summary>\n`;
 }
 
-/* Only when there is a choice to make. One backend needs no name and printing
-   it would invite the model to pass an argument that changes nothing; several
-   make the `backend` parameter required, exactly as a shared target key makes
-   `runner` required. A backend with no rules endpoint says so here rather than
-   only in the result of the call that discovers it. */
+/* Only when there is a choice to make. One backend needs no name; several make
+   the `backend` parameter required, exactly as a shared target key makes
+   `runner` required. */
 function buildMetricsSummary(): string {
   const backends = listMetricsBackends();
   if (backends.length < 2) return "";

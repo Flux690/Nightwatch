@@ -1,7 +1,6 @@
 /* Every tool the build declares, in one list both ends compile against. The
    console decides what to draw by comparing a name, and until this existed a
-   rename on the API side changed the console's behaviour with nothing failing.
-   The schemas themselves stay in apps/api; only the vocabulary is shared. */
+   rename on the API side changed its behaviour with nothing failing. */
 
 export const TOOL_NAMES = [
   // Docker
@@ -58,11 +57,9 @@ export const TOOL_NAMES = [
 
 export type ToolName = (typeof TOOL_NAMES)[number];
 
-/* Whether a recorded call is one of the named tools. `actual` stays a plain
-   string on purpose - a stored transcript holds the names of tools that have
-   since been renamed or retired, and it must still render. What is checked is
-   the literal on our side: naming a tool the build no longer declares fails to
-   compile, which is the whole point of the list. */
+/* `actual` stays a plain string: a stored transcript holds names of tools since
+   retired and must still render. What is checked is the literal on our side -
+   naming a tool the build no longer declares fails to compile. */
 export function isTool(actual: string, ...names: readonly ToolName[]): boolean {
   return names.some((name) => name === actual);
 }

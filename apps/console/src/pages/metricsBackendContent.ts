@@ -5,9 +5,7 @@ import type { MetricsBackendKind } from "@nightwarden/shared";
    worth saying per product is where the rules live and what breaks quietly. */
 export interface MetricsBackendContent {
   label: string;
-  // Null where we ship no mark for the vendor, which draws a plain metrics
-  // icon rather than a broken image.
-  logo: string | null;
+  logo: string;
   blurb: string;
   // What the card says on the Integrations grid, where the vendor's other
   // names have to be findable by someone searching for them.
@@ -48,7 +46,7 @@ export const METRICS_BACKEND_CONTENT: Record<
   },
   victoriametrics: {
     label: "VictoriaMetrics",
-    logo: null,
+    logo: "/logos/victoriametrics.svg",
     blurb:
       "Connect VictoriaMetrics, single-node or cluster. Queries go to vmsingle or vmselect; alerting rules live in vmalert, which is a separate address.",
     cardDescription:
@@ -66,7 +64,7 @@ export const METRICS_BACKEND_CONTENT: Record<
   },
   mimir: {
     label: "Grafana Mimir",
-    logo: "/logos/grafana.svg",
+    logo: "/logos/mimir.svg",
     blurb:
       "Connect Grafana Mimir, self-hosted or as Grafana Cloud Metrics, which is the same thing hosted by Grafana Labs.",
     cardDescription:
@@ -84,7 +82,7 @@ export const METRICS_BACKEND_CONTENT: Record<
   },
   thanos: {
     label: "Thanos",
-    logo: null,
+    logo: "/logos/thanos.svg",
     blurb:
       "Connect Thanos Query, which answers for every Prometheus behind it and aggregates alerting rules from your rulers and sidecars.",
     cardDescription:

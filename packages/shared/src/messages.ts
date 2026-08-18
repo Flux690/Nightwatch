@@ -59,11 +59,9 @@ export interface ToolResultPart {
   outcome?: ToolOutcome;
 }
 
-/* Where the provider summarised the conversation to keep it inside the window.
-   Drawn, never replayed: like ReasoningPart, the block itself rides in the
-   message's `native` envelope, so rebuilding from parts drops it - which is
-   exactly what a provider that cannot accept one needs. It carries no summary
-   text, because the turns it summarises are still in the transcript below it. */
+/* Where the provider summarised the conversation to fit its window. Drawn,
+   never replayed: the block rides in the message's `native` envelope, so
+   rebuilding from parts drops it, which is what a foreign provider needs. */
 export interface CompactionPart {
   type: "compaction";
 }

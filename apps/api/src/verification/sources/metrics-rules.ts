@@ -4,13 +4,8 @@ import { logger } from "../../logger.js";
 import type { ConditionState, VerificationSource } from "../source.js";
 
 /* The rules API answers for its own alerting rules, on the same evaluation that
-   fired the alert - not a query we composed, not a threshold we guessed.
-
-   Which host serves it is configuration, not an assumption: VictoriaMetrics
-   serves rules from vmalert alone, Grafana Cloud from the Grafana stack behind
-   a different credential, and a Grafana-managed rule lives in Grafana rather
-   than in any metrics backend at all. Each connection names its own rules
-   endpoint, so all three answer here through one mechanism. */
+   fired the alert. Which host serves it is configuration, not an assumption:
+   each connection names its own rules endpoint. */
 export const metricsRulesSource: VerificationSource = {
   name: "metrics-rules",
 
@@ -22,9 +17,8 @@ export const metricsRulesSource: VerificationSource = {
   },
 
   async checkCondition(alert): Promise<ConditionState> {
-    /* Every backend with a rules endpoint is asked, because which one holds the
-       rule is not knowable from the alert: two clusters can both be connected
-       and only one evaluate it. One saying "cleared" is the answer; the rest
+    /* Every backend with a rules endpoint is asked: which one holds the rule is not
+       knowable from the alert. One saying "cleared" is the answer; the rest
        answering "no such rule" is not evidence against it. */
     let cleared = false;
     for (const backend of listMetricsBackends()) {
@@ -37,10 +31,9 @@ export const metricsRulesSource: VerificationSource = {
         // This backend knows no rule by that name, so it cannot speak to this
         // alert. Silence from one is never a recovery.
         if (instances === null) continue;
-        /* Emptiness is the whole answer: no instance of the rule is active, so
-           this alert's is not either. Labels are never compared - the alert
-           carries the external_labels a rule evaluation has no way to know
-           about. A rule still pending counts as firing. */
+        /* Emptiness is the whole answer: no instance of the rule is active, so this
+           alert's is not either. Labels are never compared - the alert carries
+           external_labels a rule evaluation cannot know about. */
         if (instances.every((instance) => instance.state === "inactive")) {
           cleared = true;
         } else {

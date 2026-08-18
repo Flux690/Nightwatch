@@ -13,10 +13,9 @@ import { decrypt, encrypt } from "../../secrets.js";
 import { METRICS_PRESETS, type MetricsPreset } from "./presets.js";
 import type { MetricsEndpoint } from "./client.js";
 
-/* One stored row resolved into the two addresses the API dials and what this
-   backend can be asked. Every caller - the tools, the verification source, the
-   readiness check - asks here, so nowhere else decrypts a credential or decides
-   whether a rules API exists. */
+/* One stored row resolved into the addresses the API dials. Every caller asks
+   here, so nowhere else decrypts a credential or decides whether a rules API
+   exists. */
 export interface MetricsBackend {
   id: string;
   kind: MetricsBackendKind;
@@ -85,10 +84,9 @@ export function hasMetricsBackend(): boolean {
   return listMetricsBackendRows().length > 0;
 }
 
-/* A basic pair becomes one Authorization value here, so the rest of the system
-   holds one credential per endpoint however the user supplied it. Encoded
-   rather than asked for as base64: a Grafana Cloud user is handed an instance
-   id and a token, and turning those into a header is our job, not theirs. */
+/* A basic pair becomes one Authorization value here. Encoded rather than asked
+   for as base64: a Grafana Cloud user is handed an instance id and a token, and
+   turning those into a header is our job. */
 export function authorizationOf(input: MetricsEndpointInput): string | null {
   if (input.authHeader !== undefined && input.authHeader !== "") {
     return input.authHeader;
