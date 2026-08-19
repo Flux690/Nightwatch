@@ -39,7 +39,7 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
       finding: {
         type: "string",
         description:
-          "What the cited results actually showed, and why that settles it this way. Quote the value, the line or the timestamp that decided it.",
+          "What the cited results actually showed, and why that settles it this way, in complete sentences. This is read beneath your statement by someone who was not here, so it has to explain rather than remind: quote the value, the line or the timestamp that decided it, and say what it means. Two or three sentences is usually right; a fragment is not.",
       },
       evidenceIds: {
         type: "array",

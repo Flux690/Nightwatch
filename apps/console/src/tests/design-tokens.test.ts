@@ -226,7 +226,7 @@ describe("the scale", () => {
     }
     for (const name of scale.keys()) {
       expect(name, `--${name} is a raw colour outside the scale`).toMatch(
-        /^(n|line|ink|status|cobalt|red|white)(-|$)/,
+        /^(n|line|ink|status|series|cobalt|red|white)(-|$)/,
       );
     }
     for (const [name, target] of aliases) {
@@ -304,6 +304,43 @@ describe("the scale", () => {
           `--${name} would sink on --${surface}`,
         ).toBeGreaterThan(step(surface).L);
       }
+    }
+  });
+});
+
+/* A chart tells series apart by hue alone, so they have to be equal in every
+   other way, and each has to clear the graphical-object floor on the stage. */
+describe("chart series", () => {
+  const series = [...scale.entries()].filter(([name]) =>
+    name.startsWith("series-"),
+  );
+
+  it("varies hue and nothing else", () => {
+    expect(series.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(series.map(([, step]) => step.L)).size).toBe(1);
+    expect(new Set(series.map(([, step]) => step.C)).size).toBe(1);
+    expect(new Set(series.map(([, step]) => step.H)).size).toBe(series.length);
+  });
+
+  /* Status means something. A line the same hue as ok, warn or fail reads as a
+     healthy or a failing one when it is neither. */
+  it("keeps clear of the hues that carry status", () => {
+    const status = ["status-ok", "status-warn", "status-fail"].map(
+      (name) => scale.get(name)!.H,
+    );
+    for (const [name, step] of series) {
+      for (const hue of status) {
+        expect(
+          Math.abs(step.H - hue),
+          `--${name} sits on a status hue`,
+        ).toBeGreaterThan(25);
+      }
+    }
+  });
+
+  it("clears 3:1 on the stage (WCAG 1.4.11)", () => {
+    for (const [name] of series) {
+      expect(contrast(name, "background"), name).toBeGreaterThanOrEqual(3);
     }
   });
 });

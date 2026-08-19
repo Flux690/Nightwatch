@@ -1,25 +1,20 @@
-import type {
-  EvidenceKind,
-  NormalizedAlert,
-  ResolvedEvidence,
-} from "@nightwarden/shared";
+import type { NormalizedAlert, ResolvedEvidence } from "@nightwarden/shared";
 import { cn } from "@/lib/utils";
-import { revealToolCall } from "@/components/transcript/revealToolCall";
-import { Button } from "@/components/ui/button";
+import { resultSummary } from "@/components/transcript/toolPresentation";
 import {
-  resultSummary,
-  targetOf,
-} from "@/components/transcript/toolPresentation";
-import { parseFileChange } from "@/components/transcript/DiffCard";
+  parseFileChange,
+  type DiffLine,
+} from "@/components/transcript/DiffCard";
 import { parsePullRequestResult } from "@/components/transcript/PRCard";
 import { ChangesList, pullRequestsFrom } from "./ChangesList.js";
 import { Measurement } from "./Measurement.js";
-import { plotFrom } from "./plot.js";
+import { plotCaption, plotFrom } from "./plot.js";
 import {
   carriesSeries,
   isSevere,
   isWarning,
   logExcerpt,
+  type LogExcerpt,
   readingGroups,
   scannedLines,
   stateGroups,
@@ -36,7 +31,7 @@ const MAX_DIFF_LINES = 12;
 
 function Readings({ groups }: { groups: ReadingGroup[] }): React.JSX.Element {
   return (
-    <div className="mt-2 flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
       {groups.map((group, at) => (
         <div key={group.runner ?? at}>
           {group.runner !== null && (
@@ -67,13 +62,9 @@ function lineTone(line: string): string {
   return isWarning(line) ? "text-wait" : "text-muted-foreground";
 }
 
-function LogBody({ result }: { result: string }): React.JSX.Element | null {
-  const excerpt = logExcerpt(result);
-  if (excerpt === null) return null;
-  const scanned = scannedLines(result);
-
+function LogBody({ excerpt }: { excerpt: LogExcerpt }): React.JSX.Element {
   return (
-    <div className="mt-2">
+    <div>
       <pre className="m-0 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
         {excerpt.worstAbove !== null && (
           <>
@@ -91,107 +82,137 @@ function LogBody({ result }: { result: string }): React.JSX.Element | null {
           </span>
         ))}
       </pre>
-      {/* What the excerpt cannot speak for: how much was read, and how much of
-          it is on screen. */}
-      <p className="m-0 mt-2 text-sm text-ink-subtle">
-        {excerpt.lines.length} of {excerpt.returned} shown
-        {scanned !== null && `, ${scanned} lines searched`}
-      </p>
     </div>
   );
 }
 
-function DiffBody({ result }: { result: string }): React.JSX.Element | null {
-  const change = parseFileChange(result);
-  if (change === null) return null;
-  const lines = change.hunks.flatMap((hunk) => hunk.lines);
-  const shown = lines.slice(0, MAX_DIFF_LINES);
-  const added = lines.filter((line) => line.type === "added").length;
-  const removed = lines.filter((line) => line.type === "removed").length;
-
+function DiffBody({ lines }: { lines: DiffLine[] }): React.JSX.Element {
   return (
-    <div className="mt-2">
-      <p className="m-0 mb-1 font-mono text-sm">
-        <span className="text-muted-foreground">{change.path}</span>
-        <span className="ml-2 text-ok">+{added}</span>
-        <span className="ml-1 text-fail">-{removed}</span>
-      </p>
-      <pre className="m-0 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
-        {shown.map((line, at) => (
-          <span
-            key={at}
-            className={cn(
-              "block",
-              line.type === "added" && "text-ok",
-              line.type === "removed" && "text-fail",
-              line.type === "unchanged" && "text-muted-foreground",
-            )}
-          >
-            {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
-            {line.content}
-          </span>
-        ))}
-      </pre>
-      {lines.length > shown.length && (
-        <p className="m-0 mt-2 text-sm text-ink-subtle">
-          {lines.length - shown.length} further lines in the transcript
-        </p>
-      )}
-    </div>
+    <pre className="m-0 font-mono text-sm leading-relaxed break-words whitespace-pre-wrap">
+      {lines.map((line, at) => (
+        <span
+          key={at}
+          className={cn(
+            "block",
+            line.type === "added" && "text-ok",
+            line.type === "removed" && "text-fail",
+            line.type === "unchanged" && "text-muted-foreground",
+          )}
+        >
+          {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+          {line.content}
+        </span>
+      ))}
+    </pre>
   );
 }
 
-function ChangeBody({ result }: { result: string }): React.JSX.Element | null {
-  const merged = pullRequestsFrom(result);
-  if (merged.length > 0) return <ChangesList pullRequests={merged} />;
-
-  // The pull request this run opened, which is a change like any other.
-  const opened = parsePullRequestResult(result);
-  if (opened === null) return null;
+function OpenedPullRequest({
+  pr,
+}: {
+  pr: { url: string; number: number; draft: boolean };
+}): React.JSX.Element {
   return (
-    <p className="m-0 mt-2 text-sm">
+    <p className="m-0 text-sm">
       <a
-        href={opened.url}
+        href={pr.url}
         target="_blank"
         rel="noreferrer"
         className="font-medium text-ring no-underline hover:underline"
       >
-        #{opened.number}
+        #{pr.number}
       </a>
       <span className="ml-2 text-muted-foreground">
-        {opened.draft ? "draft pull request" : "pull request"} {opened.action}
+        {pr.draft ? "draft pull request" : "pull request"}
       </span>
     </p>
   );
 }
 
-/* A plain function rather than a component, so the caller can tell a kind that
-   drew something from one that did not: the one-line reading is what stands in
-   when nothing is drawn, and printing both says the same thing twice. */
-function bodyFor(
-  kind: EvidenceKind,
+/* What was drawn, and beneath it what it is and what it cannot speak for. The
+   caption belongs to the drawing, so it may be absent without anything moving -
+   which is what a heading above could never be. */
+interface Drawing {
+  body: React.JSX.Element;
+  of: string;
+  scope: string;
+}
+
+function drawingFor(
   entry: ResolvedEvidence,
   alert: NormalizedAlert | null,
-): React.JSX.Element | null {
-  switch (kind) {
+): Drawing | null {
+  switch (entry.kind) {
     case "metric": {
       // A series is a shape over time; everything else a measurement carries is
       // a reading, and mixed units are never bars.
       const plot = plotFrom(entry.result, alert);
-      if (plot !== null) return <Measurement plot={plot} />;
+      if (plot !== null) {
+        const caption = plotCaption(plot);
+        return { body: <Measurement plot={plot} />, ...caption };
+      }
       if (carriesSeries(entry.result)) return null;
       const groups = readingGroups(entry.result);
-      return groups.length === 0 ? null : <Readings groups={groups} />;
+      return groups.length === 0
+        ? null
+        : { body: <Readings groups={groups} />, of: "", scope: "" };
     }
-    case "logs":
-      return <LogBody result={entry.result} />;
-    case "diff":
-      return <DiffBody result={entry.result} />;
-    case "change":
-      return <ChangeBody result={entry.result} />;
+    case "logs": {
+      const excerpt = logExcerpt(entry.result);
+      if (excerpt === null) return null;
+      const scanned = scannedLines(entry.result);
+      return {
+        body: <LogBody excerpt={excerpt} />,
+        of: "",
+        scope: [
+          `${excerpt.lines.length} of ${excerpt.returned} shown`,
+          scanned === null ? "" : `${scanned} lines searched`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    }
+    case "diff": {
+      const change = parseFileChange(entry.result);
+      if (change === null) return null;
+      const lines = change.hunks.flatMap((hunk) => hunk.lines);
+      const added = lines.filter((line) => line.type === "added").length;
+      const removed = lines.filter((line) => line.type === "removed").length;
+      const over = lines.length - MAX_DIFF_LINES;
+      return {
+        body: <DiffBody lines={lines.slice(0, MAX_DIFF_LINES)} />,
+        of: change.path,
+        scope: [
+          `+${added} \u2212${removed}`,
+          over > 0 ? `${over} further lines in the transcript` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    }
+    case "change": {
+      const merged = pullRequestsFrom(entry.result);
+      if (merged.length > 0) {
+        return {
+          body: <ChangesList pullRequests={merged} />,
+          of: "",
+          scope: `${merged.length} merged in the window`,
+        };
+      }
+      const opened = parsePullRequestResult(entry.result);
+      return opened === null
+        ? null
+        : {
+            body: <OpenedPullRequest pr={opened} />,
+            of: "",
+            scope: `${opened.action} by this investigation`,
+          };
+    }
     case "state": {
       const groups = stateGroups(entry.result);
-      return groups.length === 0 ? null : <Readings groups={groups} />;
+      return groups.length === 0
+        ? null
+        : { body: <Readings groups={groups} />, of: "", scope: "" };
     }
     case "text":
       return null;
@@ -205,55 +226,35 @@ export function Evidence({
 }: {
   entry: ResolvedEvidence;
   alert: NormalizedAlert | null;
-  // The same call cited by a later claim. It is named and linked, never drawn a
-  // second time: one call's chart down the page three times reads as three
+  // The same call cited by a later claim. It is named once in the sources row
+  // and never drawn again: one call's chart three times reads as three
   // measurements.
   repeat?: boolean;
-}): React.JSX.Element {
-  const target = targetOf(entry.input);
-
-  const header = (
-    <div className="flex items-baseline gap-2">
-      <span className="font-mono text-sm text-ink-subtle">
-        {entry.toolName}
-      </span>
-      {target && (
-        <span className="min-w-0 truncate font-mono text-sm text-muted-foreground">
-          {target}
-        </span>
-      )}
-      {repeat && (
-        <span className="text-sm text-muted-foreground">shown above</span>
-      )}
-      <Button
-        variant="link"
-        className="ml-auto"
-        onClick={() => revealToolCall(entry.toolUseId)}
-      >
-        Show in transcript
-      </Button>
-    </div>
-  );
-
-  if (repeat) {
-    return <div className="mt-2 border-l border-border pl-3">{header}</div>;
-  }
+}): React.JSX.Element | null {
+  if (repeat) return null;
 
   const summary = resultSummary(entry.toolName, entry.result, entry.outcome);
   // A call that answered nothing has nothing to draw: its outcome is the whole
-  // reading, and it is what the line below carries.
-  const body =
-    entry.outcome === undefined ? bodyFor(entry.kind, entry, alert) : null;
+  // reading, and it is what the line carries.
+  const drawing = entry.outcome === undefined ? drawingFor(entry, alert) : null;
+
+  if (drawing === null) {
+    return summary.text === "" ? null : (
+      <p className={cn("m-0 mt-4 font-mono text-sm", summary.tone)}>
+        {summary.text}
+      </p>
+    );
+  }
 
   return (
-    <div className="mt-2 border-l border-border pl-3">
-      {header}
-      {body === null && summary.text !== "" && (
-        <p className={cn("m-0 mt-1 font-mono text-sm", summary.tone)}>
-          {summary.text}
-        </p>
+    <figure className="m-0 mt-8">
+      {drawing.body}
+      {(drawing.of !== "" || drawing.scope !== "") && (
+        <figcaption className="mt-2 flex flex-wrap justify-between gap-3 text-xs text-muted-foreground">
+          <span className="min-w-0 font-mono">{drawing.of}</span>
+          <span className="shrink-0">{drawing.scope}</span>
+        </figcaption>
       )}
-      {body}
-    </div>
+    </figure>
   );
 }

@@ -2,21 +2,37 @@ import type { NormalizedAlert } from "@nightwarden/shared";
 import { asRecord } from "@/lib/toolResult";
 
 /* What a measurement result is drawn as, decided by the shape of the data and
-   never by the model: points over time are a line, a reading per label is a
+   never by the model: points over time are lines, a reading per label is a
    comparison, one reading is a number. */
 
 export interface Point {
-  at: string;
+  at: number;
   value: number;
 }
 
 export type PlotUnit = "bytes";
 
+export interface Line {
+  label: string;
+  points: Point[];
+}
+
 export type Plot =
-  | { kind: "line"; label: string; unit: PlotUnit | null; points: Point[] }
+  | {
+      kind: "line";
+      unit: PlotUnit | null;
+      // Every series the query returned. Drawing one of five and saying nothing
+      // is a chart that answers a question nobody asked.
+      lines: Line[];
+      // The metric every series here measures, which is one fact.
+      metric: string;
+      // Where the alert fired, when it falls inside the window drawn.
+      alertAt: number | null;
+    }
   | {
       kind: "bars";
       unit: PlotUnit | null;
+      metric: string;
       bars: { label: string; value: number }[];
     }
   | { kind: "value"; label: string; unit: PlotUnit | null; value: number };
@@ -26,18 +42,8 @@ interface Series {
   points: Point[];
 }
 
-// Labels every alert carries: they identify the rule, not the service, so
-// matching on them would pick an arbitrary series rather than the one under
-// investigation.
-const IGNORED_MATCH_LABELS = new Set([
-  "alertname",
-  "severity",
-  "job",
-  "prometheus",
-]);
-
 // Enough to show the shape of a window without drawing a point per pixel.
-const MAX_POINTS = 80;
+const MAX_POINTS = 120;
 
 function labelOf(metric: Record<string, string>): string {
   const name = metric["__name__"] ?? "series";
@@ -46,9 +52,27 @@ function labelOf(metric: Record<string, string>): string {
   return qualifier ? `${name} (${qualifier})` : name;
 }
 
+/* When several series are drawn together the metric name is the same on all of
+   them, so the label is what differs: the pod, the container, the instance. */
+function seriesLabels(all: Series[]): string[] {
+  const full = all.map((s) => labelOf(s.metric));
+  if (all.length < 2) return full;
+  const qualifiers = all.map(
+    (s) =>
+      s.metric["container"] ??
+      s.metric["pod"] ??
+      s.metric["instance"] ??
+      s.metric["job"] ??
+      null,
+  );
+  return qualifiers.every((q) => q !== null && q !== "")
+    ? qualifiers.map((q) => q as string)
+    : full;
+}
+
 // Prometheus names a metric for the unit it counts in, so the name is where the
-// unit comes from. Without it a working set of 4272341811 draws as "4.3B", which
-// is not 4 GB and is not caught at 02:14.
+// unit comes from. Without it a working set of 4272341811 draws as "4.3B",
+// which is not 4 GB and is not caught at 02:14.
 function unitOf(metric: Record<string, string>): PlotUnit | null {
   return /_bytes(_total)?$/.test(metric["__name__"] ?? "") ? "bytes" : null;
 }
@@ -72,7 +96,7 @@ function pointsFrom(value: unknown): Point[] {
     const [at, raw] = pair;
     const parsed = Number(raw);
     return typeof at === "number" && Number.isFinite(parsed)
-      ? [{ at: new Date(at * 1000).toISOString(), value: parsed }]
+      ? [{ at: at * 1000, value: parsed }]
       : [];
   });
 }
@@ -89,25 +113,6 @@ function seriesFrom(result: unknown): Series[] {
       ? []
       : [{ metric: stringMap(series["metric"]), points }];
   });
-}
-
-// Prefer the series whose labels mention the alert, so a chart shows the one
-// under investigation. Matched on the alert's own label values, which came from
-// the metrics source and so are the vocabulary the series already carry.
-function pickSeries(series: Series[], alert: NormalizedAlert | null): Series {
-  const first = series[0]!;
-  if (alert === null) return first;
-  const tokens = Object.entries(alert.labels)
-    .filter(([key]) => !IGNORED_MATCH_LABELS.has(key))
-    .map(([, value]) => value)
-    .filter((t) => t.length > 2);
-  if (tokens.length === 0) return first;
-  return (
-    series.find((s) => {
-      const labels = JSON.stringify(s.metric);
-      return tokens.some((t) => labels.includes(t));
-    }) ?? first
-  );
 }
 
 function downsample(points: Point[]): Point[] {
@@ -131,24 +136,36 @@ export function plotFrom(
 
   const overTime = series.filter((s) => s.points.length > 1);
   if (overTime.length > 0) {
-    const chosen = pickSeries(overTime, alert);
+    const labels = seriesLabels(overTime);
+    const firedAt = alert === null ? NaN : new Date(alert.firedAt).getTime();
+    const times = overTime.flatMap((s) => s.points.map((p) => p.at));
+    const inWindow =
+      Number.isFinite(firedAt) &&
+      firedAt >= Math.min(...times) &&
+      firedAt <= Math.max(...times);
     return {
       kind: "line",
-      label: labelOf(chosen.metric),
-      unit: unitOf(chosen.metric),
-      points: downsample(chosen.points),
+      unit: unitOf(overTime[0]!.metric),
+      metric: overTime[0]!.metric["__name__"] ?? "series",
+      lines: overTime.map((s, at) => ({
+        label: labels[at] ?? labelOf(s.metric),
+        points: downsample(s.points),
+      })),
+      alertAt: inWindow ? firedAt : null,
     };
   }
 
   // One reading each: there is no time axis to draw, so the comparison across
   // labels is the measurement, and a lone reading is just its number.
   if (series.length > 1) {
+    const labels = seriesLabels(series);
     return {
       kind: "bars",
+      metric: series[0]!.metric["__name__"] ?? "series",
       // Bars only compare readings of the same metric, so one unit covers them.
       unit: unitOf(series[0]!.metric),
-      bars: series.map((s) => ({
-        label: labelOf(s.metric),
+      bars: series.map((s, at) => ({
+        label: labels[at] ?? labelOf(s.metric),
         value: s.points[0]!.value,
       })),
     };
@@ -158,5 +175,30 @@ export function plotFrom(
     label: labelOf(series[0]!.metric),
     unit: unitOf(series[0]!.metric),
     value: series[0]!.points[0]!.value,
+  };
+}
+
+function clockOf(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/* What a drawing is of, and what it cannot speak for, beneath the drawing where
+   a caption goes. Never a heading above it: a heading has to be there for the
+   layout to hold, and a caption may be absent without anything moving. */
+export function plotCaption(plot: Plot): { of: string; scope: string } {
+  if (plot.kind === "value") return { of: plot.label, scope: "" };
+  if (plot.kind === "bars") {
+    return { of: plot.metric, scope: `${plot.bars.length} series` };
+  }
+  const points = Math.max(...plot.lines.map((line) => line.points.length));
+  const times = plot.lines.flatMap((line) => line.points.map((p) => p.at));
+  const window = `${clockOf(Math.min(...times))}–${clockOf(Math.max(...times))}`;
+  return {
+    of: plot.metric,
+    scope:
+      plot.lines.length === 1
+        ? `${points} points · ${window}`
+        : `${plot.lines.length} series · ${points} points each · ${window}`,
   };
 }

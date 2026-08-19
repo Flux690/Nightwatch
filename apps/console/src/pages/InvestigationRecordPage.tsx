@@ -36,6 +36,9 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/api/client";
 
+// --duration-panel, which is what the rail animates over.
+const PANEL_MS = 320;
+
 /* The record's place in the queue, so triage moves record to record without
    returning to the list and finding the row again. The order is the list's own
    and the total is the server's, so the two can never disagree. */
@@ -123,11 +126,32 @@ export function InvestigationRecordPage(): React.JSX.Element {
   // anything to follow, so a session still loading never flashes the transcript.
   const working = followedRun.current === true && openRequests === 0;
 
-  // In an effect rather than the handler, so the first request finds the column
-  // the render it triggered has just mounted.
+  /* Only the expanded rail hides the report outright, so only leaving or
+     entering that state has a reveal to cover: the report arrives at a width it
+     never had and rewraps on every frame of the way there. Closing the rail
+     just makes the report wider, which is what a side panel is for. */
+  const [revealing, setRevealing] = useState(false);
+  const wasExpanded = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (wasExpanded.current === null) {
+      wasExpanded.current = chatExpanded;
+      return;
+    }
+    if (wasExpanded.current === chatExpanded) return;
+    wasExpanded.current = chatExpanded;
+    setRevealing(true);
+    const done = window.setTimeout(() => setRevealing(false), PANEL_MS);
+    return () => window.clearTimeout(done);
+  }, [chatExpanded]);
+
+  /* In an effect rather than the handler, so the first request finds the column
+     the render it triggered has just mounted. The expanded rail covers the
+     report outright, so asking for the report has to close it: focusing what
+     something else is painted over is the same no-op by another route. */
   const reportRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (openRequests === 0) return;
+    setChatExpanded(false);
     const column = reportRef.current;
     if (column === null) return;
     column.scrollTop = 0;
@@ -262,7 +286,10 @@ export function InvestigationRecordPage(): React.JSX.Element {
           <div
             ref={reportRef}
             tabIndex={-1}
-            className="min-w-0 flex-1 overflow-y-auto [contain:layout]"
+            className={cn(
+              "min-w-0 flex-1 overflow-y-auto transition-opacity duration-(--duration-base) [contain:layout]",
+              revealing && "opacity-0",
+            )}
           >
             <ReportPanel
               report={report?.report ?? null}

@@ -15,7 +15,7 @@ export function InterruptCard({
     <Card
       data-resolved={resolved || undefined}
       className={cn(
-        "gap-2 rounded-none border px-4 py-4 ring-0",
+        "gap-2 border px-4 py-4 ring-0",
         resolved ? "border-border" : "border-border-strong",
         className,
       )}

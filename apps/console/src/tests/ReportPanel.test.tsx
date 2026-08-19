@@ -327,8 +327,10 @@ describe("ReportPanel", () => {
     // measurement, so checking the claim costs a glance rather than two clicks.
     expect(screen.getByText("memory used")).toBeInTheDocument();
     expect(screen.getByText("511 MB")).toBeInTheDocument();
-    expect(screen.getByText("GetDockerStats")).toBeInTheDocument();
-    expect(screen.getByText("payments-worker")).toBeInTheDocument();
+    // The call is named once, in the sources row at the foot of the claim.
+    expect(
+      screen.getByRole("button", { name: "GetDockerStats" }),
+    ).toBeInTheDocument();
 
     // The fix cites the change list, which renders as the merged pull request.
     const prLink = screen.getByRole("link", { name: /#482 bump cache size/ });
@@ -392,12 +394,12 @@ describe("ReportPanel", () => {
       1,
     );
     expect(screen.getByText(/job 4471 accepted/)).toBeInTheDocument();
-    // What the excerpt cannot speak for, in the result's own numbers.
+    // What the excerpt cannot speak for, in the caption beneath it.
     expect(
-      screen.getByText(/2 of 2 shown, 2 lines searched/),
+      screen.getByText(/2 of 2 shown . 2 lines searched/),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /show in transcript/i }),
+      screen.getByRole("button", { name: "GetDockerLogs" }),
     ).toBeInTheDocument();
   });
 
@@ -494,8 +496,10 @@ describe("ReportPanel", () => {
       }),
     );
 
-    expect(screen.getByText("rss (payments-worker)")).toBeInTheDocument();
-    expect(screen.getByText("rss (web)")).toBeInTheDocument();
+    /* Several series of one metric are told apart by what differs, so the
+       metric name is not repeated down the column beside itself. */
+    expect(screen.getByText("payments-worker")).toBeInTheDocument();
+    expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.getByText("500")).toBeInTheDocument();
   });
 
@@ -736,9 +740,7 @@ describe("ReportPanel", () => {
     window.addEventListener("nw:reveal-tool-call", listener);
 
     render(panel());
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /show in transcript/i })[0]!,
-    );
+    fireEvent.click(screen.getByRole("button", { name: "GetDockerStats" }));
 
     expect(revealed).toEqual(["tu-stats"]);
     window.removeEventListener("nw:reveal-tool-call", listener);

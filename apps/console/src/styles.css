@@ -39,6 +39,17 @@
   --status-fail-tint: oklch(0.25 0.05 18);
   --status-fail-wash: oklch(0.34 0.05 18);
 
+  /* Series on a chart, which are told apart and mean nothing individually. One
+     lightness and one chroma so no line reads as louder than its neighbours,
+     and hues kept clear of the status ones: a green line must not be mistaken
+     for a healthy one. */
+  --series-1: oklch(0.78 0.12 270);
+  --series-2: oklch(0.78 0.12 320);
+  --series-3: oklch(0.78 0.12 220);
+  --series-4: oklch(0.78 0.12 300);
+  --series-5: oklch(0.78 0.12 250);
+  --series-6: oklch(0.78 0.12 200);
+
   /* One accent, at the two lightnesses physics demands: a fill dark enough to
      carry white and an ink light enough to be read on the dark. */
   --cobalt-fill: oklch(0.52 0.15 270);

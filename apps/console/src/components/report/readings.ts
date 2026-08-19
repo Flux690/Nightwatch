@@ -43,6 +43,31 @@ function readingOf(key: string, value: number): string {
   return compact.format(value);
 }
 
+/* A content-addressed digest, whatever field it arrives in. Shown the length
+   `docker images` shows it: enough to tell two builds apart, and the rest is
+   sixty characters nobody reads dominating every row beside it. */
+const DIGEST = /^([a-z0-9]+):([0-9a-f]{32,})$/;
+
+/* An instant, however it arrived. Carried with its date rather than as a bare
+   clock: a config table holds when an image was built as well as when a
+   container started, and those can be weeks apart. */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
+function readable(value: string): string {
+  const digest = DIGEST.exec(value);
+  if (digest !== null) return `${digest[1]}:${digest[2]!.slice(0, 12)}…`;
+  if (!ISO.test(value)) return value;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime())
+    ? value
+    : at.toLocaleString([], {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+}
+
 // memoryUsedBytes -> "memory used". The unit is carried by the value, so
 // repeating it in the label says the same thing twice.
 function label(key: string): string {
@@ -84,7 +109,7 @@ export function stateGroups(result: unknown): ReadingGroup[] {
         return [{ key, label: label(key), value: readingOf(key, value) }];
       }
       return typeof value === "string" && value !== ""
-        ? [{ key, label: label(key), value }]
+        ? [{ key, label: label(key), value: readable(value) }]
         : [];
     });
     return rows.length === 0 ? [] : [{ runner: scope.runner, rows }];
