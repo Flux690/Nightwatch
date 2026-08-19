@@ -228,7 +228,7 @@ describe("ReportPanel", () => {
   it("separates what held up from what was ruled out", () => {
     render(panel());
 
-    expect(screen.getByText("Findings")).toBeInTheDocument();
+    expect(screen.getByText("What held up")).toBeInTheDocument();
     expect(screen.getByText("Ruled out")).toBeInTheDocument();
     // The heading says it, so the row beneath does not repeat "Disproven".
     expect(screen.getByText("Root cause")).toBeInTheDocument();
@@ -271,9 +271,11 @@ describe("ReportPanel", () => {
   it("marks how well each claim is backed, and marks nothing when it is not", () => {
     render(panel());
 
-    expect(screen.getByText("corroborated")).toBeInTheDocument();
+    // Twice for the leading claim: once in the run's own summary line, once
+    // beside the claim itself, which are two different questions.
+    expect(screen.getAllByText("corroborated")).toHaveLength(2);
     expect(screen.getByText("cited")).toBeInTheDocument();
-    // h2 earned nothing, and absence is the whole signal: no warning badge.
+    // Nothing here earned it, and absence is the whole signal: no warning badge.
     expect(screen.queryByText("verified")).not.toBeInTheDocument();
   });
 
@@ -296,7 +298,7 @@ describe("ReportPanel", () => {
     // The model wrote two entries and the system contributed the write between
     // them: an action cannot be missing from a timeline the model did not
     // author in full.
-    expect(screen.getByText("Timeline")).toBeInTheDocument();
+    expect(screen.getByText("What happened")).toBeInTheDocument();
     expect(screen.getByText("PR #482 merged")).toBeInTheDocument();
     expect(screen.getByText("RestartDockerService")).toBeInTheDocument();
     expect(screen.getByText("Ran")).toBeInTheDocument();
@@ -304,7 +306,22 @@ describe("ReportPanel", () => {
   });
 
   it("puts the tool output that backs a claim underneath the claim", () => {
-    render(panel());
+    // Both citations on the standing claim: what a run ruled out draws no
+    // evidence, so a change cited there would never be reached.
+    render(
+      panel({
+        report: {
+          ...REPORT,
+          hypotheses: [
+            {
+              ...REPORT.hypotheses[0]!,
+              evidenceIds: ["tu-stats", "tu-changes"],
+            },
+            REPORT.hypotheses[1]!,
+          ],
+        },
+      }),
+    );
 
     // The readings the claim rests on, drawn because the tool declares itself a
     // measurement, so checking the claim costs a glance rather than two clicks.
@@ -325,7 +342,11 @@ describe("ReportPanel", () => {
           ...REPORT,
           hypotheses: [
             { ...REPORT.hypotheses[0]!, evidenceIds: ["tu-stats"] },
-            { ...REPORT.hypotheses[1]!, evidenceIds: ["tu-stats"] },
+            {
+              ...REPORT.hypotheses[1]!,
+              verdict: "symptom" as const,
+              evidenceIds: ["tu-stats"],
+            },
           ],
         },
       }),

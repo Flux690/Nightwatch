@@ -127,14 +127,16 @@ describe("reportToMarkdown", () => {
     expect(md).toContain(
       "encodr-worker exhausted its limit buffering two large jobs",
     );
-    expect(md).toContain("## Timeline");
+    expect(md).toContain("## What happened");
     expect(md).toContain("- 2026-08-03T20:11:00.000Z - PR #812 merged");
     expect(md).toContain("## Impact");
     expect(md).toContain("## Recommendation");
     expect(md).toContain("Cap concurrency at one job per worker");
     // What was ruled out travels too: it is the half a reader needs when the
     // agent turns out to be wrong.
-    expect(md.indexOf("## Findings")).toBeLessThan(md.indexOf("## Ruled out"));
+    expect(md.indexOf("## What held up")).toBeLessThan(
+      md.indexOf("## Ruled out"),
+    );
     expect(md).toContain("### The ffmpeg bump leaks");
   });
 
@@ -144,6 +146,6 @@ describe("reportToMarkdown", () => {
     expect(md).toContain("# encodr-worker memory");
     expect(md).toContain("- ContainerRestarting (critical)");
     expect(md).toContain("still firing");
-    expect(md).not.toContain("## Findings");
+    expect(md).not.toContain("## What held up");
   });
 });

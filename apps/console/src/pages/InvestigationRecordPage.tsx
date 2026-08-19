@@ -270,6 +270,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
               evidence={report?.evidence ?? []}
               conviction={report?.conviction ?? {}}
               alerts={session?.alerts ?? []}
+              createdAt={session?.createdAt ?? null}
+              lastActivityAt={session?.lastActivityAt ?? null}
             />
           </div>
           <ChatRail

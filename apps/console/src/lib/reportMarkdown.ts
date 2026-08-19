@@ -69,7 +69,7 @@ export function reportToMarkdown(
     if (submitted.timeline.length > 0) {
       sections.push(
         [
-          "## Timeline",
+          "## What happened",
           "",
           ...submitted.timeline.map((e) => `- ${e.at} - ${e.what}`),
         ].join("\n"),
@@ -114,7 +114,7 @@ export function reportToMarkdown(
         .join("\n\n"),
     ].join("\n");
 
-  if (settled.length > 0) sections.push(claimBlock("Findings", settled));
+  if (settled.length > 0) sections.push(claimBlock("What held up", settled));
   if (ruledOut.length > 0) sections.push(claimBlock("Ruled out", ruledOut));
 
   // What the user released, read from the ledger rather than from anything
