@@ -16,7 +16,7 @@ import type {
   ThinkingItem,
   AlertArrivedItem,
 } from "./types.js";
-import { ToolCard } from "./toolPresentation.js";
+import { ToolCall } from "./toolPresentation.js";
 import { ApprovalCardPanel } from "./ApprovalCardPanel.js";
 import { ClarificationCardPanel } from "./ClarificationCardPanel.js";
 import { ContinueCardPanel } from "./ContinueCardPanel.js";
@@ -203,10 +203,14 @@ export function TranscriptItemRenderer({
       return <Compaction />;
     case "thinking":
       return <ThinkingBlock item={item} />;
-    case "tool_card":
-      return <ToolCard item={item} />;
-    case "approval_card":
-      return (
+    /* One kind for a tool call's whole life, so what it is drawn as is read off
+       its state rather than off a second label that could disagree with it. A
+       call waiting on a person is raised into the surface that asks; every
+       other moment of it - running, declined, answered, done - is a row. */
+    case "tool_call":
+      if (item.state.phase !== "awaiting_human")
+        return <ToolCall item={item} />;
+      return item.state.gate === "approval" ? (
         <ApprovalCardPanel
           item={item}
           submitting={submitting}
@@ -216,9 +220,7 @@ export function TranscriptItemRenderer({
               : undefined
           }
         />
-      );
-    case "clarification_card":
-      return (
+      ) : (
         <ClarificationCardPanel
           item={item}
           submitting={submitting}

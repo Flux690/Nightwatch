@@ -235,7 +235,7 @@ describe("mid-run alert injection (loop seam)", () => {
     // composing turn 1, so the tool call that ran afterwards reads afterwards.
     expect(transcript.slice(0, 3).map((i) => i.kind)).toEqual([
       "alert_arrived",
-      "tool_card",
+      "tool_call",
       "agent_text",
     ]);
     unregisterRunner(conn);

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { isTool } from "@nightwarden/shared";
 import type { ToolName } from "@nightwarden/shared";
 import { asRecord, stringAt as inputString } from "@/lib/toolResult";
-import type { ToolCallState, ToolCardItem, ToolOutcome } from "./types.js";
+import type { ToolCallItem, ToolCallState, ToolOutcome } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
 import { findingFor, formatBytes } from "./toolFindings.js";
@@ -189,6 +189,27 @@ function ToolBody({
   input: Record<string, unknown>;
   result: unknown;
 }): React.JSX.Element {
+  // Before the record guard: an answer is a bare string, so asRecord would send
+  // it to the raw fallback and print the question nowhere.
+  if (isTool(toolName, "AskUserQuestion")) {
+    const answer = typeof result === "string" ? result : JSON.stringify(result);
+    return (
+      <dl className="m-0 flex flex-col gap-2">
+        {[
+          ["Asked", inputString(input, "question") ?? ""],
+          ["You", answer],
+        ].map(([label, value]) => (
+          <div key={label} className="flex gap-3">
+            <dt className="w-16 shrink-0 text-sm text-ink-subtle">{label}</dt>
+            <dd className="m-0 min-w-0 text-sm break-words whitespace-pre-wrap">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
+
   const record = asRecord(result);
 
   if (record !== null) {
@@ -285,7 +306,7 @@ function ToolBody({
   return <CappedText text={text} />;
 }
 
-function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
+function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const { toolName, input } = item;
@@ -321,7 +342,7 @@ function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
     // Anchor for the report's evidence links: a citation there names the tool
     // call that produced it, and this is where that call lives.
     <div
-      data-testid="tool-card"
+      data-testid="tool-call"
       id={`tool-${item.toolUseId}`}
       data-revealed={revealed || undefined}
       className={cn(
@@ -346,7 +367,7 @@ function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
         )}
         <span className={cn("min-w-0 flex-1 truncate text-sm", tone)}>
           {running ? (
-            <span data-testid="tool-card-pending" className="animate-pulse">
+            <span data-testid="tool-call-pending" className="animate-pulse">
               running
             </span>
           ) : (
@@ -373,10 +394,10 @@ function ToolRow({ item }: { item: ToolCardItem }): React.JSX.Element {
 
 /* The presentation registry. Tools whose result IS a rendered artifact keep
    their bespoke component; everything else is a row. */
-export function ToolCard({
+export function ToolCall({
   item,
 }: {
-  item: ToolCardItem;
+  item: ToolCallItem;
 }): React.JSX.Element | null {
   const { toolName, input } = item;
   const result =

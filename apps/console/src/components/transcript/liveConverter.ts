@@ -24,7 +24,7 @@ export function hasActiveStream(items: TranscriptItem[]): boolean {
   if (last.kind === "thinking")
     return last.streaming && last.text.trim() !== "";
   if (last.kind === "agent_text") return true;
-  if (last.kind === "tool_card") return last.state.phase === "running";
+  if (last.kind === "tool_call") return last.state.phase === "running";
   return false;
 }
 

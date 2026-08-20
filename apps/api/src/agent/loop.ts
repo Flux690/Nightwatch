@@ -41,7 +41,7 @@ import {
   publishRunRetrying,
   publishTranscriptItem,
 } from "../session/stream.js";
-import { toolCallCard } from "../session/transcript.js";
+import { continueCard, toolCallCard } from "../session/transcript.js";
 import type { ReportCardItem } from "@nightwarden/shared";
 import {
   generateSessionTitle,
@@ -752,8 +752,10 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           toolUseId: gated.tool.id,
           toolName: gated.tool.name,
           input: gated.tool.input,
-          state: { phase: "awaiting_human" },
-          awaitingKind: isAskGate ? "clarification" : "approval",
+          state: {
+            phase: "awaiting_human",
+            gate: isAskGate ? "clarification" : "approval",
+          },
         }),
       });
       publishInterrupt({
@@ -809,11 +811,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   );
   publishTranscriptItem({
     sessionId,
-    item: toolCallCard({
-      toolUseId: continueId,
-      state: { phase: "awaiting_human" },
-      awaitingKind: "continue",
-    }),
+    item: continueCard(continueId, { phase: "awaiting_human" }),
   });
   publishInterrupt({
     sessionId,

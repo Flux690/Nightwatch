@@ -166,14 +166,13 @@ export {
   isToolOutcome,
 } from "./messages.js";
 export type {
+  ToolGate,
   ToolCallState,
   UserTurnItem,
   AgentTextItem,
   ErrorTextItem,
   ThinkingItem,
-  ToolCardItem,
-  ApprovalCardItem,
-  ClarificationCardItem,
+  ToolCallItem,
   ContinueCardItem,
   ReportCardItem,
   AlertArrivedItem,

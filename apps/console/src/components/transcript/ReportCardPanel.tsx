@@ -1,15 +1,37 @@
-import { FileText } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { ICON_UI } from "@/lib/iconProps";
+import { cn } from "@/lib/utils";
 import type { ReportCardItem } from "./types.js";
-import { InterruptCard } from "./InterruptCard.js";
 import { openReport } from "./openReport.js";
 
-/* The turn that produces the report belongs in the same column as the turns
-   before it. Nothing opens on its own: a report that slides in over the message
-   being read is the page moving under the reader. */
+/* The end of the run, drawn the way the transcript draws any other fact about
+   the run: a rule the label rides. This one is last and nothing renders below
+   it, which is what reads as an ending without a word spent on it. */
+
+/* Not a card. The report is not in here - this is the door to it, and a filled
+   panel would promise content it does not hold. Cobalt only once it is ready,
+   because that is the one moment there is something to act on. */
+const PHASE: Record<
+  ReportCardItem["state"]["phase"],
+  { label: string; rule: string; ink: string }
+> = {
+  building: {
+    label: "Writing the investigation report",
+    rule: "bg-border",
+    ink: "text-muted-foreground",
+  },
+  ready: {
+    label: "Report ready",
+    rule: "bg-primary-ink",
+    ink: "text-foreground",
+  },
+  failed: {
+    label: "The report was not written",
+    rule: "bg-fail",
+    ink: "text-fail",
+  },
+};
+
 export function ReportCardPanel({
   item,
   retrying = false,
@@ -20,45 +42,36 @@ export function ReportCardPanel({
   onRetry?: () => void;
 }): React.JSX.Element {
   const phase = item.state.phase;
-
-  if (phase === "building") {
-    return (
-      <div
-        role="status"
-        data-testid="report-card"
-        data-phase="building"
-        className="animate-in fade-in flex items-center gap-2 py-1 text-sm text-muted-foreground duration-(--duration-slow)"
-      >
-        <Spinner className="size-4" />
-        <span className="shimmer">Writing the investigation report</span>
-      </div>
-    );
-  }
-
-  // Resolved: the strong edge is how a card says it is waiting on a decision,
-  // and a report that is ready announces a fact instead.
-  if (phase === "ready") {
-    return (
-      <InterruptCard data-testid="report-card" data-phase="ready" resolved>
-        <div className="flex items-center justify-between gap-3">
-          <span className="flex min-w-0 items-center gap-2 text-sm">
-            <FileText {...ICON_UI} className="shrink-0 text-muted-foreground" />
-            The investigation report is ready
-          </span>
-          <Button size="sm" className="shrink-0" onClick={() => openReport()}>
-            Open report
-          </Button>
-        </div>
-      </InterruptCard>
-    );
-  }
+  const { label, rule, ink } = PHASE[phase];
 
   return (
-    <InterruptCard data-testid="report-card" data-phase="failed">
-      <div className="flex items-center justify-between gap-3">
-        {/* Why it was not written is the error notice above this card, which is
-            where every other failure in the run explains itself. */}
-        <span className="min-w-0 text-sm">The report was not written.</span>
+    <div
+      role="status"
+      data-testid="report-card"
+      data-phase={phase}
+      className="animate-in fade-in flex items-center gap-3 py-1 text-sm duration-(--duration-slow)"
+    >
+      <span aria-hidden className={cn("h-px w-6 shrink-0", rule)} />
+      <span
+        className={cn(
+          "shrink-0 font-medium whitespace-nowrap",
+          ink,
+          phase === "building" && "shimmer",
+        )}
+      >
+        {label}
+      </span>
+      <span aria-hidden className={cn("h-px min-w-0 flex-1", rule)} />
+      {/* Ready waits to be clicked: a run ending must not swap the view out
+          from under whoever is mid-sentence. */}
+      {phase === "ready" && (
+        <Button size="sm" className="shrink-0" onClick={() => openReport()}>
+          Open report
+        </Button>
+      )}
+      {/* Why it was not written is the error notice above, which is where every
+          other failure in the run explains itself. */}
+      {phase === "failed" && (
         <Button
           size="sm"
           variant="secondary"
@@ -69,7 +82,7 @@ export function ReportCardPanel({
           {retrying && <Spinner className="size-4" />}
           Try again
         </Button>
-      </div>
-    </InterruptCard>
+      )}
+    </div>
   );
 }

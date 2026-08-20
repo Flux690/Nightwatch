@@ -29,6 +29,7 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import { buildTranscript } from "../session/transcript.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -238,6 +239,19 @@ describe("clarification interrupts", () => {
 
     // Interrupt row gone after resolution
     expect(hasPendingHumanInput(sessionId)).toBe(false);
+
+    /* Answering ends the question. What the console is handed is one ordinary
+       call carrying what the person said - not a question card that outlives
+       its own answer, which is what it used to be given. */
+    const asked = buildTranscript(sessionId).filter(
+      (item) => item.kind === "tool_call" && item.toolUseId === "tu-ans-1",
+    );
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.kind === "tool_call" && asked[0].state).toMatchObject({
+      phase: "resolved",
+      decision: "answered",
+      result: "Database overloaded",
+    });
 
     close();
   });

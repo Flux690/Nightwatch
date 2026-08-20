@@ -6,11 +6,17 @@ import type { ToolOutcome } from "./messages.js";
 // with whatever the session is suspended on. The browser draws these; it never
 // works out what state a tool call is in.
 
+/* What a suspended call needs from a person, named exactly as the interrupt row
+   names it so there is one vocabulary rather than a translation between two. It
+   lives on the one phase where it means anything, so it can never disagree with
+   a call that has already settled. */
+export type ToolGate = "approval" | "clarification";
+
 // Explicit rather than an optional field, so "not set" is never a meaning. A
 // decision in flight is the component's own concern and never appears here.
 export type ToolCallState =
   | { phase: "running" }
-  | { phase: "awaiting_human" }
+  | { phase: "awaiting_human"; gate: ToolGate }
   // A human decided; `result` arrives once the tool that was waiting has run.
   | {
       phase: "resolved";
@@ -51,42 +57,34 @@ export interface ThinkingItem {
   streaming: boolean;
 }
 
-export interface ToolCardItem {
-  kind: "tool_card";
+/* One item for the whole life of a tool call: running, waiting on a person for
+   an approval or an answer, then settled. The state carries which of those it
+   is, so nothing here can label a call as something its own state contradicts.
+   Its arguments travel whole in `input` rather than being copied out field by
+   field - a copy is a second source, and which fields matter is a question
+   about drawing, which belongs to the console. */
+export interface ToolCallItem {
+  kind: "tool_call";
   toolUseId: string;
   toolName: string;
   input: Record<string, unknown>;
-  state: ToolCallState;
-}
-
-export interface ApprovalCardItem {
-  kind: "approval_card";
-  toolUseId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  risk?: string;
   // How many times this same write already ran in this investigation, counted
   // from its transcript. Present only when it has happened before; the card
-  // informs, it never refuses.
+  // informs, it never refuses. Here rather than in `input` because only a walk
+  // of the transcript can answer it.
   priorRuns?: number;
   state: ToolCallState;
 }
 
-export interface ClarificationCardItem {
-  kind: "clarification_card";
-  toolUseId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  question?: string;
-  options?: Array<{ label: string; description: string }>;
-  multiSelect?: boolean;
-  state: ToolCallState;
-}
-
+/* Not a tool call: the harness raises it when the time budget runs out, no model
+   asked for it, and its synthetic id keys an interrupt row rather than any turn.
+   So it carries the two states it can actually be in, never a tool's four. */
 export interface ContinueCardItem {
   kind: "continue_card";
   toolUseId: string;
-  state: ToolCallState;
+  state:
+    | { phase: "awaiting_human" }
+    | { phase: "resolved"; decision: ApprovalStatus };
 }
 
 /* In the transcript rather than beside it: the report is produced by a turn like
@@ -120,9 +118,7 @@ export type TranscriptItem =
   | AgentTextItem
   | ErrorTextItem
   | ThinkingItem
-  | ToolCardItem
-  | ApprovalCardItem
-  | ClarificationCardItem
+  | ToolCallItem
   | ContinueCardItem
   | ReportCardItem
   | AlertArrivedItem

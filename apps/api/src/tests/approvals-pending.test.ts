@@ -154,16 +154,18 @@ describe("a suspended session serves its pending row with its transcript", () =>
     const sessionId = await waitForAwaitingSession();
     const items = await getTranscript(sessionId);
 
-    // The card and the decision it waits on arrive as one item, so the console
-    // has nothing to reconcile and nothing to drop.
-    const card = items.find((i) => i.kind === "approval_card");
+    // The call and what it waits on arrive as one item, so the console has
+    // nothing to reconcile and nothing to drop. What it needs from the human
+    // rides on the state, never on a second label beside it.
+    const card = items.find((i) => i.kind === "tool_call");
     expect(card).toBeDefined();
-    expect(card?.kind === "approval_card" && card.toolName).toBe(
+    expect(card?.kind === "tool_call" && card.toolName).toBe(
       "RestartDockerService",
     );
-    expect(card?.kind === "approval_card" && card.state.phase).toBe(
-      "awaiting_human",
-    );
+    expect(card?.kind === "tool_call" && card.state).toEqual({
+      phase: "awaiting_human",
+      gate: "approval",
+    });
 
     await resolvePending(sessionId);
     unregisterRunner(conn);
@@ -179,8 +181,13 @@ describe("a suspended session serves its pending row with its transcript", () =>
     // The decision has to be reconstructible from the database, not the browser
     // that made it: the registry says gated, the outcome says declined.
     const items = await getTranscript(sessionId);
-    const card = items.find((i) => i.kind === "approval_card");
-    expect(card?.kind === "approval_card" && card.state).toMatchObject({
+    const cards = items.filter(
+      (i) => i.kind === "tool_call" && i.toolName === "RestartDockerService",
+    );
+    // One call is one item for its whole life. A settled approval used to keep
+    // its own card and grow a second one beneath it for the same call.
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.kind === "tool_call" && cards[0].state).toMatchObject({
       phase: "resolved",
       decision: "rejected",
       outcome: "rejected",

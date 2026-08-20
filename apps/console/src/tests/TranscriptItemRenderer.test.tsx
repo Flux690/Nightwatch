@@ -48,17 +48,17 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
-  describe("approval_card", () => {
+  describe("a call awaiting approval", () => {
     const approvalItem: TranscriptItem = {
-      kind: "approval_card",
+      kind: "tool_call",
       toolUseId: "tu-gate",
       toolName: "RestartDockerService",
       input: {
         service: { project: "web-01", service: "web-01" },
         reason: "The health check has failed six times in a row.",
+        risk: "high",
       },
-      risk: "high",
-      state: { phase: "awaiting_human" },
+      state: { phase: "awaiting_human", gate: "approval" },
     };
 
     it("labels the action button with the verb, not a generic Approve", async () => {
@@ -151,18 +151,20 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
-  describe("clarification_card", () => {
-    const clarItem: TranscriptItem = {
-      kind: "clarification_card",
-      toolUseId: "tu-clar",
-      toolName: "AskUserQuestion",
-      input: {},
+  describe("a call awaiting an answer", () => {
+    const clarInput = {
       question: "Which service first?",
       options: [
         { label: "nginx", description: "web server" },
         { label: "postgres", description: "database" },
       ],
-      state: { phase: "awaiting_human" },
+    };
+    const clarItem: TranscriptItem = {
+      kind: "tool_call",
+      toolUseId: "tu-clar",
+      toolName: "AskUserQuestion",
+      input: clarInput,
+      state: { phase: "awaiting_human", gate: "clarification" },
     };
 
     it("calls onAnswer with the selected radio once Submit is clicked", async () => {
@@ -178,7 +180,10 @@ describe("TranscriptItemRenderer", () => {
 
     it("multiSelect: accumulates checkbox selection and posts all on Submit", async () => {
       const onAnswer = vi.fn();
-      wrap({ ...clarItem, multiSelect: true }, { onAnswer });
+      wrap(
+        { ...clarItem, input: { ...clarInput, multiSelect: true } },
+        { onAnswer },
+      );
 
       const user = userEvent.setup();
       await user.click(screen.getByRole("checkbox", { name: /^nginx$/i }));
@@ -293,7 +298,7 @@ describe("TranscriptItemRenderer", () => {
   describe("the report tools", () => {
     it("draws nothing for the submission the report card already announces", () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-report",
         toolName: "SubmitInvestigationReport",
         input: { headline: "Pool exhausted" },
@@ -307,7 +312,7 @@ describe("TranscriptItemRenderer", () => {
 
     it("draws a recorded hypothesis, which is a step the reader can follow", () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-hypo",
         toolName: "RecordHypothesis",
         input: { statement: "The pool was exhausted" },
@@ -342,7 +347,7 @@ describe("TranscriptItemRenderer", () => {
 
     it("renders Edit results as a colored diff card", () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-1",
         toolName: "Edit",
         input: { path: "src/app.ts" },
@@ -359,7 +364,7 @@ describe("TranscriptItemRenderer", () => {
 
     it("parses the persisted JSON-string form of a diff result too", () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-2",
         toolName: "Write",
         input: { path: "src/app.ts" },
@@ -372,7 +377,7 @@ describe("TranscriptItemRenderer", () => {
 
     it("renders OpenPullRequest results as a PR card with the GitHub link", () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-4",
         toolName: "OpenPullRequest",
         input: { title: "Fix the leak" },
@@ -401,7 +406,7 @@ describe("TranscriptItemRenderer", () => {
   describe("output disclosure", () => {
     it("shows an unknown tool's first line as the finding and the rest on expand", async () => {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-5",
         toolName: "SomeToolWeDoNotRender",
         input: { target: "docker/api/api" },
@@ -425,7 +430,7 @@ describe("TranscriptItemRenderer", () => {
         "\n",
       );
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: "tu-6",
         toolName: "Bash",
         input: { command: "ls" },
@@ -451,7 +456,7 @@ describe("TranscriptItemRenderer", () => {
       result: unknown,
     ): HTMLElement {
       wrap({
-        kind: "tool_card",
+        kind: "tool_call",
         toolUseId: `tu-${outcome ?? "ok"}`,
         toolName: "Read",
         input: { path: "docker-compose.yml" },
@@ -531,7 +536,7 @@ describe("TranscriptItemRenderer", () => {
         <>
           <TranscriptItemRenderer
             item={{
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-logs",
               toolName: "GetDockerLogs",
               input: { target: "docker/encodr/cache" },
@@ -546,7 +551,7 @@ describe("TranscriptItemRenderer", () => {
           />
           <TranscriptItemRenderer
             item={{
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-stats",
               toolName: "GetDockerStats",
               input: { target: "docker/encodr/cache" },
@@ -559,7 +564,7 @@ describe("TranscriptItemRenderer", () => {
         </>,
       );
 
-      const [logs, stats] = screen.getAllByTestId("tool-card");
+      const [logs, stats] = screen.getAllByTestId("tool-call");
       expect(logs!.querySelector("button")).toHaveAttribute(
         "aria-expanded",
         "false",

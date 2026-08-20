@@ -1,34 +1,64 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import type { ClarificationCardItem } from "./types.js";
+import { asRecord, stringAt } from "@/lib/toolResult";
+import type { ToolCallItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
-import { firstLines, IO_LABEL_CLASS, TOOL_CARD_CLASS } from "./cardChrome.js";
+
+/* The raised form of a question, which exists only while it is unanswered. An
+   answered one is an ordinary row whose result is what the person said, so
+   nothing here has a second life to draw.
+
+   Unlike an approval this is pinned, because a question stops the whole run
+   rather than one tool: there is nothing else for the reader to be doing. */
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+// Read from the call's own arguments rather than from fields copied beside
+// them: a copy is a second source, and this is the only reader.
+export function questionOf(input: Record<string, unknown>): {
+  question: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+} {
+  const raw = input["options"];
+  const options = (Array.isArray(raw) ? raw : []).flatMap(
+    (entry): QuestionOption[] => {
+      const record = asRecord(entry);
+      const label = record === null ? null : stringAt(record, "label");
+      if (record === null || label === null) return [];
+      return [{ label, description: stringAt(record, "description") ?? "" }];
+    },
+  );
+  return {
+    question: stringAt(input, "question") ?? "",
+    options,
+    multiSelect: input["multiSelect"] === true,
+  };
+}
 
 export function ClarificationCardPanel({
   item,
   submitting = false,
   onAnswer,
 }: {
-  item: ClarificationCardItem;
+  item: ToolCallItem;
   submitting?: boolean;
   onAnswer?: (answer: string | string[]) => void;
 }): React.JSX.Element {
-  const state = item.state;
-  const resolved = state.phase === "resolved";
-  const answer = state.phase === "resolved" ? state.result : undefined;
+  const { question, options, multiSelect } = questionOf(item.input);
   const [selected, setSelected] = useState<string[]>([]);
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
 
-  const options = item.options ?? [];
-
   function toggleOption(label: string): void {
-    if (item.multiSelect) {
+    if (multiSelect) {
       setSelected((prev) =>
         prev.includes(label)
           ? prev.filter((l) => l !== label)
@@ -41,7 +71,7 @@ export function ClarificationCardPanel({
   }
 
   function toggleOther(): void {
-    if (item.multiSelect) {
+    if (multiSelect) {
       setOtherChecked((prev) => !prev);
     } else {
       setSelected([]);
@@ -51,7 +81,7 @@ export function ClarificationCardPanel({
 
   function handleSubmit(): void {
     const otherTrimmed = otherText.trim();
-    if (item.multiSelect) {
+    if (multiSelect) {
       const answers =
         otherChecked && otherTrimmed ? [...selected, otherTrimmed] : selected;
       if (answers.length === 0) return;
@@ -66,45 +96,15 @@ export function ClarificationCardPanel({
     }
   }
 
-  const canSubmit = item.multiSelect
+  const canSubmit = multiSelect
     ? selected.length > 0 || (otherChecked && otherText.trim().length > 0)
     : (otherChecked && otherText.trim().length > 0) || selected.length > 0;
 
-  // Once answered, the interactive card collapses into one compact Q/A card:
-  // the question in, the human's answer out, nothing else.
-  if (resolved) {
-    const answerText =
-      typeof answer === "string"
-        ? answer
-        : answer !== undefined
-          ? JSON.stringify(answer)
-          : null;
-    return (
-      <div data-testid="clarification-card" data-resolved="true">
-        <p className="mb-2 font-mono text-base font-medium">AskUserQuestion</p>
-        <Card size="sm" className={TOOL_CARD_CLASS}>
-          <CardContent className="px-4">
-            <p className={IO_LABEL_CLASS}>IN</p>
-            <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
-              {firstLines(item.question ?? "")}
-            </p>
-          </CardContent>
-          <CardContent className="px-4">
-            <p className={IO_LABEL_CLASS}>OUT</p>
-            <p className="m-0 overflow-hidden text-base whitespace-pre-wrap">
-              {answerText === null ? "Answered" : firstLines(answerText)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <InterruptCard data-testid="clarification-card" resolved={resolved}>
-      <p className="text-sm">{item.question}</p>
+    <InterruptCard data-testid="clarification-card">
+      <p className="text-sm">{question}</p>
       <div className="flex flex-col gap-2">
-        {item.multiSelect ? (
+        {multiSelect ? (
           <>
             {options.map((opt) => (
               <label

@@ -2,14 +2,13 @@
 // both ends compile against one definition.
 export type {
   ToolOutcome,
+  ToolGate,
   ToolCallState,
   UserTurnItem,
   AgentTextItem,
   ErrorTextItem,
   ThinkingItem,
-  ToolCardItem,
-  ApprovalCardItem,
-  ClarificationCardItem,
+  ToolCallItem,
   ContinueCardItem,
   ReportCardItem,
   AlertArrivedItem,

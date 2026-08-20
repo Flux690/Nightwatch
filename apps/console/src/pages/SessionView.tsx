@@ -32,18 +32,25 @@ import { apiFetch } from "@/api/client";
 // A stable empty default, so an unloaded transcript does not remount the column.
 const EMPTY_ITEMS: TranscriptItem[] = [];
 
-// The one card the session is waiting on, wherever it came from: the projected
-// transcript after a reload, or the live stream during a run.
-function awaitingCard(
-  ...lists: TranscriptItem[][]
-): TranscriptItem | undefined {
+/* What gets pinned above the input, from wherever it came - the projected
+   transcript after a reload, or the live stream during a run. Only what stops
+   the whole run qualifies: a question, and the time-budget prompt.
+
+   An approval is deliberately not here. It gates one tool rather than the run,
+   so it stays inline where it happened and is allowed to scroll away. */
+function dockedCard(...lists: TranscriptItem[][]): TranscriptItem | undefined {
   for (const items of lists) {
     for (const item of items) {
-      const isCard =
-        item.kind === "approval_card" ||
-        item.kind === "clarification_card" ||
-        item.kind === "continue_card";
-      if (isCard && item.state.phase === "awaiting_human") return item;
+      if (item.kind === "continue_card") {
+        if (item.state.phase === "awaiting_human") return item;
+        continue;
+      }
+      if (
+        item.kind === "tool_call" &&
+        item.state.phase === "awaiting_human" &&
+        item.state.gate === "clarification"
+      )
+        return item;
     }
   }
   return undefined;
@@ -377,17 +384,7 @@ export function SessionView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(vars.body),
       }),
-    onError: (err, vars) => {
-      setLiveItems((prev) =>
-        prev.map((item) =>
-          (item.kind === "approval_card" ||
-            item.kind === "clarification_card" ||
-            item.kind === "continue_card") &&
-          item.toolUseId === vars.toolUseId
-            ? { ...item, approval: undefined }
-            : item,
-        ),
-      );
+    onError: (err) => {
       toast.show({
         title: "Response not sent",
         message: err instanceof Error ? err.message : "Try again.",
@@ -398,14 +395,8 @@ export function SessionView({
 
   const handleResolve = useCallback(
     (toolUseId: string, action: "approve" | "reject", reason?: string) => {
-      setLiveItems((prev) =>
-        prev.map((item) =>
-          (item.kind === "approval_card" || item.kind === "continue_card") &&
-          item.toolUseId === toolUseId
-            ? { ...item, approval: "pending" }
-            : item,
-        ),
-      );
+      // Nothing is stamped on the item: the decision in flight belongs to this
+      // browser, and `submitting` below is what draws it.
       respond.mutate({
         toolUseId,
         // The comment rides the same request the decision does; the API feeds it
@@ -442,15 +433,6 @@ export function SessionView({
   const handleAnswer = useCallback(
     (toolUseId: string, answer: string | string[]) => {
       const text = Array.isArray(answer) ? answer.join(", ") : answer;
-      // Stash the answer on the live card so the resolved Q/A view can show it
-      // before the persisted transcript catches up.
-      setLiveItems((prev) =>
-        prev.map((item) =>
-          item.kind === "clarification_card" && item.toolUseId === toolUseId
-            ? { ...item, approval: "pending", result: text }
-            : item,
-        ),
-      );
       respond.mutate({ toolUseId, body: { text } });
     },
     [respond],
@@ -475,7 +457,7 @@ export function SessionView({
     setIsRunning(false);
   }, []);
 
-  const awaitingItem = awaitingCard(persistedItems, liveItems);
+  const dockedItem = dockedCard(persistedItems, liveItems);
   const submittingToolUseId = respond.isPending
     ? (respond.variables?.toolUseId ?? null)
     : null;
@@ -510,7 +492,7 @@ export function SessionView({
               pendingEcho={pendingEcho}
               lastEchoText={lastEchoRef.current}
               showWorking={showWorking}
-              dockedKey={awaitingItem ? transcriptItemKey(awaitingItem) : null}
+              dockedKey={dockedItem ? transcriptItemKey(dockedItem) : null}
               submittingToolUseId={submittingToolUseId}
               onResolve={handleResolve}
               onAnswer={handleAnswer}
@@ -528,13 +510,13 @@ export function SessionView({
           </div>
         )}
 
-        {awaitingItem && (
+        {dockedItem && (
           <div className="mx-auto mb-2 w-full max-w-chat px-6">
             <TranscriptItemRenderer
-              item={awaitingItem}
+              item={dockedItem}
               submitting={
-                "toolUseId" in awaitingItem &&
-                awaitingItem.toolUseId === submittingToolUseId
+                "toolUseId" in dockedItem &&
+                dockedItem.toolUseId === submittingToolUseId
               }
               onResolve={handleResolve}
               onAnswer={handleAnswer}

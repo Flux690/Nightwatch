@@ -37,7 +37,7 @@ function itemEvent(item: TranscriptItem): ConsoleEvent {
 
 function toolCallStart(toolUseId: string): ConsoleEvent {
   return itemEvent({
-    kind: "tool_card",
+    kind: "tool_call",
     toolUseId,
     toolName: "check_service_status",
     input: {},
@@ -47,7 +47,7 @@ function toolCallStart(toolUseId: string): ConsoleEvent {
 
 function toolCallEnd(toolUseId: string, result: unknown): ConsoleEvent {
   return itemEvent({
-    kind: "tool_card",
+    kind: "tool_call",
     toolUseId,
     toolName: "check_service_status",
     input: {},
@@ -57,12 +57,11 @@ function toolCallEnd(toolUseId: string, result: unknown): ConsoleEvent {
 
 function interrupt(toolUseId: string): ConsoleEvent {
   return itemEvent({
-    kind: "approval_card",
+    kind: "tool_call",
     toolUseId,
     toolName: "RestartDockerService",
     input: { risk: "high" },
-    risk: "high",
-    state: { phase: "awaiting_human" },
+    state: { phase: "awaiting_human", gate: "approval" },
   });
 }
 
@@ -177,7 +176,7 @@ describe("applyLiveEvent — thinking", () => {
     expect(items).toHaveLength(2);
     const thinking = items[0] as ThinkingItem;
     expect(thinking.streaming).toBe(false);
-    expect(items[1]).toMatchObject({ kind: "tool_card", toolUseId: "tu-1" });
+    expect(items[1]).toMatchObject({ kind: "tool_call", toolUseId: "tu-1" });
   });
 
   it("stops streaming the thinking item the moment an interrupt arrives", () => {
@@ -189,7 +188,7 @@ describe("applyLiveEvent — thinking", () => {
     const thinking = items[0] as ThinkingItem;
     expect(thinking.streaming).toBe(false);
     expect(items[1]).toMatchObject({
-      kind: "approval_card",
+      kind: "tool_call",
       toolUseId: "tu-gate",
     });
   });

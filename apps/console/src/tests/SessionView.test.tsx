@@ -383,8 +383,8 @@ describe("SessionView", () => {
     });
   });
 
-  describe("tool card (TRANSCRIPT_ITEM events)", () => {
-    it("renders a tool card with IN block when the API sends a running call", async () => {
+  describe("tool call (TRANSCRIPT_ITEM events)", () => {
+    it("renders a running call as a row naming the tool and its target", async () => {
       setup();
 
       await waitFor(() => {
@@ -400,7 +400,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
@@ -416,7 +416,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("fills the OUT block when the call completes", async () => {
+    it("reads the result on the row once the call completes", async () => {
       setup();
 
       await waitFor(() => {
@@ -432,7 +432,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
@@ -453,7 +453,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-1",
               toolName: "check_service_status",
               input: {},
@@ -493,7 +493,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
@@ -507,7 +507,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-2",
               toolName: "list_processes",
               input: { filter: "http" },
@@ -529,7 +529,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-2",
               toolName: "check_service_status",
               input: {},
@@ -570,7 +570,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "other-session",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-99",
               toolName: "should_not_appear",
               input: {},
@@ -773,7 +773,7 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "tool_card",
+              kind: "tool_call",
               toolUseId: "tu-1",
               toolName: "check_service_status",
               input: { target: "nginx" },
@@ -881,12 +881,11 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "approval_card",
+              kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
               input: { target: "docker/web-01/web-01", risk: "high" },
-              risk: "high",
-              state: { phase: "awaiting_human" },
+              state: { phase: "awaiting_human", gate: "approval" },
             },
           },
         });
@@ -935,7 +934,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("replaces the buttons with a resolution label on INTERRUPT_RESOLVED and keeps the tool card below", async () => {
+    it("settles into one row, not a card with a second copy of itself beneath", async () => {
       setup();
 
       await waitFor(() => {
@@ -957,15 +956,13 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "approval_card",
+              kind: "tool_call",
               toolUseId: "tu-gated",
               toolName: "RestartDockerService",
               input: { target: "docker/web-01/web-01", risk: "high" },
-              risk: "high",
               state: {
                 phase: "resolved",
                 decision: "approved",
-                by: "user",
                 result: "web-01 restarted",
               },
             },
@@ -973,30 +970,17 @@ describe("SessionView", () => {
         });
       });
 
+      /* A decided call is an ordinary row. The card was the raised state of
+         this same call, so it goes when the decision does - it used to stay and
+         grow a duplicate beneath it, naming one call twice. */
       await waitFor(() => {
-        const card = screen.getByTestId("approval-card");
-        expect(within(card).getByText(/^approved$/i)).toBeInTheDocument();
-        expect(
-          within(card).queryByRole("button", { name: /restart/i }),
-        ).not.toBeInTheDocument();
-        expect(
-          within(card).queryByRole("button", { name: /reject/i }),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByTestId("approval-card")).not.toBeInTheDocument();
       });
+      expect(screen.getAllByText("RestartDockerService")).toHaveLength(1);
 
-      // The decision carries the result of the tool it released, so the paired
-      // tool card renders below it with that output already in place.
-      expect(screen.getAllByText("RestartDockerService")).toHaveLength(2);
-      const resolvedCard = screen.getByTestId("approval-card");
-      const toolCard = screen.getByTestId("tool-card");
-      expect(
-        resolvedCard.compareDocumentPosition(toolCard) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
       // The result is the row's finding, so it reads without being expanded.
-      expect(
-        within(toolCard).getByText(/web-01 restarted/),
-      ).toBeInTheDocument();
+      const row = screen.getByTestId("tool-call");
+      expect(within(row).getByText(/web-01 restarted/)).toBeInTheDocument();
     });
   });
 
@@ -1005,12 +989,11 @@ describe("SessionView", () => {
       setup([
         USER_TURN,
         {
-          kind: "approval_card",
+          kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
           input: { target: "docker/web-01/web-01", risk: "high" },
-          risk: "high",
-          state: { phase: "awaiting_human" },
+          state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);
 
@@ -1030,13 +1013,14 @@ describe("SessionView", () => {
       setup([
         USER_TURN,
         {
-          kind: "clarification_card",
+          kind: "tool_call",
           toolUseId: "tu-durable-clar",
           toolName: "AskUserQuestion",
-          input: {},
-          question: "Which service first?",
-          options: [{ label: "nginx", description: "The web server" }],
-          state: { phase: "awaiting_human" },
+          input: {
+            question: "Which service first?",
+            options: [{ label: "nginx", description: "The web server" }],
+          },
+          state: { phase: "awaiting_human", gate: "clarification" },
         },
       ]);
 
@@ -1055,12 +1039,11 @@ describe("SessionView", () => {
       setup([
         USER_TURN,
         {
-          kind: "approval_card",
+          kind: "tool_call",
           toolUseId: "tu-durable",
           toolName: "RestartDockerService",
           input: { target: "docker/web-01/web-01", risk: "high" },
-          risk: "high",
-          state: { phase: "awaiting_human" },
+          state: { phase: "awaiting_human", gate: "approval" },
         },
       ]);
 
@@ -1318,7 +1301,7 @@ describe("SessionView", () => {
   });
 
   describe("clarification card (INTERRUPT kind=clarification)", () => {
-    function pushClarification(extra: object = {}): void {
+    function pushClarification(inputExtra: object = {}): void {
       act(() => {
         MockEventSource.latest?.push({
           messageId: "c1",
@@ -1326,17 +1309,18 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "clarification_card",
+              kind: "tool_call",
               toolUseId: "tu-clar",
               toolName: "AskUserQuestion",
-              input: {},
-              question: "Which service should I investigate first?",
-              options: [
-                { label: "nginx", description: "The web server" },
-                { label: "postgres", description: "The database" },
-              ],
-              state: { phase: "awaiting_human" },
-              ...extra,
+              input: {
+                question: "Which service should I investigate first?",
+                options: [
+                  { label: "nginx", description: "The web server" },
+                  { label: "postgres", description: "The database" },
+                ],
+                ...inputExtra,
+              },
+              state: { phase: "awaiting_human", gate: "clarification" },
             },
           },
         });
@@ -1403,7 +1387,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("shows Answered label after INTERRUPT_RESOLVED with status=answered", async () => {
+    it("settles into a row whose line reads the answer the person gave", async () => {
       setup();
 
       await waitFor(() => {
@@ -1425,15 +1409,15 @@ describe("SessionView", () => {
           payload: {
             sessionId: "s1",
             item: {
-              kind: "clarification_card",
+              kind: "tool_call",
               toolUseId: "tu-clar",
               toolName: "AskUserQuestion",
-              input: {},
-              question: "Which service should I investigate first?",
+              input: {
+                question: "Which service should I investigate first?",
+              },
               state: {
                 phase: "resolved",
                 decision: "answered",
-                by: "user",
                 result: "nginx",
               },
             },
@@ -1441,13 +1425,17 @@ describe("SessionView", () => {
         });
       });
 
+      /* Answering ends the question: what is left is a call like any other,
+         and its line says what the person actually said rather than the word
+         "Answered", which told the reader nothing they came back for. */
       await waitFor(() => {
-        const card = screen.getByTestId("clarification-card");
-        expect(within(card).getByText("AskUserQuestion")).toBeInTheDocument();
         expect(
-          within(card).queryByRole("radio", { name: /^nginx$/i }),
+          screen.queryByTestId("clarification-card"),
         ).not.toBeInTheDocument();
       });
+      const row = screen.getByTestId("tool-call");
+      expect(within(row).getByText("AskUserQuestion")).toBeInTheDocument();
+      expect(within(row).getByText("nginx")).toBeInTheDocument();
     });
 
     it("multiSelect: joins selected options and posts to /respond as text", async () => {

@@ -214,7 +214,7 @@ describe("API-local session store", () => {
     ]);
 
     const card = buildTranscript(m.sessionId).find(
-      (item) => item.kind === "tool_card",
+      (item) => item.kind === "tool_call",
     );
     expect(card?.state).toEqual({
       phase: "complete",

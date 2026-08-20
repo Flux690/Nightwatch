@@ -12,10 +12,9 @@ export function ContinueCardPanel({
   onResolve?: (action: "approve" | "reject") => void;
 }): React.JSX.Element {
   const state = item.state;
-  const resolved = state.phase === "resolved";
 
   return (
-    <InterruptCard data-testid="continue-card" resolved={resolved}>
+    <InterruptCard data-testid="continue-card">
       <p className="text-sm">
         Time budget reached. Resume with a fresh budget or end the
         investigation.

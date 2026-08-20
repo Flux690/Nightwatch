@@ -1,7 +1,9 @@
 import type {
   ApprovalStatus,
+  ContinueCardItem,
   TranscriptRow,
   ToolCallState,
+  ToolGate,
   ToolOutcome,
   TranscriptItem,
 } from "@nightwarden/shared";
@@ -28,59 +30,41 @@ export function wasGated(toolName: string): boolean {
   return findTool(toolName)?.policy === "approve";
 }
 
-// The only place a tool call becomes a card. Both the transcript fetch and the
-// live stream call it, which is what keeps a streamed card and a reloaded one
-// byte-identical instead of merely similar.
-export function toolCallCard(
-  call:
-    | { toolUseId: string; state: ToolCallState; awaitingKind: "continue" }
-    | {
-        toolUseId: string;
-        toolName: string;
-        input: Record<string, unknown>;
-        state: ToolCallState;
-        awaitingKind?: "approval" | "clarification";
-        // How many times this same write already ran in this investigation. The
-        // caller counts it, because only a walk of the transcript can.
-        priorRuns?: number;
-      },
-): TranscriptItem {
-  const { toolUseId, state } = call;
-  if (call.awaitingKind === "continue") {
-    return { kind: "continue_card", toolUseId, state };
-  }
-  const { toolName, input, awaitingKind } = call;
-  if (isElicitation(toolName)) {
-    const parsed = input as {
-      question?: string;
-      options?: Array<{ label: string; description: string }>;
-      multiSelect?: boolean;
-    };
-    return {
-      kind: "clarification_card",
-      toolUseId,
-      toolName,
-      input,
-      question: parsed.question,
-      options: parsed.options,
-      multiSelect: parsed.multiSelect,
-      state,
-    };
-  }
-  if (awaitingKind === "approval") {
-    const risk = input["risk"];
-    const priorRuns = call.priorRuns ?? 0;
-    return {
-      kind: "approval_card",
-      toolUseId,
-      toolName,
-      input,
-      ...(typeof risk === "string" && { risk }),
-      ...(priorRuns > 0 && { priorRuns }),
-      state,
-    };
-  }
-  return { kind: "tool_card", toolUseId, toolName, input, state };
+/* The only place a tool call becomes an item. Both the transcript fetch and the
+   live stream call it, which is what keeps a streamed card and a reloaded one
+   byte-identical instead of merely similar.
+
+   It chooses nothing. A call is one kind and its state says where in its life it
+   is, so there is no label here that could disagree with the state beside it -
+   which is what let a settled approval keep claiming to be one. */
+export function toolCallCard(call: {
+  toolUseId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  state: ToolCallState;
+  // How many times this same write already ran in this investigation. The
+  // caller counts it, because only a walk of the transcript can.
+  priorRuns?: number;
+}): TranscriptItem {
+  const { toolUseId, toolName, input, state } = call;
+  const priorRuns = call.priorRuns ?? 0;
+  return {
+    kind: "tool_call",
+    toolUseId,
+    toolName,
+    input,
+    ...(priorRuns > 0 && { priorRuns }),
+    state,
+  };
+}
+
+// The time-budget prompt, which no model asked for and which answers to nobody's
+// tool call. Its own function because its states are its own.
+export function continueCard(
+  toolUseId: string,
+  state: ContinueCardItem["state"],
+): ContinueCardItem {
+  return { kind: "continue_card", toolUseId, state };
 }
 
 /* Repeating a fix is rarely fixing it, and 3am is when that is easiest to miss.
@@ -118,11 +102,11 @@ function reportCard(sessionId: string): TranscriptItem | null {
 function toolCallState(
   toolName: string,
   result: string | undefined,
-  awaiting: boolean,
+  gate: ToolGate | null,
   decided: ApprovalStatus | null,
   outcome: ToolOutcome | undefined,
 ): ToolCallState {
-  if (awaiting) return { phase: "awaiting_human" };
+  if (gate !== null) return { phase: "awaiting_human", gate };
   const classified = outcome === undefined ? {} : { outcome };
   if (decided !== null)
     return {
@@ -251,6 +235,12 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
         }
       } else if (part.type === "tool_call") {
         const awaiting = pending?.toolUseId === part.id ? pending : null;
+        // "continue" cannot reach here: its id is synthetic and answers to no
+        // turn, so it never matches a tool call part.
+        const gate =
+          awaiting !== null && awaiting.kind !== "continue"
+            ? awaiting.kind
+            : null;
         const decided = decisionFor(
           part.name,
           part.id,
@@ -264,17 +254,11 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
             state: toolCallState(
               part.name,
               results.get(part.id),
-              awaiting !== null,
+              gate,
               decided,
               outcomes.get(part.id),
             ),
             priorRuns: priorRunsOf(part.name, part.input, approved),
-            // A decided call stays an approval card so its outcome has somewhere
-            // to render, not just the tool output it produced.
-            ...(awaiting ? { awaitingKind: awaiting.kind } : {}),
-            ...(!awaiting && decided !== null
-              ? { awaitingKind: "approval" as const }
-              : {}),
           }),
         );
         // Counted in transcript order, so a card reports what ran before it and
