@@ -70,10 +70,10 @@ function MessageScrollerItem({
     <MessageScrollerPrimitive.Item
       data-slot="message-scroller-item"
       scrollAnchor={scrollAnchor}
-      className={cn(
-        "min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]",
-        className,
-      )}
+      /* No content-visibility: a placeholder height collapses when the item
+         scrolls in and drags the viewport with it. Thousands of rows would want
+         real virtualization, never a fabricated size. */
+      className={cn("min-w-0 shrink-0", className)}
       {...props}
     />
   );

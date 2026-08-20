@@ -251,7 +251,9 @@ export function InvestigationRecordPage(): React.JSX.Element {
                 while its menu is open. This one is not a trigger: expanded means
                 the rail is open, which is the resting state, so the light would
                 never go out. The attribute stays, the fill does not. */}
-            {!working && (
+            {/* Hidden while the chat covers the stage: there is no rail to
+                collapse then, so Minimize is the one exit. */}
+            {!working && !chatExpanded && (
               <Button
                 variant="ghost"
                 size="icon"
