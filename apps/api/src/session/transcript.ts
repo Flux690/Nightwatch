@@ -287,6 +287,14 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     });
   }
 
+  /* The walk above cannot find this one: no model asked for it, so there is no
+     tool call to project, and its id answers to no turn. The row saying the run
+     is parked is the only record of it, so it is read from there or not at all -
+     without this a reloaded session shows nothing and offers no way out. */
+  if (pending?.kind === "continue") {
+    items.push(continueCard(pending.toolUseId, { phase: "awaiting_human" }));
+  }
+
   // Last, because writing up is the last thing a run does.
   const report = reportCard(sessionId);
   if (report !== null) items.push(report);

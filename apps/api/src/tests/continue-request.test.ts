@@ -28,6 +28,7 @@ import { connectConsoleEvents } from "./console-events-helper.js";
 import { registerSessionRoutes } from "../session/routes.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
+import { buildTranscript } from "../session/transcript.js";
 import {
   registerRunner,
   setRunnerManifest,
@@ -179,6 +180,18 @@ describe("continue-request interrupts", () => {
     // INTERRUPT event carries kind=continue and no tool-specific payload
     expect(interrupt.payload["kind"]).toBe("continue");
     expect(interrupt.payload["toolName"]).toBe("");
+
+    /* And it survives a reload. The card is published live, but no model asked
+       for it, so the walk over saved turns has nothing to find - without it read
+       back from the interrupt row, a refreshed page shows a parked run as an
+       idle one, with no way to resume or stand down. */
+    const parked = buildTranscript(sessionId).filter(
+      (item) => item.kind === "continue_card",
+    );
+    expect(parked).toHaveLength(1);
+    expect(parked[0]?.kind === "continue_card" && parked[0].state).toEqual({
+      phase: "awaiting_human",
+    });
 
     close();
 
