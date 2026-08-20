@@ -324,6 +324,56 @@ describe("clarification interrupts", () => {
     close();
   });
 
+  /* The schema says at most four and providers honour maxItems unevenly, so the
+     harness has to hold the line itself. Refused whole: keeping four and
+     dropping the rest hides a choice the person may have needed. */
+  it("refuses a question offering more options than a card can show, and is re-asked", async () => {
+    const tooMany = Array.from({ length: 6 }, (_, i) => ({
+      label: `Option ${i + 1}`,
+      description: `What picking option ${i + 1} would mean`,
+    }));
+    setScript([
+      {
+        text: "Too many choices.",
+        toolUses: [
+          {
+            id: "tu-over-1",
+            name: "AskUserQuestion",
+            input: { question: "Which one?", options: tooMany },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `nw_auth=${SESSION}`,
+      },
+      body: JSON.stringify({ message: "Which one?" }),
+    });
+    const { sessionId } = (await res.json()) as { sessionId: string };
+
+    // It never reaches a person: the run carries on to its next turn instead.
+    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
+    expect(hasPendingHumanInput(sessionId)).toBe(false);
+
+    const asked = buildTranscript(sessionId).find(
+      (item) => item.kind === "tool_call" && item.toolUseId === "tu-over-1",
+    );
+    expect(asked?.kind === "tool_call" && asked.state).toMatchObject({
+      phase: "complete",
+      outcome: "system",
+    });
+    // The message names the cap and says the free-text box covers the rest, so
+    // the model can drop an option rather than guess at why it was refused.
+    const state = asked?.kind === "tool_call" ? asked.state : null;
+    const said = state?.phase === "complete" ? String(state.result) : "";
+    expect(said).toMatch(/at most 4/);
+  });
+
   it("clarification with decision body returns 400", async () => {
     setScript([
       {

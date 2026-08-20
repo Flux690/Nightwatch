@@ -1,4 +1,5 @@
 import { executeTool, resolvePolicy } from "./tools/toolset.js";
+import { questionOptionOverflow } from "./tools/elicitations.js";
 import { isToolFailure } from "./tools/types.js";
 import type { OfferedToolset } from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
@@ -60,6 +61,19 @@ export async function processToolUses(params: {
       // Nothing to execute either way: an elicitation's answer comes from a
       // person, so it suspends rather than running.
       if (offered.elicitations.some((e) => e.schema.name === tool.name)) {
+        // The schema declares the cap, but providers honour maxItems unevenly,
+        // so it is also checked here - a question nobody can answer at a glance
+        // is worth one more round trip.
+        const overflow = questionOptionOverflow(tool.input);
+        if (overflow !== null) {
+          toolResults.push({
+            tool_use_id: tool.id,
+            content: overflow,
+            is_error: true,
+            outcome: "system",
+          });
+          continue;
+        }
         gateOrReject(tool, "clarification");
         continue;
       }

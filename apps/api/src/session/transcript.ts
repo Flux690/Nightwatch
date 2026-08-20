@@ -116,7 +116,10 @@ function toolCallState(
       ...classified,
     };
   if (result === undefined) return { phase: "running" };
-  if (isElicitation(toolName))
+  /* Only a clean result came from a person. A question the harness refused -
+     too many options to draw - also has a result, and calling that "answered"
+     would put words the reader never said into the record. */
+  if (isElicitation(toolName) && outcome === undefined)
     return { phase: "resolved", decision: "answered", result };
   return { phase: "complete", result, ...classified };
 }

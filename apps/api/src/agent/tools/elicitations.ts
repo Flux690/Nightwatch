@@ -7,6 +7,23 @@ export interface Elicitation {
   schema: ToolSchema;
 }
 
+/* Four, and the person always gets a free-text box beside them, so the card
+   offers five rows. Beyond that a question stops being answerable at a glance,
+   which is the only reason to interrupt someone with one. */
+export const MAX_QUESTION_OPTIONS = 4;
+
+/* Refused whole rather than trimmed to fit. Keeping four and dropping the rest
+   would hide a choice the person might have needed, and nothing else here shows
+   less than it found without saying so. */
+export function questionOptionOverflow(
+  input: Record<string, unknown>,
+): string | null {
+  const options = input["options"];
+  if (!Array.isArray(options) || options.length <= MAX_QUESTION_OPTIONS)
+    return null;
+  return `You offered ${options.length} options and at most ${MAX_QUESTION_OPTIONS} can be shown. Ask again with the ${MAX_QUESTION_OPTIONS} that most change what happens next; the user is given a free-text box as well, so a rarer answer is not lost by leaving it out.`;
+}
+
 export const ELICITATIONS: Elicitation[] = [
   {
     schema: {
@@ -23,6 +40,7 @@ export const ELICITATIONS: Elicitation[] = [
           },
           options: {
             type: "array",
+            maxItems: MAX_QUESTION_OPTIONS,
             items: {
               type: "object",
               properties: {
@@ -37,8 +55,7 @@ export const ELICITATIONS: Elicitation[] = [
               },
               required: ["label", "description"],
             },
-            description:
-              "The answers to offer. List only specific, named choices. Never add a catch-all such as 'Other' or 'None of the above': the user is always given a free-text box alongside your options, so adding one of your own only duplicates it.",
+            description: `The answers to offer, at most ${MAX_QUESTION_OPTIONS}. List only specific, named choices. Never add a catch-all such as 'Other' or 'None of the above': the user is always given a free-text box alongside your options, so adding one of your own only duplicates it.`,
           },
           multiSelect: {
             type: "boolean",

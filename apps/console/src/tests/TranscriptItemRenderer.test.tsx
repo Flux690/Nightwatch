@@ -218,6 +218,28 @@ describe("TranscriptItemRenderer", () => {
       expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
       expect(onAnswer).not.toHaveBeenCalled();
     });
+
+    /* The tool requires a description on every option and the card used to
+       drop all of them, leaving the reader the label alone to choose by. */
+    it("shows what choosing each answer would mean", () => {
+      wrap(clarItem);
+
+      expect(screen.getByText("web server")).toBeInTheDocument();
+      expect(screen.getByText("database")).toBeInTheDocument();
+    });
+
+    // A printed number a keyboard cannot press is a promise not kept.
+    it("selects by the number printed beside the option, and submits on Enter", async () => {
+      const onAnswer = vi.fn();
+      const user = userEvent.setup();
+      wrap(clarItem, { onAnswer });
+
+      await user.keyboard("2");
+      expect(screen.getByRole("radio", { name: /^postgres$/i })).toBeChecked();
+
+      await user.keyboard("{Enter}");
+      expect(onAnswer).toHaveBeenCalledWith("tu-clar", "postgres");
+    });
   });
 
   describe("continue_card", () => {
