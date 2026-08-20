@@ -365,7 +365,10 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
             {target}
           </span>
         )}
-        <span className={cn("min-w-0 flex-1 truncate text-sm", tone)}>
+        {/* Not stretched: the chevron belongs against the text it opens, so the
+            row reads as one phrase rather than as a name and a control held
+            apart by however much width the window happens to have. */}
+        <span className={cn("min-w-0 truncate text-sm", tone)}>
           {running ? (
             <span data-testid="tool-call-pending" className="animate-pulse">
               running
@@ -374,17 +377,24 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
             summary
           )}
         </span>
-        {!running && (
-          <ChevronRight
-            {...ICON_INLINE}
-            aria-hidden="true"
-            className="shrink-0 self-center text-ink-subtle transition-transform duration-(--duration-base) group-aria-expanded:rotate-90"
-          />
-        )}
+        {/* Always drawn, dimmed while the call is in flight. Appearing on
+            completion moved the row's own text, and now that it sits in the
+            reading line rather than at the margin, that jump is unmissable. */}
+        <ChevronRight
+          {...ICON_INLINE}
+          aria-hidden="true"
+          className={cn(
+            "shrink-0 self-center text-ink-subtle transition-transform duration-(--duration-base) group-aria-expanded:rotate-90",
+            running && "opacity-40",
+          )}
+        />
       </button>
 
+      {/* No rule and no indent: the body is the evidence the row was opened
+          for, so nothing here sets it back. Tight above because it belongs to
+          the row, looser below because it is finished. */}
       {open && !running && (
-        <div className="mt-1 mb-2 border-l border-border py-1 pl-4">
+        <div className="mt-1 mb-4">
           <ToolBody toolName={toolName} input={input} result={result} />
         </div>
       )}
