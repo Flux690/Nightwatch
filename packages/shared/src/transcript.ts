@@ -39,6 +39,8 @@ export interface AgentTextItem {
   kind: "agent_text";
   id: string;
   text: string;
+  // Which turn wrote it; a streamed copy carries the same number.
+  turn: number;
 }
 
 // NightWarden's own failure note (role "error"), rendered exactly like agent text.
@@ -55,6 +57,7 @@ export interface ThinkingItem {
   // True only while live deltas are still arriving for this burst; reload-path
   // items are never streaming, and either way it renders collapsed until opened.
   streaming: boolean;
+  turn: number;
 }
 
 /* One item for the whole life of a tool call: running, waiting on a person for

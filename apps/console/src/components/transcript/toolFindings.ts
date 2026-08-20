@@ -38,9 +38,8 @@ function formatPercent(value: number): string {
   return value >= 10 ? `${Math.round(value)}%` : `${value.toFixed(1)}%`;
 }
 
-// One line, clipped so a 400px rail shows the start of the message rather than
-// an ellipsis where the interesting part was. Shared with the row, which clips a
-// question by the same rule; CSS then holds whatever survives to one line.
+// Clipped so a 400px rail shows the start of the message rather than an
+// ellipsis where the interesting part was. A question is held to the same rule.
 const LINE_CLIP = 120;
 
 export function clipLine(line: string): string {

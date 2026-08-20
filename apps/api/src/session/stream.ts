@@ -24,12 +24,13 @@ import type {
 // serializes it on the wire and the client routes by type/sessionId.
 export function publishTextMessageContent(
   sessionId: string,
+  turn: number,
   delta: StreamDelta,
 ): void {
   const env: ConsoleTextMessageContent = {
     messageId: randomUUID(),
     type: "TEXT_MESSAGE_CONTENT",
-    payload: { sessionId, kind: delta.kind, delta: delta.text },
+    payload: { sessionId, kind: delta.kind, delta: delta.text, turn },
   };
   publishConsoleEvent(env);
 }

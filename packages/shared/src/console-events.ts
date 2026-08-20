@@ -28,6 +28,8 @@ export interface ConsoleTextMessageContent extends ConsoleEnvelope {
     sessionId: string;
     kind: "text" | "thinking";
     delta: string;
+    // The seq this turn will be saved under, sent before it is.
+    turn: number;
   };
 }
 

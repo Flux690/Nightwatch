@@ -221,10 +221,8 @@ export function ClarificationCardPanel({
             <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">
               {otherIndex + 1}
             </span>
-            {/* A bare field rather than the Input primitive, whose fixed height
-                and border would fight a box this row already owns. The slot
-                marks it as a group's inner control, which is how styles.css
-                already exempts one from the focus edge. */}
+            {/* Bare, not the Input primitive, whose height and border fight a
+                box this row owns. The slot is how styles.css drops the focus edge. */}
             <input
               ref={otherRef}
               type="text"

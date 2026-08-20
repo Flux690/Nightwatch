@@ -381,6 +381,69 @@ describe("SessionView", () => {
         expect(screen.getByText("Investigation complete.")).toBeInTheDocument();
       });
     });
+
+    /* The test above waits for the end state, which is why it never saw this.
+       A streamed block is named after the clock and its saved counterpart after
+       the turn it became, so the merge can never recognise them as one and adds
+       instead - drawing the same sentence twice for as long as both lists hold
+       it. Provoked deliberately here rather than raced for: REPORT_UPDATED
+       refetches the transcript without clearing the live buffer. */
+    it("does not draw a streamed turn twice once its saved copy arrives", async () => {
+      const { setItems } = setup();
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Service is down on web-01"),
+        ).toBeInTheDocument();
+      });
+
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "d1",
+          type: "TEXT_MESSAGE_CONTENT",
+          payload: {
+            sessionId: "s1",
+            kind: "text",
+            delta: "Investigation complete.",
+            turn: 2,
+          },
+        });
+      });
+      await waitFor(() => {
+        expect(screen.getByText("Investigation complete.")).toBeInTheDocument();
+      });
+
+      /* The marker is what proves the refetch landed. Counting straight after
+         the event would pass on the first poll, against a transcript the server
+         had not answered yet - which is how this went unnoticed. */
+      setItems([
+        USER_TURN,
+        {
+          kind: "agent_text",
+          id: "agent-2-0",
+          text: "Investigation complete.",
+          turn: 2,
+        },
+        {
+          kind: "agent_text",
+          id: "agent-2-1",
+          text: "The saved copy landed.",
+          turn: 2,
+        },
+      ]);
+      act(() => {
+        MockEventSource.latest?.push({
+          messageId: "d2",
+          type: "REPORT_UPDATED",
+          payload: { sessionId: "s1" },
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("The saved copy landed.")).toBeInTheDocument();
+      });
+      expect(screen.getAllByText("Investigation complete.")).toHaveLength(1);
+    });
   });
 
   describe("tool call (TRANSCRIPT_ITEM events)", () => {

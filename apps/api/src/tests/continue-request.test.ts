@@ -181,10 +181,8 @@ describe("continue-request interrupts", () => {
     expect(interrupt.payload["kind"]).toBe("continue");
     expect(interrupt.payload["toolName"]).toBe("");
 
-    /* And it survives a reload. The card is published live, but no model asked
-       for it, so the walk over saved turns has nothing to find - without it read
-       back from the interrupt row, a refreshed page shows a parked run as an
-       idle one, with no way to resume or stand down. */
+    // And it survives a reload: published live, but absent from the saved
+    // turns, so a refreshed page showed a parked run as an idle one.
     const parked = buildTranscript(sessionId).filter(
       (item) => item.kind === "continue_card",
     );

@@ -85,6 +85,12 @@ function stampOutcomes(
 // Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot index
 // so rows the seed skipped never collide. `harnessTurns` names the indices
 // NightWarden authored, which the provider cannot tell from the user's.
+// The seq a turn will be saved under, which persistNewTurns computes the same
+// way below. Streaming happens first, so the console is told it in advance.
+function turnSeq(provider: LLMProvider, seqOffset: number): number {
+  return seqOffset + provider.snapshot().length;
+}
+
 function persistNewTurns(
   provider: LLMProvider,
   sessionId: string,
@@ -246,6 +252,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const chatWithRetries = (
     provider: LLMProvider,
     toolSchemas: ToolSchema[],
+    turn: number,
     // The run's effective signal: the user's stop, or that combined with
     // the investigation deadline once the loop has one.
     chatSignal: AbortSignal | undefined = signal,
@@ -254,7 +261,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       () =>
         provider.chat(
           toolSchemas,
-          (d) => publishTextMessageContent(sessionId, d),
+          (d) => publishTextMessageContent(sessionId, turn, d),
           chatSignal,
         ),
       {
@@ -315,7 +322,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     }
     log.info("time budget ended: user chose to end, running closing turn");
     try {
-      await chatWithRetries(provider, []);
+      await chatWithRetries(provider, [], turnSeq(provider, seqOffset));
     } catch (err) {
       if (!signal?.aborted) throw err;
     }
@@ -498,6 +505,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
         written = await chatWithRetries(
           provider,
           [SUBMIT_REPORT_TOOL.schema],
+          turnSeq(provider, seqOffset),
           runSignal,
         );
       } catch (err) {
@@ -591,7 +599,12 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     const startedAt = Date.now();
     let response: ChatResponse;
     try {
-      response = await chatWithRetries(provider, toolSchemas, runSignal);
+      response = await chatWithRetries(
+        provider,
+        toolSchemas,
+        turnSeq(provider, seqOffset),
+        runSignal,
+      );
     } catch (err) {
       if (signal?.aborted) {
         log.info({ turn }, "run stopped by user");

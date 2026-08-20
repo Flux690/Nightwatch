@@ -206,11 +206,16 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
 
     if (msg.parts.length === 0) {
       if (msg.content) {
-        items.push({
-          kind: msg.kind === "user" ? "user_turn" : "agent_text",
-          id: `${msg.kind}-${msg.seq}`,
-          text: msg.content,
-        });
+        items.push(
+          msg.kind === "user"
+            ? { kind: "user_turn", id: `user-${msg.seq}`, text: msg.content }
+            : {
+                kind: "agent_text",
+                id: `${msg.kind}-${msg.seq}`,
+                text: msg.content,
+                turn: msg.seq,
+              },
+        );
       }
       continue;
     }
@@ -220,11 +225,11 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
       const id = `${msg.kind}-${msg.seq}-${idx++}`;
       if (part.type === "text") {
         if (!part.text) continue;
-        items.push({
-          kind: msg.kind === "user" ? "user_turn" : "agent_text",
-          id,
-          text: part.text,
-        });
+        items.push(
+          msg.kind === "user"
+            ? { kind: "user_turn", id, text: part.text }
+            : { kind: "agent_text", id, text: part.text, turn: msg.seq },
+        );
       } else if (part.type === "compaction") {
         items.push({ kind: "compaction", id });
       } else if (part.type === "reasoning") {
@@ -234,6 +239,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
             id,
             text: part.text,
             streaming: false,
+            turn: msg.seq,
           });
         }
       } else if (part.type === "tool_call") {
@@ -287,10 +293,8 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
     });
   }
 
-  /* The walk above cannot find this one: no model asked for it, so there is no
-     tool call to project, and its id answers to no turn. The row saying the run
-     is parked is the only record of it, so it is read from there or not at all -
-     without this a reloaded session shows nothing and offers no way out. */
+  // No model asked for it, so the walk above has no tool call to project. The
+  // interrupt row is the only record, or a reloaded session offers no way out.
   if (pending?.kind === "continue") {
     items.push(continueCard(pending.toolUseId, { phase: "awaiting_human" }));
   }

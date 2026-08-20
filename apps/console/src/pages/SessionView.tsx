@@ -129,10 +129,19 @@ function TranscriptColumn({
       ? { kind: "user_turn", id: "pending-echo", text: pendingEcho }
       : null;
 
+  // A streamed turn lives only until the transcript holds it. Derived, so the
+  // two can never both be drawn and there is no window where neither is.
+  const savedTurns = new Set(
+    persistedItems.flatMap((item) => ("turn" in item ? [item.turn] : [])),
+  );
+  const live = liveItems.filter(
+    (item) => !("turn" in item) || !savedTurns.has(item.turn),
+  );
+
   // Live events update the fetched list in place rather than competing with it:
   // a card can be replaced by a newer version of itself, never discarded.
   const merged = [...persistedItems, ...(echoItem ? [echoItem] : [])];
-  for (const item of liveItems) {
+  for (const item of live) {
     const key = transcriptItemKey(item);
     const at = merged.findIndex((seen) => transcriptItemKey(seen) === key);
     if (at === -1) merged.push(item);
@@ -305,22 +314,16 @@ export function SessionView({
       }
 
       if (env.type === "MESSAGE") {
-        const { sessionId, message } = env.payload;
+        const { sessionId } = env.payload;
         if (sessionId !== sid) return;
         // A persisted row, not a lifecycle signal - never touch isRunning here.
         // The optimistic echo clears once its own turn lands.
         setPendingEcho(null);
-        /* Streamed text carries ephemeral ids the refetch cannot match, so an
-           assistant or error row drops it - but only once the saved copy has
-           arrived. Dropping first leaves the turn blank until the refetch
-           lands, which reads as the page flickering. */
-        const streamed =
-          message.kind === "assistant" || message.kind === "error";
+        // Housekeeping, not correctness: the render already hides a streamed
+        // turn the transcript holds. This only bounds the buffer.
         void queryClient
           .invalidateQueries({ queryKey: ["session", sid] })
-          .then(() => {
-            if (streamed) setLiveItems([]);
-          });
+          .then(() => setLiveItems([]));
         return;
       }
 

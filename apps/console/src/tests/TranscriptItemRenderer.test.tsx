@@ -42,7 +42,12 @@ afterEach(() => {
 describe("TranscriptItemRenderer", () => {
   describe("agent_text — full-width markdown", () => {
     it("does not render raw HTML from agent text as DOM elements", () => {
-      wrap({ kind: "agent_text", id: "a3", text: "<script>alert(1)</script>" });
+      wrap({
+        kind: "agent_text",
+        id: "a3",
+        text: "<script>alert(1)</script>",
+        turn: 1,
+      });
 
       expect(document.querySelector("script")).not.toBeInTheDocument();
     });

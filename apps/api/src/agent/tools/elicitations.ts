@@ -12,11 +12,8 @@ export interface Elicitation {
    which is the only reason to interrupt someone with one. */
 export const MAX_QUESTION_OPTIONS = 4;
 
-/* An ordinary shape error, answered on the same channel every tool error uses -
-   the sibling of executeTool's size guard, which also catches a bad shape
-   centrally and names the fix. Nothing is gated and nobody is asked: a call with
-   nine options never became a question. Whole rather than trimmed to fit, since
-   keeping four silently would hide a choice the person might have needed. */
+// A shape error on the channel every tool error uses, like executeTool's size
+// guard. Whole rather than trimmed: keeping four would hide a choice silently.
 export function questionOptionOverflow(
   input: Record<string, unknown>,
 ): string | null {

@@ -10,19 +10,19 @@ import type {
   ThinkingItem,
 } from "@/components/transcript/types";
 
-function textDelta(delta: string): ConsoleEvent {
+function textDelta(delta: string, turn = 1): ConsoleEvent {
   return {
     messageId: "m1",
     type: "TEXT_MESSAGE_CONTENT",
-    payload: { sessionId: "s1", kind: "text", delta },
+    payload: { sessionId: "s1", kind: "text", delta, turn },
   };
 }
 
-function thinkingDelta(delta: string): ConsoleEvent {
+function thinkingDelta(delta: string, turn = 1): ConsoleEvent {
   return {
     messageId: "m1",
     type: "TEXT_MESSAGE_CONTENT",
-    payload: { sessionId: "s1", kind: "thinking", delta },
+    payload: { sessionId: "s1", kind: "thinking", delta, turn },
   };
 }
 
@@ -122,7 +122,7 @@ describe("applyLiveEvent — continue interrupt", () => {
       {
         messageId: "m1",
         type: "TEXT_MESSAGE_CONTENT",
-        payload: { sessionId: "s1", kind: "thinking", delta: "Hmm…" },
+        payload: { sessionId: "s1", kind: "thinking", delta: "Hmm…", turn: 1 },
       },
       "s1",
     );

@@ -52,6 +52,7 @@ export function applyLiveEvent(
           id: `thinking-${Date.now()}`,
           text: payload.delta,
           streaming: true,
+          turn: payload.turn,
         },
       ];
     }
@@ -66,9 +67,16 @@ export function applyLiveEvent(
         { ...last, text: last.text + payload.delta },
       ];
     }
+    // The id is this browser's own and never matches the saved row's, so the
+    // turn number is what says the two are the same turn.
     return [
       ...settled,
-      { kind: "agent_text", id: `agent-${Date.now()}`, text: payload.delta },
+      {
+        kind: "agent_text",
+        id: `agent-${Date.now()}`,
+        text: payload.delta,
+        turn: payload.turn,
+      },
     ];
   }
 
