@@ -10,7 +10,7 @@ import { asRecord, stringAt as inputString } from "@/lib/toolResult";
 import type { ToolCallItem, ToolCallState, ToolOutcome } from "./types.js";
 import { DiffCard, parseFileChange } from "./DiffCard.js";
 import { PRCard, parsePullRequestResult } from "./PRCard.js";
-import { findingFor, formatBytes } from "./toolFindings.js";
+import { clipLine, findingFor, formatBytes } from "./toolFindings.js";
 
 /* One row shape for every tool: name, target, the finding, and a chevron. The
    row carries the answer so the common case needs no click, and expansion is a
@@ -337,6 +337,12 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
     result,
     outcomeOf(item.state),
   );
+  /* The one row that names its input rather than its result. What was asked is
+     what a reader scanning back is looking for, and the answer is one click
+     away in the body, where the exchange reads whole. */
+  const line = isTool(toolName, "AskUserQuestion")
+    ? clipLine(inputString(input, "question") ?? "")
+    : summary;
 
   return (
     // Anchor for the report's evidence links: a citation there names the tool
@@ -374,7 +380,7 @@ function ToolRow({ item }: { item: ToolCallItem }): React.JSX.Element {
               running
             </span>
           ) : (
-            summary
+            line
           )}
         </span>
         {/* Always drawn, dimmed while the call is in flight. Appearing on

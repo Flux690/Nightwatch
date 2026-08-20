@@ -38,11 +38,12 @@ function formatPercent(value: number): string {
   return value >= 10 ? `${Math.round(value)}%` : `${value.toFixed(1)}%`;
 }
 
-// One line of a log, clipped so a 400px rail shows the start of the message
-// rather than an ellipsis where the interesting part was.
+// One line, clipped so a 400px rail shows the start of the message rather than
+// an ellipsis where the interesting part was. Shared with the row, which clips a
+// question by the same rule; CSS then holds whatever survives to one line.
 const LINE_CLIP = 120;
 
-function quoteLine(line: string): string {
+export function clipLine(line: string): string {
   const trimmed = line.trim();
   return trimmed.length > LINE_CLIP
     ? `${trimmed.slice(0, LINE_CLIP)}…`
@@ -105,7 +106,7 @@ const FORMATTERS: Record<string, Formatter> = {
     return worst === null
       ? { text: counted, tone: "normal" }
       : {
-          text: `${quoteLine(worst.line)} · ${counted}`,
+          text: `${clipLine(worst.line)} · ${counted}`,
           tone: worst.severe ? "bad" : "normal",
         };
   },
@@ -189,7 +190,7 @@ const FORMATTERS: Record<string, Formatter> = {
         : "";
     const count = `${events.length} event${events.length === 1 ? "" : "s"}`;
     return {
-      text: label ? `${quoteLine(label)} · ${count}` : count,
+      text: label ? `${clipLine(label)} · ${count}` : count,
       tone: "normal",
     };
   },
@@ -247,7 +248,7 @@ FORMATTERS["GetK8sStats"] = (record) => {
 // the outcome that did not: the message is the whole answer.
 FORMATTERS["OpenPullRequest"] = (r) => {
   const message = str(r, "message");
-  return message === null ? null : { text: quoteLine(message), tone: "normal" };
+  return message === null ? null : { text: clipLine(message), tone: "normal" };
 };
 
 // Prometheus and Loki share a series shape, and an empty result is the finding
@@ -286,7 +287,7 @@ function execFinding(record: Record<string, unknown>): ToolFinding | null {
   if (exit !== 0) {
     const firstErr = stderr.split("\n").find(Boolean);
     return {
-      text: firstErr ? `exit ${exit} · ${quoteLine(firstErr)}` : `exit ${exit}`,
+      text: firstErr ? `exit ${exit} · ${clipLine(firstErr)}` : `exit ${exit}`,
       tone: "bad",
     };
   }
@@ -308,14 +309,14 @@ export function findingFor(
   if (typeof result === "string" && result.startsWith(ERROR_PREFIX)) {
     const message = result.slice(ERROR_PREFIX.length).trim();
     const firstLine = message.split("\n").find(Boolean) ?? "failed";
-    return { text: quoteLine(firstLine), tone: "bad" };
+    return { text: clipLine(firstLine), tone: "bad" };
   }
 
   const record = asRecord(result);
   if (record === null) {
     if (typeof result !== "string") return null;
     const firstLine = result.split("\n").find(Boolean);
-    return firstLine ? { text: quoteLine(firstLine), tone: "normal" } : null;
+    return firstLine ? { text: clipLine(firstLine), tone: "normal" } : null;
   }
 
   const formatter = FORMATTERS[toolName];

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { asRecord, stringAt } from "@/lib/toolResult";
 import { cn } from "@/lib/utils";
 import type { ToolCallItem } from "./types.js";
@@ -218,12 +217,18 @@ export function ClarificationCardPanel({
             nothing below moves, which matters for a card pinned above the
             composer, and the answer stays where its number is. */}
         {otherOpen ? (
-          <div className="flex items-center gap-3 rounded-md bg-control px-3 py-2">
+          <div className="flex w-full items-baseline gap-3 rounded-md bg-control px-3 py-2">
             <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">
               {otherIndex + 1}
             </span>
-            <Input
+            {/* A bare field rather than the Input primitive, whose fixed height
+                and border would fight a box this row already owns. The slot
+                marks it as a group's inner control, which is how styles.css
+                already exempts one from the focus edge. */}
+            <input
               ref={otherRef}
+              type="text"
+              data-slot="input-group-control"
               aria-label="Your own answer"
               placeholder="Type your answer…"
               value={otherText}
@@ -234,7 +239,7 @@ export function ClarificationCardPanel({
                 e.preventDefault();
                 handleSubmit();
               }}
-              className="h-auto border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+              className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted-foreground"
             />
           </div>
         ) : (

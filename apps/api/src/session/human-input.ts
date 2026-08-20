@@ -104,7 +104,10 @@ function unpause(
       state: {
         phase: "resolved",
         decision: status,
-        ...(status === "approved" && { result: gatedResult.content }),
+        /* The result rides whenever it is the outcome of the call: an approved
+           tool ran, and an answer is what the person said. A rejection ran
+           nothing, and its recorded outcome already reads as Declined. */
+        ...(status !== "rejected" && { result: gatedResult.content }),
         ...(outcome !== undefined && { outcome }),
       },
     }),

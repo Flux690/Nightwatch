@@ -12,9 +12,11 @@ export interface Elicitation {
    which is the only reason to interrupt someone with one. */
 export const MAX_QUESTION_OPTIONS = 4;
 
-/* Refused whole rather than trimmed to fit. Keeping four and dropping the rest
-   would hide a choice the person might have needed, and nothing else here shows
-   less than it found without saying so. */
+/* An ordinary shape error, answered on the same channel every tool error uses -
+   the sibling of executeTool's size guard, which also catches a bad shape
+   centrally and names the fix. Nothing is gated and nobody is asked: a call with
+   nine options never became a question. Whole rather than trimmed to fit, since
+   keeping four silently would hide a choice the person might have needed. */
 export function questionOptionOverflow(
   input: Record<string, unknown>,
 ): string | null {

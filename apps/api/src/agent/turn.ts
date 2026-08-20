@@ -61,9 +61,9 @@ export async function processToolUses(params: {
       // Nothing to execute either way: an elicitation's answer comes from a
       // person, so it suspends rather than running.
       if (offered.elicitations.some((e) => e.schema.name === tool.name)) {
-        // The schema declares the cap, but providers honour maxItems unevenly,
-        // so it is also checked here - a question nobody can answer at a glance
-        // is worth one more round trip.
+        // The schema declares the cap, but providers honour maxItems unevenly.
+        // Answered like any other bad call: an error result naming the fix, so
+        // the model asks again. Nothing suspends, because nothing valid arrived.
         const overflow = questionOptionOverflow(tool.input);
         if (overflow !== null) {
           toolResults.push({

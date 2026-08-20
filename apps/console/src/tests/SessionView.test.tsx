@@ -1387,7 +1387,7 @@ describe("SessionView", () => {
       });
     });
 
-    it("settles into a row whose line reads the answer the person gave", async () => {
+    it("settles into a row naming what was asked, with the answer inside", async () => {
       setup();
 
       await waitFor(() => {
@@ -1425,9 +1425,9 @@ describe("SessionView", () => {
         });
       });
 
-      /* Answering ends the question: what is left is a call like any other,
-         and its line says what the person actually said rather than the word
-         "Answered", which told the reader nothing they came back for. */
+      /* Answering ends the question: what is left is a call like any other. Its
+         line names what was asked, which is what a reader scanning back is
+         looking for - not the word "Answered", which told them nothing. */
       await waitFor(() => {
         expect(
           screen.queryByTestId("clarification-card"),
@@ -1435,6 +1435,13 @@ describe("SessionView", () => {
       });
       const row = screen.getByTestId("tool-call");
       expect(within(row).getByText("AskUserQuestion")).toBeInTheDocument();
+      expect(
+        within(row).getByText(/which service should I investigate first/i),
+      ).toBeInTheDocument();
+
+      // The answer is one click away, where the exchange reads whole.
+      const user = userEvent.setup();
+      await user.click(within(row).getByRole("button"));
       expect(within(row).getByText("nginx")).toBeInTheDocument();
     });
 
