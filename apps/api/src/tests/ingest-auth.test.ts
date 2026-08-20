@@ -10,6 +10,16 @@ import {
 } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+
+// Dispatched investigations must never reach a real LLM.
+vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
+
+import { mockCreateProvider } from "./llm-factory-mock.js";
+import { createScriptRunner } from "./contract-fake-provider.js";
+
+const scriptRunner = createScriptRunner();
+mockCreateProvider.mockImplementation(() => scriptRunner.create());
+
 import { generateRunnerToken } from "../db/runner.js";
 import {
   deleteLokiIntegration,
