@@ -61,12 +61,12 @@ export interface ToolResultPart {
   type: "tool_result";
   toolCallId: string;
   output: string;
-  // The wire fact a provider needs. Derived from `outcome` by `isToolFailure`,
+  // The wire fact a provider needs. Derived from `toolOutcome` by `isToolFailure`,
   // so the two cannot disagree about whether something went wrong.
   isError?: boolean;
   // Our own classification, which no wire format carries. Stamped from what the
   // run knew, which is what lets it live with the call instead of beside it.
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
   /* Present only when a person was actually asked. Absent is the answer for
      every call that never reached a gate - including one the harness refused
      because the tool was not offered, which used to read as an approval. */

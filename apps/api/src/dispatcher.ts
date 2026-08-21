@@ -81,15 +81,15 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
     controllers.set(input.sessionId, controller);
 
     void run({ ...input, signal: controller.signal })
-      .then((outcome) => {
+      .then((toolOutcome) => {
         // A run that reached an ending, however it ended, is not a failure any
         // more - so it stops carrying one and gets its full three attempts back.
         clearRunFailure(input.sessionId);
         // Single lifecycle owner: exactly one terminal event per run. Completed and
         // stopped runs need theirs here; suspended runs already ended via the loop's
         // interrupt event, and failed runs terminate in the catch below.
-        if (outcome === "completed") publishRunFinished(input.sessionId);
-        else if (outcome === "stopped") {
+        if (toolOutcome === "completed") publishRunFinished(input.sessionId);
+        else if (toolOutcome === "stopped") {
           markStopped(input.sessionId);
           publishRunStopped(input.sessionId);
         }

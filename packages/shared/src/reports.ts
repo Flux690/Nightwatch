@@ -82,7 +82,7 @@ export interface TimelineEntry {
     toolName: string;
     target: string | null;
     decision: "approved" | "rejected";
-    outcome?: ToolOutcome;
+    toolOutcome?: ToolOutcome;
   };
 }
 
@@ -131,7 +131,7 @@ export interface ResolvedEvidence {
   // Absent when the call answered. A cited miss is often the evidence itself -
   // the file really is not there - while a cited crash proves nothing about the
   // fleet, and the report must not read the two the same way.
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
   // Present only where a person was asked. A cited call they declined never ran,
   // which is a different thing again from one that ran and found nothing.
   humanDecision?: HumanDecision;
@@ -154,7 +154,7 @@ export interface GatedCall {
   decision: "approved" | "rejected";
   // Present only on a call that did not simply answer, and always the API's own
   // reading of the tool: what the person said is `decision` above.
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
   // Only worth reading on a failure: a success is its own output, which the
   // transcript already shows.
   result: string | null;

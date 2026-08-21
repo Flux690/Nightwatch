@@ -6,20 +6,20 @@ export interface ToolExecuteResult {
   // Absent means the call answered. Every failure path names its class instead
   // of a boolean, and the wire's is_error is derived from it below, so the two
   // can never disagree about whether something went wrong.
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
 }
 
 // What the dispatcher hands back: the result already rendered to the string the
 // model reads, and already bounded, so no caller can enter context past the cap.
 export interface DispatchedToolResult {
   content: string;
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
 }
 
 // A fan-out where some runners answered still carries an answer; everything
 // else the model must read as an error.
-export function isToolFailure(outcome: ToolOutcome | undefined): boolean {
-  return outcome !== undefined && outcome !== "partial";
+export function isToolFailure(toolOutcome: ToolOutcome | undefined): boolean {
+  return toolOutcome !== undefined && toolOutcome !== "partial";
 }
 
 interface ToolCallIdentity {

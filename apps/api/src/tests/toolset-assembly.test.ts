@@ -262,28 +262,18 @@ describe("toolset assembly by fleet capabilities", () => {
                 !offeredNames.has(name),
             );
             expect(namedButNotOffered).toEqual([]);
+
+            /* Same rule for the block a description points at. With no runner
+               connected the fleet summary is never rendered, and the run that
+               was told to copy a target key from it used the only proper nouns
+               left in the prompt, which were metrics source labels. */
+            expect(prompt.includes("<fleet-summary>")).toBe(
+              offeredNames.size > 0 &&
+                offered.tools.some((t) => t.on === "runner"),
+            );
           }
         }
       }
-    });
-
-    // The addressing grammar sends the model to <fleet-summary> for a target
-    // key. With no runner connected that block is never rendered, so the
-    // instruction would point at a section that is not there.
-    it("explains target keys only when a tool takes one", () => {
-      const withFleet = buildChatContext(
-        [],
-        { budgetMinutes: 30, repo: null, fleetTools: true },
-        true,
-      ).systemPrompt;
-      expect(withFleet).toContain("<fleet-summary>");
-
-      const without = buildChatContext(
-        [],
-        { budgetMinutes: 30, repo: null, fleetTools: false },
-        true,
-      ).systemPrompt;
-      expect(without).not.toContain("<fleet-summary>");
     });
   });
 

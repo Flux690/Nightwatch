@@ -41,7 +41,7 @@ describe("the ceiling on one tool result", () => {
     );
     const result = await executeTool(toolReturning({ lines }), {}, CTX);
 
-    expect(result.outcome).toBe("system");
+    expect(result.toolOutcome).toBe("system");
     // Not one character of it: a prefix would read as the whole answer.
     expect(result.content).not.toContain("connection refused");
     expect(result.content).toContain("GetDockerLogs");

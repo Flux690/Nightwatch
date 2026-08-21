@@ -193,7 +193,7 @@ describe("API-local session store", () => {
     });
   });
 
-  it("carries a tool call's outcome class into the rebuilt transcript", () => {
+  it("carries a tool call's toolOutcome class into the rebuilt transcript", () => {
     // Stamped onto the part on the way to disk, because the provider message has
     // nowhere to put it. Without it a reload draws a miss as a crash.
     const m = meta();
@@ -207,7 +207,7 @@ describe("API-local session store", () => {
             type: "tool_result",
             toolCallId: "tu-miss",
             output: "not found",
-            outcome: "expected_miss",
+            toolOutcome: "expected_miss",
           },
         ],
       },
@@ -219,7 +219,7 @@ describe("API-local session store", () => {
     expect(card?.state).toEqual({
       phase: "complete",
       result: "not found",
-      outcome: "expected_miss",
+      toolOutcome: "expected_miss",
     });
   });
 

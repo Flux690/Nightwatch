@@ -37,7 +37,7 @@ interface LedgerEntry {
   result: string | null;
   // Absent when the call simply answered. Carried on the result part it belongs
   // to, so one walk answers both what a call returned and how it went.
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
   // Absent unless a person was asked about this call, which is the only thing
   // that makes it a released write rather than a call the harness ran or refused.
   humanDecision?: HumanDecision;
@@ -65,7 +65,8 @@ function ledgerIn(sessionId: string): LedgerEntry[] {
         const entry = byToolUseId.get(part.toolCallId);
         if (entry) {
           entry.result = part.output;
-          if (part.outcome !== undefined) entry.outcome = part.outcome;
+          if (part.toolOutcome !== undefined)
+            entry.toolOutcome = part.toolOutcome;
           if (part.humanDecision !== undefined) {
             entry.humanDecision = part.humanDecision;
           }
@@ -114,7 +115,7 @@ export function resolveEvidence(
   if (cited.size === 0) return [];
   const resolved: ResolvedEvidence[] = [];
   for (const entry of ledgerIn(sessionId)) {
-    const { toolUseId, toolName, input, result, outcome } = entry;
+    const { toolUseId, toolName, input, result, toolOutcome } = entry;
     if (!cited.has(toolUseId) || result === null) continue;
     resolved.push({
       toolUseId,
@@ -122,7 +123,7 @@ export function resolveEvidence(
       kind: evidenceKind(toolName),
       input,
       result,
-      ...(outcome !== undefined && { outcome }),
+      ...(toolOutcome !== undefined && { toolOutcome }),
       ...(entry.humanDecision !== undefined && {
         humanDecision: entry.humanDecision,
       }),
@@ -156,7 +157,7 @@ function convictionOf(
    write, so it is not one of these. */
 export function gatedCalls(sessionId: string): GatedCall[] {
   return ledgerIn(sessionId).flatMap((entry) => {
-    const { humanDecision, outcome } = entry;
+    const { humanDecision, toolOutcome } = entry;
     if (entry.result === null) return [];
     if (humanDecision !== "approved" && humanDecision !== "rejected") return [];
     return [
@@ -166,7 +167,7 @@ export function gatedCalls(sessionId: string): GatedCall[] {
         target: targetKeyFromInput(entry.input),
         at: entry.timestamp,
         decision: humanDecision,
-        ...(outcome !== undefined && { outcome }),
+        ...(toolOutcome !== undefined && { toolOutcome }),
         result: entry.result,
       },
     ];

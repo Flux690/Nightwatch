@@ -365,7 +365,7 @@ describe("clarification interrupts", () => {
     );
     expect(asked?.kind === "tool_call" && asked.state).toMatchObject({
       phase: "complete",
-      outcome: "system",
+      toolOutcome: "system",
     });
     // The message names the cap and says the free-text box covers the rest, so
     // the model can drop an option rather than guess at why it was refused.

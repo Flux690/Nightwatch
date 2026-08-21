@@ -137,15 +137,15 @@ export async function sendFleetCommand(
   );
 
   let succeeded = 0;
-  const byRunner = settled.map((outcome, i) => {
+  const byRunner = settled.map((toolOutcome, i) => {
     const runner = addressName(conns[i]!) ?? conns[i]!.runnerId;
-    if (outcome.status === "fulfilled") {
+    if (toolOutcome.status === "fulfilled") {
       succeeded++;
-      return { runner, result: outcome.value };
+      return { runner, result: toolOutcome.value };
     }
     // One runner's failure is that entry's result, not the whole call's: the
     // others still carry evidence.
-    const err: unknown = outcome.reason;
+    const err: unknown = toolOutcome.reason;
     const message = err instanceof Error ? err.message : String(err);
     return { runner, result: `Error: ${message}` };
   });

@@ -69,10 +69,10 @@ function readPathsFor(sessionId: string): string[] {
   const rows = getTranscriptRows(sessionId);
   // Any outcome at all means the call did not answer cleanly, `partial`
   // included: a fan-out that half answered showed the model half a file.
-  const outcomes = new Set(
+  const toolOutcomes = new Set(
     rows.flatMap((row) =>
       row.parts.flatMap((part) =>
-        part.type === "tool_result" && part.outcome !== undefined
+        part.type === "tool_result" && part.toolOutcome !== undefined
           ? [part.toolCallId]
           : [],
       ),
@@ -83,7 +83,7 @@ function readPathsFor(sessionId: string): string[] {
     for (const part of row.parts) {
       if (part.type !== "tool_call") continue;
       if (!PATH_UNLOCKING_TOOLS.has(part.name)) continue;
-      if (outcomes.has(part.id)) continue;
+      if (toolOutcomes.has(part.id)) continue;
       const path = part.input["path"];
       if (typeof path !== "string") continue;
       try {
@@ -149,23 +149,26 @@ function workspaceOptionsFor(sessionId: string): WorkspaceOptions | null {
 // The sentence the model reads and the class the console renders are decided
 // together: a message that says "reconnect the token" while the class says
 // "expected miss" would be two answers to one question.
-function corrective(err: unknown): { content: string; outcome: ToolOutcome } {
+function corrective(err: unknown): {
+  content: string;
+  toolOutcome: ToolOutcome;
+} {
   if (err instanceof FileNotFoundError) {
-    return { content: err.message, outcome: "expected_miss" };
+    return { content: err.message, toolOutcome: "expected_miss" };
   }
   if (err instanceof PathEscapeError) {
     return {
       content: `${err.message}. Use a path relative to the repository root.`,
-      outcome: "system",
+      toolOutcome: "system",
     };
   }
   if (err instanceof ReadRequiredError) {
-    return { content: err.message, outcome: "system" };
+    return { content: err.message, toolOutcome: "system" };
   }
   if (err instanceof GitHubApiError) {
     return {
       content: `${gitHubErrorDetail(err)} Continue the investigation without repo tools.`,
-      outcome: classifyGitHubError(err),
+      toolOutcome: classifyGitHubError(err),
     };
   }
   if (
@@ -174,12 +177,12 @@ function corrective(err: unknown): { content: string; outcome: ToolOutcome } {
   ) {
     return {
       content: `${err.message}. Repo tools are unavailable until the user fixes this (Integrations page). Continue the investigation without them.`,
-      outcome: "system",
+      toolOutcome: "system",
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    outcome: "system",
+    toolOutcome: "system",
   };
 }
 
@@ -189,13 +192,13 @@ function corrective(err: unknown): { content: string; outcome: ToolOutcome } {
 async function runRepoTool<T>(
   ctx: ToolExecuteContext,
   fn: (ws: Workspace) => Promise<T>,
-): Promise<{ content: T | string; outcome?: ToolOutcome }> {
+): Promise<{ content: T | string; toolOutcome?: ToolOutcome }> {
   const options = workspaceOptionsFor(ctx.sessionId);
   if (options === null) {
     return {
       content:
         "GitHub integration is not configured. The user can connect a repository from the Integrations page. Continue without repo tools.",
-      outcome: "permission",
+      toolOutcome: "permission",
     };
   }
   try {
@@ -224,7 +227,7 @@ function optionalNumber(
 }
 
 function badInput(message: string): ToolExecuteResult {
-  return { content: message, outcome: "system" };
+  return { content: message, toolOutcome: "system" };
 }
 
 // PR body section order (model text, then incident context, files) is host
@@ -510,7 +513,7 @@ export const REPO_TOOLS: Tool[] = [
       const { content } = result;
       return typeof content !== "string" &&
         content.action === "nothing_to_propose"
-        ? { ...result, outcome: "expected_miss" }
+        ? { ...result, toolOutcome: "expected_miss" }
         : result;
     },
   },

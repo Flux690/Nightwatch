@@ -35,7 +35,7 @@ export interface ToolResult {
   /* Carried alongside the wire fields, never sent: adapters read the three above
      and ignore these. They ride here so a result that crosses a suspend - parked
      on the session row as JSON - comes back knowing how it went. */
-  outcome?: ToolOutcome;
+  toolOutcome?: ToolOutcome;
   // Set only where a person was asked, which is the only place it can be known.
   humanDecision?: HumanDecision;
 }

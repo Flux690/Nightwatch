@@ -344,7 +344,7 @@ describe("durable approval interrupts", () => {
     close();
   });
 
-  it("an approval with no decision is refused: it has exactly two outcomes", async () => {
+  it("an approval with no decision is refused: it has exactly two toolOutcomes", async () => {
     setScript([
       {
         text: "Restarting.",

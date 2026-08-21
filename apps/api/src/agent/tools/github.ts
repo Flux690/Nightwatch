@@ -189,7 +189,7 @@ export const GITHUB_TOOLS: Tool[] = [
         return {
           content:
             "GitHub integration is not configured. The user can connect a repository from the Integrations page. Continue without recent-change context.",
-          outcome: "permission",
+          toolOutcome: "permission",
         };
       }
       const { repoOwner, repoName } = integration;
@@ -259,7 +259,7 @@ export const GITHUB_TOOLS: Tool[] = [
               : String(err);
         return {
           content: `${detail} Continue the investigation without recent-change context.`,
-          outcome: classifyGitHubError(err),
+          toolOutcome: classifyGitHubError(err),
         };
       }
     },

@@ -101,7 +101,7 @@ function unpause(
   const gatedResult: ToolResult = { ...answer, humanDecision: status };
   // Read off the result rather than passed beside it: how a call went belongs
   // to the call, and two ways to say it is one way to say two things.
-  const { outcome } = gatedResult;
+  const { toolOutcome } = gatedResult;
 
   publishTranscriptItem({
     sessionId,
@@ -115,7 +115,7 @@ function unpause(
         // An approved tool ran and an answer is what the person said; a
         // rejection ran nothing, and its outcome already reads as Declined.
         ...(status !== "rejected" && { result: gatedResult.content }),
-        ...(outcome !== undefined && { outcome }),
+        ...(toolOutcome !== undefined && { toolOutcome }),
       },
     }),
   });
@@ -217,7 +217,7 @@ export async function respondToPendingHumanInput(
   if (claim(sessionId, pending.claimedAt ?? null) === "stale") {
     logger.warn(
       { sessionId, tool: call.name, toolUseId: pending.toolUseId },
-      "stale claim: a previous attempt died holding it, outcome unknown",
+      "stale claim: a previous attempt died holding it, toolOutcome unknown",
     );
     return unpause(
       sessionId,
@@ -227,9 +227,9 @@ export async function respondToPendingHumanInput(
       {
         tool_use_id: pending.toolUseId,
         content:
-          "This call was already attempted and the outcome is unknown - it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
+          "This call was already attempted and the toolOutcome is unknown - it may have run. Do not re-execute it automatically. Tell the user what was attempted and ask whether to retry.",
         is_error: true,
-        outcome: "system",
+        toolOutcome: "system",
       },
       { toolName: call.name, input: call.input },
     );

@@ -68,12 +68,14 @@ export async function executeTool(
   if (content.length > MAX_TOOL_RESULT_CHARS) {
     return {
       content: tooLarge(tool.schema.name, content.length),
-      outcome: "system",
+      toolOutcome: "system",
     };
   }
   return {
     content,
-    ...(result.outcome !== undefined && { outcome: result.outcome }),
+    ...(result.toolOutcome !== undefined && {
+      toolOutcome: result.toolOutcome,
+    }),
   };
 }
 

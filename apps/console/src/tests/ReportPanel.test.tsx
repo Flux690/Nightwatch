@@ -518,7 +518,7 @@ describe("ReportPanel", () => {
             kind: "text",
             input: { path: "/etc/redis/redis.conf" },
             result: "File not found: /etc/redis/redis.conf",
-            outcome: "expected_miss",
+            toolOutcome: "expected_miss",
           },
         ],
       }),
@@ -710,7 +710,7 @@ describe("ReportPanel", () => {
             target: null,
             at: "2026-07-21T12:14:00.000Z",
             decision: "approved",
-            outcome: "system",
+            toolOutcome: "system",
             result:
               "There is nothing to propose: this branch has no commits against the base branch.",
           },

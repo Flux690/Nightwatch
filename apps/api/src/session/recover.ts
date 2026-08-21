@@ -74,7 +74,7 @@ async function answerPendingCalls(
   for (const call of calls) {
     const tool = findTool(call.name);
     if (tool === undefined) return false;
-    const { content, outcome } = await executeTool(tool, call.input, {
+    const { content, toolOutcome } = await executeTool(tool, call.input, {
       sessionId,
       toolUseId: call.toolUseId,
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
@@ -83,8 +83,8 @@ async function answerPendingCalls(
       type: "tool_result",
       toolCallId: call.toolUseId,
       output: content,
-      ...(isToolFailure(outcome) && { isError: true }),
-      ...(outcome !== undefined && { outcome }),
+      ...(isToolFailure(toolOutcome) && { isError: true }),
+      ...(toolOutcome !== undefined && { toolOutcome }),
     });
     texts.push(content);
   }

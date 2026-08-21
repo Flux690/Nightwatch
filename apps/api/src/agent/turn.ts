@@ -15,7 +15,7 @@ type GateKind = "approval" | "clarification";
 
 interface TurnOutcome {
   // One per non-gated tool_use, so every block is answered even when a later one
-  // suspends. Each carries its outcome, which the loop stamps onto the part.
+  // suspends. Each carries its toolOutcome, which the loop stamps onto the part.
   toolResults: ToolResult[];
   // The single gated call to suspend on, or null if the turn had none. At most
   // one per turn; subsequent gated calls are rejected inline.
@@ -119,7 +119,7 @@ export async function processToolUses(params: {
         tool_use_id: call.id,
         content: "Another gated action is pending. Retry after it resolves.",
         is_error: true,
-        outcome: "system",
+        toolOutcome: "system",
       });
       return;
     }
@@ -143,7 +143,7 @@ export async function processToolUses(params: {
             tool_use_id: tool.id,
             content: overflow,
             is_error: true,
-            outcome: "system",
+            toolOutcome: "system",
           });
           continue;
         }
@@ -160,7 +160,7 @@ export async function processToolUses(params: {
         tool_use_id: tool.id,
         content: unavailableMessage(tool.name, offeredNames, asked + 1),
         is_error: true,
-        outcome: "system",
+        toolOutcome: "system",
       });
       continue;
     }
@@ -179,15 +179,15 @@ export async function processToolUses(params: {
         state: { phase: "running" },
       }),
     });
-    const { content, outcome } = await executeTool(entry, tool.input, {
+    const { content, toolOutcome } = await executeTool(entry, tool.input, {
       ...execCtx,
       toolUseId: tool.id,
     });
     toolResults.push({
       tool_use_id: tool.id,
       content,
-      is_error: isToolFailure(outcome),
-      ...(outcome !== undefined && { outcome }),
+      is_error: isToolFailure(toolOutcome),
+      ...(toolOutcome !== undefined && { toolOutcome }),
     });
     publishTranscriptItem({
       sessionId,
@@ -200,7 +200,7 @@ export async function processToolUses(params: {
         state: {
           phase: "complete",
           result: content,
-          ...(outcome !== undefined && { outcome }),
+          ...(toolOutcome !== undefined && { toolOutcome }),
         },
       }),
     });

@@ -30,7 +30,7 @@ export async function executeApprovedTool(
       );
     }
 
-    const { content, outcome } = await executeTool(toolEntry, toolInput, {
+    const { content, toolOutcome } = await executeTool(toolEntry, toolInput, {
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
       sessionId,
       toolUseId,
@@ -38,8 +38,8 @@ export async function executeApprovedTool(
     return {
       tool_use_id: toolUseId,
       content,
-      is_error: isToolFailure(outcome),
-      ...(outcome !== undefined && { outcome }),
+      is_error: isToolFailure(toolOutcome),
+      ...(toolOutcome !== undefined && { toolOutcome }),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -61,6 +61,6 @@ function failed(toolUseId: string, content: string): ToolResult {
     tool_use_id: toolUseId,
     content,
     is_error: true,
-    outcome: "system",
+    toolOutcome: "system",
   };
 }

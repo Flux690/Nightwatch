@@ -133,7 +133,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    expect(result.outcome).toBe("permission");
+    expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("No metrics source is connected");
     expect(mock.requests).toHaveLength(0);
   });
@@ -150,7 +150,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up", at: "alert" },
       ctx,
     );
-    expect(atAlert.outcome).toBeUndefined();
+    expect(atAlert.toolOutcome).toBeUndefined();
     expect(mock.requests[0]!.path).toBe("/api/v1/query");
     expect(mock.requests[0]!.params.get("time")).toBe(FIRED_AT);
     expect(mock.requests[0]!.params.get("query")).toBe("up");
@@ -167,7 +167,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    expect(result.outcome).toBeUndefined();
+    expect(result.toolOutcome).toBeUndefined();
 
     const params = mock.requests[0]!.params;
     // 180min back, 30min forward, 12600s window -> ceil(12600/200) = 63s step.
@@ -265,7 +265,7 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up{" },
       mintSession(ALERT),
     );
-    expect(result.outcome).toBe("system");
+    expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("parse error");
   });
 
@@ -324,7 +324,7 @@ describe("metrics tools through the tool dispatch", () => {
         { contains: "nonesuch" },
         mintSession(ALERT),
       );
-      expect(result.outcome).toBe("expected_miss");
+      expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("No metric names matched");
     });
 
@@ -360,7 +360,7 @@ describe("metrics tools through the tool dispatch", () => {
         { metric: "custom_thing" },
         mintSession(ALERT),
       );
-      expect(result.outcome).toBe("expected_miss");
+      expect(result.toolOutcome).toBe("expected_miss");
       expect(result.content).toContain("may still exist");
     });
 
@@ -437,7 +437,7 @@ describe("metrics tools through the tool dispatch", () => {
           mintSession(ALERT),
         );
 
-        expect(result.outcome).toBe("permission");
+        expect(result.toolOutcome).toBe("permission");
         expect(result.content).toContain("not an absence of rules");
         expect(result.content).toContain("vmalert");
         expect(mock.requests).toHaveLength(0);
@@ -455,7 +455,7 @@ describe("metrics tools through the tool dispatch", () => {
           mintSession(ALERT),
         );
 
-        expect(result.outcome).toBe("system");
+        expect(result.toolOutcome).toBe("system");
         expect(result.content).toContain("prom-prod");
         expect(result.content).toContain("prom-staging");
         expect(mock.requests).toHaveLength(0);
@@ -487,7 +487,7 @@ describe("metrics tools through the tool dispatch", () => {
           { metric: "x" },
           mintSession(ALERT),
         );
-        expect(result.outcome).toBe("permission");
+        expect(result.toolOutcome).toBe("permission");
         expect(result.content).toContain("No metrics source is connected");
       }
     });

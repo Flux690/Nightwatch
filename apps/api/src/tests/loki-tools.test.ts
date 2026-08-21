@@ -159,7 +159,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"}' },
       mintSession(ALERT),
     );
-    expect(result.outcome).toBe("permission");
+    expect(result.toolOutcome).toBe("permission");
     expect(result.content).toContain("not configured");
     expect(mock.requests).toHaveLength(0);
   });
@@ -184,7 +184,7 @@ describe("Loki tools through the tool dispatch", () => {
       { query: '{app="api"} |= "error"' },
       mintSession(ALERT),
     );
-    expect(result.outcome).toBeUndefined();
+    expect(result.toolOutcome).toBeUndefined();
 
     const req = mock.requests[0]!;
     expect(req.path).toBe("/loki/api/v1/query_range");
@@ -299,7 +299,7 @@ describe("Loki tools through the tool dispatch", () => {
       mintSession(ALERT),
     );
 
-    expect(result.outcome).toBe("system");
+    expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("ISO 8601");
     // Corrected before any request: a bad window is not Loki's to answer.
     expect(mock.requests).toHaveLength(0);
@@ -365,7 +365,7 @@ describe("Loki tools through the tool dispatch", () => {
     mock.status = "error";
     mock.errorText = "parse error at line 1: unexpected }";
     const result = await executeTool(logs, { query: "{" }, mintSession(ALERT));
-    expect(result.outcome).toBe("system");
+    expect(result.toolOutcome).toBe("system");
     expect(result.content).toContain("parse error");
   });
 

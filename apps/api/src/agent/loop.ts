@@ -71,10 +71,10 @@ import type {
 } from "../llm/types.js";
 import type { PendingHumanInput } from "../db/interrupts.js";
 
-/* Neither `outcome` nor `humanDecision` is a wire field, so a provider snapshot
+/* Neither `toolOutcome` nor `humanDecision` is a wire field, so a provider snapshot
    always comes back without them. The run knew both before the row existed; this
    puts them back. */
-type ResultAnnotation = Pick<ToolResult, "outcome" | "humanDecision">;
+type ResultAnnotation = Pick<ToolResult, "toolOutcome" | "humanDecision">;
 
 function stampOutcomes(
   parts: MessagePart[],
@@ -87,7 +87,9 @@ function stampOutcomes(
     if (noted === undefined) return part;
     return {
       ...part,
-      ...(noted.outcome !== undefined && { outcome: noted.outcome }),
+      ...(noted.toolOutcome !== undefined && {
+        toolOutcome: noted.toolOutcome,
+      }),
       ...(noted.humanDecision !== undefined && {
         humanDecision: noted.humanDecision,
       }),
@@ -110,7 +112,7 @@ function persistNewTurns(
   fromCount: number,
   seqOffset: number,
   harnessTurns: ReadonlySet<number>,
-  outcomes: ReadonlyMap<string, ResultAnnotation>,
+  toolOutcomes: ReadonlyMap<string, ResultAnnotation>,
   interrupt?: PendingHumanInput,
 ): number {
   const snap = provider.snapshot();
@@ -123,7 +125,7 @@ function persistNewTurns(
       seq: seqOffset + i,
       kind: harnessTurns.has(i) ? "nightwarden" : m.role,
       content: m.content,
-      parts: stampOutcomes(m.parts, outcomes),
+      parts: stampOutcomes(m.parts, toolOutcomes),
       ...(m.native && { native: m.native }),
       timestamp: new Date().toISOString(),
     });
@@ -350,11 +352,16 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   const seenOutcomes = new Map<string, ResultAnnotation>();
   const noteOutcomes = (results: readonly ToolResult[]): void => {
     for (const result of results) {
-      if (result.outcome === undefined && result.humanDecision === undefined) {
+      if (
+        result.toolOutcome === undefined &&
+        result.humanDecision === undefined
+      ) {
         continue;
       }
       seenOutcomes.set(result.tool_use_id, {
-        ...(result.outcome !== undefined && { outcome: result.outcome }),
+        ...(result.toolOutcome !== undefined && {
+          toolOutcome: result.toolOutcome,
+        }),
         ...(result.humanDecision !== undefined && {
           humanDecision: result.humanDecision,
         }),

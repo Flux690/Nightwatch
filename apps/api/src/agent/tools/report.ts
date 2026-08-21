@@ -61,7 +61,7 @@ const SUBMIT_REPORT_INPUT = z.object({
 // Names the fields that failed: the model gets exactly one more attempt, and
 // "invalid input" tells it nothing about which one.
 function malformed(message: string): ToolExecuteResult {
-  return { content: message, outcome: "system" };
+  return { content: message, toolOutcome: "system" };
 }
 
 function fieldErrors(error: z.ZodError): string {
@@ -75,10 +75,10 @@ function fieldErrors(error: z.ZodError): string {
 
 // A refusal is the record holding its ground, not a fault: the tool worked and
 // what was asked for is not available.
-function toResult(outcome: RecordOutcome): ToolExecuteResult {
-  return outcome.recorded
-    ? { content: outcome.message }
-    : { content: outcome.message, outcome: "expected_miss" };
+function toResult(recording: RecordOutcome): ToolExecuteResult {
+  return recording.recorded
+    ? { content: recording.message }
+    : { content: recording.message, toolOutcome: "expected_miss" };
 }
 
 export const REPORT_TOOLS: Tool[] = [

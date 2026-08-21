@@ -245,18 +245,18 @@ describe("OpenPullRequest", () => {
       "opr-create",
     );
 
-    expect(result.outcome).toBeUndefined();
-    const outcome = parsedContent<{
+    expect(result.toolOutcome).toBeUndefined();
+    const toolOutcome = parsedContent<{
       action: string;
       number: number;
       url: string;
       draft: boolean;
       message: string;
     }>(result);
-    expect(outcome.action).toBe("created");
-    expect(outcome.number).toBe(42);
-    expect(outcome.draft).toBe(true);
-    expect(outcome.message).toContain("draft PR #42");
+    expect(toolOutcome.action).toBe("created");
+    expect(toolOutcome.number).toBe(42);
+    expect(toolOutcome.draft).toBe(true);
+    expect(toolOutcome.message).toContain("draft PR #42");
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(true);
 
     const payload = prState.createPayloads.at(-1)!;
@@ -290,10 +290,12 @@ describe("OpenPullRequest", () => {
     );
     prState.open = [];
 
-    expect(result.outcome).toBeUndefined();
-    const outcome = parsedContent<{ action: string; message: string }>(result);
-    expect(outcome.action).toBe("updated");
-    expect(outcome.message).toContain("Updated existing PR #42");
+    expect(result.toolOutcome).toBeUndefined();
+    const toolOutcome = parsedContent<{ action: string; message: string }>(
+      result,
+    );
+    expect(toolOutcome.action).toBe("updated");
+    expect(toolOutcome.message).toContain("Updated existing PR #42");
     expect(prState.createPayloads).toHaveLength(before);
     expect(prState.patchPayloads.at(-1)?.["title"]).toBe(
       "Fix payments OOM (v2)",
@@ -310,10 +312,12 @@ describe("OpenPullRequest", () => {
     );
     prState.rejectDraft = false;
 
-    expect(result.outcome).toBeUndefined();
-    const outcome = parsedContent<{ draft: boolean; message: string }>(result);
-    expect(outcome.draft).toBe(false);
-    expect(outcome.message).toContain("draft mode is unavailable");
+    expect(result.toolOutcome).toBeUndefined();
+    const toolOutcome = parsedContent<{ draft: boolean; message: string }>(
+      result,
+    );
+    expect(toolOutcome.draft).toBe(false);
+    expect(toolOutcome.message).toContain("draft mode is unavailable");
     const attempts = prState.createPayloads.slice(-2);
     expect(attempts[0]?.["draft"]).toBe(true);
     expect(attempts[1]?.["draft"]).toBe(false);
@@ -329,10 +333,12 @@ describe("OpenPullRequest", () => {
 
     const result = await runOpr({ title: "Fix it" }, SESSION_ID, "opr-nodiff");
 
-    expect(result.outcome).toBe("expected_miss");
-    const outcome = parsedContent<{ action: string; message: string }>(result);
-    expect(outcome.action).toBe("nothing_to_propose");
-    expect(outcome.message).toContain("nothing to propose");
+    expect(result.toolOutcome).toBe("expected_miss");
+    const toolOutcome = parsedContent<{ action: string; message: string }>(
+      result,
+    );
+    expect(toolOutcome.action).toBe("nothing_to_propose");
+    expect(toolOutcome.message).toContain("nothing to propose");
     expect(prState.createPayloads).toHaveLength(requestsBefore);
     expect(gitState.calls.some((a) => a.includes("push"))).toBe(false);
   });

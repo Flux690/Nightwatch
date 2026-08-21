@@ -22,9 +22,9 @@ export type ToolCallState =
       phase: "resolved";
       decision: ApprovalStatus;
       result?: unknown;
-      outcome?: ToolOutcome;
+      toolOutcome?: ToolOutcome;
     }
-  | { phase: "complete"; result: unknown; outcome?: ToolOutcome };
+  | { phase: "complete"; result: unknown; toolOutcome?: ToolOutcome };
 
 export interface UserTurnItem {
   kind: "user_turn";

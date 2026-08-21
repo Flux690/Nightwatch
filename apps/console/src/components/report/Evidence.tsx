@@ -233,10 +233,15 @@ export function Evidence({
 }): React.JSX.Element | null {
   if (repeat) return null;
 
-  const summary = resultSummary(entry.toolName, entry.result, entry.outcome);
+  const summary = resultSummary(
+    entry.toolName,
+    entry.result,
+    entry.toolOutcome,
+  );
   // A call that answered nothing has nothing to draw: its outcome is the whole
   // reading, and it is what the line carries.
-  const drawing = entry.outcome === undefined ? drawingFor(entry, alert) : null;
+  const drawing =
+    entry.toolOutcome === undefined ? drawingFor(entry, alert) : null;
 
   if (drawing === null) {
     return summary.text === "" ? null : (

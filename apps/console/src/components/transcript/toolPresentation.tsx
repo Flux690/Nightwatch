@@ -46,7 +46,7 @@ export function targetOf(input: Record<string, unknown>): string | null {
 
 function outcomeOf(state: ToolCallState): ToolOutcome | undefined {
   return state.phase === "complete" || state.phase === "resolved"
-    ? state.outcome
+    ? state.toolOutcome
     : undefined;
 }
 
@@ -88,18 +88,18 @@ const DECLINED = { text: "Declined", tone: "text-muted-foreground" } as const;
 export function resultSummary(
   toolName: string,
   result: unknown,
-  outcome: ToolOutcome | undefined,
+  toolOutcome: ToolOutcome | undefined,
   humanDecision?: HumanDecision,
 ): { text: string; tone: string } {
   if (humanDecision === "rejected") return { ...DECLINED };
   const finding = findingFor(toolName, result);
   const tone =
-    outcome !== undefined
-      ? OUTCOME_TONE[outcome]
+    toolOutcome !== undefined
+      ? OUTCOME_TONE[toolOutcome]
       : finding?.tone === "bad"
         ? "text-fail"
         : "text-muted-foreground";
-  const label = outcome === undefined ? "" : OUTCOME_LABEL[outcome];
+  const label = toolOutcome === undefined ? "" : OUTCOME_LABEL[toolOutcome];
   return { text: [label, finding?.text].filter(Boolean).join(" · "), tone };
 }
 

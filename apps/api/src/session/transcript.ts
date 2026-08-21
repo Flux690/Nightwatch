@@ -97,10 +97,10 @@ function toolCallState(
   result: string | undefined,
   gate: ToolGate | null,
   decided: ApprovalStatus | null,
-  outcome: ToolOutcome | undefined,
+  toolOutcome: ToolOutcome | undefined,
 ): ToolCallState {
   if (gate !== null) return { phase: "awaiting_human", gate };
-  const classified = outcome === undefined ? {} : { outcome };
+  const classified = toolOutcome === undefined ? {} : { toolOutcome };
   /* Every path a person is on ends here, including an answered question: the
      decision was recorded when they were asked, so nothing needs to work out
      from a tool's name whether the words in the result are theirs. */
@@ -136,14 +136,14 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
   // One pass for all three: a result, how it went, and what a person said all
   // arrive on the same part.
   const results = new Map<string, string>();
-  const outcomes = new Map<string, ToolOutcome>();
+  const toolOutcomes = new Map<string, ToolOutcome>();
   const decisions = new Map<string, HumanDecision>();
   for (const msg of messages) {
     for (const part of msg.parts) {
       if (part.type === "tool_result") {
         results.set(part.toolCallId, part.output);
-        if (part.outcome !== undefined) {
-          outcomes.set(part.toolCallId, part.outcome);
+        if (part.toolOutcome !== undefined) {
+          toolOutcomes.set(part.toolCallId, part.toolOutcome);
         }
         if (part.humanDecision !== undefined) {
           decisions.set(part.toolCallId, part.humanDecision);
@@ -257,7 +257,7 @@ export function buildTranscript(sessionId: string): TranscriptItem[] {
               results.get(part.id),
               gate,
               decided,
-              outcomes.get(part.id),
+              toolOutcomes.get(part.id),
             ),
             priorRuns: priorRunsOf(part.name, part.input, approved),
           }),

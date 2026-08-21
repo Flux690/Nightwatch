@@ -80,10 +80,10 @@ function Band({
    decided is not shown - there is one user, and the record is theirs. */
 function decisionView(call: {
   decision: "approved" | "rejected";
-  outcome?: string;
+  toolOutcome?: string;
 }): { label: string; tone: StatusTone } {
   if (call.decision === "rejected") return { label: "Declined", tone: "muted" };
-  return call.outcome === "system" || call.outcome === "retryable"
+  return call.toolOutcome === "system" || call.toolOutcome === "retryable"
     ? { label: "Failed", tone: "fail" }
     : { label: "Ran", tone: "ok" };
 }
@@ -164,7 +164,9 @@ function timelineRows(
         toolName: call.toolName,
         target: call.target,
         decision: call.decision,
-        ...(call.outcome !== undefined && { outcome: call.outcome }),
+        ...(call.toolOutcome !== undefined && {
+          toolOutcome: call.toolOutcome,
+        }),
       },
     },
   }));

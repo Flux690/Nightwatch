@@ -99,14 +99,14 @@ describe("the investigation record", () => {
   });
 
   // One ledger entry at a chosen instant, so a read after a remediation is
-  // distinguishable from one before. `outcome` rides the part, as production does.
+  // distinguishable from one before. `toolOutcome` rides the part, as production does.
   function appendCall(
     sessionId: string,
     seq: number,
     entry: { id: string; name: string; input: Record<string, unknown> },
     output: string,
     at: string,
-    outcome?: ToolOutcome,
+    toolOutcome?: ToolOutcome,
     humanDecision?: HumanDecision,
   ): void {
     appendTranscriptRows([
@@ -135,7 +135,7 @@ describe("the investigation record", () => {
             type: "tool_result",
             toolCallId: entry.id,
             output,
-            ...(outcome !== undefined && { outcome }),
+            ...(toolOutcome !== undefined && { toolOutcome }),
             ...(humanDecision !== undefined && { humanDecision }),
           },
         ],
@@ -171,7 +171,7 @@ describe("the investigation record", () => {
     toolName: string,
     sessionId: string,
     input: Record<string, unknown>,
-  ): Promise<{ content: unknown; outcome?: string }> {
+  ): Promise<{ content: unknown; toolOutcome?: string }> {
     const tool = REPORT_TOOLS.find((t) => t.schema.name === toolName);
     return executeTool(tool!, input, {
       sessionId,
@@ -203,7 +203,7 @@ describe("the investigation record", () => {
   async function submit(
     sessionId: string,
     input: Record<string, unknown>,
-  ): Promise<{ content: unknown; outcome?: string }> {
+  ): Promise<{ content: unknown; toolOutcome?: string }> {
     return executeTool(SUBMIT_REPORT_TOOL, input, {
       sessionId,
       toolUseId: "tu-submit",
@@ -261,7 +261,7 @@ describe("the investigation record", () => {
         finding: "still looking",
         evidenceIds: ["tu-1"],
       });
-      expect(result.outcome).toBe("system");
+      expect(result.toolOutcome).toBe("system");
       expect(getReport(sessionId)).toBeUndefined();
     });
 
@@ -275,7 +275,7 @@ describe("the investigation record", () => {
           finding: "no reason given",
           evidenceIds: [],
         });
-        expect(result.outcome).toBe("system");
+        expect(result.toolOutcome).toBe("system");
         // The one rule broken most often, so the refusal says what to do about
         // it rather than only which field failed.
         expect(String(result.content)).toContain("at least one citation");
@@ -442,7 +442,7 @@ describe("the investigation record", () => {
         recommendation: "",
       });
 
-      expect(refused.outcome).toBe("system");
+      expect(refused.toolOutcome).toBe("system");
       expect(String(refused.content)).toContain("summary");
       expect(getReport(sessionId)?.submitted ?? null).toBeNull();
     });
@@ -646,7 +646,7 @@ describe("the investigation record", () => {
 
     // A provider carries the wire's error flag and nothing else, so the class is
     // put back on the way to disk. Without it a reload cannot tell miss from crash.
-    it("keeps the outcome class on the persisted result, not beside it", async () => {
+    it("keeps the toolOutcome class on the persisted result, not beside it", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
           {
@@ -670,7 +670,7 @@ describe("the investigation record", () => {
       const answering = getTranscriptRows(sessionId)
         .flatMap((row) => row.parts)
         .find((p) => p.type === "tool_result" && p.toolCallId === "tu-gone");
-      expect(answering).toMatchObject({ outcome: "system", isError: true });
+      expect(answering).toMatchObject({ toolOutcome: "system", isError: true });
     });
 
     it("never counts a declined call as the write a later read confirms", async () => {
@@ -851,11 +851,11 @@ describe("the investigation record", () => {
       seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
         alert("gate"),
       ]);
-      const outcome = await runSession({
+      const toolOutcome = await runSession({
         sessionId,
         alerts: [alert("gate")],
       });
-      expect(outcome).toBe("completed");
+      expect(toolOutcome).toBe("completed");
 
       const requests = completionRequests();
       expect(requests).toHaveLength(3);
@@ -975,11 +975,11 @@ describe("the investigation record", () => {
         alert("cut-off"),
       ]);
 
-      const outcome = await runSession({
+      const toolOutcome = await runSession({
         sessionId,
         alerts: [alert("cut-off")],
       });
-      expect(outcome).toBe("completed");
+      expect(toolOutcome).toBe("completed");
 
       const drawn = JSON.stringify(buildTranscript(sessionId));
       expect(drawn).toContain("cut off at this model's output limit");
@@ -1049,11 +1049,11 @@ describe("the investigation record", () => {
       seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
         alert("gate-pass"),
       ]);
-      const outcome = await runSession({
+      const toolOutcome = await runSession({
         sessionId,
         alerts: [alert("gate-pass")],
       });
-      expect(outcome).toBe("completed");
+      expect(toolOutcome).toBe("completed");
 
       expect(completionRequests()).toHaveLength(0);
       expect(reportRequests()).toHaveLength(1);
@@ -1077,11 +1077,11 @@ describe("the investigation record", () => {
       );
       const sessionId = randomUUID();
       seedChatSession(sessionId, "how many containers are running?");
-      const outcome = await runSession({
+      const toolOutcome = await runSession({
         sessionId,
         userMessage: "how many containers are running?",
       });
-      expect(outcome).toBe("completed");
+      expect(toolOutcome).toBe("completed");
       expect(harnessMessages()).toHaveLength(0);
       expect(getReport(sessionId)).toBeUndefined();
     });

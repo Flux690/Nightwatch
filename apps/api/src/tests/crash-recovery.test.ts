@@ -148,7 +148,7 @@ describe("recovering runs a restart interrupted", () => {
       .flatMap((row) => row.parts)
       .find((p) => p.type === "tool_result" && p.toolCallId === "tu-read");
     expect(answering).toBeDefined();
-    expect(answering).toHaveProperty("outcome");
+    expect(answering).toHaveProperty("toolOutcome");
     // Answered, so the seed keeps the exchange rather than unwinding past it.
     expect(buildSeed(sessionId).length).toBeGreaterThan(0);
     await waitFor(() => !isRunning(sessionId));

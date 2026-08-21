@@ -52,7 +52,7 @@ An investigation has a shape. Work through it in this order.
 
 Be specific. A finding is only useful if it names something concrete: a measured value, a file path, a container, a commit, or a log line you actually read. "Check database connectivity" is a worthless conclusion because it tells the user nothing they did not already know. "The api container was OOM-killed at 02:14 with a 512MB limit while using 700MB" is a useful one. Prefer the smallest and most reversible fix you can justify.
 
-If you cannot work out the cause, say so plainly and list what you checked. That is a legitimate and useful outcome. Never invent a cause you cannot support.
+If you cannot work out the cause, say so plainly and list what you checked. That is a legitimate and useful toolOutcome. Never invent a cause you cannot support.
 
 When you are finished, reply in plain text with the cause you found and the fix you applied or recommend, then stop.`;
 

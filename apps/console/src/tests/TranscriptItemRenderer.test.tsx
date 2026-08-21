@@ -477,20 +477,20 @@ describe("TranscriptItemRenderer", () => {
     });
   });
 
-  describe("outcome classes", () => {
+  describe("toolOutcome classes", () => {
     function finding(
-      outcome: ToolOutcome | undefined,
+      toolOutcome: ToolOutcome | undefined,
       result: unknown,
     ): HTMLElement {
       wrap({
         kind: "tool_call",
-        toolUseId: `tu-${outcome ?? "ok"}`,
+        toolUseId: `tu-${toolOutcome ?? "ok"}`,
         toolName: "Read",
         input: { path: "docker-compose.yml" },
         state: {
           phase: "complete",
           result,
-          ...(outcome !== undefined && { outcome }),
+          ...(toolOutcome !== undefined && { toolOutcome }),
         },
       });
       // The finding is the row's third span: name, target, then the answer.

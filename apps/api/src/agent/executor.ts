@@ -43,14 +43,14 @@ export async function executeRunnerTool(
     // none did. Each runner's own reason rides in the envelope either way.
     if (failed === 0) return { content: envelope };
     return succeeded > 0
-      ? { content: envelope, outcome: "partial" }
-      : { content: envelope, outcome: "system" };
+      ? { content: envelope, toolOutcome: "partial" }
+      : { content: envelope, toolOutcome: "system" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.warn({ tool: name, err }, "runner tool failed");
     return {
       content: `Error executing ${name}: ${msg}`,
-      outcome: classifyRunnerError(err),
+      toolOutcome: classifyRunnerError(err),
     };
   }
 }

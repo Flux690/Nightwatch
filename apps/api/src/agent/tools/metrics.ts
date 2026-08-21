@@ -98,7 +98,7 @@ function resolveMetricsSource(
     return {
       content:
         "No metrics source is connected. The user can connect one from the Integrations page. Continue without metric evidence.",
-      outcome: "permission",
+      toolOutcome: "permission",
     };
   }
   const named = input["metricsSource"];
@@ -109,7 +109,7 @@ function resolveMetricsSource(
       content: `More than one metrics source is connected, so name the one you mean in "metricsSource": ${all
         .map((b) => b.label)
         .join(", ")}.`,
-      outcome: "system",
+      toolOutcome: "system",
     };
   }
   const wanted = named.trim().toLowerCase();
@@ -119,7 +119,7 @@ function resolveMetricsSource(
     content: `No metrics source is named "${named.trim()}". The connected ones are: ${all
       .map((b) => b.label)
       .join(", ")}.`,
-    outcome: "system",
+    toolOutcome: "system",
   };
 }
 
@@ -134,17 +134,17 @@ function corrective(err: unknown): ToolExecuteResult {
     if (err.code === "bad_query") {
       return {
         content: `The source rejected the query: ${err.message}. Fix the PromQL and retry.`,
-        outcome: "system",
+        toolOutcome: "system",
       };
     }
     return {
       content: `Metrics request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
-      outcome: err.code === "unauthorized" ? "permission" : "retryable",
+      toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }
   return {
     content: err instanceof Error ? err.message : String(err),
-    outcome: "system",
+    toolOutcome: "system",
   };
 }
 
@@ -182,7 +182,10 @@ export const METRICS_TOOLS: Tool[] = [
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a PromQL string", outcome: "system" };
+        return {
+          content: "query must be a PromQL string",
+          toolOutcome: "system",
+        };
       }
       try {
         const data = await instantQuery(
@@ -241,7 +244,10 @@ export const METRICS_TOOLS: Tool[] = [
       if (!isSource(source)) return source;
       const query = input["query"];
       if (typeof query !== "string" || query.trim() === "") {
-        return { content: "query must be a PromQL string", outcome: "system" };
+        return {
+          content: "query must be a PromQL string",
+          toolOutcome: "system",
+        };
       }
 
       const anchor = alertAnchorFor(ctx.sessionId);
@@ -337,7 +343,7 @@ export const METRICS_TOOLS: Tool[] = [
           return {
             content:
               "No metric names matched. Widen the substring, or drop it to see what this source stores at all.",
-            outcome: "expected_miss",
+            toolOutcome: "expected_miss",
           };
         }
         const result: MetricNamesResult = {
@@ -381,7 +387,7 @@ export const METRICS_TOOLS: Tool[] = [
       if (!isSource(source)) return source;
       const metric = input["metric"];
       if (typeof metric !== "string" || metric.trim() === "") {
-        return { content: "metric must be a name", outcome: "system" };
+        return { content: "metric must be a name", toolOutcome: "system" };
       }
       /* Stated, not discovered: VictoriaMetrics answers this endpoint with an empty
          object for every metric, so reporting the emptiness would be a fact about
@@ -389,7 +395,7 @@ export const METRICS_TOOLS: Tool[] = [
       if (!source.capabilities.metricMetadata) {
         return {
           content: `${source.label} does not implement the metric metadata API - it answers with an empty result for every metric, so nothing here can tell you the type or unit of "${metric.trim()}". This says nothing about whether the metric exists. Read its type from the exporter, or infer it from how the values behave over a range.`,
-          outcome: "expected_miss",
+          toolOutcome: "expected_miss",
         };
       }
       try {
@@ -397,7 +403,7 @@ export const METRICS_TOOLS: Tool[] = [
         if (meta === null) {
           return {
             content: `No exporter declared metadata for "${metric.trim()}" on ${source.label}. The metric may still exist and be queryable.`,
-            outcome: "expected_miss",
+            toolOutcome: "expected_miss",
           };
         }
         return { content: meta };
@@ -439,7 +445,7 @@ export const METRICS_TOOLS: Tool[] = [
       if (source.rules === null) {
         return {
           content: `No rules endpoint is configured for ${source.label}, so nothing here can say which alerting rules it evaluates or whether any is firing. This is a gap in the connection, not an absence of rules. The user can add the rules URL on the Integrations page - on VictoriaMetrics it is vmalert's address, and on Grafana Cloud the Grafana stack's.`,
-          outcome: "permission",
+          toolOutcome: "permission",
         };
       }
       const contains = input["contains"];
@@ -459,7 +465,7 @@ export const METRICS_TOOLS: Tool[] = [
               needle === null
                 ? `${source.label} returned no alerting rules. That is not proof it evaluates none: a VictoriaMetrics query endpoint answers this the same way, with an empty list, when the rules actually live in vmalert.`
                 : `No alerting rule name contains "${contains as string}".`,
-            outcome: "expected_miss",
+            toolOutcome: "expected_miss",
           };
         }
         const { kept } = fitWithinBudget(matched.slice(0, MAX_ALERT_RULES));
