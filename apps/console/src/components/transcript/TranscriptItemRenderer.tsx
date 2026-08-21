@@ -117,6 +117,9 @@ function Compaction(): React.JSX.Element {
   );
 }
 
+// Shorter than this is punctuation or a stray token, not reasoning worth a row.
+const MIN_THINKING_CHARS = 12;
+
 function ThinkingBlock({
   item,
 }: {
@@ -139,10 +142,16 @@ function ThinkingBlock({
 
   const trimmed = item.text.trim();
 
-  // Empty reasoning is never a transcript item: the working animation stands in
-  // for "the model is thinking" while nothing is shown. A thinking block renders
-  // only once it has real text - so the chevron and body always exist together.
+  /* Empty reasoning is never a transcript item: the working animation stands in
+     for "the model is thinking" while nothing is shown. A thinking block renders
+     only once it has real text - so the chevron and body always exist together.
+
+     A settled burst also has a floor: a free model emitted a single "." six
+     times in one run and each earned a whole block. It applies only once the
+     turn is done, because mid-stream the block is what says work is happening
+     and text arrives a few characters at a time. */
   if (!trimmed) return null;
+  if (!item.streaming && trimmed.length < MIN_THINKING_CHARS) return null;
 
   return (
     <div

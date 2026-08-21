@@ -59,6 +59,7 @@ import type {
   MessagePart,
   NormalizedAlert,
   SubmittedReport,
+  ToolName,
   TranscriptRow,
   SessionMeta,
 } from "@nightwarden/shared";
@@ -315,6 +316,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
     // The run's effective signal: the user's stop, or that combined with
     // the investigation deadline once the loop has one.
     chatSignal: AbortSignal | undefined = signal,
+    forceTool?: ToolName,
   ): Promise<ChatResponse> =>
     withLLMRetries(
       () =>
@@ -322,6 +324,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           toolSchemas,
           (d) => publishTextMessageContent(sessionId, turn, d),
           chatSignal,
+          forceTool,
         ),
       {
         signal: chatSignal,
@@ -586,6 +589,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           [SUBMIT_REPORT_TOOL.schema],
           turnSeq(provider, seqOffset),
           runSignal,
+          // One tool and one job, so the turn cannot come back as prose. It has:
+          // a model once wrote the report as markdown and burned an attempt.
+          SUBMIT_REPORT_TOOL.schema.name,
         );
       } catch (err) {
         if (signal?.aborted) {

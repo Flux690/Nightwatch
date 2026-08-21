@@ -8,6 +8,7 @@ import type {
   ReasoningLevel,
   ResolvedLLMConfig,
   WireDialect,
+  ToolName,
 } from "@nightwarden/shared";
 import type {
   ChatResponse,
@@ -213,6 +214,7 @@ export class AnthropicProvider implements LLMProvider {
     tools: ToolSchema[],
     onDelta?: OnDelta,
     signal?: AbortSignal,
+    forceTool?: ToolName,
   ): Promise<ChatResponse> {
     let response: BetaMessage;
     try {
@@ -235,6 +237,11 @@ export class AnthropicProvider implements LLMProvider {
           ...this.compactionParams(),
           // ToolSchema is structurally compatible with Anthropic.Beta.BetaTool.
           tools: tools as Anthropic.Beta.BetaTool[],
+          /* Compatible with adaptive thinking, which is what thinkingParams
+             sends; only the older explicit thinking mode refuses it. */
+          ...(forceTool !== undefined && {
+            tool_choice: { type: "tool" as const, name: forceTool },
+          }),
           messages: this.messagesWithCacheBreakpoint(),
         },
         { signal },

@@ -253,7 +253,15 @@ describe("termination paths: every run ends in model text, no escalation", () =>
     ).toBe(false);
     expect(events.some((e) => e.type === "ESCALATED")).toBe(false);
 
-    const lastAssistant = messages.filter((m) => m.kind === "assistant").pop();
-    expect(lastAssistant?.content).toContain("rejected");
+    /* The model's own last words, not the last row: an investigation writes
+       itself up afterwards, and that turn is a tool call rather than prose. */
+    const lastSpoken = messages
+      .filter(
+        (m) =>
+          m.kind === "assistant" &&
+          m.parts.some((p) => p.type === "text" && p.text.trim() !== ""),
+      )
+      .pop();
+    expect(lastSpoken?.content).toContain("rejected");
   });
 });

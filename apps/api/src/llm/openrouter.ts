@@ -7,6 +7,7 @@ import type {
   ReasoningLevel,
   ResolvedLLMConfig,
   WireDialect,
+  ToolName,
 } from "@nightwarden/shared";
 import { resolveDefault } from "./reasoning.js";
 import type {
@@ -237,6 +238,7 @@ export class OpenRouterProvider implements LLMProvider {
     tools: ToolSchema[],
     onDelta?: OnDelta,
     signal?: AbortSignal,
+    forceTool?: ToolName,
   ): Promise<ChatResponse> {
     let response: OpenAI.Chat.Completions.ChatCompletion;
     let thinking = "";
@@ -256,6 +258,12 @@ export class OpenRouterProvider implements LLMProvider {
           },
         })),
         ...this.reasoningParam(),
+        ...(forceTool !== undefined && {
+          tool_choice: {
+            type: "function" as const,
+            function: { name: forceTool },
+          },
+        }),
       };
       const stream = this.client.chat.completions.stream(streamParams, {
         signal,

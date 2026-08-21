@@ -17,12 +17,26 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["statement", "verdict", "finding", "evidenceIds"],
+    /* Reasoning before conclusion. A schema whose answer field precedes its
+       reasoning field makes the model commit before it explains, which
+       measurably degrades the reasoning (Tam et al., EMNLP 2024). Under strict
+       decoding the order binds; without it, it still leads. */
+    required: ["statement", "finding", "evidenceIds", "verdict"],
     properties: {
       statement: {
         type: "string",
         description:
           "The explanation you tested, stated so that it can be proved or disproved. Name the thing you mean: a container, a file, a metric, a commit. 'Check database connectivity' says nothing; 'the cache bump in PR #482 leaks memory in payments-worker' can be tested.",
+      },
+      finding: {
+        type: "string",
+        description:
+          "What the cited results actually showed, and why that settles it this way, in complete sentences. This is read beneath your statement by someone who was not here, so it has to explain rather than remind: quote the value, the line or the timestamp that decided it, and say what it means. Two or three sentences is usually right; a fragment is not.",
+      },
+      evidenceIds: {
+        type: "array",
+        items: { type: "string" },
+        description: `${CITATION_DESCRIPTION} At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal.`,
       },
       verdict: {
         type: "string",
@@ -35,16 +49,6 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
         ],
         description:
           "'root_cause' is the underlying condition that made the failure possible. 'trigger' is the event that set it off. 'symptom' is something the real cause produced downstream. 'contributing_factor' made the failure worse or more likely without causing it. 'disproven' means you tested it and it is not so. Most published analyses identify a trigger rather than a root cause, so do not reach for 'root_cause' when 'trigger' or 'symptom' is what the evidence shows.",
-      },
-      finding: {
-        type: "string",
-        description:
-          "What the cited results actually showed, and why that settles it this way, in complete sentences. This is read beneath your statement by someone who was not here, so it has to explain rather than remind: quote the value, the line or the timestamp that decided it, and say what it means. Two or three sentences is usually right; a fragment is not.",
-      },
-      evidenceIds: {
-        type: "array",
-        items: { type: "string" },
-        description: `${CITATION_DESCRIPTION} At least one is required, on every verdict: a claim nothing backs is a guess, and so is a dismissal.`,
       },
     },
   },

@@ -218,6 +218,7 @@ function makeProvider(
         _tools: unknown,
         onDelta?: (d: { kind: string; text: string }) => void,
         signal?: AbortSignal,
+        forceTool?: string,
       ): Promise<ChatResponse> => {
         /* Checked here and not only in seed(): seed sees what the caller hands
            over, while this is the state a real request would be built from,
@@ -229,7 +230,27 @@ function makeProvider(
         // A real SDK abandons an in-flight request when the signal fires; a fake
         // that returned a turn anyway would hide every abort bug.
         if (signal?.aborted) throw signal.reason;
-        const turn = nextTurn();
+        const scripted = nextTurn();
+        /* The API prefills the assistant message to force the call, so a forced
+           turn always calls it and never answers with prose. A script that says
+           otherwise is describing something no provider would send, so the fake
+           substitutes the call rather than letting the run see prose. */
+        const forced =
+          forceTool !== undefined &&
+          !scripted.toolUses.some((t) => t.name === forceTool);
+        const turn: ScriptedTurn = forced
+          ? {
+              text: "",
+              toolUses: [
+                { id: `forced-${forceTool}`, name: forceTool!, input: {} },
+              ],
+              // Carried: a turn cut short at the output limit still reports it,
+              // and the loop reads stopReason before it reads the call.
+              ...(scripted.stopReason !== undefined && {
+                stopReason: scripted.stopReason,
+              }),
+            }
+          : scripted;
         if (onDelta && turn.text) {
           onDelta({ kind: "text", text: turn.text });
         }
