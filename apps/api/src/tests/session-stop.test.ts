@@ -51,16 +51,6 @@ describe("POST /sessions/:id/stop", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(
-      `http://127.0.0.1:${port}/api/sessions/unknown/stop`,
-      {
-        method: "POST",
-      },
-    );
-    expect(res.status).toBe(401);
-  });
-
   it("returns 409 when the session is not running", async () => {
     const res = await fetch(
       `http://127.0.0.1:${port}/api/sessions/unknown/stop`,

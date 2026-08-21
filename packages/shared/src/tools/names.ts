@@ -2,8 +2,9 @@
    console decides what to draw by comparing a name, and until this existed a
    rename on the API side changed its behaviour with nothing failing. */
 
-export const TOOL_NAMES = [
-  // Docker
+/* Everything a Docker runner must be able to serve. Host tools are here because
+   a Docker host is one machine, so its own vitals are that runner's to answer. */
+export const DOCKER_TOOL_NAMES = [
   "ListDockerServices",
   "GetDockerLogs",
   "GetDockerConfig",
@@ -12,14 +13,15 @@ export const TOOL_NAMES = [
   "GetDockerProcesses",
   "RestartDockerService",
   "DockerBash",
-  // The host a Docker runner is 1:1 with
   "GetHostCPU",
   "GetHostMemory",
   "GetHostDisk",
   "GetHostNetwork",
   "GetHostDmesg",
   "ReadHostFile",
-  // Kubernetes
+] as const;
+
+export const KUBERNETES_TOOL_NAMES = [
   "ListK8sWorkloads",
   "GetK8sLogs",
   "GetK8sConfig",
@@ -30,6 +32,11 @@ export const TOOL_NAMES = [
   "GetK8sRolloutStatus",
   "RestartK8sWorkload",
   "K8sBash",
+] as const;
+
+/* Everything that runs inside the API and reaches no runner: what it queries,
+   what it does to the connected repository, and what it writes to the record. */
+const API_TOOL_NAMES = [
   // Metrics
   "QueryMetrics",
   "QueryMetricsRange",
@@ -53,6 +60,14 @@ export const TOOL_NAMES = [
   // Asking a human is not a tool, but it is offered as one: tool-calling is the
   // only channel the model has to request anything.
   "AskUserQuestion",
+] as const;
+
+/* Composed, never typed a second time. Each runner owes handlers for its own
+   group, which is what lets its registry be checked rather than described. */
+export const TOOL_NAMES = [
+  ...DOCKER_TOOL_NAMES,
+  ...KUBERNETES_TOOL_NAMES,
+  ...API_TOOL_NAMES,
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

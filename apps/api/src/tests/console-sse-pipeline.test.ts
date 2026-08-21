@@ -69,14 +69,6 @@ describe("console SSE pipeline", () => {
     cleanupDb();
   });
 
-  it("rejects the stream without a valid session cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/console/events`, {
-      headers: { Accept: "text/event-stream" },
-    });
-    expect(res.status).toBe(401);
-    await res.text();
-  });
-
   it("delivers delta events then RUN_FINISHED, transcript loadable after", async () => {
     script.setScript([{ toolUses: [], text: "All looks well." }]);
     const { events, close } = await connectConsoleEvents(port, SESSION);

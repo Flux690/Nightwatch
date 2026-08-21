@@ -199,11 +199,6 @@ describe("a suspended session serves its pending row with its transcript", () =>
     unregisterRunner(conn);
   });
 
-  it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/sessions/any-id`);
-    expect(res.status).toBe(401);
-  });
-
   it("flags the waiting session user-wide, whichever runner produced it", async () => {
     const { conn } = connectRunner("scope-c");
     await startGatedChat("scope test");

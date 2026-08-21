@@ -83,7 +83,13 @@ export type {
   HostFileInput,
   HostFileResult,
 } from "./tools/host.js";
-export { TOOL_NAMES, isTool, isToolName } from "./tools/names.js";
+export {
+  DOCKER_TOOL_NAMES,
+  KUBERNETES_TOOL_NAMES,
+  TOOL_NAMES,
+  isTool,
+  isToolName,
+} from "./tools/names.js";
 export { METRICS_SOURCE_KINDS, isMetricsSourceKind } from "./metrics.js";
 export type {
   MetricsSourceKind,

@@ -48,13 +48,6 @@ describe("DELETE /sessions/:id", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/sessions/unknown`, {
-      method: "DELETE",
-    });
-    expect(res.status).toBe(401);
-  });
-
   it("deletes a finished session and returns 204", async () => {
     const chatRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",

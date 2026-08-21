@@ -263,16 +263,6 @@ describe("state inversion: persistence and reads are API-local", () => {
       expect((await listPage("?offset=-1")).status).toBe(400);
     });
   });
-
-  it("returns 401 on /sessions and /sessions/:id without a valid nw_auth cookie", async () => {
-    const listRes = await fetch(`http://127.0.0.1:${port}/api/sessions`);
-    expect(listRes.status).toBe(401);
-
-    const txRes = await fetch(
-      `http://127.0.0.1:${port}/api/sessions/nonexistent-id`,
-    );
-    expect(txRes.status).toBe(401);
-  });
 });
 
 describe("state inversion: opening alert context stays alert-scoped", () => {

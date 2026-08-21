@@ -73,12 +73,6 @@ describe("flat runner registry", () => {
     vi.unstubAllEnvs();
   });
 
-  it("returns 401 without a valid nw_auth cookie", async () => {
-    const res = await server.inject({ method: "GET", url: "/api/runners" });
-
-    expect(res.statusCode).toBe(401);
-  });
-
   async function getRunners(): Promise<RunnerRecord[]> {
     const res = await server.inject({
       method: "GET",

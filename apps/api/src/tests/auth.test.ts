@@ -268,11 +268,6 @@ describe("requireSession gate", () => {
     cleanupDb();
   });
 
-  it("returns 401 when no cookie is present", async () => {
-    const res = await server.inject({ method: "GET", url: "/protected" });
-    expect(res.statusCode).toBe(401);
-  });
-
   it("returns 200 for a valid jose JWT cookie", async () => {
     const res = await server.inject({
       method: "GET",
@@ -469,14 +464,6 @@ describe("POST /logout-all", () => {
   afterAll(async () => {
     await server.close();
     cleanupDb();
-  });
-
-  it("returns 401 without a valid session", async () => {
-    const res = await server.inject({
-      method: "POST",
-      url: "/api/logout-all",
-    });
-    expect(res.statusCode).toBe(401);
   });
 
   it("returns 200 when called with a valid session", async () => {

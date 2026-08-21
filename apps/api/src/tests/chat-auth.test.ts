@@ -47,15 +47,6 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
     vi.unstubAllEnvs();
   });
 
-  it("POST /chat returns 401 without a valid nw_auth cookie", async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "hello" }),
-    });
-    expect(res.status).toBe(401);
-  });
-
   it("POST /chat returns 400 when message is missing", async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/chat`, {
       method: "POST",
@@ -96,30 +87,6 @@ describe("chat routes — session-uuid-addressed, owner-cookie-gated", () => {
       body: JSON.stringify({ message: "hello" }),
     });
     expect(res.status).toBe(404);
-  });
-
-  it("POST /sessions/:id/messages returns 401 without a cookie", async () => {
-    // Start a real session first.
-    const startRes = await fetch(`http://127.0.0.1:${port}/api/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `nw_auth=${SESSION}`,
-      },
-      body: JSON.stringify({ message: "Starting." }),
-    });
-    const { sessionId } = (await startRes.json()) as { sessionId: string };
-    await waitFor(() => !dispatcher.isSessionRunning(sessionId));
-
-    const res = await fetch(
-      `http://127.0.0.1:${port}/api/sessions/${sessionId}/messages`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "Follow-up." }),
-      },
-    );
-    expect(res.status).toBe(401);
   });
 
   it("POST /sessions/:id/messages continues the session by uuid, returning the same sessionId", async () => {

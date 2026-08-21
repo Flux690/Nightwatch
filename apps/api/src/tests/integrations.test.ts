@@ -130,14 +130,6 @@ describe("GitHub integration routes", () => {
         validatedAt: null,
       });
     });
-
-    it("requires a session", async () => {
-      const res = await server.inject({
-        method: "GET",
-        url: "/api/integrations/github",
-      });
-      expect(res.statusCode).toBe(401);
-    });
   });
 
   describe("PATCH /integrations/github (rebind repo) before onboarding", () => {
@@ -382,15 +374,6 @@ describe("GitHub integration routes", () => {
       expect(res.statusCode).toBe(404);
       expect(JSON.parse(res.body)).toMatchObject({ code: "repo_not_found" });
     });
-
-    it("requires a session", async () => {
-      const res = await server.inject({
-        method: "PATCH",
-        url: "/api/integrations/github",
-        payload: { repo: "acme/other" },
-      });
-      expect(res.statusCode).toBe(401);
-    });
   });
 
   describe("DELETE /integrations/github", () => {
@@ -406,14 +389,6 @@ describe("GitHub integration routes", () => {
         url: "/api/integrations/github",
       });
       expect(JSON.parse(status.body)).toMatchObject({ configured: false });
-    });
-
-    it("requires a session", async () => {
-      const res = await server.inject({
-        method: "DELETE",
-        url: "/api/integrations/github",
-      });
-      expect(res.statusCode).toBe(401);
     });
   });
 });

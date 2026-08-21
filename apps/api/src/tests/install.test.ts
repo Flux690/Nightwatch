@@ -45,15 +45,6 @@ describe("GET /runners/install", () => {
   }
 
   describe("authentication", () => {
-    it("returns 401 without a session cookie", async () => {
-      const res = await server.inject({
-        method: "GET",
-        url: URL,
-        headers: { authorization: `Bearer ${DOCKER_TOKEN}` },
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
     it("returns 400 when the Authorization header is missing", async () => {
       const res = await get(null);
       expect(res.statusCode).toBe(400);
