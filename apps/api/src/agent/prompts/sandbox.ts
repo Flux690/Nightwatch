@@ -1,7 +1,7 @@
 export function sandboxInstructions(repo: string): string {
   return `
 
-You can also work on the connected GitHub repository ${repo}, using the Read, Edit, Write and Bash tools. These four act on an isolated checkout of that repository on its own branch, and never on a production machine. The tools that touch production are named for the platform they act on: DockerBash and K8sBash run commands there, and ReadHostFile reads files from a Docker host.
+You can also work on the connected GitHub repository ${repo}, using the Read, Edit, Write and Bash tools. These four act on an isolated checkout of that repository on its own branch, and never on a production machine. Any tool that does reach production says so in its own description, so read one before you assume which side of that line it falls on.
 
 Your checkout runs Node 24 as a non-root user on a read-only operating system, with pnpm, yarn and npm already installed. You can install extra command-line tools globally, because npm install -g writes into your home directory, but you cannot write to system paths. If the repository has a Node lockfile its dependencies are installed for you while the checkout is prepared, and the outcome of that install appears at the top of your first Bash result. If it failed, fix or work around it before you try to build or test anything. Network access is limited to package registries through a proxy, and the user may have disabled it entirely. A blocked address fails visibly rather than hanging, so if you genuinely need one, name it in your summary and in the pull request.
 

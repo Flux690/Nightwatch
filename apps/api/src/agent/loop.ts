@@ -10,7 +10,11 @@ import { gatedCalls, reportGaps, type ReportGap } from "./report.js";
 import { SUBMIT_REPORT_TOOL } from "./tools/report.js";
 import { getReport } from "../db/reports.js";
 import { recoveryState } from "../verification/recovery.js";
-import { effectiveToolset, offeredSchemas } from "./tools/toolset.js";
+import {
+  effectiveToolset,
+  offeredSchemas,
+  type OfferedToolset,
+} from "./tools/toolset.js";
 import type { ToolDispatchContext } from "./tools/types.js";
 import { connectedPlatforms } from "./policy.js";
 import { processToolUses } from "./turn.js";
@@ -135,6 +139,46 @@ function persistNewTurns(
     if (message.kind !== "nightwarden") publishMessage(sessionId, message);
   }
   return snap.length;
+}
+
+// What the fleet and the connected integrations currently allow. Read together,
+// because the prompt describing them is built from the same call.
+function currentToolset(investigation: boolean): OfferedToolset {
+  return effectiveToolset(
+    connectedPlatforms(),
+    {
+      github: getGitHubIntegration() !== null,
+      metrics: hasMetricsSource(),
+      loki: getLokiIntegration() !== null,
+    },
+    investigation,
+  );
+}
+
+/* What to tell the model when its options change under it, or null when they
+   have not. Names only the difference: a run thirty turns deep does not need its
+   whole toolset restated, and the tools themselves carry their own descriptions. */
+function toolsetChange(
+  before: OfferedToolset,
+  after: OfferedToolset,
+): string | null {
+  const was = new Set(before.tools.map((t) => t.schema.name));
+  const now = new Set(after.tools.map((t) => t.schema.name));
+  const gained = [...now].filter((n) => !was.has(n));
+  const lost = [...was].filter((n) => !now.has(n));
+  if (gained.length === 0 && lost.length === 0) return null;
+  const lines: string[] = [];
+  if (gained.length > 0) {
+    lines.push(
+      `Something connected while you were working, so these tools are available to you now: ${gained.join(", ")}.`,
+    );
+  }
+  if (lost.length > 0) {
+    lines.push(
+      `Something disconnected while you were working, so these tools are no longer available and calling one will be refused: ${lost.join(", ")}. Anything they already told you stays on the record.`,
+    );
+  }
+  return lines.join(" ");
 }
 
 // One id, because a session has one report: a later phase replaces the card
@@ -368,12 +412,18 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   const fleetView = getFleetView();
   const integration = getGitHubIntegration();
+  /* Assembled once, before the prompt that describes it. Everything the model is
+     told about how to call tools is derived from this one value, so the prose
+     and the tools it describes cannot disagree - which is what let a run ask for
+     eleven tools the prompt named and the toolset had never contained. */
+  let offered = currentToolset(opensInvestigation);
   const promptOptions: PromptOptions = {
     budgetMinutes: Math.max(1, Math.round(config.checkInAfterMs / 60_000)),
     repo:
       integration === null
         ? null
         : `${integration.repoOwner}/${integration.repoName}`,
+    fleetTools: offered.tools.some((t) => t.on === "runner"),
   };
   const { systemPrompt, openingTurn } =
     allAlerts.length > 0
@@ -596,19 +646,18 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   while (Date.now() < deadline) {
     turn++;
 
-    const platforms = connectedPlatforms();
-    // Re-read per turn: disconnecting an integration strips its tools from the
-    // very next turn. What the session is cannot change mid-run, so it is not
-    // re-read alongside them.
-    const offered = effectiveToolset(
-      platforms,
-      {
-        github: getGitHubIntegration() !== null,
-        metrics: hasMetricsSource(),
-        loki: getLokiIntegration() !== null,
-      },
-      opensInvestigation,
-    );
+    /* Re-read per turn, but never silently: a runner connecting or an
+       integration dropping changes what the model can do, and a change it is not
+       told about looks to it like the rules moved. Saying so also keeps the
+       system prompt honest, since that is written once and never revised. */
+    const nowOffered = currentToolset(opensInvestigation);
+    const change = toolsetChange(offered, nowOffered);
+    if (change !== null) {
+      log.info({ turn, change }, "offered toolset changed mid-run");
+      offered = nowOffered;
+      sendHarnessMessage(provider, change);
+      persist();
+    }
     const toolSchemas = offeredSchemas(offered);
 
     const startedAt = Date.now();

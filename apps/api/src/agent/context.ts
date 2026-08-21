@@ -9,6 +9,7 @@ import {
   budgetLine,
   CHAT_PROMPT,
   INVESTIGATION_PROMPT,
+  toolProtocol,
   type PromptOptions,
 } from "./prompts/system.js";
 import { REPORT_PROTOCOL } from "./prompts/report.js";
@@ -25,6 +26,7 @@ interface InitialContext {
 const DEFAULT_PROMPT_OPTIONS: PromptOptions = {
   budgetMinutes: 30,
   repo: null,
+  fleetTools: false,
 };
 
 // Two prompts, not one with a section bolted on: a question about the fleet is
@@ -34,6 +36,7 @@ function systemPromptFor(opts: PromptOptions, investigation: boolean): string {
   let prompt = investigation
     ? INVESTIGATION_PROMPT + budgetLine(opts, true) + REPORT_PROTOCOL
     : CHAT_PROMPT + budgetLine(opts, false);
+  prompt += toolProtocol(opts.fleetTools);
   if (opts.repo !== null) prompt += sandboxInstructions(opts.repo);
   return prompt;
 }

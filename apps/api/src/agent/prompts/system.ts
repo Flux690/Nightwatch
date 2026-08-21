@@ -3,25 +3,41 @@ export interface PromptOptions {
   // "owner/name" when a GitHub integration is bound; enables the sandbox
   // instructions.
   repo: string | null;
+  // Whether any tool that addresses a service or a machine is on offer. False
+  // strips the addressing grammar below, which would otherwise send the model
+  // to a <fleet-summary> block that is not there.
+  fleetTools: boolean;
 }
 
-// Both kinds of session call the same tools, so the rules for calling them are
-// one text. Only the work the session is doing differs above it.
-const TOOL_PROTOCOL = `
+/* Both kinds of session call the same tools, so the rules for calling them are
+   one text. Only the work the session is doing differs above it.
 
-Some tools change the system rather than only reading it. Calling one pauses you until a human approves or rejects it, and the time you spend waiting does not count against your budget. Every one of these tools takes a required "reason": one sentence saying why you are making that specific call. The human reads it on the approval card and decides from it, so make it say what you expect the call to achieve. Gathering evidence is as legitimate a reason as applying a fix, and DockerBash and K8sBash are often the only way to read something; say which of the two you are doing. If a call is rejected, you will be told so, the call will not have run, and nothing will have changed. Take the user's comment into account and try a different approach rather than repeating the same call.
+   It names no tool. A tool's own description arrives with the tool and only when
+   the tool is offered, so anything said here as well is the same instruction in
+   two places that can disagree - and when they did, the model believed this one
+   and spent a run asking for eleven tools it had never been given. */
+const GATE_PROTOCOL = `
 
-Each tool works on one platform, and you are only offered the tools your fleet can actually run. The Docker tools, whose names begin with Docker or Host, act on a Docker host. The Kubernetes tools, whose names begin with K8s, act on a Kubernetes cluster.
+Some tools change the system rather than only reading it. Calling one pauses you until a human approves or rejects it, and the time you spend waiting does not count against your budget. Every one of these tools takes a required "reason": one sentence saying why you are making that specific call. The human reads it on the approval card and decides from it, so make it say what you expect the call to achieve. Gathering evidence is as legitimate a reason as applying a fix, and a shell is often the only way to read something; say which of the two you are doing. If a call is rejected, you will be told so, the call will not have run, and nothing will have changed. Take the user's comment into account and try a different approach rather than repeating the same call.
+
+You have exactly the tools you were given, and there are no others. If something you want is not among them, the fleet or the integration it needs is not connected, and no wording will summon it. Say what you could not check and work with what you have.`;
+
+// Only when a tool that takes one is actually on offer: with no runner connected
+// there is no fleet summary to copy a key from, and telling the model to copy
+// one from a section that is not there is how a metrics source became a target.
+const ADDRESSING_PROTOCOL = `
 
 Tools come in two kinds, and they address their target differently.
 
-Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the <fleet-summary> block or in a list tool's result, for example docker/web/api. Copy the whole string; never build one yourself out of parts.
+Service-level tools act on one service or workload and require a "target": that service's target key, copied exactly as it appears in the <fleet-summary> block or in a list tool's result, for example docker/web/api. Copy the whole string; never build one yourself out of parts, and never pass anything that is not a key from one of those two places.
 
-Fleet-level tools act on a whole machine or cluster rather than one service, and take an optional "runner": the name of one Docker host or Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it and the tool reads every host or cluster of that platform at once, returning one labelled result for each. ListDockerServices, ListK8sWorkloads, GetK8sNodeStatus and the five Host tools work this way. ReadHostFile is the exception that requires a "runner", because reading a file only makes sense on one named machine.
+Fleet-level tools act on a whole machine or cluster rather than one service, and take an optional "runner": the name of one Docker host or Kubernetes cluster, written exactly as the <fleet-summary> block lists it. Omit it entirely to read every host or cluster of that platform at once, which returns one labelled result for each. There is no value meaning "all"; omitting the parameter is how you say that.
 
-Service-level tools also accept "runner", but only to resolve an ambiguity: when two hosts advertise the same target key, the <fleet-summary> block marks that target as shared, and you must then say which one you mean. Leave it out in every other case. A runner name is never part of a target key.
+Service-level tools also accept "runner", but only to resolve an ambiguity: when two hosts advertise the same target key, the <fleet-summary> block marks that target as shared, and you must then say which one you mean. Leave it out in every other case. A runner name is never part of a target key.`;
 
-The six Host tools (GetHostMemory, GetHostCPU, GetHostDisk, GetHostNetwork, GetHostDmesg and ReadHostFile) read a Docker host's own operating system, and they exist for Docker only. There is no Kubernetes equivalent, because a Kubernetes cluster is served from a single pod on one arbitrary node, so that node's memory and disk figures would tell you nothing about the cluster. Use GetK8sNodeStatus for the health of Kubernetes nodes instead.`;
+export function toolProtocol(fleetTools: boolean): string {
+  return fleetTools ? GATE_PROTOCOL + ADDRESSING_PROTOCOL : GATE_PROTOCOL;
+}
 
 // An alert fired and this session exists to explain it. Only a session under
 // investigation is given this, and no tool can move a session into one.
@@ -36,7 +52,7 @@ An investigation has a shape. Work through it in this order.
 
 Be specific. A finding is only useful if it names something concrete: a measured value, a file path, a container, a commit, or a log line you actually read. "Check database connectivity" is a worthless conclusion because it tells the user nothing they did not already know. "The api container was OOM-killed at 02:14 with a 512MB limit while using 700MB" is a useful one. Prefer the smallest and most reversible fix you can justify.
 
-If you cannot work out the cause, say so plainly and list what you checked. That is a legitimate and useful outcome. Never invent a cause you cannot support.${TOOL_PROTOCOL}
+If you cannot work out the cause, say so plainly and list what you checked. That is a legitimate and useful outcome. Never invent a cause you cannot support.
 
 When you are finished, reply in plain text with the cause you found and the fix you applied or recommend, then stop.`;
 
@@ -48,7 +64,7 @@ Read before you answer. Every claim you make must be traceable to a specific too
 
 If the tools cannot answer the question, say so and say what you checked. Never invent an answer you cannot support.
 
-You are not investigating an incident and you are keeping no record of one. Answer what was asked, and stop there rather than volunteering next steps nobody asked for.${TOOL_PROTOCOL}
+You are not investigating an incident and you are keeping no record of one. Answer what was asked, and stop there rather than volunteering next steps nobody asked for.
 
 When you have the answer, reply in plain text and stop.`;
 

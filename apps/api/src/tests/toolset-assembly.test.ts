@@ -2,7 +2,11 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import type { RunnerCommandMessage } from "@nightwarden/shared";
+import {
+  TOOL_NAMES,
+  type Platform,
+  type RunnerCommandMessage,
+} from "@nightwarden/shared";
 import type { ToolSchema } from "../llm/types.js";
 
 vi.mock("../llm/factory.js", () => import("./llm-factory-mock.js"));
@@ -37,6 +41,7 @@ import {
 import type { RunnerConnection } from "../ws/fleet.js";
 import { resolveCommand } from "../ws/command-transport.js";
 import { effectiveToolset, getToolSchemas } from "../agent/tools/toolset.js";
+import { buildChatContext } from "../agent/context.js";
 import { connectedPlatforms } from "../agent/policy.js";
 import { mountApi } from "./api-server.js";
 import {
@@ -52,6 +57,15 @@ const K8S_SERVICE = {
 
 describe("toolset assembly by fleet capabilities", () => {
   describe("provider library injection (unit)", () => {
+    /* Not pure any more: the prompt assertions below build a system prompt, and
+       that reads the connected metrics sources. Without this the suite would
+       open the real ~/.nightwarden database. */
+    let cleanupDb: () => void;
+    beforeAll(() => {
+      cleanupDb = useTempDb();
+    });
+    afterAll(() => cleanupDb());
+
     // Platform comes from the runner's row, so it is known the instant a socket
     // authenticates. There is no handshake window in which the fleet's platforms
     // are unknown, which is what the old probe-and-report manifest created.
@@ -206,6 +220,70 @@ describe("toolset assembly by fleet capabilities", () => {
       // The report turn's tool is the loop's to attach, never the
       // toolset's: offered here it would let a run write itself up mid-work.
       expect(investigating).not.toContain("SubmitInvestigationReport");
+    });
+
+    /* The system prompt used to enumerate eleven tools, and a run with no runner
+       connected asked for every one of them - the prompt said they existed and
+       the toolset had never contained them. A tool's own description arrives
+       with the tool, so nothing here may name one at all. */
+    it("never names a tool it is not offering", () => {
+      for (const investigation of [true, false]) {
+        for (const github of [true, false]) {
+          for (const platforms of [
+            new Set<Platform>(),
+            new Set(["docker" as Platform]),
+          ]) {
+            const offered = effectiveToolset(
+              platforms,
+              { github, metrics: false, loki: false },
+              investigation,
+            );
+            const prompt = buildChatContext(
+              [],
+              {
+                budgetMinutes: 30,
+                repo: github ? "acme/api" : null,
+                fleetTools: offered.tools.some((t) => t.on === "runner"),
+              },
+              investigation,
+            ).systemPrompt;
+
+            const offeredNames = new Set(
+              offered.tools.map((t) => t.schema.name),
+            );
+            /* Compound names only. Read, Edit, Write and Bash are ordinary
+               English words that appear in prose all over these prompts, and no
+               substring match can tell "Read before you conclude" from the tool.
+               Every name the observed run invented its way to was a compound. */
+            const namedButNotOffered = TOOL_NAMES.filter(
+              (name) =>
+                /[a-z][A-Z]/.test(name) &&
+                prompt.includes(name) &&
+                !offeredNames.has(name),
+            );
+            expect(namedButNotOffered).toEqual([]);
+          }
+        }
+      }
+    });
+
+    // The addressing grammar sends the model to <fleet-summary> for a target
+    // key. With no runner connected that block is never rendered, so the
+    // instruction would point at a section that is not there.
+    it("explains target keys only when a tool takes one", () => {
+      const withFleet = buildChatContext(
+        [],
+        { budgetMinutes: 30, repo: null, fleetTools: true },
+        true,
+      ).systemPrompt;
+      expect(withFleet).toContain("<fleet-summary>");
+
+      const without = buildChatContext(
+        [],
+        { budgetMinutes: 30, repo: null, fleetTools: false },
+        true,
+      ).systemPrompt;
+      expect(without).not.toContain("<fleet-summary>");
     });
   });
 
