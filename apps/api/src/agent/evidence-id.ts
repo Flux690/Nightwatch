@@ -35,13 +35,3 @@ export function evidenceHeader(
   const label = typeof aim === "string" ? ` \u00b7 ${aim}` : "";
   return `[${evidenceId} \u00b7 ${toolName}${label}]`;
 }
-
-// How many calls the transcript already holds, which is the number the next one
-// takes. Counted the same way evidenceIdsByToolUseId numbers them.
-export function countToolCalls(rows: readonly TranscriptRow[]): number {
-  let n = 0;
-  for (const row of rows) {
-    for (const part of row.parts) if (part.type === "tool_call") n += 1;
-  }
-  return n;
-}

@@ -1,4 +1,5 @@
 import type { MessagePart, TranscriptRow } from "@nightwarden/shared";
+import { evidenceIdsByToolUseId } from "../agent/evidence-id.js";
 import { executeTool, findTool } from "../agent/tools/toolset.js";
 import { isToolFailure } from "../agent/tools/types.js";
 import { loadConfig } from "../config/store.js";
@@ -69,15 +70,19 @@ async function answerPendingCalls(
 ): Promise<boolean> {
   if (!calls.every((call) => replayable(call.name))) return false;
 
+  // A replay answers calls the transcript already holds, so it adds no numbers.
+  const ledger = evidenceIdsByToolUseId(getTranscriptRows(sessionId));
   const parts: MessagePart[] = [];
   const texts: string[] = [];
   for (const call of calls) {
     const tool = findTool(call.name);
     if (tool === undefined) return false;
+    const evidenceId = ledger.get(call.toolUseId);
     const { content, toolOutcome } = await executeTool(tool, call.input, {
       sessionId,
       toolUseId: call.toolUseId,
       toolCallCeilingMs: loadConfig().toolCallCeilingMs,
+      ...(evidenceId !== undefined && { evidenceId }),
     });
     parts.push({
       type: "tool_result",

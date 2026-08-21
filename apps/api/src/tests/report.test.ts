@@ -522,6 +522,75 @@ describe("the investigation record", () => {
       expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
     });
 
+    // The other half of the same contract: a claim cites the call it read only
+    // if the id in a result is the id the ledger resolves that call by.
+    it("stamps a result with the id the ledger resolves that call by", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          // Two calls in one turn, because the drift is the size of the turn.
+          {
+            toolUses: [
+              {
+                id: "tu-a",
+                name: "RecordHypothesis",
+                input: {
+                  statement: "the disk filled",
+                  verdict: "root_cause",
+                  finding: "the read showed 98 percent",
+                  evidenceIds: ["tu-a"],
+                },
+              },
+              {
+                id: "tu-b",
+                name: "RecordHypothesis",
+                input: {
+                  statement: "the cache was cold",
+                  verdict: "disproven",
+                  finding: "the hit rate held",
+                  evidenceIds: ["tu-a"],
+                },
+              },
+            ],
+            text: "",
+          },
+          { toolUses: [], text: "done" },
+          {
+            toolUses: [
+              {
+                id: "tu-submit",
+                name: "SubmitInvestigationReport",
+                input: {
+                  summary: "the worker ran out of disk",
+                  timeline: [],
+                  impact: "one job dropped",
+                  recommendation: "raise the volume",
+                },
+              },
+            ],
+            text: "",
+          },
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("stamped-ids"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("stamped-ids")] });
+
+      const answers = new Map(
+        getTranscriptRows(sessionId)
+          .flatMap((row) => row.parts)
+          .flatMap((part) =>
+            part.type === "tool_result"
+              ? [[part.toolCallId, part.output] as const]
+              : [],
+          ),
+      );
+      expect(answers.get("tu-a")).toContain("[e1]");
+      expect(answers.get("tu-b")).toContain("[e2]");
+    });
+
     // Refused rather than stored with what survives. One run recorded three
     // identical uncited root causes when both were said in one breath.
     it("refuses a claim whose every citation names no call", async () => {
