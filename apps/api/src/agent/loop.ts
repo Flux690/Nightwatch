@@ -220,6 +220,10 @@ export type RunOutcome = "completed" | "suspended" | "stopped";
 // rather than looping; the time budget bounds it as well.
 const MAX_NUDGES = 3;
 
+// Consecutive turns that asked for nothing but unavailable tools. Three is
+// enough to tell a wrong guess from a model with nothing left to try.
+const MAX_BARREN_TURNS = 3;
+
 // The report turn has one tool and one job, so a second failure is a model that
 // cannot do it rather than one that misread the request.
 const MAX_REPORT_ATTEMPTS = 2;
@@ -523,6 +527,9 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   let turn = 0;
   let nudges = 0;
+  // Per name across the whole run, so the fourth ask is answered as the fourth.
+  const refusedNames = new Map<string, number>();
+  let barrenTurns = 0;
   // How many completion requests each gap has survived, so a repeat is loud.
   const gapsSeen = new Map<ReportGap["kind"], number>();
   // Computed once and never moved, so a run cannot outrun its own clock: every
@@ -622,6 +629,7 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
           toolCallCeilingMs: config.toolCallCeilingMs,
         },
         log,
+        alreadyRefused: refusedNames,
       });
       noteOutcomes(toolResults);
       if (toolResults.length > 0) provider.appendToolResults(toolResults);
@@ -777,13 +785,41 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       sessionId,
     };
 
-    const { toolResults, gated } = await processToolUses({
+    const { toolResults, gated, refused } = await processToolUses({
       toolUses: response.toolUses,
       offered,
       sessionId,
       execCtx,
       log,
+      alreadyRefused: refusedNames,
     });
+    for (const name of refused) {
+      refusedNames.set(name, (refusedNames.get(name) ?? 0) + 1);
+    }
+
+    /* A turn that asked for nothing but tools it cannot have got nothing done,
+       and the model has no way to notice it is looping. The observed run spent
+       28 of 39 calls this way across fourteen turns, working through the
+       namespace a name at a time until the budget ran out. */
+    barrenTurns =
+      refused.length === response.toolUses.length ? barrenTurns + 1 : 0;
+    if (barrenTurns >= MAX_BARREN_TURNS) {
+      log.warn(
+        { turn, barrenTurns, refused: [...refusedNames.keys()] },
+        "run asked only for unavailable tools; ending it",
+      );
+      provider.appendToolResults(toolResults);
+      persist();
+      appendErrorMessage(
+        sessionId,
+        `The last ${barrenTurns} turns asked only for tools this investigation does not have, so the run was ended rather than spend its budget repeating them. What was available: ${offeredSchemas(
+          offered,
+        )
+          .map((t) => t.name)
+          .join(", ")}.`,
+      );
+      return "completed";
+    }
 
     noteOutcomes(toolResults);
 

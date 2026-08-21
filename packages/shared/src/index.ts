@@ -83,7 +83,7 @@ export type {
   HostFileInput,
   HostFileResult,
 } from "./tools/host.js";
-export { TOOL_NAMES, isTool } from "./tools/names.js";
+export { TOOL_NAMES, isTool, isToolName } from "./tools/names.js";
 export { METRICS_SOURCE_KINDS, isMetricsSourceKind } from "./metrics.js";
 export type {
   MetricsSourceKind,

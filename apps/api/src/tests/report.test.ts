@@ -587,6 +587,63 @@ describe("the investigation record", () => {
       );
     });
 
+    /* From a real run with no runner connected. GetK8sLogs exists and was
+       withheld; the rest were invented. They all got the same sentence, so the
+       model worked through the namespace guessing which, and 28 of that run's
+       39 calls were refusals nothing counted. */
+    it("tells a withheld tool from an invented one, and names a near miss", async () => {
+      mockCreateProvider.mockImplementationOnce(() =>
+        createContractFakeProvider([
+          {
+            toolUses: [
+              { id: "tu-withheld", name: "GetK8sLogs", input: { target: "x" } },
+              { id: "tu-near", name: "RecordHypotheses", input: {} },
+              { id: "tu-far", name: "K8sExec", input: { command: "ls" } },
+            ],
+            text: "",
+          },
+          { toolUses: [], text: "Nothing I can reach." },
+        ]),
+      );
+      const sessionId = randomUUID();
+      seedAlertSession(buildSessionMeta(sessionId, null, undefined), [
+        alert("refusals"),
+      ]);
+
+      await runSession({ sessionId, alerts: [alert("refusals")] });
+
+      const answerTo = (toolUseId: string): string => {
+        const part = getTranscriptRows(sessionId)
+          .flatMap((row) => row.parts)
+          .find((p) => p.type === "tool_result" && p.toolCallId === toolUseId);
+        return part !== undefined && part.type === "tool_result"
+          ? part.output
+          : "";
+      };
+
+      // A real tool the fleet cannot serve blames the connection, not the name.
+      const withheld = answerTo("tu-withheld");
+      expect(withheld).toContain("is a real tool");
+      expect(withheld).toContain("Kubernetes cluster");
+
+      // An invented name close to a real one is pointed at it.
+      const near = answerTo("tu-near");
+      expect(near).toContain("There is no tool called");
+      expect(near).toContain("Did you mean RecordHypothesis?");
+
+      /* One that resembles nothing on offer gets no suggestion. Naming an
+         unrelated tool would send the model somewhere it was never going. */
+      const far = answerTo("tu-far");
+      expect(far).toContain("There is no tool called");
+      expect(far).not.toContain("Did you mean");
+
+      // All three name what the turn held, which the old sentence never did.
+      for (const message of [withheld, near, far]) {
+        expect(message).toContain("What you do have is:");
+        expect(message).toContain("RecordHypothesis");
+      }
+    });
+
     // A provider carries the wire's error flag and nothing else, so the class is
     // put back on the way to disk. Without it a reload cannot tell miss from crash.
     it("keeps the outcome class on the persisted result, not beside it", async () => {
