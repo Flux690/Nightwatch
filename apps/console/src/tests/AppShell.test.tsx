@@ -436,7 +436,7 @@ describe("Shell", () => {
       const { router } = setup();
 
       const textarea = await screen.findByRole("textbox");
-      // The composer renders before the stream opens, so waiting on the textarea
+      // The message box renders before the stream opens, so waiting on the textarea
       // and reading the stream is a gap that only closes on an idle machine.
       await waitFor(() => expect(MockEventSource.latest).not.toBeNull());
       const streamBefore = MockEventSource.latest;

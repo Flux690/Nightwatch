@@ -154,7 +154,7 @@ export function ClarificationCardPanel({
   }
 
   /* A printed number a keyboard cannot press is a promise not kept. Bound while
-     this card is what the run waits on, and never over a field: the composer
+     this card is what the run waits on, and never over a field: the message box
      sits directly beneath it and must keep every key it is given. */
   useEffect(() => {
     if (submitting) return;
@@ -215,7 +215,7 @@ export function ClarificationCardPanel({
 
         {/* The row becomes the field rather than revealing one beneath it:
             nothing below moves, which matters for a card pinned above the
-            composer, and the answer stays where its number is. */}
+            message box, and the answer stays where its number is. */}
         {otherOpen ? (
           <div className="flex w-full items-baseline gap-3 rounded-md bg-control px-3 py-2">
             <span className="w-3 shrink-0 font-mono text-sm text-ink-subtle tabular-nums">

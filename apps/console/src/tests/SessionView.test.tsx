@@ -1640,7 +1640,7 @@ describe("SessionView", () => {
   // The stream is this component's own state, so leaving and coming back starts
   // it empty. Without the snapshot saying so, a live run reads as finished.
   describe("rejoining a session that is already running", () => {
-    it("shows the run as working and holds the composer closed", async () => {
+    it("shows the run as working and holds the message box closed", async () => {
       setup([USER_TURN], true);
 
       await waitFor(() => {
@@ -1649,7 +1649,7 @@ describe("SessionView", () => {
       expect(screen.getByRole("button", { name: /stop/i })).toBeInTheDocument();
     });
 
-    it("leaves the composer open when the snapshot says nothing is running", async () => {
+    it("leaves the message box open when the snapshot says nothing is running", async () => {
       setup();
 
       await waitFor(() => {
