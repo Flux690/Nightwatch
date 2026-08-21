@@ -382,12 +382,9 @@ describe("SessionView", () => {
       });
     });
 
-    /* The test above waits for the end state, which is why it never saw this.
-       A streamed block is named after the clock and its saved counterpart after
-       the turn it became, so the merge can never recognise them as one and adds
-       instead - drawing the same sentence twice for as long as both lists hold
-       it. Provoked deliberately here rather than raced for: REPORT_UPDATED
-       refetches the transcript without clearing the live buffer. */
+    /* The test above waits for the end state, which is why it never saw this. A
+       streamed block keyed by the clock and its saved counterpart keyed by the
+       turn never merge, so the same sentence is drawn twice. */
     it("does not draw a streamed turn twice once its saved copy arrives", async () => {
       const { setItems } = setup();
 

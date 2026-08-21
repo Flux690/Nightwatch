@@ -12,13 +12,40 @@ import type {
   ToolExecuteResult,
 } from "./tools/types.js";
 
-// A runner that never answered may answer next time; anything the runner itself
-// reported back, or a routing mistake, will not change on a retry.
+/* Unreachable may answer next time; a routing mistake will not. A service the
+   runner cannot find is neither: the container is not running, which is a
+   finding rather than a broken tool. */
 function classifyRunnerError(err: unknown): ToolOutcome {
-  return err instanceof RunnerUnreachableError ||
+  if (
+    err instanceof RunnerUnreachableError ||
     err instanceof NoPlatformRunnerError
-    ? "retryable"
-    : "system";
+  ) {
+    return "retryable";
+  }
+  return isMissingTarget(err) ? "expected_miss" : "system";
+}
+
+// The runners' own wording, which crosses the wire as a plain message: both
+// answer a target they cannot resolve with "No running <thing> found for".
+function isMissingTarget(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /^No running \w+ found for /.test(message);
+}
+
+/* What the agent should do about it, which the old one sentence never said. It
+   named the tool and the raw message for all 25 runner tools and stopped. */
+function runnerFailureMessage(
+  name: string,
+  msg: string,
+  toolOutcome: ToolOutcome,
+): string {
+  if (toolOutcome === "expected_miss") {
+    return `${name} found nothing to read: ${msg}. That is an answer, not a fault - the service is not running there. Confirm it with a list tool before concluding, and say so if it is the finding.`;
+  }
+  if (toolOutcome === "retryable") {
+    return `${name} could not reach the runner it needs: ${msg}. Nothing was read, so this says nothing about the service. Try again, or work from what another tool can tell you.`;
+  }
+  return `${name} failed: ${msg}. Nothing was read, so draw no conclusion from it. Check the arguments against the tool's description, and if they were right, this is a fault rather than a finding.`;
 }
 
 // Single dispatch + error-formatting primitive shared by the loop's read path and the
@@ -47,10 +74,11 @@ export async function executeRunnerTool(
       : { content: envelope, toolOutcome: "system" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ tool: name, err }, "runner tool failed");
+    const toolOutcome = classifyRunnerError(err);
+    logger.warn({ tool: name, err, toolOutcome }, "runner tool failed");
     return {
-      content: `Error executing ${name}: ${msg}`,
-      toolOutcome: classifyRunnerError(err),
+      content: runnerFailureMessage(name, msg, toolOutcome),
+      toolOutcome,
     };
   }
 }

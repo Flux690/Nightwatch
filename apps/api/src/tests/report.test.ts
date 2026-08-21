@@ -522,11 +522,8 @@ describe("the investigation record", () => {
       expect(resolved.map((e) => e.toolUseId)).toEqual(["tu-1"]);
     });
 
-    /* A claim citing only ids that name no call is refused rather than stored
-       with what survives. The schema requires a citation, the filter ran after
-       that check, and nothing looked again, so one observed run recorded three
-       identical uncited root causes: told "recorded" and "your citations were
-       dropped" together, recording again is the only sensible move. */
+    // Refused rather than stored with what survives. One run recorded three
+    // identical uncited root causes when both were said in one breath.
     it("refuses a claim whose every citation names no call", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);
@@ -631,10 +628,8 @@ describe("the investigation record", () => {
       );
     });
 
-    /* From a real run with no runner connected. GetK8sLogs exists and was
-       withheld; the rest were invented. They all got the same sentence, so the
-       model worked through the namespace guessing which, and 28 of that run's
-       39 calls were refusals nothing counted. */
+    // From a real run with no runner connected: GetK8sLogs exists and was
+    // withheld, the rest were invented, and all three got one sentence.
     it("tells a withheld tool from an invented one, and names a near miss", async () => {
       mockCreateProvider.mockImplementationOnce(() =>
         createContractFakeProvider([
@@ -778,12 +773,9 @@ describe("the investigation record", () => {
       expect(gatedCalls(sessionId)).toHaveLength(0);
     });
 
-    /* The defect this record was built to end. With no Docker runner connected,
-       DockerBash is not in the offered set, so the harness answers the call
-       itself and no card is ever drawn. It still carries the name of a gated
-       tool, which is all the old check looked at - so five refusals were
-       reported to the user as five writes they had approved, and fed to the
-       report turn under a heading saying so. */
+    /* With no Docker runner, DockerBash is refused and no card is drawn, but it
+       carries the name of a gated tool - all the old check looked at. Five
+       refusals were reported to the user as five writes they had approved. */
     it("never counts a call the harness refused as a write the user released", async () => {
       const sessionId = randomUUID();
       seedTranscript(sessionId);

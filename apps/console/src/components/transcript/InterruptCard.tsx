@@ -1,10 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/* The raised state of a tool call, not a kind of its own: what a run parks on
-   while it waits for a person. Depth rather than an outline - one rung above
-   the message bubbles and the chat input - so it is found by sitting higher
-   than the column instead of by a border competing with every other edge. */
+/* The raised state of a tool call, not a kind of its own. Depth rather than an
+   outline, one rung above the bubbles and the message box, so it is found by
+   sitting higher than the column rather than by another border. */
 export function InterruptCard({
   className,
   ...props

@@ -32,12 +32,9 @@ import { apiFetch } from "@/api/client";
 // A stable empty default, so an unloaded transcript does not remount the column.
 const EMPTY_ITEMS: TranscriptItem[] = [];
 
-/* What gets pinned above the input, from wherever it came - the projected
-   transcript after a reload, or the live stream during a run. Only what stops
-   the whole run qualifies: a question, and the time-budget prompt.
-
-   An approval is deliberately not here. It gates one tool rather than the run,
-   so it stays inline where it happened and is allowed to scroll away. */
+/* What gets pinned above the message box, from the projection or the live
+   stream. Only what stops the whole run qualifies: a question and the
+   time-budget prompt. An approval gates one tool, so it stays inline. */
 function dockedCard(...lists: TranscriptItem[][]): TranscriptItem | undefined {
   for (const items of lists) {
     for (const item of items) {

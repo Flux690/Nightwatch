@@ -24,13 +24,9 @@ export function targetKeyFromInput(
   return typeof target === "string" ? target : null;
 }
 
-/* The only place a tool call becomes an item. Both the transcript fetch and the
-   live stream call it, which is what keeps a streamed card and a reloaded one
-   byte-identical instead of merely similar.
-
-   It chooses nothing. A call is one kind and its state says where in its life it
-   is, so there is no label here that could disagree with the state beside it -
-   which is what let a settled approval keep claiming to be one. */
+/* The only place a tool call becomes an item, called by both the transcript
+   fetch and the live stream so the two cannot differ. It chooses nothing: a call
+   is one kind and its state says where in its life it is. */
 export function toolCallCard(call: {
   toolUseId: string;
   toolName: string;

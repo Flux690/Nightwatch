@@ -40,10 +40,8 @@ export const ELICITATIONS: Elicitation[] = [
           },
           options: {
             type: "array",
-            /* The cap is prose and a runtime check, not a schema keyword: strict
-               decoding compiles the schema to a grammar and rejects array
-               length constraints. questionOptionOverflow enforces it either
-               way, because providers honoured maxItems unevenly regardless. */
+            // Prose and a runtime check, not maxItems: strict decoding rejects
+            // array length constraints, and providers honoured it unevenly.
             items: {
               type: "object",
               additionalProperties: false,

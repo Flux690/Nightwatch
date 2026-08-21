@@ -6,14 +6,9 @@ function hasToolCall(message: TranscriptRow): boolean {
   return message.parts.some((p) => p.type === "tool_call");
 }
 
-/* A conversation ending on an unanswered `tool_use` is one every provider
-   rejects, and it is what a crash between writing the assistant turn and running
-   its tools leaves. Later turns go too: keeping them keeps the unanswered call.
-
-   `resuming` names the calls this dispatch is about to answer: the gate, and
-   every sibling that ran beside it in the same turn. They are unanswered on
-   purpose, and dropping their turn would send results for calls the model can
-   no longer see it made. */
+/* Every provider rejects a conversation ending on an unanswered tool_use, which
+   is what a crash leaves. `resuming` names the calls this dispatch is about to
+   answer, so their turn survives: they are unanswered on purpose. */
 function throughLastAnsweredExchange(
   rows: TranscriptRow[],
   resuming: readonly string[],
@@ -34,12 +29,9 @@ function throughLastAnsweredExchange(
   return rows;
 }
 
-/* Replays the durable transcript for a resumed run, mapping our four kinds onto
-   the provider's two roles. An error row and the dead exchange it terminates are
-   dropped back to the last clean assistant turn; a harness row returns as user.
-
-   `resuming` names the calls whose results this dispatch is about to append, so
-   the turn that made them survives the unwind above. */
+// Replays the durable transcript for a resumed run, mapping our four kinds onto
+// the provider's two roles. An error row and the dead exchange it terminates are
+// dropped back to the last clean assistant turn; a harness row returns as user.
 export function buildSeed(
   sessionId: string,
   resuming: readonly string[] = [],

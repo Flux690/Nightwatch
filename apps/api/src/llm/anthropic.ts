@@ -235,10 +235,8 @@ export class AnthropicProvider implements LLMProvider {
           ],
           ...this.thinkingParams(),
           ...this.compactionParams(),
-          /* strict constrains sampling to the schema, and Anthropic documents
-             that it also guarantees the tool name is one of these. Optional
-             fields stay optional here: only the OpenAI family requires every
-             property in `required`. */
+          // strict constrains sampling to the schema and guarantees the tool
+          // name is one of these. Optional fields stay optional on Anthropic.
           tools: tools.map((t) => ({
             ...t,
             strict: true,

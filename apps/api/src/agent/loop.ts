@@ -100,11 +100,8 @@ function stampOutcomes(
   });
 }
 
-// Writes the provider-snapshot diff atomically; seq = seqOffset + snapshot index
-// so rows the seed skipped never collide. `harnessTurns` names the indices
-// NightWarden authored, which the provider cannot tell from the user's.
-// The seq a turn will be saved under, which persistNewTurns computes the same
-// way below. Streaming happens first, so the console is told it in advance.
+// The seq a turn will be saved under, computed the way persistNewTurns computes
+// it below. Streaming happens first, so the console is told it in advance.
 function turnSeq(provider: LLMProvider, seqOffset: number): number {
   return seqOffset + provider.snapshot().length;
 }
@@ -428,10 +425,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
 
   const fleetView = getFleetView();
   const integration = getGitHubIntegration();
-  /* Assembled once, before the prompt that describes it. Everything the model is
-     told about how to call tools is derived from this one value, so the prose
-     and the tools it describes cannot disagree - which is what let a run ask for
-     eleven tools the prompt named and the toolset had never contained. */
+  // Assembled once, before the prompt that describes it, so the prose and the
+  // tools it describes are derived from one value and cannot disagree.
   let offered = currentToolset(opensInvestigation);
   const promptOptions: PromptOptions = {
     budgetMinutes: Math.max(1, Math.round(config.checkInAfterMs / 60_000)),
@@ -672,10 +667,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
   while (Date.now() < deadline) {
     turn++;
 
-    /* Re-read per turn, but never silently: a runner connecting or an
-       integration dropping changes what the model can do, and a change it is not
-       told about looks to it like the rules moved. Saying so also keeps the
-       system prompt honest, since that is written once and never revised. */
+    // Re-read per turn, but never silently: a change the model is not told about
+    // looks to it like the rules moved, and the prompt is never revised.
     const nowOffered = currentToolset(opensInvestigation);
     const change = toolsetChange(offered, nowOffered);
     if (change !== null) {
@@ -815,10 +808,8 @@ export async function runSession(input: RunSessionInput): Promise<RunOutcome> {
       refusedNames.set(name, (refusedNames.get(name) ?? 0) + 1);
     }
 
-    /* A turn that asked for nothing but tools it cannot have got nothing done,
-       and the model has no way to notice it is looping. The observed run spent
-       28 of 39 calls this way across fourteen turns, working through the
-       namespace a name at a time until the budget ran out. */
+    // A turn of nothing but unavailable tools got nothing done, and the model
+    // cannot see it is looping. Only the time budget used to stop it.
     barrenTurns =
       refused.length === response.toolUses.length ? barrenTurns + 1 : 0;
     if (barrenTurns >= MAX_BARREN_TURNS) {

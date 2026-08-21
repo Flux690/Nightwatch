@@ -1,13 +1,8 @@
 import type { TranscriptRow } from "@nightwarden/shared";
 
-/* The handle the model cites a call by. The provider's own id is a forty-
-   character opaque string that appears nowhere it reads as content - it lives in
-   the message's tool_calls plumbing - so a run asked to cite one invented 21 ids,
-   then 5, then 3, and said out loud that it could not find the format.
-
-   Nothing is stored. `e3` is the third tool call in this session's transcript, so
-   it is arithmetic over rows the ledger already walks, and both the side that
-   renders it and the side that resolves it count the same way. */
+/* The handle the model cites a call by, because the provider's own id appears
+   nowhere it reads as content. Nothing is stored: e3 is the third tool call in
+   the transcript, so rendering it and resolving it count the same way. */
 const PREFIX = "e";
 
 // Calls, not results: a call that never answered still takes its number, so a

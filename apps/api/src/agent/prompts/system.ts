@@ -9,13 +9,9 @@ export interface PromptOptions {
   fleetTools: boolean;
 }
 
-/* Both kinds of session call the same tools, so the rules for calling them are
-   one text. Only the work the session is doing differs above it.
-
-   It names no tool. A tool's own description arrives with the tool and only when
-   the tool is offered, so anything said here as well is the same instruction in
-   two places that can disagree - and when they did, the model believed this one
-   and spent a run asking for eleven tools it had never been given. */
+/* One text for both kinds of session, and it names no tool: a description
+   arrives with its tool and only when the tool is offered, so naming one here
+   is the same instruction in two places that can disagree. */
 const GATE_PROTOCOL = `
 
 Some tools change the system rather than only reading it. Calling one pauses you until a human approves or rejects it, and the time you spend waiting does not count against your budget. Every one of these tools takes a required "reason": one sentence saying why you are making that specific call. The human reads it on the approval card and decides from it, so make it say what you expect the call to achieve. Gathering evidence is as legitimate a reason as applying a fix, and a shell is often the only way to read something; say which of the two you are doing. If a call is rejected, you will be told so, the call will not have run, and nothing will have changed. Take the user's comment into account and try a different approach rather than repeating the same call.

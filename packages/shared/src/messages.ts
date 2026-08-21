@@ -43,12 +43,9 @@ export function isToolOutcome(value: unknown): value is ToolOutcome {
   return typeof value === "string" && TOOL_OUTCOMES.some((o) => o === value);
 }
 
-/* What a person said when the harness stopped and asked them. Recorded at the
-   call, never re-derived: the registry can say a tool needs releasing, but only
-   this can say anyone was asked, and a call the harness refused was not.
-
-   Deliberately not a member of ToolOutcome - that says how the tool behaved,
-   and a human is not a tool. The same split `effect` and `policy` already make. */
+/* What a person said when the harness asked them, recorded at the call: the
+   registry can say a tool needs releasing, but only this says anyone was asked.
+   Not a ToolOutcome, which says how the tool behaved. */
 export const HUMAN_DECISIONS = ["approved", "rejected", "answered"] as const;
 
 export type HumanDecision = (typeof HUMAN_DECISIONS)[number];

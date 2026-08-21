@@ -35,14 +35,9 @@ export const TOOL_REGISTRY: Tool[] = [
   ...REPORT_TOOLS,
 ];
 
-/* The citation handle, put where the model reads it. The provider's own call id
-   lives in the message's tool_calls plumbing and never appears as content, which
-   is why a run asked to cite one invented 21 ids rather than copy a real one.
-
-   A field on the object rather than a prefix on the text: most results are JSON
-   and the console parses them, so a header line would break every tool card and
-   the report's evidence renderers. A plain-string result takes the prefix, since
-   nothing parses those. */
+/* The citation handle, put where the model reads it. A field on the object
+   rather than a text prefix: the console parses these results, so a header line
+   would break every tool card. A plain string takes the prefix instead. */
 function withEvidenceId(
   content: unknown,
   evidenceId: string | undefined,

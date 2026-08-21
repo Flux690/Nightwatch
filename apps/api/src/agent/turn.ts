@@ -45,11 +45,8 @@ function editDistance(a: string, b: string): number {
   return prev[b.length]!;
 }
 
-/* The offered name closest to what was asked for, or null when nothing is near
-   enough to be worth suggesting. Every name the observed run invented was one
-   word from a real one - GetDockerContainerLogs for GetDockerLogs, ListK8sNodes
-   for GetK8sNodeStatus, DockerExec for DockerBash - so a suggestion turns most
-   of them into the call that was meant. */
+// The offered name closest to what was asked for, or null when nothing is near.
+// Every invented name in the observed run was one word from a real one.
 function nearestOffered(wanted: string, offered: string[]): string | null {
   let best: string | null = null;
   let bestDistance = Infinity;
@@ -66,11 +63,9 @@ function nearestOffered(wanted: string, offered: string[]): string | null {
     : null;
 }
 
-/* Three facts, because the old sentence gave one for two different situations.
-   ListDockerServices exists and was withheld for want of a runner; DockerExec
-   has never existed. Told the same thing, a model guesses which, and the
-   observed run guessed by working through the namespace: 28 of its 39 calls
-   were refusals and nothing counted them. */
+/* Three facts, because one sentence covered two situations: a real tool
+   withheld for want of a runner, and a name that never existed. Told the same
+   thing, a model guesses which by working through the namespace. */
 function unavailableMessage(
   wanted: string,
   offered: string[],

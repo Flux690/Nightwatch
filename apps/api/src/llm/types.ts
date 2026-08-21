@@ -81,11 +81,9 @@ export interface LLMProvider {
   snapshot(): ProviderMessage[];
   // onDelta, when provided, receives live fragments as the turn streams; signal, when
   // provided, aborts the in-flight request when the run is stopped.
-  /* `forceTool` names the one tool this turn must call. Every provider spells
-     it differently and all of them prefill the assistant message to enforce it,
-     so the turn cannot come back as prose. Used on the report turn, where the
-     model once wrote a markdown report instead of calling the only tool it had
-     and burned an attempt saying so. */
+  /* `forceTool` names the one tool this turn must call. Every provider enforces
+     it by prefilling the assistant message, so the turn cannot come back as
+     prose. Used on the report turn. */
   chat(
     tools: ToolSchema[],
     onDelta?: OnDelta,

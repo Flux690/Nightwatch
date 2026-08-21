@@ -17,10 +17,8 @@ export const RECORD_HYPOTHESIS_SCHEMA: ToolSchema = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    /* Reasoning before conclusion. A schema whose answer field precedes its
-       reasoning field makes the model commit before it explains, which
-       measurably degrades the reasoning (Tam et al., EMNLP 2024). Under strict
-       decoding the order binds; without it, it still leads. */
+    // Reasoning before conclusion: an answer field ahead of its reasoning field
+    // makes the model commit before it explains (Tam et al., EMNLP 2024).
     required: ["statement", "finding", "evidenceIds", "verdict"],
     properties: {
       statement: {

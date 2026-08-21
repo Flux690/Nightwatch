@@ -189,12 +189,9 @@ function convictionOf(
   return sources.size >= 2 ? "corroborated" : "cited";
 }
 
-/* Every call the user was actually asked about, and which way they went, read
-   back from what was recorded at the call. A tool's name cannot answer this: a
-   call the harness refused because the tool was never offered carries the name
-   of a gated tool and reached no gate at all, which is how five refusals once
-   reported as five writes the user approved. An answered question is not a
-   write, so it is not one of these. */
+/* Every call a person was actually asked about, read from what was recorded at
+   the call. A name cannot answer this: a refused call carries the name of a
+   gated tool and reached no gate. An answered question is not a write. */
 export function gatedCalls(sessionId: string): GatedCall[] {
   return ledgerIn(sessionId).flatMap((entry) => {
     const { humanDecision, toolOutcome } = entry;
@@ -214,10 +211,9 @@ export function gatedCalls(sessionId: string): GatedCall[] {
   });
 }
 
-/* The instant the last released write answered, which is what makes a later read
-   a confirmation rather than another observation. Only a call a person released
-   starts that clock: a declined one changed nothing, and a refused one never
-   ran, so neither can promote a later reading to `verified`. */
+/* The instant the last released write answered, which makes a later read a
+   confirmation. Only a call a person released starts that clock: a declined one
+   changed nothing and a refused one never ran. */
 function lastExecutedAt(ledger: Map<string, LedgerEntry>): string | null {
   let latest: string | null = null;
   for (const entry of ledger.values()) {
@@ -302,12 +298,9 @@ export function recordHypothesis(
   input: RecordHypothesisInput,
 ): RecordOutcome {
   const { kept, invented } = knownCitations(sessionId, input.evidenceIds);
-  /* Refused rather than recorded with what survives. The schema requires a
-     citation, the filter ran after that check, and nothing looked again, so a
-     claim citing two invented ids was stored citing nothing - three identical
-     uncited root causes in one observed run, because "recorded" and "your
-     citations were dropped" in one breath leaves recording again as the only
-     sensible move. */
+  /* Refused rather than recorded with what survives. The schema check ran before
+     this filter and nothing looked again, so a claim citing two invented ids was
+     stored citing nothing. */
   if (kept.length === 0) {
     return { recorded: false, message: citationRefusal(sessionId, invented) };
   }

@@ -155,7 +155,7 @@ function corrective(err: unknown): ToolExecuteResult {
       };
     }
     return {
-      content: `Loki request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
+      content: `Loki request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
       toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }
@@ -327,6 +327,8 @@ export const LOKI_TOOLS: Tool[] = [
           );
         }
 
+        // Classed rather than returned as a clean answer, so the report and the
+        // conviction arithmetic cannot read nothing as something.
         const result: LokiLogsResult = {
           streams,
           returnedLines,
@@ -338,7 +340,9 @@ export const LOKI_TOOLS: Tool[] = [
           windowEnd: end.toISOString(),
           note: notes.join(" "),
         };
-        return { content: result };
+        return returnedLines === 0
+          ? { content: result, toolOutcome: "expected_miss" }
+          : { content: result };
       } catch (err) {
         return corrective(err);
       }

@@ -1,14 +1,9 @@
 import { getDb } from "./client.js";
 import type { ToolResult } from "../llm/types.js";
 
-/* The gate a session is parked on. Four columns on the session row rather than a
-   table of its own: there is at most one per session and nothing ever queried it
-   by anything but session id. The module stays, because "which call is waiting"
-   is a different question from "what is this session", even sharing a row.
-
-   What a person decided is deliberately not here. That is durable and belongs on
-   the transcript with the call; these columns are live control state and are
-   cleared the moment the gate resolves. */
+/* The gate a session is parked on: four columns on the session row, since there
+   is at most one per session and nothing queried it by anything else. What a
+   person decided is not here - that is durable and lives on the transcript. */
 export interface PendingHumanInput {
   sessionId: string;
   toolUseId: string;

@@ -126,10 +126,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
   // anything to follow, so a session still loading never flashes the transcript.
   const working = followedRun.current === true && openRequests === 0;
 
-  /* Only the expanded rail hides the report outright, so only leaving or
-     entering that state has a reveal to cover: the report arrives at a width it
-     never had and rewraps on every frame of the way there. Closing the rail
-     just makes the report wider, which is what a side panel is for. */
+  // Only the expanded rail hides the report outright, so only that transition
+  // has a reveal to cover. Closing the rail just makes the report wider.
   const [revealing, setRevealing] = useState(false);
   const wasExpanded = useRef<boolean | null>(null);
   useEffect(() => {
@@ -144,10 +142,8 @@ export function InvestigationRecordPage(): React.JSX.Element {
     return () => window.clearTimeout(done);
   }, [chatExpanded]);
 
-  /* In an effect rather than the handler, so the first request finds the column
-     the render it triggered has just mounted. The expanded rail covers the
-     report outright, so asking for the report has to close it: focusing what
-     something else is painted over is the same no-op by another route. */
+  // In an effect rather than the handler, so the first request finds the column
+  // it just mounted. Asking for the report has to close the expanded rail.
   const reportRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (openRequests === 0) return;

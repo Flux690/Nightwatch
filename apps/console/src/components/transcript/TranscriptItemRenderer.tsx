@@ -142,14 +142,9 @@ function ThinkingBlock({
 
   const trimmed = item.text.trim();
 
-  /* Empty reasoning is never a transcript item: the working animation stands in
-     for "the model is thinking" while nothing is shown. A thinking block renders
-     only once it has real text - so the chevron and body always exist together.
-
-     A settled burst also has a floor: a free model emitted a single "." six
-     times in one run and each earned a whole block. It applies only once the
-     turn is done, because mid-stream the block is what says work is happening
-     and text arrives a few characters at a time. */
+  /* Empty reasoning is never an item: the working animation stands in for it. A
+     settled burst also has a floor, after a model emitted a single "." six
+     times; mid-stream has none, since the block is what says work is happening. */
   if (!trimmed) return null;
   if (!item.streaming && trimmed.length < MIN_THINKING_CHARS) return null;
 
@@ -212,10 +207,8 @@ export function TranscriptItemRenderer({
       return <Compaction />;
     case "thinking":
       return <ThinkingBlock item={item} />;
-    /* One kind for a tool call's whole life, so what it is drawn as is read off
-       its state rather than off a second label that could disagree with it. A
-       call waiting on a person is raised into the surface that asks; every
-       other moment of it - running, declined, answered, done - is a row. */
+    // One kind for a tool call's whole life, so what it is drawn as is read off
+    // its state. Waiting on a person is raised; every other moment is a row.
     case "tool_call":
       if (item.state.phase !== "awaiting_human")
         return <ToolCall item={item} />;

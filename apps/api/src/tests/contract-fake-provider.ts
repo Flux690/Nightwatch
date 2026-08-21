@@ -231,10 +231,8 @@ function makeProvider(
         // that returned a turn anyway would hide every abort bug.
         if (signal?.aborted) throw signal.reason;
         const scripted = nextTurn();
-        /* The API prefills the assistant message to force the call, so a forced
-           turn always calls it and never answers with prose. A script that says
-           otherwise is describing something no provider would send, so the fake
-           substitutes the call rather than letting the run see prose. */
+        // The API prefills the assistant message, so a forced turn always calls
+        // the tool. A script saying otherwise describes no real provider.
         const forced =
           forceTool !== undefined &&
           !scripted.toolUses.some((t) => t.name === forceTool);

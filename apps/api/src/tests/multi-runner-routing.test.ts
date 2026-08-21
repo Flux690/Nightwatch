@@ -85,6 +85,10 @@ function makeK8sManifest(
   );
 }
 
+// Set by a test that wants the runner to answer with its own failure, the way
+// a real one does when it cannot resolve the target.
+let runnerError: string | null = null;
+
 function makeSend(
   log: Array<{ commandName: string; commandInput: Record<string, unknown> }>,
 ) {
@@ -92,6 +96,15 @@ function makeSend(
     const msg = JSON.parse(raw) as RunnerCommandMessage;
     const { commandName, commandInput, correlationId } = msg.payload;
     log.push({ commandName, commandInput });
+    if (runnerError !== null) {
+      resolveCommand({
+        correlationId,
+        success: false,
+        result: null,
+        error: runnerError,
+      });
+      return;
+    }
     resolveCommand({ correlationId, success: true, result: {} });
   };
 }
@@ -292,6 +305,36 @@ describe("multi-runner routing", () => {
     expect(errorMsg?.content).toMatch(/nginx/);
     expect(errorMsg?.content).toMatch(/api/);
     expect(errorMsg?.content).toMatch(/postgres/);
+  });
+
+  // A container that is not running is the finding, not a broken tool. It was
+  // classed as system, which tells the agent its evidence proves nothing.
+  it("reads a service the runner cannot find as a miss, not a fault", async () => {
+    setScript([
+      {
+        text: "Reading logs.",
+        toolUses: [
+          {
+            id: "tu-missing",
+            name: "GetDockerLogs",
+            input: { target: "docker/nginx/nginx" },
+          },
+        ],
+      },
+      FINISH_TURN,
+    ]);
+    runnerError = "No running container found for nginx/nginx";
+    const sessionId = await runSession();
+    runnerError = null;
+
+    const answer = getTranscriptRows(sessionId)
+      .flatMap((row) => row.parts)
+      .find((p) => p.type === "tool_result" && p.toolCallId === "tu-missing");
+    expect(answer).toMatchObject({ toolOutcome: "expected_miss" });
+    // And it says what that means, rather than naming the tool and stopping.
+    expect(answer?.type === "tool_result" && answer.output).toContain(
+      "That is an answer, not a fault",
+    );
   });
 
   it("a host command naming a runner reaches only that runner", async () => {

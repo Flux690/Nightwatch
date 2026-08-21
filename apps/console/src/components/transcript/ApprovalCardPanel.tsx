@@ -6,12 +6,9 @@ import { SHELL_TOOLS } from "./toolPresentation.js";
 import { isTool } from "@nightwarden/shared";
 import { InterruptCard } from "./InterruptCard.js";
 
-/* The raised form of a call that cannot run until a person says so. It exists
-   only while that is true: once decided, the same call is an ordinary row whose
-   own outcome says which way it went, so there is nothing here to render twice.
-
-   It is not pinned. A write gates one tool rather than the whole run, so it
-   stays where it happened and the transcript keeps its shape. */
+/* The raised form of a call that cannot run until a person says so, drawn only
+   while that is true. Not pinned: a write gates one tool rather than the run,
+   so it stays where it happened. */
 
 // Shared by both halves of the exchange so neither can be styled as the louder one.
 const EXCHANGE_LABEL_CLASS = "text-sm text-ink-subtle";

@@ -123,6 +123,13 @@ function resolveMetricsSource(
   };
 }
 
+/* An empty series is not a reading of zero: a metric name that does not exist
+   answers identically. The result is kept rather than replaced, since the window
+   is what makes the emptiness mean anything. */
+function emptyNote(query: string, label: string): string {
+  return `${label} evaluated "${query}" and it matched no series. That is not a reading of zero: a metric name that does not exist, a label that never had this value, and a genuinely absent target all answer this way. Check the name with ListMetricNames before treating this as evidence of anything.`;
+}
+
 function isSource(
   resolved: MetricsSource | ToolExecuteResult,
 ): resolved is MetricsSource {
@@ -138,7 +145,7 @@ function corrective(err: unknown): ToolExecuteResult {
       };
     }
     return {
-      content: `Metrics request failed: ${err.message}. If this persists the user must fix the connection on the Integrations page.`,
+      content: `Metrics request failed. ${err.message} If this persists the user must fix the connection on the Integrations page.`,
       toolOutcome: err.code === "unauthorized" ? "permission" : "retryable",
     };
   }
@@ -197,6 +204,12 @@ export const METRICS_TOOLS: Tool[] = [
             : undefined,
         );
         const result: MetricsQueryResult = capSeries(data);
+        if (result.series.length === 0) {
+          return {
+            content: { ...result, note: emptyNote(query, source.label) },
+            toolOutcome: "expected_miss",
+          };
+        }
         return { content: result };
       } catch (err) {
         return corrective(err);
@@ -300,6 +313,12 @@ export const METRICS_TOOLS: Tool[] = [
           windowEnd: end.toISOString(),
           stepSeconds: step,
         };
+        if (result.series.length === 0) {
+          return {
+            content: { ...result, note: emptyNote(query, source.label) },
+            toolOutcome: "expected_miss",
+          };
+        }
         return { content: result };
       } catch (err) {
         return corrective(err);
@@ -391,7 +410,11 @@ export const METRICS_TOOLS: Tool[] = [
       if (!isSource(source)) return source;
       const metric = input["metric"];
       if (typeof metric !== "string" || metric.trim() === "") {
-        return { content: "metric must be a name", toolOutcome: "system" };
+        return {
+          content:
+            "metric must be a metric name, for example container_memory_usage_bytes. It was missing or empty.",
+          toolOutcome: "system",
+        };
       }
       /* Stated, not discovered: VictoriaMetrics answers this endpoint with an empty
          object for every metric, so reporting the emptiness would be a fact about

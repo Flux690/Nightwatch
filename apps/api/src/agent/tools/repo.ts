@@ -158,7 +158,7 @@ function corrective(err: unknown): {
   }
   if (err instanceof PathEscapeError) {
     return {
-      content: `${err.message}. Use a path relative to the repository root.`,
+      content: `${err.message} Use a path relative to the repository root.`,
       toolOutcome: "system",
     };
   }
@@ -176,7 +176,7 @@ function corrective(err: unknown): {
     err instanceof GitOperationError
   ) {
     return {
-      content: `${err.message}. Repo tools are unavailable until the user fixes this (Integrations page). Continue the investigation without them.`,
+      content: `${err.message} Repo tools are unavailable until the user fixes this (Integrations page). Continue the investigation without them.`,
       toolOutcome: "system",
     };
   }

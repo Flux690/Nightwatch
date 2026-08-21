@@ -167,7 +167,10 @@ describe("metrics tools through the tool dispatch", () => {
       { query: "up" },
       mintSession(ALERT),
     );
-    expect(result.toolOutcome).toBeUndefined();
+    /* The stub answers with no series, which is a miss rather than a reading of
+       zero: a metric that does not exist answers identically. The window is
+       still echoed, since it is what makes the emptiness mean anything. */
+    expect(result.toolOutcome).toBe("expected_miss");
 
     const params = mock.requests[0]!.params;
     // 180min back, 30min forward, 12600s window -> ceil(12600/200) = 63s step.

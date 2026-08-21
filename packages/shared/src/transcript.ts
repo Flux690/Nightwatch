@@ -6,10 +6,9 @@ import type { ToolOutcome } from "./messages.js";
 // with whatever the session is suspended on. The browser draws these; it never
 // works out what state a tool call is in.
 
-/* What a suspended call needs from a person, named exactly as the interrupt row
-   names it so there is one vocabulary rather than a translation between two. It
-   lives on the one phase where it means anything, so it can never disagree with
-   a call that has already settled. */
+/* What a suspended call needs from a person, named as the gate names it so there
+   is one vocabulary. It lives on the one phase where it means anything, so it
+   cannot disagree with a call that has settled. */
 export type ToolGate = "approval" | "clarification";
 
 // Explicit rather than an optional field, so "not set" is never a meaning. A
@@ -60,21 +59,16 @@ export interface ThinkingItem {
   turn: number;
 }
 
-/* One item for the whole life of a tool call: running, waiting on a person for
-   an approval or an answer, then settled. The state carries which of those it
-   is, so nothing here can label a call as something its own state contradicts.
-   Its arguments travel whole in `input` rather than being copied out field by
-   field - a copy is a second source, and which fields matter is a question
-   about drawing, which belongs to the console. */
+/* One item for the whole life of a tool call, with the state carrying which
+   moment it is in, so nothing can label a call as something its state
+   contradicts. Arguments travel whole in `input`: a copy is a second source. */
 export interface ToolCallItem {
   kind: "tool_call";
   toolUseId: string;
   toolName: string;
   input: Record<string, unknown>;
-  // How many times this same write already ran in this investigation, counted
-  // from its transcript. Present only when it has happened before; the card
-  // informs, it never refuses. Here rather than in `input` because only a walk
-  // of the transcript can answer it.
+  // How many times this same write already ran, counted from the transcript.
+  // The card informs, it never refuses; only a walk can answer it.
   priorRuns?: number;
   state: ToolCallState;
 }

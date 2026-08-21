@@ -222,10 +222,8 @@ describe("toolset assembly by fleet capabilities", () => {
       expect(investigating).not.toContain("SubmitInvestigationReport");
     });
 
-    /* The system prompt used to enumerate eleven tools, and a run with no runner
-       connected asked for every one of them - the prompt said they existed and
-       the toolset had never contained them. A tool's own description arrives
-       with the tool, so nothing here may name one at all. */
+    // The prompt named eleven tools and a run with no runner asked for every
+    // one. A description arrives with its tool, so nothing here may name one.
     it("never names a tool it is not offering", () => {
       for (const investigation of [true, false]) {
         for (const github of [true, false]) {
@@ -251,10 +249,8 @@ describe("toolset assembly by fleet capabilities", () => {
             const offeredNames = new Set(
               offered.tools.map((t) => t.schema.name),
             );
-            /* Compound names only. Read, Edit, Write and Bash are ordinary
-               English words that appear in prose all over these prompts, and no
-               substring match can tell "Read before you conclude" from the tool.
-               Every name the observed run invented its way to was a compound. */
+            // Compound names only: Read, Edit, Write and Bash are English words
+            // this prose uses, and no substring match can tell them apart.
             const namedButNotOffered = TOOL_NAMES.filter(
               (name) =>
                 /[a-z][A-Z]/.test(name) &&
@@ -263,10 +259,8 @@ describe("toolset assembly by fleet capabilities", () => {
             );
             expect(namedButNotOffered).toEqual([]);
 
-            /* Same rule for the block a description points at. With no runner
-               connected the fleet summary is never rendered, and the run that
-               was told to copy a target key from it used the only proper nouns
-               left in the prompt, which were metrics source labels. */
+            // Same rule for the block a description points at: with no runner
+            // the fleet summary is never rendered, so nothing may cite it.
             expect(prompt.includes("<fleet-summary>")).toBe(
               offeredNames.size > 0 &&
                 offered.tools.some((t) => t.on === "runner"),

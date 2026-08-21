@@ -6,12 +6,9 @@ import { cn } from "@/lib/utils";
 import type { ToolCallItem } from "./types.js";
 import { InterruptCard } from "./InterruptCard.js";
 
-/* The raised form of a question, which exists only while it is unanswered. An
-   answered one is an ordinary row whose result is what the person said, so
-   nothing here has a second life to draw.
-
-   Unlike an approval this is pinned, because a question stops the whole run
-   rather than one tool: there is nothing else for the reader to be doing. */
+/* The raised form of a question, drawn only while it is unanswered. Pinned
+   unlike an approval, because a question stops the whole run rather than one
+   tool: there is nothing else for the reader to be doing. */
 
 export interface QuestionOption {
   label: string;
@@ -41,14 +38,9 @@ export function questionOf(input: Record<string, unknown>): {
   };
 }
 
-/* One row per answer: its number, its label, and the sentence saying what
-   picking it would mean. Two lines of real content give the row its own height,
-   so the chosen fill has something to fill rather than invented padding.
-
-   No tick and no dot. The number is the affordance and the fill is the answer,
-   while the role and aria-checked keep saying "option 2 of 5, selected" to
-   anyone who cannot see either. The label alone is the accessible name, so the
-   description reads as description rather than being run onto the end of it. */
+/* One row per answer: number, label, and what picking it would mean. No tick and
+   no dot - the number is the affordance and the fill is the answer, while role
+   and aria-checked say the same thing to anyone who cannot see either. */
 function OptionRow({
   index,
   label,

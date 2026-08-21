@@ -16,23 +16,12 @@ import { elapsed } from "@/lib/time";
 import { CitationChip } from "./CitationChip.js";
 import { Evidence } from "./Evidence.js";
 
-/* Two authors on one page: the prose at the top is the model's, everything
-   beneath it - what backs a claim, how well, what actually ran - is the system
-   answering for itself. The headings are nominal: there is no "we" here.
+/* Three axes, one meaning each. Size is level, weight is semibold for a heading
+   alone, and colour says what a thing is rather than how loud: prose takes full
+   ink wherever it sits, and muted is for labels, counts, captions and lines. */
 
-   Three axes, one meaning each. SIZE is level: 24 the headline, 18 a section,
-   16 the deck and a claim, 14 prose, 12 a caption. WEIGHT is semibold for a
-   heading, medium for a claim, regular for everything else. COLOUR says what a
-   thing is rather than how loud it is: anything written in sentences for a
-   person to read takes full ink, and muted is for what is not prose - labels,
-   counts, captions, timestamps, log lines. Dimming an explanation because it
-   sits under something else is a third differentiator doing a job the first
-   two have already done. */
-
-/* Colour marks the two verdicts that change what a user does next. The other
-   two standing verdicts are full ink: a symptom is a finding the run stands
-   behind, and setting it back said it mattered less than it does. Only what the
-   run discarded is muted. */
+// Colour marks the two verdicts that change what a user does next. The other
+// standing verdicts take full ink; only what the run discarded is muted.
 const VERDICT_VIEW: Record<Verdict, { label: string; className: string }> = {
   root_cause: { label: "Root cause", className: "text-ok" },
   trigger: { label: "Trigger", className: "text-ok" },
@@ -136,10 +125,9 @@ function clockOf(iso: string): string {
     : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-/* The model's entries and the system's, in one order, split once where the
-   alert fired. Every released write is contributed here rather than left to the
-   model to list, so an action cannot be missing from a timeline it did not
-   author in full - and it appears here alone, never as a second list. */
+/* The model's entries and the system's in one order, split where the alert
+   fired. Released writes are contributed here rather than listed by the model,
+   so an action cannot be missing from a timeline it did not author. */
 type Row =
   | { at: string; kind: "entry"; entry: TimelineEntry }
   | { at: string; kind: "alert" };

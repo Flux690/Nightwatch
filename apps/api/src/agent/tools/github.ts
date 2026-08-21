@@ -86,16 +86,16 @@ export function classifyGitHubError(err: unknown): ToolOutcome {
 export function gitHubErrorDetail(err: GitHubApiError): string {
   switch (err.code) {
     case "invalid_token":
-      return `GitHub rejected the token: ${err.message}. The user must reconnect the repository on the Integrations page.`;
+      return `GitHub rejected the token. ${err.message} The user must reconnect the repository on the Integrations page.`;
     case "sso_required":
-      return `GitHub requires SSO authorization for this token: ${err.message}. The user must authorize it on GitHub, then retry.`;
+      return `GitHub requires SSO authorization for this token. ${err.message} The user must authorize it on GitHub, then retry.`;
     case "repo_not_found":
-      return `GitHub has no such repository, or this token cannot see it: ${err.message}.`;
+      return `GitHub has no such repository, or this token cannot see it. ${err.message}`;
     case "network":
       if (err.status === 403 || err.status === 404) {
-        return `GitHub would not serve this: ${err.message}. The token authenticated, so this is its repository permissions rather than the credential.`;
+        return `GitHub would not serve this. ${err.message} The token authenticated, so this is its repository permissions rather than the credential.`;
       }
-      return `GitHub could not serve the request: ${err.message}. The token authenticated; this is not a credentials problem.`;
+      return `GitHub could not serve the request. ${err.message} The token authenticated; this is not a credentials problem.`;
   }
 }
 
