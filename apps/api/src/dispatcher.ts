@@ -13,6 +13,7 @@ import {
   releaseRun,
   sessionExists,
 } from "./db/sessions.js";
+import { markStopped } from "./db/sessions.js";
 import { hasSeat } from "./run-pool.js";
 import { describeLLMError, isTransientLLMError } from "./llm/failures.js";
 import { logger } from "./logger.js";
@@ -88,7 +89,10 @@ export function createDispatcher(opts: DispatcherOptions): Dispatcher {
         // stopped runs need theirs here; suspended runs already ended via the loop's
         // interrupt event, and failed runs terminate in the catch below.
         if (outcome === "completed") publishRunFinished(input.sessionId);
-        else if (outcome === "stopped") publishRunStopped(input.sessionId);
+        else if (outcome === "stopped") {
+          markStopped(input.sessionId);
+          publishRunStopped(input.sessionId);
+        }
       })
       .catch((err: unknown) => {
         logger.error(

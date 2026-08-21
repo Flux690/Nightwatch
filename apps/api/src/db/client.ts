@@ -87,6 +87,9 @@ CREATE TABLE IF NOT EXISTS sessions (
                                  CHECK (run_state IN ('running', 'suspended', 'done')),
   failed_attempts      INTEGER   NOT NULL DEFAULT 0,
   failure_kind         TEXT      CHECK (failure_kind IN ('transient', 'permanent')),
+  -- When a person ended the run. Recorded, because otherwise a stopped run is
+  -- indistinguishable from one that concluded nothing.
+  stopped_at           TEXT,
   report               TEXT,
   created_at           TEXT      NOT NULL,
   last_activity_at     TEXT      NOT NULL

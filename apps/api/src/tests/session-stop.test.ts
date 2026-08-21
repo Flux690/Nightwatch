@@ -26,6 +26,7 @@ import { registerConsoleEventRoutes } from "../session/events.js";
 import { dispatcher } from "../dispatcher.js";
 import { hasPendingHumanInput } from "../db/interrupts.js";
 import { deleteMetricsSource } from "../db/metrics.js";
+import { listSessionPage } from "../session/list.js";
 import { mountApi } from "./api-server.js";
 
 describe("POST /sessions/:id/stop", () => {
@@ -160,7 +161,10 @@ describe("POST /sessions/:id/stop", () => {
         "Content-Type": "application/json",
         Cookie: `nw_auth=${SESSION}`,
       },
-      body: JSON.stringify({ message: "Look and then ask." }),
+      body: JSON.stringify({
+        message: "Look and then ask.",
+        kind: "investigation",
+      }),
     });
     const { sessionId } = (await chatRes.json()) as { sessionId: string };
     await waitFor(() => readStarted);
@@ -188,6 +192,14 @@ describe("POST /sessions/:id/stop", () => {
           e.payload["sessionId"] === sessionId,
       ),
     ).toBe(false);
+
+    /* And the list says a person ended it. Without the stop being recorded this
+       row falls through to Inconclusive, which names a conclusion the run
+       reached - blaming the agent for a decision the user made. */
+    const row = listSessionPage(50, 0).rows.find(
+      (r) => r.sessionId === sessionId,
+    );
+    expect(row?.status).toBe("stopped");
 
     console.close();
     vi.unstubAllGlobals();

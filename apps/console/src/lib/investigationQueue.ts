@@ -12,6 +12,7 @@ const STATUS_ORDER: SessionRunStatus[] = [
   "investigating",
   "resolved",
   "inconclusive",
+  "stopped",
   "failed",
 ];
 
@@ -20,6 +21,7 @@ export const STATUS_LABEL: Record<SessionRunStatus, string> = {
   investigating: "Investigating",
   resolved: "Resolved",
   inconclusive: "Inconclusive",
+  stopped: "Stopped",
   failed: "Failed",
 };
 

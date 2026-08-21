@@ -85,7 +85,16 @@ forgotten when a tool is added.
 Asking you a question is not a tool. It is offered to the model as one, because
 tool-calling is the only channel it has to request anything, but it carries no
 implementation and no policy - it always suspends, and no setting can turn that
-off.
+off. A question offers at most four answers and always a free-text box beside
+them, so you are never boxed into a list; pick one by clicking it or by pressing
+its number.
+
+**The two interruptions sit differently, because they stop different amounts.**
+An approval holds up one tool call, so its card stays inline in the transcript
+where it happened and you can scroll past it. A question holds up the whole run,
+so it pins above the message box until you answer. Either way, once it is
+settled it becomes an ordinary line in the transcript like any other call, with
+what you decided or what you said readable on it.
 
 The agent is also told what an approved write did: a rejection comes back saying
 you refused and that nothing changed, so it redirects rather than trying the
@@ -101,7 +110,7 @@ When a GitHub repository is connected and the cause is in your code, the same lo
 
 **Runner** is an executor you install on each host or cluster you want monitored, and it comes in two: a Docker runner and a Kubernetes runner. Which one you installed is what it is - it never probes for a platform, and one runner never serves both. It opens an outbound WSS connection to the API (so it works behind any firewall or NAT, with no inbound ports), advertises the services or workloads it can see, and executes the read and approval-gated write commands the API sends. It writes nothing to disk and remembers nothing across restarts. It is optional: a fully read-only investigation can run on your metrics, logs, and connected repository alone, and a runner adds container/host evidence and approved remediation when installed.
 
-**Console** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one from that list and the report takes the main area - the answer, what to do, what happened, what held up and what was ruled out, each claim showing what backs it and naming the calls it rests on - with the transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. Approval cards, the runner fleet view and settings all live here too.
+**Console** is the user UI, built around the report rather than the chat. The sidebar holds navigation and nothing else - Agent, Investigations, Integrations, then Settings and Log out - and collapses to a narrow icon strip when you want the full width for reading. Your conversations live behind a disclosure in the Agent page header; investigations have a page of their own, grouped by status. Open one from that list and the report takes the main area - the answer, what to do, what happened, what held up and what was ruled out, each claim showing what backs it and naming the calls it rests on - with the transcript in a rail on the right that also collapses. A plain conversation keeps the chat centred and shows no report. The runner fleet view and settings live here too.
 
 **Watching a run end never moves the page under you.** While it works the chat has the whole stage, because a report being written in front of you is not worth reading. When the agent finishes, it posts its closing message and then a card: first that the report is being written, then that it is ready. Nothing changes until you click it. Arriving from the Investigations list is already a deliberate act, so that still opens the record directly.
 
@@ -195,6 +204,7 @@ An alert for any other group opens its own investigation, or waits for a slot.
 | **Action required** | It is waiting on you, or it finished with something to act on | Approve, answer, or act on the recommendation                          |
 | **Resolved**        | Every alert on it stopped firing                              | Nothing to do. This is the only status that means the incident is over |
 | **Inconclusive**    | The run ended without anything for you to act on              | Read what it ruled out; it may still recover on its own                |
+| **Stopped**         | You ended the run yourself                                    | Nothing to do. Start a new investigation to look again                 |
 | **Failed**          | The run broke - usually the model provider                    | Retried automatically if the cause was temporary; see below            |
 
 **Resolved is never inferred.** It does not mean a fix ran, and it never comes
@@ -226,8 +236,9 @@ it carries on from its last complete exchange. Otherwise it is marked as
 interrupted, so it reads as broken rather than as an investigation that
 concluded nothing.
 
-**A run parked on your approval** is left alone. It is waiting, not broken, and
-it keeps its slot.
+**A run parked on you** is left alone. It is waiting, not broken, and it keeps
+its slot. Whatever it is parked on comes back with the page: an approval, a
+question, or the check-in a long run makes when its time budget runs out.
 
 There is one narrow case in between. If NightWarden stops in the instant between
 running an approved command and recording its result, it comes back knowing the
@@ -240,7 +251,10 @@ again."_
 
 **You can stop a run.** The stop is checked between a turn's tool calls and the
 approval gate, so a run you stopped ends as stopped rather than parking an
-approval card nobody is going to answer.
+approval card nobody is going to answer. It also says so afterwards: the record
+reads **Stopped**, never Inconclusive, because you ending a run and the agent
+running out of ideas are different things and only one of them is about the
+agent.
 
 **A long run checks in rather than being killed.** After its time budget
 (Settings → Agent, thirty minutes by default) it finishes the step it is on and

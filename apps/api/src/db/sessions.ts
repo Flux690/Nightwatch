@@ -494,6 +494,8 @@ export interface SessionListSource {
   awaitingHumanInput: boolean;
   // What the session is waiting on, null when it waits on nothing.
   pendingKind: PendingHumanInput["kind"] | null;
+  // When a person ended the run, null when nobody did.
+  stoppedAt: string | null;
 }
 
 // One page of it. nextOffset is the offset to ask for next, or null once the
@@ -514,6 +516,7 @@ interface SessionListRawRow {
   lastContent: string | null;
   awaitingHumanInput: number;
   pendingKind: string | null;
+  stoppedAt: string | null;
 }
 
 const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS createdAt,
@@ -526,7 +529,8 @@ const LIST_COLUMNS = `s.session_id AS sessionId, s.title, s.created_at AS create
           ORDER BY m.seq DESC LIMIT 1) AS lastContent,
         s.last_activity_at AS lastActivityAt,
         (p.session_id IS NOT NULL) AS awaitingHumanInput,
-        p.kind AS pendingKind`;
+        p.kind AS pendingKind,
+        s.stopped_at AS stoppedAt`;
 
 function toSource(
   r: SessionListRawRow,
@@ -547,6 +551,7 @@ function toSource(
       r.pendingKind !== null && isHumanInputKind(r.pendingKind)
         ? r.pendingKind
         : null,
+    stoppedAt: r.stoppedAt,
   };
 }
 
@@ -596,11 +601,20 @@ export function countInvestigations(): number {
 export function claimRun(sessionId: string): boolean {
   const result = getDb()
     .prepare(
-      `UPDATE sessions SET run_state = 'running'
+      `UPDATE sessions SET run_state = 'running', stopped_at = NULL
        WHERE session_id = ? AND run_state IN ('done', 'suspended')`,
     )
     .run(sessionId);
   return result.changes > 0;
+}
+
+/* A person ended this one. Kept because nothing else can say so afterwards: a
+   stopped run reaches the same end as one that ran out of ideas, and calling
+   both inconclusive blames the agent for a decision the user made. */
+export function markStopped(sessionId: string): void {
+  getDb()
+    .prepare(`UPDATE sessions SET stopped_at = ? WHERE session_id = ?`)
+    .run(new Date().toISOString(), sessionId);
 }
 
 // Conditional on 'running' so it cannot undo the 'suspended' written with the

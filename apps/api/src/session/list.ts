@@ -32,6 +32,10 @@ function deriveStatus(source: SessionListSource): SessionRunStatus {
   if (dispatcher.isSessionRunning(source.sessionId)) return "investigating";
   if (isSettled(source)) return "resolved";
   if (report !== null && isActionable(report)) return "action_required";
+  /* Below the actionable check on purpose: a run stopped after it had something
+     to act on is still something to act on. Above the fall-through, because
+     inconclusive names a conclusion the run reached and this one was ended. */
+  if (source.stoppedAt !== null) return "stopped";
   if (source.lastKind === "error") return "failed";
   // Nothing for the user to act on: the run ended without a recommendation,
   // whether or not it named a cause along the way.
@@ -73,6 +77,9 @@ function deriveFinding(
         ? WAITING_ON[source.pendingKind]
         : awaitedRecommendation(source.report);
     case "investigating":
+    // What it had settled on when the person ended it, if it had settled on
+    // anything. The run stopped; the claims it made before that still stand.
+    case "stopped":
       return leadingClaim(source.report)?.statement ?? null;
     case "resolved":
       return "Alert condition recovered";

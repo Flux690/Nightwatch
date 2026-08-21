@@ -18,7 +18,12 @@ export type TranscriptKind = "user" | "assistant" | "error" | "nightwarden";
 // the model. A row no word applies to says nothing, which is why the field is
 // nullable rather than carrying a sixth value.
 export type SessionRunStatus =
-  "action_required" | "investigating" | "resolved" | "inconclusive" | "failed";
+  | "action_required"
+  | "investigating"
+  | "resolved"
+  | "inconclusive"
+  | "stopped"
+  | "failed";
 
 // One row of the console's one session list. A session not under investigation
 // leaves the status fields null.
