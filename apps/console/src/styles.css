@@ -9,26 +9,86 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces, each with a job. The ground doubles into the stage; the card sits
-     1.44x above it and a pick-from control 1.35x above the card. Near black the
-     eye reads a ratio, not a distance, and these two are measured off Linear. */
-  --n-1: oklch(0.14 0.002 270);
-  --n-2: oklch(0.182 0.002 270);
-  --n-3: oklch(0.2 0.002 270);
-  --n-4: oklch(0.216 0.002 270);
-  --n-5: oklch(0.255 0.002 270);
+  /* The four inputs a theme is. Override these together and the whole ladder
+     follows; every other value below is a departure from this anchor. */
+  --base-l: 0.182;
+  --base-c: 0.002;
+  --base-h: 270;
+  --contrast: 1;
+
+  /* How far each rung sits from the anchor, in lightness at contrast 1. The
+     shape of the ladder, which a theme inherits rather than restates. */
+  --d-n-1: -0.042;
+  --d-n-3: 0.018;
+  --d-n-4: 0.034;
+  --d-n-5: 0.073;
+  --d-line-1: 0.077;
+  --d-line-lit: 0.145;
+  --d-line-2: 0.191;
+  --d-line-3: 0.312;
+  --d-ink-1: 0.508;
+  --d-ink-2: 0.6305;
+  --d-ink-3: 0.753;
+
+  /* Chroma per band, scaled by contrast with the lightness so a raised theme
+     keeps its tint instead of washing out. Dimmer ink carries more of it. */
+  --c-line: 0.004;
+  --c-ink-1: 0.012;
+  --c-ink-2: 0.01;
+  --c-ink-3: 0.004;
+
+  /* Surfaces, each with a job. n-2 is the anchor itself; the ground drops below
+     it and the card and a pick-from control rise above. */
+  --n-1: oklch(
+    calc(var(--base-l) + var(--d-n-1) * var(--contrast))
+      calc(var(--base-c) * var(--contrast)) var(--base-h)
+  );
+  --n-2: oklch(var(--base-l) var(--base-c) var(--base-h));
+  --n-3: oklch(
+    calc(var(--base-l) + var(--d-n-3) * var(--contrast))
+      calc(var(--base-c) * var(--contrast)) var(--base-h)
+  );
+  --n-4: oklch(
+    calc(var(--base-l) + var(--d-n-4) * var(--contrast))
+      calc(var(--base-c) * var(--contrast)) var(--base-h)
+  );
+  --n-5: oklch(
+    calc(var(--base-l) + var(--d-n-5) * var(--contrast))
+      calc(var(--base-c) * var(--contrast)) var(--base-h)
+  );
 
   /* Lines sit above every surface, so an edge can never be darker than what it
      lands on. line-3 carries the chart axis at 3:1 on the stage. */
-  --line-1: oklch(0.259 0.003 270);
-  --line-2: oklch(0.373 0.004 270);
-  --line-3: oklch(0.494 0.004 270);
-  --line-lit: oklch(0.327 0.004 270);
+  --line-1: oklch(
+    calc(var(--base-l) + var(--d-line-1) * var(--contrast))
+      calc(0.003 * var(--contrast)) var(--base-h)
+  );
+  --line-2: oklch(
+    calc(var(--base-l) + var(--d-line-2) * var(--contrast))
+      calc(var(--c-line) * var(--contrast)) var(--base-h)
+  );
+  --line-3: oklch(
+    calc(var(--base-l) + var(--d-line-3) * var(--contrast))
+      calc(var(--c-line) * var(--contrast)) var(--base-h)
+  );
+  --line-lit: oklch(
+    calc(var(--base-l) + var(--d-line-lit) * var(--contrast))
+      calc(var(--c-line) * var(--contrast)) var(--base-h)
+  );
 
-  /* Ink, +0.1225. */
-  --ink-1: oklch(0.69 0.012 270);
-  --ink-2: oklch(0.8125 0.01 270);
-  --ink-3: oklch(0.935 0.004 270);
+  /* Ink. */
+  --ink-1: oklch(
+    calc(var(--base-l) + var(--d-ink-1) * var(--contrast))
+      calc(var(--c-ink-1) * var(--contrast)) var(--base-h)
+  );
+  --ink-2: oklch(
+    calc(var(--base-l) + var(--d-ink-2) * var(--contrast))
+      calc(var(--c-ink-2) * var(--contrast)) var(--base-h)
+  );
+  --ink-3: oklch(
+    calc(var(--base-l) + var(--d-ink-3) * var(--contrast))
+      calc(var(--c-ink-3) * var(--contrast)) var(--base-h)
+  );
 
   /* Status hues, then their tints at +0.090. */
   --status-ok: oklch(0.78 0.14 165);

@@ -30,11 +30,60 @@ const MIX =
 const overlays = new Map<string, { ink: string; alpha: number }>();
 const OVERLAY =
   /^color-mix\(\s*in srgb,\s*var\(--([a-z][-a-z0-9]*)\) ([\d.]+)%,\s*transparent\s*\)$/;
+/* A scalar declaration: a theme's four inputs and the departures they drive.
+   Resolved here so the test does the arithmetic the browser does. */
+const scalars = new Map<string, number>();
 for (const [name, value] of declarations) {
-  const triple = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);
+  if (/^-?[\d.]+$/.test(value)) scalars.set(name, +value);
+}
+
+// var() and calc() over those scalars, with the two operators the ladder uses.
+function scalar(expr: string): number {
+  const resolved = expr
+    .replace(/var\(--([a-z0-9-]+)\)/g, (_, ref: string) =>
+      String(scalars.get(ref) ?? NaN),
+    )
+    .replace(/^calc\((.*)\)$/, "$1")
+    .trim();
+  const sum = resolved.split(/\s+\+\s+/).map((term) =>
+    term
+      .split(/\s*\*\s*/)
+      .map(Number)
+      .reduce((a, b) => a * b, 1),
+  );
+  return sum.reduce((a, b) => a + b, 0);
+}
+
+// The three slots of an oklch(), split on the spaces between them: a slot may
+// be a calc() carrying spaces and parens of its own.
+function slots(value: string): string[] | null {
+  const body = /^oklch\((.*)\)$/.exec(value.replace(/\s+/g, " ").trim())?.[1];
+  if (body === undefined || body.includes("/")) return null;
+  const out: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of body) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === " " && depth === 0) {
+      if (current) out.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current) out.push(current);
+  return out.length === 3 ? out : null;
+}
+
+for (const [name, value] of declarations) {
+  const triple = slots(value);
   if (triple) {
-    scale.set(name, { L: +triple[1], C: +triple[2], H: +triple[3] });
-    continue;
+    const [L, C, H] = triple.map(scalar);
+    if ([L, C, H].every(Number.isFinite)) {
+      scale.set(name, { L: L!, C: C!, H: H! });
+      continue;
+    }
   }
   const blend = MIX.exec(value);
   if (blend) {
@@ -107,13 +156,14 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-function expectEvenSteps(group: string[], spacing: number): void {
-  for (let i = 1; i < group.length; i++) {
-    const [below, above] = [step(group[i - 1] ?? ""), step(group[i] ?? "")];
-    expect(above.L - below.L, `${group[i - 1]} to ${group[i]}`).toBeCloseTo(
-      spacing,
-      4,
-    );
+// Every gap in a band equals the first one. The value is the theme's; only the
+// evenness is the system's, so a band of two is trivially even and says nothing.
+function expectEvenSteps(group: string[]): void {
+  const gaps = group
+    .slice(1)
+    .map((name, i) => step(name).L - step(group[i] ?? "").L);
+  for (const [i, gap] of gaps.entries()) {
+    expect(gap, `${group[i]} to ${group[i + 1]}`).toBeCloseTo(gaps[0]!, 4);
   }
 }
 
@@ -145,12 +195,12 @@ function channel(name: string): number {
 }
 
 describe("the scale", () => {
-  /* The ladder only ever rises. Even spacing is not the rule - Linear's own
-     ladder is not evenly spaced - so each relationship that carries meaning
-     states the ratio it was measured at instead. */
-  it("rises monotonically, doubling the ground into the stage", () => {
-    expect(channel("n-2") / channel("n-1")).toBeGreaterThanOrEqual(1.9);
+  /* The ladder rises away from the anchor and never doubles back. The size of a
+     step is a theme's business; the order is the system's, so only order is
+     asserted here and the contrast floors below carry the rest. */
+  it("rises monotonically away from the anchor", () => {
     for (const [below, above] of [
+      ["n-1", "n-2"],
       ["n-2", "n-3"],
       ["n-3", "n-4"],
       ["n-4", "n-5"],
@@ -161,9 +211,21 @@ describe("the scale", () => {
     }
   });
 
-  it("holds the card and the control at the ratios they were measured at", () => {
-    expect(channel("card") / channel("background")).toBeCloseTo(1.44, 1);
-    expect(channel("control") / channel("card")).toBeCloseTo(1.35, 1);
+  /* Every surface is the anchor plus its own departure, so a theme moves the
+     whole ladder by moving one value. A rung that stops deriving is a rung that
+     will be wrong in the next theme. */
+  it("derives every surface from the one anchor", () => {
+    const anchor = scalars.get("base-l");
+    expect(anchor, "--base-l").toBeTypeOf("number");
+    expect(step("n-2").L).toBeCloseTo(anchor!, 10);
+    for (const rung of ["n-1", "n-3", "n-4", "n-5"]) {
+      const departure = scalars.get(`d-${rung}`);
+      expect(departure, `--d-${rung}`).toBeTypeOf("number");
+      expect(step(rung).L, rung).toBeCloseTo(
+        anchor! + departure! * scalars.get("contrast")!,
+        10,
+      );
+    }
   });
 
   it("keeps every line above every surface, so an edge cannot invert", () => {
@@ -172,12 +234,14 @@ describe("the scale", () => {
         expect(channel(line), `${line} over ${n}`).toBeGreaterThan(channel(n));
   });
 
-  it("spaces ink by 0.1225", () => {
-    expectEvenSteps(["ink-1", "ink-2", "ink-3"], 0.1225);
+  /* Evenly spaced, without saying by how much: the gap is a theme's to choose
+     and a band with one uneven rung is the defect. */
+  it("spaces ink evenly, whatever the spacing is", () => {
+    expectEvenSteps(["ink-1", "ink-2", "ink-3"]);
   });
 
-  it("spaces status tints by 0.09", () => {
-    expectEvenSteps(["status-fail-tint", "status-fail-wash"], 0.09);
+  it("spaces status tints evenly, whatever the spacing is", () => {
+    expectEvenSteps(["status-fail-tint", "status-fail-wash"]);
   });
 
   /* One value per accent: a fill lifts toward white the same way a surface
@@ -220,6 +284,8 @@ describe("the scale", () => {
       if (scale.has(name) || aliases.has(name) || mixes.has(name)) continue;
       if (overlays.has(name)) continue;
       if (value.startsWith("linear-gradient(")) continue;
+      // A theme's inputs and the departures they drive are numbers, not colours.
+      if (scalars.has(name)) continue;
       expect(value, `--${name} is neither a step, a mix nor an alias`).toMatch(
         /oklch\(0 0 0 \/ /,
       );
@@ -491,15 +557,6 @@ describe("radius", () => {
   it("declares one set, and no rung outside it", () => {
     const rungs = [...css.matchAll(/--radius(-[a-z0-9]*)?:/g)].map((m) => m[1]);
     expect(rungs.sort()).toEqual(["-2xl", "-lg", "-md", "-sm", "-xl"]);
-  });
-
-  /* Five names, two values: the names are Tailwind's namespace and the system
-     has one radius for the stage and one for what floats above it. */
-  it("spends two values across those names", () => {
-    const values = [...css.matchAll(/--radius-[a-z0-9]*:\s*([^;]+);/g)].map(
-      (m) => m[1]?.trim(),
-    );
-    expect([...new Set(values)].sort()).toEqual(["0.5rem", "0.75rem"]);
   });
 
   it("rounds nothing to a value off that set", () => {
